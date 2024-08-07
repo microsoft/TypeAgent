@@ -1,0 +1,3 @@
+[submodule "ts/packages/dispatcher/test/repo"]
+	path = ts/packages/dispatcher/test/repo
+	url = https://github.com/microsoft/AISystemsTestData
