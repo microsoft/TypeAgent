@@ -55,7 +55,7 @@ TypeAgent is early stage sample code over TypeChat. TypeAgent is not a framework
 - TypeAgent relies on [TypeChat](https://github.com/microsoft/typechat), which uses schema to validate LLM responses. An agent's validity therefore depends on how well _its schema_ represents the user intents and LLM responses _for its domains_.
 - You are responsible for supplying any **API keys** used by examples.
 
-# Getting Started
+## Getting Started
 
 TypeAgent is written in TypeScript and relies on TypeChat. To understand how TypeAgent examples work, we recommend getting comfortable with TypeChat and [TypeChat examples](https://github.com/microsoft/TypeChat/tree/main/typescript/examples) first.
 
@@ -69,13 +69,13 @@ Microsoft AI Systems Repo is a mono-repo, with components organized with the fol
 
 The main entry point to explore TypeAgent is the Agent Shell example. Follow the [instructions](./ts/README.md) in the typescript code [directory](./ts) to get started.
 
-# Code of Conduct
+## Code of Conduct
 
 This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
 For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
 contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
 
-# Trademarks
+## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
 trademarks or logos is subject to and must follow

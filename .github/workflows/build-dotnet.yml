@@ -23,7 +23,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build_dotnet:
     strategy:
       fail-fast: false
       matrix:
@@ -33,7 +33,7 @@ jobs:
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -43,10 +43,10 @@ jobs:
               - ".github/workflows/build-dotnet.yml"
       - name: Setup MSBuild
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet == 'true' }}
-        uses: microsoft/setup-msbuild@v1
+        uses: microsoft/setup-msbuild@v2
       - name: Setup NuGet
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet == 'true' }}
-        uses: NuGet/setup-nuget@v1.0.5
+        uses: NuGet/setup-nuget@v2.0.0
       - name: Restore Packages
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet == 'true' }}
         working-directory: dotnet

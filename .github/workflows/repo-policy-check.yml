@@ -22,14 +22,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: "true"
           token: ${{ secrets.PAT_TOKEN }}
-      - uses: pnpm/action-setup@v2
+      - uses: pnpm/action-setup@v4
         name: Install pnpm
         with:
-          version: 8
+          version: 9
           run_install: |
             - args: [--frozen-lockfile, --strict-peer-dependencies, --ignore-scripts]
               cwd: ts

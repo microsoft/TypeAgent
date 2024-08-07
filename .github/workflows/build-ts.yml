@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "windows-latest"]
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
         version: [18, 20]
 
     runs-on: ${{ matrix.os }}
@@ -35,7 +35,7 @@ jobs:
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -47,7 +47,7 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         name: Install pnpm
         with:
-          version: 8
+          version: 9
           run_install: false
       - uses: actions/setup-node@v4
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
