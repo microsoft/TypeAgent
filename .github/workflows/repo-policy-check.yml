@@ -1,0 +1,70 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+name: repo-policy-check
+
+on:
+  pull_request:
+    branches: ["main"]
+  merge_group:
+    branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check-submodules:
+    name: Repo Policy Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: "true"
+          token: ${{ secrets.PAT_TOKEN }}
+      - uses: pnpm/action-setup@v2
+        name: Install pnpm
+        with:
+          version: 8
+          run_install: |
+            - args: [--frozen-lockfile, --strict-peer-dependencies, --ignore-scripts]
+              cwd: ts
+      - name: Check Repo Policy
+        run: |
+          node ts/tools/scripts/repo-policy-check.mjs
+      - name: Check Submodule
+        run: |
+          echo GITHUB_EVENT_NAME: $GITHUB_EVENT_NAME
+          echo GITHUB_BASE_REF: $GITHUB_BASE_REF
+          echo GITHUB_REF: $GITHUB_REF
+          echo GITHUB_SHA: $GITHUB_SHA
+
+          if [ "$GITHUB_EVENT_NAME" == "merge_group" ]; then
+            BASE_REF=$(echo $GITHUB_REF | cut -d/ -f4)
+          else
+            BASE_REF=$GITHUB_BASE_REF
+          fi
+
+          echo BASE_REF: $BASE_REF          
+          git fetch origin $BASE_REF --recurse-submodules=no
+
+          SUBMODULE_PATH=ts/packages/dispatcher/test/repo
+          SUBMODULE_TARGET_SHA=`git ls-tree --object-only $GITHUB_SHA $SUBMODULE_PATH`
+          echo "Target: $GITHUB_SHA Submodule: $SUBMODULE_TARGET_SHA"          
+          BASE_SHA=`git show-ref refs/remotes/origin/$BASE_REF --hash`
+          SUBMODULE_BASE_SHA=`git ls-tree --object-only $BASE_SHA $SUBMODULE_PATH`
+          echo "Base: $BASE_REF $BASE_SHA Submodule: $SUBMODULE_BASE_SHA"
+
+          if [ "$SUBMODULE_TARGET_SHA" == "$SUBMODULE_BASE_SHA" ]; then
+            exit 0
+          fi
+
+          cd $SUBMODULE_PATH
+          git fetch origin $SUBMODULE_BASE_SHA
+          git fetch origin $SUBMODULE_TARGET_SHA --depth 50
+          echo "Checking git merge-base --is-ancestor $SUBMODULE_BASE_SHA $SUBMODULE_TARGET_SHA"
+          git merge-base --is-ancestor $SUBMODULE_BASE_SHA $SUBMODULE_TARGET_SHA

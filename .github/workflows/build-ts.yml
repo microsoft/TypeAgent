@@ -1,0 +1,77 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# This workflow will build the TypeAgent TypeScript code
+
+name: build-ts
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  merge_group:
+    branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: read
+  contents: read
+
+jobs:
+  build_ts:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest", "windows-latest"]
+        version: [18, 20]
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Setup Git LF
+        run: |
+          git config --global core.autocrlf false
+      - uses: actions/checkout@v3
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            ts:
+              - "ts/**"
+              - ".github/workflows/build-ts.yml"
+      - uses: pnpm/action-setup@v4
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        name: Install pnpm
+        with:
+          version: 8
+          run_install: false
+      - uses: actions/setup-node@v4
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        with:
+          node-version: ${{ matrix.version }}
+          cache: "pnpm"
+          cache-dependency-path: ts/pnpm-lock.yaml
+      - name: Install dependencies
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        working-directory: ts
+        run: |
+          pnpm install --frozen-lockfile --strict-peer-dependencies
+      - name: Build
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        working-directory: ts
+        run: |
+          npm run build
+      - name: Test
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        working-directory: ts
+        run: |
+          npm run test
+      - name: Lint
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        working-directory: ts
+        run: |
+          npm run lint
