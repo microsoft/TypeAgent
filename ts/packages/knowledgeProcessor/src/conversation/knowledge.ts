@@ -202,9 +202,11 @@ export function actionToString(action: Action): string {
 
 export function actionVerbsToString(
     verbs: string[],
-    verbTense: VerbTense,
+    verbTense?: VerbTense,
 ): string {
-    const text = `${verbs.join(" ")} {In ${verbTense}}`;
+    const text = verbTense
+        ? `${verbs.join(" ")} {In ${verbTense}}`
+        : verbs.join(" ");
     return text;
 }
 

@@ -665,12 +665,39 @@ export async function runPlayChat(): Promise<void> {
     function actionsDef(): CommandMetadata {
         return {
             description: "Search for actions",
+            options: {
+                verb: {
+                    description: "Verb to search for",
+                },
+                tense: {
+                    description: "Verb tense",
+                },
+                count: {
+                    description: "Num matches",
+                    defaultValue: 1,
+                    type: "number",
+                },
+                showMessages: {
+                    defaultValue: false,
+                    type: "boolean",
+                },
+            },
         };
     }
     handlers.actions.metadata = actionsDef();
     async function actions(args: string[], io: InteractiveIo) {
-        //const namedArgs = parseNamedArguments(args, actionsDef());
+        const namedArgs = parseNamedArguments(args, actionsDef());
         const index = await context.conversation.getActionIndex();
+        const verb: string = namedArgs.verb;
+        const tense = namedArgs.tense;
+        if (verb) {
+            const actionIds = await index.searchVerbs([verb], tense, {
+                maxMatches: namedArgs.count,
+            });
+            await writeActionsById(index, actionIds, namedArgs.showMessages);
+            return;
+        }
+
         for await (const action of index.entries()) {
             writeExtractedAction(action);
         }
@@ -1127,6 +1154,34 @@ export async function runPlayChat(): Promise<void> {
             for (const value of composite.values()) {
                 await writeCompositeEntity(value.value);
                 printer.writeLine();
+            }
+        }
+    }
+
+    async function writeActionsById(
+        index: knowLib.conversation.ActionIndex,
+        actionIds: string[],
+        showMessages: boolean,
+    ): Promise<void> {
+        if (!actionIds || actionIds.length === 0) {
+            return;
+        }
+        if (showMessages) {
+            const messages = await loadMessages(
+                await index.getSourceIds(actionIds),
+            );
+            printer.writeTemporalBlocks(chalk.cyan, messages);
+        } else {
+            const actions = await asyncArray.mapAsync(
+                actionIds,
+                context.searchConcurrency,
+                (id) => index.get(id),
+            );
+            for (const action of actions) {
+                if (action) {
+                    writeExtractedAction(action);
+                    printer.writeLine();
+                }
             }
         }
     }

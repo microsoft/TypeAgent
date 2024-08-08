@@ -70,6 +70,11 @@ export interface ActionIndex<TActionId = any, TEntityId = any, TSourceId = any>
         filter: ActionFilter,
         options: ActionSearchOptions,
     ): Promise<ActionSearchResult<TActionId>>;
+    searchVerbs(
+        verb: string[],
+        tense?: VerbTense,
+        options?: SearchOptions,
+    ): Promise<TActionId[]>;
 }
 
 export async function createActionIndex<TEntityId = any, TSourceId = any>(
@@ -102,6 +107,7 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         getActions,
         getSourceIds,
         search,
+        searchVerbs,
     };
 
     async function add(
@@ -181,6 +187,19 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
             );
         }
         return results;
+    }
+
+    async function searchVerbs(
+        verbs: string[],
+        tense?: VerbTense,
+        options?: SearchOptions,
+    ): Promise<ActionId[]> {
+        const fullVerb = actionVerbsToString(verbs, tense);
+        return await verbIndex.getNearest(
+            fullVerb,
+            options?.maxMatches ?? 1,
+            options?.minScore,
+        );
     }
 
     function filterResults(
