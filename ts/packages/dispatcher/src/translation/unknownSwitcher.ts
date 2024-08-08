@@ -8,8 +8,6 @@ import {
     InlineTranslatorSchemaDef,
     createJsonTranslatorFromSchemaDef,
     SearchMenuItem,
-    ITemplateAction,
-    TemplateParamObject,
     TemplateParamField,
 } from "common-utils";
 import { getTranslatorActionInfo as getTranslatorActionInfos } from "./actionInfo.js";
@@ -106,7 +104,6 @@ export function getActionInfo(translatorNames: string[]) {
     const actionNames: string[] = [];
     const actionComments: string[] = [];
     const actionItems: SearchMenuItem[] = [];
-    const actionParamTrees: ITemplateAction[] = [];
     for (const name of translatorNames) {
         const translatorConfig = getTranslatorConfig(name);
         if (translatorConfig.injected) {
@@ -169,7 +166,7 @@ function getTemplateParamFieldType(
                 return {
                     type: "string-union",
                     // remove quotes and split by pipe
-                    values: param.value
+                    typeEnum: param.value
                         .split("|")
                         .map((v) => v.trim().slice(1, -1)),
                 };
@@ -186,7 +183,7 @@ function getTemplateParamFieldType(
         default:
             console.log(`Unhandled type ${param.type}`);
     }
-    return { type: "unknown" };
+    return { type: "string", value: "unhandled" };
 }
 
 // assumes parser is open to the correct object

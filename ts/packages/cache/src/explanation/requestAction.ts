@@ -9,8 +9,6 @@ export type HistoryContext = {
     entities: Entity[];
 };
 
-export type ParamValueType = string | number | boolean;
-
 export function normalizeParamValue(value: ParamValueType) {
     return typeof value === "string" ? value.toLowerCase() : value;
 }
@@ -21,6 +19,8 @@ export function equalNormalizedParamValue(
 ) {
     return a === b || normalizeParamValue(a) === normalizeParamValue(b);
 }
+
+export type ParamValueType = string | number | boolean;
 
 export type ParamFieldType =
     | ParamValueType

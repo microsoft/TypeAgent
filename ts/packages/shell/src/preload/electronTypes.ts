@@ -16,18 +16,25 @@ export type SearchMenuItem = {
     groupName?: string;
 };
 
-export type TemplateParamValue = {
-    type: "string" | "number" | "boolean" | "unknown";
+export type TemplateParamPrimitive = {
+    type: "string" | "number" | "boolean";
+    value?: string | number | boolean;
 };
 
 export type TemplateParamStringUnion = {
     type: "string-union";
-    values: string[];
+    typeEnum: string[];
+    value?: string;
 };
+
+export type TemplateParamScalar =
+    | TemplateParamPrimitive
+    | TemplateParamStringUnion;
 
 export type TemplateParamArray = {
     type: "array";
     elementType: TemplateParamField;
+    elements?: TemplateParamField[];
 };
 
 export type TemplateParamObject = {
@@ -39,19 +46,13 @@ export type TemplateParamObject = {
 
 export type TemplateParamFieldOpt = {
     optional?: boolean;
-    fieldType: TemplateParamField;
+    field: TemplateParamField;
 };
 
 export type TemplateParamField =
-    | TemplateParamValue
-    | TemplateParamStringUnion
+    | TemplateParamScalar
     | TemplateParamObject
     | TemplateParamArray;
-
-export interface ITemplateAction {
-    actionName: string;
-    parameters: TemplateParamObject;
-}
 
 // end duplicate type section
 
@@ -98,6 +99,16 @@ export interface ClientAPI {
             message: string,
             id: string,
             temporary: boolean,
+        ) => void,
+    ): void;
+    onActionCommand(
+        callback: (
+            e: Electron.IpcRendererEvent,
+            actionAgent: string,
+            actionName: string,
+            parameterStructure: TemplateParamObject,
+            command: string,
+            requestId: string,
         ) => void,
     ): void;
     onSearchMenuCommand(
