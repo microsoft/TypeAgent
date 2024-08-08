@@ -1,0 +1,23 @@
+# VSCode config
+.vscode/**
+**/.vscode-test/**
+
+# Lock file
+pnpm-lock.yaml
+
+# Build output
+**/dist/*
+**/lib/*
+**/out/*
+
+# Typescript config
+tsconfig.json
+
+# TypeChat Fork
+packages/typechat
+
+
+# Test data
+packages/dispatcher/test/data
+packages/dispatcher/test/repo
+packages/dispatcher/data/**/*.json

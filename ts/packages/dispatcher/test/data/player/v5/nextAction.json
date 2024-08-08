@@ -1,0 +1,4510 @@
+{
+  "version": 2,
+  "translatorName": "player",
+  "explainerName": "v5",
+  "entries": [
+    {
+      "request": "Advance to the next item.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Advance to the next item"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Advance to",
+            "synonyms": [
+              "Move forward to",
+              "Proceed to",
+              "Go to"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the next item",
+            "synonyms": [
+              "the following entry",
+              "the subsequent element",
+              "the next piece"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Advance to",
+              "the next item"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Go back to",
+                  "the previous item"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause",
+                  "the current item"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play",
+                  "the current item"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop",
+                  "the playback"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Bounce to the next track.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Bounce to the next track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Bounce to",
+            "synonyms": [
+              "Skip to",
+              "Jump to",
+              "Move to"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the next track",
+            "synonyms": [
+              "the following song",
+              "the subsequent track",
+              "the next item"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ".",
+            "synonyms": [],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Bounce to",
+              "the next track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Go back to",
+                  "the previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause",
+                  "the music"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play",
+                  "the music"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle",
+                  "the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "Repeat",
+                  "the current track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Can we get to the next track?",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "next track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can we get to the",
+            "synonyms": [
+              "Could we move to the",
+              "Is it possible to go to the",
+              "Can you switch to the"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "next track",
+            "synonyms": [
+              "following song",
+              "upcoming track",
+              "next song"
+            ],
+            "category": "media control",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "next track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the music"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the music"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat the track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Can we hop to the next track?",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "hop to the next track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can we",
+            "synonyms": [
+              "Is it possible to",
+              "Could we",
+              "Would it be possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "hop to",
+            "synonyms": [
+              "skip to",
+              "jump to",
+              "move to"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the next track",
+            "synonyms": [
+              "the following song",
+              "the subsequent track",
+              "the next song"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "",
+              "please.",
+              "now."
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "hop to",
+              "the next track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "go back to",
+                  "the previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause",
+                  "the current track"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play",
+                  "the track"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle",
+                  "the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat",
+                  "the current track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Can you change to the next song?",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "change to the next song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can you",
+            "synonyms": [
+              "Could you",
+              "Would you mind to",
+              "Can you please"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "change to the next song",
+            "synonyms": [
+              "skip to the next track",
+              "move to the next song",
+              "go to the next song"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "please.",
+              "right now.",
+              "as soon as possible."
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "change to the next song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the song"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the song"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "go back to the previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat the current song"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Can you go to the next track?",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "next track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can you",
+            "synonyms": [
+              "Could you",
+              "Would you mind",
+              "Can you please"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "go to the",
+            "synonyms": [
+              "move to the",
+              "skip to the",
+              "advance to the"
+            ],
+            "category": "preposition",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "next track",
+            "synonyms": [
+              "following song",
+              "next song",
+              "upcoming track"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "please.",
+              "now.",
+              "."
+            ],
+            "category": "confirmation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "go to the",
+              "next track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "go to the",
+                  "previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the",
+                  "music"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "start the",
+                  "music"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "enable",
+                  "shuffle mode"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "turn on",
+                  "repeat"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Can you hit the next button?",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "hit the next button"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can you",
+            "synonyms": [
+              "Could you",
+              "Would you mind to",
+              "Is it possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "hit the",
+            "synonyms": [
+              "press the",
+              "activate the",
+              "click the"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "next button",
+            "synonyms": [
+              "forward button",
+              "skip button",
+              "next track button"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "hit the",
+              "next button"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "press the",
+                  "pause button"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "tap the",
+                  "play button"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "smash the",
+                  "stop button"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "hit the",
+                  "previous button"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "activate the",
+                  "shuffle mode"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Could we advance to the next track?",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "advance to the next track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Could we",
+            "synonyms": [
+              "Can we",
+              "Is it possible to",
+              "Would it be possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "advance to the next track",
+            "synonyms": [
+              "move to the next song",
+              "skip to the next track",
+              "go to the next track"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "please.",
+              "right now.",
+              "at this moment."
+            ],
+            "category": "confirmation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "advance to the next track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "go back to the previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the current track"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "start playing the track"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat the current track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Could you move to the next track?",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "move to the next track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Could you",
+            "synonyms": [
+              "Can you",
+              "Would you be able to",
+              "Is it possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "move to the",
+            "synonyms": [
+              "go to the",
+              "skip to the",
+              "advance to the"
+            ],
+            "category": "action directive",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "next track",
+            "synonyms": [
+              "following song",
+              "upcoming track",
+              "next song"
+            ],
+            "category": "object of action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "move to the",
+              "next track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "go back to the",
+                  "previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the",
+                  "music"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "start playing",
+                  "the music"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the",
+                  "playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat the",
+                  "current track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Flick to the next tune.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Flick to the next tune."
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Flick",
+            "synonyms": [
+              "Skip",
+              "Jump",
+              "Move"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "to the next",
+            "synonyms": [
+              "to another",
+              "forward to a new",
+              "to the subsequent"
+            ],
+            "category": "direction",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "tune.",
+            "synonyms": [
+              "track.",
+              "song.",
+              "piece."
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Flick",
+              "to the next",
+              "tune."
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Flick",
+                  "to the previous",
+                  "tune."
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Press",
+                  "to pause",
+                  "the music."
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Tap",
+                  "to play",
+                  "the song."
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Swipe",
+                  "for shuffle",
+                  "mode."
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "Double tap",
+                  "to repeat",
+                  "the track."
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Flip to the next song.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Flip to the next song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Flip to",
+            "synonyms": [
+              "Switch to",
+              "Move to",
+              "Go to"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the next",
+            "synonyms": [
+              "the following",
+              "another",
+              "a different"
+            ],
+            "category": "qualifier",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "song",
+            "synonyms": [
+              "track",
+              "tune",
+              "piece"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ".",
+            "synonyms": [
+              "",
+              "!",
+              "?"
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Flip to",
+              "the next",
+              "song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Go back to",
+                  "the previous",
+                  "song"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause",
+                  "",
+                  "song"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play",
+                  "",
+                  "song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle",
+                  "",
+                  "playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "Repeat",
+                  "the current",
+                  "song"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Hit next.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Hit next"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Hit",
+            "synonyms": [
+              "Press",
+              "Tap",
+              "Click"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "next",
+            "synonyms": [
+              "forward",
+              "advance",
+              "skip"
+            ],
+            "category": "direction",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ".",
+            "synonyms": [
+              "",
+              "please.",
+              "now."
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Hit",
+              "next"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Hit",
+                  "previous"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Hit",
+                  "pause"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Hit",
+                  "play"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "I want to listen to the next song.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "listen to the next song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "I want to",
+            "synonyms": [
+              "I would like to",
+              "I'm looking to",
+              "I'm interested in"
+            ],
+            "category": "politeness",
+            "isOptional": true,
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "listen to",
+            "synonyms": [
+              "hear",
+              "play",
+              "stream"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the next song",
+            "synonyms": [
+              "the following track",
+              "the subsequent tune",
+              "the upcoming song"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "I want to",
+              "listen to",
+              "the next song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "I want to",
+                  "pause",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "I want to",
+                  "play",
+                  "music"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "I want to",
+                  "listen to",
+                  "the previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "I want to",
+                  "turn on",
+                  "shuffle mode"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "I want to",
+                  "enable",
+                  "repeat mode"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "I'd appreciate the next song now.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "next song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "I'd appreciate",
+            "synonyms": [
+              "I would like",
+              "Can you",
+              "Please"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "the next song",
+            "synonyms": [
+              "the following track",
+              "the subsequent tune",
+              "the next piece"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "now",
+            "synonyms": [
+              "immediately",
+              "right away",
+              "at this moment"
+            ],
+            "category": "time",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "the next song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "the previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the song"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "I'd like to hear the next track.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "next track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "I'd like to",
+            "synonyms": [
+              "I want to",
+              "I wish to",
+              "Can you"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "hear the",
+            "synonyms": [
+              "listen to the",
+              "play the",
+              "start the"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "next track",
+            "synonyms": [
+              "upcoming song",
+              "next song",
+              "following track"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "hear the",
+              "next track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "hear the",
+                  "previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the",
+                  "current track"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the",
+                  "current track"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the",
+                  "playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat the",
+                  "current track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "I'd like to skip to the next.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "skip to the next"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "I'd like to",
+            "synonyms": [
+              "I want to",
+              "I wish to",
+              "I'm looking to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "skip to the next",
+            "synonyms": [
+              "advance to the next",
+              "move to the next",
+              "go to the next"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "skip to the next"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "go back to the previous"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the track"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the music"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "I'd prefer the next track.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "next track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "I'd prefer",
+            "synonyms": [
+              "I would like",
+              "Can you play",
+              "Please play"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "the next track",
+            "synonyms": [
+              "the following song",
+              "the subsequent track",
+              "the next song"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "the next track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "the previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the music"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the music"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat the track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "I'm ready for the next song.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "next song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "I'm ready for",
+            "synonyms": [
+              "I am prepared for",
+              "I am set for",
+              "I am up for"
+            ],
+            "category": "acknowledgement",
+            "isOptional": true
+          },
+          {
+            "text": "the next song",
+            "synonyms": [
+              "the following track",
+              "the subsequent tune",
+              "the next piece of music"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "the next song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the song"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the song"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "the previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat the song"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Jump to the next track.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Jump to the next track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Jump to",
+            "synonyms": [
+              "Skip to",
+              "Move to",
+              "Go to"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the next track",
+            "synonyms": [
+              "the following song",
+              "the subsequent track",
+              "the next item in the playlist"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Jump to",
+              "the next track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Go back to",
+                  "the previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause",
+                  "the track"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play",
+                  "the track"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle",
+                  "the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "Repeat",
+                  "the track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Kindly take us to the next track.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "next track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Kindly",
+            "synonyms": [
+              "Please",
+              "Could you",
+              "Would you mind"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "take us to the",
+            "synonyms": [
+              "move to the",
+              "skip to the",
+              "advance to the"
+            ],
+            "category": "action directive",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "next track",
+            "synonyms": [
+              "following song",
+              "next song",
+              "upcoming track"
+            ],
+            "category": "media navigation",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "take us to the",
+              "next track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "take us back to the",
+                  "previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the",
+                  "music"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "start playing the",
+                  "music"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the",
+                  "playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat the",
+                  "current track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let's go to the next.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "next"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's go to the",
+            "synonyms": [
+              "Proceed to the",
+              "Move on to the",
+              "Advance to the"
+            ],
+            "category": "preposition",
+            "isOptional": true
+          },
+          {
+            "text": "next",
+            "synonyms": [
+              "following",
+              "upcoming",
+              "subsequent"
+            ],
+            "category": "navigation",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "next"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "previous"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let's hear the next one.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "next one"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's hear",
+            "synonyms": [
+              "I want to listen to",
+              "Play",
+              "Can we listen to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "the next one",
+            "synonyms": [
+              "the following track",
+              "the subsequent song",
+              "the next item"
+            ],
+            "category": "navigation",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "the next one"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "the previous one"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let's jump to the next tune.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "jump to the next tune"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's",
+            "synonyms": [
+              "I want to",
+              "I'd like to",
+              "Please"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "jump to",
+            "synonyms": [
+              "skip to",
+              "go to",
+              "move to"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the next",
+            "synonyms": [
+              "the following",
+              "another",
+              "a different"
+            ],
+            "category": "ordinal",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "tune.",
+            "synonyms": [
+              "track",
+              "song",
+              "music"
+            ],
+            "category": "subject",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "jump to",
+              "the next",
+              "tune."
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "go back to",
+                  "the previous",
+                  "track."
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause",
+                  "the current",
+                  "song."
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play",
+                  "the current",
+                  "music."
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle",
+                  "the",
+                  "playlist."
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat",
+                  "the current",
+                  "track."
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let's proceed to the next song.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "next song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's proceed to",
+            "synonyms": [
+              "move on to",
+              "go to",
+              "advance to"
+            ],
+            "category": "transition",
+            "isOptional": true
+          },
+          {
+            "text": "the next song",
+            "synonyms": [
+              "the following track",
+              "the subsequent tune",
+              "the next piece"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "the next song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "the previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pausing the music"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "playing the music"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffling the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeating the current song"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let's roll to the next song.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "next song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's roll to the",
+            "synonyms": [
+              "Proceed to the",
+              "Move on to the",
+              "Go to the"
+            ],
+            "category": "preposition",
+            "isOptional": true
+          },
+          {
+            "text": "next song",
+            "synonyms": [
+              "upcoming track",
+              "following tune",
+              "next track"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "next song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause song"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat song"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let's skip this track.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "skip this track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's",
+            "synonyms": [
+              "Please",
+              "I want to",
+              "Can we"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "skip this track",
+            "synonyms": [
+              "move to the next song",
+              "advance to another track",
+              "go to the next track"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "skip this track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause this track"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "go back to the previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat this track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Move on to the next song.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Move on to the next song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Move on to",
+            "synonyms": [
+              "Proceed to",
+              "Skip to",
+              "Advance to"
+            ],
+            "category": "action directive",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the next song",
+            "synonyms": [
+              "the following track",
+              "the subsequent tune",
+              "the next piece"
+            ],
+            "category": "object of action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ".",
+            "synonyms": [
+              "",
+              "please.",
+              "now."
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Move on to",
+              "the next song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause",
+                  "the music"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play",
+                  "the music"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Go back to",
+                  "the previous song"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Next hit, please.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Next hit"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Next hit",
+            "synonyms": [
+              "Next track",
+              "Next song",
+              "Skip to the next"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "please",
+            "synonyms": [
+              "if you could",
+              "would you mind",
+              "kindly"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Next hit"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Previous hit"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Next melody, please.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Next melody, please."
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Next melody",
+            "synonyms": [
+              "Play the next song",
+              "Skip to the next track",
+              "Move to the next piece"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ", please.",
+            "synonyms": [
+              "if you would",
+              "kindly",
+              "at your convenience"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Next melody"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Previous melody"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause melody"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play melody"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "Repeat track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Next number, please.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Next number"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Next number",
+            "synonyms": [
+              "Following number",
+              "Subsequent number",
+              "Next in sequence"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "please",
+            "synonyms": [
+              "if you would",
+              "kindly",
+              "if you could"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Next number"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Previous number"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause"
+                ]
+              },
+              {
+                "propertyValue": "player.resume",
+                "propertySubPhrases": [
+                  "Resume"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Next on the queue.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Next"
+            ],
+            "implied": true
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Next",
+            "synonyms": [
+              "Skip to the next",
+              "Advance to the next",
+              "Move to the next"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "on the",
+            "synonyms": [
+              "in the",
+              "within the",
+              "for the"
+            ],
+            "category": "preposition",
+            "isOptional": true
+          },
+          {
+            "text": "queue",
+            "synonyms": [
+              "playlist",
+              "list",
+              "lineup"
+            ],
+            "category": "subject",
+            "isOptional": true
+          },
+          {
+            "text": ".",
+            "synonyms": [
+              "",
+              "please.",
+              "now."
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Next"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Previous"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Next song, if you don't mind.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Next song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Next song",
+            "synonyms": [
+              "Advance track",
+              "Skip to the next track",
+              "Play the next song"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "if you don't mind",
+            "synonyms": [
+              "please",
+              "if it's not too much trouble",
+              "at your convenience"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Next song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause song"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play song"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Previous song"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Next track, please.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Next track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Next track",
+            "synonyms": [
+              "Skip to the next song",
+              "Advance to the next track",
+              "Move to the next track"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "please",
+            "synonyms": [
+              "if you could",
+              "kindly",
+              "would you mind"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Next track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause track"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play track"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "Repeat track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Next tune, kindly.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Next tune"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Next tune",
+            "synonyms": [
+              "Next song",
+              "Next track",
+              "Skip to the next"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "kindly",
+            "synonyms": [
+              "please",
+              "if you would",
+              "if you could"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Next tune"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Previous tune"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause tune"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play tune"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "Repeat track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Next up on the playlist.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Next up on the playlist."
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Next up",
+            "synonyms": [
+              "Coming up next",
+              "Up next",
+              "The following item"
+            ],
+            "category": "action directive",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "on the",
+            "synonyms": [
+              "in the",
+              "within the",
+              "on"
+            ],
+            "category": "preposition",
+            "isOptional": true
+          },
+          {
+            "text": "playlist.",
+            "synonyms": [
+              "queue.",
+              "list of tracks.",
+              "music lineup."
+            ],
+            "category": "context specifier",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Next up",
+              "playlist."
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause",
+                  "playlist."
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play",
+                  "playlist."
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle",
+                  "playlist."
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Next, please!",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Next"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Next",
+            "synonyms": [
+              "Skip",
+              "Advance",
+              "Move forward"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "please",
+            "synonyms": [
+              "if you could",
+              "kindly",
+              "would you mind"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Next"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Previous"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "On to the next one.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "On to the next one."
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "On to the",
+            "synonyms": [
+              "Proceed to the",
+              "Move to the",
+              "Advance to the"
+            ],
+            "category": "transition",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "next one",
+            "synonyms": [
+              "following item",
+              "subsequent one",
+              "next track"
+            ],
+            "category": "reference",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "On to the",
+              "next one"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Back to the",
+                  "previous one"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Hold on to the",
+                  "current one"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle to a",
+                  "random one"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Please cue the next track.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "cue the next track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Please",
+            "synonyms": [
+              "Kindly",
+              "Would you mind to",
+              "Can you"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "cue the next track",
+            "synonyms": [
+              "play the following song",
+              "start the subsequent track",
+              "initiate the next piece"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "cue the next track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "cue the previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the track"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the track"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Please forward to the next track.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "forward to the next track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Please",
+            "synonyms": [
+              "Kindly",
+              "Could you",
+              "Would you mind"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "forward to the next track",
+            "synonyms": [
+              "skip to the next song",
+              "go to the next track",
+              "advance to the next track"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "forward to the next track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "back to the previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the track"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the track"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the track"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Please play the next one.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "play the next one"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Please",
+            "synonyms": [
+              "Kindly",
+              "Could you",
+              "Would you mind"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "play the next one",
+            "synonyms": [
+              "start the following track",
+              "skip to the next song",
+              "go to the next item"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "play the next one"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "play the previous one"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the player"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the current one"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat the current one"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Please skip this one.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "skip this one"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Please",
+            "synonyms": [
+              "Kindly",
+              "Would you mind to",
+              "I'd appreciate it if you could"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "skip this one",
+            "synonyms": [
+              "move to the next",
+              "advance to the next item",
+              "go to the next track"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "skip this one"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "go back one"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the track"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the song"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Proceed to the next song.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "next song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Proceed to the",
+            "synonyms": [
+              "Move on to the",
+              "Skip to the",
+              "Go to the"
+            ],
+            "category": "preposition",
+            "isOptional": true
+          },
+          {
+            "text": "next song",
+            "synonyms": [
+              "following track",
+              "upcoming song",
+              "next track"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "next song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause song"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat song"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Push next.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Push next."
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Push",
+            "synonyms": [
+              "Press",
+              "Hit",
+              "Tap"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "next",
+            "synonyms": [
+              "forward",
+              "advance",
+              "skip"
+            ],
+            "category": "direction",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ".",
+            "synonyms": [
+              "",
+              "please.",
+              "now."
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Push",
+              "next"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Push",
+                  "previous"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Push",
+                  "pause"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Push",
+                  "play"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Queue up the next song.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Queue up the next song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Queue up",
+            "synonyms": [
+              "Play",
+              "Start",
+              "Initiate"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the next",
+            "synonyms": [
+              "the following",
+              "another",
+              "a different"
+            ],
+            "category": "qualifier",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "song",
+            "synonyms": [
+              "track",
+              "tune",
+              "piece"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ".",
+            "synonyms": [],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Queue up",
+              "the next",
+              "song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Go back to",
+                  "the previous",
+                  "song"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause",
+                  "",
+                  "music"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Start playing",
+                  "",
+                  "track"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle",
+                  "",
+                  "playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Shift to the next track.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Shift to the next track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Shift to",
+            "synonyms": [
+              "Move to",
+              "Skip to",
+              "Jump to"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the next track",
+            "synonyms": [
+              "the following song",
+              "the subsequent track",
+              "the next item in the playlist"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Shift to",
+              "the next track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Go back to",
+                  "the previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause",
+                  "the track"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play",
+                  "the track"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Toggle",
+                  "shuffle mode"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "Switch on",
+                  "repeat mode"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Skip to the next song.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Skip to the next song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Skip to",
+            "synonyms": [
+              "Move forward to",
+              "Advance to",
+              "Proceed to"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the next song",
+            "synonyms": [
+              "the following track",
+              "the subsequent tune",
+              "the upcoming piece"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Skip to",
+              "the next song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Go back to",
+                  "the previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause",
+                  "the song"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play",
+                  "the song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle",
+                  "the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "Repeat",
+                  "the current song"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Slide over to the next song.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "next song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Slide over to the",
+            "synonyms": [
+              "Move to the",
+              "Skip to the",
+              "Go to the"
+            ],
+            "category": "preposition",
+            "isOptional": true
+          },
+          {
+            "text": "next song",
+            "synonyms": [
+              "following track",
+              "upcoming song",
+              "next track"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "next song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause song"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat song"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Swipe to the next track.",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "Swipe to the next track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Swipe",
+            "synonyms": [
+              "Slide",
+              "Flick",
+              "Drag"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "to the next track",
+            "synonyms": [
+              "to another song",
+              "forward to another track",
+              "to the subsequent track"
+            ],
+            "category": "direction",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "Swipe",
+              "to the next track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Swipe",
+                  "to the previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Tap",
+                  "to pause the track"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Tap",
+                  "to play the track"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shake",
+                  "to shuffle the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "Double tap",
+                  "to repeat the track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Would you mind the next track?",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "next track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Would you mind",
+            "synonyms": [
+              "Could you",
+              "Can you",
+              "Would it be possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "the next track",
+            "synonyms": [
+              "the following song",
+              "the subsequent track",
+              "the next song"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "the next track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "the previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pausing the track"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "playing the track"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffling the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeating the track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Yo, next track!",
+      "action": {
+        "fullActionName": "player.next",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "next track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Yo",
+            "synonyms": [
+              "Hey",
+              "Hi",
+              "Hello"
+            ],
+            "category": "greeting",
+            "isOptional": true
+          },
+          {
+            "text": "next track",
+            "synonyms": [
+              "skip song",
+              "next song",
+              "advance track"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "!",
+            "synonyms": [
+              ".",
+              ""
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "next track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause music"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play music"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

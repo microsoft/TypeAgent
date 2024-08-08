@@ -1,0 +1,10 @@
+{
+  "paramSpec": {
+    "addItems": {
+      "items.*": "wildcard"
+    },
+    "removeItems": {
+      "items.*": "wildcard"
+    }
+  }
+}

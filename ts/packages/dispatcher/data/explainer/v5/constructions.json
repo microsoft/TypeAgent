@@ -1,0 +1,469 @@
+{
+  "version": 3,
+  "explainerName": "v5",
+  "matchSets": [
+    {
+      "matches": [
+        "can you",
+        "could you",
+        "would you mind to",
+        "can you please"
+      ],
+      "basename": "politeness",
+      "canBeMerged": false,
+      "index": 0
+    },
+    {
+      "matches": [
+        "pause",
+        "stop",
+        "halt",
+        "suspend"
+      ],
+      "basename": "P:action",
+      "namespace": "player.pause::fullActionName",
+      "canBeMerged": false,
+      "index": 1
+    },
+    {
+      "matches": [
+        "please",
+        "kindly",
+        "if you could",
+        "if you would"
+      ],
+      "basename": "politeness",
+      "canBeMerged": false,
+      "index": 2
+    },
+    {
+      "matches": [
+        "can you",
+        "could you",
+        "would you mind",
+        "can you please"
+      ],
+      "basename": "politeness",
+      "canBeMerged": false,
+      "index": 3
+    },
+    {
+      "matches": [
+        "pause"
+      ],
+      "basename": "P:action",
+      "namespace": "player.pause::fullActionName",
+      "canBeMerged": false,
+      "index": 4
+    },
+    {
+      "matches": [
+        "the music"
+      ],
+      "basename": "P:object",
+      "namespace": "player.pause::fullActionName",
+      "canBeMerged": false,
+      "index": 5
+    },
+    {
+      "matches": [
+        "can you",
+        "could you",
+        "would you be able to",
+        "can you please"
+      ],
+      "basename": "politeness",
+      "canBeMerged": false,
+      "index": 6
+    },
+    {
+      "matches": [
+        "play",
+        "put on",
+        "start playing",
+        "begin"
+      ],
+      "basename": "P:action",
+      "namespace": "player.play::fullActionName",
+      "canBeMerged": false,
+      "index": 7
+    },
+    {
+      "matches": [
+        "some",
+        "a bit of",
+        "a few",
+        "several"
+      ],
+      "basename": "quantity",
+      "canBeMerged": false,
+      "index": 8
+    },
+    {
+      "matches": [
+        "bach",
+        "johann sebastian bach",
+        "the composer bach",
+        "bach's music",
+        "classical",
+        "the well-tempered clavier",
+        "toccata and fugue",
+        "beethoven",
+        "mozart",
+        "chopin"
+      ],
+      "basename": "P:artist",
+      "namespace": "player::parameters.query.0.constraint,player::parameters.query.0.text",
+      "canBeMerged": false,
+      "index": 9
+    },
+    {
+      "matches": [
+        "for me",
+        "to me",
+        "for my enjoyment",
+        "for my listening pleasure"
+      ],
+      "basename": "preposition",
+      "canBeMerged": false,
+      "index": 10
+    }
+  ],
+  "constructionNamespaces": [
+    {
+      "name": "player",
+      "constructions": [
+        {
+          "parts": [
+            {
+              "matchSet": "politeness_0",
+              "capture": false,
+              "optional": true,
+              "wildcard": false
+            },
+            {
+              "matchSet": "P:action_1",
+              "capture": true,
+              "optional": false,
+              "wildcard": false,
+              "transformInfos": [
+                {
+                  "namespace": "player.pause",
+                  "transformName": "fullActionName"
+                }
+              ]
+            },
+            {
+              "matchSet": "politeness_2",
+              "capture": false,
+              "optional": true,
+              "wildcard": false
+            }
+          ],
+          "implicitParameters": []
+        },
+        {
+          "parts": [
+            {
+              "matchSet": "politeness_3",
+              "capture": false,
+              "optional": true,
+              "wildcard": false
+            },
+            {
+              "matchSet": "P:action_4",
+              "capture": true,
+              "optional": false,
+              "wildcard": false,
+              "transformInfos": [
+                {
+                  "namespace": "player.pause",
+                  "transformName": "fullActionName"
+                }
+              ]
+            },
+            {
+              "matchSet": "P:object_5",
+              "capture": true,
+              "optional": false,
+              "wildcard": false,
+              "transformInfos": [
+                {
+                  "namespace": "player.pause",
+                  "transformName": "fullActionName"
+                }
+              ]
+            },
+            {
+              "matchSet": "politeness_2",
+              "capture": false,
+              "optional": true,
+              "wildcard": false
+            }
+          ],
+          "implicitParameters": []
+        },
+        {
+          "parts": [
+            {
+              "matchSet": "politeness_6",
+              "capture": false,
+              "optional": true,
+              "wildcard": false
+            },
+            {
+              "matchSet": "P:action_7",
+              "capture": true,
+              "optional": false,
+              "wildcard": false,
+              "transformInfos": [
+                {
+                  "namespace": "player.play",
+                  "transformName": "fullActionName"
+                }
+              ]
+            },
+            {
+              "matchSet": "quantity_8",
+              "capture": false,
+              "optional": false,
+              "wildcard": false
+            },
+            {
+              "matchSet": "P:artist_9",
+              "capture": true,
+              "optional": false,
+              "wildcard": false,
+              "transformInfos": [
+                {
+                  "namespace": "player",
+                  "transformName": "parameters.query.0.constraint"
+                },
+                {
+                  "namespace": "player",
+                  "transformName": "parameters.query.0.text"
+                }
+              ]
+            },
+            {
+              "matchSet": "preposition_10",
+              "capture": false,
+              "optional": true,
+              "wildcard": false
+            },
+            {
+              "matchSet": "politeness_2",
+              "capture": false,
+              "optional": true,
+              "wildcard": false
+            }
+          ],
+          "implicitParameters": [
+            {
+              "paramName": "parameters.quantity",
+              "paramValue": 5
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "transformNamespaces": [
+    {
+      "name": "player.pause",
+      "transforms": [
+        {
+          "name": "fullActionName",
+          "transform": [
+            [
+              "pause",
+              {
+                "value": "player.pause",
+                "original": true
+              }
+            ],
+            [
+              "stop",
+              {
+                "value": "player.pause",
+                "original": false
+              }
+            ],
+            [
+              "halt",
+              {
+                "value": "player.pause",
+                "original": false
+              }
+            ],
+            [
+              "suspend",
+              {
+                "value": "player.pause",
+                "original": false
+              }
+            ],
+            [
+              "pause|the music",
+              {
+                "value": "player.pause",
+                "original": true
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "player.play",
+      "transforms": [
+        {
+          "name": "fullActionName",
+          "transform": [
+            [
+              "play",
+              {
+                "value": "player.play",
+                "original": true
+              }
+            ],
+            [
+              "put on",
+              {
+                "value": "player.play",
+                "original": false
+              }
+            ],
+            [
+              "start playing",
+              {
+                "value": "player.play",
+                "original": false
+              }
+            ],
+            [
+              "begin",
+              {
+                "value": "player.play",
+                "original": false
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "player",
+      "transforms": [
+        {
+          "name": "parameters.query.0.constraint",
+          "transform": [
+            [
+              "bach",
+              {
+                "value": "artist",
+                "original": true
+              }
+            ],
+            [
+              "classical",
+              {
+                "value": "genre",
+                "original": false
+              }
+            ],
+            [
+              "the well-tempered clavier",
+              {
+                "value": "album",
+                "original": false
+              }
+            ],
+            [
+              "toccata and fugue",
+              {
+                "value": "track",
+                "original": false
+              }
+            ],
+            [
+              "johann sebastian bach",
+              {
+                "value": "artist",
+                "original": false
+              }
+            ],
+            [
+              "the composer bach",
+              {
+                "value": "artist",
+                "original": false
+              }
+            ],
+            [
+              "bach's music",
+              {
+                "value": "artist",
+                "original": false
+              }
+            ]
+          ]
+        },
+        {
+          "name": "parameters.query.0.text",
+          "transform": [
+            [
+              "bach",
+              {
+                "value": "Bach",
+                "original": true
+              }
+            ],
+            [
+              "beethoven",
+              {
+                "value": "Beethoven",
+                "original": false
+              }
+            ],
+            [
+              "mozart",
+              {
+                "value": "Mozart",
+                "original": false
+              }
+            ],
+            [
+              "chopin",
+              {
+                "value": "Chopin",
+                "original": false
+              }
+            ],
+            [
+              "johann sebastian bach",
+              {
+                "value": "Bach",
+                "original": false
+              }
+            ],
+            [
+              "the composer bach",
+              {
+                "value": "Bach",
+                "original": false
+              }
+            ],
+            [
+              "bach's music",
+              {
+                "value": "Bach",
+                "original": false
+              }
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

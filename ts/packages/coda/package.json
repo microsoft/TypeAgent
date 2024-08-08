@@ -1,0 +1,76 @@
+{
+  "name": "agent-coda",
+  "displayName": "agent-coda",
+  "version": "0.0.1",
+  "description": "Coda Operated Assistance for Coding with Voice",
+  "categories": [
+    "Other"
+  ],
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/coda"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "publisher": "aisystems",
+  "main": "./out/extension.js",
+  "scripts": {
+    "build": "pnpm run esbuild-base --sourcemap",
+    "clean": "rimraf --glob out dist-pub *.tsbuildinfo *.done.build.log",
+    "deploy:local": "pnpm run package && code --install-extension dist-pub/aisystems-coda.vsix --force",
+    "esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node",
+    "esbuild-watch": "pnpm run esbuild-base --sourcemap --watch",
+    "package": "mkdirp dist-pub && vsce package --allow-star-activation --allow-missing-repository --no-dependencies -o dist-pub/aisystems-coda.vsix",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "pretest": "pnpm run build",
+    "test-compile": "tsc -p ./src",
+    "test:full": "vscode-test",
+    "vscode:prepublish": "pnpm run esbuild-base --minify"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "coda-shell.start",
+        "title": "Start you typeagent experience ...",
+        "category": "Coda Shell"
+      }
+    ]
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "dependencies": {
+    "axios": "^1.6.1",
+    "body-parser": "^1.20.2",
+    "chalk": "^5.3.0",
+    "cors": "^2.8.5",
+    "debug": "^4.3.4",
+    "dotenv": "^16.3.1",
+    "express": "^4.19.2",
+    "open": "^7.0.4",
+    "ws": "^8.17.1"
+  },
+  "devDependencies": {
+    "@types/body-parser": "^1.19.5",
+    "@types/cors": "^2.8.17",
+    "@types/debug": "^4.1.10",
+    "@types/express": "^4.17.17",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "18.x",
+    "@types/vscode": "^1.88.0",
+    "@types/ws": "^8.5.10",
+    "@vscode/test-cli": "^0.0.8",
+    "@vscode/test-electron": "^2.3.9",
+    "@vscode/vsce": "^2.24.0",
+    "esbuild": "^0.20.2",
+    "mkdirp": "^3.0.1",
+    "prettier": "^3.2.5",
+    "rimraf": "^5.0.5"
+  },
+  "engines": {
+    "vscode": "^1.88.0"
+  }
+}

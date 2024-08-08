@@ -1,0 +1,4408 @@
+{
+  "version": 2,
+  "translatorName": "player",
+  "explainerName": "v5",
+  "entries": [
+    {
+      "request": "Can we have a quiet moment? Pause the music.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Pause the music"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can we have",
+            "synonyms": [
+              "Could we get",
+              "Is it possible to have",
+              "Would it be okay to have"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "a quiet moment?",
+            "synonyms": [
+              "some silence",
+              "a bit of quiet",
+              "a silent interval"
+            ],
+            "category": "preposition",
+            "isOptional": true
+          },
+          {
+            "text": "Pause the music",
+            "synonyms": [
+              "Stop the music",
+              "Halt the tunes",
+              "Cease the sound"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Pause the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.volumeDown",
+                "propertySubPhrases": [
+                  "Lower the volume"
+                ]
+              },
+              {
+                "propertyValue": "player.volumeMute",
+                "propertySubPhrases": [
+                  "Mute the music"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Can we stop the sound? Pause it.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "stop the sound",
+              "Pause it"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can we",
+            "synonyms": [
+              "Is it possible to",
+              "Could we",
+              "Would it be okay to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "stop the sound",
+            "synonyms": [
+              "halt the audio",
+              "cease the noise",
+              "silence the music"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "please.",
+              "right now.",
+              "immediately."
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          },
+          {
+            "text": "Pause it",
+            "synonyms": [
+              "Hold it",
+              "Freeze it",
+              "Suspend it"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ".",
+            "synonyms": [
+              "!",
+              "?"
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "stop the sound",
+              "Pause it"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the playback",
+                  "Stop it"
+                ]
+              },
+              {
+                "propertyValue": "player.mute",
+                "propertySubPhrases": [
+                  "mute the sound",
+                  "Mute it"
+                ]
+              },
+              {
+                "propertyValue": "player.volumeDown",
+                "propertySubPhrases": [
+                  "lower the volume",
+                  "Turn it down"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Can we take a brief intermission? Pause the song.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Pause the song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can we take a brief intermission?",
+            "synonyms": [
+              "Could we have a short break?",
+              "Is it possible to have a brief pause?",
+              "May we stop for a moment?"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "Pause the song.",
+            "synonyms": [
+              "Stop the music.",
+              "Halt the track.",
+              "Cease the playback."
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Pause the song."
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play the song."
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the song."
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "Skip the song."
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Can you give the play button a rest? Pause it.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Pause it."
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can you",
+            "synonyms": [
+              "Would you",
+              "Could you",
+              "Can you please"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "give the play button a rest?",
+            "synonyms": [
+              "stop the playback",
+              "halt the music",
+              "cease playing"
+            ],
+            "category": "action request",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "Pause it.",
+            "synonyms": [
+              "Stop it.",
+              "Hold it.",
+              "Freeze it."
+            ],
+            "category": "action command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "give the play button a rest?",
+              "Pause it."
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "hit the play button",
+                  "Play it."
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "make the play button stop",
+                  "Stop it."
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "skip the current track",
+                  "Next track, please."
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Can you pause the playback there?",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "pause the playback"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can you",
+            "synonyms": [
+              "Could you",
+              "Would you mind to",
+              "Is it possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "pause the playback",
+            "synonyms": [
+              "stop the video",
+              "halt the music",
+              "suspend the stream"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "there",
+            "synonyms": [
+              "right now",
+              "immediately",
+              "at this moment"
+            ],
+            "category": "confirmation",
+            "isOptional": true
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "please.",
+              "right away.",
+              "now."
+            ],
+            "category": "confirmation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "pause the playback"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "resume the playback"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the playback"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "skip the playback"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Can you pause the track?",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "pause the track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can you",
+            "synonyms": [
+              "Could you",
+              "Would you mind to",
+              "Is it possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "pause the track",
+            "synonyms": [
+              "stop the music",
+              "halt the song",
+              "suspend the playback"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "please.",
+              "right now.",
+              "at this moment."
+            ],
+            "category": "confirmation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "pause the track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the track"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the track"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "skip the track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Can you put the music on hold? Pause it.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "put the music on hold",
+              "Pause it"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can you",
+            "synonyms": [
+              "Would you",
+              "Could you",
+              "Is it possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "put the music on hold",
+            "synonyms": [
+              "suspend the music",
+              "stop the music temporarily",
+              "hold the music"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "",
+              "please.",
+              "right now."
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          },
+          {
+            "text": "Pause it",
+            "synonyms": [
+              "Stop it",
+              "Halt it",
+              "Freeze it"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ".",
+            "synonyms": [
+              "",
+              "!",
+              "?"
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "put the music on hold",
+              "Pause it"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "start the music",
+                  "Play it"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music",
+                  "Stop it"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "skip to the next song",
+                  "Next track"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "go back to the previous song",
+                  "Previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist",
+                  "Shuffle the music"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Cease the sound, please pause.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Cease the sound",
+              "pause"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Cease the sound",
+            "synonyms": [
+              "Stop the audio",
+              "Halt the music",
+              "Silence the noise"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "please",
+            "synonyms": [
+              "kindly",
+              "if you could",
+              "would you mind"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "pause",
+            "synonyms": [
+              "halt",
+              "suspend",
+              "interrupt"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Cease the sound",
+              "pause"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the sound",
+                  "stop"
+                ]
+              },
+              {
+                "propertyValue": "player.mute",
+                "propertySubPhrases": [
+                  "Mute the sound",
+                  "mute"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Resume the sound",
+                  "play"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Could you give the song a break? Pause it.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "give the song a break",
+              "Pause it"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Could you",
+            "synonyms": [
+              "Can you",
+              "Would you mind to",
+              "Is it possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "give the song a break",
+            "synonyms": [
+              "stop the song",
+              "halt the music",
+              "pause the track"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              ".",
+              "!",
+              "..."
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          },
+          {
+            "text": "Pause it",
+            "synonyms": [
+              "Stop it",
+              "Halt it",
+              "Pause the song"
+            ],
+            "category": "confirmation",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ".",
+            "synonyms": [
+              "?",
+              "!",
+              "..."
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "give the song a break",
+              "Pause it"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "start the song",
+                  "Play it"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the song",
+                  "Stop it"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "skip to the next song",
+                  "Next track"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "go back to the previous song",
+                  "Previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "mix up the song order",
+                  "Shuffle the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Could you hit pause on the player?",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "hit pause",
+              "on the player"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Could you",
+            "synonyms": [
+              "Can you",
+              "Would you mind to",
+              "Is it possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "hit pause",
+            "synonyms": [
+              "pause",
+              "stop",
+              "halt"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "on the player",
+            "synonyms": [
+              "the player",
+              "player",
+              "the media player"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "",
+              "please.",
+              "now."
+            ],
+            "category": "confirmation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "hit pause",
+              "on the player"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "start playing",
+                  "on the player"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop",
+                  "the player"
+                ]
+              },
+              {
+                "propertyValue": "player.mute",
+                "propertySubPhrases": [
+                  "mute",
+                  "the player"
+                ]
+              },
+              {
+                "propertyValue": "player.unmute",
+                "propertySubPhrases": [
+                  "unmute",
+                  "the player"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "skip forward",
+                  "on the player"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Could you stop the music? Just hit pause.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "stop the music",
+              "hit pause"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Could you",
+            "synonyms": [
+              "Can you",
+              "Would you mind to",
+              "Is it possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "stop the music",
+            "synonyms": [
+              "halt the tunes",
+              "cease the songs",
+              "end the playback"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "please.",
+              "right now.",
+              "."
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          },
+          {
+            "text": "Just",
+            "synonyms": [
+              "Simply",
+              "Only",
+              "Merely"
+            ],
+            "category": "filler",
+            "isOptional": true
+          },
+          {
+            "text": "hit pause",
+            "synonyms": [
+              "press pause",
+              "activate pause",
+              "engage pause"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ".",
+            "synonyms": [
+              "!",
+              ""
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "stop the music",
+              "hit pause"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music",
+                  "stop playback"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "start the music",
+                  "play the music"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "skip the music",
+                  "go to the next song"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "go back a song",
+                  "play the previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the music",
+                  "turn on shuffle mode"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Freeze the beats, pause the music.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Freeze the beats",
+              "pause the music"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Freeze the beats",
+            "synonyms": [
+              "Stop the rhythm",
+              "Halt the tunes",
+              "Cease the sound"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "pause the music",
+            "synonyms": [
+              "halt the song",
+              "suspend the playback",
+              "interrupt the audio"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Freeze the beats",
+              "pause the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Resume the beats",
+                  "play the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the beats",
+                  "stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "Skip the beats",
+                  "next track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Give the music a break, pause it.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "pause it"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Give the music a break",
+            "synonyms": [
+              "stop the music",
+              "halt the tunes",
+              "interrupt the audio"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "pause it",
+            "synonyms": [
+              "suspend playback",
+              "halt it",
+              "stop it"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Give the music a break",
+              "pause it"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Resume the music",
+                  "play it"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the music",
+                  "stop it"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "Skip to the next track",
+                  "next track"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Go back to the previous track",
+                  "previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Mix up the playlist",
+                  "shuffle the music"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Hit the pause button, will you?",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Hit the pause button"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Hit the",
+            "synonyms": [
+              "Press the",
+              "Activate the",
+              "Use the"
+            ],
+            "category": "action-verb",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "pause button",
+            "synonyms": [
+              "pause control",
+              "pause feature",
+              "pause option"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ", will you?",
+            "synonyms": [
+              ", can you?",
+              ", could you?",
+              ", would you mind?"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Hit the",
+              "pause button"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Hit the",
+                  "play button"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Press the",
+                  "stop button"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "Tap the",
+                  "next button"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Smack the",
+                  "previous button"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Hit the",
+                  "shuffle button"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Hold on, let's pause the tunes.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "pause the tunes"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Hold on",
+            "synonyms": [
+              "wait",
+              "hang on",
+              "give me a second"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "let's",
+            "synonyms": [
+              "we should",
+              "we ought to",
+              "it's time to"
+            ],
+            "category": "suggestion",
+            "isOptional": true
+          },
+          {
+            "text": "pause the tunes",
+            "synonyms": [
+              "stop the music",
+              "halt the songs",
+              "suspend the tracks"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "pause the tunes"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the tunes"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the tunes"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "skip the tunes"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Hold the tunes, pause the music.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "pause the music"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Hold the tunes",
+            "synonyms": [
+              "stop the music",
+              "halt the songs",
+              "suspend the playback"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "pause the music",
+            "synonyms": [
+              "stop the tracks",
+              "halt the audio",
+              "suspend the sound"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Hold the tunes",
+              "pause the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Resume the tunes",
+                  "play the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the tunes",
+                  "stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "Skip the tunes",
+                  "next track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Hold up, pause that.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "pause that"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Hold up",
+            "synonyms": [
+              "wait",
+              "hang on",
+              "one moment"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "pause that",
+            "synonyms": [
+              "stop that",
+              "halt that",
+              "cease that"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "pause that"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play that"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop that"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "skip that"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "I need a moment of silence, please pause the music.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "pause the music"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "I need a moment of silence",
+            "synonyms": [
+              "I require some quiet time",
+              "I'm looking for a brief period of quiet",
+              "I desire a short break of silence"
+            ],
+            "category": "request",
+            "propertyNames": []
+          },
+          {
+            "text": "please",
+            "synonyms": [
+              "kindly",
+              "would you",
+              "could you"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "pause the music",
+            "synonyms": [
+              "stop the music",
+              "halt the tunes",
+              "suspend the sound"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "pause the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.mute",
+                "propertySubPhrases": [
+                  "mute the music"
+                ]
+              },
+              {
+                "propertyValue": "player.volumeDown",
+                "propertySubPhrases": [
+                  "lower the volume"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "I'd appreciate it if you paused the song.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "paused the song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "I'd appreciate it if you",
+            "synonyms": [
+              "Could you please",
+              "Would you mind to",
+              "I would be grateful if you could"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "paused the song",
+            "synonyms": [
+              "stop the music",
+              "halt the track",
+              "suspend the playback"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "paused the song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "played the song"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stopped the song"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "skipped to the next song"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "went back to the previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffled the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Interrupt the rhythm, pause the track.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "pause the track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Interrupt the rhythm",
+            "synonyms": [
+              "stop the music",
+              "halt the song",
+              "cease the playback"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ",",
+            "synonyms": [
+              "",
+              " and",
+              " then"
+            ],
+            "category": "filler",
+            "isOptional": true
+          },
+          {
+            "text": "pause the track",
+            "synonyms": [
+              "suspend the tune",
+              "halt the music",
+              "stop the song"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Interrupt the rhythm",
+              "pause the track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Resume the rhythm",
+                  "play the track"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Terminate the rhythm",
+                  "stop the track"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "Skip the rhythm",
+                  "skip the track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let's freeze the playlist, pause the song.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "freeze the playlist",
+              "pause the song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's",
+            "synonyms": [
+              "We should",
+              "I want to",
+              "Please"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "freeze the playlist",
+            "synonyms": [
+              "stop the playlist",
+              "halt the playlist",
+              "suspend the playlist"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ",",
+            "synonyms": [
+              ""
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          },
+          {
+            "text": "pause the song",
+            "synonyms": [
+              "stop the song",
+              "halt the song",
+              "suspend the song"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ".",
+            "synonyms": [
+              ""
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "freeze the playlist",
+              "pause the song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "unfreeze the playlist",
+                  "play the song"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the playlist",
+                  "stop the song"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "skip the playlist",
+                  "skip the song"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let's have a pause in the music.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "pause",
+              "music"
+            ],
+            "implied": true
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's have a",
+            "synonyms": [
+              "I want to",
+              "Can we",
+              "Please make a"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "pause",
+            "synonyms": [
+              "stop",
+              "halt",
+              "break"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "in the",
+            "synonyms": [
+              "for the",
+              "on the",
+              "with the"
+            ],
+            "category": "preposition",
+            "isOptional": true
+          },
+          {
+            "text": "music",
+            "synonyms": [
+              "song",
+              "track",
+              "playback"
+            ],
+            "category": "context",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "pause",
+              "music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play",
+                  "music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop",
+                  "music"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "skip",
+                  "music"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let's hold off on the music, pause it.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "pause it"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's hold off on the music",
+            "synonyms": [
+              "stop the music",
+              "don't play the music",
+              "cease the music playback"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "pause it",
+            "synonyms": [
+              "stop it",
+              "halt it",
+              "suspend it"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "pause it"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "skip to the next song"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "go back to the previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let's interrupt the flow, pause the track.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "pause the track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's interrupt the flow",
+            "synonyms": [
+              "stop the music",
+              "halt the song",
+              "cease the audio"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "pause the track",
+            "synonyms": [
+              "suspend the song",
+              "halt the music",
+              "freeze the playing"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Let's interrupt the flow",
+              "pause the track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Let's resume the flow",
+                  "play the track"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Let's end the flow",
+                  "stop the track"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "Let's skip ahead",
+                  "skip the track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let's put a pin in it, pause the music.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "pause the music"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's put a pin in it",
+            "synonyms": [
+              "Let's hold off on this",
+              "Let's delay this",
+              "We'll come back to this later"
+            ],
+            "category": "idiom",
+            "isOptional": true
+          },
+          {
+            "text": "pause the music",
+            "synonyms": [
+              "stop the music",
+              "halt the music",
+              "suspend the music playback"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "pause the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "skip to the next song"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "go back to the previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let's silence the sound for a sec, hit pause.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "silence the sound",
+              "hit pause"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's",
+            "synonyms": [
+              "Please",
+              "I want to",
+              "Could you"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "silence the sound",
+            "synonyms": [
+              "mute the audio",
+              "turn off the sound",
+              "stop the noise"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "for a sec",
+            "synonyms": [
+              "temporarily",
+              "briefly",
+              "for a moment"
+            ],
+            "category": "duration",
+            "isOptional": true
+          },
+          {
+            "text": "hit pause",
+            "synonyms": [
+              "pause the player",
+              "stop playing",
+              "pause the music"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "silence the sound",
+              "hit pause"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.mute",
+                "propertySubPhrases": [
+                  "mute the sound",
+                  "hit mute"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the sound",
+                  "hit stop"
+                ]
+              },
+              {
+                "propertyValue": "player.volumeDown",
+                "propertySubPhrases": [
+                  "lower the volume",
+                  "turn down the sound"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let's take a breather, pause the song.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "pause the song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's take a breather,",
+            "synonyms": [
+              "Let's have a break,",
+              "Let's rest for a moment,",
+              "Time for a pause,"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "pause the song",
+            "synonyms": [
+              "stop the music",
+              "halt the track",
+              "suspend the playback"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "pause the song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the song"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the song"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "skip the song"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let's take a music break, hit pause.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "hit pause"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's take a",
+            "synonyms": [
+              "We should have a",
+              "I want to have a",
+              "It's time for a"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "music break",
+            "synonyms": [
+              "short break with music",
+              "break with some tunes",
+              "musical interlude"
+            ],
+            "category": "preposition",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "hit pause",
+            "synonyms": [
+              "pause the music",
+              "stop the song",
+              "pause playback"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "music break",
+              "hit pause"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "music break",
+                  "hit play"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "music break",
+                  "hit stop"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "music break",
+                  "skip forward"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let's take a pause from the music.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "pause",
+              "music"
+            ],
+            "implied": true
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's take a",
+            "synonyms": [
+              "We should have a",
+              "I want to have a",
+              "It's time for a"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "pause",
+            "synonyms": [
+              "break",
+              "stop",
+              "halt"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "from the",
+            "synonyms": [
+              "in the",
+              "with the",
+              "on the"
+            ],
+            "category": "preposition",
+            "isOptional": true
+          },
+          {
+            "text": "music",
+            "synonyms": [
+              "tunes",
+              "sound",
+              "playlist"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "pause",
+              "music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play",
+                  "music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop",
+                  "music"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "skip",
+                  "music"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Mind suspending the tunes? Hit pause.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "suspending the tunes",
+              "Hit pause"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Mind",
+            "synonyms": [
+              "Would you",
+              "Can you",
+              "Could you"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "suspending the tunes",
+            "synonyms": [
+              "stopping the music",
+              "pausing the song",
+              "halting the playback"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "please.",
+              "for me?",
+              "right now?"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "Hit",
+            "synonyms": [
+              "Press",
+              "Activate",
+              "Use"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "pause",
+            "synonyms": [
+              "stop",
+              "halt",
+              "freeze"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ".",
+            "synonyms": [
+              "",
+              "!",
+              ""
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "suspending the tunes",
+              "Hit",
+              "pause"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stopping the tunes",
+                  "Hit",
+                  "stop"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "resuming the tunes",
+                  "Hit",
+                  "play"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "skipping the tunes",
+                  "Hit",
+                  "next"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "replaying the tunes",
+                  "Hit",
+                  "previous"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "mixing up the tunes",
+                  "Hit",
+                  "shuffle"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Pause the audio, thanks.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Pause the audio"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Pause the audio",
+            "synonyms": [
+              "Stop the sound",
+              "Halt the playback",
+              "Cease the music"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "thanks",
+            "synonyms": [
+              "thank you",
+              "appreciate it",
+              "much obliged"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Pause the audio"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play the audio"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the audio"
+                ]
+              },
+              {
+                "propertyValue": "player.mute",
+                "propertySubPhrases": [
+                  "Mute the audio"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Pause the beats for me, please.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Pause the beats"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Pause the beats",
+            "synonyms": [
+              "Stop the music",
+              "Halt the tunes",
+              "Cease the sound"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "for me",
+            "synonyms": [
+              "on my behalf",
+              "for my sake",
+              "to assist me"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "please",
+            "synonyms": [
+              "if you could",
+              "kindly",
+              "would you mind"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Pause the beats"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play the beats"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the beats"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "Skip the beats"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Pause the melody for a bit, will you?",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Pause the melody"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Pause the melody",
+            "synonyms": [
+              "Stop the music",
+              "Halt the tune",
+              "Cease the song"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "for a bit",
+            "synonyms": [
+              "temporarily",
+              "for a short time",
+              "for a moment"
+            ],
+            "category": "duration",
+            "isOptional": true
+          },
+          {
+            "text": "will you",
+            "synonyms": [
+              "please",
+              "can you",
+              "could you"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Pause the melody"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play the melody"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the melody"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "Skip the melody"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Pause the music for a sec, I need to think.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Pause the music"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Pause the music",
+            "synonyms": [
+              "Stop the music",
+              "Halt the tunes",
+              "Cease the sound"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "for a sec",
+            "synonyms": [
+              "briefly",
+              "for a moment",
+              "for a short time"
+            ],
+            "category": "duration",
+            "isOptional": true
+          },
+          {
+            "text": "I need to think",
+            "synonyms": [
+              "I require some time to contemplate",
+              "I must ponder",
+              "I have to consider"
+            ],
+            "category": "explanation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Pause the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "Skip the music"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Pause the music, I have an announcement.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Pause the music"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Pause the music",
+            "synonyms": [
+              "Stop the music",
+              "Halt the tunes",
+              "Cease the sound"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ", I have an announcement.",
+            "synonyms": [
+              ", I need to make an announcement.",
+              ", I've got something to announce.",
+              ", I must declare something."
+            ],
+            "category": "context",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Pause the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "Skip to the next song"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Go back to the previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Pause the music, it's too loud.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Pause the music"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Pause the music",
+            "synonyms": [
+              "Stop the music",
+              "Halt the playback",
+              "Cease the audio"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ", it's too loud",
+            "synonyms": [
+              "because it's too noisy",
+              "as it's too high volume",
+              "since it's too deafening"
+            ],
+            "category": "reason",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Pause the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.lowerVolume",
+                "propertySubPhrases": [
+                  "Lower the volume"
+                ]
+              },
+              {
+                "propertyValue": "player.mute",
+                "propertySubPhrases": [
+                  "Mute the music"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Pause the playback for a moment.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Pause the playback"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Pause",
+            "synonyms": [
+              "Stop",
+              "Halt",
+              "Freeze"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the playback",
+            "synonyms": [
+              "the video",
+              "the music",
+              "the audio"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "for a moment",
+            "synonyms": [
+              "temporarily",
+              "briefly",
+              "for a short time"
+            ],
+            "category": "duration",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Pause",
+              "the playback"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Resume",
+                  "the playback"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop",
+                  "the playback"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "Skip",
+                  "the playback"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Pause the record, if you don't mind.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Pause the record"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Pause the",
+            "synonyms": [
+              "Stop the",
+              "Halt the",
+              "Freeze the"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "record",
+            "synonyms": [
+              "playback",
+              "music",
+              "track"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ", if you don't mind.",
+            "synonyms": [
+              ", please.",
+              ", if it's not too much trouble.",
+              ", at your convenience."
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Pause the",
+              "record"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play the",
+                  "record"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the",
+                  "record"
+                ]
+              },
+              {
+                "propertyValue": "player.resume",
+                "propertySubPhrases": [
+                  "Resume the",
+                  "record"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Pause the song real quick.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Pause the song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Pause the song",
+            "synonyms": [
+              "Stop the music",
+              "Halt the track",
+              "Cease the playback"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "real quick",
+            "synonyms": [
+              "immediately",
+              "right away",
+              "instantly"
+            ],
+            "category": "modifier",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Pause the song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play the song"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the song"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "Skip the song"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Pause the sound, I need to talk.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Pause the sound"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Pause",
+            "synonyms": [
+              "Stop",
+              "Halt",
+              "Suspend"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the sound",
+            "synonyms": [
+              "the audio",
+              "the music",
+              "the noise"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ",",
+            "synonyms": [
+              "",
+              ".",
+              ";"
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          },
+          {
+            "text": "I need to talk",
+            "synonyms": [
+              "I have to speak",
+              "I want to converse",
+              "I must communicate"
+            ],
+            "category": "explanation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Pause",
+              "the sound"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop",
+                  "the sound"
+                ]
+              },
+              {
+                "propertyValue": "player.mute",
+                "propertySubPhrases": [
+                  "Mute",
+                  "the sound"
+                ]
+              },
+              {
+                "propertyValue": "player.volumeDown",
+                "propertySubPhrases": [
+                  "Lower",
+                  "the volume"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Pause the tune, please.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Pause the tune"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Pause the tune",
+            "synonyms": [
+              "Stop the music",
+              "Halt the song",
+              "Cease the melody"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "please",
+            "synonyms": [
+              "if you could",
+              "kindly",
+              "would you mind"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Pause the tune"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play the tune"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the tune"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "Skip the tune"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {      
+      "request": "Pause the tunes for a moment.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Pause the tunes"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Pause",
+            "synonyms": [
+              "Stop",
+              "Halt",
+              "Freeze"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the tunes",
+            "synonyms": [
+              "the music",
+              "the song",
+              "the playback"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "for a moment",
+            "synonyms": [
+              "briefly",
+              "temporarily",
+              "for a bit"
+            ],
+            "category": "duration",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Pause",
+              "the tunes"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play",
+                  "the tunes"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop",
+                  "the tunes"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "Skip",
+                  "the tunes"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Pause the vibes for a second.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Pause"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Pause",
+            "synonyms": [
+              "Stop",
+              "Halt",
+              "Freeze"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the vibes",
+            "synonyms": [
+              "the music",
+              "the sound",
+              "the tune"
+            ],
+            "category": "object",
+            "isOptional": true
+          },
+          {
+            "text": "for a second",
+            "synonyms": [
+              "briefly",
+              "for a moment",
+              "temporarily"
+            ],
+            "category": "duration",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Pause"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "Skip"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Please pause the music.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "pause the music"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Please",
+            "synonyms": [
+              "Kindly",
+              "Would you mind to",
+              "Could you"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "pause the music",
+            "synonyms": [
+              "stop the music",
+              "halt the music",
+              "suspend the music"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "pause the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "skip to the next song"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "go back to the previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Press pause on that, would you?",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Press pause"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Press pause",
+            "synonyms": [
+              "pause the video",
+              "stop playing",
+              "halt playback"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "on that",
+            "synonyms": [
+              "on the player",
+              "on the device",
+              "on the screen"
+            ],
+            "category": "preposition",
+            "isOptional": true
+          },
+          {
+            "text": "would you",
+            "synonyms": [
+              "please",
+              "can you",
+              "could you"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Press pause"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Press play"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Press stop"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "Press skip"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Take a quick pause on the music, okay?",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "Take a quick pause",
+              "on the music"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Take a quick pause",
+            "synonyms": [
+              "Pause the music quickly",
+              "Quickly stop the music",
+              "Briefly halt the music"
+            ],
+            "category": "action command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "on the music",
+            "synonyms": [
+              "for the music",
+              "with the music playing",
+              "in the music playback"
+            ],
+            "category": "context specification",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "okay?",
+            "synonyms": [
+              "alright?",
+              "is that good?",
+              "do you agree?"
+            ],
+            "category": "confirmation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Take a quick pause",
+              "on the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Resume playing",
+                  "the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop",
+                  "the music"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "Skip to the next track",
+                  "in the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.volumeDown",
+                "propertySubPhrases": [
+                  "Turn down the volume",
+                  "on the music"
+                ]
+              },
+              {
+                "propertyValue": "player.volumeUp",
+                "propertySubPhrases": [
+                  "Turn up the volume",
+                  "on the music"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Time out on the tunes, pause them.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "pause them"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Time out on the tunes",
+            "synonyms": [
+              "Stop the music",
+              "Halt the songs",
+              "Cease the audio playback"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ",",
+            "synonyms": [],
+            "category": "punctuation",
+            "isOptional": true
+          },
+          {
+            "text": "pause them",
+            "synonyms": [
+              "suspend the playback",
+              "halt the tunes",
+              "stop the music"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "Time out on the tunes",
+              "pause them"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Resume the tunes",
+                  "play them"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the tunes",
+                  "stop them"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "Skip this tune",
+                  "next one"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Would you mind pausing the music?",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "pausing the music"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Would you mind",
+            "synonyms": [
+              "Can you",
+              "Could you",
+              "Would it be possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "pausing the music",
+            "synonyms": [
+              "stopping the music",
+              "halting the music playback",
+              "suspending the music"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "pausing the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "playing the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stopping the music"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "skipping to the next track"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "going back to the previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffling the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Yo, pause the song.",
+      "action": {
+        "fullActionName": "player.pause",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.pause",
+            "substrings": [
+              "pause the song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Yo",
+            "synonyms": [
+              "Hey",
+              "Hello",
+              "Hi"
+            ],
+            "category": "greeting",
+            "isOptional": true
+          },
+          {
+            "text": "pause the song",
+            "synonyms": [
+              "stop the music",
+              "halt the track",
+              "suspend the playback"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.pause",
+            "propertySubPhrases": [
+              "pause the song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the song"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the song"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "skip the song"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

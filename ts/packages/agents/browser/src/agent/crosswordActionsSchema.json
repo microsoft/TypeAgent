@@ -1,0 +1,11 @@
+{
+  "paramSpec": {
+    "enterText": {
+      "value": "wildcard",
+      "clueNumber": "number"
+    },
+    "getClueValue": {
+      "clueNumber": "number"
+    }
+  }
+}

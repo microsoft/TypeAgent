@@ -1,0 +1,118 @@
+{
+  "agents": {
+    "player": {
+      "type": "module",
+      "name": "music",
+      "imports": ["./test/data/player/**/*.json"]
+    },
+    "calendar": {
+      "type": "module",
+      "name": "calendar",
+      "imports": [        
+        "./test/data/calendar/**/*.json"        
+      ]
+    },
+    "email": {
+      "type": "module",
+      "name": "email"
+    },
+    "list": {
+      "type": "module",
+      "name": "list-agent"
+    },
+    "browser": {
+      "type": "module",
+      "name": "browser-automation"
+    },
+    "desktop": {
+      "type": "module",
+      "name": "desktop-automation"
+    },
+    "code": {
+      "type": "module",
+      "name": "code-agent"
+    },
+    "phrases": {
+      "emojiChar": "🗨️",
+      "defaultEnabled": false,
+      "actionDefaultEnabled": false,
+      "schema": {
+        "description": "Look up phrases in a database",
+        "schemaFile": "./src/handlers/dataFrame/phraseSchema.ts",
+        "schemaType": "DataFrameAction",
+        "dataFrameColumns": {
+          "categoryGroup": "string",
+          "category": "string",
+          "phraseText": "string",
+          "idiomOrSlang": "boolean",
+          "votes": "number"
+        }
+      }
+    },
+    "books": {
+      "emojiChar": "📖",
+      "defaultEnabled": false,
+      "actionDefaultEnabled": false,
+      "schema": {
+        "description": "Look up books in a database",
+        "schemaFile": "./src/handlers/dataFrame/bookSchema.ts",
+        "schemaType": "DataFrameAction",
+        "dataFrameColumns": {
+          "title": "string",
+          "author": "string",
+          "genre": "string",
+          "series": "string",
+          "language": "string",
+          "pageCount": "number",
+          "rating": "number"
+        }
+      }
+    },  
+    "chat": {
+      "type": "module",
+      "name": "chat-agent"
+    },
+    "correction": {
+      "emojiChar": "❌",
+      "defaultEnabled": false,
+      "schema": {
+        "description": "Correct previous action's translation",
+        "schemaFile": "./src/translation/correctionActionsSchema.ts",
+        "schemaType": "CorrectionAction",
+        "injected" : true,
+        "cached": false
+      }
+    },
+    "system": {
+      "emojiChar": "🔧",
+      "subTranslators": {
+        "config": {
+          "schema": {
+            "description": "System agent that helps you manage system settings and preferences.",
+            "schemaFile": "./src/translation/system/configActionSchema.ts",
+            "schemaType": "ConfigAction"
+          }
+        },
+        "session": {
+          "schema": {
+            "description": "System agent that helps you manage your session.",
+            "schemaFile": "./src/translation/system/sessionActionSchema.ts",
+            "schemaType": "SessionAction"
+          }
+        }
+      }
+    }
+  },
+  "explainers": {
+    "v5": {
+      "constructions": {
+        "data": ["./data/explainer/v5/data/player/basic.json"],
+        "file": "./data/explainer/v5/constructions.json"
+      }
+    }
+  },
+  "tests": [
+    "./test/data/**/**/*.json",
+    "./test/repo/explanations/**/**/*.json"
+  ]
+}

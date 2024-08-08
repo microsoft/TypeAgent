@@ -1,0 +1,51 @@
+# ====== Init =======
+@config action -* desktop browser code calendar email  
+@config translator -* desktop browser code calendar email
+@config serviceHost on
+
+# -------------------------------------
+# Calendar
+# -------------------------------------
+# Browser and navigate to calendar page
+Launch edge
+Open "https://outlook.office.com/calendar/view/workweek?actSwt=true" in a new tab
+
+Create a code review meeting next Monday at 11:00 AM
+Add Alex to the code review meeting
+Add Megan to the code review meeting
+
+Schedule a lunch meeting at noon tomorrow
+Add Alex and Megan to the lunch meeting
+
+Block some time to pick up groceries at 5:00 PM today
+Schedule dimsum lunch on April 30th at 1:00pm
+could you add Megan to the dimsum lunch?
+
+# -------------------------------------
+# Code
+# -------------------------------------
+# Launch vsCode for the demo
+Launch vs code
+
+create a text file
+Create a readme file with sample table with two rows
+split window into two columns
+Revert back to a single column
+
+Change color scheme to Monokai
+Change theme back to light
+Actually I want the color to be solarized light
+Create a new python code file that merges two sorted arrays of numbers
+ 
+# -------------------------------------
+# email
+# -------------------------------------
+# TO DO: Need to launch regular browser and incognito browser
+Open "https://outlook.office.com/mail/sentitems/" in a new tab
+
+Send email to Megan asking if she wants to meet for coffee and chat after work today.
+Send email to Megan with the recipe for Lasgna
+
+# **Login as Megan and send an Email to Adele and send email to Adele.
+# Reply to the email from Megan saying you will be happy to meet for coffee
+# Forward the mail from Megan to Alex asking if he wants to join us for coffee

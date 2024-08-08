@@ -1,0 +1,19 @@
+{
+  "paramSpec": {
+    "play": {
+      "query.*.text": "wildcard",
+      "query.*.constraint": "literal",
+      "trackNumber": "ordinal",
+      "quantity": "number"
+    },
+    "setVolume": {
+      "newVolumeLevel": "number"
+    },
+    "changeVolume": {
+      "volumeChangePercentage": "percentage"
+    },
+    "getFavorites": {
+      "count": "number"
+    }
+  }
+}

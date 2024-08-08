@@ -1,0 +1,33 @@
+{
+  "emojiChar": "⚛️",
+  "defaultEnabled": false,
+  "actionDefaultEnabled": false,
+  "schema": {
+    "description": "Code agent helps you with productivity in using an editor and performing actions like creating files, editor customization, writing code, intelligent code suggestions, real-time error detection, debugging, and source control tasks etc.",
+    "schemaFile": "./codeActionsSchema.ts",
+    "schemaType": "CodeActions"
+  },
+  "subTranslators": {
+    "code-debug": {
+      "schema": {
+        "description": "Code agent that helps you debug code including handling actions like showing the debug panel, adding/toggling breakpoints, stepping in/out of code etc.",
+        "schemaFile": "./vscode/debugActionsSchema.ts",
+        "schemaType": "CodeDebugActions"
+      }
+    },
+    "code-display": {
+      "schema": {
+        "description": "Code agent that helps you work with display keyboard bindings, Zoom in, Zoom out, do text search and replace, show extensions etc.",
+        "schemaFile": "./vscode/displayActionsSchema.ts",
+        "schemaType": "CodeDisplayActions"
+      }
+    },
+    "code-general": {
+      "schema": {
+        "description": "Code agent that helps you perform actions like finding a file, go to a symbol or a line in a file, Open new vscode window, show the command palette, user settings json etc.",
+        "schemaFile": "./vscode/generalActionsSchema.ts",
+        "schemaType": "CodeGeneralActions"
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "paramSpec": {
+    "addEvent": {
+      "event.description": "wildcard"
+    },
+    "removeEvent": {
+      "eventReference.description": "wildcard"
+    },
+    "addParticipants": {
+      "eventReference.description": "wildcard"
+    },
+    "changeTime": {
+      "eventReference.description": "wildcard"
+    },
+    "changeDescription": {
+      "eventReference.description": "wildcard",
+      "description": "wildcard"
+    },
+    "findEvents": {
+      "eventReference.description": "wildcard"
+    }
+  }
+}

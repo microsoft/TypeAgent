@@ -1,0 +1,18 @@
+{
+  "extends": "../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "rootDir": ".",
+    "outDir": "../../dist/site",
+    "noUnusedLocals": false,
+    "declaration": false,
+    "declarationMap": false,
+    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "lib": ["DOM"],
+  },
+  "include": ["./*"],
+  "ts-node": {
+    "esm": true
+  }
+}

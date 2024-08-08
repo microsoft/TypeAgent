@@ -1,0 +1,38 @@
+# ====== Init =======
+@config bot on
+@config serviceHost on
+@config action -* desktop browser
+@config translator -* desktop browser
+
+# -------------------------------------
+# Run desktop actions
+# -------------------------------------
+Please open notepad
+Launch edge
+Tile notepad the left and edge to the right
+Maximize Edge
+
+# -------------------------------------
+# Run browser actions
+# -------------------------------------
+Go To BBC
+Scroll down
+Scroll up
+Zoom in
+Zoom out
+Follow BBC link
+
+
+# -------------------------------------
+# Run PBDB actions
+# -------------------------------------
+Show PBDB site I saw yesterday
+Set location to Denver
+Zoom in
+Show fossils from 100 million years ago
+Show T-Rex fossils
+clear filters
+when did whales first evolve?
+show whale fossils from puget sound from that epoch
+clear filters
+Where are Triceratops fossils found?

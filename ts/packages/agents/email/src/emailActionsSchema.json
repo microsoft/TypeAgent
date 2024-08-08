@@ -1,0 +1,18 @@
+{
+  "actionNamespace": true,
+  "paramSpec": {
+    "sendEmail": {
+      "subject": "wildcard",
+      "body": "wildcard"
+    },
+    "forwardEmail": {
+      "additionalMessage": "wildcard"
+    },
+    "replyEmail": {
+      "body": "wildcard"
+    },
+    "findEmail": {
+      "searchText": "wildcard"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+root = true
+
+[*]
+indent_style = space
+end_of_line = lf
+
+# Typescript files
+[*.{ts,tsx}]
+insert_final_newline = true
+trim_trailing_whitespace = true
+tab_width = 4
+indent_size = 4
+file_header_template = // Copyright (c) Microsoft Corporation.\n// Licensed under the MIT License.
+
+# Javascript files
+[*.{cjs,mjs,js,jsx}]
+insert_final_newline = true
+trim_trailing_whitespace = true
+tab_width = 4
+indent_size = 4
+file_header_template = // Copyright (c) Microsoft Corporation.\n// Licensed under the MIT License.
+
+# JSON config files
+[*.json]
+tab_width = 2
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true

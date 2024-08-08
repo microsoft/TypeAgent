@@ -1,0 +1,15 @@
+{
+    "compilerOptions": {
+       "strict": true,
+       "module": "esnext",
+       "moduleResolution": "Bundler",
+       "target": "es2022",
+       "esModuleInterop": true,
+       "sourceMap": true,
+       "rootDir": "src",
+       "outDir": "dist/js",
+       "noEmitOnError": true,
+       "typeRoots": [ "node_modules/@types" ]
+    },
+    "exclude": ["dist/*.ts", "src/agent/*.ts"]
+ }

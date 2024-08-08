@@ -1,0 +1,8 @@
+{
+  "emojiChar": "📅",
+  "schema": {
+    "description": "Calendar agent that keeps track of important dates and events. Use it to schedule appointments, set reminders, and organize activities.",
+    "schemaFile": "./calendarActionsSchema.ts",
+    "schemaType": "CalendarAction"
+  }
+}

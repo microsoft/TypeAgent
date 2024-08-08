@@ -1,0 +1,26 @@
+# ====== Init =======
+@config action -* player calendar
+@config translator -* player calendar
+@config serviceHost off
+
+# -------------------------------------
+# Player scenario and explanation
+# -------------------------------------
+# Request with explanation
+Please play Nocturne No. 2 by Chopin.
+Could you play Anti-Hero by Taylor Swift?
+Kindly play Rhapsody on a Theme of Paganini composed by Rachmaninoff?
+I would like to stream Figure Humaine by Poulenc
+Could you play Liebesleid please?
+
+# -------------------------------------
+# Calendar - cross domain generalization
+# -------------------------------------
+@config translator calendar
+
+# Request with explanation
+Can you schedule design meeting starting at 2 pm with Piali?
+kindly plan meeting to discuss office assignment from 4 pm with John?
+Add meeting 3-4pm next Thursday
+Create 2 hours year end celebration party beginning at 5pm Thursday next week
+I'd appreciate it if you could set up lunch with ana at 12pm next wednesday

@@ -1,0 +1,39 @@
+{
+  "name": "chat-agent",
+  "version": "0.0.1",
+  "description": "Chat dispatcher agent",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agents/chat"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/chatManifest.json",
+    "./agent/handlers": "./dist/chatResponseHandler.js"
+  },
+  "scripts": {
+    "build": "npm run tsc",
+    "postbuild": "copyfiles -u 1 \"src/**/config.json\" dist",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "aiclient": "workspace:*",
+    "common-utils": "workspace:*",
+    "dispatcher-agent": "workspace:*",
+    "typeagent": "workspace:*",
+    "typechat": "^0.1.0"
+  },
+  "devDependencies": {
+    "copyfiles": "^2.4.1",
+    "prettier": "^3.2.5",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.4.2"
+  }
+}

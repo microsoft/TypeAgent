@@ -1,0 +1,1067 @@
+{
+  "version": 2,
+  "translatorName": "player",
+  "explainerName": "v5",
+  "entries": [
+    {
+      "request": "Can you start the music, please?",
+      "action": {
+        "fullActionName": "player.play",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.play",
+            "substrings": [
+              "start the music"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can you",
+            "synonyms": [
+              "Would you",
+              "Could you",
+              "Will you"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "start the music",
+            "synonyms": [
+              "play the songs",
+              "begin playing music",
+              "initiate the playlist"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "please",
+            "synonyms": [
+              "if you could",
+              "kindly",
+              "if you would be so kind"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.play",
+            "propertySubPhrases": [
+              "start the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the music"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat the music"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "How about you choose a song to play?",
+      "action": {
+        "fullActionName": "player.play",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.play",
+            "substrings": [
+              "choose a song to play"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "How about you",
+            "synonyms": [
+              "Could you please",
+              "Would you mind to",
+              "Can you"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "choose a song to play",
+            "synonyms": [
+              "select a track to play",
+              "pick a tune to play",
+              "find a piece of music to play"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.play",
+            "propertySubPhrases": [
+              "choose a song to play"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the song"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat the current song"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "skip to the next song"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Play a song for me",
+      "action": {
+        "fullActionName": "player.play",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.play",
+            "substrings": [
+              "Play a song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Play",
+            "synonyms": [
+              "Start",
+              "Begin",
+              "Initiate"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "a song",
+            "synonyms": [
+              "music",
+              "a track",
+              "a tune"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "for me",
+            "synonyms": [
+              "for my enjoyment",
+              "for my listening",
+              "on my behalf"
+            ],
+            "category": "preposition",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.play",
+            "propertySubPhrases": [
+              "Play",
+              "a song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause",
+                  "the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop",
+                  "the track"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle",
+                  "my playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Play some tunes for me",
+      "action": {
+        "fullActionName": "player.play",
+        "parameters": {
+          "query": [
+            {
+              "text": "tunes"
+            }
+          ],
+          "quantity": 5
+        }
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.play",
+            "substrings": [
+              "Play"
+            ],
+            "implied": true
+          },
+          {
+            "name": "parameters.query.0.text",
+            "value": "tunes",
+            "substrings": [
+              "tunes"
+            ],
+            "implied": false
+          },
+          {
+            "name": "parameters.quantity",
+            "value": 5,
+            "isImplicit": true
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Play",
+            "synonyms": [
+              "Start",
+              "Begin playing",
+              "Activate"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "some",
+            "synonyms": [
+              "a few",
+              "a couple of",
+              "several"
+            ],
+            "category": "quantity-indicator",
+            "isOptional": true
+          },
+          {
+            "text": "tunes",
+            "synonyms": [
+              "tracks",
+              "songs",
+              "music"
+            ],
+            "category": "content-type",
+            "propertyNames": [
+              "parameters.query.0.text"
+            ]
+          },
+          {
+            "text": "for me",
+            "synonyms": [
+              "for my enjoyment",
+              "to listen to",
+              "for my pleasure"
+            ],
+            "category": "recipient",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.play",
+            "propertySubPhrases": [
+              "Play"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.query.0.text",
+            "propertyValue": "tunes",
+            "propertySubPhrases": [
+              "tunes"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "rock music",
+                "propertySubPhrases": [
+                  "rock music"
+                ]
+              },
+              {
+                "propertyValue": "classical music",
+                "propertySubPhrases": [
+                  "classical music"
+                ]
+              },
+              {
+                "propertyValue": "pop songs",
+                "propertySubPhrases": [
+                  "pop songs"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Shall we enjoy some music together?",
+      "action": {
+        "fullActionName": "player.play",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.play",
+            "substrings": [
+              "enjoy some music"
+            ],
+            "implied": true
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Shall we",
+            "synonyms": [
+              "Should we",
+              "Can we",
+              "Do we want to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "enjoy some music",
+            "synonyms": [
+              "listen to some music",
+              "play some tunes",
+              "hear some songs"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "together",
+            "synonyms": [
+              "as a group",
+              "with each other",
+              "collectively"
+            ],
+            "category": "manner",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.play",
+            "propertySubPhrases": [
+              "enjoy some music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "take a break from music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "mix up the music"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat the music"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Start playing my favorite songs",
+      "action": {
+        "fullActionName": "player.play",
+        "parameters": {
+          "query": [
+            {
+              "constraint": "track",
+              "text": "my favorite songs"
+            }
+          ]
+        }
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.play",
+            "substrings": [
+              "Start playing"
+            ],
+            "implied": true
+          },
+          {
+            "name": "parameters.query.0.constraint",
+            "value": "track",
+            "substrings": [
+              "songs"
+            ],
+            "implied": true
+          },
+          {
+            "name": "parameters.query.0.text",
+            "value": "my favorite songs",
+            "substrings": [
+              "my favorite songs"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Start playing",
+            "synonyms": [
+              "Begin playback",
+              "Play",
+              "Commence playing"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "my favorite songs",
+            "synonyms": [
+              "the tracks I love the most",
+              "the songs I prefer",
+              "the music I like best"
+            ],
+            "category": "subject",
+            "propertyNames": [
+              "parameters.query.0.constraint",
+              "parameters.query.0.text"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.play",
+            "propertySubPhrases": [
+              "Start playing"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop playing"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.query.0.constraint",
+            "propertyValue": "track",
+            "propertySubPhrases": [
+              "my favorite songs"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "artist",
+                "propertySubPhrases": [
+                  "my favorite artist"
+                ]
+              },
+              {
+                "propertyValue": "album",
+                "propertySubPhrases": [
+                  "my favorite album"
+                ]
+              },
+              {
+                "propertyValue": "playlist",
+                "propertySubPhrases": [
+                  "my favorite playlist"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.query.0.text",
+            "propertyValue": "my favorite songs",
+            "propertySubPhrases": [
+              "my favorite songs"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "the latest hits",
+                "propertySubPhrases": [
+                  "the latest hits"
+                ]
+              },
+              {
+                "propertyValue": "some classical music",
+                "propertySubPhrases": [
+                  "some classical music"
+                ]
+              },
+              {
+                "propertyValue": "the top rock songs",
+                "propertySubPhrases": [
+                  "the top rock songs"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Start the music, please",
+      "action": {
+        "fullActionName": "player.play",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.play",
+            "substrings": [
+              "Start the music"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Start the music",
+            "synonyms": [
+              "Play the music",
+              "Begin playing music",
+              "Initiate music playback"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "please",
+            "synonyms": [
+              "if you could",
+              "kindly",
+              "would you mind"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.play",
+            "propertySubPhrases": [
+              "Start the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "Skip to the next song"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Go back to the previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Turn up the volume on the electronic dance music",
+      "action": {
+        "fullActionName": "player.changeVolume",
+        "parameters": {
+          "volumeChangePercentage": 10
+        }
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.changeVolume",
+            "substrings": [
+              "Turn up the volume"
+            ],
+            "implied": false
+          },
+          {
+            "name": "parameters.volumeChangePercentage",
+            "value": 10,
+            "isImplicit": true
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Turn up the volume",
+            "synonyms": [
+              "Increase the volume",
+              "Raise the sound level",
+              "Boost the volume"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "on the",
+            "synonyms": [
+              "for the",
+              "with the",
+              "over the"
+            ],
+            "category": "preposition",
+            "isOptional": true
+          },
+          {
+            "text": "electronic dance music",
+            "synonyms": [
+              "EDM tracks",
+              "dance tracks",
+              "club music"
+            ],
+            "category": "object",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.changeVolume",
+            "propertySubPhrases": [
+              "Turn up the volume"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.decreaseVolume",
+                "propertySubPhrases": [
+                  "Turn down the volume"
+                ]
+              },
+              {
+                "propertyValue": "player.mute",
+                "propertySubPhrases": [
+                  "Mute the volume"
+                ]
+              },
+              {
+                "propertyValue": "player.unmute",
+                "propertySubPhrases": [
+                  "Unmute the volume"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Would you mind playing some music?",
+      "action": {
+        "fullActionName": "player.play",
+        "parameters": {
+          "quantity": 5
+        }
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.play",
+            "substrings": [
+              "playing some music"
+            ],
+            "implied": false
+          },
+          {
+            "name": "parameters.quantity",
+            "value": 5,
+            "isImplicit": true
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Would you mind",
+            "synonyms": [
+              "Could you",
+              "Can you",
+              "Would it be possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "playing some music",
+            "synonyms": [
+              "starting the music",
+              "initiating music playback",
+              "beginning to play music"
+            ],
+            "category": "action request",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.play",
+            "propertySubPhrases": [
+              "playing some music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pausing the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stopping the music"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffling the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeating the current song"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Yo, can we get some sick tunes blastin' on these streets?",
+      "action": {
+        "fullActionName": "player.play",
+        "parameters": {
+          "query": [
+            {
+              "text": "sick tunes"
+            }
+          ]
+        }
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.play",
+            "substrings": [
+              "get some sick tunes blastin'"
+            ],
+            "implied": true
+          },
+          {
+            "name": "parameters.query.0.text",
+            "value": "sick tunes",
+            "substrings": [
+              "sick tunes"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Yo,",
+            "synonyms": [
+              "Hey,",
+              "Hello,",
+              "Hi,"
+            ],
+            "category": "greeting",
+            "isOptional": true
+          },
+          {
+            "text": "can we",
+            "synonyms": [
+              "could you",
+              "is it possible to",
+              "would you mind to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "get some",
+            "synonyms": [
+              "play",
+              "start playing",
+              "have"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "sick tunes",
+            "synonyms": [
+              "great music",
+              "awesome tracks",
+              "cool songs"
+            ],
+            "category": "query",
+            "propertyNames": [
+              "parameters.query.0.text"
+            ]
+          },
+          {
+            "text": "blastin'",
+            "synonyms": [
+              "playing loudly",
+              "blaring",
+              "pumping out"
+            ],
+            "category": "action modifier",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "on these streets?",
+            "synonyms": [
+              "in this area",
+              "around here",
+              "in the neighborhood"
+            ],
+            "category": "location context",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.play",
+            "propertySubPhrases": [
+              "get some",
+              "blastin'"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause",
+                  "the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop",
+                  "the tunes"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle",
+                  "the playlist"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.query.0.text",
+            "propertyValue": "sick tunes",
+            "propertySubPhrases": [
+              "sick tunes"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "classical music",
+                "propertySubPhrases": [
+                  "classical music"
+                ]
+              },
+              {
+                "propertyValue": "jazz",
+                "propertySubPhrases": [
+                  "smooth jazz"
+                ]
+              },
+              {
+                "propertyValue": "pop hits",
+                "propertySubPhrases": [
+                  "latest pop"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

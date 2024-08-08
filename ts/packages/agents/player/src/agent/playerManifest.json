@@ -1,0 +1,8 @@
+{
+  "emojiChar": "🎧",
+  "schema": {
+    "description": "Music Player agent that lets you search for, play and control music.",
+    "schemaFile": "./playerSchema.ts",
+    "schemaType": "PlayerAction"
+  }
+}

@@ -1,0 +1,15 @@
+# ====== Init =======
+@session new --memory
+@config action -*
+@config translator -* player calendar
+@config serviceHost off
+
+# Initialize context
+Tell me about the phrase "Why birds suddenly appear every time you are near"?
+# Translate and construction
+play it
+# Change context
+Tell me about the phrase "It ain't nessessarily so"?
+# Use cache
+@config bot off
+play it

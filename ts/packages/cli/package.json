@@ -1,0 +1,66 @@
+{
+  "name": "agent-cli",
+  "version": "0.0.1",
+  "description": "TypeAgent Dispatcher CLI",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/cli"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "main": "",
+  "bin": {
+    "agent-cli": "./bin/run.js",
+    "agent-cli-dev": "./bin/dev.js"
+  },
+  "scripts": {
+    "build": "npm run tsc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "regen": "./bin/dev.js data regenerate -f ../dispatcher/test/data/**/**/*.json ../dispatcher/test/repo/explanations/**/**/*.json",
+    "regen:builtin": "./bin/dev.js data regenerate --builtin player",
+    "start": "npx --no .",
+    "start:dev": "npx --no agent-cli-dev",
+    "stat": "./bin/dev.js data stat -f ../dispatcher/test/data/**/**/*.json ../dispatcher/test/repo/explanations/**/**/*.json",
+    "tsc": "tsc -b"
+  },
+  "oclif": {
+    "bin": "agent-cli",
+    "commands": "./dist/commands",
+    "dirname": "agent-cli",
+    "plugins": [
+      "@oclif/plugin-help"
+    ],
+    "topicSeparator": " ",
+    "topics": {
+      "run": {
+        "description": "Run the handler directly. Same as @<command> in interactive mode."
+      }
+    }
+  },
+  "dependencies": {
+    "@oclif/core": "^3",
+    "@oclif/plugin-help": "^5",
+    "agent-cache": "workspace:*",
+    "agent-dispatcher": "workspace:*",
+    "chalk": "^5.3.0",
+    "common-utils": "workspace:*",
+    "debug": "^4.3.4",
+    "dotenv": "^16.3.1",
+    "rimraf": "^5.0.5",
+    "ts-node": "^10.9.1",
+    "typechat": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.10",
+    "@types/jest": "^29.5.7",
+    "@types/node": "^18.18.7",
+    "jest": "^29.7.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.2"
+  }
+}

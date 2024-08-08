@@ -1,0 +1,43 @@
+{
+  "name": "aiclient",
+  "version": "0.0.10",
+  "description": "Clients for AI APIs used by Microsoft AI Systems team.",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/aiclient"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "npm run tsc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../prettierignore",
+    "tsc": "tsc -p src"
+  },
+  "dependencies": {
+    "@azure/identity": "^4.2.1",
+    "async": "^3.2.5",
+    "debug": "^4.3.4",
+    "typechat": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/async": "^3.2.24",
+    "@types/debug": "^4.1.10",
+    "@types/node": "^18.18.7",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.4.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

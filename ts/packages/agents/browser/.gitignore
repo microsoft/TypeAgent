@@ -1,0 +1,17 @@
+build/
+dist/
+out/
+node_modules/
+.env
+*.map
+*.out.txt
+*.bat
+
+# Local development and debugging
+.scratch/
+.vscode
+**/.vscode/*
+**/tsconfig.debug.json
+!**/.vscode/launch.json
+**/build.bat
+

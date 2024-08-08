@@ -1,0 +1,80 @@
+@pauseForInput
+
+# -------------------------------------
+# Player actions
+# -------------------------------------
+please launch spotify
+set device to computer
+
+Please play Nocturne No. 2 by Chopin.
+set the music volume to 40
+
+
+# -------------------------------------
+# Code
+# -------------------------------------
+please open vscode
+
+Create a readme file with sample table with two rows
+split window into two columns
+Revert back to a single column
+
+Change color scheme to Monokai
+Actually I want the color to be solarized light
+Create a new python code file that merges two sorted arrays of numbers
+
+# -------------------------------------
+# Window management actions
+# -------------------------------------
+Launch edge
+Tile vs code the left and edge to the right
+Maximize Edge
+
+# -------------------------------------
+# Browser actions
+# -------------------------------------
+Go To BBC
+Scroll down
+Scroll up
+Zoom in
+Zoom out
+Follow BBC home link
+
+# -------------------------------------
+# PBDB actions
+# -------------------------------------
+Show PBDB site I saw yesterday
+Set location to Denver
+Zoom in
+Show fossils from 100 million years ago
+Show T-Rex fossils
+clear filters
+# when did whales first evolve?
+# show whale fossils from puget sound from that epoch
+# zoom out
+# pan right
+
+
+# -------------------------------------
+# Calendar
+# -------------------------------------
+# Navigate to calendar page
+# Open "https://outlook.office.com/calendar/view/workweek?actSwt=true" in a new tab
+
+Create a code review meeting next Monday at 11:00 AM
+Add Alex to the code review meeting
+# Add Megan to the code review meeting
+
+Schedule a lunch meeting at noon tomorrow
+# Add Alex and Megan to the lunch meeting
+
+# Block some time to pick up groceries at 5:00 PM today
+
+# -------------------------------------
+# email
+# -------------------------------------
+# Open "https://outlook.office.com/mail/sentitems/" in a new tab
+
+Send email to Megan with the recipe for Lasgna
+Reply to the email from Megan saying you will be happy to meet for coffee
+Forward the mail from Megan to Alex asking if he wants to join us for coffee

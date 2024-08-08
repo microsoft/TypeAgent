@@ -1,0 +1,66 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { RequestAction } from "./requestAction.js";
+import { Construction } from "../constructions/constructions.js";
+import { ValidationError } from "./typeChatAgent.js";
+import { SchemaConfigProvider } from "./schemaConfig.js";
+
+export type CorrectionRecord<T> = {
+    data: T;
+    correction: ValidationError;
+};
+type GenericExplanationSuccess<T> = {
+    success: true;
+    data: T;
+    corrections?: CorrectionRecord<T>[];
+    construction?: Construction; // Return the construction if the explainer supports it
+};
+
+type GenericExplanationError<T> = {
+    success: false;
+    message: string;
+    corrections?: CorrectionRecord<T>[];
+};
+
+export type GenericExplanationResult<T extends object = object> =
+    | GenericExplanationSuccess<T>
+    | GenericExplanationError<T>;
+
+export type ExplanationValidator<T> = (
+    requestAction: RequestAction,
+    explanation: T,
+) => string | undefined;
+
+export type CreateConstructionInfo = {
+    getSchemaConfig?: SchemaConfigProvider | undefined;
+};
+
+export type ConstructionFactory<T> = (
+    requestAction: RequestAction,
+    explanation: T,
+    createConstructionInfo: CreateConstructionInfo,
+) => Construction;
+
+type ToPrettyString<T> = (explanation: T) => string;
+
+export interface GenericExplainer<T extends object = object> {
+    generate(
+        requestAction: RequestAction,
+        createConstructionInfo?: CreateConstructionInfo,
+    ): Promise<GenericExplanationResult<T>>;
+
+    correct?(
+        requestAction: RequestAction,
+        explanation: T,
+        correction: ValidationError,
+    ): Promise<GenericExplanationResult<T>>;
+
+    validate(
+        requestAction: RequestAction,
+        explanation: T,
+    ): ValidationError | undefined;
+    createConstruction?: ConstructionFactory<any> | undefined;
+
+    toPrettyString?: ToPrettyString<any> | undefined;
+}

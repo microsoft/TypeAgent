@@ -1,0 +1,7 @@
+{
+  "lookup": {
+    "fastMode": true,
+    "fastModelName": "GPT_35_TURBO",
+    "documentConcurrency": 1
+  }
+}

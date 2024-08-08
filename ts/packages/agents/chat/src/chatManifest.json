@@ -1,0 +1,10 @@
+{
+  "emojiChar": "💬",
+  "schema": {
+    "description": "Chat agent that helps you with general conversation, small talk, and answering questions.",
+    "schemaFile": "./chatResponseActionSchema.ts",
+    "schemaType": "ChatResponseAction",
+    "injected": true,
+    "cached": false
+  }
+}

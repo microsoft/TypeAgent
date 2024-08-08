@@ -1,0 +1,8 @@
+{
+  "emojiChar": "📝",
+  "schema": {
+    "description": "List agent that helps you manage lists of items. Use it to create shopping lists, to-do lists, grocery lists, idea lists, book lists, and more.",
+    "schemaFile": "./listSchema.ts",
+    "schemaType": "ListAction"
+  }
+}

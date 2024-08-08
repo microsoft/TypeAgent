@@ -1,0 +1,79 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Cache Explorer</title>
+  </head>
+  <style>
+    body {
+      font-family: sans-serif;
+      font-size: small;
+    }
+    table {
+      border-collapse: collapse;
+    }
+    td.layout {
+      border: none;
+      padding: 5px;
+      vertical-align: top;
+    }
+    td {
+      padding: 5px;
+      vertical-align: top;
+    }
+    h1 {
+      margin: 0;
+    }
+    tr#top {
+      height: 500px;
+    }
+    div.selected,
+    td.selected {
+      font-weight: bold;
+      background-color: yellow;
+    }
+    tr.hidden {
+      display: none;
+    }
+    div.matchset {
+      margin: 5px;
+    }
+    tr#bottom td {
+      vertical-align: top;
+    }
+    div.matchsetdetails {
+      margin: 5px;
+      display: inline-block;
+      vertical-align: top;
+    }
+    div#constructions td {
+      border: 1px solid lightgray;
+    }
+  </style>
+  <body>
+    <h1>Cache Explorer</h1>
+    <div id="content">
+      Sessions:
+      <select id="sessions"></select>
+      <div id="cacheSelection"></div>
+      <table>
+        <tr id="top">
+          <td class="layout">
+            <h2>Match Sets</h2>
+            <div id="matchsets"></div>
+          </td>
+          <td class="layout">
+            <h2>Constructions</h2>
+            <div id="constructions"></div>
+          </td>
+        </tr>
+        <tr id="bottom">
+          <td colspan="2"><div id="selectedMatchSetDetail"></div></td>
+        </tr>
+      </table>
+    </div>
+  </body>
+</html>

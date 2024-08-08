@@ -1,0 +1,4550 @@
+{
+  "version": 2,
+  "translatorName": "player",
+  "explainerName": "v5",
+  "entries": [
+    {
+      "request": "Activate the sound once more.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "Activate the sound"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Activate",
+            "synonyms": [
+              "Start",
+              "Turn on",
+              "Resume"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the sound",
+            "synonyms": [
+              "the audio",
+              "the music",
+              "the playback"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "once more",
+            "synonyms": [
+              "again",
+              "one more time",
+              "another time"
+            ],
+            "category": "frequency",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "Activate",
+              "the sound",
+              "once more"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause",
+                  "the sound",
+                  "for now"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop",
+                  "the sound",
+                  "immediately"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Start",
+                  "the sound",
+                  "right away"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Bring back the beats.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "Bring back the beats."
+            ],
+            "implied": true
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Bring back",
+            "synonyms": [
+              "Resume",
+              "Restart",
+              "Continue playing"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the beats",
+            "synonyms": [
+              "the music",
+              "the songs",
+              "the tunes"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "Bring back",
+              "the beats"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause",
+                  "the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop",
+                  "the tunes"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play",
+                  "the tracks"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Can we continue with the songs?",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "continue with the songs"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can we",
+            "synonyms": [
+              "Is it possible to",
+              "Could we",
+              "Would it be okay to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "continue with the songs",
+            "synonyms": [
+              "resume the music",
+              "keep playing the tracks",
+              "go on with the playlist"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "please",
+              "now",
+              "right away"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "continue with the songs"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the songs"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the songs"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "skip to the next song"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "go back to the previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the songs"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Can we get the sound back?",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "get the sound back"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can we",
+            "synonyms": [
+              "Is it possible to",
+              "Could we",
+              "Would it be possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "get the sound back",
+            "synonyms": [
+              "resume the audio",
+              "continue playing the sound",
+              "restore the audio"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "please.",
+              "if you can.",
+              "at your earliest convenience."
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "get the sound back"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.mute",
+                "propertySubPhrases": [
+                  "mute the sound"
+                ]
+              },
+              {
+                "propertyValue": "player.volumeUp",
+                "propertySubPhrases": [
+                  "increase the volume"
+                ]
+              },
+              {
+                "propertyValue": "player.volumeDown",
+                "propertySubPhrases": [
+                  "lower the volume"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the sound"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the sound"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Can you kickstart the tunes again?",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "kickstart the tunes again"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can you",
+            "synonyms": [
+              "Would you be able to",
+              "Could you",
+              "Is it possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "kickstart the tunes",
+            "synonyms": [
+              "start playing the music",
+              "resume the songs",
+              "continue the playlist"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "again",
+            "synonyms": [
+              "once more",
+              "another time",
+              "recommence"
+            ],
+            "category": "confirmation",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "please.",
+              "now.",
+              "right away."
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "kickstart the tunes",
+              "again"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "start the tunes",
+                  "again"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the tunes",
+                  "again"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat the tunes",
+                  "again"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Can you put the music back on?",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "put the music back on"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can you",
+            "synonyms": [
+              "Would you mind",
+              "Could you",
+              "Is it possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "put the music",
+            "synonyms": [
+              "start the music",
+              "play the music",
+              "resume the music"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "back on",
+            "synonyms": [
+              "again",
+              "once more",
+              "another time"
+            ],
+            "category": "state change",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "please.",
+              "now.",
+              "right away."
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "put the music",
+              "back on"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "start the music",
+                  "again"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the music",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the music",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat the music",
+                  ""
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Can you restart the music?",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "restart the music"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can you",
+            "synonyms": [
+              "Would you be able to",
+              "Could you",
+              "Is it possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "restart the music",
+            "synonyms": [
+              "play the music again",
+              "resume the song",
+              "continue playing the music"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "please.",
+              "right now.",
+              "at this moment."
+            ],
+            "category": "confirmation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "restart the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.playNext",
+                "propertySubPhrases": [
+                  "play the next song"
+                ]
+              },
+              {
+                "propertyValue": "player.playPrevious",
+                "propertySubPhrases": [
+                  "play the previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the music"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Can you start the music back up?",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "start the music back up"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can you",
+            "synonyms": [
+              "Could you",
+              "Would you mind to",
+              "Is it possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "start the music back up",
+            "synonyms": [
+              "resume the music",
+              "continue playing the music",
+              "restart the music"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "please",
+              "now",
+              "right away"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "start the music back up"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the music"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "skip to the next song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Continue playing the tunes.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "Continue playing"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Continue playing",
+            "synonyms": [
+              "Resume playback",
+              "Keep playing",
+              "Proceed with playing"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the tunes",
+            "synonyms": [
+              "the music",
+              "the songs",
+              "the melodies"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "Continue playing",
+              "the tunes"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause",
+                  "the tunes"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop",
+                  "the tunes"
+                ]
+              },
+              {
+                "propertyValue": "player.playNext",
+                "propertySubPhrases": [
+                  "Skip to the next",
+                  "tune"
+                ]
+              },
+              {
+                "propertyValue": "player.playPrevious",
+                "propertySubPhrases": [
+                  "Go back to the previous",
+                  "tune"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle",
+                  "the tunes"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Continue the melody, please.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "Continue the melody"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Continue the melody",
+            "synonyms": [
+              "Resume the music",
+              "Keep playing the song",
+              "Proceed with the tune"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "please",
+            "synonyms": [
+              "if you would",
+              "kindly",
+              "if you can"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "Continue the melody"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause the melody"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the melody"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "Skip the melody"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Could you continue the tunes?",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "continue the tunes"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Could you",
+            "synonyms": [
+              "Can you",
+              "Would you be able to",
+              "Is it possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "continue the tunes",
+            "synonyms": [
+              "resume the music",
+              "keep playing the songs",
+              "go on with the tracks"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "please",
+              "can you",
+              "will you"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "continue the tunes"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the tunes"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the tunes"
+                ]
+              },
+              {
+                "propertyValue": "player.playNext",
+                "propertySubPhrases": [
+                  "skip to the next tune"
+                ]
+              },
+              {
+                "propertyValue": "player.playPrevious",
+                "propertySubPhrases": [
+                  "go back to the previous tune"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the tunes"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Could you get the music started again?",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "get the music started again"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Could you",
+            "synonyms": [
+              "Can you",
+              "Would you be able to",
+              "Is it possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "get the music",
+            "synonyms": [
+              "start the music",
+              "play the music",
+              "resume the music"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "started again",
+            "synonyms": [
+              "going again",
+              "playing again",
+              "resumed"
+            ],
+            "category": "state change",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "get the music",
+              "started again"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "start playing the music",
+                  "from the beginning"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the music",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "skip to the next song",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "go back to the previous track",
+                  ""
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Could you unpause the track?",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "unpause the track"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Could you",
+            "synonyms": [
+              "Can you",
+              "Would you mind to",
+              "Is it possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "unpause the track",
+            "synonyms": [
+              "resume the song",
+              "continue playing the music",
+              "start the track again"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "please",
+              "right now",
+              "as soon as possible"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "unpause the track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the track"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the track"
+                ]
+              },
+              {
+                "propertyValue": "player.playNext",
+                "propertySubPhrases": [
+                  "play the next track"
+                ]
+              },
+              {
+                "propertyValue": "player.playPrevious",
+                "propertySubPhrases": [
+                  "play the previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Get the playlist playing again.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "Get the playlist playing again"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Get the",
+            "synonyms": [
+              "Start the",
+              "Resume the",
+              "Continue the"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "playlist",
+            "synonyms": [
+              "tracklist",
+              "music queue",
+              "song collection"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "playing",
+            "synonyms": [
+              "running",
+              "going",
+              "functioning"
+            ],
+            "category": "state",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "again",
+            "synonyms": [
+              "once more",
+              "another time",
+              "repeatedly"
+            ],
+            "category": "frequency",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "Get the",
+              "playlist",
+              "playing",
+              "again"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause the",
+                  "playlist",
+                  "playing",
+                  "now"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the",
+                  "playlist",
+                  "completely",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle the",
+                  "playlist",
+                  "playing",
+                  "differently"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Get the tracks going again.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "Get the tracks going again"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Get the",
+            "synonyms": [
+              "Start the",
+              "Resume the",
+              "Continue the"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "tracks",
+            "synonyms": [
+              "music",
+              "songs",
+              "playlist"
+            ],
+            "category": "subject",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "going again",
+            "synonyms": [
+              "playing again",
+              "running again",
+              "in motion again"
+            ],
+            "category": "state change",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "Get the",
+              "tracks",
+              "going again"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause the",
+                  "tracks",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the",
+                  "tracks",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.playNext",
+                "propertySubPhrases": [
+                  "Skip to the next",
+                  "tracks",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.playPrevious",
+                "propertySubPhrases": [
+                  "Go back to the previous",
+                  "tracks",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle the",
+                  "tracks",
+                  ""
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Go ahead and resume the playlist.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "resume the playlist"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Go ahead and",
+            "synonyms": [
+              "please proceed to",
+              "you can",
+              "feel free to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "resume the playlist",
+            "synonyms": [
+              "start playing the playlist again",
+              "continue the playlist",
+              "play the playlist once more"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "resume the playlist"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.playNext",
+                "propertySubPhrases": [
+                  "play the next song"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Hey, could you hit play?",
+      "action": {
+        "fullActionName": "player.play",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.play",
+            "substrings": [
+              "hit play"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Hey",
+            "synonyms": [
+              "Hello",
+              "Hi",
+              "Greetings"
+            ],
+            "category": "greeting",
+            "isOptional": true
+          },
+          {
+            "text": "could you",
+            "synonyms": [
+              "can you",
+              "would you mind",
+              "please"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "hit play",
+            "synonyms": [
+              "start playing",
+              "play the music",
+              "begin playback"
+            ],
+            "category": "action command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.play",
+            "propertySubPhrases": [
+              "hit play"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "hit pause"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "hit stop"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "skip to next"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "go back"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle play"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Hit play again.",
+      "action": {
+        "fullActionName": "player.play",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.play",
+            "substrings": [
+              "Hit play"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Hit",
+            "synonyms": [
+              "Press",
+              "Activate",
+              "Start"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "play",
+            "synonyms": [
+              "begin playback",
+              "start playing",
+              "commence play"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "again",
+            "synonyms": [
+              "once more",
+              "another time",
+              "replay"
+            ],
+            "category": "frequency",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.play",
+            "propertySubPhrases": [
+              "Hit",
+              "play",
+              "again"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Hit",
+                  "pause",
+                  "now"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Press",
+                  "stop",
+                  "music"
+                ]
+              },
+              {
+                "propertyValue": "player.restart",
+                "propertySubPhrases": [
+                  "Start",
+                  "over",
+                  "again"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Hit the play button again.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "Hit the play button again."
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Hit",
+            "synonyms": [
+              "Press",
+              "Activate",
+              "Tap"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the play button",
+            "synonyms": [
+              "the resume control",
+              "the playback toggle",
+              "the start icon"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "again",
+            "synonyms": [
+              "once more",
+              "another time",
+              "repeatedly"
+            ],
+            "category": "frequency",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "Hit",
+              "the play button",
+              "again"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Press",
+                  "the pause button",
+                  "once more"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Tap",
+                  "the stop button",
+                  "again"
+                ]
+              },
+              {
+                "propertyValue": "player.rewind",
+                "propertySubPhrases": [
+                  "Swipe",
+                  "the rewind button",
+                  "one more time"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "I'd appreciate it if you could play the music again.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "play the music again"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "I'd appreciate it if you could",
+            "synonyms": [
+              "Please",
+              "Would you mind",
+              "It would be great if you could"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "play the music",
+            "synonyms": [
+              "start the music",
+              "begin playing the music",
+              "resume the music"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "again",
+            "synonyms": [
+              "once more",
+              "another time",
+              "one more time"
+            ],
+            "category": "frequency",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "play the music",
+              "again"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "start the music",
+                  "from the beginning"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the music",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the music",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat the music",
+                  ""
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "I'd like to hear the rest of that song.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "hear the rest of that song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "I'd like to",
+            "synonyms": [
+              "I want to",
+              "I wish to",
+              "I would like to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "hear the rest of",
+            "synonyms": [
+              "continue listening to",
+              "resume",
+              "keep hearing"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "that song",
+            "synonyms": [
+              "the song",
+              "that track",
+              "the music"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "hear the rest of",
+              "that song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "start playing",
+                  "this song"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause",
+                  "the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop",
+                  "the track"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "skip to the next",
+                  "song"
+                ]
+              },
+              {
+                "propertyValue": "player.replay",
+                "propertySubPhrases": [
+                  "replay",
+                  "that song from the beginning"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "I'd love it if you could continue the music.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "continue the music"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "I'd love it if you could",
+            "synonyms": [
+              "Please",
+              "Can you",
+              "Would you mind to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "continue the music",
+            "synonyms": [
+              "resume the song",
+              "keep playing the tunes",
+              "go on with the playlist"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "continue the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.playNext",
+                "propertySubPhrases": [
+                  "skip to the next song"
+                ]
+              },
+              {
+                "propertyValue": "player.playPrevious",
+                "propertySubPhrases": [
+                  "go back to the previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Keep the music rolling.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "Keep the music rolling"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Keep the music rolling",
+            "synonyms": [
+              "Continue playing the music",
+              "Don't stop the music",
+              "Let the music keep playing"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ".",
+            "synonyms": [
+              "",
+              "please.",
+              "now."
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "Keep the music rolling"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.playNext",
+                "propertySubPhrases": [
+                  "Skip to the next song"
+                ]
+              },
+              {
+                "propertyValue": "player.playPrevious",
+                "propertySubPhrases": [
+                  "Go back to the previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Keep the party going with the music.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "Keep the party going",
+              "with the music"
+            ],
+            "implied": true
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Keep the party going",
+            "synonyms": [
+              "Continue the party",
+              "Don't stop the party",
+              "Let the party continue"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "with the music",
+            "synonyms": [
+              "using the music",
+              "by playing the music",
+              "through the tunes"
+            ],
+            "category": "method",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "Keep the party going",
+              "with the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause the party",
+                  "with the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the party",
+                  "with the music"
+                ]
+              },
+              {
+                "propertyValue": "player.playNext",
+                "propertySubPhrases": [
+                  "Skip to the next song",
+                  "with the music"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Keep the rhythm going.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "Keep the rhythm going"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Keep the rhythm going",
+            "synonyms": [
+              "Continue playing the music",
+              "Don't stop the music",
+              "Let the music keep playing"
+            ],
+            "category": "action directive",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "Keep the rhythm going"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause the rhythm"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the rhythm"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
+                "propertySubPhrases": [
+                  "Skip to the next rhythm"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Kindly continue with the playlist.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "continue with the playlist"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Kindly",
+            "synonyms": [
+              "Please",
+              "Could you",
+              "Would you mind"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "continue with the playlist",
+            "synonyms": [
+              "resume the playlist",
+              "go on with the playlist",
+              "keep playing the playlist"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "continue with the playlist"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let the music flow again.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "Let the music flow again"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let the",
+            "synonyms": [
+              "Please allow the",
+              "I would like the",
+              "Can you make the"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "music",
+            "synonyms": [
+              "tunes",
+              "songs",
+              "audio"
+            ],
+            "category": "subject",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "flow",
+            "synonyms": [
+              "play",
+              "stream",
+              "run"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "again",
+            "synonyms": [
+              "once more",
+              "another time",
+              "recommence"
+            ],
+            "category": "frequency",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ".",
+            "synonyms": [
+              "",
+              "",
+              ""
+            ],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "music",
+              "flow",
+              "again"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "music",
+                  "halt",
+                  "now"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "music",
+                  "start",
+                  "now"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "music",
+                  "skip",
+                  "track"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "corrections": [
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "player.resume",
+                "substrings": [
+                  "Let the music flow again"
+                ],
+                "implied": false
+              }
+            ],
+            "subPhrases": [
+              {
+                "text": "Let the",
+                "synonyms": [
+                  "Please allow the",
+                  "I would like the",
+                  "Can you make the"
+                ],
+                "category": "politeness",
+                "isOptional": true
+              },
+              {
+                "text": "music",
+                "synonyms": [
+                  "tunes",
+                  "songs",
+                  "audio"
+                ],
+                "category": "subject",
+                "propertyNames": [
+                  "fullActionName"
+                ]
+              },
+              {
+                "text": "flow",
+                "synonyms": [
+                  "play",
+                  "stream",
+                  "run"
+                ],
+                "category": "action",
+                "propertyNames": [
+                  "fullActionName"
+                ]
+              },
+              {
+                "text": "again",
+                "synonyms": [
+                  "once more",
+                  "another time",
+                  "recommence"
+                ],
+                "category": "frequency",
+                "propertyNames": [
+                  "fullActionName"
+                ]
+              },
+              {
+                "text": ".",
+                "synonyms": [
+                  "",
+                  "",
+                  ""
+                ],
+                "category": "punctuation",
+                "isOptional": true
+              }
+            ],
+            "propertyAlternatives": [
+              {
+                "propertyName": "fullActionName",
+                "propertyValue": "player.resume",
+                "propertySubPhrases": [
+                  "music",
+                  "flow",
+                  "again"
+                ],
+                "alternatives": [
+                  {
+                    "propertyValue": "player.pause",
+                    "propertySubPhrases": [
+                      "music",
+                      "stop"
+                    ]
+                  },
+                  {
+                    "propertyValue": "player.play",
+                    "propertySubPhrases": [
+                      "music",
+                      "start"
+                    ]
+                  },
+                  {
+                    "propertyValue": "player.next",
+                    "propertySubPhrases": [
+                      "music",
+                      "skip"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "correction": [
+            "Mismatch number of sub-phrases: alternatives value 'player.pause' for property 'fullActionName' must have 3 sub-phrases",
+            "Mismatch number of sub-phrases: alternatives value 'player.play' for property 'fullActionName' must have 3 sub-phrases",
+            "Mismatch number of sub-phrases: alternatives value 'player.next' for property 'fullActionName' must have 3 sub-phrases"
+          ]
+        }
+      ]
+    },
+    {
+      "request": "Let's get back to the beats.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "get back to the beats"
+            ],
+            "implied": true
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's",
+            "synonyms": [
+              "We should",
+              "I want to",
+              "It's time to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "get back to",
+            "synonyms": [
+              "resume",
+              "continue",
+              "return to"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the beats",
+            "synonyms": [
+              "the music",
+              "the songs",
+              "the playlist"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "get back to",
+              "the beats"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "start playing",
+                  "the music"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "hold on",
+                  "the tunes"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop",
+                  "the tracks"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let's get the music back on.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "get the music back on"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's",
+            "synonyms": [
+              "We should",
+              "I want to",
+              "Can we"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "get the music",
+            "synonyms": [
+              "start the music",
+              "play the music",
+              "resume the music"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "back on",
+            "synonyms": [
+              "playing again",
+              "on again",
+              "going again"
+            ],
+            "category": "state change",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "get the music",
+              "back on"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "start the music",
+                  "again"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the music",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music",
+                  ""
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let's hear some more music.",
+      "action": {
+        "fullActionName": "player.play",
+        "parameters": {
+          "quantity": 5
+        }
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.play",
+            "substrings": [
+              "hear some more music"
+            ],
+            "implied": true
+          },
+          {
+            "name": "parameters.quantity",
+            "value": 5,
+            "isImplicit": true
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's",
+            "synonyms": [
+              "I want to",
+              "I would like to",
+              "Can we"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "hear some more music",
+            "synonyms": [
+              "play additional songs",
+              "listen to more tracks",
+              "continue playing music"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.play",
+            "propertySubPhrases": [
+              "hear some more music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let's pick up where we left off with the music.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "pick up where we left off",
+              "music"
+            ],
+            "implied": true
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's",
+            "synonyms": [
+              "We should",
+              "I want to",
+              "Can we"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "pick up where we left off",
+            "synonyms": [
+              "continue from where we stopped",
+              "resume playing",
+              "start again from the same point"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "with the",
+            "synonyms": [
+              "using the",
+              "on the",
+              "through the"
+            ],
+            "category": "preposition",
+            "isOptional": true
+          },
+          {
+            "text": "music",
+            "synonyms": [
+              "tunes",
+              "songs",
+              "playlist"
+            ],
+            "category": "subject",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "pick up where we left off",
+              "music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "start playing",
+                  "music"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause",
+                  "music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop",
+                  "music"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle",
+                  "music"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat",
+                  "music"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Let's resume the audio playback.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "resume",
+              "audio playback"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Let's",
+            "synonyms": [
+              "I want to",
+              "Please",
+              "Can we"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "resume",
+            "synonyms": [
+              "continue",
+              "start again",
+              "proceed with"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the audio playback",
+            "synonyms": [
+              "the sound",
+              "the music",
+              "the track"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "resume",
+              "the audio playback"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause",
+                  "the audio playback"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop",
+                  "the audio playback"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "start",
+                  "the audio playback"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Play on, please.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "Play on"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Play on",
+            "synonyms": [
+              "Resume playback",
+              "Continue playing",
+              "Start playing again"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "please",
+            "synonyms": [
+              "if you could",
+              "kindly",
+              "would you mind"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "Play on"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Start playing"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop playing"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "Skip to next"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "Go back to previous"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Play the music once more.",
+      "action": {
+        "fullActionName": "player.play",
+        "parameters": {
+          "query": [
+            {
+              "text": "music once more"
+            }
+          ]
+        }
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.play",
+            "substrings": [
+              "Play"
+            ],
+            "implied": false
+          },
+          {
+            "name": "parameters.query.0.text",
+            "value": "music once more",
+            "substrings": [
+              "music once more"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Play",
+            "synonyms": [
+              "Start",
+              "Begin",
+              "Initiate"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the",
+            "synonyms": [
+              "this",
+              "that",
+              "a"
+            ],
+            "category": "preposition",
+            "isOptional": true
+          },
+          {
+            "text": "music once more",
+            "synonyms": [
+              "the song again",
+              "the track another time",
+              "the music one more time"
+            ],
+            "category": "object and manner",
+            "propertyNames": [
+              "parameters.query.0.text"
+            ]
+          },
+          {
+            "text": ".",
+            "synonyms": [],
+            "category": "punctuation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.play",
+            "propertySubPhrases": [
+              "Play"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.query.0.text",
+            "propertyValue": "music once more",
+            "propertySubPhrases": [
+              "music once more"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "the latest album",
+                "propertySubPhrases": [
+                  "the latest album"
+                ]
+              },
+              {
+                "propertyValue": "my favorite playlist",
+                "propertySubPhrases": [
+                  "my favorite playlist"
+                ]
+              },
+              {
+                "propertyValue": "classical music",
+                "propertySubPhrases": [
+                  "classical music"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Please continue the music.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "continue the music"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Please",
+            "synonyms": [
+              "Kindly",
+              "Would you mind to",
+              "I'd appreciate it if you could"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "continue the music",
+            "synonyms": [
+              "resume the song",
+              "keep playing the tunes",
+              "go on with the playlist"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "continue the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.playNext",
+                "propertySubPhrases": [
+                  "skip to the next song"
+                ]
+              },
+              {
+                "propertyValue": "player.playPrevious",
+                "propertySubPhrases": [
+                  "go back to the previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Please hit play on the music.",
+      "action": {
+        "fullActionName": "player.play",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.play",
+            "substrings": [
+              "hit play",
+              "on the music"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Please",
+            "synonyms": [
+              "Kindly",
+              "Would you mind to",
+              "Could you"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "hit play",
+            "synonyms": [
+              "start playing",
+              "begin playback",
+              "commence playing"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "on the music",
+            "synonyms": [
+              "for the music",
+              "with the music",
+              "to play the music"
+            ],
+            "category": "context",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.play",
+            "propertySubPhrases": [
+              "hit play",
+              "on the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "hit pause",
+                  "on the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "hit stop",
+                  "on the music"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "skip to the next track",
+                  "in the music"
+                ]
+              },
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "go back to the previous track",
+                  "in the music"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "turn on shuffle",
+                  "for the music"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Please resume the music.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "resume the music"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Please",
+            "synonyms": [
+              "Kindly",
+              "Would you mind to",
+              "Could you"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "resume the music",
+            "synonyms": [
+              "continue playing the music",
+              "start the music again",
+              "keep playing the music"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "resume the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the music"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Proceed with the audio playback.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "Proceed with the audio playback"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Proceed with",
+            "synonyms": [
+              "Continue",
+              "Go ahead with",
+              "Carry on with"
+            ],
+            "category": "action directive",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the audio playback",
+            "synonyms": [
+              "playing the sound",
+              "the sound reproduction",
+              "the music playing"
+            ],
+            "category": "object of action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "Proceed with",
+              "the audio playback"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause",
+                  "the audio playback"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop",
+                  "the audio playback"
+                ]
+              },
+              {
+                "propertyValue": "player.start",
+                "propertySubPhrases": [
+                  "Start",
+                  "the audio playback"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Restart the jam, please.",
+      "action": {
+        "fullActionName": "player.play",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.play",
+            "substrings": [
+              "Restart the jam"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Restart the jam",
+            "synonyms": [
+              "Begin the music again",
+              "Play the track once more",
+              "Resume the song"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "please",
+            "synonyms": [
+              "if you could",
+              "kindly",
+              "would you mind"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.play",
+            "propertySubPhrases": [
+              "Restart the jam"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause the jam"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the jam"
+                ]
+              },
+              {
+                "propertyValue": "player.restart",
+                "propertySubPhrases": [
+                  "Replay the jam"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Resume the audio, please.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "Resume the audio"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Resume the audio",
+            "synonyms": [
+              "Play the audio",
+              "Continue playing the audio",
+              "Start the audio again"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "please",
+            "synonyms": [
+              "kindly",
+              "if you could",
+              "if you would"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "Resume the audio"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause the audio"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the audio"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play the audio"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Resume the song, if you don't mind.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "Resume the song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Resume the song",
+            "synonyms": [
+              "Continue playing the song",
+              "Start the song again",
+              "Proceed with the song"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "if you don't mind",
+            "synonyms": [
+              "if it's okay with you",
+              "if you would",
+              "if that's alright"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "Resume the song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause the song"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the song"
+                ]
+              },
+              {
+                "propertyValue": "player.playNext",
+                "propertySubPhrases": [
+                  "Play the next song"
+                ]
+              },
+              {
+                "propertyValue": "player.playPrevious",
+                "propertySubPhrases": [
+                  "Play the previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Resume the sound, if you will.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "Resume the sound"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Resume the sound",
+            "synonyms": [
+              "Continue playing the sound",
+              "Restart the audio",
+              "Unpause the music"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ", if you will.",
+            "synonyms": [
+              "please",
+              "if you don't mind",
+              "if it's not too much trouble"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "Resume the sound"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause the sound"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the sound"
+                ]
+              },
+              {
+                "propertyValue": "player.mute",
+                "propertySubPhrases": [
+                  "Mute the sound"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Resume the vibes, please.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "Resume"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Resume",
+            "synonyms": [
+              "Continue",
+              "Start again",
+              "Proceed"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the vibes",
+            "synonyms": [
+              "the music",
+              "the sound",
+              "the tunes"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "please",
+            "synonyms": [
+              "kindly",
+              "if you could",
+              "would you mind"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "Resume",
+              "the vibes"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause",
+                  "the vibes"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop",
+                  "the music"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play",
+                  "the tunes"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Start the music up again.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "Start the music up again"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Start the",
+            "synonyms": [
+              "Resume the",
+              "Continue the",
+              "Play the"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "music",
+            "synonyms": [
+              "song",
+              "track",
+              "playlist"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "up again",
+            "synonyms": [
+              "once more",
+              "anew",
+              "afresh"
+            ],
+            "category": "modifier",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "Start the",
+              "music",
+              "up again"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "Play the",
+                  "music",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause the",
+                  "music",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the",
+                  "music",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle the",
+                  "music",
+                  ""
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "Repeat the",
+                  "music",
+                  ""
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Unpause the tunes, will you?",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "Unpause the tunes"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Unpause the tunes",
+            "synonyms": [
+              "Resume the music",
+              "Continue playing the songs",
+              "Start the music again"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": ", will you?",
+            "synonyms": [
+              ", please?",
+              ", could you?",
+              ", can you?"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "Unpause the tunes"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "Pause the tunes"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop the tunes"
+                ]
+              },
+              {
+                "propertyValue": "player.playNext",
+                "propertySubPhrases": [
+                  "Skip to the next tune"
+                ]
+              },
+              {
+                "propertyValue": "player.playPrevious",
+                "propertySubPhrases": [
+                  "Go back to the previous tune"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "Shuffle the tunes"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Would you mind resuming the song?",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "resuming the song"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Would you mind",
+            "synonyms": [
+              "Could you",
+              "Can you",
+              "Would it be possible to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "resuming the song",
+            "synonyms": [
+              "continue playing the song",
+              "start the song again",
+              "play the song once more"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "resuming the song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pausing the song"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stopping the song"
+                ]
+              },
+              {
+                "propertyValue": "player.playNext",
+                "propertySubPhrases": [
+                  "playing the next song"
+                ]
+              },
+              {
+                "propertyValue": "player.playPrevious",
+                "propertySubPhrases": [
+                  "playing the previous song"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffling the playlist"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Would you resume the audio?",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "resume the audio"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Would you",
+            "synonyms": [
+              "Can you",
+              "Could you",
+              "Will you"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "resume the audio",
+            "synonyms": [
+              "start playing the audio",
+              "continue the audio",
+              "play the audio again"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "?",
+            "synonyms": [
+              "please",
+              "now",
+              "right away"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "resume the audio"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the audio"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the audio"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the audio"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Yo, keep the beats going.",
+      "action": {
+        "fullActionName": "player.resume",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.resume",
+            "substrings": [
+              "keep the beats going"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Yo",
+            "synonyms": [
+              "Hey",
+              "Hello",
+              "Hi"
+            ],
+            "category": "greeting",
+            "isOptional": true
+          },
+          {
+            "text": "keep the beats going",
+            "synonyms": [
+              "continue playing the music",
+              "don't stop the music",
+              "let the music play on"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.resume",
+            "propertySubPhrases": [
+              "keep the beats going"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "stop the beats"
+                ]
+              },
+              {
+                "propertyValue": "player.playNext",
+                "propertySubPhrases": [
+                  "skip to the next beat"
+                ]
+              },
+              {
+                "propertyValue": "player.playPrevious",
+                "propertySubPhrases": [
+                  "go back to the last beat"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffle",
+                "propertySubPhrases": [
+                  "shuffle the beats"
+                ]
+              },
+              {
+                "propertyValue": "player.repeat",
+                "propertySubPhrases": [
+                  "repeat the beats"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Yo, press play on that again.",
+      "action": {
+        "fullActionName": "player.play",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.play",
+            "substrings": [
+              "press play"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Yo",
+            "synonyms": [
+              "Hey",
+              "Hello",
+              "Hi"
+            ],
+            "category": "greeting",
+            "isOptional": true
+          },
+          {
+            "text": "press play",
+            "synonyms": [
+              "start playing",
+              "play the track",
+              "hit play"
+            ],
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "on that",
+            "synonyms": [
+              "on it",
+              "on the device",
+              "on the player"
+            ],
+            "category": "preposition",
+            "isOptional": true
+          },
+          {
+            "text": "again",
+            "synonyms": [
+              "one more time",
+              "once more",
+              "another time"
+            ],
+            "category": "confirmation",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.play",
+            "propertySubPhrases": [
+              "press play"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "press pause"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "press stop"
+                ]
+              },
+              {
+                "propertyValue": "player.rewind",
+                "propertySubPhrases": [
+                  "press rewind"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

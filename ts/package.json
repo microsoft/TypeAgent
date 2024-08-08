@@ -1,0 +1,50 @@
+{
+  "name": "ai-systems-root",
+  "version": "0.0.1",
+  "private": true,
+  "description": "AI Systems workspace root",
+  "keywords": [],
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "scripts": {
+    "build": "fluid-build . -t build",
+    "check:policy": "node tools/scripts/repo-policy-check.mjs",
+    "check:policy:fix": "node tools/scripts/repo-policy-check.mjs --fix",
+    "clean": "fluid-build . -t clean",
+    "cli": "pnpm -C packages/cli exec npx --no .",
+    "elevate": "node tools/scripts/elevate.js",
+    "getKeys": "node tools/scripts/getKeys.js",
+    "lint": "fluid-build . -t prettier",
+    "lint:fix": "pnpm run prettier:fix",
+    "prettier": "prettier --check .",
+    "prettier:fix": "prettier --write .",
+    "rebuild": "fluid-build . -t build --rebuild",
+    "regen": "pnpm -C packages/cli exec npm run regen",
+    "regen:builtin": "pnpm -C packages/cli exec npm run regen:builtin",
+    "shell": "pnpm -C packages/shell exec npm run dev",
+    "test": "pnpm run -r --parallel --stream test",
+    "test:full": "pnpm run -r --parallel --stream test:full"
+  },
+  "devDependencies": {
+    "@fluidframework/build-tools": "^0.35.0-247707",
+    "@types/node": "^20.8.9",
+    "concurrently": "^8.2.2",
+    "prettier": "^3.2.5"
+  },
+  "packageManager": "pnpm@8.15.5+sha256.4b4efa12490e5055d59b9b9fc9438b7d581a6b7af3b5675eb5c5f447cee1a589",
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=8"
+  },
+  "peerDependencyRules": {
+    "ignoreMissing": [
+      "eslint"
+    ]
+  }
+}
