@@ -4,7 +4,7 @@
 
 **TypeAgent** is **sample code** that explores architectures for building _interactive agents_ with _natural language interfaces_ using [TypeChat](https://github.com/microsoft/typechat).
 
-This directory contains Typescript implemented packages and main entry point for **TypeAgent**. For more details about the project, please review the TypeAgent [ReadMe](./../README.md).
+This directory contains Typescript packages and main entry point for **TypeAgent**. For more details about the project, please review the TypeAgent [ReadMe](./../README.md).
 
 ## Build
 
