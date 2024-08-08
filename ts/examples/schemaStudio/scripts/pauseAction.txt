@@ -1,1 +1,0 @@
-@fromSchema --action PauseAction --descr "Pause a music player" --count 50 --type "most likely" --facets "politeness, slang, phrase structure" --output ..\data\player\pauseAction.txt

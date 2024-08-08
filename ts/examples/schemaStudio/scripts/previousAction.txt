@@ -1,1 +1,0 @@
-@fromSchema --action PreviousAction --descr "Prev on a music player" --count 50 --type "most likely" --facets "politeness, slang, phrase structure" --output ..\data\player\previousAction.txt
