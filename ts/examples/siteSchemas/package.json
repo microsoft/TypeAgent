@@ -1,0 +1,47 @@
+{
+  "name": "site-schemas",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Site Schemas",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/siteSchemas"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "scripts": {
+    "build": "npm run tsc",
+    "postbuild": "copyfiles -u 1 \"src/**/*Schema.ts\" \"src/**/*.txt\" dist",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "start": "node dist/crosswordPage.js",
+    "tsc": "tsc -p src"
+  },
+  "dependencies": {
+    "aiclient": "workspace:*",
+    "common-utils": "workspace:*",
+    "copyfiles": "^2.4.1",
+    "dotenv": "^16.3.1",
+    "find-config": "^1.0.0",
+    "jsonpath": "^1.1.1",
+    "typeagent": "workspace:*",
+    "typechat": "^0.1.0",
+    "typescript": "^5.4.2",
+    "ws": "^8.17.1"
+  },
+  "devDependencies": {
+    "@types/find-config": "1.0.4",
+    "@types/jsonpath": "^0.2.4",
+    "@types/node": "^18.18.7",
+    "@types/ws": "^8.5.10",
+    "rimraf": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=8"
+  }
+}

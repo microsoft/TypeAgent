@@ -1,0 +1,3 @@
+@fromSchema --action SearchTracksAction --count 200 --type "most likely" --facets "genre, artist, album, song, phrase structure" --output ..\data\player\searchTracks.txt
+
+@fromSchema --action SearchTracksAction --count 50 --type "most likely" --facets "politeness, artist, album, song, slang" --examplePath ..\data\player\searchTracks.txt --output ..\data\player\searchTracks_Expand.txt

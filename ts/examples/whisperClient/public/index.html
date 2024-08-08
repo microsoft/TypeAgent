@@ -1,0 +1,33 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html>
+  <head>
+    <title>Microphone capture</title>
+  </head>
+  <body>
+    <button id="record">Start Capture</button>
+    <div id="transcriptionResult"></div>
+    <script src="index.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", (event) => {
+        const whisperClient = new WhisperRecognizer();
+
+        whisperClient.onRecognizing((data) => {
+          transcriptionResult.innerText = data.text;
+        });
+
+        whisperClient.onRecognized((data) => {
+          transcriptionResult.innerText = data.text;
+          record.disabled = false;
+        });
+
+        record.onclick = (e) => {
+          record.disabled = true;
+          whisperClient.startRecording();
+        };
+      });
+    </script>
+  </body>
+</html>

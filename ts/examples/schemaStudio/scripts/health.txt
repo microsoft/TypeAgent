@@ -1,0 +1,8 @@
+@fromSchema --action GetHealthItemsAction --schemaPath "/src/aisystems/ts/packages/dispatcher/src/translation/healthActionsSchema.ts" --example "What medications am I taking?"
+
+ @fromSchema --action GetHealthItemsAction --schemaPath "/src/aisystems/ts/packages/dispatcher/src/translation/healthActionsSchema.ts"
+
+@fromSchema --action GetHealthItemsAction --schemaPath "/src/aisystems/ts/packages/dispatcher/src/translation/healthActionsSchema.ts" --example "Show me all my blood pressure readings for 2024" --facets "measurement type"
+
+@template --example "What is my dosage for ${vocab.DrugName}?"
+@template --example "What are the ${vocab.DrugInfoType} of ${vocab.DrugName}?" --count 10

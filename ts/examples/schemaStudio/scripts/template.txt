@@ -1,0 +1,5 @@
+@template --example "Your ${medication.name} dosage is ${medication.dosage}"
+@template --example "Take ${medication.quantity} of ${medication.name} ${medication.frequency}
+
+@template --example "What is my dosage for ${vocab.DrugName}?"
+@template --example "What are the ${vocab.DrugInfoType} of ${vocab.DrugName}?" --count 10

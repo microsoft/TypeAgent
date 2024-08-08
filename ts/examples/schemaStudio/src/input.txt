@@ -1,0 +1,13 @@
+@fromSchema --count 25
+
+@fromSchema --count 25 --facets "phrase structure, slang"
+
+@fromSchema --action PauseAction --type "most unlikely" --facets "Slang, Phrase Structure, Wordiness"
+
+@fromSchema --action GetAlbumAction --count 20 --facets "Phrase Structure, Album Name, Slang" --example "Yo, load up Nevermind by Nirvana"
+
+@variations "Yo, play me some Goldberg Variations by Bach!" --facets "Composer, Piece, Slang" --depth 2 --progress
+
+# Interactive mode only
+"Play me Aja by Steely Dan" --facets "Composer, Piece, Slang" --type "similar"
+
