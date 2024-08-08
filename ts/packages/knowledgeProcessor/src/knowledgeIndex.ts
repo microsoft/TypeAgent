@@ -320,7 +320,9 @@ export async function createTextIndex<TSourceId = any>(
             postingsNearest = [...unionMultiple(...nearestPostings)];
         } else if (!postings || postings.length === 0) {
             const textId = await semanticIndex.nearestNeighbor(value, minScore);
-            postingsNearest = await postingFolder.get(textId.item);
+            if (textId) {
+                postingsNearest = await postingFolder.get(textId.item);
+            }
         }
         postings = unionArrays(postings, postingsNearest);
         return postings ?? [];

@@ -21,10 +21,16 @@ export interface KnowledgeActionTranslator {
 
 export function createKnowledgeActionTranslator(
     model: TypeChatLanguageModel,
+    includeActions: boolean = true,
 ): KnowledgeActionTranslator {
     const typeName = "SearchAction";
     const schema = loadSchema(
-        ["dateTimeSchema.ts", "knowledgeSearchSchema.ts"],
+        [
+            "dateTimeSchema.ts",
+            includeActions
+                ? "knowledgeSearchSchema.ts"
+                : "knowledgeSearchNoActionsSchema.ts",
+        ],
         import.meta.url,
     );
     const validator = createTypeScriptJsonValidator<SearchAction>(

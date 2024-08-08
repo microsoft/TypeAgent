@@ -27,7 +27,7 @@ export interface VectorIndex<ID = number> {
         value: Embedding,
         similarity: SimilarityType,
         minScore?: number,
-    ): Promise<ScoredItem<ID>>;
+    ): Promise<ScoredItem<ID> | undefined>;
     /**
      * Return upto maxMatches nearest neighbors
      * @param value

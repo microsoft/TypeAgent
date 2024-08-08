@@ -29,6 +29,7 @@ export type SearchProcessingOptions = {
     fallbackSearch?: SearchOptions | undefined;
     includeTimeRange: boolean;
     combinationSetOp?: SetOp;
+    includeActions?: boolean;
     actionPreprocess?: (action: SearchAction) => void;
 };
 
@@ -48,10 +49,14 @@ export interface ConversationSearchProcessor {
 export function createSearchProcessor(
     conversation: Conversation,
     actionModel: ChatModel,
-    answerModel?: ChatModel,
+    answerModel: ChatModel,
+    includeActions: boolean = true,
 ): ConversationSearchProcessor {
-    const actions = createKnowledgeActionTranslator(actionModel);
-    const answers = createAnswerGenerator(answerModel ?? actionModel);
+    const actions = createKnowledgeActionTranslator(
+        actionModel,
+        includeActions,
+    );
+    const answers = createAnswerGenerator(answerModel);
 
     return {
         actions,
@@ -128,17 +133,19 @@ export function createSearchProcessor(
                 minScore: options.minScore,
                 loadTopics: true, //responseType === "Topics",
             },
-            action: {
+            topicLevel,
+            loadMessages: responseType === "Answer", //topicLevel === 1,
+        };
+        if (options.includeActions) {
+            searchOptions.action = {
                 maxMatches: options.maxMatches,
                 minScore: options.minScore,
                 verbSearchOptions: {
                     maxMatches: 1,
                     minScore: options.minScore,
                 },
-            },
-            topicLevel,
-            loadMessages: responseType === "Answer", //topicLevel === 1,
-        };
+            };
+        }
 
         adjustRequest(query, action, searchOptions);
 

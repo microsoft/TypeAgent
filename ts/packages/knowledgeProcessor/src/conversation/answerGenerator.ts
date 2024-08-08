@@ -64,10 +64,10 @@ export function createAnswerGenerator(
         higherPrecision: boolean,
     ): Promise<AnswerResponse | undefined> {
         const hasMessages = response.messages && response.messages.length > 0;
-        const context = {
+        const context: any = {
             entities: {
                 timeRanges: response.entityTimeRanges(),
-                values: response.mergeAllEntities(settings!.topKEntities), //[...response.allEntities()]
+                values: response.mergeAllEntities(settings!.topKEntities),
             },
             topics: {
                 timeRanges: response.topicTimeRanges(),
@@ -83,10 +83,16 @@ export function createAnswerGenerator(
                       })
                     : [],
         };
-
+        const actions = [...response.allActions()];
+        if (actions.length > 0) {
+            context.actions = {
+                timeRanges: response.actionTimeRanges(),
+                values: actions,
+            };
+        }
         let prompt = `The following is a user question about a conversation:\n${question}\n\n`;
         prompt +=
-            "Answer the question using only the relevant topics, entities, messages and time ranges/timestamps found in CONVERSATION HISTORY.\n";
+            "Answer the question using only the relevant topics, entities, actions, messages and time ranges/timestamps found in CONVERSATION HISTORY.\n";
         prompt += "Entities and topics are case-insensitive\n";
         if (higherPrecision) {
             prompt +=

@@ -9,7 +9,6 @@ import {
     CommandMetadata,
     InteractiveIo,
     addStandardHandlers,
-    getArg,
     parseNamedArguments,
     runConsole,
 } from "interactive-app";
@@ -60,6 +59,7 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         searcher: knowLib.conversation.createSearchProcessor(
             conversation,
             chatModel,
+            chatModel,
         ),
     };
     context.searchMemory = await createSearchMemory(context);
@@ -104,6 +104,7 @@ export async function createSearchMemory(
             windowSize: 8,
             maxContextLength: context.maxCharsPerChunk,
             includeSuggestedTopics: false,
+            includeActions: false,
         }),
         await conversation.createConversationTopicMerger(
             context.chatModel,
@@ -114,7 +115,11 @@ export async function createSearchMemory(
     );
 }
 
-export async function loadConversation(context: ChatContext, name: string) {
+export async function loadConversation(
+    context: ChatContext,
+    name: string,
+    includeActions = true,
+) {
     context.conversation = await createConversation(
         path.join(context.storePath, name),
     );
@@ -122,6 +127,8 @@ export async function loadConversation(context: ChatContext, name: string) {
     context.searcher = conversation.createSearchProcessor(
         context.conversation,
         context.chatModel,
+        context.chatModel,
+        includeActions,
     );
 }
 
@@ -133,10 +140,11 @@ export async function runPlayChat(): Promise<void> {
         importTranscript,
         load,
         replay,
-        topics,
         knowledge,
         buildIndex,
+        topics,
         entities,
+        actions,
         search,
     };
     addStandardHandlers(handlers);
@@ -247,10 +255,28 @@ export async function runPlayChat(): Promise<void> {
         }
     }
 
-    handlers.load.metadata = "Load the named conversation memory";
+    function loadDef(): CommandMetadata {
+        return {
+            description: "Load the named conversation memory",
+            args: {
+                name: {
+                    description: "Conversation name",
+                },
+            },
+            options: {
+                actions: {
+                    description: "Use actions in search",
+                    type: "boolean",
+                    defaultValue: true,
+                },
+            },
+        };
+    }
+    handlers.load.metadata = loadDef();
     async function load(args: string[], io: InteractiveIo) {
         if (args.length > 0) {
-            await loadConversation(context, getArg(args, 0));
+            const namedArgs = parseNamedArguments(args, loadDef());
+            await loadConversation(context, namedArgs.name, namedArgs.actions);
         } else {
             printer.writeLine(context.conversationName);
         }
@@ -260,6 +286,11 @@ export async function runPlayChat(): Promise<void> {
         return {
             description: "Extract knowledge",
             options: {
+                actions: {
+                    description: "Extract actions",
+                    type: "boolean",
+                    defaultValue: true,
+                },
                 maxTurns: {
                     type: "number",
                     defaultValue: 10,
@@ -289,6 +320,7 @@ export async function runPlayChat(): Promise<void> {
                 windowSize: 8,
                 maxContextLength: context.maxCharsPerChunk,
                 includeSuggestedTopics: false,
+                includeActions: namedArgs.actions,
             },
         );
         let messages: knowLib.SourceTextBlock[] = await asyncArray.toArray(
@@ -371,17 +403,15 @@ export async function runPlayChat(): Promise<void> {
                     defaultValue: 0,
                     description: "Throttle calls to model",
                 },
-                knowledge: {
-                    type: "boolean",
-                    defaultValue: true,
-                },
                 messages: {
                     type: "boolean",
                     defaultValue: true,
+                    description: "Index messages",
                 },
                 actions: {
                     type: "boolean",
-                    defaultValue: false,
+                    defaultValue: true,
+                    description: "Index actions",
                 },
             },
         };
@@ -405,23 +435,22 @@ export async function runPlayChat(): Promise<void> {
             await context.conversation.removeMessageIndex();
             messageIndex = await context.conversation.getMessageIndex();
         }
-        if (namedArgs.knowledge) {
-            await context.conversation.removeKnowledge();
-            topicMerger = await conversation.createConversationTopicMerger(
-                context.chatModel,
-                context.conversation,
-                1,
-                namedArgs.mergeWindow,
-            );
-            knowledgeExtractor = conversation.createKnowledgeExtractor(
-                context.chatModel,
-                {
-                    windowSize: 8,
-                    maxContextLength: context.maxCharsPerChunk,
-                    includeSuggestedTopics: false,
-                },
-            );
-        }
+        await context.conversation.removeKnowledge();
+        topicMerger = await conversation.createConversationTopicMerger(
+            context.chatModel,
+            context.conversation,
+            1,
+            namedArgs.mergeWindow,
+        );
+        knowledgeExtractor = conversation.createKnowledgeExtractor(
+            context.chatModel,
+            {
+                windowSize: 8,
+                maxContextLength: context.maxCharsPerChunk,
+                includeSuggestedTopics: false,
+                includeActions: namedArgs.actions,
+            },
+        );
         context.conversationSettings.indexActions = namedArgs.actions;
         let count = 0;
         const concurrency = namedArgs.concurrency;
@@ -633,6 +662,20 @@ export async function runPlayChat(): Promise<void> {
         }
     }
 
+    function actionsDef(): CommandMetadata {
+        return {
+            description: "Search for actions",
+        };
+    }
+    handlers.actions.metadata = actionsDef();
+    async function actions(args: string[], io: InteractiveIo) {
+        //const namedArgs = parseNamedArguments(args, actionsDef());
+        const index = await context.conversation.getActionIndex();
+        for await (const action of index.entries()) {
+            writeExtractedAction(action);
+        }
+    }
+
     function searchDef(): CommandMetadata {
         return {
             description: "Natural language search on conversation",
@@ -657,6 +700,11 @@ export async function runPlayChat(): Promise<void> {
                     type: "boolean",
                     defaultValue: true,
                 },
+                action: {
+                    description: "Include actions",
+                    type: "boolean",
+                    defaultValue: true,
+                },
                 eval: {
                     description: "Evaluate search query",
                     type: "boolean",
@@ -667,14 +715,15 @@ export async function runPlayChat(): Promise<void> {
                     type: "boolean",
                     defaultValue: false,
                 },
-                intersect: {
-                    type: "boolean",
-                    defaultValue: false,
-                },
                 save: {
                     description: "Save the search",
                     type: "boolean",
                     defaultValue: true,
+                },
+                evidence: {
+                    description: "Include evidence for the answer",
+                    type: "boolean",
+                    defaultValue: false,
                 },
             },
         };
@@ -685,7 +734,7 @@ export async function runPlayChat(): Promise<void> {
         const namedArgs = parseNamedArguments(args, searchDef());
         const maxMatches = namedArgs.maxMatches;
         const minScore = namedArgs.minScore;
-        const query = namedArgs.query.trim();
+        let query = namedArgs.query.trim();
         if (!query || query.length === 0) {
             return;
         }
@@ -694,27 +743,27 @@ export async function runPlayChat(): Promise<void> {
             minScore,
             maxMessages: 15,
             includeTimeRange: true,
-            combinationSetOp: namedArgs.intersect
-                ? knowLib.sets.SetOp.Intersect
-                : knowLib.sets.SetOp.IntersectUnion,
+            combinationSetOp: knowLib.sets.SetOp.IntersectUnion,
             actionPreprocess: (action) => printer.writeJson(action),
         };
         if (namedArgs.fallback) {
             searchOptions.fallbackSearch = { maxMatches: 10 };
         }
+        searchOptions.includeActions = namedArgs.action;
         if (!namedArgs.eval) {
-            const searchResult = await context.searcher.actions.translateSearch(
-                query,
-                await context.searcher.buildContext(searchOptions),
-            );
-            printer.writeJson(searchResult);
+            await searchNoEval(query, searchOptions);
             return;
+        }
+        if (namedArgs.evidence) {
+            query +=
+                "\nInclude your evidence in your response using a separate paragraph";
         }
         const result = await context.searcher.search(query, searchOptions);
         if (!result) {
             printer.writeError("No result");
             return;
         }
+
         if (result.response) {
             const timestampA = new Date();
             const entityIndex = await context.conversation.getEntityIndex();
@@ -738,6 +787,17 @@ export async function runPlayChat(): Promise<void> {
                 }
             }
         }
+    }
+
+    async function searchNoEval(
+        query: string,
+        searchOptions: conversation.SearchProcessingOptions,
+    ) {
+        const searchResult = await context.searcher.actions.translateSearch(
+            query,
+            await context.searcher.buildContext(searchOptions),
+        );
+        printer.writeJson(searchResult);
     }
 
     //--------------------
@@ -873,6 +933,10 @@ export async function runPlayChat(): Promise<void> {
                     `Entity to Message Hit Count: ${entityIds.size}`,
                 );
             }
+            const allActions = [...rr.response.allActions()];
+            if (allActions && allActions.length > 0) {
+                printer.writeLine(`Action Hit Count: ${allActions.length}`);
+            }
             if (rr.response?.messages) {
                 printer.writeLine(
                     `Message Hit Count: ${rr.response.messages ? rr.response.messages.length : 0}`,
@@ -1005,6 +1069,12 @@ export async function runPlayChat(): Promise<void> {
             );
             printer.writeLine();
         }
+    }
+
+    function writeExtractedAction(
+        action: knowLib.conversation.ExtractedAction,
+    ) {
+        printer.writeLine(conversation.actionToString(action.value));
     }
 
     async function writeExtractedEntity(
