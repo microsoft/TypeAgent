@@ -3,7 +3,11 @@
 
 import { askYesNo } from "../../utils/interactive.js";
 import readline from "readline/promises";
-import { SearchMenuItem } from "common-utils";
+import {
+    SearchMenuItem,
+    TemplateParamField,
+    TemplateParamObject,
+} from "common-utils";
 import chalk from "chalk";
 
 export type RequestId = string | undefined;
@@ -34,6 +38,13 @@ export interface ClientIO {
     result(message: string, requestId: RequestId): void;
     warn(message: string, requestId: RequestId): void;
     error(message: string, requestId: RequestId): void;
+    actionCommand(
+        actionAgent: string,
+        actionName: string,
+        parameterStructure: TemplateParamObject,
+        command: string,
+        requestId: RequestId,
+    ): void;
     searchMenuCommand(
         menuId: string,
         command: SearchMenuCommand,

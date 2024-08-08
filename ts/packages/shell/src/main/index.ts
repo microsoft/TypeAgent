@@ -29,7 +29,10 @@ import {
 } from "agent-dispatcher";
 
 import { SearchMenuCommand } from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
-import { SearchMenuItem } from "../preload/electronTypes.js";
+import {
+    SearchMenuItem,
+    TemplateParamObject,
+} from "../preload/electronTypes.js";
 
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
@@ -247,6 +250,22 @@ function searchMenuCommand(
     );
 }
 
+function actionCommand(
+    actionAgent: string,
+    actionName: string,
+    parameterStructure: TemplateParamObject,
+    command: string,
+    requestId: RequestId,
+) {
+    mainWindow?.webContents.send(
+        "select-action-parameters",
+        actionAgent,
+        actionName,
+        parameterStructure,
+        command,
+        requestId,
+    );
+}
 const clientIO: ClientIO = {
     clear: () => {
         mainWindow?.webContents.send("clear");
@@ -261,7 +280,8 @@ const clientIO: ClientIO = {
     result: showResult,
     setActionStatus: showResult,
     updateActionStatus: updateResult,
-    searchMenuCommand: searchMenuCommand,
+    searchMenuCommand,
+    actionCommand,
     askYesNo,
     question,
     notify(event: string, requestId: RequestId, data: any) {

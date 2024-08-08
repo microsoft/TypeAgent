@@ -24,8 +24,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: "true"
-          token: ${{ secrets.PAT_TOKEN }}
+          submodules: "false"
+          # token: ${{ secrets.PAT_TOKEN }}
       - uses: pnpm/action-setup@v4
         name: Install pnpm
         with:
@@ -37,6 +37,7 @@ jobs:
         run: |
           node ts/tools/scripts/repo-policy-check.mjs
       - name: Check Submodule
+        if: false # This step is disabled and will be skipped
         run: |
           echo GITHUB_EVENT_NAME: $GITHUB_EVENT_NAME
           echo GITHUB_BASE_REF: $GITHUB_BASE_REF

@@ -20,6 +20,9 @@ const api: ClientAPI = {
     sendPartialInput: (text: string) => {
         ipcRenderer.send("partial-input", text);
     },
+    onActionCommand: (callback) => {
+        ipcRenderer.on("select-action-parameters", callback);
+    },
     onSearchMenuCommand: (callback) => {
         ipcRenderer.on("search-menu-command", callback);
     },

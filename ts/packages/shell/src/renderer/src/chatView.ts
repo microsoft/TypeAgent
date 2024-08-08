@@ -13,7 +13,10 @@ import { SpeechInfo } from "./speech";
 import { SearchMenu } from "./search";
 import { AnsiUp } from "ansi_up";
 import { iconCheckMarkCircle, iconX, iconRoadrunner } from "./icon";
-import { SearchMenuItem } from "../../preload/electronTypes";
+import {
+    SearchMenuItem,
+    TemplateParamObject,
+} from "../../preload/electronTypes";
 
 export interface InputChoice {
     element: HTMLElement;
@@ -643,6 +646,37 @@ export class ChatView {
         }
     }
 
+    actionCommand(
+        _actionAgent: string,
+        _actionName: string,
+        _parameterStructure: TemplateParamObject,
+        _command: string,
+        _requestId: string,
+    ) {
+        /*
+        switch (command) {
+            case "confirmAction":
+                this.confirmAction(
+                    actionAgent,
+                    actionName,
+                    parameterStructure,
+                    requestId,
+                );
+                break;
+            case "replaceAction":
+                this.replaceAction(
+                    actionAgent,
+                    actionName,
+                    parameterStructure,
+                    requestId,
+                );
+                break;
+            default:
+                console.error(`Unhandled action command: ${command}`);
+                break;
+        }
+                */
+    }
     searchMenuCommand(
         menuId: string,
         command: string,
