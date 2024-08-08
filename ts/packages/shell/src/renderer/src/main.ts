@@ -85,6 +85,10 @@ function addEvents(chatView: ChatView) {
     api.onSendDemoEvent((_, name) => {
         (window as any).electron.ipcRenderer.send("send-demo-event", name);
     });
+    api.onHelpRequested((_, key) => {
+        console.log(`User asked for help via ${key}`);
+        chatView.addUserMessage(`@help`);
+    });
 }
 
 export class IdGenerator {

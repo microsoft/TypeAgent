@@ -68,6 +68,9 @@ const api: ClientAPI = {
     onSendDemoEvent(callback) {
         ipcRenderer.on("send-demo-event", callback);
     },
+    onHelpRequested(callback) {
+        ipcRenderer.on("help-requested", callback);
+    },
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to

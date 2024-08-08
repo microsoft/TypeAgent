@@ -6,15 +6,15 @@ With user requests, translation and history, LLM is asked to **explain** how it 
 
 ### Adding new explainer
 
-The list of supported explainer is located at [explainerFactories.ts](./src/explanation/explainerFactories.ts)
+The list of supported explainers is located at [explainerFactories.ts](./src/explanation/explainerFactories.ts)
 Multiple explainer support is use to explore changes to the explainer prompt and schema. Each explainer may be configured
-with their own validator and construction creator. Some explainer might not support that and some of the scenario will not work.
+with their own validator and construction creator. Some explainers might not support that and some of the scenarios will not work.
 
-Each explainer contain code (validation and construction creation), and the schema(s) (used to ask LLM to break down requests).
+Each explainer contains code (validation and construction creation), and the schema(s) (used to ask LLM to break down requests).
 
 ### Cloning existing explainer
 
-Each explainer contain code (validation and construction creation), and the schema (used to ask LLM to break down requests).
+Each explainer contains code (validation and construction creation), and the schema (used to ask LLM to break down requests).
 
 One way to start a new explainer is to clone an existing one.
 Here is an example instruction to create v5 from v4:
@@ -24,7 +24,7 @@ Here is an example instruction to create v5 from v4:
 - Add the new explainer in the `explainerFactories.ts` by adding a new entry in the `explainerFactories array`, with the key as the name of the explainer and the value the function to create the explainer from `explanationV5.ts`
 - After that `@config explainer v5` in the CLI or shell will switch to start using that explainer.
 
-Note that explainer has their own cache and not reused across different explainers.
+Note that each explainer has their own cache and not reused across different explainers.
 
 ## Trademarks
 

@@ -32,27 +32,27 @@ import { processRequests, unicodeChar } from "./utils/interactive.js";
 
 class HelpCommandHandler implements CommandHandler {
     public readonly description = "Show help";
-    async run(request: string) {
+    public async run(request: string, context: CommandHandlerContext) {
         const printHandleTable = (handlers: HandlerTable, command: string) => {
-            console.log(`${handlers.description}`);
-            console.log();
-            if (command) {
-                console.log(`Usage: @${command} <subcommand> ...`);
-                console.log("Subcommands:");
-            } else {
-                console.log("Usage: @<command> ...");
-                console.log("Commands:");
-            }
+            context.requestIO.result((log: (message?: string) => void) => {
+                log(`${handlers.description}`);
+                log();
+                if (command) {
+                    log(`Usage: @${command} <subcommand> ...`);
+                    log("Subcommands:");
+                } else {
+                    log("Usage: @<command> ...");
+                    log("Commands:");
+                }
 
-            for (const name in handlers.commands) {
-                const handler = handlers.commands[name];
-                const subcommand = isCommandHandler(handler)
-                    ? name
-                    : `${name} <subcommand>`;
-                console.log(
-                    `  ${subcommand.padEnd(20)}: ${handler.description}`,
-                );
-            }
+                for (const name in handlers.commands) {
+                    const handler = handlers.commands[name];
+                    const subcommand = isCommandHandler(handler)
+                        ? name
+                        : `${name} <subcommand>`;
+                    log(`  ${subcommand.padEnd(20)}: ${handler.description}`);
+                }
+            });
         };
         if (request === "") {
             printHandleTable(handlers, "");
@@ -64,9 +64,9 @@ class HelpCommandHandler implements CommandHandler {
 
             if (isCommandHandler(result.resolved)) {
                 if (result.resolved.help) {
-                    console.log(result.resolved.help);
+                    context.requestIO.result(result.resolved.help);
                 } else {
-                    console.log(
+                    context.requestIO.result(
                         `${result.command} - ${result.resolved.description}`,
                     );
                 }
@@ -161,8 +161,10 @@ function resolveCommand(input: string): ResolveCommandResult | undefined {
         const action = currentHandlers.commands[subCommand];
         if (action === undefined) {
             throw new Error(
-                `Unknown command '${subCommand}'${
-                    command ? ` for '@${command}'` : ""
+                `Unknown command '${subCommand}'. ${
+                    command
+                        ? ` for '@${command}'. Try @help ${command} for a list of subcommands.`
+                        : "Try '@help' for a list of commands."
                 }`,
             );
         }

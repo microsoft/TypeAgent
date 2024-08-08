@@ -37,11 +37,11 @@ Beyond natural language, users can specify system command with inputs starting w
 
 Dispatcher agent's translation can be enabled and disabled.
 
-- `@config translator <translator>` - Enable `<translator>`
-- `@config translator -<translator>` - Disable `<translator>`
-- `@config translator *`- Enable all translators
-- `@config translator code*` - Enable a pattern of translators (useful for sub-translators)
-- `@config translator @` - Reset enable or disable of the translator to default
+- `@config translator <translator>` | Enables the supplied translator
+- `@config translator -<translator>` | Disables the supplied translator
+- `@config translator *` | Enable all translators
+- `@config translator code*` | Enable a pattern of translators (useful for sub-translators)
+- `@config translator @` | Reset enable or disable of the translator to default
 
 Similarly, dispatcher agent's action can be enabled and disable independent of translation with similar pattern using `@config action`
 
@@ -67,7 +67,7 @@ For example, in the [CLI](../cli):
 [📅💊📩📝👀🪟⚛️💬🔧 (explainer: v4)]>
 ```
 
-To list all explainer configured:
+To list all configured explainers:
 
 ```bash
 🤖🚧💾  [📅💊📩📝👀🪟⚛️💬🔧]>@config explainer

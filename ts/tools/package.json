@@ -1,0 +1,21 @@
+{
+  "name": "tools-scripts",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Scripts for AI Systems workspace",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/tools"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "dependencies": {
+    "@azure/arm-authorization": "^9.0.0",
+    "@azure/identity": "^4.2.1",
+    "chalk": "^5.3.0",
+    "sort-package-json": "^2.10.0",
+    "validate-npm-package-name": "^5.0.1"
+  }
+}

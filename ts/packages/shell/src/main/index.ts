@@ -379,6 +379,10 @@ app.whenReady().then(async () => {
         mainWindow?.webContents.send("send-demo-event", "Alt+Right");
     });
 
+    globalShortcut.register("F1", () => {
+        mainWindow?.webContents.send("help-requested", "F1");
+    });
+
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.
     // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils

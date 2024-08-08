@@ -147,6 +147,9 @@ export interface ClientAPI {
     onSendDemoEvent(
         callback: (e: Electron.IpcRendererEvent, name: string) => void,
     ): void;
+    onHelpRequested(
+        callback: (e: Electron.IpcRendererEvent, key: string) => void,
+    ): void;
 }
 
 export interface ElectronWindowFields {
