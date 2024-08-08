@@ -1,0 +1,225 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+          "name": "Attach",
+          "port": 9229,
+          "request": "attach",
+          "skipFiles": [
+            "<node_internals>/**"
+          ],
+          "type": "node"
+        },
+        {
+            "name": "Debug Main Process",
+            "type": "node",
+            "request": "launch",
+            "cwd": "${workspaceRoot}/packages/shell",
+            "runtimeExecutable": "${workspaceRoot}/packages/shell/node_modules/.bin/electron-vite",
+            "windows": {
+              "runtimeExecutable": "${workspaceRoot}/packages/shell/node_modules/.bin/electron-vite.cmd"
+            },
+            "runtimeArgs": ["--sourcemap"],
+            "env": {
+              "REMOTE_DEBUGGING_PORT": "9222"
+            }
+          },       
+        {
+            "name": "Player Service",
+            "type": "node",
+            "request": "launch",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "cwd": "${workspaceFolder}/packages/player",
+            "program": "./dist/main.js",
+            "console": "externalTerminal",
+            "preLaunchTask": "pnpm: build",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ]
+          },
+        {
+          "type": "node",
+          "request": "launch",
+          "name": "CLI interactive",
+          "skipFiles": [
+              "<node_internals>/**"
+          ],
+          "cwd": "${workspaceFolder}/packages/cli",
+          "program": "./bin/run.js",
+          "args": [ "interactive" ],
+          "console": "externalTerminal",
+          "preLaunchTask": "pnpm: build",
+          "outFiles": [
+              "${workspaceFolder}/**/*.js"
+          ]
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "CLI (dev) interactive",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "cwd": "${workspaceFolder}/packages/cli",
+            "program": "./bin/dev.js",
+            "args": [ "interactive" ],
+            "runtimeArgs": [ "--loader", "ts-node/esm", "--no-warnings=ExperimentalWarning"],
+            "console": "externalTerminal",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ]
+        },
+        {
+          // Needed for WSL, which can't spawn a terminal
+          "type": "node",
+          "request": "launch",
+          "name": "CLI (dev) interactive [intergrated terminal]",
+          "skipFiles": [
+              "<node_internals>/**"
+          ],
+          "cwd": "${workspaceFolder}/packages/cli",
+          "program": "./bin/dev.js",
+          "args": [ "interactive" ],
+          "runtimeArgs": [ "--loader", "ts-node/esm", "--no-warnings=ExperimentalWarning"],
+          "console": "integratedTerminal",
+          "outFiles": [
+              "${workspaceFolder}/**/*.js"
+          ]
+        },
+        {
+            "name": "Launch Playground",
+            "type": "node",
+            "request": "launch",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}/examples/playground/src/main.ts",
+            "console": "externalTerminal",
+            //"preLaunchTask": "pnpm: build",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ],
+            //"args": [ "batch", "/data/variations/play.bat" ],
+        },
+        {
+            "name": "Launch Chat Examples",
+            "type": "node",
+            "request": "launch",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}/examples/chat/src/main.ts",
+            "console": "externalTerminal",
+            //"preLaunchTask": "pnpm: build",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ]
+        },
+        {
+            "name": "Launch YOUR Example",
+            "type": "node",
+            "request": "launch",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}/examples/schemaStudio/src/main.ts",
+            "console": "externalTerminal",
+            //"preLaunchTask": "pnpm: build",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ],
+            //"args": [ "batch", "/data/variations/play.bat" ],
+            //"args": [ "@fromSchema", "--count", "20", "--facets", "phrase structure, band names" ],
+        },
+        {
+            "name": "Launch Example - WSL",
+            "type": "node",
+            "request": "launch",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}/examples/chat/src/main.ts",
+            "console": "internalConsole",
+            //"preLaunchTask": "pnpm: build",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ]
+        },
+        {
+            "name": "Launch Classify",
+            "type": "node",
+            "request": "launch",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}/examples/classify/src/main.ts",
+            "console": "externalTerminal",
+            //"preLaunchTask": "pnpm: build",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ]
+        },
+        {
+            "name": "Launch Classify - WSL",
+            "type": "node",
+            "request": "launch",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}/examples/classify/src/main.ts",
+            "console": "internalConsole",
+            //"preLaunchTask": "pnpm: build",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ]
+        },
+        {
+            "name": "Launch Parser-Test",
+            "type": "node",
+            "request": "launch",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}/examples/parser-test/src/main.ts",
+            "console": "externalTerminal",
+            //"preLaunchTask": "pnpm: build",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ]
+        },
+        {
+            "name": "Launch Parser-Test - WSL",
+            "type": "node",
+            "request": "launch",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}/examples/parser-test/src/main.ts",
+            "console": "internalConsole",
+            //"preLaunchTask": "pnpm: build",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ]
+        },
+		{
+			"name": "Run Extension",
+			"type": "extensionHost",
+			"request": "launch",
+            "cwd": "${workspaceFolder}/packages/coda",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}/packages/coda"
+			],
+			"outFiles": [
+				"${workspaceFolder}/packages/coda/out/**/*.js"
+			],
+			"preLaunchTask": "${defaultBuildTask}"
+		}
+    ]
+}
+
