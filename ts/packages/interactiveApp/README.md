@@ -1,6 +1,11 @@
 # interactiveApp
 
-interactiveApp is a no-external dependencies library for writing console apps.
+**InteractiveApp** is a no-external dependencies library for writing console apps.
+
+InteractiveApp is:
+
+- Sample code used by TypeAgent examples.
+- Not intended for other uses.
 
 ## Trademarks
 

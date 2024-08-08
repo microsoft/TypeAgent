@@ -31,7 +31,10 @@ export interface SemanticIndex<ID = string> {
      * @param value
      * @param minScore
      */
-    nearestNeighbor(value: string, minScore?: number): Promise<ScoredItem<ID>>;
+    nearestNeighbor(
+        value: string,
+        minScore?: number,
+    ): Promise<ScoredItem<ID> | undefined>;
     /**
      * Return upto maxMatches nearest neighbors
      * @param value
@@ -102,7 +105,7 @@ export function createSemanticIndex<ID = string>(
     async function nearestNeighbor(
         value: string,
         minScore?: number,
-    ): Promise<ScoredItem<ID>> {
+    ): Promise<ScoredItem<ID> | undefined> {
         const embedding: NormalizedEmbedding = await generateEmbedding(
             model!,
             value,

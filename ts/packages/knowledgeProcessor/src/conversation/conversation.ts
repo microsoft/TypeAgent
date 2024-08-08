@@ -45,7 +45,7 @@ import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
 import { intersectSets, unionSets, uniqueFrom } from "../setOperations.js";
 import { getRangeOfTemporalSequence } from "../temporal.js";
-import { ConcreteEntity } from "./knowledgeSchema.js";
+import { Action, ConcreteEntity } from "./knowledgeSchema.js";
 import { MessageIndex, createMessageIndex } from "./messages.js";
 import {
     ActionIndex,
@@ -186,8 +186,12 @@ export interface SearchResponse<
     mergeAllEntities(topK: number): CompositeEntity[];
     entityTimeRanges(): (dateTime.DateRange | undefined)[];
 
+    allActions(): IterableIterator<Action>;
+    actionTimeRanges(): (dateTime.DateRange | undefined)[];
+
     hasTopics(): boolean;
     hasEntities(): boolean;
+    hasActions(): boolean;
 }
 
 export function createSearchResponse<
@@ -203,14 +207,17 @@ export function createSearchResponse<
         allTopics,
         allTopicIds,
         mergeAllTopics,
+        topicTimeRanges,
         allEntities,
         allEntityIds,
         allEntityNames,
         mergeAllEntities,
         entityTimeRanges,
-        topicTimeRanges,
+        allActions,
+        actionTimeRanges,
         hasTopics,
         hasEntities,
+        hasActions,
     };
     return response;
 
@@ -292,6 +299,24 @@ export function createSearchResponse<
             : [];
     }
 
+    function* allActions(): IterableIterator<Action> {
+        for (const result of response.actions) {
+            if (result.actions && result.actions.length > 0) {
+                for (const action of result.actions) {
+                    yield action;
+                }
+            }
+        }
+    }
+
+    function actionTimeRanges(): (dateTime.DateRange | undefined)[] {
+        return response.actions.length > 0
+            ? response.actions.map((a) =>
+                  getRangeOfTemporalSequence(a.temporalSequence),
+              )
+            : [];
+    }
+
     function hasTopics(): boolean {
         for (const topic of allTopics()) {
             return true;
@@ -301,6 +326,13 @@ export function createSearchResponse<
 
     function hasEntities(): boolean {
         for (const entity of allEntities()) {
+            return true;
+        }
+        return false;
+    }
+
+    function hasActions(): boolean {
+        for (const action of allActions()) {
             return true;
         }
         return false;
@@ -315,7 +347,8 @@ export type ConversationSettings = {
 export type ConversationSearchOptions = {
     entity: EntitySearchOptions;
     topic: TopicSearchOptions;
-    action: ActionSearchOptions;
+    // Include if you want to use actions in your search
+    action?: ActionSearchOptions | undefined;
     topicLevel?: number;
     loadMessages?: boolean;
 };
@@ -610,11 +643,13 @@ export async function createConversation(
                     results.entities.push(entityResult);
                     break;
                 case "Action":
-                    const actionResults = await actionIndex.search(
-                        filter,
-                        options.action,
-                    );
-                    results.actions.push(actionResults);
+                    if (options.action) {
+                        const actionResults = await actionIndex.search(
+                            filter,
+                            options.action,
+                        );
+                        results.actions.push(actionResults);
+                    }
                     break;
             }
         }

@@ -62,9 +62,12 @@ export async function createEmbeddingFolder(
     async function nearestNeighbor(
         embedding: Embedding,
         similarity: SimilarityType,
-    ): Promise<ScoredItem<string>> {
+    ): Promise<ScoredItem<string> | undefined> {
         const entries = await loadEntries();
         const match = indexOfNearest(entries.embeddings, embedding, similarity);
+        if (match.item < 0) {
+            return undefined;
+        }
         return {
             item: entries.names[match.item],
             score: match.score,
@@ -79,6 +82,10 @@ export async function createEmbeddingFolder(
     ): Promise<ScoredItem<string>[]> {
         if (maxMatches === 1) {
             const match = await nearestNeighbor(embedding, similarity);
+            if (!match) {
+                return [];
+            }
+
             const matches: ScoredItem<string>[] = [];
             if (!minScore || match.score >= minScore) {
                 matches.push(match);

@@ -27,6 +27,7 @@ export type KnowledgeExtractorSettings = {
     windowSize: number;
     maxContextLength: number;
     includeSuggestedTopics?: boolean | undefined;
+    includeActions: boolean;
 };
 
 export function createKnowledgeExtractor(
@@ -51,7 +52,9 @@ export function createKnowledgeExtractor(
         if (!result.success) {
             return undefined;
         }
-
+        if (result.data.actions === undefined) {
+            result.data.actions = [];
+        }
         topics.push(result.data.topics);
         return result.data;
     }
@@ -68,7 +71,14 @@ export function createKnowledgeExtractor(
     function createTranslator(
         model: TypeChatLanguageModel,
     ): TypeChatJsonTranslator<KnowledgeResponse> {
-        const schema = loadSchema(["knowledgeSchema.ts"], import.meta.url);
+        const schema = loadSchema(
+            [
+                settings.includeActions
+                    ? "knowledgeSchema.ts"
+                    : "knowledgeNoActionsSchema.ts",
+            ],
+            import.meta.url,
+        );
         const typeName = "KnowledgeResponse";
         const validator = createTypeScriptJsonValidator<KnowledgeResponse>(
             schema,
