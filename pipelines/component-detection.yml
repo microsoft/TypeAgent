@@ -1,0 +1,18 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+name: $(Build.BuildId)
+
+trigger:
+  branches:
+    include:
+      - main
+
+steps:
+  - checkout: self
+  - task: ComponentGovernanceComponentDetection@0
+    displayName: Component Detection
+    inputs:
+      verbosity: Verbose
+      scanType: Register
+      alertWarningLevel: High
