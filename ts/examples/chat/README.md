@@ -1,21 +1,11 @@
-## Schema Studio
+## chat example
 
-This example explores how you could use TypeChat to:
+This sample explores ideas in using types and TypeChat for:
 
-- Generate variations on user utterances
-- Automatically generate possible user utterances for a given schema
+- [LLMs for Code analysis](./src/codeChat/)
+- [Conversation memory](./src/memory/)
 
-### Running
-
-node dist/main.js
-
-### Windows
-
-You can use the run.cmd wrapper to launch node main.js
-
-- cd scripts
-- run.cmd @fromSchema --count 25
-- run.cmd @variations "Yo, play me some Goldberg Variations by Bach!" --facets "Composer, Piece, Slang" --depth 2
+By default, we run the conversation memory example.
 
 ## Trademarks
 
