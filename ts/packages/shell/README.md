@@ -12,6 +12,20 @@ TypeAgent Shell is a **single personal assistant** that takes user request and u
 
 TypeAgent shell is built using [Electron](https://www.electronjs.org). Install libraries needed to build in Linux/WSL following the [instruction](https://www.electronjs.org/docs/latest/development/build-instructions-linux)
 
+## Running the agent shell
+
+```shell
+npm run shell
+```
+
+On Windows, if you notice a lag when starting up the shell, you can add the source code folder to the exclusions list for Windows Defender scans following the [instruction](https://support.microsoft.com/en-us/windows/add-an-exclusion-to-windows-security-811816c0-4dfd-af4a-47e4-c301afe13b26).
+
+Additionally, if you are running MS Graph based sample agents like Calendar and Email, there is a auth tokens persisted in the idenitity cache that can occassionally get corrupted. This could also slow down the start up time of the shell, you can delete that by running:
+
+```console
+>del %LOCALAPPDATA%\.IdentityService\typeagent-tokencache
+```
+
 ### Azure Speech to Text service (Optional)
 
 Currently, TypeAgent Shell optionally supports voice input via Azure Speech Services or [Local Whisper Service](../../../python/whisperService/) beside keyboard input.
