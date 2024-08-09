@@ -13,7 +13,6 @@ import {
     KnowledgeStore,
     TextIndex,
     TextIndexSettings,
-    createIndexFolder,
     createKnowledgeStore,
     createTextIndex,
     searchIndex,
@@ -23,7 +22,12 @@ import path from "path";
 import { TextBlock, TextBlockType } from "../text.js";
 import { ActionFilter } from "./knowledgeSearchSchema.js";
 import { getRangeOfTemporalSequence } from "../temporal.js";
-import { SetOp, uniqueFrom } from "../setOperations.js";
+import {
+    SetOp,
+    intersectArrays,
+    unionArrays,
+    uniqueFrom,
+} from "../setOperations.js";
 import { EntityIndex } from "./entities.js";
 import { ExtractedAction, actionVerbsToString } from "./knowledge.js";
 
@@ -101,6 +105,12 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         folderSettings,
         fSys,
     );
+    const subjectIndex = await createTextIndex<ActionId>(
+        settings,
+        path.join(rootPath, "subjects"),
+        folderSettings,
+        fSys,
+    );
     return {
         ...actionStore,
         verbIndex,
@@ -117,7 +127,12 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         id?: ActionId,
     ): Promise<ActionId> {
         id = await actionStore.add(action, id);
-        await addVerb(action.value, id);
+        const postings = [id];
+
+        await Promise.all([
+            addVerb(action.value, postings),
+            addSubject(action.value, postings),
+        ]);
         return id;
     }
 
@@ -155,9 +170,21 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         );
     }
 
-    async function addVerb(action: Action, id: ActionId): Promise<void> {
+    async function addVerb(
+        action: Action,
+        actionIds: ActionId[],
+    ): Promise<void> {
         const fullVerb = actionVerbsToString(action.verbs, action.verbTense);
-        await verbIndex.put(fullVerb, [id]);
+        await verbIndex.put(fullVerb, actionIds);
+    }
+
+    async function addSubject(
+        action: Action,
+        actionIds: ActionId[],
+    ): Promise<void> {
+        if (action.subjectEntityName) {
+            await subjectIndex.put(action.subjectEntityName, actionIds);
+        }
     }
 
     async function search(
@@ -165,15 +192,20 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         options: ActionSearchOptions,
     ): Promise<ActionSearchResult<ActionId>> {
         const results = createSearchResults<ActionId>();
-        const fullVerb = actionVerbsToString(filter.verbs, filter.verbTense);
-        if (filter.verbs) {
-            const verbOptions = options.verbSearchOptions ?? options;
-            results.actionIds = await verbIndex.getNearest(
-                fullVerb,
-                verbOptions.maxMatches,
-                verbOptions.minScore,
-            );
-        }
+        let subjectToActionIds: ActionId[] | undefined;
+        let verbToActionIds: ActionId[] | undefined;
+        await Promise.all([
+            async () => {
+                subjectToActionIds = await matchSubjects(filter, options);
+            },
+            async () => {
+                verbToActionIds = await matchVerbs(filter, options);
+            },
+        ]);
+        results.actionIds = intersectArrays(
+            subjectToActionIds,
+            verbToActionIds,
+        );
         if (results.actionIds) {
             results.actions = await getActions(results.actionIds);
         }
@@ -206,6 +238,34 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         );
     }
 
+    async function matchSubjects(
+        filter: ActionFilter,
+        options: ActionSearchOptions,
+    ): Promise<ActionId[] | undefined> {
+        return filter.subjectEntityName
+            ? subjectIndex.getNearest(
+                  filter.subjectEntityName,
+                  options.maxMatches,
+                  options.minScore,
+              )
+            : undefined;
+    }
+
+    async function matchVerbs(
+        filter: ActionFilter,
+        options: ActionSearchOptions,
+    ): Promise<ActionId[] | undefined> {
+        if (filter.verbs && filter.verbs.length > 0) {
+            const verbOptions = options.verbSearchOptions ?? options;
+            return verbIndex.getNearest(
+                actionVerbsToString(filter.verbs, filter.verbTense),
+                verbOptions.maxMatches,
+                verbOptions.minScore,
+            );
+        }
+        return undefined;
+    }
+
     function filterResults(
         results: ActionSearchResult<ActionId>,
         filter: ActionFilter,
@@ -214,10 +274,6 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         for (let i = 0; i < results.actions!.length; ) {
             const action = results.actions![i];
             if (
-                !filterEntity(
-                    filter.subjectEntityName,
-                    actionEntities.subjects,
-                ) ||
                 !filterEntity(
                     filter.objectEntityName,
                     actionEntities.objects,
@@ -256,14 +312,6 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
     ): Promise<ActionEntities> {
         const actionEntities: ActionEntities = {};
         const tasks = [];
-        if (filter.subjectEntityName) {
-            tasks.push(async () => {
-                actionEntities.subjects = await resolveEntityNames(
-                    filter.subjectEntityName!,
-                    options,
-                );
-            });
-        }
         if (filter.objectEntityName) {
             tasks.push(async () => {
                 actionEntities.objects = await resolveEntityNames(
@@ -300,7 +348,6 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
     }
 
     type ActionEntities = {
-        subjects?: string[] | undefined;
         objects?: string[] | undefined;
         indirectObjects?: string[] | undefined;
     };
