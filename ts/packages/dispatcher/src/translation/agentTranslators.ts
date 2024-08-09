@@ -192,7 +192,7 @@ function ensureInjectedTranslatorConfig() {
         );
 
         for (const [name, config] of injectedTranslatorConfig) {
-            for (const info of getTranslatorActionInfo(config)) {
+            for (const info of getTranslatorActionInfo(config, name)) {
                 injectedTranslatorForActionName.set(info.name, name);
             }
         }

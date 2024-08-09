@@ -167,7 +167,7 @@ export async function createTextIndex<TSourceId = any>(
     );
 
     return {
-        text: textIdMap.keys,
+        text: () => textIdMap.keys(),
         ids,
         entries,
         get,
@@ -579,12 +579,12 @@ export async function createKnowledgeStore<T>(
     };
 
     async function getMultiple(ids: TId[]): Promise<T[]> {
-        const entities = await asyncArray.mapAsync(
+        const items = await asyncArray.mapAsync(
             ids,
             settings.concurrency,
             (id) => entries.get(id),
         );
-        return removeUndefined(entities);
+        return removeUndefined(items);
     }
 
     async function addNext(items: T[], timestamp?: Date): Promise<TId[]> {

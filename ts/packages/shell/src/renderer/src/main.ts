@@ -53,24 +53,9 @@ function addEvents(chatView: ChatView) {
     api.onSetPartialInputHandler((_, enabled) => {
         chatView.enablePartialInputHandler(enabled);
     });
-    api.onActionCommand(
-        (
-            _,
-            actionAgent,
-            actionName,
-            parameterStructure,
-            command,
-            requestId,
-        ) => {
-            chatView.actionCommand(
-                actionAgent,
-                actionName,
-                parameterStructure,
-                command,
-                requestId,
-            );
-        },
-    );
+    api.onActionCommand((_, actionTemplates, command, requestId) => {
+        chatView.actionCommand(actionTemplates, command, requestId);
+    });
     api.onSearchMenuCommand((_, menuId, command, prefix, choices, visible) => {
         chatView.searchMenuCommand(menuId, command, prefix, choices, visible);
     });

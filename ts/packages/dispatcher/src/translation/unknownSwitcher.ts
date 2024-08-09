@@ -2,15 +2,12 @@
 // Licensed under the MIT License.
 
 import { getTranslatorConfig } from "./agentTranslators.js";
-import { ISymbol, SchemaParser, NodeType } from "schema-parser";
-import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import {
     InlineTranslatorSchemaDef,
     createJsonTranslatorFromSchemaDef,
-    SearchMenuItem,
-    TemplateParamField,
+    ActionTemplate,
 } from "common-utils";
-import { getTranslatorActionInfo as getTranslatorActionInfos } from "./actionInfo.js";
+import { getTranslatorActionInfo } from "./actionInfo.js";
 import { Result, success } from "typechat";
 import registerDebug from "debug";
 
@@ -26,7 +23,10 @@ function createSelectionSchema(
         selectSchemaCache.set(translatorName, undefined);
         return undefined;
     }
-    const actionInfos = getTranslatorActionInfos(translatorConfig);
+    const actionInfos = getTranslatorActionInfo(
+        translatorConfig,
+        translatorName,
+    );
 
     const actionNames: string[] = [];
     const actionComments: string[] = [];
@@ -99,125 +99,6 @@ export type AssistantSelection = {
     assistant: string;
     action: string;
 };
-
-export function getActionInfo(translatorNames: string[]) {
-    const actionNames: string[] = [];
-    const actionComments: string[] = [];
-    const actionItems: SearchMenuItem[] = [];
-    for (const name of translatorNames) {
-        const translatorConfig = getTranslatorConfig(name);
-        if (translatorConfig.injected) {
-            continue;
-        }
-        const actionInfos = getTranslatorActionInfos(translatorConfig);
-        for (const info of actionInfos) {
-            if (info !== undefined) {
-                actionNames.push(info.name);
-                actionComments.push(
-                    `"${info.name}"${info.comments ? ` - ${info.comments}` : ""}`,
-                );
-                actionItems.push({
-                    matchText: info.name,
-                    emojiChar: translatorConfig.emojiChar,
-                    groupName: name,
-                });
-            }
-        }
-    }
-    return { actionNames, actionItems, actionComments };
-}
-
-function getTemplateParamFieldType(
-    parser: SchemaParser,
-    param: ISymbol,
-    valueType?: NodeType,
-): TemplateParamField {
-    let type = param.type;
-    if (valueType !== undefined) {
-        type = valueType;
-    }
-    switch (type) {
-        case NodeType.String:
-            return { type: "string" };
-        case NodeType.Numeric:
-            return { type: "number" };
-        case NodeType.Boolean:
-            return { type: "boolean" };
-        case NodeType.Object:
-        case NodeType.Interface:
-        case NodeType.TypeReference:
-            parser.open(param.name);
-            const tree = getTemplateParamObjectType(parser);
-            parser.close();
-            return tree;
-        case NodeType.Array:
-            return {
-                type: "array",
-                elementType: getTemplateParamFieldType(
-                    parser,
-                    param,
-                    param.valueType,
-                ),
-            };
-        case NodeType.Property:
-            return getTemplateParamFieldType(parser, param, param.valueType);
-        case NodeType.Union:
-            if (param.valueType === NodeType.String) {
-                return {
-                    type: "string-union",
-                    // remove quotes and split by pipe
-                    typeEnum: param.value
-                        .split("|")
-                        .map((v) => v.trim().slice(1, -1)),
-                };
-            }
-            break;
-        case NodeType.ObjectArray:
-            parser.open(param.name);
-            const elementType = getTemplateParamObjectType(parser);
-            parser.close();
-            return {
-                type: "array",
-                elementType,
-            };
-        default:
-            console.log(`Unhandled type ${param.type}`);
-    }
-    return { type: "string", value: "unhandled" };
-}
-
-// assumes parser is open to the correct object
-function getTemplateParamObjectType(parser: SchemaParser): TemplateParamField {
-    let fields: { [key: string]: any } = {};
-    const paramChildren = parser.symbols();
-    if (paramChildren !== undefined) {
-        for (const param of paramChildren) {
-            const fieldType = getTemplateParamFieldType(parser, param);
-            fields[param.name] = {
-                fieldType,
-                optional: param.optional,
-            };
-        }
-    }
-    return {
-        type: "object",
-        fields,
-    };
-}
-
-export function getParams(actionName: string, translatorName: string) {
-    const parser = new SchemaParser();
-    const translatorConfig = getTranslatorConfig(translatorName);
-    parser.loadSchema(getPackageFilePath(translatorConfig.schemaFile));
-    const fullActionName = `${actionName}Action`;
-    let node = parser.openActionNode(fullActionName);
-    if (node === undefined) {
-        return undefined;
-    } else {
-        parser.open("parameters");
-        return getTemplateParamObjectType(parser);
-    }
-}
 
 // GPT-4 has 8192 token window, with an estimated 4 chars per token, so use only 3 times to leave room for output.
 const assistantSelectionLimit = 8192 * 3;

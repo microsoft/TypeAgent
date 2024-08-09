@@ -21,7 +21,7 @@ const api: ClientAPI = {
         ipcRenderer.send("partial-input", text);
     },
     onActionCommand: (callback) => {
-        ipcRenderer.on("select-action-parameters", callback);
+        ipcRenderer.on("action-command", callback);
     },
     onSearchMenuCommand: (callback) => {
         ipcRenderer.on("search-menu-command", callback);

@@ -97,17 +97,6 @@ export function questionInput(
     return replacementContainer;
 }
 
-export function proposeAction(message: string) {
-    // use this div to show the proposed action
-    const actionContainer = document.createElement("div");
-    actionContainer.className = "action-container";
-    const actionDiv = document.createElement("div");
-    actionDiv.className = "action-text";
-    setContent(actionDiv, message);
-    actionContainer.appendChild(actionDiv);
-    return actionContainer;
-}
-
 export class ChatInput {
     inputContainer: HTMLDivElement;
     textarea: ExpandableTextarea;

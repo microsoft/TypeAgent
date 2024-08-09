@@ -2,21 +2,18 @@
 // Licensed under the MIT License.
 
 import { IdGenerator, getClientAPI } from "./main";
-import {
-    ChatInput,
-    proposeAction,
-    //    questionInput,
-    ExpandableTextarea,
-    questionInput,
-} from "./chatInput";
+import { ChatInput, ExpandableTextarea, questionInput } from "./chatInput";
 import { SpeechInfo } from "./speech";
 import { SearchMenu } from "./search";
 import { AnsiUp } from "ansi_up";
 import { iconCheckMarkCircle, iconX, iconRoadrunner } from "./icon";
 import {
+    ActionInfo,
+    ActionTemplate,
+    ActionUICommand,
     SearchMenuItem,
-    TemplateParamObject,
 } from "../../preload/electronTypes";
+import { ActionCascade } from "./ActionCascade";
 
 export interface InputChoice {
     element: HTMLElement;
@@ -451,6 +448,8 @@ export class ChatView {
     choicePanel: ChoicePanel | undefined = undefined;
     choicePanelOnly = false;
     commandBackStackIndex = -1;
+    registeredActions: Map<string, ActionInfo> = new Map<string, ActionInfo>();
+    actionCascade: ActionCascade | undefined = undefined;
 
     constructor(
         private idGenerator: IdGenerator,
@@ -594,6 +593,34 @@ export class ChatView {
         }
     }
 
+    getActionTemplates(requestId: string) {
+        const actionInfo = this.registeredActions.get(requestId);
+        if (actionInfo === undefined) {
+            console.error(`Invalid requestId ${requestId}`);
+            return [];
+        }
+        return actionInfo.actionTemplates;
+    }
+
+    proposeAction(message: string, requestId: string) {
+        // use this div to show the proposed action
+        const actionContainer = document.createElement("div");
+        actionContainer.className = "action-container";
+        if (message === "reserved") {
+            // build the action div from the reserved action templates
+            const actionTemplates = this.getActionTemplates(requestId);
+            this.actionCascade = new ActionCascade(actionTemplates);
+            const actionDiv = this.actionCascade.toHTML();
+            actionContainer.appendChild(actionDiv);
+        } else {
+            const actionDiv = document.createElement("div");
+            actionDiv.className = "action-text";
+            setContent(actionDiv, message);
+            actionContainer.appendChild(actionDiv);
+        }
+        return actionContainer;
+    }
+
     registerSearchMenu(
         id: string,
         initialChoices: SearchMenuItem[],
@@ -646,37 +673,33 @@ export class ChatView {
         }
     }
 
-    actionCommand(
-        _actionAgent: string,
-        _actionName: string,
-        _parameterStructure: TemplateParamObject,
-        _command: string,
-        _requestId: string,
+    registerActionStructure(
+        actionTemplates: ActionTemplate[],
+        requestId: string,
     ) {
-        /*
+        this.registeredActions.set(requestId, {
+            actionTemplates,
+            requestId,
+        });
+    }
+
+    actionCommand(
+        actionTemplates: ActionTemplate[],
+        command: ActionUICommand,
+        requestId: string,
+    ) {
         switch (command) {
-            case "confirmAction":
-                this.confirmAction(
-                    actionAgent,
-                    actionName,
-                    parameterStructure,
-                    requestId,
-                );
+            case "register":
+                this.registerActionStructure(actionTemplates, requestId);
                 break;
-            case "replaceAction":
-                this.replaceAction(
-                    actionAgent,
-                    actionName,
-                    parameterStructure,
-                    requestId,
-                );
+            case "remove":
+                this.registeredActions.delete(requestId);
                 break;
-            default:
-                console.error(`Unhandled action command: ${command}`);
+            case "replace":
                 break;
         }
-                */
     }
+
     searchMenuCommand(
         menuId: string,
         command: string,
@@ -827,7 +850,7 @@ export class ChatView {
             return;
         }
         agentMessage.className = "chat-message chat-message-confirm";
-        const proposeElm = proposeAction(message);
+        const proposeElm = this.proposeAction(message, requestId);
         agentMessage.appendChild(proposeElm);
         proposeYesNo(this, askYesNoId, requestId, message);
     }

@@ -28,11 +28,7 @@ import {
     getTranslatorConfig,
     isChangeAssistantAction,
 } from "../translation/agentTranslators.js";
-import {
-    loadAssistantSelectionJsonTranslator,
-    getActionInfo,
-    getParams,
-} from "../translation/unknownSwitcher.js";
+import { loadAssistantSelectionJsonTranslator } from "../translation/unknownSwitcher.js";
 import {
     MultipleAction,
     isMultipleAction,
@@ -40,6 +36,7 @@ import {
 import { makeRequestPromptCreator } from "./common/chatHistoryPrompt.js";
 import { MatchResult } from "../../../cache/dist/constructions/constructions.js";
 import registerDebug from "debug";
+import { getAllActionInfo } from "../translation/actionInfo.js";
 
 const debugConstValidation = registerDebug("typeagent:const:validation");
 
@@ -76,38 +73,35 @@ async function confirmTranslation(
         "Use the buttons to run or cancel the following action. You can also type Enter to run it or Del to cancel it.";
     const prefaceMultiple =
         "Use the buttons to run or cancel the following sequence of actions. You can also type Enter to run it or Del to cancel it.";
+    const translatorNames = context.session.useTranslators.filter(
+        (name) => !name.startsWith("system."),
+    );
+    const allActionInfo = getAllActionInfo(translatorNames);
     let displayMessages = actions.toHTML(prefaceSingle, prefaceMultiple);
     const accept = await requestIO.askYesNo(displayMessages, true);
     if (accept) {
         return { requestAction };
     }
 
-    const translatorNames = context.session.useTranslators.filter(
-        (name) => !name.startsWith("system."),
-    );
-    const actionInfo = getActionInfo(translatorNames);
+    const searchMenuItems = allActionInfo.map((info) => info.item);
     context.clientIO?.searchMenuCommand(
         "actions",
         "register",
         "",
-        actionInfo.actionItems,
+        searchMenuItems,
         true,
     );
     const actionLegend = `Select the action you would like to run for this request ...`;
     context.clientIO?.searchMenuCommand("actions", "legend", actionLegend);
     const answer = await requestIO.question(actionLegend);
     if (answer !== undefined) {
-        const actionItem = actionInfo.actionItems.find(
-            (item) => item.matchText === answer,
+        const actionInfo = allActionInfo.find(
+            (info) => info.item.matchText === answer,
         );
-        if (actionItem !== undefined) {
-            const params = getParams(
-                actionItem.matchText,
-                actionItem.groupName!,
+        if (actionInfo && actionInfo.template) {
+            console.log(
+                `Selected action: ${actionInfo.template.agent}.${actionInfo.item.matchText}`,
             );
-            if (params !== undefined) {
-                console.log(JSON.stringify(params, undefined, 2));
-            }
         }
     }
     return { requestAction: null };

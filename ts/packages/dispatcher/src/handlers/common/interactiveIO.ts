@@ -3,11 +3,7 @@
 
 import { askYesNo } from "../../utils/interactive.js";
 import readline from "readline/promises";
-import {
-    SearchMenuItem,
-    TemplateParamField,
-    TemplateParamObject,
-} from "common-utils";
+import { SearchMenuItem, ActionTemplate } from "common-utils";
 import chalk from "chalk";
 
 export type RequestId = string | undefined;
@@ -19,6 +15,8 @@ export type SearchMenuCommand =
     | "cancel"
     | "show"
     | "remove";
+
+export type ActionUICommand = "register" | "replace" | "remove";
 
 export type SearchMenuState = "active" | "inactive";
 
@@ -39,10 +37,8 @@ export interface ClientIO {
     warn(message: string, requestId: RequestId): void;
     error(message: string, requestId: RequestId): void;
     actionCommand(
-        actionAgent: string,
-        actionName: string,
-        parameterStructure: TemplateParamObject,
-        command: string,
+        actionTemplates: ActionTemplate[],
+        command: ActionUICommand,
         requestId: RequestId,
     ): void;
     searchMenuCommand(

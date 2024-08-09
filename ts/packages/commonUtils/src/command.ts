@@ -51,6 +51,14 @@ export type TemplateParamField =
     | TemplateParamObject
     | TemplateParamArray;
 
+export type ActionTemplate = {
+    agent: string;
+    name: string;
+    parameterStructure: TemplateParamObject;
+    prefaceSingle?: string;
+    prefaceMultiple?: string;
+};
+
 // end duplicate type section
 
 export function parseCommandLine(line: string): Command | undefined {

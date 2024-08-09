@@ -691,6 +691,12 @@ export async function runPlayChat(): Promise<void> {
         const verb: string = namedArgs.verb;
         const tense = namedArgs.tense;
         if (verb) {
+            if (verb === "*") {
+                for await (const v of index.verbIndex.text()) {
+                    printer.writeLine(v);
+                }
+                return;
+            }
             const matches = await index.searchVerbs([verb], tense, {
                 maxMatches: namedArgs.count,
             });

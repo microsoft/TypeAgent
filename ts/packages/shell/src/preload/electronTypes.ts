@@ -16,6 +16,12 @@ export type SearchMenuItem = {
     groupName?: string;
 };
 
+export type ActionUICommand = "register" | "replace" | "remove";
+export type ActionInfo = {
+    actionTemplates: ActionTemplate[];
+    requestId: string;
+};
+
 export type TemplateParamPrimitive = {
     type: "string" | "number" | "boolean";
     value?: string | number | boolean;
@@ -53,6 +59,14 @@ export type TemplateParamField =
     | TemplateParamScalar
     | TemplateParamObject
     | TemplateParamArray;
+
+export type ActionTemplate = {
+    agent: string;
+    name: string;
+    parameterStructure: TemplateParamObject;
+    prefaceSingle?: string;
+    prefaceMultiple?: string;
+};
 
 // end duplicate type section
 
@@ -104,10 +118,8 @@ export interface ClientAPI {
     onActionCommand(
         callback: (
             e: Electron.IpcRendererEvent,
-            actionAgent: string,
-            actionName: string,
-            parameterStructure: TemplateParamObject,
-            command: string,
+            actionTemplates: ActionTemplate[],
+            command: ActionUICommand,
             requestId: string,
         ) => void,
     ): void;

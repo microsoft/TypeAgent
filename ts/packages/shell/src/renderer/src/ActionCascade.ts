@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import {
+    ActionTemplate,
     TemplateParamFieldOpt,
-    TemplateParamObject,
     TemplateParamScalar,
 } from "../../preload/electronTypes";
 
@@ -13,9 +13,7 @@ export class ActionCascade {
     container: HTMLDivElement;
 
     constructor(
-        public actionAgent: string,
-        public actionName: string,
-        public parameters: TemplateParamObject,
+        public actionTemplates: ActionTemplate[],
         public editMode = false,
     ) {
         this.container = this.toHTML();
@@ -99,19 +97,23 @@ export class ActionCascade {
         return li;
     }
 
-    public toHTML(prefaceText?: string) {
+    public toHTML() {
+        // for now assume a single action
+        const actionTemplate = this.actionTemplates[0];
         const div = document.createElement("div");
-        if (prefaceText) {
+        if (actionTemplate.prefaceSingle) {
             const preface = document.createElement("div");
             preface.className = "preface-text";
-            preface.innerText = prefaceText;
+            preface.innerText = actionTemplate.prefaceSingle;
             div.appendChild(preface);
         }
         const actionDiv = document.createElement("div");
-        actionDiv.innerText = `Action: ${this.actionName}`;
+        actionDiv.innerText = `Action: ${actionTemplate.agent}.${actionTemplate.name}`;
         div.appendChild(actionDiv);
         // now the parameters
-        const entries = Object.entries(this.parameters.fields);
+        const entries = Object.entries(
+            actionTemplate.parameterStructure.fields,
+        );
         if (entries.length !== 0) {
             const paramDiv = document.createElement("div");
             paramDiv.innerText = "Parameters:";
