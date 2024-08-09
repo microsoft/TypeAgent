@@ -1,11 +1,13 @@
+## Schema Studio
+
+This example explores how you could use TypeChat to:
+
+- Generate variations on user utterances
+- Automatically generate possible user utterances for a given schema
+
 ### Running
 
 node dist/main.js
-
-### Sample Input
-
-- [input.txt](./src/input.txt)
-- [scripts](./scripts)
 
 ### Windows
 
@@ -14,7 +16,6 @@ You can use the run.cmd wrapper to launch node main.js
 - cd scripts
 - run.cmd @fromSchema --count 25
 - run.cmd @variations "Yo, play me some Goldberg Variations by Bach!" --facets "Composer, Piece, Slang" --depth 2
-- run.cmd batch playAction.txt
 
 ## Trademarks
 
