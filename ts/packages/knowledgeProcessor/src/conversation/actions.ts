@@ -4,6 +4,7 @@
 import {
     FileSystem,
     ObjectFolderSettings,
+    ScoredItem,
     SearchOptions,
     asyncArray,
     dateTime,
@@ -15,6 +16,7 @@ import {
     createIndexFolder,
     createKnowledgeStore,
     createTextIndex,
+    searchIndex,
 } from "../knowledgeIndex.js";
 import { Action, VerbTense } from "./knowledgeSchema.js";
 import path from "path";
@@ -74,7 +76,7 @@ export interface ActionIndex<TActionId = any, TEntityId = any, TSourceId = any>
         verb: string[],
         tense?: VerbTense,
         options?: SearchOptions,
-    ): Promise<TActionId[]>;
+    ): Promise<ScoredItem<TActionId[]>[]>;
 }
 
 export async function createActionIndex<TEntityId = any, TSourceId = any>(
@@ -193,10 +195,12 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         verbs: string[],
         tense?: VerbTense,
         options?: SearchOptions,
-    ): Promise<ActionId[]> {
+    ): Promise<ScoredItem<ActionId[]>[]> {
         const fullVerb = actionVerbsToString(verbs, tense);
-        return await verbIndex.getNearest(
+        return searchIndex(
+            verbIndex,
             fullVerb,
+            false,
             options?.maxMatches ?? 1,
             options?.minScore,
         );

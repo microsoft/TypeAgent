@@ -691,10 +691,18 @@ export async function runPlayChat(): Promise<void> {
         const verb: string = namedArgs.verb;
         const tense = namedArgs.tense;
         if (verb) {
-            const actionIds = await index.searchVerbs([verb], tense, {
+            const matches = await index.searchVerbs([verb], tense, {
                 maxMatches: namedArgs.count,
             });
-            await writeActionsById(index, actionIds, namedArgs.showMessages);
+            for (const match of matches) {
+                printer.writeInColor(chalk.green, `[${match.score}]`);
+                await writeActionsById(
+                    index,
+                    match.item,
+                    namedArgs.showMessages,
+                );
+                printer.writeLine();
+            }
             return;
         }
 
