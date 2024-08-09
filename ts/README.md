@@ -1,4 +1,4 @@
-# TypeAgent Typescript Repo
+# TypeAgent Typescript Code
 
 ## Overview
 

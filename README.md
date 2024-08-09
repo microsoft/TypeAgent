@@ -64,10 +64,23 @@ TypeAgent is written in TypeScript and relies on TypeChat. To understand how Typ
 Microsoft AI Systems Repo is a mono-repo, with components organized with the following root folders based on language used.
 
 - [`ts`](./ts) TypeScript code ([Readme](./ts/README.md))
+- [`python`](./python) Python code ([Readme](./python/README.md))
+- [`dotnet`](./dotnet) Dotnet (C#) code ([Readme](./dotnet/README.md))
 
 ### Agent Shell Example
 
 The main entry point to explore TypeAgent is the Agent Shell example. Follow the [instructions](./ts/README.md) in the typescript code [directory](./ts) to get started.
+
+## Contributing
+
+This project welcomes contributions and suggestions. Most contributions require you to
+agree to a Contributor License Agreement (CLA) declaring that you have the right to,
+and actually do, grant us the rights to use your contribution. For details, visit
+https://cla.microsoft.com.
+
+When you submit a pull request, a CLA-bot will automatically determine whether you need
+to provide a CLA and decorate the PR appropriately (e.g., label, comment). Simply follow the
+instructions provided by the bot. You will only need to do this once across all repositories using our CLA.
 
 ## Code of Conduct
 
