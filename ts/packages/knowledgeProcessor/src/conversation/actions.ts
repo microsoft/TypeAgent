@@ -192,16 +192,24 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         options: ActionSearchOptions,
     ): Promise<ActionSearchResult<ActionId>> {
         const results = createSearchResults<ActionId>();
+
         let subjectToActionIds: ActionId[] | undefined;
         let verbToActionIds: ActionId[] | undefined;
+        /*
         await Promise.all([
             async () => {
                 subjectToActionIds = await matchSubjects(filter, options);
+                return;
             },
             async () => {
                 verbToActionIds = await matchVerbs(filter, options);
+                return;
             },
         ]);
+        */
+        subjectToActionIds = await matchSubjects(filter, options);
+        verbToActionIds = await matchVerbs(filter, options);
+
         results.actionIds = intersectArrays(
             subjectToActionIds,
             verbToActionIds,
