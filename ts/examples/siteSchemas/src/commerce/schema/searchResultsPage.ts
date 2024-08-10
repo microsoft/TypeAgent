@@ -19,6 +19,9 @@ export type ProductTile = {
     // css selector for text input
     cssSelector: string;
 
+    // CSS Selector for the link to the product details page
+    detailsLinkSelector: string;
+
     addToCartButton?: AddToCartButton;
 };
 

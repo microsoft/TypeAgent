@@ -188,6 +188,27 @@ async function getTabByTitle(title: string): Promise<chrome.tabs.Tab | null> {
     return null;
 }
 
+async function awaitPageLoad(targetTab: chrome.tabs.Tab) {
+    return new Promise<string | undefined>((resolve, reject) => {
+        if (targetTab.status == "complete") {
+            resolve("OK");
+        }
+
+        const handler = (
+            tabId: number,
+            changeInfo: chrome.tabs.TabChangeInfo,
+            tab: chrome.tabs.Tab,
+        ) => {
+            if (tabId == targetTab.id && tab.status == "complete") {
+                chrome.tabs.onUpdated.removeListener(handler);
+                resolve("OK");
+            }
+        };
+
+        chrome.tabs.onUpdated.addListener(handler);
+    });
+}
+
 async function getLatLongForLocation(locationName: string) {
     const vals = await getConfigValues();
     const mapsApiKey = vals["BING_MAPS_API_KEY"];
@@ -979,6 +1000,12 @@ async function runBrowserAction(action: any) {
         }
         case "getPageUrl": {
             const targetTab = await getActiveTab();
+            responseObject = targetTab.url;
+            break;
+        }
+        case "awaitPageLoad": {
+            const targetTab = await getActiveTab();
+            await awaitPageLoad(targetTab);
             responseObject = targetTab.url;
             break;
         }

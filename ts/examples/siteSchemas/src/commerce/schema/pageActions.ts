@@ -30,6 +30,14 @@ export type SearchForProductAction = {
     };
 };
 
+export type SelectSearchResult = {
+    actionName: "selectSearchResult";
+    parameters: {
+        position: number;
+        productName?: string;
+    };
+};
+
 export type UnknownAction = {
     actionName: "unknown";
     parameters: {
@@ -43,4 +51,5 @@ export type ShoppingAction =
     | PickUpAtStoreAction
     | LookupAtStoreAction
     | SearchForProductAction
+    | SelectSearchResult
     | UnknownAction;
