@@ -125,17 +125,19 @@ export class BrowserConnector {
         }, 5 * 1000);
     }
 
-    async sendActionToBrowserAgent(action: any) {
+    async sendActionToBrowserAgent(action: any, messageType?: string) {
         return new Promise<string | undefined>((resolve, reject) => {
             if (this.webSocket) {
                 try {
+                    messageType = messageType ?? this.siteTranslatedActionName;
+
                     const requestId = new Date().getTime().toString();
 
                     this.webSocket.send(
                         JSON.stringify({
                             source: this.siteClientName,
                             target: "browser",
-                            messageType: this.siteTranslatedActionName,
+                            messageType: messageType,
                             id: requestId,
                             body: action,
                         }),
@@ -356,5 +358,14 @@ export class BrowserConnector {
         };
 
         return this.sendActionToBrowserAgent(textAction);
+    }
+
+    async awaitPageLoad() {
+        const action = {
+            actionName: "awaitPageLoad",
+            parameters: {},
+        };
+
+        return this.sendActionToBrowserAgent(action, "translatedAction");
     }
 }
