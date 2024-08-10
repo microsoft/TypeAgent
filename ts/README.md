@@ -1,4 +1,4 @@
-# TypeAgent Typescript Repo
+# TypeAgent Typescript Code
 
 ## Overview
 
@@ -78,9 +78,9 @@ Other examples in the [example directory](./examples/) may have additional servi
 
 Read the [Debugging](#debugging) section for additional service keys that can be used for debugging.
 
-**For AISystems Team Devs**:
+**Local Environment**:
 
-AISystems Team Devs has shared instances of these services. To get the required config and key saved to the `.env` file:
+You can use Azure Key Vault to store keys. To get the required config and keys saved to the `.env` file under the `ts` folder:
 
 - Install [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
 - Run `az login` to login using the CLI. Run `az account set --subscription <Subscription Id>` to set the subscription.
