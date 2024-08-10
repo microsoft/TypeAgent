@@ -84,11 +84,18 @@ export class CalendarClient {
                     break;
                 }
             } while (nextPageLink);
-            await this.generateEmbedding(allEvents, true);
-            if (!this.fCalendarIndexed) {
-                this.fCalendarIndexed = true;
+
+            try {
+                await this.generateEmbedding(allEvents, true);
+                if (!this.fCalendarIndexed) {
+                    this.fCalendarIndexed = true;
+                    this.logger(
+                        chalk.green(`Calendar events indexed successfully.`),
+                    );
+                }
+            } catch (error) {
                 this.logger(
-                    chalk.green(`Calendar events indexed successfully.`),
+                    chalk.red(`Error while embedding calendar events:${error}`),
                 );
             }
         }
