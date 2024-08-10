@@ -81,11 +81,13 @@ export class GraphClient {
 
             let loadSettings: boolean = instance.loadMSGraphSettings();
             if (loadSettings) {
-                await instance.initializeGraphFromDeviceCode();
+                let fInitialized =
+                    await instance.initializeGraphFromDeviceCode();
+                if (fInitialized && instance._userClient) {
+                    await instance.loadUserEmailAddresses();
+                }
             }
             GraphClient.instance = instance;
-
-            await instance.loadUserEmailAddresses();
         }
         return GraphClient.instance;
     }
@@ -135,11 +137,12 @@ export class GraphClient {
         }
     }
 
-    public async initializeGraphFromDeviceCode() {
+    public async initializeGraphFromDeviceCode(): Promise<boolean> {
         let isValidSettings: boolean = this.loadMSGraphSettings();
 
         if (!isValidSettings || !this._settings) {
             this.logger(chalk.red("Unable to load settings"));
+            return false;
         }
 
         const fileContent = this.readFileSafely(this.AUTH_RECORD_PATH);
@@ -149,7 +152,7 @@ export class GraphClient {
             authRecord = deserializeAuthenticationRecord(fileContent);
         }
 
-        if (this._settings === undefined) return;
+        if (this._settings === undefined) return false;
 
         if (authRecord !== undefined) {
             this._deviceCodeCredential = new DeviceCodeCredential({
@@ -180,6 +183,8 @@ export class GraphClient {
             await this.refreshTokenFromDeviceCodeCred();
             this.createClient(this._deviceCodeCredential);
         }
+
+        return true;
     }
 
     public async initializeGraphFromUserCred() {
@@ -249,7 +254,10 @@ export class GraphClient {
     public async refreshTokenFromDeviceCodeCred(): Promise<void> {
         const retries = 3;
 
-        if (this._deviceCodeCredential !== undefined) {
+        if (
+            this._deviceCodeCredential !== undefined &&
+            this._userClient !== undefined
+        ) {
             for (let i = 0; i < retries; i++) {
                 try {
                     const token = await this._deviceCodeCredential.getToken(
@@ -280,7 +288,10 @@ export class GraphClient {
     public async refreshTokenFromUsernamePasswdCred(): Promise<void> {
         const retries = 3;
 
-        if (this._usernamePasswordCredential !== undefined) {
+        if (
+            this._usernamePasswordCredential !== undefined &&
+            this._userClient !== undefined
+        ) {
             for (let i = 0; i < retries; i++) {
                 try {
                     if (this._userClient !== undefined) {
