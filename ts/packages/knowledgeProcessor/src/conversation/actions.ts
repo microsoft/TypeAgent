@@ -90,7 +90,6 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
     folderSettings?: ObjectFolderSettings,
     fSys?: FileSystem,
 ): Promise<ActionIndex<string, string, TSourceId>> {
-    type EntityId = string;
     type ActionId = string;
     const actionStore = await createKnowledgeStore<ExtractedAction<TSourceId>>(
         settings,
@@ -193,23 +192,10 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
     ): Promise<ActionSearchResult<ActionId>> {
         const results = createSearchResults<ActionId>();
 
-        let subjectToActionIds: ActionId[] | undefined;
-        let verbToActionIds: ActionId[] | undefined;
-        /*
-        await Promise.all([
-            async () => {
-                subjectToActionIds = await matchSubjects(filter, options);
-                return;
-            },
-            async () => {
-                verbToActionIds = await matchVerbs(filter, options);
-                return;
-            },
+        const [subjectToActionIds, verbToActionIds] = await Promise.all([
+            matchSubjects(filter, options),
+            matchVerbs(filter, options),
         ]);
-        */
-        subjectToActionIds = await matchSubjects(filter, options);
-        verbToActionIds = await matchVerbs(filter, options);
-
         results.actionIds = intersectArrays(
             subjectToActionIds,
             verbToActionIds,
@@ -217,16 +203,13 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         if (results.actionIds) {
             results.actions = await getActions(results.actionIds);
         }
+        const [objects, indirectObjects] = await Promise.all([
+            resolveObjects(filter, options),
+            resolveIndirectObjects(filter, options),
+        ]);
         if (results.actions && results.actions.length > 0) {
             // Todo: index
-            filterResults(
-                results,
-                filter,
-                await resolveEntities(
-                    filter,
-                    options.entitySearchOptions ?? options,
-                ),
-            );
+            filterResults(results, filter, objects, indirectObjects);
         }
         return results;
     }
@@ -274,22 +257,40 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         return undefined;
     }
 
+    async function resolveObjects(
+        filter: ActionFilter,
+        options: ActionSearchOptions,
+    ) {
+        if (filter.objectEntityName) {
+            return resolveEntityNames(filter.objectEntityName!, options);
+        }
+        return undefined;
+    }
+
+    async function resolveIndirectObjects(
+        filter: ActionFilter,
+        options: ActionSearchOptions,
+    ) {
+        if (filter.indirectObjectEntityName) {
+            return resolveEntityNames(
+                filter.indirectObjectEntityName!,
+                options,
+            );
+        }
+        return undefined;
+    }
+
     function filterResults(
         results: ActionSearchResult<ActionId>,
         filter: ActionFilter,
-        actionEntities: ActionEntities,
+        objects: string[] | undefined,
+        indirectObjects: string[] | undefined,
     ) {
         for (let i = 0; i < results.actions!.length; ) {
             const action = results.actions![i];
             if (
-                !filterEntity(
-                    filter.objectEntityName,
-                    actionEntities.objects,
-                ) ||
-                !filterEntity(
-                    filter.indirectObjectEntityName,
-                    actionEntities.indirectObjects,
-                )
+                !filterEntity(filter.objectEntityName, objects) ||
+                !filterEntity(filter.indirectObjectEntityName, indirectObjects)
             ) {
                 removeMatch(results, i);
             } else {
@@ -314,32 +315,6 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         results.actionIds!.splice(at, 1);
     }
 
-    async function resolveEntities(
-        filter: ActionFilter,
-        options: SearchOptions,
-    ): Promise<ActionEntities> {
-        const actionEntities: ActionEntities = {};
-        const tasks = [];
-        if (filter.objectEntityName) {
-            tasks.push(async () => {
-                actionEntities.objects = await resolveEntityNames(
-                    filter.objectEntityName!,
-                    options,
-                );
-            });
-        }
-        if (filter.indirectObjectEntityName) {
-            tasks.push(async () => {
-                actionEntities.indirectObjects = await resolveEntityNames(
-                    filter.indirectObjectEntityName!,
-                    options,
-                );
-            });
-        }
-        await Promise.all(tasks);
-        return actionEntities;
-    }
-
     async function resolveEntityNames(
         name: string,
         options: SearchOptions,
@@ -354,9 +329,4 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
             textIds,
         )) as string[];
     }
-
-    type ActionEntities = {
-        objects?: string[] | undefined;
-        indirectObjects?: string[] | undefined;
-    };
 }
