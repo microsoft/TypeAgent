@@ -23,17 +23,17 @@ export function* intersect<T>(
 ): IterableIterator<T> {
     const x: Iterator<T> = Array.isArray(xArray) ? xArray.values() : xArray;
     const y: Iterator<T> = Array.isArray(yArray) ? yArray.values() : yArray;
-    let xId = x.next();
-    let yId = y.next();
-    while (!xId.done && !yId.done) {
-        if (xId.value === yId.value) {
-            yield xId.value;
-            xId = x.next();
-            yId = y.next();
-        } else if (xId.value < yId.value) {
-            xId = x.next();
+    let xVal = x.next();
+    let yVal = y.next();
+    while (!xVal.done && !yVal.done) {
+        if (xVal.value === yVal.value) {
+            yield xVal.value;
+            xVal = x.next();
+            yVal = y.next();
+        } else if (xVal.value < yVal.value) {
+            xVal = x.next();
         } else {
-            yId = y.next();
+            yVal = y.next();
         }
     }
 }
@@ -80,29 +80,29 @@ export function* union<T>(
 ): IterableIterator<T> {
     const x: Iterator<T> = Array.isArray(xArray) ? xArray.values() : xArray;
     const y: Iterator<T> = Array.isArray(yArray) ? yArray.values() : yArray;
-    let xId = x.next();
-    let yId = y.next();
+    let xVal = x.next();
+    let yVal = y.next();
 
-    while (!xId.done && !yId.done) {
-        if (xId.value === yId.value) {
-            yield xId.value;
-            xId = x.next();
-            yId = y.next();
-        } else if (xId.value < yId.value) {
-            yield xId.value;
-            xId = x.next();
+    while (!xVal.done && !yVal.done) {
+        if (xVal.value === yVal.value) {
+            yield xVal.value;
+            xVal = x.next();
+            yVal = y.next();
+        } else if (xVal.value < yVal.value) {
+            yield xVal.value;
+            xVal = x.next();
         } else {
-            yield yId.value;
-            yId = y.next();
+            yield yVal.value;
+            yVal = y.next();
         }
     }
-    while (!xId.done) {
-        yield xId.value;
-        xId = x.next();
+    while (!xVal.done) {
+        yield xVal.value;
+        xVal = x.next();
     }
-    while (!yId.done) {
-        yield yId.value;
-        yId = y.next();
+    while (!yVal.done) {
+        yield yVal.value;
+        yVal = y.next();
     }
 }
 
