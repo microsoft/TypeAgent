@@ -38,7 +38,9 @@ The TypeAgent repo contains example agents and applications, along with internal
 
 ### State Management
 
-All storage, registration, chat, memory and other state maintained by examples is stored **_locally_** in **your user folder** on your development machine. State is typically saved as ordinary text or JSON files in sub-folders below your user folder.
+Storage, registration, chat, memory and other state maintained by examples is **_typically_** stored **_locally_** in **your user folder** on your development machine. State is typically saved as ordinary text or JSON files in sub-folders below your user folder.
+
+Example agents that use the Microsoft Graph or similar external services may store state in those services.
 
 ## Intended Uses
 
