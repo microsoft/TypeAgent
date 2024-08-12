@@ -59,6 +59,10 @@ TypeAgent is early stage sample code over TypeChat. TypeAgent is not a framework
 
 TypeAgent is written in TypeScript and relies on TypeChat. To understand how TypeAgent examples work, we recommend getting comfortable with TypeChat and [TypeChat examples](https://github.com/microsoft/TypeChat/tree/main/typescript/examples) first.
 
+### Agent Shell Example
+
+The main entry point to explore TypeAgent is the Agent Shell example. Follow the [instructions](./ts/README.md) in the TypeScript code [directory](./ts) to get started.
+
 ## Developers
 
 Microsoft AI Systems Repo is a mono-repo, with components organized with the following root folders based on language used.
@@ -66,10 +70,6 @@ Microsoft AI Systems Repo is a mono-repo, with components organized with the fol
 - [`ts`](./ts) TypeScript code ([Readme](./ts/README.md))
 - [`python`](./python) Python code ([Readme](./python/README.md))
 - [`dotnet`](./dotnet) Dotnet (C#) code ([Readme](./dotnet/README.md))
-
-### Agent Shell Example
-
-The main entry point to explore TypeAgent is the Agent Shell example. Follow the [instructions](./ts/README.md) in the TypeScript code [directory](./ts) to get started.
 
 ## Contributing
 
