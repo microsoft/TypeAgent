@@ -48,7 +48,7 @@ If you want to use a local whisper service for voice input in the [TypeAgent She
 ### Service Keys
 
 Multiple services are required to run the scenarios. Put the necessary keys in the `.env` file at this directory (TypeAgent repo's `./ts` directory).
-The follow set of functionality will need the services keys. Please read the links for details about the variables needed. It is possible to use "keyless" configuration for some APIs.  See [Running Keyless](#running-keyless) below.
+The follow set of functionality will need the services keys. Please read the links for details about the variables needed. It is possible to use "keyless" configuration for some APIs.  See [Keyless API Access](#keyless-api-access) below.
 
 **Minimum requirements** to try out the experience with the [List](./packages/agents/list/README.md) TypeAgent:
 
@@ -78,7 +78,7 @@ Other examples in the [example directory](./examples/) may have additional servi
 
 Read the [Debugging](#debugging) section for additional service keys that can be used for debugging.
 
-### Running Keyless
+### Keyless API Access
 
 For additional security, it is possible to run a subset of the TypeAgent endpoints in a keyless environment. Instead of using keys the examples provided can use Azure Entra user identities to authenticate against endpoints. To use this approach, modify the .env file and specify `identity` as the key value.
 You must also configure your services to use [RBAC](https://learn.microsoft.com/en-us/azure/role-based-access-control/overview) and assign users access to the correct roles for each endpoint. Please see the tables above to determine keyless endpoint support.
