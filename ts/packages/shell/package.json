@@ -29,6 +29,7 @@
     "typecheck:web": "tsc -p tsconfig.web.json"
   },
   "dependencies": {
+    "aiclient": "workspace:*",
     "@electron-toolkit/preload": "^2.0.0",
     "@electron-toolkit/utils": "^2.0.0",
     "agent-dispatcher": "workspace:*",
@@ -37,6 +38,7 @@
     "dotenv": "^16.3.1",
     "electron-updater": "^6.3.2",
     "microsoft-cognitiveservices-speech-sdk": "^1.34.0",
+    "typechat": "^0.1.0",
     "ws": "^8.17.1"
   },
   "devDependencies": {

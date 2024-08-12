@@ -1224,6 +1224,9 @@ importers:
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher
+      aiclient:
+        specifier: workspace:*
+        version: link:../aiclient
       ansi_up:
         specifier: ^6.0.2
         version: 6.0.2
@@ -1239,6 +1242,9 @@ importers:
       microsoft-cognitiveservices-speech-sdk:
         specifier: ^1.34.0
         version: 1.34.0
+      typechat:
+        specifier: ^0.1.0
+        version: 0.1.0(typescript@5.4.3)
       ws:
         specifier: ^8.17.1
         version: 8.17.1
