@@ -19,7 +19,7 @@
     "clean": "fluid-build . -t clean",
     "cli": "pnpm -C packages/cli exec npx --no .",
     "elevate": "node tools/scripts/elevate.js",
-    "getKeys": "node tools/scripts/getKeys.js",
+    "getKeys": "node tools/scripts/getKeys.mjs",
     "lint": "fluid-build . -t prettier",
     "lint:fix": "pnpm run prettier:fix",
     "prettier": "prettier --check .",
