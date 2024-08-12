@@ -6,6 +6,8 @@
 
 This directory contains Typescript implemented packages and main entry point for **TypeAgent**. For more details about the project, please review the TypeAgent [ReadMe](./../README.md).
 
+The main entry point to explore TypeAgent is the [TypeAgent Shell](./packages/shell) example. Currently, we only support running from the repo (i.e. no published/installable builds). Follow the instruction below to [build](#build) and [run](#running) the [TypeAgent Shell](./packages/shell) example.
+
 ## Build
 
 ### Setup
@@ -78,22 +80,29 @@ Other examples in the [example directory](./examples/) may have additional servi
 
 Read the [Debugging](#debugging) section for additional service keys that can be used for debugging.
 
-**Local Environment**:
+#### Using Azure Key Vault to manage keys
 
-You can use Azure Key Vault to store keys. To get the required config and keys saved to the `.env` file under the `ts` folder:
+The [getKey](./tools/scripts/getKeys.mjs) script is created for developer convenience to manage service secret using Azure Key Vault and set up the local development environments.
 
-- Install [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
-- Run `az login` to login using the CLI. Run `az account set --subscription <Subscription Id>` to set the subscription.
-- Run `npm run getKeys` at the root to pull secret from our team key vault.
+To setup:
 
-Note: Shared keys doesn't include Spotify integration, which can be created using the the [Spotify API keys instructions](./packages/agents/player/README.md)
+- Install the latest [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
+- Run `az login` to login using the CLI.
+- Run `az account set --subscription <Subscription Id>` to set the subscription.
+- [Create a Azure Key Vault](https://learn.microsoft.com/en-us/azure/key-vault/general/quick-create-cli) with name `<name>`.
 
-To update keys on the key vault
+To update keys on the key vault:
 
 - Add or change the values in the `.env` file
 - Add new keys name in `tools/scripts/getKeys.config.json`
-- Run `npm run getKeys -- push`
+- Run `npm run getKeys -- push [--vault <name>]`. (If the `--vault` option is omitted, the default from vault name in `tools/scripts/getKeys.config.json` is used.)
 - Check in the changes to `tools/scripts/getKeys.config.json`
+
+To get the required config and keys saved to the `.env` file under the `ts` folder:
+
+- Run `npm run getKeys [--vault <name>]` at the root to pull secret from the key vault with `<name>`. (If the `--vault` option is omitted, the default from vault name in `tools/scripts/getKeys.config.json` is used.)
+
+Note: Shared keys doesn't include Spotify integration, which can be created using the the [Spotify API keys instructions](./packages/agents/player/README.md)
 
 ### WSL
 
@@ -110,15 +119,19 @@ After the step above, you will need to enter a password to protect the secrets i
 
 ## Running
 
-There are two main apps to start using the system: [TypeAgent Shell](#shell) or [TypeAgent CLI](#cli). Currently, we only support running builds from the repo (i.e. no published/installable builds). Both shared a common core package [dispatcher](./packages/dispatcher/)
+There are two main apps to start exploring TypeAgent: [TypeAgent Shell](#shell) and [TypeAgent CLI](#cli). Both provides _interactive agents_ with _natural language interfaces_ experience via a shared package [dispatcher](./packages/dispatcher/) that implemented core TypeAgent functionalities. Currently, we only support running from the repo (i.e. no published/installable builds).
 
 ### Shell
+
+[TypeAgent Shell](./packages/shell) provides a light weight GUI _interactive agents_ with _natural language interfaces_ experience
 
 - Run `pnpm run shell`.
 
 Also, you can go to the shell directory `./packages/shell` and start from there. Please see instruction in TypeAgent Shell's [README.md](./packages/shell/README.md).
 
 ### CLI
+
+[TypeAgent CLI](./packages/cli) provides a console based _interactive agents_ with _natural language interfaces_ experience. Additional console command is available to explore different part of TypeAgent functionalities.
 
 - Run `pnpm run cli` to get the available command
 - Run `pnpm run cli -- interactive` will start the interactive prompt

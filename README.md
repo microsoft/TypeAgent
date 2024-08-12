@@ -49,7 +49,7 @@ Example agents that use the Microsoft Graph or similar external services may sto
 
 ## Limitations
 
-TypeAgent is early stage sample code over TypeChat. TypeAgent is not a framework. All code in this repo is intented for building our own example apps and agents only.
+TypeAgent is early stage sample code over TypeChat. TypeAgent is not a framework. All code in this repo is intended for building our own example apps and agents only.
 
 - TypeAgent is in **active development** with frequent updates and refactoring.
 - TypeAgent has been tested with Azure Open AI services on developer's own machines only.
