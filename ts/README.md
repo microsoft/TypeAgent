@@ -79,10 +79,12 @@ Other examples in the [example directory](./examples/) may have additional servi
 Read the [Debugging](#debugging) section for additional service keys that can be used for debugging.
 
 **Running Keyless**:
-It is possible to run a subset of the TypeAgent endpoints in a keyless environment for additional security. Instead of using keys, the examples provided can use Azure Entra user identities to authenticate against endpoints. To use this approach, modify the .env file and specify `identity` as the key value.
-You must also configure your services to use [RBAC](https://learn.microsoft.com/en-us/azure/role-based-access-control/overview) and assign users access to the correct roles for each endpoint. 
+
+For additional security, it is possible to run a subset of the TypeAgent endpoints in a keyless environment. Instead of using keys, the examples provided can use Azure Entra user identities to authenticate against endpoints. To use this approach, modify the .env file and specify `identity` as the key value.
+You must also configure your services to use [RBAC](https://learn.microsoft.com/en-us/azure/role-based-access-control/overview) and assign users access to the correct roles for each endpoint. Please see the tables above to determine keyless endpoint support.
 
 **Just-in-time Access**:
+
 TypeAgent also supports least privileged security approach using [Azure Entra Prividged Identity Management](https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/pim-configure). [Elevate.js](./tools/scripts/elevate.js) is a script used to automate elevation. Default configuration
 options for elevation (duration, justification message, etc.) are stored in `tools/scripts/elevate.config.json`. A typical developer workflow is to run `npm run elevate` once at the beginning of each workday.
 
