@@ -43,7 +43,7 @@ All storage, registration, chat, memory and other state maintained by examples i
 ## Intended Uses
 
 - TypeAgent is sample code shared to encourage the exploration of natural language agent architectures using TypeChat.
-- Sample agents are not intended to be used in real-world settings without further testing/validation.
+- Sample agents are not intended to be implemented in real-world settings without further testing/validation.
 
 ## Limitations
 
@@ -53,7 +53,7 @@ TypeAgent is early stage sample code over TypeChat. TypeAgent is not a framework
 - TypeAgent has been tested with Azure Open AI services on developer's own machines only.
 - TypeAgent is currently tested in English. Performance may vary in other languages.
 - TypeAgent relies on [TypeChat](https://github.com/microsoft/typechat), which uses schema to validate LLM responses. An agent's validity therefore depends on how well _its schema_ represents the user intents and LLM responses _for its domains_.
-- You are responsible for supplying any **API keys** for services needed by examples.
+- You are responsible for supplying any **API keys** for services used by examples.
 
 ## Getting Started
 
