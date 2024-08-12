@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Result, success } from "typechat";
+import { Result, success, error } from "typechat";
 import { getJson } from "./restClient";
 import { appendNV, getEnvSetting } from "./common";
 
@@ -101,24 +101,31 @@ export interface SearchAPI {
 }
 
 /**
- * Create a Bing Search client
+ * Create a Bing Search client. Requires a Bing API key.
+ * If no API key provided in settings, tries to load BING_API_KEY from environment.
+ * If no API key available, returns an error.
  * @param settings Api Settings. If not supplied, initialized from Environment
- * @returns Bing client
+ * @returns Bing client if success, else error.
  */
 export async function createBingSearch(
     settings?: ApiSettings,
-): Promise<SearchAPI> {
-    settings ??= apiSettingsFromEnv();
+): Promise<Result<SearchAPI>> {
+    try {
+        settings ??= apiSettingsFromEnv();
+    } catch (e) {
+        return error(`Could not create Bing Client:\n${e}`);
+    }
+
     const baseUrl = "https://api.bing.microsoft.com/v7.0";
     const webEndpoint = baseUrl + "/search";
     const imageEndpoint = baseUrl + "/images/search";
     const headers = createApiHeaders(settings);
 
-    return {
+    return success({
         webSearch,
         imageSearch,
         search,
-    };
+    });
 
     /**
      *
@@ -209,7 +216,11 @@ export async function searchWeb(
 ): Promise<WebPage[]> {
     const options = count ? { count } : undefined;
     // Automatically uses Environment variable: BING_API_KEY
-    const client = await createBingSearch();
+    const clientResult = await createBingSearch();
+    if (!clientResult.success) {
+        return [];
+    }
+    const client = clientResult.data;
     const results = await client.webSearch(query, options);
     return results.success ? results.data : [];
 }
@@ -227,7 +238,11 @@ export async function searchImages(
 ): Promise<Image[]> {
     const options = count ? { count } : undefined;
     // Automatically uses Environment variable: BING_API_KEY
-    const client = await createBingSearch();
+    const clientResult = await createBingSearch();
+    if (!clientResult.success) {
+        return [];
+    }
+    const client = clientResult.data;
     const results = await client.imageSearch(query, options);
     return results.success ? results.data : [];
 }
