@@ -3,7 +3,7 @@
 
 import { askYesNo } from "../../utils/interactive.js";
 import readline from "readline/promises";
-import { SearchMenuItem, ActionTemplate } from "common-utils";
+import { SearchMenuItem, ActionTemplateSequence } from "common-utils";
 import chalk from "chalk";
 
 export type RequestId = string | undefined;
@@ -37,7 +37,7 @@ export interface ClientIO {
     warn(message: string, requestId: RequestId): void;
     error(message: string, requestId: RequestId): void;
     actionCommand(
-        actionTemplates: ActionTemplate[],
+        actionTemplates: ActionTemplateSequence,
         command: ActionUICommand,
         requestId: RequestId,
     ): void;

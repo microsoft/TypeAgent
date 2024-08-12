@@ -55,6 +55,10 @@ export type ActionTemplate = {
     agent: string;
     name: string;
     parameterStructure: TemplateParamObject;
+};
+
+export type ActionTemplateSequence = {
+    templates: ActionTemplate[];
     prefaceSingle?: string;
     prefaceMultiple?: string;
 };

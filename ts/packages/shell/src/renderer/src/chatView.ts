@@ -9,7 +9,7 @@ import { AnsiUp } from "ansi_up";
 import { iconCheckMarkCircle, iconX, iconRoadrunner } from "./icon";
 import {
     ActionInfo,
-    ActionTemplate,
+    ActionTemplateSequence,
     ActionUICommand,
     SearchMenuItem,
 } from "../../preload/electronTypes";
@@ -597,7 +597,7 @@ export class ChatView {
         const actionInfo = this.registeredActions.get(requestId);
         if (actionInfo === undefined) {
             console.error(`Invalid requestId ${requestId}`);
-            return [];
+            return undefined;
         }
         return actionInfo.actionTemplates;
     }
@@ -609,9 +609,11 @@ export class ChatView {
         if (message === "reserved") {
             // build the action div from the reserved action templates
             const actionTemplates = this.getActionTemplates(requestId);
-            this.actionCascade = new ActionCascade(actionTemplates);
-            const actionDiv = this.actionCascade.toHTML();
-            actionContainer.appendChild(actionDiv);
+            if (actionTemplates !== undefined) {
+                this.actionCascade = new ActionCascade(actionTemplates);
+                const actionDiv = this.actionCascade.toHTML();
+                actionContainer.appendChild(actionDiv);
+            }
         } else {
             const actionDiv = document.createElement("div");
             actionDiv.className = "action-text";
@@ -674,7 +676,7 @@ export class ChatView {
     }
 
     registerActionStructure(
-        actionTemplates: ActionTemplate[],
+        actionTemplates: ActionTemplateSequence,
         requestId: string,
     ) {
         this.registeredActions.set(requestId, {
@@ -684,7 +686,7 @@ export class ChatView {
     }
 
     actionCommand(
-        actionTemplates: ActionTemplate[],
+        actionTemplates: ActionTemplateSequence,
         command: ActionUICommand,
         requestId: string,
     ) {

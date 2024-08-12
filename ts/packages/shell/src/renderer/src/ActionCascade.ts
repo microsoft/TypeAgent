@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import {
-    ActionTemplate,
+    ActionTemplateSequence as ActionTemplateSequence,
     TemplateParamFieldOpt,
     TemplateParamScalar,
 } from "../../preload/electronTypes";
@@ -13,7 +13,7 @@ export class ActionCascade {
     container: HTMLDivElement;
 
     constructor(
-        public actionTemplates: ActionTemplate[],
+        public actionTemplates: ActionTemplateSequence,
         public editMode = false,
     ) {
         this.container = this.toHTML();
@@ -99,32 +99,60 @@ export class ActionCascade {
 
     public toHTML() {
         // for now assume a single action
-        const actionTemplate = this.actionTemplates[0];
         const div = document.createElement("div");
-        if (actionTemplate.prefaceSingle) {
+        if (
+            this.actionTemplates.templates.length === 1 &&
+            this.actionTemplates.prefaceSingle
+        ) {
             const preface = document.createElement("div");
             preface.className = "preface-text";
-            preface.innerText = actionTemplate.prefaceSingle;
+            preface.innerText = this.actionTemplates.prefaceSingle;
+            div.appendChild(preface);
+        } else if (
+            this.actionTemplates.templates.length > 1 &&
+            this.actionTemplates.prefaceMultiple
+        ) {
+            const preface = document.createElement("div");
+            preface.className = "preface-text";
+            preface.innerText = this.actionTemplates.prefaceMultiple;
             div.appendChild(preface);
         }
-        const actionDiv = document.createElement("div");
-        actionDiv.innerText = `Action: ${actionTemplate.agent}.${actionTemplate.name}`;
-        div.appendChild(actionDiv);
-        // now the parameters
-        const entries = Object.entries(
-            actionTemplate.parameterStructure.fields,
-        );
-        if (entries.length !== 0) {
-            const paramDiv = document.createElement("div");
-            paramDiv.innerText = "Parameters:";
-            const ul = document.createElement("ul");
-            // TODO: split the entries by optional and required
-            for (const [key, value] of entries.sort()) {
-                const li = this.paramToHTML(key, value, true);
-                ul.appendChild(li);
+        for (const actionTemplate of this.actionTemplates.templates) {
+            const actionDiv = document.createElement("div");
+            actionDiv.innerText = `Action: ${actionTemplate.agent}.${actionTemplate.name}`;
+            div.appendChild(actionDiv);
+            // now the parameters
+            const entries = Object.entries(
+                actionTemplate.parameterStructure.fields,
+            );
+            if (entries.length !== 0) {
+                const paramDiv = document.createElement("div");
+                paramDiv.innerText = "Parameters:";
+                const ul = document.createElement("ul");
+                // TODO: split the entries by optional and required
+                for (const [key, value] of entries.sort()) {
+                    const li = this.paramToHTML(key, value, true);
+                    ul.appendChild(li);
+                }
+                paramDiv.appendChild(ul);
+                div.appendChild(paramDiv);
             }
-            paramDiv.appendChild(ul);
-            div.appendChild(paramDiv);
+        }
+        if (this.editMode) {
+            // add a button to enter an additional action
+            const addButton = document.createElement("button");
+            addButton.innerText = "Add action";
+            addButton.onclick = () => {
+                console.log("add");
+            };
+            div.appendChild(addButton);
+            // add a button to submit the action
+            const submitButton = document.createElement("button");
+            submitButton.innerText = "Submit";
+            submitButton.onclick = () => {
+                console.log("submit");
+            };
+            div.appendChild(submitButton);
         }
         return div;
     }

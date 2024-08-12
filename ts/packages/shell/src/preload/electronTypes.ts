@@ -18,7 +18,7 @@ export type SearchMenuItem = {
 
 export type ActionUICommand = "register" | "replace" | "remove";
 export type ActionInfo = {
-    actionTemplates: ActionTemplate[];
+    actionTemplates: ActionTemplateSequence;
     requestId: string;
 };
 
@@ -64,6 +64,10 @@ export type ActionTemplate = {
     agent: string;
     name: string;
     parameterStructure: TemplateParamObject;
+};
+
+export type ActionTemplateSequence = {
+    templates: ActionTemplate[];
     prefaceSingle?: string;
     prefaceMultiple?: string;
 };
@@ -118,7 +122,7 @@ export interface ClientAPI {
     onActionCommand(
         callback: (
             e: Electron.IpcRendererEvent,
-            actionTemplates: ActionTemplate[],
+            actionTemplates: ActionTemplateSequence,
             command: ActionUICommand,
             requestId: string,
         ) => void,
