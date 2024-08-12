@@ -38,22 +38,22 @@ The TypeAgent repo contains example agents and applications, along with internal
 
 ### State Management
 
-All storage, registration, chat, memory and other state maintained by examples is stored **_locally_** in **your user folder** on your development machine. State is typically saved as ordinary text or JSON files in sub-folders below your user folder .
+All storage, registration, chat, memory and other state maintained by examples is stored **_locally_** in **your user folder** on your development machine. State is typically saved as ordinary text or JSON files in sub-folders below your user folder.
 
 ## Intended Uses
 
 - TypeAgent is sample code shared to encourage the exploration of natural language agent architectures using TypeChat.
-- Sample agents are not intended to be implemented in real-world settings without further testing/validation.
+- Sample agents are not intended to be used in real-world settings without further testing/validation.
 
 ## Limitations
 
-TypeAgent is early stage sample code over TypeChat. TypeAgent is not a framework. All library code is used to build our own example apps and agents only.
+TypeAgent is early stage sample code over TypeChat. TypeAgent is not a framework. All code in this repo is intented for building our own example apps and agents only.
 
 - TypeAgent is in **active development** with frequent updates and refactoring.
 - TypeAgent has been tested with Azure Open AI services on developer's own machines only.
 - TypeAgent is currently tested in English. Performance may vary in other languages.
 - TypeAgent relies on [TypeChat](https://github.com/microsoft/typechat), which uses schema to validate LLM responses. An agent's validity therefore depends on how well _its schema_ represents the user intents and LLM responses _for its domains_.
-- You are responsible for supplying any **API keys** used by examples.
+- You are responsible for supplying any **API keys** for services needed by examples.
 
 ## Getting Started
 
@@ -69,7 +69,7 @@ Microsoft AI Systems Repo is a mono-repo, with components organized with the fol
 
 ### Agent Shell Example
 
-The main entry point to explore TypeAgent is the Agent Shell example. Follow the [instructions](./ts/README.md) in the typescript code [directory](./ts) to get started.
+The main entry point to explore TypeAgent is the Agent Shell example. Follow the [instructions](./ts/README.md) in the TypeScript code [directory](./ts) to get started.
 
 ## Contributing
 
