@@ -80,15 +80,11 @@ Other examples in the [example directory](./examples/) may have additional servi
 
 Read the [Debugging](#debugging) section for additional service keys that can be used for debugging.
 
-**Local Environment**:
+#### Using Azure Key Vault to manage keys
 
-You can use Azure Key Vault to store keys. To get the required config and keys saved to the `.env` file under the `ts` folder:
+The [getKey](./tools/scripts/getKeys.mjs) script is created for developer convenience to manage service secret using Azure Key vault to set up the local development environment.
 
-- Install [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
-- Run `az login` to login using the CLI. Run `az account set --subscription <Subscription Id>` to set the subscription.
-- Run `npm run getKeys` at the root to pull secret from our team key vault.
-
-Note: Shared keys doesn't include Spotify integration, which can be created using the the [Spotify API keys instructions](./packages/agents/player/README.md)
+To setup, just create a Azure Key Vault with name `<name>`.
 
 To update keys on the key vault
 
@@ -96,6 +92,14 @@ To update keys on the key vault
 - Add new keys name in `tools/scripts/getKeys.config.json`
 - Run `npm run getKeys -- push`
 - Check in the changes to `tools/scripts/getKeys.config.json`
+
+To get the required config and keys saved to the `.env` file under the `ts` folder:
+
+- Install [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
+- Run `az login` to login using the CLI. Run `az account set --subscription <Subscription Id>` to set the subscription.
+- Run `npm run getKeys [--vault <name>]` at the root to pull secret from the key vault with `<name>`. (If the `--vault` option is omitted, the default from vault name in `tools/scripts/getKeys.config.json` is used.)
+
+Note: Shared keys doesn't include Spotify integration, which can be created using the the [Spotify API keys instructions](./packages/agents/player/README.md)
 
 ### WSL
 
