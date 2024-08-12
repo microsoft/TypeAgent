@@ -90,7 +90,7 @@ To update keys on the key vault
 
 - Add or change the values in the `.env` file
 - Add new keys name in `tools/scripts/getKeys.config.json`
-- Run `npm run getKeys -- push`
+- Run `npm run getKeys -- push [--vault <name>]`. (If the `--vault` option is omitted, the default from vault name in `tools/scripts/getKeys.config.json` is used.)
 - Check in the changes to `tools/scripts/getKeys.config.json`
 
 To get the required config and keys saved to the `.env` file under the `ts` folder:
