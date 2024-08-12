@@ -38,7 +38,9 @@ The TypeAgent repo contains example agents and applications, along with internal
 
 ### State Management
 
-All storage, registration, chat, memory and other state maintained by examples is stored **_locally_** in **your user folder** on your development machine. State is typically saved as ordinary text or JSON files in sub-folders below your user folder .
+Storage, registration, chat, memory and other state maintained by examples is **_typically_** stored **_locally_** in **your user folder** on your development machine. State is typically saved as ordinary text or JSON files in sub-folders below your user folder.
+
+Example agents that use the Microsoft Graph or similar external services may store state in those services.
 
 ## Intended Uses
 
@@ -47,27 +49,40 @@ All storage, registration, chat, memory and other state maintained by examples i
 
 ## Limitations
 
-TypeAgent is early stage sample code over TypeChat. TypeAgent is not a framework. All library code is used to build our own example apps and agents only.
+TypeAgent is early stage sample code over TypeChat. TypeAgent is not a framework. All code in this repo is intended for building our own example apps and agents only.
 
 - TypeAgent is in **active development** with frequent updates and refactoring.
 - TypeAgent has been tested with Azure Open AI services on developer's own machines only.
 - TypeAgent is currently tested in English. Performance may vary in other languages.
 - TypeAgent relies on [TypeChat](https://github.com/microsoft/typechat), which uses schema to validate LLM responses. An agent's validity therefore depends on how well _its schema_ represents the user intents and LLM responses _for its domains_.
-- You are responsible for supplying any **API keys** used by examples.
+- You are responsible for supplying any **API keys** for services used by examples.
 
 ## Getting Started
 
 TypeAgent is written in TypeScript and relies on TypeChat. To understand how TypeAgent examples work, we recommend getting comfortable with TypeChat and [TypeChat examples](https://github.com/microsoft/TypeChat/tree/main/typescript/examples) first.
+
+### Agent Shell Example
+
+The main entry point to explore TypeAgent is the Agent Shell example. Follow the [instructions](./ts/README.md) in the TypeScript code [directory](./ts) to get started.
 
 ## Developers
 
 Microsoft AI Systems Repo is a mono-repo, with components organized with the following root folders based on language used.
 
 - [`ts`](./ts) TypeScript code ([Readme](./ts/README.md))
+- [`python`](./python) Python code ([Readme](./python/README.md))
+- [`dotnet`](./dotnet) Dotnet (C#) code ([Readme](./dotnet/README.md))
 
-### Agent Shell Example
+## Contributing
 
-The main entry point to explore TypeAgent is the Agent Shell example. Follow the [instructions](./ts/README.md) in the typescript code [directory](./ts) to get started.
+This project welcomes contributions and suggestions. Most contributions require you to
+agree to a Contributor License Agreement (CLA) declaring that you have the right to,
+and actually do, grant us the rights to use your contribution. For details, visit
+https://cla.microsoft.com.
+
+When you submit a pull request, a CLA-bot will automatically determine whether you need
+to provide a CLA and decorate the PR appropriately (e.g., label, comment). Simply follow the
+instructions provided by the bot. You will only need to do this once across all repositories using our CLA.
 
 ## Code of Conduct
 

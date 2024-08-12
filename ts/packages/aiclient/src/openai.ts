@@ -486,7 +486,6 @@ export function createChatModel(
         let completionParams: CompletionSettings | undefined;
         if (completionSettings) {
             completionParams = { ...completionSettings };
-            delete completionParams.response_format;
         }
         const params = {
             ...defaultParams,

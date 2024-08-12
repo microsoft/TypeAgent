@@ -2,21 +2,57 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-const fs = require("fs");
-const path = require("path");
-const child_process = require("child_process");
-const readline = require("readline/promises");
+import fs from "node:fs";
+import path from "node:path";
+import child_process from "node:child_process";
+import readline from "node:readline/promises";
+import { getClient as getPIMClient } from "./lib/pimClient.mjs";
+import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+import chalk from "chalk";
+import { exit } from "node:process";
 
+const require = createRequire(import.meta.url);
 const config = require("./getKeys.config.json");
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dotenvPath = path.resolve(__dirname, config.defaultDotEnvPath);
 const sharedKeys = config.env.shared;
 const privateKeys = config.env.private;
 const deleteKeys = config.env.delete;
-const sharedVault = config.vault.shared;
+let sharedVault = config.vault.shared;
+
+async function getSecretListWithElevation(keyVaultClient, vaultName) {
+    try {
+        return await keyVaultClient.getSecrets(vaultName);
+    } catch (e) {
+        if (!e.message.includes("ForbiddenByRbac")) {
+            throw e;
+        }
+
+        console.warn(chalk.yellowBright("Elevating to get secrets..."));
+        const pimClient = await getPIMClient();
+        await pimClient.elevate({
+            requestType: "SelfActivate",
+            roleName: "Key Vault Administrator",
+            expirationType: "AfterDuration",
+            expirationDuration: "PT5M", // activate for 5 minutes
+        });
+        // Wait for the role to be activated
+        console.warn(chalk.yellowBright("Waiting 5 seconds..."));
+        await new Promise((res) => setTimeout(res, 5000));
+        return await keyVaultClient.getSecrets(vaultName);
+    }
+}
 
 async function getSecrets(keyVaultClient, vaultName) {
-    console.log(`Getting existing secrets from ${vaultName} key vault.`);
-    const secretList = await keyVaultClient.getSecrets(vaultName);
+    console.log(
+        `Getting existing secrets from ${chalk.cyanBright(vaultName)} key vault.`,
+    );
+    const secretList = await getSecretListWithElevation(
+        keyVaultClient,
+        vaultName,
+    );
     const p = [];
     for (const secret of secretList) {
         if (secret.attributes.enabled) {
@@ -56,7 +92,7 @@ class AzCliKeyVaultClient {
         // We use this to validate that the user is logged in (already ran `az login`).
         try {
             const account = JSON.parse(await execAsync("az account show"));
-            console.log(`Logged in as ${account.user.name}`);
+            console.log(`Logged in as ${chalk.cyanBright(account.user.name)}`);
         } catch (e) {
             console.error(
                 "ERROR: User not logged in to Azure CLI. Run 'az login'.",
@@ -93,7 +129,7 @@ class AzCliKeyVaultClient {
     }
 }
 
-async function getClient() {
+async function getKeyVaultClient() {
     return AzCliKeyVaultClient.get();
 }
 
@@ -123,7 +159,14 @@ function toEnvKey(secretKey) {
 }
 
 // Return 0 if the value is the same. -1 if the user skipped. 1 if the value was updated.
-async function pushSecret(stdio, client, vault, secrets, secretKey, value) {
+async function pushSecret(
+    stdio,
+    keyVaultClient,
+    vault,
+    secrets,
+    secretKey,
+    value,
+) {
     const secretValue = secrets.get(secretKey);
     if (secretValue === value) {
         return 0;
@@ -140,14 +183,14 @@ async function pushSecret(stdio, client, vault, secrets, secretKey, value) {
     } else {
         console.log(`  Creating ${secretKey}`);
     }
-    await client.writeSecret(vault, secretKey, value);
+    await keyVaultClient.writeSecret(vault, secretKey, value);
     return 1;
 }
 
 async function pushSecrets() {
     const dotEnv = await readDotenv();
-    const client = await getClient();
-    const secrets = new Map(await getSecrets(client, sharedVault));
+    const keyVaultClient = await getKeyVaultClient();
+    const secrets = new Map(await getSecrets(keyVaultClient, sharedVault));
 
     console.log(`Pushing secrets from ${dotenvPath} to key vault.`);
     let updated = 0;
@@ -159,7 +202,7 @@ async function pushSecrets() {
             if (sharedKeys.includes(envKey)) {
                 const result = await pushSecret(
                     stdio,
-                    client,
+                    keyVaultClient,
                     sharedVault,
                     secrets,
                     secretKey,
@@ -194,14 +237,16 @@ async function pushSecrets() {
 
 async function pullSecrets() {
     const dotEnv = new Map(await readDotenv());
-    const client = await getClient();
-    const secrets = await getSecrets(client, sharedVault);
+    const keyVaultClient = await getKeyVaultClient();
+    const secrets = await getSecrets(keyVaultClient, sharedVault);
     if (secrets.length === 0) {
         console.log("WARNING: No secrets found in key vault.");
         return;
     }
 
-    console.log(`Pulling secrets from key vault to ${dotenvPath}`);
+    console.log(
+        `Pulling secrets from key vault to ${chalk.cyanBright(dotenvPath)}`,
+    );
     let updated = 0;
 
     for (const [secretKey, value] of secrets) {
@@ -222,10 +267,14 @@ async function pullSecrets() {
     }
 
     if (updated === 0) {
-        console.log(`\nAll values up to date in ${dotenvPath}`);
+        console.log(
+            `\nAll values up to date in ${chalk.cyanBright(dotenvPath)}`,
+        );
         return;
     }
-    console.log(`\n${updated} values updated.\nWriting '${dotenvPath}'.`);
+    console.log(
+        `\n${updated} values updated.\nWriting '${chalk.cyanBright(dotenvPath)}'.`,
+    );
     await fs.promises.writeFile(
         dotenvPath,
         [...dotEnv.entries()]
@@ -234,8 +283,25 @@ async function pullSecrets() {
     );
 }
 
+const commands = ["push", "pull", "help"];
 (async () => {
-    const command = process.argv[2];
+    const command = commands.includes(process.argv[2])
+        ? process.argv[2]
+        : undefined;
+    const start = command !== undefined ? 3 : 2;
+    for (let i = start; i < process.argv.length; i++) {
+        const arg = process.argv[i];
+        if (arg === "--vault") {
+            sharedVault = process.argv[i + 1];
+            if (sharedVault === undefined) {
+                throw new Error("Missing value for --vault");
+            }
+            i++;
+            continue;
+        }
+
+        throw new Error(`Unknown argument: ${arg}`);
+    }
     switch (command) {
         case "push":
             await pushSecrets();
@@ -257,12 +323,14 @@ async function pullSecrets() {
         )
     ) {
         console.error(
-            `ERROR: Azure CLI is not installed. Install it and run 'az login' before running this tool.`,
+            chalk.red(
+                `ERROR: Azure CLI is not installed. Install it and run 'az login' before running this tool.`,
+            ),
         );
         // eslint-disable-next-line no-undef
         exit(0);
     }
 
-    console.error(`FATAL ERROR: ${e.stack}`);
+    console.error(chalk.red(`FATAL ERROR: ${e.stack}`));
     process.exit(-1);
 });

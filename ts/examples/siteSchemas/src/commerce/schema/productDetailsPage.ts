@@ -20,6 +20,8 @@ export type ProductTile = {
     cssSelector: string;
 
     addToCartButton?: AddToCartButton;
+    locationInStore?: string;
+    numberInStock?: string;
 };
 
 export type ProductDetailsPage = {

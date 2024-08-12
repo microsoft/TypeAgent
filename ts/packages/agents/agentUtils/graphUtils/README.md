@@ -1,6 +1,6 @@
 # graph-utils
 
-Utility function to access msgraph apis.
+Sample code to access [Microsoft Graph API](https://learn.microsoft.com/en-us/graph/use-the-api).
 
 ## Trademarks
 

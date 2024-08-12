@@ -121,7 +121,7 @@ Use the `@const <args>` command at the prompt to control the construction store.
 
 ### Debugging
 
-`@trace <trace pattern>` - add a trace pattern for debugging, see [Tracing](#tracing) below.
+`@trace <trace pattern>` - add a trace pattern for debugging. See [Tracing](../../README.md#tracing) in the ts root README.md.
 
 ### Other configs
 

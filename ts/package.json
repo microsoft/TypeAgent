@@ -1,8 +1,8 @@
 {
-  "name": "ai-systems-root",
+  "name": "typeagent-root",
   "version": "0.0.1",
   "private": true,
-  "description": "AI Systems workspace root",
+  "description": "TypeAgent TypeScript Workspace Root",
   "keywords": [],
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -14,12 +14,13 @@
   "author": "Microsoft",
   "scripts": {
     "build": "fluid-build . -t build",
+    "check:link": "git ls-tree -r --name-only HEAD .. | grep \\.md | xargs  markdown-link-check",
     "check:policy": "node tools/scripts/repo-policy-check.mjs",
     "check:policy:fix": "node tools/scripts/repo-policy-check.mjs --fix",
     "clean": "fluid-build . -t clean",
     "cli": "pnpm -C packages/cli exec npx --no .",
     "elevate": "node tools/scripts/elevate.js",
-    "getKeys": "node tools/scripts/getKeys.js",
+    "getKeys": "node tools/scripts/getKeys.mjs",
     "lint": "fluid-build . -t prettier",
     "lint:fix": "pnpm run prettier:fix",
     "prettier": "prettier --check .",
@@ -35,6 +36,7 @@
     "@fluidframework/build-tools": "^0.35.0-247707",
     "@types/node": "^20.8.9",
     "concurrently": "^8.2.2",
+    "markdown-link-check": "^3.12.2",
     "prettier": "^3.2.5"
   },
   "packageManager": "pnpm@9.6.0+sha512.38dc6fba8dba35b39340b9700112c2fe1e12f10b17134715a4aa98ccf7bb035e76fd981cf0bb384dfa98f8d6af5481c2bef2f4266a24bfa20c34eb7147ce0b5e",
