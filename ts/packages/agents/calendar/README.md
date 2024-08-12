@@ -3,7 +3,7 @@
 This package contains the schema defintion and implemtation for implementing a Calendar Agent
 that interacts with the Outlook using MS Graph APIs.
 
-This agent depends on the utility library [graph-utils](../graphUtils/src/calendarClient.ts) to implement different calendar actions.
+This agent depends on the utility library [graph-utils](../agentUtils/graphUtils/src/calendarClient.ts) to implement different calendar actions.
 
 To build the calendar agent, it needs to provide a manifest and an instantiation entry point.  
 These are declared in the `package.json` as export paths:
