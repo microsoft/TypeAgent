@@ -10,6 +10,7 @@ import { getClient as getPIMClient } from "./lib/pimClient.mjs";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import chalk from "chalk";
+import { exit } from "node:process";
 
 const require = createRequire(import.meta.url);
 const config = require("./getKeys.config.json");
@@ -19,7 +20,7 @@ const dotenvPath = path.resolve(__dirname, config.defaultDotEnvPath);
 const sharedKeys = config.env.shared;
 const privateKeys = config.env.private;
 const deleteKeys = config.env.delete;
-const sharedVault = config.vault.shared;
+let sharedVault = config.vault.shared;
 
 async function getSecretListWithElevation(keyVaultClient, vaultName) {
     try {
@@ -282,8 +283,25 @@ async function pullSecrets() {
     );
 }
 
+const commands = ["push", "pull", "help"];
 (async () => {
-    const command = process.argv[2];
+    const command = commands.includes(process.argv[2])
+        ? process.argv[2]
+        : undefined;
+    const start = command !== undefined ? 3 : 2;
+    for (let i = start; i < process.argv.length; i++) {
+        const arg = process.argv[i];
+        if (arg === "--vault") {
+            sharedVault = process.argv[i + 1];
+            if (sharedVault === undefined) {
+                throw new Error("Missing value for --vault");
+            }
+            i++;
+            continue;
+        }
+
+        throw new Error(`Unknown argument: ${arg}`);
+    }
     switch (command) {
         case "push":
             await pushSecrets();
@@ -305,12 +323,14 @@ async function pullSecrets() {
         )
     ) {
         console.error(
-            `ERROR: Azure CLI is not installed. Install it and run 'az login' before running this tool.`,
+            chalk.red(
+                `ERROR: Azure CLI is not installed. Install it and run 'az login' before running this tool.`,
+            ),
         );
         // eslint-disable-next-line no-undef
         exit(0);
     }
 
-    console.error(`FATAL ERROR: ${e.stack}`);
+    console.error(chalk.red(`FATAL ERROR: ${e.stack}`));
     process.exit(-1);
 });
