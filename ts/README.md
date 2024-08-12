@@ -6,6 +6,8 @@
 
 This directory contains Typescript implemented packages and main entry point for **TypeAgent**. For more details about the project, please review the TypeAgent [ReadMe](./../README.md).
 
+The main entry point to explore TypeAgent is the [TypeAgent Shell](./packages/shell) example. Currently, we only support running from the repo (i.e. no published/installable builds). Follow the instruction below to [build](#build) and [run](#running) the [TypeAgent Shell](./packages/shell) example.
+
 ## Build
 
 ### Setup
@@ -110,7 +112,7 @@ After the step above, you will need to enter a password to protect the secrets i
 
 ## Running
 
-There are two main apps to start using the system: [TypeAgent Shell](#shell) or [TypeAgent CLI](#cli). Currently, we only support running builds from the repo (i.e. no published/installable builds). Both shared a common core package [dispatcher](./packages/dispatcher/)
+There are two main apps to start using the system: [TypeAgent Shell](#shell) or [TypeAgent CLI](#cli). Both shared a common core package [dispatcher](./packages/dispatcher/). Currently, we only support running from the repo (i.e. no published/installable builds).
 
 ### Shell
 
