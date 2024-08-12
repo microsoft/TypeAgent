@@ -1,8 +1,8 @@
 {
-  "name": "ai-systems-root",
+  "name": "typeagent-root",
   "version": "0.0.1",
   "private": true,
-  "description": "AI Systems workspace root",
+  "description": "TypeAgent TypeScript Workspace Root",
   "keywords": [],
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
