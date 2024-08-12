@@ -19,13 +19,12 @@ import {
 } from "../knowledgeIndex.js";
 import { Action, VerbTense } from "./knowledgeSchema.js";
 import path from "path";
-import { TextBlock, TextBlockType } from "../text.js";
 import { ActionFilter } from "./knowledgeSearchSchema.js";
-import { getRangeOfTemporalSequence } from "../temporal.js";
+import { TemporalLog, getRangeOfTemporalSequence } from "../temporal.js";
 import {
-    SetOp,
+    addToSet,
+    intersect,
     intersectArrays,
-    unionArrays,
     uniqueFrom,
 } from "../setOperations.js";
 import { EntityIndex } from "./entities.js";
@@ -52,17 +51,7 @@ function createSearchResults<TActionId = any>(): ActionSearchResult<TActionId> {
     };
 }
 
-export type ConcreteActionFilter<TEntityId = any> = {
-    // Each verb is typically a word
-    verbs: string[];
-    verbTense: VerbTense;
-    // ASSUMPTION: the following ID arrays are SORTED
-    subjectEntityIds?: TEntityId[] | undefined;
-    objectEntityIds?: TEntityId[] | undefined;
-    indirectObjectEntityIds?: TEntityId[] | undefined;
-};
-
-export interface ActionIndex<TActionId = any, TEntityId = any, TSourceId = any>
+export interface ActionIndex<TActionId = any, TSourceId = any>
     extends KnowledgeStore<ExtractedAction<TSourceId>, TActionId> {
     readonly verbIndex: TextIndex<TActionId>;
 
@@ -81,15 +70,20 @@ export interface ActionIndex<TActionId = any, TEntityId = any, TSourceId = any>
         tense?: VerbTense,
         options?: SearchOptions,
     ): Promise<ScoredItem<TActionId[]>[]>;
+    loadSourceIds(
+        sourceIdLog: TemporalLog<TSourceId>,
+        results: ActionSearchResult<TActionId>[],
+        unique?: Set<TSourceId>,
+    ): Promise<Set<TSourceId> | undefined>;
 }
 
-export async function createActionIndex<TEntityId = any, TSourceId = any>(
+export async function createActionIndex<TSourceId = any>(
     settings: TextIndexSettings,
-    getEntityIndex: () => Promise<EntityIndex<TEntityId>>,
+    getEntityIndex: () => Promise<EntityIndex>,
     rootPath: string,
     folderSettings?: ObjectFolderSettings,
     fSys?: FileSystem,
-): Promise<ActionIndex<string, string, TSourceId>> {
+): Promise<ActionIndex<string, TSourceId>> {
     type ActionId = string;
     const actionStore = await createKnowledgeStore<ExtractedAction<TSourceId>>(
         settings,
@@ -119,6 +113,7 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         getSourceIds,
         search,
         searchVerbs,
+        loadSourceIds,
     };
 
     async function add(
@@ -328,5 +323,36 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         return (await entityIndex.nameIndex.getTextMultiple(
             textIds,
         )) as string[];
+    }
+
+    async function loadSourceIds(
+        sourceIdLog: TemporalLog<TSourceId>,
+        results: ActionSearchResult<ActionId>[],
+        unique?: Set<TSourceId>,
+    ): Promise<Set<TSourceId> | undefined> {
+        if (results.length === 0) {
+            return unique;
+        }
+        unique ??= new Set<TSourceId>();
+        await asyncArray.forEachAsync(
+            results,
+            settings.concurrency,
+            async (a) => {
+                if (a.actionIds && a.actionIds.length > 0) {
+                    const ids = await getSourceIds(a.actionIds);
+                    const timeRange = a.getTemporalRange();
+                    if (timeRange) {
+                        const idRange = await sourceIdLog.getIdsInRange(
+                            timeRange.startDate,
+                            timeRange.stopDate,
+                        );
+                        addToSet(unique, intersect(ids, idRange));
+                    } else {
+                        addToSet(unique, ids);
+                    }
+                }
+            },
+        );
+        return unique.size === 0 ? undefined : unique;
     }
 }

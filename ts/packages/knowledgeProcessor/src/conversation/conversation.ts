@@ -654,7 +654,12 @@ export async function createConversation(
             }
         }
         if (options.loadMessages) {
-            await resolveMessages(results, topicIndex, entityIndex);
+            await resolveMessages(
+                results,
+                topicIndex,
+                entityIndex,
+                actionIndex,
+            );
         }
         return results;
     }
@@ -697,10 +702,11 @@ export async function createConversation(
         results: SearchResponse,
         topicIndex: TopicIndex,
         entityIndex: EntityIndex,
+        actionIndex: ActionIndex,
     ): Promise<void> {
-        // Todo: switch to SortedSet
         let topicMessageIds: Set<MessageId> | undefined;
         let entityMessageIds: Set<MessageId> | undefined;
+        let actionMessageIds: Set<MessageId> | undefined;
         if (results.topics && results.topics.length > 0) {
             topicMessageIds = await topicIndex.loadSourceIds(
                 messages,
@@ -713,11 +719,23 @@ export async function createConversation(
                 results.entities,
             );
         }
-        let messageIds = intersectSets(topicMessageIds, entityMessageIds);
+        if (results.actions && results.actions.length > 0) {
+            actionMessageIds = await actionIndex.loadSourceIds(
+                messages,
+                results.actions,
+            );
+        }
+        let messageIds = intersectSets(
+            topicMessageIds,
+            intersectSets(entityMessageIds, actionMessageIds),
+        );
         if (!messageIds || messageIds.size === 0) {
             // If nothing in common, try a union.
             //messageIds = topicMessageIds;
-            messageIds = unionSets(topicMessageIds, entityMessageIds);
+            messageIds = unionSets(
+                topicMessageIds,
+                unionSets(entityMessageIds, actionMessageIds),
+            );
         }
         if (messageIds && messageIds.size > 0) {
             results.messageIds = [...messageIds.values()].sort();
