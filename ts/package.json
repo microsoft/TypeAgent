@@ -1,8 +1,8 @@
 {
-  "name": "ai-systems-root",
+  "name": "typeagent-root",
   "version": "0.0.1",
   "private": true,
-  "description": "AI Systems workspace root",
+  "description": "TypeAgent TypeScript Workspace Root",
   "keywords": [],
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -19,7 +19,7 @@
     "clean": "fluid-build . -t clean",
     "cli": "pnpm -C packages/cli exec npx --no .",
     "elevate": "node tools/scripts/elevate.js",
-    "getKeys": "node tools/scripts/getKeys.js",
+    "getKeys": "node tools/scripts/getKeys.mjs",
     "lint": "fluid-build . -t prettier",
     "lint:fix": "pnpm run prettier:fix",
     "prettier": "prettier --check .",
