@@ -91,7 +91,7 @@ function onRecognizing(
     recognitionEventArgs: speechSDK.SpeechRecognitionEventArgs,
     inputId: string,
 ) {
-    console.log("Running REcognizing step");
+    console.log("Running Recognizing step");
     const result = recognitionEventArgs.result;
     const phraseDiv = document.querySelector<HTMLDivElement>(`#${inputId}`)!;
     // Update the hypothesis line in the phrase/result view (only have one)

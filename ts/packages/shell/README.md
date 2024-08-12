@@ -38,6 +38,14 @@ To set up Azure [Speech to Text service](https://learn.microsoft.com/en-us/azure
 | `SPEECH_SDK_KEY`      | API key                                |
 | `SPEECH_SDK_REGION`   | Region of the service (e.g. `westus2`) |
 
+## Keyless API Access
+
+If you would like to enable keyless Speech API access you must have performed the following steps:
+    - Specify `identity` as the API key in the `.env` file. 
+    - Configure your speech API to support Azure Entra RBAC and add the necessary users/groups with the necessary permissions 
+(typically `Cognitive Services Speech User` or `Cognitive Services Speech Contributor`). More information on congitive services roles [here](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/role-based-access-control).
+    - If you are using JIT access elevate prior to calling the speech API.
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
