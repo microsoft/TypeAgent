@@ -96,7 +96,7 @@ You can use Azure Key Vault to store keys. To get the required config and keys s
 
 - Install [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
 - Run `az login` to login using the CLI. Run `az account set --subscription <Subscription Id>` to set the subscription.
-- Run `npm run getKeys` at the root to pull secret from our team key vault.
+- Run `npm run getKeys` at the root to pull secret from our team key vault. GetKeys will elevate JIT access if required. 
 
 Note: Shared keys doesn't include Spotify integration, which can be created using the the [Spotify API keys instructions](./packages/agents/player/README.md)
 
