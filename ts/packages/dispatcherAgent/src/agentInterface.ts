@@ -92,12 +92,19 @@ export type StorageListOptions = {
     dirs?: boolean;
 };
 
+export interface TokenCachePersistence {
+    load(): Promise<string | null>;
+    save(token: string): Promise<void>;
+}
+
 export interface Storage {
     read(storagePath: string, options: StorageEncoding): Promise<string>;
     write(storagePath: string, data: string): Promise<void>;
     list(storagePath: string, options?: StorageListOptions): Promise<string[]>;
     exists(storagePath: string): boolean;
     delete(storagePath: string): Promise<void>;
+
+    getTokenCachePersistence(): Promise<TokenCachePersistence>;
 }
 
 // TODO: review if these should be exposed. Duplicated from dispatcher's interactiveIO.ts
