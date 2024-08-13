@@ -6,6 +6,7 @@ import { ElectronAPI } from "@electron-toolkit/preload";
 export type SpeechToken = {
     token: string;
     expire: number;
+    endpoint: string;
     region: string;
 };
 

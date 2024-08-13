@@ -74,8 +74,7 @@ export function getAudioConfig() {
 export function getSpeechConfig(token: SpeechToken | undefined) {
     let speechConfig: speechSDK.SpeechConfig;
     if (token) {
-        // TODO: get resource ID from endpoint
-        speechConfig = speechSDK.SpeechConfig.fromAuthorizationToken(`aad#${resourceId}#${token.token}`, token.region)
+        speechConfig = speechSDK.SpeechConfig.fromAuthorizationToken(`aad#${token.endpoint}#${token.token}`, token.region)
     } else {
         return undefined;
     }
@@ -122,6 +121,11 @@ function onRecognizedResult(
             speechSDK.CancellationDetails.fromResult(result);
         if (cancelationResult.reason == speechSDK.CancellationReason.Error) {
             errorMessage = `[ERROR: ${cancelationResult.errorDetails} (code:${cancelationResult.ErrorCode})]`;
+
+            if (cancelationResult.ErrorCode == 4) {
+                errorMessage += `Did you forget to elevate your RBAC role?`;
+            }
+
         } else {
             errorMessage = `[ERROR: Cancelled]`;
         }

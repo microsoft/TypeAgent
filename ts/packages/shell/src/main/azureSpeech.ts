@@ -11,6 +11,7 @@ import {
 export interface TokenResponse {
     token: string;
     region: string;
+    endpoint: string;
 }
 
 const defaultVoiceName = "en-US-RogerNeural";
@@ -27,7 +28,7 @@ export class AzureSpeech {
     private constructor(
         private readonly subscriptionKey: string,
         private readonly region: string,
-        private readonly resourceId: string
+        private readonly endpoint: string
     ) {
         // ...
     }
@@ -35,16 +36,16 @@ export class AzureSpeech {
     public static initializeAsync = async (config: {
         azureSpeechSubscriptionKey: string;
         azureSpeechRegion: string;
-        azureResourceId: string;
+        azureSpeechEndpoint: string;
     }): Promise<void> => {
         if (AzureSpeech.instance) {
             return;
         }
-        const { azureSpeechSubscriptionKey, azureSpeechRegion, azureResourceId } = config;
+        const { azureSpeechSubscriptionKey, azureSpeechRegion, azureSpeechEndpoint: azureSpeechEndpoint } = config;
         AzureSpeech.instance = new AzureSpeech(
             azureSpeechSubscriptionKey,
             azureSpeechRegion,
-            azureResourceId
+            azureSpeechEndpoint
         );
     };
 
@@ -82,6 +83,7 @@ export class AzureSpeech {
         const result: TokenResponse = {
             token: tokenResult.data,
             region: this.region,
+            endpoint: this.endpoint
         };
 
         return result;    
@@ -96,8 +98,8 @@ export class AzureSpeech {
             }),
         };
 
-        const endpoint = `https://${this.region}.api.cognitive.microsoft.com/sts/v1.0/issuetoken`;
-        const response = await fetch(endpoint, options);
+        const tokenEndpoint = `https://${this.region}.api.cognitive.microsoft.com/sts/v1.0/issuetoken`;
+        const response = await fetch(tokenEndpoint, options);
         if (!response.ok) {
             throw new Error(
                 `AzureSpeech: getTokenAsync: ${response.status} ${response.statusText}`,
@@ -107,6 +109,7 @@ export class AzureSpeech {
         const result: TokenResponse = {
             token: await response.text(),
             region: this.region,
+            endpoint: this.endpoint
         };
 
         return result;
@@ -123,7 +126,7 @@ export class AzureSpeech {
         );
 
         if (this.subscriptionKey.toLowerCase() == IdentityApiKey.toLowerCase()) {
-            speechConfig = sdk.SpeechConfig.fromAuthorizationToken(`aad#${this.resourceId}#${this.token}`, this.region)
+            speechConfig = sdk.SpeechConfig.fromAuthorizationToken(`aad#${this.endpoint}#${this.token}`, this.region)
         }
 
         const synthesizer = new sdk.SpeechSynthesizer(speechConfig);
