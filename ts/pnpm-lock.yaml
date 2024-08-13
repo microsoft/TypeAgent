@@ -1009,6 +1009,9 @@ importers:
 
   packages/dispatcher:
     dependencies:
+      '@azure/msal-node-extensions':
+        specifier: ^1.0.12
+        version: 1.0.12
       agent-cache:
         specifier: workspace:*
         version: link:../cache

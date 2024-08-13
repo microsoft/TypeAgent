@@ -17,8 +17,6 @@ To turn on Spotify in the shell or interactive mode, run `@config spotify on`. T
 
 You can use `@config spotify off`, to turn off running the action.
 
-Alternatively, you can run a backend to do the call to Spotify. In the [music player package](../player/), run `node dist/main.js` to start the backend server in a separate shell. Then in interactive mode run `@config spotify backend` to turn on Spotify using the backend.
-
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft

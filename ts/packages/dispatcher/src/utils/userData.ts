@@ -95,7 +95,7 @@ function saveGlobalUserConfig(userConfig: GlobalUserConfig) {
 function migrateOldUserDataDir() {
     const newDir = getUserDataDir();
     const oldDir = path.join(os.homedir(), ".aisystems");
-    if (fs.existsSync(oldDir)) {
+    if (fs.existsSync(oldDir) && !fs.existsSync(newDir)) {
         fs.renameSync(oldDir, newDir);
     }
 }
