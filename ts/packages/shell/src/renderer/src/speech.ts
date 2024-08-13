@@ -160,7 +160,7 @@ export function recognizeOnce(
     button.disabled = true;
     button.children[0].classList.add("chat-message-hidden");
     button.children[1].classList.remove("chat-message-hidden");
-    
+
     if (useLocalWhisper) {
         const reco = new WhisperRecognizer();
 

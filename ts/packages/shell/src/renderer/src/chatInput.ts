@@ -2,7 +2,11 @@
 // Licensed under the MIT License.
 
 import { ChatView, setContent } from "./chatView";
-import { iconMicrophone, iconMicrophoneListening, iconMicrophoneDisabled } from "./icon";
+import {
+    iconMicrophone,
+    iconMicrophoneListening,
+    iconMicrophoneDisabled,
+} from "./icon";
 import { getClientAPI } from "./main";
 import { SpeechInfo, recognizeOnce } from "./speech";
 
@@ -171,17 +175,24 @@ export class ChatInput {
             curSpeechToken === undefined ||
             curSpeechToken.expire <= Date.now()
         ) {
-            getClientAPI().getSpeechToken().then(result => {
-                speechInfo.speechToken = result;
+            getClientAPI()
+                .getSpeechToken()
+                .then((result) => {
+                    speechInfo.speechToken = result;
 
-                if (result == undefined) {
-                    const button = document.querySelector<HTMLButtonElement>(`#${buttonId}`)!;
-                    button.disabled = true;
-                    button.children[0].classList.add("chat-message-hidden");
-                    button.children[1].classList.add("chat-message-hidden");
-                    button.children[2].classList.remove("chat-message-hidden");                    
-                }
-            })
+                    if (result == undefined) {
+                        const button =
+                            document.querySelector<HTMLButtonElement>(
+                                `#${buttonId}`,
+                            )!;
+                        button.disabled = true;
+                        button.children[0].classList.add("chat-message-hidden");
+                        button.children[1].classList.add("chat-message-hidden");
+                        button.children[2].classList.remove(
+                            "chat-message-hidden",
+                        );
+                    }
+                });
             // speechInfo.speechToken =
             //     await getClientAPI().getSpeechToken();
         }
