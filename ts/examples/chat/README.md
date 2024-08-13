@@ -1,9 +1,9 @@
-## Chat example
+## Chat test app
 
-The chat example explores ideas in using schema and TypeChat for the following scenarios:
+This sample app is used to interactive test the following packages:
 
-- Using [LLMs for code analysis](./src/codeChat/)
-- Implementing **structured** [conversation memory](./src/memory/) and RAG.
+- [Code Processor](../../packages/codeProcessor/)
+- [Knowledge Processor](../../packages/knowledgeProcessor/)
 
 ## Trademarks
 

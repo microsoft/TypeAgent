@@ -1,13 +1,8 @@
-# knowledge-processor
+## Playground
 
-**Sample code** that explores how to:
+This example explores how to use TypeChat to implement interactive chat with history.
 
-- Use TypeChat to extract **_structured knowledge_** from conversations, transcripts and documents.
-- Implement a **Structured RAG**. The exploration includes ideas on how to:
-  - Index the extracted knowledge and source text for retrieval.
-  - Use TypeChat to generate **structured queries** for structured knowledge.\*\*
-  - Use structured objects to **_answer_** questions.
-  - Use structured indices to improve precision.
+The example is **sample code** and not intended to be implemented in real-world settings.
 
 ## Trademarks
 
