@@ -72,18 +72,21 @@ function copyActionValue(
         case "array":
             return {
                 type: "array",
-                elementType: copyActionValue(value, field.elementType),
+                elementType: field.elementType,
+                elements: (value as ParamFieldType[]).map((v) =>
+                    copyActionValue(v, field.elementType),
+                ),
             };
         case "object":
             const fields: { [key: string]: TemplateParamFieldOpt } = {};
             for (const [key, templateField] of Object.entries(field.fields)) {
-                fields[key] = {
-                    optional: templateField.optional ?? false,
-                    field: copyActionValue(
-                        (value as ParamObjectType)[key],
-                        templateField.field,
-                    ),
-                };
+                const fieldValue = (value as ParamObjectType)[key];
+                if (fieldValue !== undefined) {
+                    fields[key] = {
+                        optional: templateField.optional ?? false,
+                        field: copyActionValue(fieldValue, templateField.field),
+                    };
+                }
             }
             return {
                 type: "object",
@@ -172,7 +175,7 @@ export class Action {
         if (entries.length !== 0) {
             for (const [key, value] of entries.sort()) {
                 const field = parameterStructure.fields[key];
-                if (field) {
+                if (field && value) {
                     pstructCopy.fields[key] = {
                         optional: field.optional ?? false,
                         field: copyActionValue(value, field.field),

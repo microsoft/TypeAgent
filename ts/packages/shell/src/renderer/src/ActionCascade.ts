@@ -10,14 +10,10 @@ import {
 import { iconX } from "./icon";
 
 export class ActionCascade {
-    container: HTMLDivElement;
-
     constructor(
         public actionTemplates: ActionTemplateSequence,
         public editMode = false,
-    ) {
-        this.container = this.toHTML();
-    }
+    ) {}
 
     public scalarToHTML(
         li: HTMLLIElement,
@@ -51,22 +47,22 @@ export class ActionCascade {
         paramValue: TemplateParamFieldOpt,
         topLevel = false,
     ) {
-        const li = document.createElement("li");
+        const liSeq: HTMLLIElement[] = [];
         switch (paramValue.field.type) {
-            case "array":
+            case "array": {
                 if (paramValue.field.elements) {
                     const elts = paramValue.field.elements;
-                    const ul = document.createElement("ul");
                     for (let i = 0; i < elts.length; i++) {
                         const arrayKey = paramName
                             ? `${paramName}[${i}]`
                             : i.toString();
-                        const li = this.paramToHTML(arrayKey, {
-                            field: paramValue[i],
+                        const innerSeq = this.paramToHTML(arrayKey, {
+                            field: paramValue.field.elements[i],
                         } as TemplateParamFieldOpt);
-                        ul.appendChild(li);
+                        for (const elt of innerSeq) {
+                            liSeq.push(elt);
+                        }
                     }
-                    li.appendChild(ul);
                 }
                 if (this.editMode) {
                     // add a button to add more elements
@@ -75,26 +71,36 @@ export class ActionCascade {
                     addButton.onclick = () => {
                         console.log("add");
                     };
+                    const li = document.createElement("li");
                     li.appendChild(addButton);
+                    liSeq.push(li);
                 }
                 break;
+            }
             case "object": {
+                const li = document.createElement("li");
                 li.innerText = paramName;
                 const ul = document.createElement("ul");
                 const fields = paramValue.field.fields;
                 for (const [k, v] of Object.entries(fields)) {
-                    const innerLi = this.paramToHTML(k, v);
-                    ul.appendChild(innerLi);
+                    const innerLiSeq = this.paramToHTML(k, v);
+                    for (const innerLi of innerLiSeq) {
+                        ul.appendChild(innerLi);
+                    }
                 }
                 li.appendChild(ul);
+                liSeq.push(li);
                 break;
             }
-            default:
+            default: {
                 // TODO: handle input case and undefined value
+                const li = document.createElement("li");
                 this.scalarToHTML(li, paramName, paramValue.field, topLevel);
+                liSeq.push(li);
                 break;
+            }
         }
-        return li;
+        return liSeq;
     }
 
     public toHTML() {
@@ -118,8 +124,11 @@ export class ActionCascade {
             div.appendChild(preface);
         }
         for (const actionTemplate of this.actionTemplates.templates) {
+            const agentDiv = document.createElement("div");
+            agentDiv.innerText = `Agent: ${actionTemplate.agent}`;
+            div.appendChild(agentDiv);
             const actionDiv = document.createElement("div");
-            actionDiv.innerText = `Action: ${actionTemplate.agent}.${actionTemplate.name}`;
+            actionDiv.innerText = `Action: ${actionTemplate.name}`;
             div.appendChild(actionDiv);
             // now the parameters
             const entries = Object.entries(
@@ -131,8 +140,10 @@ export class ActionCascade {
                 const ul = document.createElement("ul");
                 // TODO: split the entries by optional and required
                 for (const [key, value] of entries.sort()) {
-                    const li = this.paramToHTML(key, value, true);
-                    ul.appendChild(li);
+                    const liSeq = this.paramToHTML(key, value, true);
+                    for (const li of liSeq) {
+                        ul.appendChild(li);
+                    }
                 }
                 paramDiv.appendChild(ul);
                 div.appendChild(paramDiv);

@@ -77,7 +77,6 @@ async function confirmTranslation(
         (name) => !name.startsWith("system."),
     );
     const allActionInfo = getAllActionInfo(translatorNames);
-    //let displayMessages = actions.toHTML(prefaceSingle, prefaceMultiple);
     const templateSequence = actions.toTemplateSequence(
         prefaceSingle,
         prefaceMultiple,

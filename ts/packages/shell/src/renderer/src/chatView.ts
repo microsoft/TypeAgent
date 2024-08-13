@@ -612,6 +612,7 @@ export class ChatView {
             if (actionTemplates !== undefined) {
                 this.actionCascade = new ActionCascade(actionTemplates);
                 const actionDiv = this.actionCascade.toHTML();
+                actionDiv.className = "action-text";
                 actionContainer.appendChild(actionDiv);
             }
         } else {
