@@ -26,6 +26,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@azure/msal-node-extensions": "^1.0.12",
     "agent-cache": "workspace:*",
     "aiclient": "workspace:*",
     "browser-automation": "workspace:*",

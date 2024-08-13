@@ -1,7 +1,7 @@
 # Dispatcher Agent Interfaces and Utilities
 
 This package contains interface definitions and utilities for implementing a Dispatcher Agent.
-[List](../list/) dispatcher agent is a good example and initial template for building a dispatcher agent.
+[List](../agents/list/) dispatcher agent is a good example and initial template for building a dispatcher agent.
 Go to the [dispatcher README](../dispatcher/README.md) for instructions on how to add a dispatcher agent.
 
 ## Dispatcher Agent

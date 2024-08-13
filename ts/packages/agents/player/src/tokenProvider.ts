@@ -8,16 +8,12 @@ import axios, { AxiosRequestConfig } from "axios";
 import { translateAxiosError } from "./utils.js";
 import { Server } from "http";
 import querystring from "querystring";
+import { TokenCachePersistence } from "dispatcher-agent";
 
 const tokenUri = "https://accounts.spotify.com/api/token";
 function getExpiredDate(expiresIn: number) {
     // Leave one minute buffer
     return Date.now() + (expiresIn - 60) * 1000;
-}
-
-export interface RefreshTokenStorage {
-    load(): Promise<string | undefined>;
-    save(token: string): Promise<void>;
 }
 
 export class TokenProvider {
@@ -33,7 +29,7 @@ export class TokenProvider {
         private readonly clientSecret: string,
         private readonly redirectPort: string,
         private readonly scopes: string[],
-        private readonly refreshTokenStorage?: RefreshTokenStorage,
+        private readonly tokenCachePersistence?: TokenCachePersistence,
     ) {}
 
     private getAxiosRequestConfig(
@@ -148,7 +144,8 @@ export class TokenProvider {
             translateAxiosError(e);
         }
 
-        this.saveRefreshToken();
+        // Note that we don't await this call, and error is ignored.
+        this.saveRefreshToken().catch();
 
         return this.userAccessToken!;
     }
@@ -196,9 +193,16 @@ export class TokenProvider {
     private async loadRefreshToken() {
         if (
             this.userRefreshToken === undefined &&
-            this.refreshTokenStorage !== undefined
+            this.tokenCachePersistence !== undefined
         ) {
-            this.userRefreshToken = await this.refreshTokenStorage.load();
+            try {
+                const tokenCacheString =
+                    await this.tokenCachePersistence.load();
+                if (tokenCacheString !== null) {
+                    const tokenCache: TokenCache = JSON.parse(tokenCacheString);
+                    this.userRefreshToken = tokenCache.refreshToken;
+                }
+            } catch (e) {}
         }
         return this.userRefreshToken;
     }
@@ -206,9 +210,16 @@ export class TokenProvider {
     private async saveRefreshToken() {
         if (
             this.userRefreshToken !== undefined &&
-            this.refreshTokenStorage !== undefined
+            this.tokenCachePersistence !== undefined
         ) {
-            await this.refreshTokenStorage.save(this.userRefreshToken);
+            const tokenCache: TokenCache = {
+                refreshToken: this.userRefreshToken,
+            };
+            await this.tokenCachePersistence.save(JSON.stringify(tokenCache));
         }
     }
+}
+
+interface TokenCache {
+    refreshToken: string;
 }

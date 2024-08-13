@@ -10,6 +10,7 @@ import { getClient as getPIMClient } from "./lib/pimClient.mjs";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import chalk from "chalk";
+import { exit } from "node:process";
 
 const require = createRequire(import.meta.url);
 const config = require("./getKeys.config.json");
@@ -19,7 +20,8 @@ const dotenvPath = path.resolve(__dirname, config.defaultDotEnvPath);
 const sharedKeys = config.env.shared;
 const privateKeys = config.env.private;
 const deleteKeys = config.env.delete;
-const sharedVault = config.vault.shared;
+let sharedVault = config.vault.shared;
+let privateVault = undefined;
 
 async function getSecretListWithElevation(keyVaultClient, vaultName) {
     try {
@@ -44,9 +46,10 @@ async function getSecretListWithElevation(keyVaultClient, vaultName) {
     }
 }
 
-async function getSecrets(keyVaultClient, vaultName) {
+async function getSecrets(keyVaultClient, shared) {
+    const vaultName = shared ? sharedVault : privateVault;
     console.log(
-        `Getting existing secrets from ${chalk.cyanBright(vaultName)} key vault.`,
+        `Getting existing ${shared ? "shared" : "private"} secrets from ${chalk.cyanBright(vaultName)} key vault.`,
     );
     const secretList = await getSecretListWithElevation(
         keyVaultClient,
@@ -122,7 +125,7 @@ class AzCliKeyVaultClient {
     async writeSecret(vaultName, secretName, secretValue) {
         return JSON.parse(
             await execAsync(
-                `az keyvault secret set --vault-name ${vaultName} --name ${secretName} --value ${secretValue}`,
+                `az keyvault secret set --vault-name ${vaultName} --name ${secretName} --value '${secretValue}'`,
             ),
         );
     }
@@ -165,7 +168,9 @@ async function pushSecret(
     secrets,
     secretKey,
     value,
+    shared = true,
 ) {
+    const suffix = shared ? "" : " (private)";
     const secretValue = secrets.get(secretKey);
     if (secretValue === value) {
         return 0;
@@ -178,9 +183,9 @@ async function pushSecret(
             console.log("Skipping...");
             return -1;
         }
-        console.log(`  Overwriting ${secretKey}`);
+        console.log(`  Overwriting ${secretKey}${suffix}`);
     } else {
-        console.log(`  Creating ${secretKey}`);
+        console.log(`  Creating ${secretKey}${suffix}`);
     }
     await keyVaultClient.writeSecret(vault, secretKey, value);
     return 1;
@@ -189,7 +194,10 @@ async function pushSecret(
 async function pushSecrets() {
     const dotEnv = await readDotenv();
     const keyVaultClient = await getKeyVaultClient();
-    const secrets = new Map(await getSecrets(keyVaultClient, sharedVault));
+    const sharedSecrets = new Map(await getSecrets(keyVaultClient, true));
+    const privateSecrets = new Map(
+        privateVault ? await getSecrets(keyVaultClient, false) : undefined,
+    );
 
     console.log(`Pushing secrets from ${dotenvPath} to key vault.`);
     let updated = 0;
@@ -203,7 +211,7 @@ async function pushSecrets() {
                     stdio,
                     keyVaultClient,
                     sharedVault,
-                    secrets,
+                    sharedSecrets,
                     secretKey,
                     value,
                 );
@@ -214,7 +222,25 @@ async function pushSecrets() {
                     skipped++;
                 }
             } else if (privateKeys.includes(envKey)) {
-                console.log(`  Skipping private key ${envKey}.`);
+                if (privateVault === undefined) {
+                    console.log(`  Skipping private key ${envKey}.`);
+                    continue;
+                }
+                const result = await pushSecret(
+                    stdio,
+                    keyVaultClient,
+                    privateVault,
+                    privateSecrets,
+                    secretKey,
+                    value,
+                    false,
+                );
+                if (result === 1) {
+                    updated++;
+                }
+                if (result === -1) {
+                    skipped++;
+                }
             } else {
                 console.log(`  Skipping unknown key ${envKey}.`);
             }
@@ -234,29 +260,49 @@ async function pushSecrets() {
     }
 }
 
-async function pullSecrets() {
-    const dotEnv = new Map(await readDotenv());
-    const keyVaultClient = await getKeyVaultClient();
-    const secrets = await getSecrets(keyVaultClient, sharedVault);
+async function pullSecretsFromVault(keyVaultClient, shared, dotEnv) {
+    const vaultName = shared ? sharedVault : privateVault;
+    const keys = shared ? sharedKeys : privateKeys;
+    const secrets = await getSecrets(keyVaultClient, shared);
     if (secrets.length === 0) {
-        console.log("WARNING: No secrets found in key vault.");
-        return;
+        console.log(
+            chalk.yellow(
+                `WARNING: No secrets found in key vault ${chalk.cyanBright(vaultName)}.`,
+            ),
+        );
+        return undefined;
     }
 
-    console.log(
-        `Pulling secrets from key vault to ${chalk.cyanBright(dotenvPath)}`,
-    );
     let updated = 0;
-
     for (const [secretKey, value] of secrets) {
         const envKey = toEnvKey(secretKey);
-        if (sharedKeys.includes(envKey) && dotEnv.get(envKey) !== value) {
+        if (keys.includes(envKey) && dotEnv.get(envKey) !== value) {
             console.log(`  Updating ${envKey}`);
             dotEnv.set(envKey, value);
             updated++;
         }
     }
+    return updated;
+}
 
+async function pullSecrets() {
+    const dotEnv = new Map(await readDotenv());
+    const keyVaultClient = await getKeyVaultClient();
+    console.log(`Pulling secrets to ${chalk.cyanBright(dotenvPath)}`);
+    const sharedUpdated = await pullSecretsFromVault(
+        keyVaultClient,
+        true,
+        dotEnv,
+    );
+    const privateUpdated = privateVault
+        ? await pullSecretsFromVault(keyVaultClient, false, dotEnv)
+        : undefined;
+
+    if (sharedUpdated === undefined && privateUpdated === undefined) {
+        throw new Error("No secrets found in key vaults.");
+    }
+
+    let updated = (sharedUpdated ?? 0) + (privateUpdated ?? 0);
     for (const key of deleteKeys) {
         if (dotEnv.has(key)) {
             console.log(`  Deleting ${key}`);
@@ -282,8 +328,34 @@ async function pullSecrets() {
     );
 }
 
+const commands = ["push", "pull", "help"];
 (async () => {
-    const command = process.argv[2];
+    const command = commands.includes(process.argv[2])
+        ? process.argv[2]
+        : undefined;
+    const start = command !== undefined ? 3 : 2;
+    for (let i = start; i < process.argv.length; i++) {
+        const arg = process.argv[i];
+        if (arg === "--vault") {
+            sharedVault = process.argv[i + 1];
+            if (sharedVault === undefined) {
+                throw new Error("Missing value for --vault");
+            }
+            i++;
+            continue;
+        }
+
+        if (arg === "--private") {
+            privateVault = process.argv[i + 1];
+            if (privateVault === undefined) {
+                throw new Error("Missing value for --private");
+            }
+            i++;
+            continue;
+        }
+
+        throw new Error(`Unknown argument: ${arg}`);
+    }
     switch (command) {
         case "push":
             await pushSecrets();
@@ -305,12 +377,14 @@ async function pullSecrets() {
         )
     ) {
         console.error(
-            `ERROR: Azure CLI is not installed. Install it and run 'az login' before running this tool.`,
+            chalk.red(
+                `ERROR: Azure CLI is not installed. Install it and run 'az login' before running this tool.`,
+            ),
         );
         // eslint-disable-next-line no-undef
         exit(0);
     }
 
-    console.error(`FATAL ERROR: ${e.stack}`);
+    console.error(chalk.red(`FATAL ERROR: ${e.stack}`));
     process.exit(-1);
 });

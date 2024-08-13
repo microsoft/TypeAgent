@@ -10,22 +10,25 @@ import {
     dateTime,
 } from "typeagent";
 import {
+    KeyValueIndex,
     KnowledgeStore,
     TextIndex,
     TextIndexSettings,
+    createIndexFolder,
     createKnowledgeStore,
     createTextIndex,
     searchIndex,
 } from "../knowledgeIndex.js";
 import { Action, VerbTense } from "./knowledgeSchema.js";
 import path from "path";
-import { TextBlock, TextBlockType } from "../text.js";
 import { ActionFilter } from "./knowledgeSearchSchema.js";
-import { getRangeOfTemporalSequence } from "../temporal.js";
+import { TemporalLog, getRangeOfTemporalSequence } from "../temporal.js";
 import {
-    SetOp,
+    addToSet,
+    intersect,
     intersectArrays,
-    unionArrays,
+    intersectMultiple,
+    unionMultiple,
     uniqueFrom,
 } from "../setOperations.js";
 import { EntityIndex } from "./entities.js";
@@ -33,7 +36,7 @@ import { ExtractedAction, actionVerbsToString } from "./knowledge.js";
 
 export interface ActionSearchOptions extends SearchOptions {
     verbSearchOptions?: SearchOptions | undefined;
-    entitySearchOptions?: SearchOptions | undefined;
+    loadActions?: boolean | undefined;
 }
 
 export interface ActionSearchResult<TActionId = any> {
@@ -52,17 +55,7 @@ function createSearchResults<TActionId = any>(): ActionSearchResult<TActionId> {
     };
 }
 
-export type ConcreteActionFilter<TEntityId = any> = {
-    // Each verb is typically a word
-    verbs: string[];
-    verbTense: VerbTense;
-    // ASSUMPTION: the following ID arrays are SORTED
-    subjectEntityIds?: TEntityId[] | undefined;
-    objectEntityIds?: TEntityId[] | undefined;
-    indirectObjectEntityIds?: TEntityId[] | undefined;
-};
-
-export interface ActionIndex<TActionId = any, TEntityId = any, TSourceId = any>
+export interface ActionIndex<TActionId = any, TSourceId = any>
     extends KnowledgeStore<ExtractedAction<TSourceId>, TActionId> {
     readonly verbIndex: TextIndex<TActionId>;
 
@@ -81,35 +74,57 @@ export interface ActionIndex<TActionId = any, TEntityId = any, TSourceId = any>
         tense?: VerbTense,
         options?: SearchOptions,
     ): Promise<ScoredItem<TActionId[]>[]>;
+    loadSourceIds(
+        sourceIdLog: TemporalLog<TSourceId>,
+        results: ActionSearchResult<TActionId>[],
+        unique?: Set<TSourceId>,
+    ): Promise<Set<TSourceId> | undefined>;
 }
 
-export async function createActionIndex<TEntityId = any, TSourceId = any>(
+export async function createActionIndex<TSourceId = any>(
     settings: TextIndexSettings,
-    getEntityIndex: () => Promise<EntityIndex<TEntityId>>,
+    getNameIndex: () => Promise<TextIndex<string>>,
     rootPath: string,
     folderSettings?: ObjectFolderSettings,
     fSys?: FileSystem,
-): Promise<ActionIndex<string, string, TSourceId>> {
+): Promise<ActionIndex<string, TSourceId>> {
     type ActionId = string;
-    const actionStore = await createKnowledgeStore<ExtractedAction<TSourceId>>(
-        settings,
-        rootPath,
-        folderSettings,
-        fSys,
-    );
-
-    const verbIndex = await createTextIndex<ActionId>(
-        settings,
-        path.join(rootPath, "verbs"),
-        folderSettings,
-        fSys,
-    );
-    const subjectIndex = await createTextIndex<ActionId>(
-        settings,
-        path.join(rootPath, "subjects"),
-        folderSettings,
-        fSys,
-    );
+    // Initialize indexes
+    const [
+        actionStore,
+        verbIndex,
+        subjectIndex,
+        objectIndex,
+        indirectObjectIndex,
+    ] = await Promise.all([
+        createKnowledgeStore<ExtractedAction<TSourceId>>(
+            settings,
+            rootPath,
+            folderSettings,
+            fSys,
+        ),
+        createTextIndex<ActionId>(
+            settings,
+            path.join(rootPath, "verbs"),
+            folderSettings,
+            fSys,
+        ),
+        createIndexFolder<ActionId>(
+            path.join(rootPath, "subjects"),
+            folderSettings,
+            fSys,
+        ),
+        createIndexFolder<ActionId>(
+            path.join(rootPath, "objects"),
+            folderSettings,
+            fSys,
+        ),
+        createIndexFolder<ActionId>(
+            path.join(rootPath, "indirectObjects"),
+            folderSettings,
+            fSys,
+        ),
+    ]);
     return {
         ...actionStore,
         verbIndex,
@@ -119,6 +134,7 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         getSourceIds,
         search,
         searchVerbs,
+        loadSourceIds,
     };
 
     async function add(
@@ -128,9 +144,27 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         id = await actionStore.add(action, id);
         const postings = [id];
 
+        const names = await getNameIndex();
         await Promise.all([
             addVerb(action.value, postings),
-            addSubject(action.value, postings),
+            addName(
+                names,
+                subjectIndex,
+                action.value.subjectEntityName,
+                postings,
+            ),
+            addName(
+                names,
+                objectIndex,
+                action.value.objectEntityName,
+                postings,
+            ),
+            addName(
+                names,
+                indirectObjectIndex,
+                action.value.indirectObjectEntityName,
+                postings,
+            ),
         ]);
         return id;
     }
@@ -177,12 +211,17 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         await verbIndex.put(fullVerb, actionIds);
     }
 
-    async function addSubject(
-        action: Action,
+    async function addName(
+        names: TextIndex<string>,
+        nameIndex: KeyValueIndex<string, ActionId>,
+        name: string,
         actionIds: ActionId[],
     ): Promise<void> {
-        if (action.subjectEntityName) {
-            await subjectIndex.put(action.subjectEntityName, actionIds);
+        if (name) {
+            const nameId = await names.getId(name);
+            if (nameId) {
+                await nameIndex.put(actionIds, nameId);
+            }
         }
     }
 
@@ -191,25 +230,33 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         options: ActionSearchOptions,
     ): Promise<ActionSearchResult<ActionId>> {
         const results = createSearchResults<ActionId>();
-
-        const [subjectToActionIds, verbToActionIds] = await Promise.all([
-            matchSubjects(filter, options),
+        const names = await getNameIndex();
+        const [
+            subjectToActionIds,
+            objectToActionIds,
+            indirectObjectToActionIds,
+            verbToActionIds,
+        ] = await Promise.all([
+            matchName(names, subjectIndex, filter.subjectEntityName, options),
+            matchName(names, objectIndex, filter.objectEntityName, options),
+            matchName(
+                names,
+                indirectObjectIndex,
+                filter.indirectObjectEntityName,
+                options,
+            ),
             matchVerbs(filter, options),
         ]);
-        results.actionIds = intersectArrays(
-            subjectToActionIds,
-            verbToActionIds,
-        );
-        if (results.actionIds) {
+        results.actionIds = [
+            ...intersectMultiple(
+                subjectToActionIds,
+                objectToActionIds,
+                indirectObjectToActionIds,
+                verbToActionIds,
+            ),
+        ];
+        if (options.loadActions && results.actionIds) {
             results.actions = await getActions(results.actionIds);
-        }
-        const [objects, indirectObjects] = await Promise.all([
-            resolveObjects(filter, options),
-            resolveIndirectObjects(filter, options),
-        ]);
-        if (results.actions && results.actions.length > 0) {
-            // Todo: index
-            filterResults(results, filter, objects, indirectObjects);
         }
         return results;
     }
@@ -229,23 +276,37 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         );
     }
 
-    async function matchSubjects(
-        filter: ActionFilter,
+    async function matchName(
+        names: TextIndex<string>,
+        nameIndex: KeyValueIndex<string, ActionId>,
+        name: string | undefined,
         options: ActionSearchOptions,
-    ): Promise<ActionId[] | undefined> {
-        return filter.subjectEntityName
-            ? subjectIndex.getNearest(
-                  filter.subjectEntityName,
-                  options.maxMatches,
-                  options.minScore,
-              )
-            : undefined;
+    ): Promise<IterableIterator<ActionId> | undefined> {
+        if (name) {
+            // Possible names of entities
+            const nameIds = await names.getNearestText(
+                name,
+                options.maxMatches,
+                options.minScore,
+            );
+            if (nameIds && nameIds.length > 0) {
+                // Load all actions for those entities
+                const matches = await nameIndex.getMultiple(
+                    nameIds,
+                    settings.concurrency,
+                );
+                if (matches && matches.length > 0) {
+                    return unionMultiple(...matches);
+                }
+            }
+        }
+        return undefined;
     }
 
     async function matchVerbs(
         filter: ActionFilter,
         options: ActionSearchOptions,
-    ): Promise<ActionId[] | undefined> {
+    ): Promise<ActionId[]> {
         if (filter.verbs && filter.verbs.length > 0) {
             const verbOptions = options.verbSearchOptions ?? options;
             return verbIndex.getNearest(
@@ -254,79 +315,37 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
                 verbOptions.minScore,
             );
         }
-        return undefined;
+        return [];
     }
 
-    async function resolveObjects(
-        filter: ActionFilter,
-        options: ActionSearchOptions,
-    ) {
-        if (filter.objectEntityName) {
-            return resolveEntityNames(filter.objectEntityName!, options);
+    async function loadSourceIds(
+        sourceIdLog: TemporalLog<TSourceId>,
+        results: ActionSearchResult<ActionId>[],
+        unique?: Set<TSourceId>,
+    ): Promise<Set<TSourceId> | undefined> {
+        if (results.length === 0) {
+            return unique;
         }
-        return undefined;
-    }
-
-    async function resolveIndirectObjects(
-        filter: ActionFilter,
-        options: ActionSearchOptions,
-    ) {
-        if (filter.indirectObjectEntityName) {
-            return resolveEntityNames(
-                filter.indirectObjectEntityName!,
-                options,
-            );
-        }
-        return undefined;
-    }
-
-    function filterResults(
-        results: ActionSearchResult<ActionId>,
-        filter: ActionFilter,
-        objects: string[] | undefined,
-        indirectObjects: string[] | undefined,
-    ) {
-        for (let i = 0; i < results.actions!.length; ) {
-            const action = results.actions![i];
-            if (
-                !filterEntity(filter.objectEntityName, objects) ||
-                !filterEntity(filter.indirectObjectEntityName, indirectObjects)
-            ) {
-                removeMatch(results, i);
-            } else {
-                ++i;
-            }
-        }
-    }
-
-    function filterEntity(
-        name: string | undefined,
-        entityNames: string[] | undefined,
-    ): boolean {
-        if (entityNames && entityNames.length > 0) {
-            // TODO: consider switch to binary search
-            return name ? entityNames.indexOf(name.toLowerCase()) >= 0 : false;
-        }
-        return true;
-    }
-
-    function removeMatch(results: ActionSearchResult<ActionId>, at: number) {
-        results.actions!.splice(at, 1);
-        results.actionIds!.splice(at, 1);
-    }
-
-    async function resolveEntityNames(
-        name: string,
-        options: SearchOptions,
-    ): Promise<string[] | undefined> {
-        const entityIndex = await getEntityIndex();
-        const textIds = await entityIndex.nameIndex.getNearestText(
-            name,
-            options.maxMatches,
-            options.minScore,
+        unique ??= new Set<TSourceId>();
+        await asyncArray.forEachAsync(
+            results,
+            settings.concurrency,
+            async (a) => {
+                if (a.actionIds && a.actionIds.length > 0) {
+                    const ids = await getSourceIds(a.actionIds);
+                    const timeRange = a.getTemporalRange();
+                    if (timeRange) {
+                        const idRange = await sourceIdLog.getIdsInRange(
+                            timeRange.startDate,
+                            timeRange.stopDate,
+                        );
+                        addToSet(unique, intersect(ids, idRange));
+                    } else {
+                        addToSet(unique, ids);
+                    }
+                }
+            },
         );
-        return (await entityIndex.nameIndex.getTextMultiple(
-            textIds,
-        )) as string[];
+        return unique.size === 0 ? undefined : unique;
     }
 }
