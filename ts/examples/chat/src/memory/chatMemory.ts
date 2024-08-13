@@ -685,8 +685,18 @@ export async function runPlayChat(): Promise<void> {
                     defaultValue: "past",
                 },
                 count: {
-                    description: "Num matches",
+                    description: "Num action matches",
                     defaultValue: 1,
+                    type: "number",
+                },
+                verbCount: {
+                    description: "Num verb matches",
+                    defaultValue: 1,
+                    type: "number",
+                },
+                nameCount: {
+                    description: "Num name matches",
+                    defaultValue: 2,
                     type: "number",
                 },
                 showMessages: {
@@ -716,32 +726,28 @@ export async function runPlayChat(): Promise<void> {
                 }
                 return;
             }
-            if (namedArgs.subject || namedArgs.object) {
-                // Full search
-                const filter: conversation.ActionFilter = {
-                    filterType: "Action",
-                    subjectEntityName: namedArgs.subject,
-                    objectEntityName: namedArgs.object,
-                    verbs,
-                    verbTense,
-                };
-                const matches = await index.search(filter, {
-                    maxMatches: namedArgs.count,
-                    loadActions: true,
-                });
-                if (matches.actions) {
-                    for (const action of matches.actions) {
-                        printer.writeLine(conversation.actionToString(action));
-                    }
+            // Full search
+            const filter: conversation.ActionFilter = {
+                filterType: "Action",
+                subjectEntityName: namedArgs.subject,
+                objectEntityName: namedArgs.object,
+                verbs,
+                verbTense,
+            };
+            const matches = await index.search(filter, {
+                maxMatches: namedArgs.count,
+                verbSearchOptions: {
+                    maxMatches: namedArgs.verbCount,
+                },
+                nameSearchOptions: {
+                    maxMatches: namedArgs.nameCount,
+                },
+                loadActions: true,
+            });
+            if (matches.actions) {
+                for (const action of matches.actions) {
+                    printer.writeLine(conversation.actionToString(action));
                 }
-            } else {
-                await searchVerbs(
-                    index,
-                    verbs,
-                    verbTense,
-                    namedArgs.count,
-                    namedArgs.showMessages,
-                );
             }
         } else {
             // Just dump all actions
@@ -749,24 +755,6 @@ export async function runPlayChat(): Promise<void> {
                 writeExtractedAction(action);
             }
         }
-    }
-
-    async function searchVerbs(
-        index: conversation.ActionIndex,
-        verbs: string[],
-        tense: conversation.VerbTense,
-        maxMatches: number,
-        showMessages: boolean,
-    ) {
-        const matches = await index.searchVerbs(verbs, tense, {
-            maxMatches,
-        });
-        for (const match of matches) {
-            printer.writeInColor(chalk.green, `[${match.score}]`);
-            await writeActionsById(index, match.item, showMessages);
-            printer.writeLine();
-        }
-        return;
     }
 
     function searchDef(): CommandMetadata {
@@ -1214,7 +1202,7 @@ export async function runPlayChat(): Promise<void> {
             }
         }
     }
-
+    /*
     async function writeActionsById(
         index: knowLib.conversation.ActionIndex,
         actionIds: string[],
@@ -1242,6 +1230,7 @@ export async function runPlayChat(): Promise<void> {
             }
         }
     }
+    */
 
     function writeList(title: string, list?: string[]): void {
         if (list && list.length > 0) {
