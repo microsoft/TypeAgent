@@ -8,6 +8,7 @@ export * from "./knowledgeActions.js";
 
 export * from "./conversation.js";
 export * from "./dateTimeSchema.js";
+export * from "./messages.js";
 export * from "./entities.js";
 export * from "./topics.js";
 export * from "./topicSchema.js";
