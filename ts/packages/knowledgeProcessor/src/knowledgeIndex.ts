@@ -372,18 +372,25 @@ export async function createTextIndex<TSourceId = any>(
         maxMatches?: number,
         minScore?: number,
     ): Promise<TextId[]> {
-        // Check exact match first
-        let textId = textToId(value);
-        if (textId) {
-            return [textId];
-        }
         maxMatches ??= 1;
-        const matches = await semanticIndex.nearestNeighbors(
-            value,
-            maxMatches,
-            minScore,
-        );
-        return matches.map((m) => m.item);
+        // Check exact match first
+        let matchedIds: TextId[] = [];
+        let exactMatchId = textToId(value);
+        if (exactMatchId) {
+            matchedIds.push(exactMatchId);
+        }
+        if (maxMatches > 1) {
+            const nearestMatches = await semanticIndex.nearestNeighbors(
+                value,
+                maxMatches,
+                minScore,
+            );
+            if (nearestMatches.length > 0) {
+                const nearestIds = nearestMatches.map((m) => m.item).sort();
+                matchedIds = unionArrays(matchedIds, nearestIds) as TextId[];
+            }
+        }
+        return matchedIds;
     }
 
     async function getNearestTextMultiple(
