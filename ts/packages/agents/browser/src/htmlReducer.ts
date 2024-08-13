@@ -12,6 +12,7 @@ export class HTMLReducer {
         'link[rel="preconnect"]',
         'link[rel="manifest"]',
         'link[rel="dns-prefetch"]',
+        'link[rel="prefetch"]',
     ];
 
     metaTagSelectors: string[] = [
@@ -33,7 +34,9 @@ export class HTMLReducer {
 
     scriptTagsSelector: string[] = ["script"];
 
-    miscTagsToRemove: string[] = ["svg"];
+    cookieJarsSelector: string[] = ["cookieJar"];
+
+    miscTagsToRemove: string[] = ["svg", "cookieJar"];
 
     mediaElementSelectors: string[] = [
         "img",
@@ -86,6 +89,7 @@ export class HTMLReducer {
     removeSvgTags: boolean = true;
     removeScripts: boolean = true;
     removeDivs: boolean = true;
+    removeCookieJars: boolean = true;
 
     reduce(html: string): string {
         const domParser = new DOMParser();
@@ -96,6 +100,7 @@ export class HTMLReducer {
         this.removeNodes(doc, this.styleTagSelectors, this.removeStyleTags);
         this.removeNodes(doc, this.svgSelectors, this.removeSvgTags);
         this.removeNodes(doc, this.scriptTagsSelector, this.removeScripts);
+        this.removeNodes(doc, this.cookieJarsSelector, this.removeCookieJars);
 
         this.processMediaElements(doc);
         this.processClassAttributes(doc);

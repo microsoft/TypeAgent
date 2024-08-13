@@ -36,6 +36,7 @@ import { ExtractedAction, actionVerbsToString } from "./knowledge.js";
 
 export interface ActionSearchOptions extends SearchOptions {
     verbSearchOptions?: SearchOptions | undefined;
+    nameSearchOptions?: SearchOptions | undefined;
     loadActions?: boolean | undefined;
 }
 
@@ -69,11 +70,6 @@ export interface ActionIndex<TActionId = any, TSourceId = any>
         filter: ActionFilter,
         options: ActionSearchOptions,
     ): Promise<ActionSearchResult<TActionId>>;
-    searchVerbs(
-        verb: string[],
-        tense?: VerbTense,
-        options?: SearchOptions,
-    ): Promise<ScoredItem<TActionId[]>[]>;
     loadSourceIds(
         sourceIdLog: TemporalLog<TSourceId>,
         results: ActionSearchResult<TActionId>[],
@@ -133,7 +129,6 @@ export async function createActionIndex<TSourceId = any>(
         getActions,
         getSourceIds,
         search,
-        searchVerbs,
         loadSourceIds,
     };
 
@@ -261,21 +256,6 @@ export async function createActionIndex<TSourceId = any>(
         return results;
     }
 
-    async function searchVerbs(
-        verbs: string[],
-        tense?: VerbTense,
-        options?: SearchOptions,
-    ): Promise<ScoredItem<ActionId[]>[]> {
-        const fullVerb = actionVerbsToString(verbs, tense);
-        return searchIndex(
-            verbIndex,
-            fullVerb,
-            false,
-            options?.maxMatches ?? 1,
-            options?.minScore,
-        );
-    }
-
     async function matchName(
         names: TextIndex<string>,
         nameIndex: KeyValueIndex<string, ActionId>,
@@ -283,11 +263,12 @@ export async function createActionIndex<TSourceId = any>(
         options: ActionSearchOptions,
     ): Promise<IterableIterator<ActionId> | undefined> {
         if (name) {
+            const nameOptions = options.nameSearchOptions ?? options;
             // Possible names of entities
             const nameIds = await names.getNearestText(
                 name,
-                options.maxMatches,
-                options.minScore,
+                nameOptions.maxMatches,
+                nameOptions.minScore,
             );
             if (nameIds && nameIds.length > 0) {
                 // Load all actions for those entities
