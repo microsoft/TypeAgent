@@ -39,7 +39,8 @@
     "find-config": "^1.0.0",
     "rimraf": "^5.0.5",
     "string-compare": "^1.1.2",
-    "typeagent": "workspace:*"
+    "typeagent": "workspace:*",
+    "common-utils": "workspace:*"
   },
   "devDependencies": {
     "@microsoft/microsoft-graph-types": "^2.40.0",
