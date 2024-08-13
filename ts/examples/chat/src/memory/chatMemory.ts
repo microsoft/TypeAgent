@@ -37,7 +37,7 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
     const storePath = "/data/testChat";
     const chatModel = openai.createStandardAzureChatModel("GPT_4");
     const chatModelFast = openai.createStandardAzureChatModel("GPT_35_TURBO");
-    const conversationName = "adrian_tchaikovsky";
+    const conversationName = "transcript";
     const conversationSettings = createConversationSettings();
 
     //const conversationName = "play";
@@ -175,8 +175,7 @@ export async function runPlayChat(): Promise<void> {
         io: InteractiveIo,
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, importChatDef());
-        const chatPath =
-            namedArgs.chatPath ?? "/data/testChat/adrian_tchaikovsky.txt";
+        const chatPath = namedArgs.chatPath ?? "/data/testChat/transcript.txt";
         await loadConversation(context, path.parse(chatPath).name);
         printer.writeLine(`Importing ${chatPath}`);
 
@@ -682,7 +681,8 @@ export async function runPlayChat(): Promise<void> {
                         "Verb to search for. Compound verbs are comma separated",
                 },
                 tense: {
-                    description: "Verb tense",
+                    description: "Verb tense: past | present | future",
+                    defaultValue: "past",
                 },
                 count: {
                     description: "Num matches",
@@ -700,7 +700,7 @@ export async function runPlayChat(): Promise<void> {
     async function actions(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, actionsDef());
         const index = await context.conversation.getActionIndex();
-        const verb: string = namedArgs.verbs;
+        const verb: string = namedArgs.verb;
         const verbTense = namedArgs.tense;
         if (verb) {
             const verbs = knowLib.split(verb, ",", {
@@ -725,9 +725,15 @@ export async function runPlayChat(): Promise<void> {
                     verbs,
                     verbTense,
                 };
-                const results = await index.search(filter, {
+                const matches = await index.search(filter, {
                     maxMatches: namedArgs.count,
+                    loadActions: true,
                 });
+                if (matches.actions) {
+                    for (const action of matches.actions) {
+                        printer.writeLine(conversation.actionToString(action));
+                    }
+                }
             } else {
                 await searchVerbs(
                     index,
