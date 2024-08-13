@@ -6,4 +6,4 @@
 
 This directory contain dotnet C# code that support our **TypeAgent** implementation.
 
-- [AutoShell](./whisperService/)(Windows Only) - Support [Desktop](../ts/packages/agents/desktop/) to control Window functionalities.
+- [AutoShell](./autoShell/)(Windows Only) - Support [Desktop](../ts/packages/agents/desktop/) to control Window functionalities.

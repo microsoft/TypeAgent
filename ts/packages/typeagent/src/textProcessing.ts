@@ -932,7 +932,11 @@ export async function lookupAnswersOnWeb(
     context?: PromptSection[],
     progress?: ProcessProgress<WebLookup, AnswerResponse>,
 ): Promise<WebLookupAnswer> {
-    const search = await bing.createBingSearch();
+    const searchClientResult = await bing.createBingSearch();
+    if (!searchClientResult.success) {
+        return emptyWebLookupAnswer();
+    }
+    const search = searchClientResult.data;
     const searchResults = await search.webSearch(query, {
         count: maxSearchResults,
     });

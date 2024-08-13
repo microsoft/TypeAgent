@@ -1,11 +1,9 @@
-## chat example
+## Chat example
 
-This sample explores ideas in using types and TypeChat for:
+The chat example explores ideas in using schema and TypeChat for the following scenarios:
 
-- [LLMs for Code analysis](./src/codeChat/)
-- [Conversation memory](./src/memory/)
-
-By default, we run the conversation memory example.
+- Using [LLMs for code analysis](./src/codeChat/)
+- Implementing **structured** [conversation memory](./src/memory/) and RAG.
 
 ## Trademarks
 

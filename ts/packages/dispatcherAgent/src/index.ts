@@ -12,6 +12,7 @@ export {
     StorageListOptions,
     Storage,
     StorageEncoding,
+    TokenCachePersistence,
     RequestIO,
 } from "./agentInterface.js";
 export * from "./memory.js";

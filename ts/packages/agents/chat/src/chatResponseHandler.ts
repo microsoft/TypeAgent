@@ -419,7 +419,12 @@ async function searchWeb(
     query: string,
     maxSearchResults: number = 3,
 ): Promise<string[] | undefined> {
-    const searchEngine = await bing.createBingSearch();
+    const searchEngineResult = await bing.createBingSearch();
+    if (!searchEngineResult.success) {
+        console.log(searchEngineResult.message);
+        return undefined;
+    }
+    const searchEngine = searchEngineResult.data;
     const matches = await searchEngine.webSearch(query, {
         count: maxSearchResults,
     });

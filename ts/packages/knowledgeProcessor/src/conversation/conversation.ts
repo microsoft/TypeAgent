@@ -423,11 +423,15 @@ export async function createConversation(
         return entityIndex;
     }
 
+    async function getEntityNameIndex() {
+        return (await getEntityIndex()).nameIndex;
+    }
+
     async function getActionIndex(): Promise<ActionIndex> {
         if (!actionIndex) {
             actionIndex = await createActionIndex<MessageId>(
                 settings.indexSettings,
-                getEntityIndex,
+                getEntityNameIndex,
                 actionPath,
                 folderSettings,
                 fSys,
@@ -499,11 +503,9 @@ export async function createConversation(
         await knowledgeStore.put(knowledge, message.blockId);
         const knowledgeIds: ExtractedKnowledgeIds<TopicId, EntityId, ActionId> =
             {};
-        // action index depends on entity ids being available. We can finish knowledge and entities first
-        // We can update topic and action indexes in parallel
-        await addNextEntities(knowledge, knowledgeIds, message.timestamp);
 
         await Promise.all([
+            addNextEntities(knowledge, knowledgeIds, message.timestamp),
             addNextTopics(knowledge, knowledgeIds, message.timestamp),
             addNextActions(knowledge, knowledgeIds, message.timestamp),
         ]);
@@ -515,13 +517,14 @@ export async function createConversation(
         knowledgeIds: ExtractedKnowledgeIds<TopicId, EntityId, ActionId>,
         message?: SourceTextBlock<MessageId>,
     ): Promise<void> {
-        // since each index is independent, they can be updated concurrently.
+        // these indexes are independent, they can be updated concurrently.
         await Promise.all([
             indexMessage(message),
             indexTopics(knowledge),
             indexEntities(knowledge, knowledgeIds),
-            indexActions(knowledge, knowledgeIds),
         ]);
+        // actions depends on entities
+        await indexActions(knowledge, knowledgeIds);
     }
 
     async function indexMessage(
@@ -654,7 +657,12 @@ export async function createConversation(
             }
         }
         if (options.loadMessages) {
-            await resolveMessages(results, topicIndex, entityIndex);
+            await resolveMessages(
+                results,
+                topicIndex,
+                entityIndex,
+                actionIndex,
+            );
         }
         return results;
     }
@@ -697,10 +705,11 @@ export async function createConversation(
         results: SearchResponse,
         topicIndex: TopicIndex,
         entityIndex: EntityIndex,
+        actionIndex: ActionIndex,
     ): Promise<void> {
-        // Todo: switch to SortedSet
         let topicMessageIds: Set<MessageId> | undefined;
         let entityMessageIds: Set<MessageId> | undefined;
+        let actionMessageIds: Set<MessageId> | undefined;
         if (results.topics && results.topics.length > 0) {
             topicMessageIds = await topicIndex.loadSourceIds(
                 messages,
@@ -713,11 +722,23 @@ export async function createConversation(
                 results.entities,
             );
         }
-        let messageIds = intersectSets(topicMessageIds, entityMessageIds);
+        if (results.actions && results.actions.length > 0) {
+            actionMessageIds = await actionIndex.loadSourceIds(
+                messages,
+                results.actions,
+            );
+        }
+        let messageIds = intersectSets(
+            topicMessageIds,
+            intersectSets(entityMessageIds, actionMessageIds),
+        );
         if (!messageIds || messageIds.size === 0) {
             // If nothing in common, try a union.
             //messageIds = topicMessageIds;
-            messageIds = unionSets(topicMessageIds, entityMessageIds);
+            messageIds = unionSets(
+                topicMessageIds,
+                unionSets(entityMessageIds, actionMessageIds),
+            );
         }
         if (messageIds && messageIds.size > 0) {
             results.messageIds = [...messageIds.values()].sort();
