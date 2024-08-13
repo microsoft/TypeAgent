@@ -44,6 +44,11 @@ export async function createTokenProvider(storage?: Storage) {
         throw new Error("SPOTIFY_APP_PORT not set");
     }
 
+    // Legacy: clean up old files
+    if (storage?.exists("token.json")) {
+        await storage.delete("token.json");
+    }
+
     const refreshTokenStorage = storage
         ? await storage.getTokenCachePersistence()
         : undefined;
