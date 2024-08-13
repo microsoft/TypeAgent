@@ -82,8 +82,6 @@ Read the [Debugging](#debugging) section for additional service keys that can be
 
 #### Using Azure Key Vault to manage keys
 
-**Local Environment**:
-
 The [getKey](./tools/scripts/getKeys.mjs) script is created for developer convenience to manage service secret using Azure Key Vault and set up the local development environments.
 
 To setup:
