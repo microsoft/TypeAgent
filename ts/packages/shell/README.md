@@ -32,20 +32,16 @@ Currently, TypeAgent Shell optionally supports voice input via Azure Speech Serv
 
 To set up Azure [Speech to Text service](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/index-speech-to-text), the following variables in the `.env` are needed.
 
-| Variable              | Value                                                                                            |
-| --------------------- | ------------------------------------------------------------------------------------------------ |
-| `SPEECH_SDK_ENDPOINT` | Service URL (or speech API resource ID when using Identity based authentication)                 |
-| `SPEECH_SDK_KEY`      | API key                                                                                          |
-| `SPEECH_SDK_REGION`   | Region of the service (e.g. `westus2`)                                                           |
+| Variable              | Value                                                                            |
+| --------------------- | -------------------------------------------------------------------------------- |
+| `SPEECH_SDK_ENDPOINT` | Service URL (or speech API resource ID when using Identity based authentication) |
+| `SPEECH_SDK_KEY`      | API key                                                                          |
+| `SPEECH_SDK_REGION`   | Region of the service (e.g. `westus2`)                                           |
 
 ## Keyless API Access
 
-If you would like to enable keyless Speech API access you must have performed the following steps:
-    - Specify `identity` as the `SPEECH_SDK_KEY` in the `.env` file. 
-    - Replace the `SPEECH_SDK_ENDPOINT` value with the azure resource id of your cognitive service instance (i.e. `/subscriptions/<your subscription guid>/resourceGroups/myResourceGroup/providers/Microsoft.CognitiveServices/accounts/speechapi`).
-    - Configure your speech API to support Azure Entra RBAC and add the necessary users/groups with the necessary permissions 
-(typically `Cognitive Services Speech User` or `Cognitive Services Speech Contributor`). More information on congitive services roles [here](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/role-based-access-control).
-    - If you are using JIT access elevate prior to calling the speech API.  Please refer to the [elevate.js](../../tools/scripts/elevate.js) script for doing this efficiently.
+If you would like to enable keyless Speech API access you must have performed the following steps: - Specify `identity` as the `SPEECH_SDK_KEY` in the `.env` file. - Replace the `SPEECH_SDK_ENDPOINT` value with the azure resource id of your cognitive service instance (i.e. `/subscriptions/<your subscription guid>/resourceGroups/myResourceGroup/providers/Microsoft.CognitiveServices/accounts/speechapi`). - Configure your speech API to support Azure Entra RBAC and add the necessary users/groups with the necessary permissions
+(typically `Cognitive Services Speech User` or `Cognitive Services Speech Contributor`). More information on congitive services roles [here](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/role-based-access-control). - If you are using JIT access elevate prior to calling the speech API. Please refer to the [elevate.js](../../tools/scripts/elevate.js) script for doing this efficiently.
 
 ## Trademarks
 

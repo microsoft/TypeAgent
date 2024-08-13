@@ -3,10 +3,7 @@
 
 import * as sdk from "microsoft-cognitiveservices-speech-sdk";
 import { Result } from "typechat";
-import {
-    AzureTokenScopes,
-    createAzureTokenProvider,
-} from "aiclient";
+import { AzureTokenScopes, createAzureTokenProvider } from "aiclient";
 
 export interface TokenResponse {
     token: string;
@@ -28,7 +25,7 @@ export class AzureSpeech {
     private constructor(
         private readonly subscriptionKey: string,
         private readonly region: string,
-        private readonly endpoint: string
+        private readonly endpoint: string,
     ) {
         // ...
     }
@@ -41,11 +38,15 @@ export class AzureSpeech {
         if (AzureSpeech.instance) {
             return;
         }
-        const { azureSpeechSubscriptionKey, azureSpeechRegion, azureSpeechEndpoint: azureSpeechEndpoint } = config;
+        const {
+            azureSpeechSubscriptionKey,
+            azureSpeechRegion,
+            azureSpeechEndpoint: azureSpeechEndpoint,
+        } = config;
         AzureSpeech.instance = new AzureSpeech(
             azureSpeechSubscriptionKey,
             azureSpeechRegion,
-            azureSpeechEndpoint
+            azureSpeechEndpoint,
         );
     };
 
@@ -59,7 +60,9 @@ export class AzureSpeech {
     public getTokenAsync = async (): Promise<TokenResponse> => {
         let result: TokenResponse;
 
-        if (this.subscriptionKey.toLowerCase() == IdentityApiKey.toLowerCase()) {
+        if (
+            this.subscriptionKey.toLowerCase() == IdentityApiKey.toLowerCase()
+        ) {
             result = await this.getIdentityBasedTokenAsync();
         } else {
             result = await this.getKeyBasedTokenAsync();
@@ -71,8 +74,8 @@ export class AzureSpeech {
     };
 
     private getIdentityBasedTokenAsync = async (): Promise<TokenResponse> => {
-        
-        const tokenResult: Result<string> = await azureTokenProvider.getAccessToken();
+        const tokenResult: Result<string> =
+            await azureTokenProvider.getAccessToken();
 
         if (!tokenResult.success) {
             throw new Error(
@@ -83,10 +86,10 @@ export class AzureSpeech {
         const result: TokenResponse = {
             token: tokenResult.data,
             region: this.region,
-            endpoint: this.endpoint
+            endpoint: this.endpoint,
         };
 
-        return result;    
+        return result;
     };
 
     private getKeyBasedTokenAsync = async (): Promise<TokenResponse> => {
@@ -109,7 +112,7 @@ export class AzureSpeech {
         const result: TokenResponse = {
             token: await response.text(),
             region: this.region,
-            endpoint: this.endpoint
+            endpoint: this.endpoint,
         };
 
         return result;
@@ -125,8 +128,13 @@ export class AzureSpeech {
             this.region,
         );
 
-        if (this.subscriptionKey.toLowerCase() == IdentityApiKey.toLowerCase()) {
-            speechConfig = sdk.SpeechConfig.fromAuthorizationToken(`aad#${this.endpoint}#${this.token}`, this.region)
+        if (
+            this.subscriptionKey.toLowerCase() == IdentityApiKey.toLowerCase()
+        ) {
+            speechConfig = sdk.SpeechConfig.fromAuthorizationToken(
+                `aad#${this.endpoint}#${this.token}`,
+                this.region,
+            );
         }
 
         const synthesizer = new sdk.SpeechSynthesizer(speechConfig);

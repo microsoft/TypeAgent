@@ -28,7 +28,7 @@
     "typecheck:node": "tsc -p tsconfig.node.json",
     "typecheck:web": "tsc -p tsconfig.web.json"
   },
-  "dependencies": {    
+  "dependencies": {
     "@electron-toolkit/preload": "^2.0.0",
     "@electron-toolkit/utils": "^2.0.0",
     "agent-dispatcher": "workspace:*",

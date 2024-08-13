@@ -74,7 +74,10 @@ export function getAudioConfig() {
 export function getSpeechConfig(token: SpeechToken | undefined) {
     let speechConfig: speechSDK.SpeechConfig;
     if (token) {
-        speechConfig = speechSDK.SpeechConfig.fromAuthorizationToken(`aad#${token.endpoint}#${token.token}`, token.region)
+        speechConfig = speechSDK.SpeechConfig.fromAuthorizationToken(
+            `aad#${token.endpoint}#${token.token}`,
+            token.region,
+        );
     } else {
         return undefined;
     }
@@ -85,7 +88,7 @@ export function getSpeechConfig(token: SpeechToken | undefined) {
 function onRecognizing(
     recognitionEventArgs: speechSDK.SpeechRecognitionEventArgs,
     inputId: string,
-) { 
+) {
     console.log("Running Recognizing step");
     const result = recognitionEventArgs.result;
     const phraseDiv = document.querySelector<HTMLDivElement>(`#${inputId}`)!;
@@ -125,7 +128,6 @@ function onRecognizedResult(
             if (cancelationResult.ErrorCode == 4) {
                 errorMessage += `Did you forget to elevate your RBAC role?`;
             }
-
         } else {
             errorMessage = `[ERROR: Cancelled]`;
         }

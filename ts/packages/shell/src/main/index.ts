@@ -79,7 +79,9 @@ function createWindow(): void {
     setupZoomHandlers(mainWindow);
 }
 
-let speechToken: { token: string; expire: number, region: string, endpoint: string } | undefined;
+let speechToken:
+    | { token: string; expire: number; region: string; endpoint: string }
+    | undefined;
 
 async function getSpeechToken() {
     if (speechToken === undefined || speechToken.expire <= Date.now()) {
@@ -89,7 +91,7 @@ async function getSpeechToken() {
             token: tokenResponse.token,
             expire: Date.now() + 9 * 60 * 1000, // 9 minutes (token expires in 10 minutes)
             region: tokenResponse.region,
-            endpoint: tokenResponse.endpoint
+            endpoint: tokenResponse.endpoint,
         };
     }
     return speechToken;
@@ -275,7 +277,7 @@ const clientIO: ClientIO = {
     result: showResult,
     setActionStatus: showResult,
     updateActionStatus: updateResult,
-    searchMenuCommand,  
+    searchMenuCommand,
     actionCommand,
     askYesNo,
     question,
@@ -306,7 +308,7 @@ async function initializeSpeech(context: CommandHandlerContext) {
         await AzureSpeech.initializeAsync({
             azureSpeechSubscriptionKey: key,
             azureSpeechRegion: region,
-            azureSpeechEndpoint: endpoint
+            azureSpeechEndpoint: endpoint,
         });
         ipcMain.handle("get-speech-token", async () => {
             return getSpeechToken();
