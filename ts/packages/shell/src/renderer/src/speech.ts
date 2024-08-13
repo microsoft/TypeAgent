@@ -74,13 +74,8 @@ export function getAudioConfig() {
 export function getSpeechConfig(token: SpeechToken | undefined) {
     let speechConfig: speechSDK.SpeechConfig;
     if (token) {
-        speechConfig = speechSDK.SpeechConfig.fromEndpoint(new URL("wss://aisystems.cognitiveservices.azure.com/stt/speech/recognition/conversation/cognitiveservices/v1?language=en-US"))
-        speechConfig.authorizationToken = token.token
-
-        // speechConfig = speechSDK.SpeechConfig.fromAuthorizationToken(
-        //     token.token,
-        //     token.region,
-        // );
+        // TODO: get resource ID from endpoint
+        speechConfig = speechSDK.SpeechConfig.fromAuthorizationToken(`aad#${resourceId}#${token.token}`, token.region)
     } else {
         return undefined;
     }
