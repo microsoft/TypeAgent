@@ -185,6 +185,52 @@ function getPageHTMLSubFragments(
     return htmlFragments;
 }
 
+function getPageHTMLFragments(
+    documentHtml: string,
+    frameId: number,
+    maxSize: 16000,
+) {
+    if (!documentHtml) {
+        documentHtml = getPageHTML(false, documentHtml, frameId);
+    }
+    const domParser = new DOMParser();
+    const doc = domParser.parseFromString(documentHtml, "text/html");
+    let htmlFragments = [];
+    let node = doc.body;
+    while (node) {
+        if (node.outerHTML.length > maxSize) {
+            if (node.children.length > 0) {
+                let largestIndex = 0;
+                let largestSize = 0;
+                for (let i = 0; i < node.children.length; i++) {
+                    if (node.children[i].outerHTML.length > largestSize) {
+                        largestIndex = i;
+                        largestSize = node.children[i].outerHTML.length;
+                    }
+                }
+                node = node.children[largestIndex] as HTMLElement;
+            } else {
+                break;
+            }
+        } else {
+            htmlFragments.push({
+                frameId: frameId,
+                content: node.outerHTML,
+            });
+
+            node.remove();
+
+            if (node == doc.body) {
+                break;
+            } else {
+                node = doc.body;
+            }
+        }
+    }
+
+    return htmlFragments;
+}
+
 function getFullSelector(e: HTMLElement) {
     var s = "",
         t,
@@ -546,6 +592,16 @@ chrome.runtime.onMessage.addListener(
                         message.inputHtml,
                         message.cssSelectors,
                         message.frameId,
+                    );
+                    sendResponse(htmlFragments);
+                    break;
+                }
+
+                case "get_maxSize_html_fragments": {
+                    const htmlFragments = getPageHTMLFragments(
+                        message.inputHtml,
+                        message.frameId,
+                        message.maxFragmentSize,
                     );
                     sendResponse(htmlFragments);
                     break;

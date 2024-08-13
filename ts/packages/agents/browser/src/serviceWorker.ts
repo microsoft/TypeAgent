@@ -568,6 +568,7 @@ async function getTabHTMLFragments(
     targetTab: chrome.tabs.Tab,
     fullSize: boolean,
     downloadAsFile: boolean,
+    maxFragmentSize: 16000,
 ) {
     const frames = await chrome.webNavigation.getAllFrames({
         tabId: targetTab.id!,
@@ -602,6 +603,52 @@ async function getTabHTMLFragments(
                         frameId: frames[i].frameId,
                         content: frameHTML,
                     });
+                }
+            } catch {}
+        }
+    }
+
+    return htmlFragments;
+}
+
+async function getTabHTMLFragmentsBySize(
+    targetTab: chrome.tabs.Tab,
+    fullSize: boolean,
+    downloadAsFile: boolean,
+    maxFragmentSize: 16000,
+) {
+    const frames = await chrome.webNavigation.getAllFrames({
+        tabId: targetTab.id!,
+    });
+    let htmlFragments: any[] = [];
+    if (frames) {
+        for (let i = 0; i < frames?.length; i++) {
+            if (frames[i].url == "about:blank") {
+                continue;
+            }
+            try {
+                const frameFragments = await chrome.tabs.sendMessage(
+                    targetTab.id!,
+                    {
+                        type: "get_maxSize_html_fragments",
+                        frameId: frames[i].frameId,
+                        maxFragmentSize: 16000,
+                    },
+                    { frameId: frames[i].frameId },
+                );
+
+                if (frameFragments) {
+                    if (downloadAsFile) {
+                        for (let j = 0; j < frameFragments.length; j++) {
+                            await downloadStringAsFile(
+                                targetTab,
+                                frameFragments[j].content,
+                                `tabHTML_${frames[i].frameId}_${j}.html`,
+                            );
+                        }
+                    }
+
+                    htmlFragments = htmlFragments.concat(frameFragments);
                 }
             } catch {}
         }
@@ -986,6 +1033,7 @@ async function runBrowserAction(action: any) {
                 targetTab,
                 action.parameters.fullHTML,
                 action.parameters.downloadAsFile,
+                16000,
             );
             break;
         }
