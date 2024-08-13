@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import {
-    ActionTemplateSequence as ActionTemplateSequence,
+    ActionTemplateSequence,
     TemplateParamFieldOpt,
     TemplateParamScalar,
 } from "../../preload/electronTypes";

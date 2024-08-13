@@ -12,6 +12,7 @@ export type SpeechToken = {
 
 export type SearchMenuItem = {
     matchText: string;
+    selectedText: string;
     emojiChar?: string;
     groupName?: string;
 };

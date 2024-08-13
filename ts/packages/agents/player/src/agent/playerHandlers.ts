@@ -95,6 +95,7 @@ function playerPartialInput(
                     matchText: choice,
                     emojiChar: "🎵",
                     groupName: "player",
+                    selectedText: choice,
                 }));
                 context.context.searchContext.choices = choices;
                 context.searchMenuCommand(

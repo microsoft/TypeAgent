@@ -876,7 +876,7 @@ export class ChatView {
         this.showStatusMessage(message, requestId, true);
         if (this.searchMenu) {
             this.searchMenuAnswerHandler = (item) => {
-                this.answer(questionId, item.matchText, requestId);
+                this.answer(questionId, item.selectedText, requestId);
             };
         } else {
             const replacementElm = questionInput(

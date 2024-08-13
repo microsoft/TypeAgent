@@ -6,17 +6,11 @@ import { getTranslatorConfig, TranslatorConfig } from "./agentTranslators.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import {
     ActionTemplate,
+    ActionInfo,
     SearchMenuItem,
     TemplateParamField,
     TemplateParamObject,
 } from "common-utils";
-
-type ActionInfo = {
-    name: string;
-    comments: string;
-    item: SearchMenuItem;
-    template?: ActionTemplate | undefined;
-};
 
 function getActionInfo(
     actionTypeName: string,
@@ -44,6 +38,7 @@ function getActionInfo(
                 matchText: name,
                 emojiChar: translatorConfig.emojiChar,
                 groupName: translatorName,
+                selectedText: `${translatorName}.${name}`,
             };
             comments = node.leadingComments?.join(" ") ?? "";
         } else if (child.symbol.name === "parameters") {
@@ -101,14 +96,17 @@ export function getTranslatorActionInfo(
 }
 
 export function getAllActionInfo(translatorNames: string[]) {
-    let allActionInfo: ActionInfo[] = [];
+    let allActionInfo = new Map<string, ActionInfo>();
     for (const name of translatorNames) {
         const translatorConfig = getTranslatorConfig(name);
         if (translatorConfig.injected) {
             continue;
         }
         const actionInfo = getTranslatorActionInfo(translatorConfig, name);
-        allActionInfo = allActionInfo.concat(actionInfo);
+        for (const info of actionInfo) {
+            const fullActionName = `${name}.${info.name}`;
+            allActionInfo.set(fullActionName, info);
+        }
     }
     return allActionInfo;
 }
@@ -180,7 +178,7 @@ function getTemplateParamObjectType(parser: SchemaParser): TemplateParamObject {
         for (const param of paramChildren) {
             const fieldType = getTemplateParamFieldType(parser, param);
             fields[param.name] = {
-                fieldType,
+                field: fieldType,
                 optional: param.optional,
             };
         }

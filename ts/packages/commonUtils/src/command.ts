@@ -9,8 +9,16 @@ export type Command = {
 // TODO: remove duplicate types due to package circular dependencies (shell/electronTypes.ts is other source)
 export type SearchMenuItem = {
     matchText: string;
+    selectedText: string;
     emojiChar?: string;
     groupName?: string;
+};
+
+export type ActionInfo = {
+    name: string;
+    comments: string;
+    item: SearchMenuItem;
+    template?: ActionTemplate | undefined;
 };
 
 export type TemplateParamPrimitive = {

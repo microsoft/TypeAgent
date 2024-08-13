@@ -1,9 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// TODO: remove duplicate type def
+// TODO: remove duplicate type
 export type SearchMenuItem = {
     matchText: string;
+    selectedText: string;
     emojiChar?: string;
     groupName?: string;
 };

@@ -3,6 +3,14 @@
 
 import { PromptSection } from "typechat";
 import { Entity } from "dispatcher-agent";
+import {
+    ActionTemplate,
+    ActionTemplateSequence,
+    ActionInfo,
+    TemplateParamField,
+    TemplateParamFieldOpt,
+    TemplateParamObject,
+} from "common-utils";
 
 export type HistoryContext = {
     promptSections: PromptSection[];
@@ -56,6 +64,55 @@ function parseActionNameParts(fullActionName: string) {
     return { translatorName, actionName };
 }
 
+function copyActionValue(
+    value: ParamFieldType,
+    field: TemplateParamField,
+): TemplateParamField {
+    switch (field.type) {
+        case "array":
+            return {
+                type: "array",
+                elementType: copyActionValue(value, field.elementType),
+            };
+        case "object":
+            const fields: { [key: string]: TemplateParamFieldOpt } = {};
+            for (const [key, templateField] of Object.entries(field.fields)) {
+                fields[key] = {
+                    optional: templateField.optional ?? false,
+                    field: copyActionValue(
+                        (value as ParamObjectType)[key],
+                        templateField.field,
+                    ),
+                };
+            }
+            return {
+                type: "object",
+                fields,
+            };
+        case "string-union":
+            return {
+                type: "string-union",
+                typeEnum: field.typeEnum,
+                value: value as string,
+            };
+        case "boolean":
+            return {
+                type: field.type,
+                value: value as boolean,
+            };
+        case "number":
+            return {
+                type: field.type,
+                value: value as number,
+            };
+        case "string":
+            return {
+                type: field.type,
+                value: value as string,
+            };
+    }
+}
+
 export class Action {
     constructor(
         private readonly action: IAction,
@@ -104,6 +161,26 @@ export class Action {
             html += `<li>${key}: <span style="color:green">${value}</span></li>`;
         }
         return html;
+    }
+
+    public addValues(parameterStructure: TemplateParamObject) {
+        const pstructCopy: TemplateParamObject = {
+            type: "object",
+            fields: {},
+        };
+        const entries = Object.entries(this.action.parameters);
+        if (entries.length !== 0) {
+            for (const [key, value] of entries.sort()) {
+                const field = parameterStructure.fields[key];
+                if (field) {
+                    pstructCopy.fields[key] = {
+                        optional: field.optional ?? false,
+                        field: copyActionValue(value, field.field),
+                    };
+                }
+            }
+        }
+        return pstructCopy;
     }
 
     public toHTML(prefaceText?: string) {
@@ -206,6 +283,62 @@ export class Actions {
         return Array.isArray(this.actions)
             ? this.actions.map((a) => a.toJSON())
             : this.actions.toJSON();
+    }
+
+    public toTemplateSequence(
+        prefaceSingle: string,
+        prefaceMultiple: string,
+        parameterStructures: Map<string, ActionInfo>,
+    ): ActionTemplateSequence {
+        if (Array.isArray(this.actions)) {
+            const templates: ActionTemplate[] = [];
+            for (const action of this.actions) {
+                const actionInfo = parameterStructures.get(
+                    action.fullActionName,
+                );
+                if (actionInfo) {
+                    templates.push({
+                        parameterStructure: action.addValues(
+                            actionInfo.template!.parameterStructure,
+                        ),
+                        name: action.actionName,
+                        agent: action.translatorNameString,
+                    });
+                } else {
+                    console.log(
+                        `Action ${action.fullActionName} not found in parameterStructures`,
+                    );
+                }
+            }
+        } else {
+            const actionInfo = parameterStructures.get(
+                this.actions.fullActionName,
+            );
+            if (actionInfo) {
+                return {
+                    prefaceSingle,
+                    prefaceMultiple,
+                    templates: [
+                        {
+                            parameterStructure: this.actions.addValues(
+                                actionInfo.template!.parameterStructure,
+                            ),
+                            name: this.actions.actionName,
+                            agent: this.actions.translatorNameString,
+                        },
+                    ],
+                };
+            } else {
+                console.log(
+                    `Action ${this.actions.fullActionName} not found in parameterStructures`,
+                );
+            }
+        }
+        return {
+            prefaceSingle,
+            prefaceMultiple,
+            templates: [],
+        };
     }
 
     public toHTML(prefaceSingle: string, prefaceMultiple: string) {
