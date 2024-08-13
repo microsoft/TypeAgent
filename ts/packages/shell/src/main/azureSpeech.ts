@@ -22,11 +22,12 @@ const azureTokenProvider = createAzureTokenProvider(
 
 export class AzureSpeech {
     private static instance: AzureSpeech;
-    private token: string;
+    private token: string = "";
 
     private constructor(
         private readonly subscriptionKey: string,
         private readonly region: string,
+        private readonly resourceId: string
     ) {
         // ...
     }
@@ -34,14 +35,16 @@ export class AzureSpeech {
     public static initializeAsync = async (config: {
         azureSpeechSubscriptionKey: string;
         azureSpeechRegion: string;
+        azureResourceId: string;
     }): Promise<void> => {
         if (AzureSpeech.instance) {
             return;
         }
-        const { azureSpeechSubscriptionKey, azureSpeechRegion } = config;
+        const { azureSpeechSubscriptionKey, azureSpeechRegion, azureResourceId } = config;
         AzureSpeech.instance = new AzureSpeech(
             azureSpeechSubscriptionKey,
             azureSpeechRegion,
+            azureResourceId
         );
     };
 
@@ -120,7 +123,7 @@ export class AzureSpeech {
         );
 
         if (this.subscriptionKey.toLowerCase() == IdentityApiKey.toLowerCase()) {
-            speechConfig = sdk.SpeechConfig.fromAuthorizationToken(this.token, this.region)
+            speechConfig = sdk.SpeechConfig.fromAuthorizationToken(`aad#${this.resourceId}#${this.token}`, this.region)
         }
 
         const synthesizer = new sdk.SpeechSynthesizer(speechConfig);

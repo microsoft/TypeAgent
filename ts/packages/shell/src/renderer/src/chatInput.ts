@@ -129,7 +129,7 @@ export class ChatInput {
                 await getClientAPI().getLocalWhisperStatus();
             if (useLocalWhisper) {
                 recognizeOnce(
-                    "",
+                    undefined,
                     inputId,
                     buttonId,
                     messageHandler,
@@ -146,7 +146,7 @@ export class ChatInput {
                 }
                 if (speechInfo.speechToken !== undefined) {
                     recognizeOnce(
-                        speechInfo.speechToken.token,
+                        speechInfo.speechToken,
                         inputId,
                         buttonId,
                         messageHandler,

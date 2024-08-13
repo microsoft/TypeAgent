@@ -71,15 +71,16 @@ export function getAudioConfig() {
     return speechSDK.AudioConfig.fromDefaultMicrophoneInput();
 }
 
-export function getSpeechConfig(token: string) {
-    // todo: get region from service
-    const region = "westus2";
+export function getSpeechConfig(token: SpeechToken | undefined) {
     let speechConfig: speechSDK.SpeechConfig;
     if (token) {
-        speechConfig = speechSDK.SpeechConfig.fromAuthorizationToken(
-            token,
-            region,
-        );
+        speechConfig = speechSDK.SpeechConfig.fromEndpoint(new URL("wss://aisystems.cognitiveservices.azure.com/stt/speech/recognition/conversation/cognitiveservices/v1?language=en-US"))
+        speechConfig.authorizationToken = token.token
+
+        // speechConfig = speechSDK.SpeechConfig.fromAuthorizationToken(
+        //     token.token,
+        //     token.region,
+        // );
     } else {
         return undefined;
     }
@@ -90,7 +91,7 @@ export function getSpeechConfig(token: string) {
 function onRecognizing(
     recognitionEventArgs: speechSDK.SpeechRecognitionEventArgs,
     inputId: string,
-) {
+) { 
     console.log("Running Recognizing step");
     const result = recognitionEventArgs.result;
     const phraseDiv = document.querySelector<HTMLDivElement>(`#${inputId}`)!;
@@ -140,7 +141,7 @@ function onRecognizedResult(
 }
 
 export function recognizeOnce(
-    token: string,
+    token: SpeechToken | undefined,
     inputId: string,
     buttonId: string,
     messageHandler: (message: string) => void,
