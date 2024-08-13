@@ -423,11 +423,15 @@ export async function createConversation(
         return entityIndex;
     }
 
+    async function getEntityNameIndex() {
+        return (await getEntityIndex()).nameIndex;
+    }
+
     async function getActionIndex(): Promise<ActionIndex> {
         if (!actionIndex) {
             actionIndex = await createActionIndex<MessageId>(
                 settings.indexSettings,
-                getEntityIndex,
+                getEntityNameIndex,
                 actionPath,
                 folderSettings,
                 fSys,
@@ -499,11 +503,9 @@ export async function createConversation(
         await knowledgeStore.put(knowledge, message.blockId);
         const knowledgeIds: ExtractedKnowledgeIds<TopicId, EntityId, ActionId> =
             {};
-        // action index depends on entity ids being available. We can finish knowledge and entities first
-        // We can update topic and action indexes in parallel
-        await addNextEntities(knowledge, knowledgeIds, message.timestamp);
 
         await Promise.all([
+            addNextEntities(knowledge, knowledgeIds, message.timestamp),
             addNextTopics(knowledge, knowledgeIds, message.timestamp),
             addNextActions(knowledge, knowledgeIds, message.timestamp),
         ]);
@@ -515,13 +517,14 @@ export async function createConversation(
         knowledgeIds: ExtractedKnowledgeIds<TopicId, EntityId, ActionId>,
         message?: SourceTextBlock<MessageId>,
     ): Promise<void> {
-        // since each index is independent, they can be updated concurrently.
+        // these indexes are independent, they can be updated concurrently.
         await Promise.all([
             indexMessage(message),
             indexTopics(knowledge),
             indexEntities(knowledge, knowledgeIds),
-            indexActions(knowledge, knowledgeIds),
         ]);
+        // actions depends on entities
+        await indexActions(knowledge, knowledgeIds);
     }
 
     async function indexMessage(
