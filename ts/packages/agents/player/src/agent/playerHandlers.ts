@@ -31,14 +31,12 @@ export function instantiate(): DispatcherAgent {
 
 type PlayerActionContext = {
     spotify: IClientContext | undefined;
-    spotifyBackend: boolean;
     searchContext?: SearchMenuContext;
 };
 
 function initializePlayerContext() {
     return {
         spotify: undefined,
-        spotifyBackend: false,
     };
 }
 
@@ -48,28 +46,6 @@ async function executePlayerAction(
 ) {
     if (context.context.spotify) {
         return handleCall(action as PlayerAction, context.context.spotify);
-    }
-
-    if (context.context.spotifyBackend) {
-        try {
-            const response = await fetch("http://localhost:3027", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(action),
-            });
-            if (response.ok) {
-                const json = await response.json();
-                console.log(json);
-            } else {
-                console.log(response.statusText);
-            }
-        } catch (e) {
-            console.log("Unable to contact music backend. Turning off.");
-            context.context.spotifyBackend = false;
-        }
-        return;
     }
 
     return createTurnImpressionFromError(
@@ -133,7 +109,6 @@ async function updatePlayerContext(
             clearTimeout(timeoutId);
         }
         context.context.spotify = undefined;
-        context.context.spotifyBackend = false;
     }
 }
 
@@ -181,9 +156,9 @@ async function validateTrack(trackName: string, context: IClientContext) {
     const tracks = await searchTracks(trackName, context);
     if (tracks && tracks.tracks && tracks.tracks.length > 0) {
         // For validation for wildcard match, only allow substring match.
-        const lowerCaseTrackeName = trackName.toLowerCase();
+        const lowerCaseTrackName = trackName.toLowerCase();
         return tracks.tracks.some((track) =>
-            track.name.toLowerCase().includes(lowerCaseTrackeName),
+            track.name.toLowerCase().includes(lowerCaseTrackName),
         );
     }
     return false;

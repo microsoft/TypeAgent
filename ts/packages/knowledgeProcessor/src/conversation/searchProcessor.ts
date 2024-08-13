@@ -124,14 +124,15 @@ export function createSearchProcessor(
                 minScore: options.minScore,
                 matchNameToType: true,
                 combinationSetOp: options.combinationSetOp,
-                loadEntities: true, //responseType != "Answer",
+                loadEntities: true,
             },
             topic: {
                 maxMatches: topLevelTopicSummary
                     ? Number.MAX_SAFE_INTEGER
                     : options.maxMatches,
                 minScore: options.minScore,
-                loadTopics: true, //responseType === "Topics",
+                loadTopics:
+                    responseType === "Answer" || responseType === "Topics",
             },
             topicLevel,
             loadMessages: responseType === "Answer", //topicLevel === 1,
@@ -144,6 +145,7 @@ export function createSearchProcessor(
                     maxMatches: 1,
                     minScore: options.minScore,
                 },
+                loadActions: responseType === "Answer",
             };
         }
 

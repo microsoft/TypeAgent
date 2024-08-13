@@ -648,9 +648,6 @@ importers:
       '@types/spotify-api':
         specifier: ^0.0.22
         version: 0.0.22
-      copyfiles:
-        specifier: ^2.4.1
-        version: 2.4.1
       rimraf:
         specifier: ^5.0.5
         version: 5.0.5
@@ -1012,6 +1009,9 @@ importers:
 
   packages/dispatcher:
     dependencies:
+      '@azure/msal-node-extensions':
+        specifier: ^1.0.12
+        version: 1.0.12
       agent-cache:
         specifier: workspace:*
         version: link:../cache

@@ -454,67 +454,72 @@ export async function runPlayChat(): Promise<void> {
         context.conversationSettings.indexActions = namedArgs.actions;
         let count = 0;
         const concurrency = namedArgs.concurrency;
-        for (let i = 0; i < messages.length; i += concurrency) {
-            const slice = messages.slice(i, i + concurrency);
-            if (slice.length === 0) {
-                break;
-            }
-            if (messageIndex) {
-                printer.writeInColor(
-                    chalk.gray,
-                    `[Indexing messages ${i + 1} to ${i + slice.length}]`,
-                );
-                await asyncArray.mapAsync(slice, concurrency, (m) =>
-                    messageIndex.put(m.value, m.blockId),
-                );
-            }
-            if (knowledgeExtractor) {
-                printer.writeInColor(
-                    chalk.gray,
-                    `[Extracting knowledge ${i + 1} to ${i + slice.length}]`,
-                );
-                const knowledgeResults = await asyncArray.mapAsync(
-                    slice,
-                    namedArgs.concurrency,
-                    (message) =>
-                        conversation.extractKnowledgeFromBlock(
-                            knowledgeExtractor,
-                            message,
-                        ),
-                );
-                for (const knowledgeResult of knowledgeResults) {
-                    ++count;
-                    printer.writeLine(
-                        chalk.green(`[${count} / ${messages.length}]`),
+        try {
+            for (let i = 0; i < messages.length; i += concurrency) {
+                const slice = messages.slice(i, i + concurrency);
+                if (slice.length === 0) {
+                    break;
+                }
+                if (messageIndex) {
+                    printer.writeInColor(
+                        chalk.gray,
+                        `[Indexing messages ${i + 1} to ${i + slice.length}]`,
                     );
-                    if (knowledgeResult) {
-                        const [message, knowledge] = knowledgeResult;
-                        await writeKnowledgeResult(message, knowledge);
-                        const knowledgeIds = await context.conversation.putNext(
-                            message,
-                            knowledge,
+                    await asyncArray.mapAsync(slice, concurrency, (m) =>
+                        messageIndex.put(m.value, m.blockId),
+                    );
+                }
+                if (knowledgeExtractor) {
+                    printer.writeInColor(
+                        chalk.gray,
+                        `[Extracting knowledge ${i + 1} to ${i + slice.length}]`,
+                    );
+                    const knowledgeResults = await asyncArray.mapAsync(
+                        slice,
+                        namedArgs.concurrency,
+                        (message) =>
+                            conversation.extractKnowledgeFromBlock(
+                                knowledgeExtractor,
+                                message,
+                            ),
+                    );
+                    for (const knowledgeResult of knowledgeResults) {
+                        ++count;
+                        printer.writeLine(
+                            chalk.green(`[${count} / ${messages.length}]`),
                         );
-                        if (topicMerger) {
-                            const mergedTopic = await topicMerger.next(
-                                true,
-                                true,
-                            );
-                            if (mergedTopic) {
-                                printer.writeTitle("Merged Topic:");
-                                printer.writeTemporalBlock(
-                                    chalk.blueBright,
-                                    mergedTopic,
+                        if (knowledgeResult) {
+                            const [message, knowledge] = knowledgeResult;
+                            await writeKnowledgeResult(message, knowledge);
+                            const knowledgeIds =
+                                await context.conversation.putNext(
+                                    message,
+                                    knowledge,
                                 );
+                            if (topicMerger) {
+                                const mergedTopic = await topicMerger.next(
+                                    true,
+                                    true,
+                                );
+                                if (mergedTopic) {
+                                    printer.writeTitle("Merged Topic:");
+                                    printer.writeTemporalBlock(
+                                        chalk.blueBright,
+                                        mergedTopic,
+                                    );
+                                }
                             }
+                            await context.conversation.putIndex(
+                                knowledge,
+                                knowledgeIds,
+                            );
+                            printer.writeLine();
                         }
-                        await context.conversation.putIndex(
-                            knowledge,
-                            knowledgeIds,
-                        );
-                        printer.writeLine();
                     }
                 }
             }
+        } catch (error) {
+            printer.writeError(`${error}`);
         }
     }
 
@@ -761,11 +766,6 @@ export async function runPlayChat(): Promise<void> {
                     type: "boolean",
                     defaultValue: true,
                 },
-                evidence: {
-                    description: "Include evidence for the answer",
-                    type: "boolean",
-                    defaultValue: false,
-                },
             },
         };
     }
@@ -795,16 +795,12 @@ export async function runPlayChat(): Promise<void> {
             await searchNoEval(query, searchOptions);
             return;
         }
-        if (namedArgs.evidence) {
-            query +=
-                "\nInclude your evidence in your response using a separate paragraph";
-        }
+
         const result = await context.searcher.search(query, searchOptions);
         if (!result) {
             printer.writeError("No result");
             return;
         }
-
         if (result.response) {
             const timestampA = new Date();
             const entityIndex = await context.conversation.getEntityIndex();

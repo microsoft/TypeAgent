@@ -61,16 +61,6 @@ export function getSpotifyConfigCommandHandlers(): HandlerTable {
                     }
                 },
             },
-            backend: {
-                description: "Turn on spotify backend integration.",
-                run: async (
-                    request: string,
-                    context: CommandHandlerContext,
-                ) => {
-                    context.action.player.spotify = undefined;
-                    context.action.player.spotifyBackend = true;
-                },
-            },
         },
     };
 }
