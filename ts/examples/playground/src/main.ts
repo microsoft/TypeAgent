@@ -319,14 +319,16 @@ async function runPlayground(): Promise<void> {
 
     function printWelcome(io: InteractiveIo): void {
         let modelName = apiSettings.modelName ?? apiSettings.endpoint;
-        io.writer.writeLine(
-            `💬 🛝\nWelcome to Interactive Chat Playground.\nYou are speaking with ${modelName}.\n`,
-        );
+        io.writer.writeLine(`💬 🛝\nWelcome to Interactive Chat Playground.\n`);
+        io.writer.writeLine(`Model: ${modelName}`);
         io.writer.writeLine(
             `Max Context Length:${maxContextLength}\nMax Window Length: ${maxWindowLength}`,
         );
         io.writer.writeLine("@help for a list of available commands.");
         io.writer.writeLine();
+        io.writer.writeLine(
+            "To start, type something like 'hello and hit return.",
+        );
     }
 }
 

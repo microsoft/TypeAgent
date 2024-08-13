@@ -1,9 +1,10 @@
 # codeProcessor
 
-Sample code that explores how to use TypeChat to:
+Code Processor is sample code that explores how to use TypeChat and schemas to work with source code. Areas of exploration include:
 
-- Analyze and review source code
-- Implement Q&A over source code
+- Code analysis and review
+- LLM mediated debugging assistance
+- Search and Q&A
 
 ## Trademarks
 

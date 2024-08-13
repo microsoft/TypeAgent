@@ -666,8 +666,15 @@ export async function runPlayChat(): Promise<void> {
         return {
             description: "Search for actions",
             options: {
+                subject: {
+                    description: "Action to search for",
+                },
+                object: {
+                    description: "Object to search for",
+                },
                 verb: {
-                    description: "Verb to search for",
+                    description:
+                        "Verb to search for. Compound verbs are comma separated",
                 },
                 tense: {
                     description: "Verb tense",
@@ -688,33 +695,67 @@ export async function runPlayChat(): Promise<void> {
     async function actions(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, actionsDef());
         const index = await context.conversation.getActionIndex();
-        const verb: string = namedArgs.verb;
-        const tense = namedArgs.tense;
+        const verb: string = namedArgs.verbs;
+        const verbTense = namedArgs.tense;
         if (verb) {
-            if (verb === "*") {
+            const verbs = knowLib.split(verb, ",", {
+                removeEmpty: true,
+                trim: true,
+            });
+            if (verbs.length === 0) {
+                return;
+            }
+            if (verbs[0] === "*") {
                 for await (const v of index.verbIndex.text()) {
                     printer.writeLine(v);
                 }
                 return;
             }
-            const matches = await index.searchVerbs([verb], tense, {
-                maxMatches: namedArgs.count,
-            });
-            for (const match of matches) {
-                printer.writeInColor(chalk.green, `[${match.score}]`);
-                await writeActionsById(
+            if (namedArgs.subject || namedArgs.object) {
+                // Full search
+                const filter: conversation.ActionFilter = {
+                    filterType: "Action",
+                    subjectEntityName: namedArgs.subject,
+                    objectEntityName: namedArgs.object,
+                    verbs,
+                    verbTense,
+                };
+                const results = await index.search(filter, {
+                    maxMatches: namedArgs.count,
+                });
+            } else {
+                await searchVerbs(
                     index,
-                    match.item,
+                    verbs,
+                    verbTense,
+                    namedArgs.count,
                     namedArgs.showMessages,
                 );
-                printer.writeLine();
             }
-            return;
+        } else {
+            // Just dump all actions
+            for await (const action of index.entries()) {
+                writeExtractedAction(action);
+            }
         }
+    }
 
-        for await (const action of index.entries()) {
-            writeExtractedAction(action);
+    async function searchVerbs(
+        index: conversation.ActionIndex,
+        verbs: string[],
+        tense: conversation.VerbTense,
+        maxMatches: number,
+        showMessages: boolean,
+    ) {
+        const matches = await index.searchVerbs(verbs, tense, {
+            maxMatches,
+        });
+        for (const match of matches) {
+            printer.writeInColor(chalk.green, `[${match.score}]`);
+            await writeActionsById(index, match.item, showMessages);
+            printer.writeLine();
         }
+        return;
     }
 
     function searchDef(): CommandMetadata {
