@@ -313,7 +313,9 @@ async function updateTrackListAndPrint(
 export async function getClientContext(
     profileStorage?: Storage,
 ): Promise<IClientContext> {
-    const service = new SpotifyService(createTokenProvider(profileStorage));
+    const service = new SpotifyService(
+        await createTokenProvider(profileStorage),
+    );
     await service.init();
     const userdata = await getUserProfile(service);
     service.storeUser({

@@ -5,6 +5,11 @@ import path from "node:path";
 import fs from "node:fs";
 import { Storage, StorageListOptions, StorageEncoding } from "dispatcher-agent";
 
+import {
+    DataProtectionScope,
+    PersistenceCreator,
+} from "@azure/msal-node-extensions";
+
 export function getStorage(name: string, baseDir: string): Storage {
     const getFullPath = (storagePath: string) => {
         // REVIEW: validate that the file is still within base path
@@ -41,6 +46,15 @@ export function getStorage(name: string, baseDir: string): Storage {
         delete: async (storagePath: string) => {
             const fullPath = getFullPath(storagePath);
             return fs.promises.unlink(fullPath);
+        },
+        getTokenCachePersistence: async () => {
+            return PersistenceCreator.createPersistence({
+                cachePath: getFullPath("token"),
+                dataProtectionScope: DataProtectionScope.CurrentUser,
+                serviceName: `TypeAgent.${name}`,
+                accountName: `TokenCache`,
+                usePlaintextFileOnLinux: false,
+            });
         },
     };
 }
