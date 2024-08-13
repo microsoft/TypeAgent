@@ -109,6 +109,9 @@ function onRecognizedResult(
 ) {
     const button = document.querySelector<HTMLButtonElement>(`#${buttonId}`)!;
     button.disabled = false;
+    button.children[0].classList.remove("chat-message-hidden");
+    button.children[1].classList.add("chat-message-hidden");
+
     const phraseDiv = document.querySelector<HTMLDivElement>(`#${inputId}`)!;
     let message: string;
     let errorMessage: string | undefined = undefined;
@@ -155,6 +158,9 @@ export function recognizeOnce(
     }
     phraseDiv.innerHTML = "";
     button.disabled = true;
+    button.children[0].classList.add("chat-message-hidden");
+    button.children[1].classList.remove("chat-message-hidden");
+    
     if (useLocalWhisper) {
         const reco = new WhisperRecognizer();
 
