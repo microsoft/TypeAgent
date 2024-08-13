@@ -11,15 +11,15 @@ async function elevate() {
     const client = await getClient();
 
     // elevate
-    await config.forEach(element => {
+    await config.forEach((element) => {
         var v = client.elevate({
             requestType: element.properties.RequestType,
             roleName: element.roleName,
             expirationType: element.properties.ScheduleInfo.Expiration.Type,
-            expirationDuration: element.properties.ScheduleInfo.Expiration.Duration,
-        });    
+            expirationDuration:
+                element.properties.ScheduleInfo.Expiration.Duration,
+        });
     });
-    
 }
 
 (async () => {
