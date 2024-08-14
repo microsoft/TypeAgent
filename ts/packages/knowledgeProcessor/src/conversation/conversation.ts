@@ -187,6 +187,7 @@ export interface SearchResponse<
     entityTimeRanges(): (dateTime.DateRange | undefined)[];
 
     allActions(): IterableIterator<Action>;
+    allActionIds(): IterableIterator<TActionId>;
     actionTimeRanges(): (dateTime.DateRange | undefined)[];
 
     hasTopics(): boolean;
@@ -198,27 +199,30 @@ export function createSearchResponse<
     TMessageId = any,
     TTopicId = any,
     TEntityId = any,
+    TActionId = any,
 >(topicLevel?: number): SearchResponse<TMessageId, TTopicId, TEntityId> {
-    const response: SearchResponse<TMessageId, TTopicId, TEntityId> = {
-        entities: [],
-        topics: [],
-        actions: [],
-        topicLevel: topicLevel ?? 1,
-        allTopics,
-        allTopicIds,
-        mergeAllTopics,
-        topicTimeRanges,
-        allEntities,
-        allEntityIds,
-        allEntityNames,
-        mergeAllEntities,
-        entityTimeRanges,
-        allActions,
-        actionTimeRanges,
-        hasTopics,
-        hasEntities,
-        hasActions,
-    };
+    const response: SearchResponse<TMessageId, TTopicId, TEntityId, TActionId> =
+        {
+            entities: [],
+            topics: [],
+            actions: [],
+            topicLevel: topicLevel ?? 1,
+            allTopics,
+            allTopicIds,
+            mergeAllTopics,
+            topicTimeRanges,
+            allEntities,
+            allEntityIds,
+            allEntityNames,
+            mergeAllEntities,
+            entityTimeRanges,
+            allActions,
+            allActionIds,
+            actionTimeRanges,
+            hasTopics,
+            hasEntities,
+            hasActions,
+        };
     return response;
 
     function* allTopics(): IterableIterator<string> {
@@ -304,6 +308,16 @@ export function createSearchResponse<
             if (result.actions && result.actions.length > 0) {
                 for (const action of result.actions) {
                     yield action;
+                }
+            }
+        }
+    }
+
+    function* allActionIds(): IterableIterator<TActionId> {
+        for (const result of response.actions) {
+            if (result.actionIds) {
+                for (const id of result.actionIds) {
+                    yield id;
                 }
             }
         }
@@ -728,17 +742,12 @@ export async function createConversation(
                 results.actions,
             );
         }
-        let messageIds = intersectSets(
-            topicMessageIds,
-            intersectSets(entityMessageIds, actionMessageIds),
-        );
+        entityMessageIds = intersectSets(entityMessageIds, actionMessageIds);
+        let messageIds = intersectSets(topicMessageIds, entityMessageIds);
         if (!messageIds || messageIds.size === 0) {
             // If nothing in common, try a union.
             //messageIds = topicMessageIds;
-            messageIds = unionSets(
-                topicMessageIds,
-                unionSets(entityMessageIds, actionMessageIds),
-            );
+            messageIds = unionSets(topicMessageIds, entityMessageIds);
         }
         if (messageIds && messageIds.size > 0) {
             results.messageIds = [...messageIds.values()].sort();

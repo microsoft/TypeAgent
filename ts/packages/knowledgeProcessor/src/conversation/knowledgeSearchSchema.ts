@@ -31,12 +31,19 @@ export type EntityFilter = {
     timeRange?: DateTimeRange | undefined; // in this time range
 };
 
-export type ActionFilter = {
-    filterType: "Action";
+export type VerbFilter = {
     // Each verb is typically a word
     verbs: string[];
     verbTense: "past" | "present" | "future";
-    subjectEntityName?: string;
+};
+
+// Use to search for actions performed by an entity
+// Use when the user's request implies an action, like "influence"
+export type ActionFilter = {
+    filterType: "Action";
+    // When user is looking for particular action verbs
+    verbFilter?: VerbFilter;
+    subjectEntityName: string | "none";
     objectEntityName?: string;
     indirectObjectEntityName?: string;
 };
@@ -48,7 +55,7 @@ export type ResponseType =
     | "Entities" // Show information about matching entities
     | "Entity_Facets" // Show specific facets/facts/attributes of matching entities. E.g. name, age, interests, profession, quantity, color
     | "Topics" // Show topics or themes of discussion
-    | "Answer"; // Show an answer that is derived/inferred from any matched messages, topics or entities
+    | "Answer"; // Show an answer that is derived/inferred from any matched messages, topics, entities or actions
 
 export type ResponseStyle = "Paragraph" | "List";
 
