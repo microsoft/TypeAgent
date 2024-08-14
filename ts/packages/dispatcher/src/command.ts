@@ -204,7 +204,9 @@ export async function processCommandNoLock(
             context.logger?.logEvent("command", { originalInput });
             await result.resolved.run(result.args, context);
         } else {
-            throw new Error(`Command '${input}' requires a subcommand. Try '@help ${input}' for the list of sub commands.`);
+            throw new Error(
+                `Command '${input}' requires a subcommand. Try '@help ${input}' for the list of sub commands.`,
+            );
         }
     } catch (e: any) {
         context.requestIO.error(`ERROR: ${e.message}`);
