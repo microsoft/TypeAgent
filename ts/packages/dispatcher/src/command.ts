@@ -28,6 +28,7 @@ import { TranslateCommandHandler } from "./handlers/translateCommandHandler.js";
 import { getTranslatorConfig } from "./translation/agentTranslators.js";
 import { processRequests, unicodeChar } from "./utils/interactive.js";
 /* ==Experimental== */
+import { RandomCommandHandler } from "./handlers/randomCommandHandler.js";
 /* ==End Experimental== */
 
 class HelpCommandHandler implements CommandHandler {
@@ -135,6 +136,7 @@ const handlers: HandlerTable = {
                 context.clientIO ? context.clientIO.exit() : process.exit(0);
             },
         },
+        random: new RandomCommandHandler(),
     },
 };
 
