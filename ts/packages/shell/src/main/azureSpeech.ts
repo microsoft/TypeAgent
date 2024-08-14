@@ -2,21 +2,30 @@
 // Licensed under the MIT License.
 
 import * as sdk from "microsoft-cognitiveservices-speech-sdk";
+import { Result } from "typechat";
+import { AzureTokenScopes, createAzureTokenProvider } from "aiclient";
 
 export interface TokenResponse {
     token: string;
     region: string;
+    endpoint: string;
 }
 
 const defaultVoiceName = "en-US-RogerNeural";
 const defaultVoiceStyle = "chat";
+const IdentityApiKey = "identity";
+const azureTokenProvider = createAzureTokenProvider(
+    AzureTokenScopes.CogServices,
+);
 
 export class AzureSpeech {
     private static instance: AzureSpeech;
+    private token: string = "";
 
     private constructor(
         private readonly subscriptionKey: string,
         private readonly region: string,
+        private readonly endpoint: string,
     ) {
         // ...
     }
@@ -24,14 +33,20 @@ export class AzureSpeech {
     public static initializeAsync = async (config: {
         azureSpeechSubscriptionKey: string;
         azureSpeechRegion: string;
+        azureSpeechEndpoint: string;
     }): Promise<void> => {
         if (AzureSpeech.instance) {
             return;
         }
-        const { azureSpeechSubscriptionKey, azureSpeechRegion } = config;
+        const {
+            azureSpeechSubscriptionKey,
+            azureSpeechRegion,
+            azureSpeechEndpoint: azureSpeechEndpoint,
+        } = config;
         AzureSpeech.instance = new AzureSpeech(
             azureSpeechSubscriptionKey,
             azureSpeechRegion,
+            azureSpeechEndpoint,
         );
     };
 
@@ -43,6 +58,41 @@ export class AzureSpeech {
     };
 
     public getTokenAsync = async (): Promise<TokenResponse> => {
+        let result: TokenResponse;
+
+        if (
+            this.subscriptionKey.toLowerCase() == IdentityApiKey.toLowerCase()
+        ) {
+            result = await this.getIdentityBasedTokenAsync();
+        } else {
+            result = await this.getKeyBasedTokenAsync();
+        }
+
+        this.token = result.token;
+
+        return result;
+    };
+
+    private getIdentityBasedTokenAsync = async (): Promise<TokenResponse> => {
+        const tokenResult: Result<string> =
+            await azureTokenProvider.getAccessToken();
+
+        if (!tokenResult.success) {
+            throw new Error(
+                `AzureSpeech: getIdentityBasedTokenAsync: Failed to get identity based token! tokenResule: ${tokenResult}`,
+            );
+        }
+
+        const result: TokenResponse = {
+            token: tokenResult.data,
+            region: this.region,
+            endpoint: this.endpoint,
+        };
+
+        return result;
+    };
+
+    private getKeyBasedTokenAsync = async (): Promise<TokenResponse> => {
         const options: RequestInit = {
             method: "POST",
             headers: new Headers({
@@ -51,8 +101,8 @@ export class AzureSpeech {
             }),
         };
 
-        const endpoint = `https://${this.region}.api.cognitive.microsoft.com/sts/v1.0/issuetoken`;
-        const response = await fetch(endpoint, options);
+        const tokenEndpoint = `https://${this.region}.api.cognitive.microsoft.com/sts/v1.0/issuetoken`;
+        const response = await fetch(tokenEndpoint, options);
         if (!response.ok) {
             throw new Error(
                 `AzureSpeech: getTokenAsync: ${response.status} ${response.statusText}`,
@@ -62,6 +112,7 @@ export class AzureSpeech {
         const result: TokenResponse = {
             token: await response.text(),
             region: this.region,
+            endpoint: this.endpoint,
         };
 
         return result;
@@ -72,10 +123,20 @@ export class AzureSpeech {
         voiceName?: string,
         voiceStyle?: string,
     ) => {
-        const speechConfig = sdk.SpeechConfig.fromSubscription(
+        let speechConfig = sdk.SpeechConfig.fromSubscription(
             this.subscriptionKey,
             this.region,
         );
+
+        if (
+            this.subscriptionKey.toLowerCase() == IdentityApiKey.toLowerCase()
+        ) {
+            speechConfig = sdk.SpeechConfig.fromAuthorizationToken(
+                `aad#${this.endpoint}#${this.token}`,
+                this.region,
+            );
+        }
+
         const synthesizer = new sdk.SpeechSynthesizer(speechConfig);
 
         const ssml = `
