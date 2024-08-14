@@ -173,6 +173,8 @@ export async function* extractKnowledge(
     }
 }
 
+export const NoEntityName = "none";
+
 export function knowledgeValueToString(value: Value): string {
     if (typeof value === "object") {
         return `${value.amount} ${value.units}`;
@@ -182,7 +184,7 @@ export function knowledgeValueToString(value: Value): string {
 
 export function actionToString(action: Action): string {
     let text = "";
-    if (action.subjectEntityName !== "none") {
+    if (action.subjectEntityName !== NoEntityName) {
         text += " ";
         text += action.subjectEntityName;
     }
@@ -192,7 +194,7 @@ export function actionToString(action: Action): string {
         text += actionParamsToString(action);
         text += ")";
     }
-    if (action.objectEntityName !== "none") {
+    if (action.objectEntityName !== NoEntityName) {
         text += " ";
         text += action.objectEntityName;
     }

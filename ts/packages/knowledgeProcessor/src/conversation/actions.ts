@@ -17,22 +17,23 @@ import {
     createIndexFolder,
     createKnowledgeStore,
     createTextIndex,
-    searchIndex,
 } from "../knowledgeIndex.js";
-import { Action, VerbTense } from "./knowledgeSchema.js";
+import { Action } from "./knowledgeSchema.js";
 import path from "path";
 import { ActionFilter } from "./knowledgeSearchSchema.js";
 import { TemporalLog, getRangeOfTemporalSequence } from "../temporal.js";
 import {
     addToSet,
     intersect,
-    intersectArrays,
     intersectMultiple,
     unionMultiple,
     uniqueFrom,
 } from "../setOperations.js";
-import { EntityIndex } from "./entities.js";
-import { ExtractedAction, actionVerbsToString } from "./knowledge.js";
+import {
+    ExtractedAction,
+    NoEntityName,
+    actionVerbsToString,
+} from "./knowledge.js";
 
 export interface ActionSearchOptions extends SearchOptions {
     verbSearchOptions?: SearchOptions | undefined;
@@ -212,7 +213,7 @@ export async function createActionIndex<TSourceId = any>(
         name: string,
         actionIds: ActionId[],
     ): Promise<void> {
-        if (name) {
+        if (name && name !== NoEntityName) {
             const nameId = await names.getId(name);
             if (nameId) {
                 await nameIndex.put(actionIds, nameId);
@@ -287,16 +288,20 @@ export async function createActionIndex<TSourceId = any>(
     async function matchVerbs(
         filter: ActionFilter,
         options: ActionSearchOptions,
-    ): Promise<ActionId[]> {
-        if (filter.verbs && filter.verbs.length > 0) {
+    ): Promise<ActionId[] | undefined> {
+        if (filter.verbFilter && filter.verbFilter.verbs.length > 0) {
             const verbOptions = options.verbSearchOptions ?? options;
-            return verbIndex.getNearest(
-                actionVerbsToString(filter.verbs, filter.verbTense),
+            const matches = await verbIndex.getNearest(
+                actionVerbsToString(
+                    filter.verbFilter.verbs,
+                    filter.verbFilter.verbTense,
+                ),
                 verbOptions.maxMatches,
                 verbOptions.minScore,
             );
+            return matches;
         }
-        return [];
+        return undefined;
     }
 
     async function loadSourceIds(

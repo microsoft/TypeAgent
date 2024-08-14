@@ -145,8 +145,12 @@ export function createSearchProcessor(
                     maxMatches: 1,
                     minScore: options.minScore,
                 },
-                loadActions: responseType === "Answer",
+                loadActions:
+                    responseType === "Answer" || responseType === "Actions",
             };
+            if (searchOptions.action.loadActions) {
+                searchOptions.loadMessages = true;
+            }
         }
 
         adjustRequest(query, action, searchOptions);

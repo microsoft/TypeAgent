@@ -708,51 +708,58 @@ export async function runPlayChat(): Promise<void> {
     }
     handlers.actions.metadata = actionsDef();
     async function actions(args: string[], io: InteractiveIo) {
-        const namedArgs = parseNamedArguments(args, actionsDef());
         const index = await context.conversation.getActionIndex();
+        if (args.length === 0) {
+            // Just dump all actions
+            for await (const action of index.entries()) {
+                writeExtractedAction(action);
+            }
+            return;
+        }
+
+        const namedArgs = parseNamedArguments(args, actionsDef());
         const verb: string = namedArgs.verb;
         const verbTense = namedArgs.tense;
+        let verbs: string[] | undefined;
         if (verb) {
-            const verbs = knowLib.split(verb, ",", {
+            verbs = knowLib.split(verb, ",", {
                 removeEmpty: true,
                 trim: true,
             });
             if (verbs.length === 0) {
-                return;
-            }
-            if (verbs[0] === "*") {
+                verbs = undefined;
+            } else if (verbs[0] === "*") {
                 for await (const v of index.verbIndex.text()) {
                     printer.writeLine(v);
                 }
                 return;
             }
-            // Full search
-            const filter: conversation.ActionFilter = {
-                filterType: "Action",
-                subjectEntityName: namedArgs.subject,
-                objectEntityName: namedArgs.object,
+        }
+        // Full search
+        const filter: conversation.ActionFilter = {
+            filterType: "Action",
+            subjectEntityName: namedArgs.subject,
+            objectEntityName: namedArgs.object,
+        };
+        if (verbs && verbs.length > 0) {
+            filter.verbFilter = {
                 verbs,
                 verbTense,
             };
-            const matches = await index.search(filter, {
-                maxMatches: namedArgs.count,
-                verbSearchOptions: {
-                    maxMatches: namedArgs.verbCount,
-                },
-                nameSearchOptions: {
-                    maxMatches: namedArgs.nameCount,
-                },
-                loadActions: true,
-            });
-            if (matches.actions) {
-                for (const action of matches.actions) {
-                    printer.writeLine(conversation.actionToString(action));
-                }
-            }
-        } else {
-            // Just dump all actions
-            for await (const action of index.entries()) {
-                writeExtractedAction(action);
+        }
+        const matches = await index.search(filter, {
+            maxMatches: namedArgs.count,
+            verbSearchOptions: {
+                maxMatches: namedArgs.verbCount,
+            },
+            nameSearchOptions: {
+                maxMatches: namedArgs.nameCount,
+            },
+            loadActions: true,
+        });
+        if (matches.actions) {
+            for (const action of matches.actions) {
+                printer.writeLine(conversation.actionToString(action));
             }
         }
     }
