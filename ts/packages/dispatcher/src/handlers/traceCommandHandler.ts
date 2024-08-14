@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { CommandHandler } from "./common/commandHandler.js";
+import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import registerDebug from "debug";
 
 function toNamespace(regexp: RegExp) {
@@ -22,7 +23,7 @@ function getCurrentTraceSettings() {
 
 export class TraceCommandHandler implements CommandHandler {
     public readonly description = "Enable or disable trace namespaces";
-    public async run(input: string) {
+    public async run(input: string, context: CommandHandlerContext) {
         if (input !== "") {
             if (input === "-" || input === "-*") {
                 registerDebug.disable();
@@ -33,7 +34,7 @@ export class TraceCommandHandler implements CommandHandler {
             }
         }
 
-        console.log(
+        context.requestIO.success(
             `Current trace settings: ${getCurrentTraceSettings().join(",")}`,
         );
     }

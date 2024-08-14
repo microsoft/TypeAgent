@@ -163,7 +163,7 @@ function resolveCommand(input: string): ResolveCommandResult | undefined {
             throw new Error(
                 `Unknown command '${subCommand}'. ${
                     command
-                        ? ` for '@${command}'. Try @help ${command} for a list of subcommands.`
+                        ? ` for '@${command}'. Try '@help ${command}' for the list of subcommands.`
                         : "Try '@help' for a list of commands."
                 }`,
             );
@@ -204,7 +204,9 @@ export async function processCommandNoLock(
             context.logger?.logEvent("command", { originalInput });
             await result.resolved.run(result.args, context);
         } else {
-            throw new Error(`Command '${input}' requires a subcommand`);
+            throw new Error(
+                `Command '${input}' requires a subcommand. Try '@help ${input}' for the list of sub commands.`,
+            );
         }
     } catch (e: any) {
         context.requestIO.error(`ERROR: ${e.message}`);
