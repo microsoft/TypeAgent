@@ -69,7 +69,7 @@ export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any> {
         sourceIdLog: TemporalLog<TSourceId>,
         results: EntitySearchResult<TEntityId>[],
         unique?: Set<TSourceId>,
-    ): Promise<Set<TSourceId>>;
+    ): Promise<Set<TSourceId> | undefined>;
 }
 
 export interface EntitySearchOptions extends SearchOptions {
@@ -271,7 +271,7 @@ export async function createEntityIndex<TSourceId = string>(
         sourceIdLog: TemporalLog<TSourceId>,
         results: EntitySearchResult<EntityId>[],
         unique?: Set<TSourceId>,
-    ): Promise<Set<TSourceId>> {
+    ): Promise<Set<TSourceId> | undefined> {
         unique ??= new Set<TSourceId>();
         if (results.length === 0) {
             return unique;
@@ -295,7 +295,7 @@ export async function createEntityIndex<TSourceId = string>(
                 }
             },
         );
-        return unique;
+        return unique.size === 0 ? undefined : unique;
     }
 }
 

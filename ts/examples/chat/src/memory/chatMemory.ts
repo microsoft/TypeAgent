@@ -1012,7 +1012,7 @@ export async function runPlayChat(): Promise<void> {
                     `Entity to Message Hit Count: ${entityIds.size}`,
                 );
             }
-            const allActions = [...rr.response.allActions()];
+            const allActions = [...rr.response.allActionIds()];
             if (allActions && allActions.length > 0) {
                 printer.writeLine(`Action Hit Count: ${allActions.length}`);
             }

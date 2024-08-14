@@ -135,7 +135,7 @@ export function createSearchProcessor(
                     responseType === "Answer" || responseType === "Topics",
             },
             topicLevel,
-            loadMessages: responseType === "Answer", //topicLevel === 1,
+            loadMessages: responseType === "Answer" || hasActionFilter(action),
         };
         if (options.includeActions) {
             searchOptions.action = {
@@ -145,12 +145,8 @@ export function createSearchProcessor(
                     maxMatches: 1,
                     minScore: options.minScore,
                 },
-                loadActions:
-                    responseType === "Answer" || responseType === "Actions",
+                loadActions: false,
             };
-            if (searchOptions.action.loadActions) {
-                searchOptions.loadMessages = true;
-            }
         }
 
         adjustRequest(query, action, searchOptions);
@@ -194,6 +190,11 @@ export function createSearchProcessor(
             params.responseType === "Topics" &&
             !params.filters.some((f) => f.filterType !== "Topic")
         );
+    }
+
+    function hasActionFilter(action: GetAnswerAction): boolean {
+        const params = action.parameters;
+        return !params.filters.some((f) => f.filterType !== "Action");
     }
 
     function ensureTopicFilter(query: string, filters: Filter[]): void {

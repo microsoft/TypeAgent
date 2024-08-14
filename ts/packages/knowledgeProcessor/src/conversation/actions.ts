@@ -26,6 +26,7 @@ import {
     addToSet,
     intersect,
     intersectMultiple,
+    intersectUnionMultiple,
     unionMultiple,
     uniqueFrom,
 } from "../setOperations.js";
@@ -244,7 +245,7 @@ export async function createActionIndex<TSourceId = any>(
             matchVerbs(filter, options),
         ]);
         results.actionIds = [
-            ...intersectMultiple(
+            ...intersectUnionMultiple(
                 subjectToActionIds,
                 objectToActionIds,
                 indirectObjectToActionIds,

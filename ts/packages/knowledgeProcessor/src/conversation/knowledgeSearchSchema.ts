@@ -38,6 +38,7 @@ export type VerbFilter = {
 };
 
 // Use to search for actions performed by an entity
+// Use when the user's request implies an action, like "influence"
 export type ActionFilter = {
     filterType: "Action";
     // When user is looking for particular action verbs
@@ -54,7 +55,6 @@ export type ResponseType =
     | "Entities" // Show information about matching entities
     | "Entity_Facets" // Show specific facets/facts/attributes of matching entities. E.g. name, age, interests, profession, quantity, color
     | "Topics" // Show topics or themes of discussion
-    | "Actions" // Show information about matching actions
     | "Answer"; // Show an answer that is derived/inferred from any matched messages, topics, entities or actions
 
 export type ResponseStyle = "Paragraph" | "List";
