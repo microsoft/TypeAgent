@@ -762,6 +762,12 @@ export async function runPlayChat(): Promise<void> {
             for (const action of matches.actions) {
                 printer.writeLine(conversation.actionToString(action));
             }
+            if (namedArgs.showMessages && matches.actionIds) {
+                const messages = await loadMessages(
+                    await index.getSourceIds(matches.actionIds),
+                );
+                printer.writeTemporalBlocks(chalk.cyan, messages);
+            }
         }
     }
 

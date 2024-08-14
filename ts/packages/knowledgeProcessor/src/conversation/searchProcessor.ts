@@ -52,14 +52,18 @@ export function createSearchProcessor(
     answerModel: ChatModel,
     includeActions: boolean = true,
 ): ConversationSearchProcessor {
-    const actions = createKnowledgeActionTranslator(
+    const searchActions = createKnowledgeActionTranslator(
         actionModel,
-        includeActions,
+        includeActions, // Whether to include actions in most defaults
+    );
+    const searchActions_NoActions = createKnowledgeActionTranslator(
+        actionModel,
+        false,
     );
     const answers = createAnswerGenerator(answerModel);
 
     return {
-        actions,
+        actions: searchActions,
         answers,
         search,
         buildContext,
@@ -69,10 +73,10 @@ export function createSearchProcessor(
         query: string,
         options: SearchProcessingOptions,
     ): Promise<SearchActionResponse | undefined> {
-        const actionResult = await actions.translateSearch(
-            query,
-            await buildContext(options),
-        );
+        const context = await buildContext(options);
+        const actionResult = options.includeActions
+            ? await searchActions.translateSearch(query, context)
+            : await searchActions_NoActions.translateSearch(query, context);
         if (!actionResult.success) {
             return undefined;
         }
