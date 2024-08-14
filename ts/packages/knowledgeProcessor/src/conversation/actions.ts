@@ -264,7 +264,7 @@ export async function createActionIndex<TSourceId = any>(
         name: string | undefined,
         options: ActionSearchOptions,
     ): Promise<IterableIterator<ActionId> | undefined> {
-        if (name) {
+        if (name && name !== NoEntityName) {
             const nameOptions = options.nameSearchOptions ?? options;
             // Possible names of entities
             const nameIds = await names.getNearestText(

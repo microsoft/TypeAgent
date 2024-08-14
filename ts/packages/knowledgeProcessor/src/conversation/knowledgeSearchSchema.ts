@@ -43,7 +43,7 @@ export type ActionFilter = {
     filterType: "Action";
     // When user is looking for particular action verbs
     verbFilter?: VerbFilter;
-    subjectEntityName?: string;
+    subjectEntityName: string | "none";
     objectEntityName?: string;
     indirectObjectEntityName?: string;
 };

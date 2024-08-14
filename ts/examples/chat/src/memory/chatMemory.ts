@@ -672,6 +672,7 @@ export async function runPlayChat(): Promise<void> {
             options: {
                 subject: {
                     description: "Action to search for",
+                    defaultValue: conversation.NoEntityName,
                 },
                 object: {
                     description: "Object to search for",
