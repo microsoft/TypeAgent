@@ -1,6 +1,15 @@
 # aiclient
 
-Clients for AI APIs used by Microsoft AI Systems team.
+AI Client is **sample code** for calling AI endpoints and other REST services.
+
+The library is used by and intended only for sample agents and examples in the TypeAgent project.
+
+Supported services:
+
+- Open AI model endpoints, both on Azure and Open AI.
+- Bing
+
+The library includes support for getting settings needed to call these services from environment variables.
 
 ## Trademarks
 

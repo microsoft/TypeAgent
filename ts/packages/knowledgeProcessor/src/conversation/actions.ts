@@ -17,25 +17,28 @@ import {
     createIndexFolder,
     createKnowledgeStore,
     createTextIndex,
-    searchIndex,
 } from "../knowledgeIndex.js";
-import { Action, VerbTense } from "./knowledgeSchema.js";
+import { Action } from "./knowledgeSchema.js";
 import path from "path";
 import { ActionFilter } from "./knowledgeSearchSchema.js";
 import { TemporalLog, getRangeOfTemporalSequence } from "../temporal.js";
 import {
     addToSet,
     intersect,
-    intersectArrays,
     intersectMultiple,
+    intersectUnionMultiple,
     unionMultiple,
     uniqueFrom,
 } from "../setOperations.js";
-import { EntityIndex } from "./entities.js";
-import { ExtractedAction, actionVerbsToString } from "./knowledge.js";
+import {
+    ExtractedAction,
+    NoEntityName,
+    actionVerbsToString,
+} from "./knowledge.js";
 
 export interface ActionSearchOptions extends SearchOptions {
     verbSearchOptions?: SearchOptions | undefined;
+    nameSearchOptions?: SearchOptions | undefined;
     loadActions?: boolean | undefined;
 }
 
@@ -69,11 +72,6 @@ export interface ActionIndex<TActionId = any, TSourceId = any>
         filter: ActionFilter,
         options: ActionSearchOptions,
     ): Promise<ActionSearchResult<TActionId>>;
-    searchVerbs(
-        verb: string[],
-        tense?: VerbTense,
-        options?: SearchOptions,
-    ): Promise<ScoredItem<TActionId[]>[]>;
     loadSourceIds(
         sourceIdLog: TemporalLog<TSourceId>,
         results: ActionSearchResult<TActionId>[],
@@ -133,7 +131,6 @@ export async function createActionIndex<TSourceId = any>(
         getActions,
         getSourceIds,
         search,
-        searchVerbs,
         loadSourceIds,
     };
 
@@ -217,7 +214,7 @@ export async function createActionIndex<TSourceId = any>(
         name: string,
         actionIds: ActionId[],
     ): Promise<void> {
-        if (name) {
+        if (name && name !== NoEntityName) {
             const nameId = await names.getId(name);
             if (nameId) {
                 await nameIndex.put(actionIds, nameId);
@@ -248,7 +245,7 @@ export async function createActionIndex<TSourceId = any>(
             matchVerbs(filter, options),
         ]);
         results.actionIds = [
-            ...intersectMultiple(
+            ...intersectUnionMultiple(
                 subjectToActionIds,
                 objectToActionIds,
                 indirectObjectToActionIds,
@@ -261,33 +258,19 @@ export async function createActionIndex<TSourceId = any>(
         return results;
     }
 
-    async function searchVerbs(
-        verbs: string[],
-        tense?: VerbTense,
-        options?: SearchOptions,
-    ): Promise<ScoredItem<ActionId[]>[]> {
-        const fullVerb = actionVerbsToString(verbs, tense);
-        return searchIndex(
-            verbIndex,
-            fullVerb,
-            false,
-            options?.maxMatches ?? 1,
-            options?.minScore,
-        );
-    }
-
     async function matchName(
         names: TextIndex<string>,
         nameIndex: KeyValueIndex<string, ActionId>,
         name: string | undefined,
         options: ActionSearchOptions,
     ): Promise<IterableIterator<ActionId> | undefined> {
-        if (name) {
+        if (name && name !== NoEntityName) {
+            const nameOptions = options.nameSearchOptions ?? options;
             // Possible names of entities
             const nameIds = await names.getNearestText(
                 name,
-                options.maxMatches,
-                options.minScore,
+                nameOptions.maxMatches,
+                nameOptions.minScore,
             );
             if (nameIds && nameIds.length > 0) {
                 // Load all actions for those entities
@@ -306,16 +289,20 @@ export async function createActionIndex<TSourceId = any>(
     async function matchVerbs(
         filter: ActionFilter,
         options: ActionSearchOptions,
-    ): Promise<ActionId[]> {
-        if (filter.verbs && filter.verbs.length > 0) {
+    ): Promise<ActionId[] | undefined> {
+        if (filter.verbFilter && filter.verbFilter.verbs.length > 0) {
             const verbOptions = options.verbSearchOptions ?? options;
-            return verbIndex.getNearest(
-                actionVerbsToString(filter.verbs, filter.verbTense),
+            const matches = await verbIndex.getNearest(
+                actionVerbsToString(
+                    filter.verbFilter.verbs,
+                    filter.verbFilter.verbTense,
+                ),
                 verbOptions.maxMatches,
                 verbOptions.minScore,
             );
+            return matches;
         }
-        return [];
+        return undefined;
     }
 
     async function loadSourceIds(

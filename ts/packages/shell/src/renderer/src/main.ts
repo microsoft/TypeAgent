@@ -16,7 +16,7 @@ function addEvents(chatView: ChatView) {
         console.log(`listen event: ${name}`);
         if (useLocalWhisper) {
             recognizeOnce(
-                "",
+                undefined,
                 "phraseDiv",
                 "reco",
                 (message: string) => {
@@ -29,7 +29,7 @@ function addEvents(chatView: ChatView) {
                 chatView.speechInfo.speechToken = token;
                 if (name === "Alt+M") {
                     recognizeOnce(
-                        token.token,
+                        token,
                         "phraseDiv",
                         "reco",
                         (message: string) => {

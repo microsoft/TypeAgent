@@ -52,14 +52,18 @@ export function createSearchProcessor(
     answerModel: ChatModel,
     includeActions: boolean = true,
 ): ConversationSearchProcessor {
-    const actions = createKnowledgeActionTranslator(
+    const searchActions = createKnowledgeActionTranslator(
         actionModel,
-        includeActions,
+        includeActions, // Whether to include actions in most defaults
+    );
+    const searchActions_NoActions = createKnowledgeActionTranslator(
+        actionModel,
+        false,
     );
     const answers = createAnswerGenerator(answerModel);
 
     return {
-        actions,
+        actions: searchActions,
         answers,
         search,
         buildContext,
@@ -69,10 +73,10 @@ export function createSearchProcessor(
         query: string,
         options: SearchProcessingOptions,
     ): Promise<SearchActionResponse | undefined> {
-        const actionResult = await actions.translateSearch(
-            query,
-            await buildContext(options),
-        );
+        const context = await buildContext(options);
+        const actionResult = options.includeActions
+            ? await searchActions.translateSearch(query, context)
+            : await searchActions_NoActions.translateSearch(query, context);
         if (!actionResult.success) {
             return undefined;
         }
@@ -135,7 +139,7 @@ export function createSearchProcessor(
                     responseType === "Answer" || responseType === "Topics",
             },
             topicLevel,
-            loadMessages: responseType === "Answer", //topicLevel === 1,
+            loadMessages: responseType === "Answer" || hasActionFilter(action),
         };
         if (options.includeActions) {
             searchOptions.action = {
@@ -145,7 +149,7 @@ export function createSearchProcessor(
                     maxMatches: 1,
                     minScore: options.minScore,
                 },
-                loadActions: responseType === "Answer",
+                loadActions: false,
             };
         }
 
@@ -190,6 +194,11 @@ export function createSearchProcessor(
             params.responseType === "Topics" &&
             !params.filters.some((f) => f.filterType !== "Topic")
         );
+    }
+
+    function hasActionFilter(action: GetAnswerAction): boolean {
+        const params = action.parameters;
+        return !params.filters.some((f) => f.filterType !== "Action");
     }
 
     function ensureTopicFilter(query: string, filters: Filter[]): void {

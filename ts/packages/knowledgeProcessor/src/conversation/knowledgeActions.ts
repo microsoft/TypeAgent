@@ -55,10 +55,10 @@ export function createKnowledgeActionTranslator(
 
     function createRequestPrompt(request: string) {
         return (
-            `The following is a user request about a conversation between one or more users and assistants:\n` +
-            `"""\n${request}\n"""\n\n` +
             `You are a service who translates user requests into a JSON object of type "${typeName}" according to the following TypeScript definitions:\n` +
             `\`\`\`\n${schema}\`\`\`\n` +
+            `The following is a user request about a conversation between one or more users and assistants:\n` +
+            `"""\n${request}\n"""\n\n` +
             `The following is a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
         );
     }

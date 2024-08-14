@@ -119,6 +119,7 @@ class InteractiveApp {
             return;
         }
 
+        this.writeWelcome();
         if (this._settings.onStart) {
             this._settings.onStart(this._stdio);
         }
@@ -254,6 +255,19 @@ class InteractiveApp {
     protected writeLine(line: string): void {
         this._stdio.stdout.write(line);
         this._stdio.stdout.write("\n");
+    }
+
+    private writeWelcome() {
+        if (this._settings.stopCommands) {
+            this._stdio.stdout.write(
+                `Type ${this._settings.stopCommands.join(" OR ")} to exit\n`,
+            );
+        }
+        if (this._settings.commandPrefix) {
+            this._stdio.stdout.write(
+                `To run a command, prefix its name with: ${this._settings.commandPrefix}\n`,
+            );
+        }
     }
 }
 

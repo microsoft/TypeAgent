@@ -37,7 +37,7 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
     const storePath = "/data/testChat";
     const chatModel = openai.createStandardAzureChatModel("GPT_4");
     const chatModelFast = openai.createStandardAzureChatModel("GPT_35_TURBO");
-    const conversationName = "adrian_tchaikovsky";
+    const conversationName = "transcript";
     const conversationSettings = createConversationSettings();
 
     //const conversationName = "play";
@@ -175,8 +175,7 @@ export async function runPlayChat(): Promise<void> {
         io: InteractiveIo,
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, importChatDef());
-        const chatPath =
-            namedArgs.chatPath ?? "/data/testChat/adrian_tchaikovsky.txt";
+        const chatPath = namedArgs.chatPath ?? "/data/testChat/transcript.txt";
         await loadConversation(context, path.parse(chatPath).name);
         printer.writeLine(`Importing ${chatPath}`);
 
@@ -671,15 +670,34 @@ export async function runPlayChat(): Promise<void> {
         return {
             description: "Search for actions",
             options: {
+                subject: {
+                    description: "Action to search for",
+                    defaultValue: conversation.NoEntityName,
+                },
+                object: {
+                    description: "Object to search for",
+                },
                 verb: {
-                    description: "Verb to search for",
+                    description:
+                        "Verb to search for. Compound verbs are comma separated",
                 },
                 tense: {
-                    description: "Verb tense",
+                    description: "Verb tense: past | present | future",
+                    defaultValue: "past",
                 },
                 count: {
-                    description: "Num matches",
+                    description: "Num action matches",
                     defaultValue: 1,
+                    type: "number",
+                },
+                verbCount: {
+                    description: "Num verb matches",
+                    defaultValue: 1,
+                    type: "number",
+                },
+                nameCount: {
+                    description: "Num name matches",
+                    defaultValue: 2,
                     type: "number",
                 },
                 showMessages: {
@@ -691,34 +709,65 @@ export async function runPlayChat(): Promise<void> {
     }
     handlers.actions.metadata = actionsDef();
     async function actions(args: string[], io: InteractiveIo) {
-        const namedArgs = parseNamedArguments(args, actionsDef());
         const index = await context.conversation.getActionIndex();
+        if (args.length === 0) {
+            // Just dump all actions
+            for await (const action of index.entries()) {
+                writeExtractedAction(action);
+            }
+            return;
+        }
+
+        const namedArgs = parseNamedArguments(args, actionsDef());
         const verb: string = namedArgs.verb;
-        const tense = namedArgs.tense;
+        const verbTense = namedArgs.tense;
+        let verbs: string[] | undefined;
         if (verb) {
-            if (verb === "*") {
+            verbs = knowLib.split(verb, ",", {
+                removeEmpty: true,
+                trim: true,
+            });
+            if (verbs.length === 0) {
+                verbs = undefined;
+            } else if (verbs[0] === "*") {
                 for await (const v of index.verbIndex.text()) {
                     printer.writeLine(v);
                 }
                 return;
             }
-            const matches = await index.searchVerbs([verb], tense, {
-                maxMatches: namedArgs.count,
-            });
-            for (const match of matches) {
-                printer.writeInColor(chalk.green, `[${match.score}]`);
-                await writeActionsById(
-                    index,
-                    match.item,
-                    namedArgs.showMessages,
-                );
-                printer.writeLine();
-            }
-            return;
         }
-
-        for await (const action of index.entries()) {
-            writeExtractedAction(action);
+        // Full search
+        const filter: conversation.ActionFilter = {
+            filterType: "Action",
+            subjectEntityName: namedArgs.subject,
+            objectEntityName: namedArgs.object,
+        };
+        if (verbs && verbs.length > 0) {
+            filter.verbFilter = {
+                verbs,
+                verbTense,
+            };
+        }
+        const matches = await index.search(filter, {
+            maxMatches: namedArgs.count,
+            verbSearchOptions: {
+                maxMatches: namedArgs.verbCount,
+            },
+            nameSearchOptions: {
+                maxMatches: namedArgs.nameCount,
+            },
+            loadActions: true,
+        });
+        if (matches.actions) {
+            for (const action of matches.actions) {
+                printer.writeLine(conversation.actionToString(action));
+            }
+            if (namedArgs.showMessages && matches.actionIds) {
+                const messages = await loadMessages(
+                    await index.getSourceIds(matches.actionIds),
+                );
+                printer.writeTemporalBlocks(chalk.cyan, messages);
+            }
         }
     }
 
@@ -970,7 +1019,7 @@ export async function runPlayChat(): Promise<void> {
                     `Entity to Message Hit Count: ${entityIds.size}`,
                 );
             }
-            const allActions = [...rr.response.allActions()];
+            const allActions = [...rr.response.allActionIds()];
             if (allActions && allActions.length > 0) {
                 printer.writeLine(`Action Hit Count: ${allActions.length}`);
             }
@@ -1167,7 +1216,7 @@ export async function runPlayChat(): Promise<void> {
             }
         }
     }
-
+    /*
     async function writeActionsById(
         index: knowLib.conversation.ActionIndex,
         actionIds: string[],
@@ -1195,6 +1244,7 @@ export async function runPlayChat(): Promise<void> {
             }
         }
     }
+    */
 
     function writeList(title: string, list?: string[]): void {
         if (list && list.length > 0) {

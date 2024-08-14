@@ -15,13 +15,15 @@ enum AddressToType {
 
 export class MailClient {
     private readonly logger = registerDebug("typeagent:graphUtils:mailClient");
-    public constructor(private readonly graphClient: GraphClient) {}
+    public constructor(private readonly graphClient: GraphClient | undefined) {}
 
     public isGraphClientInitialized(): boolean {
-        return this.graphClient.getClient() ? true : false;
+        return this.graphClient && this.graphClient.getClient() ? true : false;
     }
 
-    public async getInboxAsync(): Promise<PageCollection> {
+    public async getInboxAsync(): Promise<PageCollection | undefined> {
+        if (this.graphClient === undefined) return undefined;
+
         this.graphClient.ensureTokenIsValid();
         return this.graphClient
             .getClient()
@@ -89,6 +91,8 @@ export class MailClient {
         cc_addrs: string[] | undefined,
         bcc_addrs: string[] | undefined,
     ): Promise<Boolean> {
+        if (this.graphClient === undefined) return false;
+
         this.graphClient.ensureTokenIsValid();
         let fSent = false;
         try {
@@ -137,6 +141,8 @@ export class MailClient {
         cc_addrs: string[] | undefined,
         bcc_addrs: string[] | undefined,
     ): Promise<Boolean> {
+        if (this.graphClient === undefined) return false;
+
         this.graphClient.ensureTokenIsValid();
         try {
             const reply = {
@@ -186,6 +192,8 @@ export class MailClient {
         cc_addrs: string[] | undefined,
         bcc_addrs: string[] | undefined,
     ): Promise<Boolean> {
+        if (this.graphClient === undefined) return false;
+
         this.graphClient.ensureTokenIsValid();
         try {
             const message: DynamicObject = {
@@ -230,8 +238,9 @@ export class MailClient {
         startDateTime: string | undefined,
         endDateTime: string | undefined,
     ): Promise<string | undefined> {
-        this.graphClient.ensureTokenIsValid();
+        if (this.graphClient === undefined) return undefined;
 
+        this.graphClient.ensureTokenIsValid();
         try {
             if (sender && sender.length > 0) {
                 let msgs = await this.graphClient
@@ -257,6 +266,7 @@ export class MailClient {
     public async getEmailAddressesOfUsernamesLocal(
         usernames: string[],
     ): Promise<string[]> {
+        if (this.graphClient === undefined) return [];
         return this.graphClient.getEmailAddressesOfUsernamesLocal(usernames);
     }
 }

@@ -46,7 +46,6 @@ import {
     intersect,
     intersectMultiple,
     removeUndefined,
-    unique,
     uniqueFrom,
 } from "../setOperations.js";
 import { createRecentItemsWindow } from "./conversation.js";
