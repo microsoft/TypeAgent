@@ -71,14 +71,12 @@ export function getAudioConfig() {
     return speechSDK.AudioConfig.fromDefaultMicrophoneInput();
 }
 
-export function getSpeechConfig(token: string) {
-    // todo: get region from service
-    const region = "westus2";
+export function getSpeechConfig(token: SpeechToken | undefined) {
     let speechConfig: speechSDK.SpeechConfig;
     if (token) {
         speechConfig = speechSDK.SpeechConfig.fromAuthorizationToken(
-            token,
-            region,
+            `aad#${token.endpoint}#${token.token}`,
+            token.region,
         );
     } else {
         return undefined;
@@ -91,7 +89,7 @@ function onRecognizing(
     recognitionEventArgs: speechSDK.SpeechRecognitionEventArgs,
     inputId: string,
 ) {
-    console.log("Running REcognizing step");
+    console.log("Running Recognizing step");
     const result = recognitionEventArgs.result;
     const phraseDiv = document.querySelector<HTMLDivElement>(`#${inputId}`)!;
     // Update the hypothesis line in the phrase/result view (only have one)
@@ -111,6 +109,9 @@ function onRecognizedResult(
 ) {
     const button = document.querySelector<HTMLButtonElement>(`#${buttonId}`)!;
     button.disabled = false;
+    button.children[0].classList.remove("chat-message-hidden");
+    button.children[1].classList.add("chat-message-hidden");
+
     const phraseDiv = document.querySelector<HTMLDivElement>(`#${inputId}`)!;
     let message: string;
     let errorMessage: string | undefined = undefined;
@@ -126,6 +127,10 @@ function onRecognizedResult(
             speechSDK.CancellationDetails.fromResult(result);
         if (cancelationResult.reason == speechSDK.CancellationReason.Error) {
             errorMessage = `[ERROR: ${cancelationResult.errorDetails} (code:${cancelationResult.ErrorCode})]`;
+
+            if (cancelationResult.ErrorCode == 4) {
+                errorMessage += `Did you forget to elevate your RBAC role?`;
+            }
         } else {
             errorMessage = `[ERROR: Cancelled]`;
         }
@@ -140,7 +145,7 @@ function onRecognizedResult(
 }
 
 export function recognizeOnce(
-    token: string,
+    token: SpeechToken | undefined,
     inputId: string,
     buttonId: string,
     messageHandler: (message: string) => void,
@@ -153,6 +158,9 @@ export function recognizeOnce(
     }
     phraseDiv.innerHTML = "";
     button.disabled = true;
+    button.children[0].classList.add("chat-message-hidden");
+    button.children[1].classList.remove("chat-message-hidden");
+
     if (useLocalWhisper) {
         const reco = new WhisperRecognizer();
 

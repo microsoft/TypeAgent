@@ -6,6 +6,8 @@ import { ElectronAPI } from "@electron-toolkit/preload";
 export type SpeechToken = {
     token: string;
     expire: number;
+    endpoint: string;
+    region: string;
 };
 
 // TODO: remove duplicate types due to package circular dependencies (commonUtils/command.ts is other source)
