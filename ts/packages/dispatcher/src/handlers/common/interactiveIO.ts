@@ -120,6 +120,10 @@ export interface RequestIO {
             fromUser: boolean;
         },
     ): void;
+    notify(
+        event: "randomCommandSelected",
+        data: { message: string; }
+    ): void;
 }
 
 export function getConsoleRequestIO(

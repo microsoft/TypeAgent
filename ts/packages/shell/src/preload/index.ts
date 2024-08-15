@@ -34,7 +34,7 @@ const api: ClientAPI = {
     },
     onUpdate(callback) {
         ipcRenderer.on("update", callback);
-    },
+    },  
     onClear(callback) {
         ipcRenderer.on("clear", callback);
     },
@@ -46,6 +46,9 @@ const api: ClientAPI = {
     },
     onMarkRequestExplained(callback) {
         ipcRenderer.on("mark-explained", callback);
+    },
+    onRandomCommandSelected(callback) {
+        ipcRenderer.on("update-random-command", callback);
     },
     onAskYesNo(callback) {
         ipcRenderer.on("askYesNo", callback);
@@ -73,6 +76,9 @@ const api: ClientAPI = {
     },
     onHelpRequested(callback) {
         ipcRenderer.on("help-requested", callback);
+    },
+    onRandomMessageRequested(callback) {
+        ipcRenderer.on("random-message-requested", callback);
     },
 };
 

@@ -9,36 +9,36 @@ import {
 } from "./common/commandHandlerContext.js";
 import { RequestAction, printProcessRequestActionResult } from "agent-cache";
 import fs from "node:fs";
+import { randomInt } from "crypto";
+import { request } from "node:http";
+import { processCommandNoLock } from "../command.js";
 
 export class RandomCommandHandler implements CommandHandler {
+    private list: string[] | undefined;
+    
     public readonly description = "Issues a random user request.";
     public async run(input: string, context: CommandHandlerContext) {
+
+        context.requestIO.status(
+            `Generating random request...`,
+        );
         
-        let list = await this.getRequests();
+        if (this.list == undefined) {
+            this.list = await this.getRequests();
+        }
         
-        // const requestAction = RequestAction.fromString(input);
-        // context.requestIO.status(
-        //     `Generating random request...`,
-        // );
-        // const result = await context.agentCache.processRequestAction(
-        //     requestAction,
-        //     false,
-        // );
-        // updateCorrectionContext(
-        //     context,
-        //     requestAction,
-        //     result.explanationResult.explanation,
-        // );
-        // context.requestIO.result((log) => {
-        //     printProcessRequestActionResult(result, log);
-        // });
+        const randomRequest = this.list[randomInt(0, this.list.length)];
+        
+        context.requestIO.notify("randomCommandSelected", { message: randomRequest });
+        
+        await processCommandNoLock(randomRequest, context, context.requestId);
     }
 
     public async getRequests(): Promise<string[]> {
         
         if (fs.existsSync("../dispatcher/data/requests.txt")) {
             const content = await fs.promises.readFile("../dispatcher/data/requests.txt", "utf-8");
-            return content.split(`\r\n`);
+            return content.split("\n");
         }
 
         return new Array();
