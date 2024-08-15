@@ -1,17 +1,23 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SearchOptions } from "typeagent";
+import {
+    SearchOptions,
+    lookupAnswersOnWeb,
+    lookupAnswersOnWebPages,
+} from "typeagent";
 import {
     Conversation,
     ConversationSearchOptions,
     SearchActionResponse,
     SearchResponse,
+    createSearchResponse,
 } from "./conversation.js";
 import {
     Filter,
     GetAnswerAction,
     SearchAction,
+    WebLookupAction,
 } from "./knowledgeSearchSchema.js";
 import { SetOp } from "../setOperations.js";
 import {
@@ -92,6 +98,9 @@ export function createSearchProcessor(
                 break;
             case "getAnswer":
                 rr.response = await handleGetAnswers(query, rr.action, options);
+                break;
+            case "webLookup":
+                rr.response = await handleLookup(query, rr.action, options);
                 break;
         }
 
@@ -183,6 +192,29 @@ export function createSearchProcessor(
                 );
             }
         }
+        return response;
+    }
+
+    async function handleLookup(
+        query: string,
+        lookup: WebLookupAction,
+        options: SearchProcessingOptions,
+    ): Promise<SearchResponse> {
+        const answer = await lookupAnswersOnWeb(
+            answerModel,
+            query,
+            options.maxMatches,
+            {
+                maxCharsPerChunk: 4096,
+                maxTextLengthToSearch: 4096 * 16,
+                rewriteForReadability: false,
+            },
+        );
+        const response = createSearchResponse(1);
+        response.answer = {
+            type: answer.answer.type === "NoAnswer" ? "NoAnswer" : "Answered",
+            answer: answer.answer.answer,
+        };
         return response;
     }
 

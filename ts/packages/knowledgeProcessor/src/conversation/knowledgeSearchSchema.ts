@@ -73,9 +73,19 @@ export type GetAnswerAction = {
         responseStyle: ResponseStyle;
     };
 };
+export type WebLookupAction = {
+    actionName: "webLookup";
+    parameter: {
+        // Lookup *facts* you don't know or if your facts are out of date.
+        // E.g. stock prices, time sensitive data, etc
+        // the search strings to look up on the user's behalf should be specific enough to return the correct information
+        // it is recommended to include the same entities as in the user request
+        lookups?: string[];
+    };
+};
 
 export type UnknownAction = {
     actionName: "unknown";
 };
 
-export type SearchAction = GetAnswerAction | UnknownAction;
+export type SearchAction = GetAnswerAction | WebLookupAction | UnknownAction;
