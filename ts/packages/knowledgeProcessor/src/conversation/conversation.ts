@@ -746,9 +746,10 @@ export async function createConversation(
         entityMessageIds = intersectSets(entityMessageIds, actionMessageIds);
         let messageIds = intersectSets(topicMessageIds, entityMessageIds);
         if (!messageIds || messageIds.size === 0) {
-            messageIds = topicMessageIds;
+            //messageIds = topicMessageIds;
             // If nothing in common, try a union.
-            //messageIds = unionSets(topicMessageIds, entityMessageIds);
+            messageIds = unionSets(topicMessageIds, entityMessageIds);
+            //messageIds = intersectUnionSets(topicMessageIds, entityMessageIds);
         }
         if (messageIds && messageIds.size > 0) {
             results.messageIds = [...messageIds.values()].sort();
