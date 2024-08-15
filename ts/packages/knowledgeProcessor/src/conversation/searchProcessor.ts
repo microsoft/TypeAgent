@@ -159,7 +159,7 @@ export function createSearchProcessor(
             action.parameters.filters,
             searchOptions,
         );
-        await adjustResponse(query, action, response, options);
+        await adjustResponse(query, action, response, searchOptions, options);
         response.answer = await answers.generateAnswer(
             query,
             action,
@@ -167,8 +167,6 @@ export function createSearchProcessor(
             false,
         );
         if (response.answer?.type === "NoAnswer" && options.fallbackSearch) {
-            //response.entities = [];
-            //response.topics = [];
             // Try an approximate match
             const sResult = await conversation.searchMessages(
                 query,
@@ -251,7 +249,8 @@ export function createSearchProcessor(
         query: string,
         action: GetAnswerAction,
         response: SearchResponse,
-        options: SearchProcessingOptions,
+        options: ConversationSearchOptions,
+        processingOptions: SearchProcessingOptions,
     ): Promise<void> {
         if (
             action.parameters.responseType == "Topics" &&
@@ -260,27 +259,30 @@ export function createSearchProcessor(
             await ensureEntitiesLoaded(response);
         }
         if (
-            response.messages &&
-            response.messages.length > options.maxMessages
+            (!response.messages &&
+                options.loadMessages &&
+                processingOptions.fallbackSearch) ||
+            (response.messages &&
+                response.messages.length > processingOptions.maxMessages)
         ) {
             const result = await conversation.searchMessages(
                 query,
                 {
-                    maxMatches: options.maxMessages,
+                    maxMatches: processingOptions.maxMessages,
                 },
                 response.messageIds,
             );
             if (result) {
                 response.messageIds = result.messageIds;
                 response.messages = result.messages;
-            } else {
+            } else if (response.messages) {
                 response.messageIds = response.messageIds!.slice(
                     0,
-                    options.maxMessages,
+                    processingOptions.maxMessages,
                 );
                 response.messages = response.messages.slice(
                     0,
-                    options.maxMessages,
+                    processingOptions.maxMessages,
                 );
             }
         }
