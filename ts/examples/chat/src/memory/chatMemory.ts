@@ -730,9 +730,8 @@ export async function runPlayChat(): Promise<void> {
             if (verbs.length === 0) {
                 verbs = undefined;
             } else if (verbs[0] === "*") {
-                for await (const v of index.verbIndex.text()) {
-                    printer.writeLine(v);
-                }
+                const allVerbs = [...index.verbIndex.text()].sort();
+                printer.writeList(allVerbs, { type: "ul" });
                 return;
             }
         }

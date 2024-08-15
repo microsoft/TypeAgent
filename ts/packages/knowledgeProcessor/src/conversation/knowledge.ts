@@ -18,6 +18,7 @@ import {
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { createRecentItemsWindow } from "./conversation.js";
 import { SourceTextBlock, TextBlock, TextBlockType } from "../text.js";
+import { facetToString } from "./entities.js";
 
 export interface KnowledgeExtractor {
     next(message: string): Promise<KnowledgeResponse | undefined>;
@@ -190,15 +191,16 @@ export function actionToString(action: Action): string {
     }
     text += ` [${action.verbs.join(", ")}]`;
     if (action.params) {
-        text += "(";
-        text += actionParamsToString(action);
-        text += ")";
+        text += `(${actionParamsToString(action)})`;
     }
     if (action.objectEntityName !== NoEntityName) {
         text += " ";
         text += action.objectEntityName;
     }
     text += ` {${action.verbTense}}`;
+    if (action.subjectEntityFacet) {
+        text += ` <${facetToString(action.subjectEntityFacet)}>`;
+    }
     return text;
 }
 

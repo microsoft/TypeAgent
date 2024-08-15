@@ -42,6 +42,8 @@ export type Action = {
     objectEntityName: string | "none";
     indirectObjectEntityName: string | "none";
     params?: (string | ActionParam)[];
+    // If the action implies this additional facet or property of the subjectEntity, such as hobbies, activities, interests, personality
+    subjectEntityFacet: Facet;
 };
 
 // Detailed and comprehensive knowledge response
