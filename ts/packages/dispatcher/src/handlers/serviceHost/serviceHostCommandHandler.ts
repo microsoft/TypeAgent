@@ -27,6 +27,7 @@ export async function createServiceHost() {
 export function getServiceHostCommandHandlers(): HandlerTable {
     return {
         description: "Configure Service Hosting",
+        defaultCommand: undefined,
         commands: {
             off: {
                 description: "Turn off Service hosting integration",

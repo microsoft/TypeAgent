@@ -14,6 +14,7 @@ export type HandlerTable = {
     commands: {
         [key: string]: CommandHandler | HandlerTable;
     };
+    defaultCommand: CommandHandler | undefined;
 };
 
 export function getToggleCommandHandlers(
@@ -48,6 +49,7 @@ export function getToggleHandlerTable(
 ): HandlerTable {
     return {
         description: `Toggle ${name}`,
+        defaultCommand: undefined,
         commands: getToggleCommandHandlers(name, toggle),
     };
 }
