@@ -190,9 +190,11 @@ export function actionToString(action: Action): string {
         text += action.subjectEntityName;
     }
     text += ` [${action.verbs.join(", ")}]`;
+    /*
     if (action.params) {
         text += `(${actionParamsToString(action)})`;
     }
+    */
     if (action.objectEntityName !== NoEntityName) {
         text += " ";
         text += action.objectEntityName;
