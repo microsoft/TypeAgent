@@ -166,6 +166,16 @@ function markRequestExplained(
     );
 }
 
+function updateRandomCommandSelected(requestId: RequestId, message: string) {
+    // Ignore message without requestId
+    if (requestId === undefined) {
+        console.warn("updateRandomCommandSelected: requestId is undefined");
+        return;
+    }
+
+    mainWindow?.webContents.send("update-random-command", requestId, message);
+}
+
 function updateResult(message: string, group_id: string) {
     mainWindow?.webContents.send("update", message, group_id);
 }
@@ -291,6 +301,9 @@ const clientIO: ClientIO = {
                     data.fromUser,
                 );
                 break;
+            case "randomCommandSelected":
+                updateRandomCommandSelected(requestId, data.message);
+                break;
             default:
             // ignore
         }
@@ -400,6 +413,10 @@ app.whenReady().then(async () => {
 
     globalShortcut.register("F1", () => {
         mainWindow?.webContents.send("help-requested", "F1");
+    });
+
+    globalShortcut.register("F2", () => {
+        mainWindow?.webContents.send("random-message-requested", "F2");
     });
 
     // Default open or close DevTools by F12 in development

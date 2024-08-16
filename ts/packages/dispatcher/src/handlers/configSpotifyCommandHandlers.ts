@@ -14,6 +14,7 @@ import { getStorage } from "../action/storageImpl.js";
 export function getSpotifyConfigCommandHandlers(): HandlerTable {
     return {
         description: "Configure spotify integration",
+        defaultSubCommand: undefined,
         commands: {
             off: {
                 description: "Turn off spotify integration",

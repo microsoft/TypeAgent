@@ -193,8 +193,6 @@ export class ChatInput {
                         );
                     }
                 });
-            // speechInfo.speechToken =
-            //     await getClientAPI().getSpeechToken();
         }
     }
 

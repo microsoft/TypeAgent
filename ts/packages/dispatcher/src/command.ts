@@ -28,6 +28,7 @@ import { TranslateCommandHandler } from "./handlers/translateCommandHandler.js";
 import { getTranslatorConfig } from "./translation/agentTranslators.js";
 import { processRequests, unicodeChar } from "./utils/interactive.js";
 /* ==Experimental== */
+import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
 /* ==End Experimental== */
 
 class HelpCommandHandler implements CommandHandler {
@@ -57,7 +58,7 @@ class HelpCommandHandler implements CommandHandler {
         if (request === "") {
             printHandleTable(handlers, "");
         } else {
-            const result = resolveCommand(request);
+            const result = resolveCommand(request, true);
             if (result === undefined) {
                 throw new Error(`Unknown command '${request}'`);
             }
@@ -111,6 +112,7 @@ const debugInteractive = registerDebug("typeagent:cli:interactive");
 
 const handlers: HandlerTable = {
     description: "Agent Dispatcher Commands",
+    defaultSubCommand: undefined,
     commands: {
         request: new RequestCommandHandler(),
         translate: new TranslateCommandHandler(),
@@ -135,6 +137,7 @@ const handlers: HandlerTable = {
                 context.clientIO ? context.clientIO.exit() : process.exit(0);
             },
         },
+        random: getRandomCommandHandlers(),
     },
 };
 
@@ -149,14 +152,28 @@ type ResolveCommandResult = {
     args: string;
     command: string;
 };
-function resolveCommand(input: string): ResolveCommandResult | undefined {
+function resolveCommand(
+    input: string,
+    isHelpCommand: boolean = false,
+): ResolveCommandResult | undefined {
     let command: string = "";
     let currentHandlers = handlers;
     const args = input.split(/\s/).filter((s) => s !== "");
     while (true) {
         const subCommand = args.shift();
         if (subCommand === undefined) {
-            return { resolved: currentHandlers, args: "", command };
+            if (
+                currentHandlers.defaultSubCommand != undefined &&
+                !isHelpCommand
+            ) {
+                return {
+                    resolved: currentHandlers.defaultSubCommand,
+                    args: "",
+                    command,
+                };
+            } else {
+                return { resolved: currentHandlers, args: "", command };
+            }
         }
         const action = currentHandlers.commands[subCommand];
         if (action === undefined) {
