@@ -12,10 +12,24 @@ import fs from "node:fs";
 import { randomInt } from "crypto";
 import { request } from "node:http";
 import { processCommandNoLock } from "../command.js";
+import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
+import {
+    MessageSourceRole,
+    createTypeChat,
+    getContextFromHistory,
+    promptLib,
+} from "typeagent";
+import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";
 
-export interface UserRequest {
+export type UserRequest = {
+    // A request a user would make of an intelligent conversational computational interface.
     message: string;
-}
+};
+
+const UserRequestSchema = `export type UserRequest = {
+    // A request a user would make of an intelligent conversational computational interface.
+    message: string;
+};`;
 
 class RandomOfflineCommandHandler implements CommandHandler {
     private list: string[] | undefined;
@@ -52,7 +66,8 @@ class RandomOfflineCommandHandler implements CommandHandler {
 }
 
 class RandomOnlineCommandHandler implements CommandHandler {
-    private list: string[] | undefined;
+    
+    private instructions = "You are an AI assistant who helps the user";
 
     public readonly description =
         "Uses the LLM to generate a random request.";
@@ -63,7 +78,80 @@ class RandomOnlineCommandHandler implements CommandHandler {
             `Generating random request using LLM...`,
         );
 
-        // TODO: impelement
+        //
+        // Create Model
+        //
+        let [apiSettings, chatModel, completionSettings] = this.createModel(false);
+        //
+        // Create Chat History
+        //
+        let maxContextLength = 8196; // characters
+        let maxWindowLength = 30;
+        let chatHistory: PromptSection[] = [];
+        
+        const chat = createTypeChat<UserRequest>(
+            chatModel,
+            UserRequestSchema,
+            "UserRequest",
+            this.instructions,
+            chatHistory,
+            maxContextLength,
+            maxWindowLength,
+            (data: UserRequest) => data.message, // Stringify responses for Chat History
+        );
+
+        const cc = await this.getTypeChatResponse("Generate a random request a user would make of an AI system.", chat);
+
+        if (cc.success) {
+            context.requestIO.notify("randomCommandSelected", { message: cc.data.message });
+        
+            await processCommandNoLock(cc.data.message, context, context.requestId);    
+        } else {
+            context.requestIO.error(cc.message);
+        }
+
+    }
+
+    async getTypeChatResponse(
+        userInput: string,
+        chat: TypeChatJsonTranslator<UserRequest>
+    ): Promise<Result<UserRequest>> {
+
+        const chatResponse = await chat.translate(
+            userInput,
+            promptLib.dateTimePrompt(), // Always include the current date and time. Makes the bot much smarter
+        );
+       
+        return chatResponse;
+    }
+
+    private createModel(
+        preferLocal: boolean,
+    ): [openai.ApiSettings, ChatModelWithStreaming, CompletionSettings] {
+        // First see if there is a local model
+        let apiSettings: openai.ApiSettings | undefined;
+        if (preferLocal) {
+            apiSettings = openai.localOpenAIApiSettingsFromEnv(
+                openai.ModelType.Chat,
+            );
+        }
+        if (!apiSettings) {
+            // Create default model
+            apiSettings = openai.apiSettingsFromEnv();
+        }
+        let completionSettings: CompletionSettings = {
+            temperature: 0.8,
+            max_tokens: 1000, // Max response tokens
+        };
+        if (apiSettings.supportsResponseFormat) {
+            completionSettings.response_format = { type: "json_object" };
+        }
+        const chatModel = openai.createChatModel(
+            apiSettings,
+            completionSettings,
+        );
+
+        return [apiSettings, chatModel, completionSettings];
     }
 }
 
@@ -74,7 +162,6 @@ export function getRandomCommandHandlers(): HandlerTable {
         commands: {
             online: new RandomOnlineCommandHandler(),
             offline: new RandomOfflineCommandHandler(),
-            default: new RandomOfflineCommandHandler(),
         },
     };
 }
