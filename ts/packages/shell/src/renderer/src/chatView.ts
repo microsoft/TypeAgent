@@ -354,7 +354,7 @@ class MessageGroup {
         return this.agentMessageDivs[index];
     }
 
-    public updateUserMessageText(message: string) {
+    public updateMessageText(message: string) {
         this.userMessage.textContent = message;
     }
 }
@@ -822,7 +822,7 @@ export class ChatView {
         const pair = this.idToMessageGroup.get(id);
         if (pair !== undefined) {
             if (message.length > 0) {
-                pair.updateUserMessageText(message);
+                pair.updateMessageText(message);
             }
         }
     }
