@@ -23,7 +23,7 @@ import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";
 
 export type UserRequestList = {
     messages: UserRequest[];
-}
+};
 
 export type UserRequest = {
     // A request a user would make of an intelligent conversational computational interface.
@@ -46,27 +46,28 @@ class RandomOfflineCommandHandler implements CommandHandler {
         "Issues a random request from a dataset of pre-generated requests.";
 
     public async run(request: string, context: CommandHandlerContext) {
-
-        context.requestIO.status(
-            `Selecting random request...`,
-        );
+        context.requestIO.status(`Selecting random request...`);
 
         if (this.list == undefined) {
             this.list = await this.getRequests();
         }
-        
+
         const randomRequest = this.list[randomInt(0, this.list.length)];
-        
-        context.requestIO.notify("randomCommandSelected", { message: randomRequest });
-        
+
+        context.requestIO.notify("randomCommandSelected", {
+            message: randomRequest,
+        });
+
         await processCommandNoLock(randomRequest, context, context.requestId);
     }
 
     public async getRequests(): Promise<string[]> {
-        
         if (fs.existsSync("../dispatcher/data/requests.txt")) {
-            const content = await fs.promises.readFile("../dispatcher/data/requests.txt", "utf-8");
-            return content.split("\n"); 
+            const content = await fs.promises.readFile(
+                "../dispatcher/data/requests.txt",
+                "utf-8",
+            );
+            return content.split("\n");
         }
 
         return new Array();
@@ -74,29 +75,24 @@ class RandomOfflineCommandHandler implements CommandHandler {
 }
 
 class RandomOnlineCommandHandler implements CommandHandler {
-    
     private instructions = `You are an Siri/Alexa/Cortana prompt generator. You create user prompts that are both supported and unsupported.`;
 
-    public readonly description =
-        "Uses the LLM to generate random requests.";
+    public readonly description = "Uses the LLM to generate random requests.";
 
     public async run(request: string, context: CommandHandlerContext) {
-
-        context.requestIO.status(
-            `Generating random request using LLM...`,
-        );
+        context.requestIO.status(`Generating random request using LLM...`);
 
         //
         // Create Model
         //
-        let chatModel= this.createModel();
+        let chatModel = this.createModel();
         //
         // Create Chat History
         //
         let maxContextLength = 8196; // characters
         let maxWindowLength = 30;
         let chatHistory: PromptSection[] = [];
-        
+
         const chat = createTypeChat<UserRequestList>(
             chatModel,
             UserRequestSchema,
@@ -108,31 +104,36 @@ class RandomOnlineCommandHandler implements CommandHandler {
             (data: UserRequestList) => data.messages.toString(), // Stringify responses for Chat History
         );
 
-        const response = await this.getTypeChatResponse("Generate 10 random user requests.", chat);
+        const response = await this.getTypeChatResponse(
+            "Generate 10 random user requests.",
+            chat,
+        );
 
         if (response.success) {
+            const message =
+                response.data.messages[
+                    randomInt(0, response.data.messages.length)
+                ].message;
 
-            const message = response.data.messages[randomInt(0, response.data.messages.length)].message;
+            context.requestIO.notify("randomCommandSelected", {
+                message: message,
+            });
 
-            context.requestIO.notify("randomCommandSelected", { message: message });
-        
-            await processCommandNoLock(message, context, context.requestId);    
+            await processCommandNoLock(message, context, context.requestId);
         } else {
             context.requestIO.error(response.message);
         }
-
     }
 
     async getTypeChatResponse(
         userInput: string,
-        chat: TypeChatJsonTranslator<UserRequestList>
+        chat: TypeChatJsonTranslator<UserRequestList>,
     ): Promise<Result<UserRequestList>> {
-
         const chatResponse = await chat.translate(
             userInput,
             promptLib.dateTimePrompt(), // Always include the current date and time. Makes the bot much smarter
         );
-       
+
         return chatResponse;
     }
 

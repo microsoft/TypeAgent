@@ -34,7 +34,7 @@ const api: ClientAPI = {
     },
     onUpdate(callback) {
         ipcRenderer.on("update", callback);
-    },  
+    },
     onClear(callback) {
         ipcRenderer.on("clear", callback);
     },

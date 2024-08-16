@@ -152,7 +152,10 @@ type ResolveCommandResult = {
     args: string;
     command: string;
 };
-function resolveCommand(input: string, isHelpCommand: boolean = false): ResolveCommandResult | undefined {
+function resolveCommand(
+    input: string,
+    isHelpCommand: boolean = false,
+): ResolveCommandResult | undefined {
     let command: string = "";
     let currentHandlers = handlers;
     const args = input.split(/\s/).filter((s) => s !== "");
@@ -160,7 +163,11 @@ function resolveCommand(input: string, isHelpCommand: boolean = false): ResolveC
         const subCommand = args.shift();
         if (subCommand === undefined) {
             if (currentHandlers.defaultCommand != undefined && !isHelpCommand) {
-                return { resolved: currentHandlers.defaultCommand, args: "", command };
+                return {
+                    resolved: currentHandlers.defaultCommand,
+                    args: "",
+                    command,
+                };
             } else {
                 return { resolved: currentHandlers, args: "", command };
             }

@@ -166,20 +166,14 @@ function markRequestExplained(
     );
 }
 
-function updateRandomCommandSelected(
-    requestId: RequestId, 
-    message: string) {
-
+function updateRandomCommandSelected(requestId: RequestId, message: string) {
     // Ignore message without requestId
     if (requestId === undefined) {
         console.warn("updateRandomCommandSelected: requestId is undefined");
         return;
     }
 
-    mainWindow?.webContents.send(
-        "update-random-command", 
-        requestId, 
-        message);
+    mainWindow?.webContents.send("update-random-command", requestId, message);
 }
 
 function updateResult(message: string, group_id: string) {

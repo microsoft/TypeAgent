@@ -149,7 +149,7 @@ export interface ClientAPI {
             id: string,
             message: string,
         ) => void,
-    ): void;    
+    ): void;
     onSettingSummaryChanged(
         callback: (e: Electron.IpcRendererEvent, summary: string) => void,
     ): void;
@@ -184,7 +184,7 @@ export interface ClientAPI {
     ): void;
     onRandomMessageRequested(
         callback: (e: Electron.IpcRendererEvent, key: string) => void,
-    ): void;    
+    ): void;
 }
 
 export interface ElectronWindowFields {
