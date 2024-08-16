@@ -12,6 +12,7 @@ import {
     getTranslatorConfig,
 } from "../translation/agentTranslators.js";
 import {
+    createTurnImpressionFromLiteral,
     DispatcherAction,
     DispatcherAgentContext,
     TurnImpression,
@@ -200,32 +201,34 @@ export async function executeActions(
     context: CommandHandlerContext,
 ) {
     debugActions(`Executing actions: ${JSON.stringify(actions, undefined, 2)}`);
-    let result: TurnImpression | undefined;
     const requestIO = context.requestIO;
     let actionIndex = 0;
     for (const action of actions) {
-        // TODO: deal with results.
-        result = await executeAction(action, context, actionIndex);
-        if (result !== undefined) {
-            if (debugActions.enabled) {
-                debugActions(turnImpressionToString(result));
-            }
-            if (result.error !== undefined) {
-                requestIO.error(result.error);
-            } else {
-                requestIO.setActionStatus(result.displayText, actionIndex);
-                context.chatHistory.addEntry(
-                    result.literalText,
-                    result.entities,
-                    "assistant",
-                    requestIO.getRequestId(),
-                    result.impressionInterpreter,
-                );
-            }
+        const result =
+            (await executeAction(action, context, actionIndex)) ??
+            createTurnImpressionFromLiteral(`
+                Action ${action.fullActionName} completed.`);
+        if (debugActions.enabled) {
+            debugActions(turnImpressionToString(result));
+        }
+        if (result.error !== undefined) {
+            requestIO.error(result.error);
+            context.chatHistory.addEntry(
+                `Action ${action.fullActionName} failed: ${result.error}`,
+                [],
+                "assistant",
+                requestIO.getRequestId(),
+            );
         } else {
-            requestIO.setActionStatus(
-                `Action ${action.fullActionName} completed.`,
-                actionIndex,
+            requestIO.setActionStatus(result.displayText, actionIndex);
+            context.chatHistory.addEntry(
+                result.literalText
+                    ? result.literalText
+                    : `Action ${action.fullActionName} completed.`,
+                result.entities,
+                "assistant",
+                requestIO.getRequestId(),
+                result.impressionInterpreter,
             );
         }
         actionIndex++;
