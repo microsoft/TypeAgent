@@ -162,7 +162,10 @@ function resolveCommand(
     while (true) {
         const subCommand = args.shift();
         if (subCommand === undefined) {
-            if (currentHandlers.defaultSubCommand != undefined && !isHelpCommand) {
+            if (
+                currentHandlers.defaultSubCommand != undefined &&
+                !isHelpCommand
+            ) {
                 return {
                     resolved: currentHandlers.defaultSubCommand,
                     args: "",
