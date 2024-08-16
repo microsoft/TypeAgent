@@ -192,7 +192,7 @@ class SessionInfoCommandHandler implements CommandHandler {
 export function getSessionCommandHandlers(): HandlerTable {
     return {
         description: "Session commands",
-        defaultCommand: undefined,
+        defaultSubCommand: undefined,
         commands: {
             new: new SessionNewCommandHandler(),
             open: new SessionOpenCommandHandler(),

@@ -112,7 +112,7 @@ const debugInteractive = registerDebug("typeagent:cli:interactive");
 
 const handlers: HandlerTable = {
     description: "Agent Dispatcher Commands",
-    defaultCommand: undefined,
+    defaultSubCommand: undefined,
     commands: {
         request: new RequestCommandHandler(),
         translate: new TranslateCommandHandler(),
@@ -162,9 +162,9 @@ function resolveCommand(
     while (true) {
         const subCommand = args.shift();
         if (subCommand === undefined) {
-            if (currentHandlers.defaultCommand != undefined && !isHelpCommand) {
+            if (currentHandlers.defaultSubCommand != undefined && !isHelpCommand) {
                 return {
-                    resolved: currentHandlers.defaultCommand,
+                    resolved: currentHandlers.defaultSubCommand,
                     args: "",
                     command,
                 };

@@ -72,7 +72,7 @@ export async function createLocalWhisperHost() {
 export function getLocalWhisperCommandHandlers(): HandlerTable {
     return {
         description: "Configure Local Whisper",
-        defaultCommand: undefined,
+        defaultSubCommand: undefined,
         commands: {
             off: {
                 description: "Turn off Local Whisper integration",
