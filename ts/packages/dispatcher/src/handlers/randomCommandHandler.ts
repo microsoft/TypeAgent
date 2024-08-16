@@ -21,12 +21,20 @@ import {
 } from "typeagent";
 import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";
 
+export type UserRequestList = {
+    messages: UserRequest[];
+}
+
 export type UserRequest = {
     // A request a user would make of an intelligent conversational computational interface.
     message: string;
 };
 
-const UserRequestSchema = `export type UserRequest = {
+const UserRequestSchema = `export type UserRequestList = {
+    messages: UserRequest[];
+}
+
+export type UserRequest = {
     // A request a user would make of an intelligent conversational computational interface.
     message: string;
 };`;
@@ -67,10 +75,10 @@ class RandomOfflineCommandHandler implements CommandHandler {
 
 class RandomOnlineCommandHandler implements CommandHandler {
     
-    private instructions = "You are an AI assistant who helps the user";
+    private instructions = `You are an Siri/Alexa/Cortana prompt generator. You create user prompts that are both supported and unsupported.`;
 
     public readonly description =
-        "Uses the LLM to generate a random request.";
+        "Uses the LLM to generate random requests.";
 
     public async run(request: string, context: CommandHandlerContext) {
 
@@ -89,23 +97,26 @@ class RandomOnlineCommandHandler implements CommandHandler {
         let maxWindowLength = 30;
         let chatHistory: PromptSection[] = [];
         
-        const chat = createTypeChat<UserRequest>(
+        const chat = createTypeChat<UserRequestList>(
             chatModel,
             UserRequestSchema,
-            "UserRequest",
+            "UserRequestList",
             this.instructions,
             chatHistory,
             maxContextLength,
             maxWindowLength,
-            (data: UserRequest) => data.message, // Stringify responses for Chat History
+            (data: UserRequestList) => data.messages.toString(), // Stringify responses for Chat History
         );
 
-        const response = await this.getTypeChatResponse("Generate a random request a user would make of an AI system.", chat);
+        const response = await this.getTypeChatResponse("Generate 10 random user requests.", chat);
 
         if (response.success) {
-            context.requestIO.notify("randomCommandSelected", { message: response.data.message });
+
+            const message = response.data.messages[randomInt(0, response.data.messages.length)].message;
+
+            context.requestIO.notify("randomCommandSelected", { message: message });
         
-            await processCommandNoLock(response.data.message, context, context.requestId);    
+            await processCommandNoLock(message, context, context.requestId);    
         } else {
             context.requestIO.error(response.message);
         }
@@ -114,8 +125,8 @@ class RandomOnlineCommandHandler implements CommandHandler {
 
     async getTypeChatResponse(
         userInput: string,
-        chat: TypeChatJsonTranslator<UserRequest>
-    ): Promise<Result<UserRequest>> {
+        chat: TypeChatJsonTranslator<UserRequestList>
+    ): Promise<Result<UserRequestList>> {
 
         const chatResponse = await chat.translate(
             userInput,
@@ -132,7 +143,7 @@ class RandomOnlineCommandHandler implements CommandHandler {
             apiSettings = openai.apiSettingsFromEnv();
         }
         let completionSettings: CompletionSettings = {
-            temperature: 0.8,
+            temperature: 1.0,
             max_tokens: 1000, // Max response tokens
         };
         if (apiSettings.supportsResponseFormat) {
