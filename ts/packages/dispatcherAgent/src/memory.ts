@@ -78,11 +78,11 @@ export interface ImpressionInterpreter {
 }
 
 export interface TurnImpression {
-    literalText: string;
+    literalText?: string | undefined;
     entities: Entity[];
     relationships?: Relationship[] | undefined;
     displayText: string;
-    error?: string;
+    error?: string | undefined;
 
     // REVIEW: this is not "remoteable", need to redesign to enable dispatcher agent isolation.
     impressionInterpreter?: ImpressionInterpreter;
@@ -90,9 +90,10 @@ export interface TurnImpression {
 
 export function createTurnImpressionFromDisplay(
     displayText: string,
+    literalText?: string,
 ): TurnImpression {
     return {
-        literalText: "",
+        literalText,
         entities: [],
         displayText,
     };
@@ -100,7 +101,6 @@ export function createTurnImpressionFromDisplay(
 
 export function createTurnImpressionFromError(error: string): TurnImpression {
     return {
-        literalText: "",
         entities: [],
         displayText: "",
         error,

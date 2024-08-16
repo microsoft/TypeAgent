@@ -402,7 +402,6 @@ export async function handleCalendarAction(
                             createTurnImpressionFromDisplay(displayText);
 
                         if (result && localId) {
-                            result.literalText = `Action calendar.${action.actionName} completed.`;
                             result.entities = [
                                 {
                                     name: `${actionEvent.description}`,
@@ -635,7 +634,6 @@ export async function handleCalendarAction(
 
                     let result = createTurnImpressionFromDisplay(displayText);
                     if (result && localId) {
-                        result.literalText = `Action calendar.${action.actionName} completed.`;
                         result.entities = [
                             {
                                 name: `${actionEvent.description}`,
@@ -729,7 +727,6 @@ export async function handleCalendarAction(
                                             displayText,
                                         );
 
-                                    result.literalText = `Action calendar.${action.actionName} completed.`;
                                     result.entities = [
                                         {
                                             name: `${meeting.subject}`,
