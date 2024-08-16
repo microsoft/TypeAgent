@@ -219,6 +219,7 @@ export class PlayerShimCursor {
 }
 
 class MessageGroup {
+    public readonly userMessageContainer: HTMLDivElement;
     public readonly userMessage: HTMLDivElement;
     private statusMessageDiv: HTMLDivElement | undefined;
     private readonly statusMessages: { message: string; temporary: boolean }[] =
@@ -230,19 +231,31 @@ class MessageGroup {
         request: string,
         container: HTMLDivElement,
         requestPromise: Promise<void>,
+        timeStamp: Date,
     ) {
+        const userMessageContainer = document.createElement("div");
+        userMessageContainer.className = "chat-message-right";
+
+        const timeStampDiv = document.createElement("div");
+        timeStampDiv.classList.add("chat-timestamp");
+        userMessageContainer.appendChild(timeStampDiv)
+        setContent(timeStampDiv, timeStamp.toString());
+
         const userMessage = document.createElement("div");
-        userMessage.className = "chat-message chat-message-right";
+        userMessage.className = "chat-message-user";
+        userMessageContainer.appendChild(userMessage);       
+
         setContent(userMessage, request);
 
         if (container.firstChild) {
-            container.firstChild.before(userMessage);
+            container.firstChild.before(userMessageContainer);
 
-            userMessage.scrollIntoView(false);
+            userMessageContainer.scrollIntoView(false);
         } else {
-            container.append(userMessage);
+            container.append(userMessageContainer);
         }
 
+        this.userMessageContainer = userMessageContainer;
         this.userMessage = userMessage;
 
         requestPromise
@@ -270,7 +283,7 @@ class MessageGroup {
             this.statusMessageDiv.classList.remove("chat-message-hidden");
 
             if (
-                this.userMessage.parentElement?.firstChild ==
+                this.userMessageContainer.parentElement?.firstChild ==
                 this.statusMessageDiv
             ) {
                 this.statusMessageDiv.scrollIntoView(false);
@@ -296,11 +309,12 @@ class MessageGroup {
     private ensureStatusMessageDiv() {
         if (this.statusMessageDiv === undefined) {
             this.statusMessageDiv = document.createElement("div");
-            this.userMessage.before(this.statusMessageDiv);
+            this.userMessageContainer.before(this.statusMessageDiv);
         }
 
         return this.statusMessageDiv;
     }
+
     public addStatusMessage(message: string, temporary: boolean) {
         const div = this.ensureStatusMessageDiv();
 
@@ -338,6 +352,10 @@ class MessageGroup {
         }
         this.updateStatusMessageDivState();
         return this.agentMessageDivs[index];
+    }
+
+    public updateUserMessageText(message: string) {
+        this.userMessage.textContent = message;
     }
 }
 
@@ -503,7 +521,7 @@ export class ChatView {
                     if (!ev.altKey && !ev.ctrlKey) {
                         if (ev.key == "ArrowUp" || ev.key == "ArrowDown") {
                             const messages = this.messageDiv.querySelectorAll(
-                                ".chat-message-right",
+                                ".chat-message-user",
                             );
 
                             if (
@@ -774,6 +792,7 @@ export class ChatView {
                 request,
                 this.messageDiv,
                 getClientAPI().processShellRequest(request, id),
+                new Date(),
             ),
         );
         this.commandBackStackIndex = -1;
@@ -803,7 +822,7 @@ export class ChatView {
         const pair = this.idToMessageGroup.get(id);
         if (pair !== undefined) {
             if (message.length > 0) {
-                pair.userMessage.textContent = message;
+                pair.updateUserMessageText(message);
             }
         }
     }
@@ -818,7 +837,7 @@ export class ChatView {
         if (message === undefined) {
             return undefined;
         }
-        message.className = "chat-message chat-message-left";
+        message.className = "chat-message chat-message-left chat-message-agent";
         setContent(message, text);
         if (!groupId) {
             const innerDiv = message.firstChild as HTMLDivElement;

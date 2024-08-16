@@ -183,7 +183,6 @@ body {
 
 .chat-message {
   /* use a common class for all messages */
-  width: 55%;
   padding-left: 10px;
   padding-right: 10px;
   padding-bottom: 5px;
@@ -196,13 +195,19 @@ body {
   animation: message 0.15s ease-out 0s forwards;
 }
 
-.chat-message-left {
-  background-color: @chat-input-bg;
-  margin-left: 10px;
-  padding: 6px 15px 8px 15px;
+.chat-message-left {  
+  width: 55%;
+  margin-left: 10px;  
+}
+
+.chat-message-right {
+  width: 55%;
+  margin-right: 10px;
+  align-self: flex-end;  
 }
 
 .chat-message-temp {
+  width: 55%;
   color: darkgreen;
   background-color: @chat-input-bg;
   margin-left: 10px;
@@ -214,16 +219,20 @@ body {
   visibility: hidden;
 }
 
-.chat-message-right {
+.chat-message-user {
+  .chat-message;
   background-color: lavender;
-  margin-right: 10px;
-  align-self: flex-end;
+  padding: 6px 15px 8px 15px;
+}
+
+.chat-message-agent {
+  .chat-message;
+  background-color: @chat-input-bg;
   padding: 6px 15px 8px 15px;
 }
 
 .chat-message-explained {
   position: relative;
-  display: flex;
 }
 
 .chat-message-explained-icon {
@@ -243,7 +252,7 @@ body {
   right: 0;
   white-space: nowrap;
   background-color: lavender;
-  color: black;
+  color: gray;
   height: 100%;
   border-radius: 5px;
   margin-right: 5px;
@@ -260,6 +269,15 @@ body {
   border: none;
   align-self: flex-end;
   background-color: transparent;
+}
+
+.chat-timestamp {
+  text-align: end;
+  font-size: 10px;
+  color: lightgray;
+  float: right;
+  position: relative;
+  bottom: 10px;
 }
 
 @keyframes message {
