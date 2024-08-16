@@ -81,7 +81,7 @@ class RandomOnlineCommandHandler implements CommandHandler {
         //
         // Create Model
         //
-        let [apiSettings, chatModel, completionSettings] = this.createModel(false);
+        let chatModel= this.createModel();
         //
         // Create Chat History
         //
@@ -100,14 +100,14 @@ class RandomOnlineCommandHandler implements CommandHandler {
             (data: UserRequest) => data.message, // Stringify responses for Chat History
         );
 
-        const cc = await this.getTypeChatResponse("Generate a random request a user would make of an AI system.", chat);
+        const response = await this.getTypeChatResponse("Generate a random request a user would make of an AI system.", chat);
 
-        if (cc.success) {
-            context.requestIO.notify("randomCommandSelected", { message: cc.data.message });
+        if (response.success) {
+            context.requestIO.notify("randomCommandSelected", { message: response.data.message });
         
-            await processCommandNoLock(cc.data.message, context, context.requestId);    
+            await processCommandNoLock(response.data.message, context, context.requestId);    
         } else {
-            context.requestIO.error(cc.message);
+            context.requestIO.error(response.message);
         }
 
     }
@@ -125,16 +125,8 @@ class RandomOnlineCommandHandler implements CommandHandler {
         return chatResponse;
     }
 
-    private createModel(
-        preferLocal: boolean,
-    ): [openai.ApiSettings, ChatModelWithStreaming, CompletionSettings] {
-        // First see if there is a local model
+    private createModel(): ChatModelWithStreaming {
         let apiSettings: openai.ApiSettings | undefined;
-        if (preferLocal) {
-            apiSettings = openai.localOpenAIApiSettingsFromEnv(
-                openai.ModelType.Chat,
-            );
-        }
         if (!apiSettings) {
             // Create default model
             apiSettings = openai.apiSettingsFromEnv();
@@ -151,7 +143,7 @@ class RandomOnlineCommandHandler implements CommandHandler {
             completionSettings,
         );
 
-        return [apiSettings, chatModel, completionSettings];
+        return chatModel;
     }
 }
 
