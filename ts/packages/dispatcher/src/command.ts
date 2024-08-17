@@ -23,6 +23,7 @@ import { DebugCommandHandler } from "./handlers/debugCommandHandlers.js";
 import { ExplainCommandHandler } from "./handlers/explainCommandHandler.js";
 import { RequestCommandHandler } from "./handlers/requestCommandHandler.js";
 import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js";
+import { getHistoryCommandHandlers } from "./handlers/historyCommandHandler.js";
 import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
 import { TranslateCommandHandler } from "./handlers/translateCommandHandler.js";
 import { getTranslatorConfig } from "./translation/agentTranslators.js";
@@ -119,6 +120,7 @@ const handlers: HandlerTable = {
         explain: new ExplainCommandHandler(),
         correct: new CorrectCommandHandler(),
         session: getSessionCommandHandlers(),
+        history: getHistoryCommandHandlers(),
         const: getConstructionCommandHandlers(),
         config: getConfigCommandHandlers(),
         trace: new TraceCommandHandler(),
