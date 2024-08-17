@@ -148,6 +148,13 @@ export interface ClientAPI {
             fromCache?: boolean,
         ) => void,
     ): void;
+    onRandomCommandSelected(
+        callback: (
+            e: Electron.IpcRendererEvent,
+            id: string,
+            message: string,
+        ) => void,
+    ): void;
     onSettingSummaryChanged(
         callback: (e: Electron.IpcRendererEvent, summary: string) => void,
     ): void;
@@ -178,6 +185,9 @@ export interface ClientAPI {
         callback: (e: Electron.IpcRendererEvent, name: string) => void,
     ): void;
     onHelpRequested(
+        callback: (e: Electron.IpcRendererEvent, key: string) => void,
+    ): void;
+    onRandomMessageRequested(
         callback: (e: Electron.IpcRendererEvent, key: string) => void,
     ): void;
 }

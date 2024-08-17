@@ -802,6 +802,15 @@ export class ChatView {
         }
     }
 
+    randomCommandSelected(id: string, message: string) {
+        const pair = this.idToMessageGroup.get(id);
+        if (pair !== undefined) {
+            if (message.length > 0) {
+                pair.userMessage.textContent = message;
+            }
+        }
+    }
+
     addAgentMessage(
         text: string,
         id: string,

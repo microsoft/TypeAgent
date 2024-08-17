@@ -73,6 +73,9 @@ function addEvents(chatView: ChatView) {
     api.onMarkRequestExplained((_, id, timestamp, fromCache) => {
         chatView.markRequestExplained(id, timestamp, fromCache);
     });
+    api.onRandomCommandSelected((_, id, message) => {
+        chatView.randomCommandSelected(id, message);
+    });
     api.onAskYesNo(async (_, askYesNoId, message, id) => {
         chatView.askYesNo(askYesNoId, message, id);
     });
@@ -91,6 +94,10 @@ function addEvents(chatView: ChatView) {
     api.onHelpRequested((_, key) => {
         console.log(`User asked for help via ${key}`);
         chatView.addUserMessage(`@help`);
+    });
+    api.onRandomMessageRequested((_, key) => {
+        console.log(`User asked for a random message via ${key}`);
+        chatView.addUserMessage(`@random`);
     });
 }
 
