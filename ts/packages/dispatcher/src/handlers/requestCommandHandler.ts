@@ -77,13 +77,24 @@ async function confirmTranslation(
         (name) => !name.startsWith("system."),
     );
     const allActionInfo = getAllActionInfo(translatorNames);
-    let displayMessages = actions.toHTML(prefaceSingle, prefaceMultiple);
-    const accept = await requestIO.askYesNo(displayMessages, true);
+    const templateSequence = actions.toTemplateSequence(
+        prefaceSingle,
+        prefaceMultiple,
+        allActionInfo,
+    );
+    context.clientIO?.actionCommand(
+        templateSequence,
+        "register",
+        context.requestId!,
+    );
+    const accept = await requestIO.askYesNo("reserved", true);
     if (accept) {
         return { requestAction };
     }
 
-    const searchMenuItems = allActionInfo.map((info) => info.item);
+    const searchMenuItems = Array.from(allActionInfo.values()).map(
+        (info) => info.item,
+    );
     context.clientIO?.searchMenuCommand(
         "actions",
         "register",
@@ -95,9 +106,7 @@ async function confirmTranslation(
     context.clientIO?.searchMenuCommand("actions", "legend", actionLegend);
     const answer = await requestIO.question(actionLegend);
     if (answer !== undefined) {
-        const actionInfo = allActionInfo.find(
-            (info) => info.item.matchText === answer,
-        );
+        const actionInfo = allActionInfo.get(answer);
         if (actionInfo && actionInfo.template) {
             console.log(
                 `Selected action: ${actionInfo.template.agent}.${actionInfo.item.matchText}`,

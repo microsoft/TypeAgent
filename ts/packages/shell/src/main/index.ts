@@ -29,7 +29,10 @@ import {
 } from "agent-dispatcher";
 
 import { SearchMenuCommand } from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
-import { ActionTemplate, SearchMenuItem } from "../preload/electronTypes.js";
+import {
+    ActionTemplateSequence,
+    SearchMenuItem,
+} from "../preload/electronTypes.js";
 
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
@@ -262,7 +265,7 @@ function searchMenuCommand(
 }
 
 function actionCommand(
-    actionTemplates: ActionTemplate[],
+    actionTemplates: ActionTemplateSequence,
     command: string,
     requestId: RequestId,
 ) {
