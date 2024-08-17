@@ -3,7 +3,10 @@
 
 import fs from "node:fs";
 import { StopWatch } from "common-utils";
-import { ChatResponseAction } from "./chatResponseActionSchema.js";
+import {
+    ChatResponseAction,
+    LookupAndGenerateResponseAction,
+} from "./chatResponseActionSchema.js";
 import {
     ChunkChatResponse,
     LookupOptions,
@@ -32,7 +35,10 @@ export function instantiate(): DispatcherAgent {
 function isChatResponseAction(
     action: DispatcherAction,
 ): action is ChatResponseAction {
-    return action.actionName === "chatResponse";
+    return (
+        action.actionName === "generateResponse" ||
+        action.actionName === "lookupAndGenerateResponse"
+    );
 }
 
 export async function executeChatResponseAction(
@@ -53,41 +59,58 @@ async function handleChatResponse(
 ) {
     const requestIO = context.requestIO;
     console.log(JSON.stringify(chatAction, undefined, 2));
-    if (
-        chatAction.parameters.lookups !== undefined &&
-        chatAction.parameters.lookups.length > 0
-    ) {
-        console.log("Running lookups");
-        return handleLookup(
-            chatAction,
-            requestIO,
-            actionIndex,
-            await getLookupSettings(true),
-        );
-    }
+    switch (chatAction.actionName) {
+        case "generateResponse": {
+            if (chatAction.parameters.generatedText !== undefined) {
+                logEntities(
+                    "UR Entities:",
+                    chatAction.parameters.userRequestEntities.entities,
+                );
+                logEntities(
+                    "GT Entities:",
+                    chatAction.parameters.generatedTextEntities.entities,
+                );
+                console.log("Got generated text");
 
-    if (chatAction.parameters.generatedText !== undefined) {
-        logEntities("UR Entities:", chatAction.parameters.userRequestEntities);
-        logEntities(
-            "GT Entities:",
-            chatAction.parameters.generatedTextEntities,
-        );
+                const result = createTurnImpressionFromLiteral(
+                    chatAction.parameters.generatedText,
+                );
 
-        console.log("Got generated text");
-        const result = createTurnImpressionFromLiteral(
-            chatAction.parameters.generatedText,
-        );
-
-        let entities = chatAction.parameters.generatedTextEntities || [];
-        if (chatAction.parameters.userRequestEntities !== undefined) {
-            entities =
-                chatAction.parameters.userRequestEntities.concat(entities);
+                let entities =
+                    chatAction.parameters.generatedTextEntities.entities || [];
+                if (
+                    chatAction.parameters.userRequestEntities.entities !==
+                    undefined
+                ) {
+                    entities =
+                        chatAction.parameters.userRequestEntities.entities.concat(
+                            entities,
+                        );
+                }
+                result.entities = entities;
+                return result;
+            }
         }
-        result.entities = entities;
-        return result;
+        case "lookupAndGenerateResponse":
+            {
+                const lookupAction =
+                    chatAction as LookupAndGenerateResponseAction;
+                if (
+                    lookupAction.parameters.lookups !== undefined &&
+                    lookupAction.parameters.lookups.length > 0
+                ) {
+                    console.log("Running lookups");
+                    return handleLookup(
+                        lookupAction,
+                        requestIO,
+                        actionIndex,
+                        await getLookupSettings(true),
+                    );
+                }
+                break;
+            }
+            requestIO.error("No information found");
     }
-
-    requestIO.error("No information found");
 }
 
 function logEntities(label: string, entities?: Entity[]): void {
@@ -217,7 +240,7 @@ type LookupSettings = {
 };
 
 async function handleLookup(
-    chatAction: ChatResponseAction,
+    chatAction: LookupAndGenerateResponseAction,
     requestIO: RequestIO,
     actionIndex: number,
     settings: LookupSettings,
