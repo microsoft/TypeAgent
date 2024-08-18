@@ -44,9 +44,9 @@ function addEvents(chatView: ChatView) {
         }
     });
     api.onResponse(
-        (_, response, id, actionIndex?: number, groupId?: string) => {
+        (_, response, id, source: string, actionIndex?: number, groupId?: string) => {
             if (response !== undefined) {
-                chatView.addAgentMessage(response, id, actionIndex, groupId);
+                chatView.addAgentMessage(response, id, source, actionIndex, groupId);
             }
         },
     );
@@ -67,8 +67,8 @@ function addEvents(chatView: ChatView) {
             chatView.updateGroup(updateMessage, groupId);
         }
     });
-    api.onStatusMessage((_, message, id, temporary) => {
-        chatView.showStatusMessage(message, id, temporary);
+    api.onStatusMessage((_, message, id, source: string, temporary) => {
+        chatView.showStatusMessage(message, id, source, temporary);
     });
     api.onMarkRequestExplained((_, id, timestamp, fromCache) => {
         chatView.markRequestExplained(id, timestamp, fromCache);
@@ -76,11 +76,11 @@ function addEvents(chatView: ChatView) {
     api.onRandomCommandSelected((_, id, message) => {
         chatView.randomCommandSelected(id, message);
     });
-    api.onAskYesNo(async (_, askYesNoId, message, id) => {
-        chatView.askYesNo(askYesNoId, message, id);
+    api.onAskYesNo(async (_, askYesNoId, message, id, source) => {
+        chatView.askYesNo(askYesNoId, message, id, source);
     });
-    api.onQuestion(async (_, questionId, message, id) => {
-        chatView.question(questionId, message, id);
+    api.onQuestion(async (_, questionId, message, id, source) => {
+        chatView.question(questionId, message, id, source);
     });
     api.onSettingSummaryChanged((_, summary) => {
         document.title = summary;

@@ -209,7 +209,7 @@ export async function processCommandNoLock(
     const oldRequestIO = context.requestIO;
     context.requestId = requestId;
     if (context.clientIO) {
-        context.requestIO = getRequestIO(context.clientIO, requestId);
+        context.requestIO = getRequestIO(context.clientIO, requestId, context.currentTranslatorName);
     }
 
     try {

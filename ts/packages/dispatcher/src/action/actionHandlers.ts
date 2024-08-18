@@ -220,7 +220,7 @@ export async function executeActions(
                 requestIO.getRequestId(),
             );
         } else {
-            requestIO.setActionStatus(result.displayText, actionIndex);
+            requestIO.setActionStatus(result.displayText, actionIndex, context.currentTranslatorName);
             context.chatHistory.addEntry(
                 result.literalText
                     ? result.literalText

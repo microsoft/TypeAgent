@@ -264,7 +264,7 @@ class MessageGroup {
     private requestCompleted() {
         this.completed = true;
         if (this.statusMessages.length === 0) {
-            this.addStatusMessage("Request completed", true);
+            this.addStatusMessage("Request completed", "Shell", true);
         }
         this.updateStatusMessageDivState();
     }
@@ -301,7 +301,7 @@ class MessageGroup {
 
     private requestException(error: any) {
         console.error(error);
-        this.addStatusMessage(`Processing Error: ${error}`, false);
+        this.addStatusMessage(`Processing Error: ${error}`, `Shell`, false);
     }
 
     private ensureStatusMessageDiv() {
@@ -314,8 +314,9 @@ class MessageGroup {
         return this.statusMessageDiv;
     }
 
-    public addStatusMessage(message: string, temporary: boolean) {
+    public addStatusMessage(message: string, source: string, temporary: boolean) {
         const div = this.ensureStatusMessageDiv().lastChild as HTMLDivElement;
+        setSource(this.statusMessageDiv as HTMLDivElement, source);
 
         let contentDiv: HTMLDivElement;
         if (
@@ -401,9 +402,22 @@ export function setContent(elm: HTMLElement, text: string) {
 export function createTimestampDiv(timestamp: Date, className: string) {
     const timeStampDiv = document.createElement("div");
     timeStampDiv.classList.add(className);
-    setContent(timeStampDiv, timestamp.toLocaleTimeString());
+
+    const nameDiv = document.createElement("div");
+    nameDiv.className = "agent-name";
+    timeStampDiv.appendChild(nameDiv);    // name placeholder
+    
+    const dateDiv = document.createElement("div");
+    dateDiv.className = "timestring";
+    timeStampDiv.appendChild(dateDiv);    // time string
+
+    setContent(timeStampDiv.lastChild as HTMLElement, timestamp.toLocaleTimeString());
 
     return timeStampDiv;
+}
+
+export function setSource(agentMessageDiv: HTMLDivElement, source: string) {
+    (agentMessageDiv.firstChild?.firstChild as HTMLDivElement).innerText = source;
 }
 
 export function getSelectionXCoord() {
@@ -447,6 +461,7 @@ export function proposeYesNo(
     chatView: ChatView,
     askYesNoId: number,
     requestId: string,
+    source: string,
     _message: string,
 ) {
     const choices: InputChoice[] = [
@@ -455,7 +470,7 @@ export function proposeYesNo(
             element: iconCheckMarkCircle(),
             selectKey: ["y", "Y", "Enter"],
             onSelected: (_choice) => {
-                chatView.answerYesNo(askYesNoId, true, requestId);
+                chatView.answerYesNo(askYesNoId, true, requestId, source);
                 chatView.removeChoicePanel();
             },
         },
@@ -464,7 +479,7 @@ export function proposeYesNo(
             element: iconX(),
             selectKey: ["n", "N", "Delete"],
             onSelected: (_choice) => {
-                chatView.answerYesNo(askYesNoId, false, requestId);
+                chatView.answerYesNo(askYesNoId, false, requestId, source);
                 chatView.removeChoicePanel();
             },
         },
@@ -796,8 +811,8 @@ export class ChatView {
         return messageGroup;
     }
 
-    showStatusMessage(message: string, id: string, temporary: boolean) {
-        this.getMessageGroup(id)?.addStatusMessage(message, temporary);
+    showStatusMessage(message: string, id: string, source: string, temporary: boolean) {
+        this.getMessageGroup(id)?.addStatusMessage(message, source, temporary);
     }
 
     clear() {
@@ -853,13 +868,17 @@ export class ChatView {
     addAgentMessage(
         text: string,
         id: string,
+        source: string,
         actionIndex?: number,
         groupId?: string,
     ) {
-        const message = this.ensureAgentMessage(id, actionIndex)?.lastChild as HTMLDivElement;
+        const messageContainer = this.ensureAgentMessage(id, actionIndex) as HTMLDivElement;
+        const message = messageContainer.lastChild as HTMLDivElement;
         if (message === undefined) {
             return undefined;
-        }      
+        }
+
+        setSource(messageContainer, source);      
         setContent(message, text);
         if (!groupId) {
             const innerDiv = message.firstChild as HTMLDivElement;
@@ -894,7 +913,7 @@ export class ChatView {
         }, 0);
     }
 
-    askYesNo(askYesNoId: number, message: string, requestId: string) {
+    askYesNo(askYesNoId: number, message: string, requestId: string, source: string) {
         const agentMessage = this.ensureAgentMessage(requestId);
         if (agentMessage === undefined) {
             return;
@@ -902,26 +921,27 @@ export class ChatView {
         agentMessage.className = "chat-message chat-message-confirm";
         const proposeElm = this.proposeAction(message, requestId);
         agentMessage.appendChild(proposeElm);
-        proposeYesNo(this, askYesNoId, requestId, message);
+        proposeYesNo(this, askYesNoId, requestId, message, source);
     }
 
-    answerYesNo(questionId: number, answer: boolean, requestId: string) {
+    answerYesNo(questionId: number, answer: boolean, requestId: string, source: string) {
         this.showStatusMessage(
             answer ? "Accepted!" : "Rejected!",
             requestId,
+            source,
             true,
         );
         getClientAPI().sendYesNo(questionId, answer);
         this.chatInputFocus();
     }
 
-    question(questionId: number, message: string, requestId: string) {
+    question(questionId: number, message: string, requestId: string, source: string) {
         const agentMessage = this.ensureAgentMessage(requestId);
         if (agentMessage === undefined) {
             return;
         }
         agentMessage.innerHTML = "";
-        this.showStatusMessage(message, requestId, true);
+        this.showStatusMessage(message, requestId, source, true);
         if (this.searchMenu) {
             this.searchMenuAnswerHandler = (item) => {
                 this.answer(questionId, item.matchText, requestId);
@@ -938,7 +958,7 @@ export class ChatView {
     }
 
     answer(questionId: number, answer: string, requestId: string) {
-        this.showStatusMessage("Answer sent!", requestId, true);
+        this.showStatusMessage("Answer sent!", requestId, "Shell", true);
         console.log(answer);
         getClientAPI().sendAnswer(questionId, answer);
     }

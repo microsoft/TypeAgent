@@ -111,6 +111,7 @@ async function triggerRecognitionOnce(context: CommandHandlerContext) {
 function showResult(
     message: string,
     requestId: RequestId,
+    source: string,
     actionIndex?: number,
     groupId?: string,
 ) {
@@ -123,6 +124,7 @@ function showResult(
         "response",
         message,
         requestId,
+        source,
         actionIndex,
         groupId,
     );
@@ -131,6 +133,7 @@ function showResult(
 function sendStatusMessage(
     message: string,
     requestId: RequestId,
+    source: string,
     temporary: boolean = false,
 ) {
     // Ignore message without requestId
@@ -142,6 +145,7 @@ function sendStatusMessage(
         "status-message",
         message,
         requestId,
+        source,
         temporary,
     );
 }
@@ -281,7 +285,7 @@ const clientIO: ClientIO = {
         /* ignore */
     },
     success: sendStatusMessage,
-    status: (message, requestId) => sendStatusMessage(message, requestId, true),
+    status: (message, requestId, source) => sendStatusMessage(message, requestId, source, true),
     warn: sendStatusMessage,
     error: sendStatusMessage,
     result: showResult,
