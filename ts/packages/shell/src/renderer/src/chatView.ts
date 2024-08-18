@@ -307,6 +307,7 @@ class MessageGroup {
     private ensureStatusMessageDiv() {
         if (this.statusMessageDiv === undefined) {
             this.statusMessageDiv = document.createElement("div");
+            this.setupAgentMessageDiv(this.statusMessageDiv, "chat-message chat-message-temp", "chat-message-agent");  
             this.userMessageContainer.before(this.statusMessageDiv);
         }
 
@@ -314,9 +315,8 @@ class MessageGroup {
     }
 
     public addStatusMessage(message: string, temporary: boolean) {
-        const div = this.ensureStatusMessageDiv();
+        const div = this.ensureStatusMessageDiv().lastChild as HTMLDivElement;
 
-        div.className = "chat-message chat-message-temp";
         let contentDiv: HTMLDivElement;
         if (
             this.statusMessages.length !== 0 &&
@@ -324,7 +324,7 @@ class MessageGroup {
         ) {
             contentDiv = div.lastChild as HTMLDivElement;
         } else {
-            contentDiv = document.createElement("div");
+            contentDiv = document.createElement("div");            
             div.appendChild(contentDiv);
         }
         this.statusMessages.push({ message, temporary });
@@ -334,6 +334,21 @@ class MessageGroup {
         this.updateStatusMessageDivState();
     }
 
+    public setupAgentMessageDiv(messageDiv: HTMLDivElement, classes: string, messageClass: string) {
+        messageDiv.className = classes;
+
+        const timestampDiv = createTimestampDiv(new Date(), "chat-timestamp-left");
+        messageDiv.append(timestampDiv);
+
+        const agentIconDiv = document.createElement("div");
+        agentIconDiv.className = "agent-icon";
+        messageDiv.append(agentIconDiv);
+        
+        const message = document.createElement("div");
+        message.className = messageClass;
+        messageDiv.append(message);
+    }
+
     public ensureAgentMessage(actionIndex?: number) {
         const index = actionIndex ?? 0;
         const agentMessage = this.agentMessageDivs[index];
@@ -341,16 +356,8 @@ class MessageGroup {
             let beforeElem = this.ensureStatusMessageDiv();
             for (let i = 0; i < index + 1; i++) {
                 if (this.agentMessageDivs[i] === undefined) {
-                    this.agentMessageDivs[i] = document.createElement("div");
-
-                    this.agentMessageDivs[i].className = "chat-message chat-message-left";
-
-                    const timestampDiv = createTimestampDiv(new Date(), "chat-timestamp-left");
-                    this.agentMessageDivs[i].append(timestampDiv);
-                    
-                    const message = document.createElement("div");
-                    message.className = "chat-message-agent";
-                    this.agentMessageDivs[i].append(message);
+                     this.agentMessageDivs[i] = document.createElement("div");
+                     this.setupAgentMessageDiv(this.agentMessageDivs[i], "chat-message chat-message-left", "chat-message-agent");
 
                     // The chat message list has the style flex-direction: column-reverse;
                     beforeElem.before(this.agentMessageDivs[i]);

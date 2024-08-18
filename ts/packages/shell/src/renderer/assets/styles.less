@@ -207,10 +207,8 @@ body {
 }
 
 .chat-message-temp {
-  width: 55%;
+  .chat-message-left;
   color: darkgreen;
-  background-color: @chat-input-bg;
-  margin-left: 10px;
   padding: 6px 15px 8px 15px;
 }
 
@@ -227,8 +225,20 @@ body {
 
 .chat-message-agent {
   .chat-message;
+  margin-left: 30px;
   background-color: @chat-input-bg;
   padding: 6px 15px 8px 15px;
+}
+
+.agent-icon {
+  background-color: chartreuse;
+  width: 30px;
+  height: 30px;
+  border-radius: 15px;
+  float:left;
+  position: absolute;
+  left: 0px;
+  margin-top: 8px;
 }
 
 .chat-message-explained {
@@ -282,11 +292,13 @@ body {
   text-align: start;
   float: left;
   top: -8px;
+  margin-left: 31px;
 }
 
 .chat-timestamp-right {
   .chat-timestamp;
   bottom: 10px;
+  margin-right: 3px;
   text-align: end;
   float: right;
 }
