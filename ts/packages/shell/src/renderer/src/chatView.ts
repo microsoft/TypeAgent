@@ -236,10 +236,8 @@ class MessageGroup {
         const userMessageContainer = document.createElement("div");
         userMessageContainer.className = "chat-message-right";
 
-        const timeStampDiv = document.createElement("div");
-        timeStampDiv.classList.add("chat-timestamp");
+        const timeStampDiv = createTimestampDiv(timeStamp, "chat-timestamp-right");
         userMessageContainer.appendChild(timeStampDiv)
-        setContent(timeStampDiv, timeStamp.toString());
 
         const userMessage = document.createElement("div");
         userMessage.className = "chat-message-user";
@@ -344,6 +342,16 @@ class MessageGroup {
             for (let i = 0; i < index + 1; i++) {
                 if (this.agentMessageDivs[i] === undefined) {
                     this.agentMessageDivs[i] = document.createElement("div");
+
+                    this.agentMessageDivs[i].className = "chat-message chat-message-left";
+
+                    const timestampDiv = createTimestampDiv(new Date(), "chat-timestamp-left");
+                    this.agentMessageDivs[i].append(timestampDiv);
+                    
+                    const message = document.createElement("div");
+                    message.className = "chat-message-agent";
+                    this.agentMessageDivs[i].append(message);
+
                     // The chat message list has the style flex-direction: column-reverse;
                     beforeElem.before(this.agentMessageDivs[i]);
                 }
@@ -381,6 +389,14 @@ export function setContent(elm: HTMLElement, text: string) {
     } else {
         elm.innerText = stripAnsi(text);
     }
+}
+
+export function createTimestampDiv(timestamp: Date, className: string) {
+    const timeStampDiv = document.createElement("div");
+    timeStampDiv.classList.add(className);
+    setContent(timeStampDiv, timestamp.toLocaleTimeString());
+
+    return timeStampDiv;
 }
 
 export function getSelectionXCoord() {
@@ -833,11 +849,10 @@ export class ChatView {
         actionIndex?: number,
         groupId?: string,
     ) {
-        const message = this.ensureAgentMessage(id, actionIndex);
+        const message = this.ensureAgentMessage(id, actionIndex)?.lastChild as HTMLDivElement;
         if (message === undefined) {
             return undefined;
-        }
-        message.className = "chat-message chat-message-left chat-message-agent";
+        }      
         setContent(message, text);
         if (!groupId) {
             const innerDiv = message.firstChild as HTMLDivElement;

@@ -272,12 +272,23 @@ body {
 }
 
 .chat-timestamp {
-  text-align: end;
   font-size: 10px;
-  color: lightgray;
-  float: right;
+  color: darkgray;
   position: relative;
+}
+
+.chat-timestamp-left {
+  .chat-timestamp;
+  text-align: start;
+  float: left;
+  top: -8px;
+}
+
+.chat-timestamp-right {
+  .chat-timestamp;
   bottom: 10px;
+  text-align: end;
+  float: right;
 }
 
 @keyframes message {
