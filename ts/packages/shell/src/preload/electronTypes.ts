@@ -158,7 +158,11 @@ export interface ClientAPI {
         ) => void,
     ): void;
     onSettingSummaryChanged(
-        callback: (e: Electron.IpcRendererEvent, summary: string, agents: Map<string, string>) => void,
+        callback: (
+            e: Electron.IpcRendererEvent,
+            summary: string,
+            agents: Map<string, string>,
+        ) => void,
     ): void;
     onAskYesNo(
         callback: (
@@ -166,7 +170,7 @@ export interface ClientAPI {
             askYesNoId: number,
             message: string,
             requestId: string,
-            source: string
+            source: string,
         ) => void,
     ): void;
     sendYesNo: (askYesNoId: number, accept: boolean) => void;

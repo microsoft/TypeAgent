@@ -289,7 +289,8 @@ const clientIO: ClientIO = {
         /* ignore */
     },
     success: sendStatusMessage,
-    status: (message, requestId, source) => sendStatusMessage(message, requestId, source, true),
+    status: (message, requestId, source) =>
+        sendStatusMessage(message, requestId, source, true),
     warn: sendStatusMessage,
     error: sendStatusMessage,
     result: showResult,
@@ -408,7 +409,11 @@ app.whenReady().then(async () => {
     ipcMain.on("dom ready", async () => {
         settingSummary = getSettingSummary(context);
         translatorSetPartialInputHandler();
-        mainWindow?.webContents.send("setting-summary-changed", settingSummary, getTranslatorNameToEmojiMap(context));
+        mainWindow?.webContents.send(
+            "setting-summary-changed",
+            settingSummary,
+            getTranslatorNameToEmojiMap(context),
+        );
     });
 
     await initializeSpeech(context);
@@ -577,6 +582,5 @@ function setAppMenu(mainWindow: BrowserWindow) {
                 mainWindow?.setAlwaysOnTop(true, "floating");
             },
         }),
-       );
+    );
 }
-
