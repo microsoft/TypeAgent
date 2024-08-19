@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // electron.vite.config.mts
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 var electron_vite_config_default = defineConfig({
