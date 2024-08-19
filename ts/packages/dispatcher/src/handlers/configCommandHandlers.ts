@@ -232,6 +232,12 @@ export function getConfigCommandHandlers(): HandlerTable {
                     await changeContextConfig({ bot: enable }, context);
                 },
             ),
+            stream: getToggleHandlerTable(
+                "streaming translation",
+                async (context, enable: boolean) => {
+                    await changeContextConfig({ stream: enable }, context);
+                },
+            ),
             explanation: {
                 description: "Toggle explanation",
                 defaultSubCommand: undefined,

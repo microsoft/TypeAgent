@@ -219,9 +219,33 @@ async function translateRequestWithTranslator(
         history,
     );
 
+    let generateResponse = false;
+    const onProperty = context.session.getConfig().stream
+        ? (prop: string, value: any, partial: boolean) => {
+              // TODO: implemented for chat's generate response.
+              // Need to design the interface for agents to use streaming
+              if (prop === "actionName") {
+                  context.requestIO.status(
+                      `[${translatorName}] Translating '${request}' into action '${value}'`,
+                  );
+                  if (value === "generateResponse") {
+                      generateResponse = true;
+                  }
+              }
+
+              if (generateResponse && prop === "parameters.generatedText") {
+                  context.requestIO.setActionStatus(
+                      `${value}${partial ? "..." : ""}`,
+                      0,
+                  );
+              }
+          }
+        : undefined;
+
     const response = await translator.translate(
         request,
         history?.promptSections,
+        onProperty,
     );
     translator.createRequestPrompt = orp;
     if (!response.success) {

@@ -6,12 +6,19 @@ import fs from "node:fs";
 import {
     createJsonTranslator,
     PromptSection,
+    Result,
+    success,
+    TypeChatJsonTranslator,
     TypeChatLanguageModel,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { TypeChatConstraintsValidator } from "./constraints.js";
 import registerDebug from "debug";
 import { openai as ai } from "aiclient";
+import {
+    createIncrementalJsonParser,
+    IncrementalJsonValueCallBack,
+} from "./incrementalJsonParser.js";
 
 const debug = registerDebug("typeagent:prompt");
 
@@ -47,6 +54,74 @@ export function composeTranslatorSchemas(
     return `export type ${typeName} = ${types.join(" | ")};\n${schemas.join("\n")}`;
 }
 
+export interface TypeChatJsonTranslatorWithStreaming<T extends object>
+    extends TypeChatJsonTranslator<T> {
+    translate: (
+        request: string,
+        promptPreamble?: string | PromptSection[],
+        cb?: IncrementalJsonValueCallBack,
+    ) => Promise<Result<T>>;
+}
+
+export function enableJsonTranslatorStreaming<T extends object>(
+    translator: TypeChatJsonTranslator<T>,
+): TypeChatJsonTranslatorWithStreaming<T> {
+    const model = translator.model;
+    if (!ai.supportsStreaming(model)) {
+        throw new Error("Model does not support streaming");
+    }
+    const complete = model.complete.bind(model);
+    const completeStream = model.completeStream.bind(model);
+    model.complete = async (
+        prompt: string | PromptSection[],
+        cb?: () => void,
+    ) => {
+        if (cb === undefined) {
+            return complete(prompt);
+        }
+        const chunks = [];
+        for await (const chunk of completeStream(prompt)) {
+            chunks.push(chunk);
+            cb();
+        }
+        return success(chunks.join(""));
+    };
+
+    const innerFn = translator.translate;
+    const translatorWithStreaming =
+        translator as TypeChatJsonTranslatorWithStreaming<T>;
+    translatorWithStreaming.translate = async (
+        request: string,
+        promptPreamble?: string | PromptSection[],
+        cb?: IncrementalJsonValueCallBack,
+    ) => {
+        if (cb === undefined) {
+            return innerFn(request, promptPreamble);
+        }
+
+        const originalComplete = model.complete;
+        try {
+            const parser = createIncrementalJsonParser(cb, {
+                partial: true,
+            });
+            model.complete = async (prompt: string | PromptSection[]) => {
+                const chunks = [];
+                for await (const chunk of completeStream(prompt)) {
+                    chunks.push(chunk);
+                    parser.parse(chunk);
+                }
+                parser.complete();
+                return success(chunks.join(""));
+            };
+            return innerFn(request, promptPreamble);
+        } finally {
+            model.complete = originalComplete;
+        }
+    };
+
+    return translatorWithStreaming;
+}
+
 /**
  *
  * @param schemas pass either a single schema text OR schema definitions to compose.
@@ -62,12 +137,14 @@ export function createJsonTranslatorFromSchemaDef<T extends object>(
     constraintsValidator?: TypeChatConstraintsValidator<T>, // Optional
     instructions?: PromptSection[],
     model?: string | TypeChatLanguageModel, // optional
+    enableStreaming?: boolean,
 ) {
     if (typeof model !== "object") {
         model = ai.createChatModel(model, {
             response_format: { type: "json_object" },
         });
     }
+
     const complete = model.complete.bind(model);
     model.complete = async (prompt: string | PromptSection[]) => {
         debug(prompt);

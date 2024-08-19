@@ -5,7 +5,6 @@ import { getTranslatorConfig } from "./agentTranslators.js";
 import {
     InlineTranslatorSchemaDef,
     createJsonTranslatorFromSchemaDef,
-    ActionTemplate,
 } from "common-utils";
 import { getTranslatorActionInfo } from "./actionInfo.js";
 import { Result, success } from "typechat";

@@ -8,8 +8,9 @@ export {
     TranslatorSchemaDef,
     InlineTranslatorSchemaDef,
     composeTranslatorSchemas,
+    enableJsonTranslatorStreaming,
+    TypeChatJsonTranslatorWithStreaming,
 } from "./jsonTranslator.js";
-
 export { Limiter, createLimiter } from "./limiter.js";
 export * from "./print.js";
 
