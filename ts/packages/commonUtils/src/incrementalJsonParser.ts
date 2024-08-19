@@ -41,10 +41,16 @@ type JSONToken = {
     literal?: string | number | boolean | null;
 };
 
+export type IncrementalJsonValueCallBack = (
+    prop: string,
+    value: any,
+    partial: boolean,
+) => void;
 export function createIncrementalJsonParser(
-    cb: (prop: string, value: any) => void,
+    cb: IncrementalJsonValueCallBack,
     options?: {
         full?: boolean;
+        partial?: boolean;
     },
 ) {
     let currentLiteralType: LiteralType = LiteralType.None;
@@ -268,11 +274,11 @@ export function createIncrementalJsonParser(
         if (value === undefined) {
             if (options?.full) {
                 value = currentNested;
-                cb!(props.join("."), value);
+                cb(props.join("."), value, false);
                 currentNested = nested.pop();
             }
         } else {
-            cb!(props.join("."), value);
+            cb(props.join("."), value, false);
         }
 
         const lastProp = props.pop();
@@ -384,6 +390,17 @@ export function createIncrementalJsonParser(
             }
         }
 
+        if (options?.partial) {
+            // States that expect a value and the value is a literal string
+            if (
+                (state === State.Value || state === State.ArrayStart) &&
+                (currentLiteralType === LiteralType.String ||
+                    currentLiteralType === LiteralType.StringEscape ||
+                    currentLiteralType === LiteralType.StringUnicodeEscape)
+            ) {
+                cb(props.join("."), currentLiteral, true);
+            }
+        }
         return finished ? processChar(" ") : true;
     };
 }

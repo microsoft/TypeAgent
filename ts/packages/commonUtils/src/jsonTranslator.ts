@@ -15,7 +15,10 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 import { TypeChatConstraintsValidator } from "./constraints.js";
 import registerDebug from "debug";
 import { openai as ai } from "aiclient";
-import { createIncrementalJsonParser } from "./incrementalJsonParser.js";
+import {
+    createIncrementalJsonParser,
+    IncrementalJsonValueCallBack,
+} from "./incrementalJsonParser.js";
 
 const debug = registerDebug("typeagent:prompt");
 
@@ -51,12 +54,12 @@ export function composeTranslatorSchemas(
     return `export type ${typeName} = ${types.join(" | ")};\n${schemas.join("\n")}`;
 }
 
-interface TypeChatJsonTranslatorWithStreaming<T extends object>
+export interface TypeChatJsonTranslatorWithStreaming<T extends object>
     extends TypeChatJsonTranslator<T> {
     translate: (
         request: string,
         promptPreamble?: string | PromptSection[],
-        cb?: (prop: string, value: any) => void,
+        cb?: IncrementalJsonValueCallBack,
     ) => Promise<Result<T>>;
 }
 
@@ -90,7 +93,7 @@ export function enableJsonTranslatorStreaming<T extends object>(
     translatorWithStreaming.translate = async (
         request: string,
         promptPreamble?: string | PromptSection[],
-        cb?: (prop: string, value: any) => void,
+        cb?: IncrementalJsonValueCallBack,
     ) => {
         if (cb === undefined) {
             return innerFn(request, promptPreamble);
@@ -98,7 +101,9 @@ export function enableJsonTranslatorStreaming<T extends object>(
 
         const originalComplete = model.complete;
         try {
-            const incrementalJsonParser = createIncrementalJsonParser(cb);
+            const incrementalJsonParser = createIncrementalJsonParser(cb, {
+                partial: true,
+            });
             model.complete = async (prompt: string | PromptSection[]) => {
                 const chunks = [];
                 for await (const chunk of completeStream(prompt)) {
