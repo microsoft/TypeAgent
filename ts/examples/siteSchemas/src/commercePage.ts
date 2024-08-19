@@ -4,7 +4,7 @@
 import fs from "fs";
 import path from "path";
 import { processRequests } from "typechat/interactive";
-import { ShoppingAction } from "./commerce/schema/pageActions.js";
+import { ShoppingPlan } from "./commerce/schema/pageActions.js";
 
 import { CommercePageType, ECommerceSiteAgent } from "./commerce/translator.js";
 import { LandingPage } from "./commerce/schema/landingPage.js";
@@ -33,9 +33,9 @@ function createCommerceAgent(
         "utf8",
     );
 
-    const agent = new ECommerceSiteAgent<ShoppingAction>(
+    const agent = new ECommerceSiteAgent<ShoppingPlan>(
         schemaText,
-        "ShoppingAction",
+        "ShoppingPlan",
         vals,
     );
     return agent;
@@ -44,7 +44,7 @@ function createCommerceAgent(
 async function getPageSchema(
     url: string,
     htmlFragments: HtmlFragments[],
-    agent: ECommerceSiteAgent<ShoppingAction>,
+    agent: ECommerceSiteAgent<ShoppingPlan>,
 ) {
     let response;
     if (url.startsWith("https://www.homedepot.com/s/")) {
@@ -92,19 +92,21 @@ async function translateShoppingMessage(request: string) {
         return message;
     }
 
-    const pageAction = response.data;
-    console.log(JSON.stringify(pageAction, undefined, 2));
+    const pageActions = response.data;
+    console.log(JSON.stringify(pageActions, undefined, 2));
 
-    switch (pageAction.actionName) {
-        case "searchForProductAction":
-            handleProductSearch(pageAction);
-            break;
-        case "selectSearchResult":
-            handleSelectSearchResult(pageAction);
-            break;
-        case "addToCartAction":
-            handleAddToCart(pageAction);
-            break;
+    for (let pageAction of pageActions.steps) {
+        switch (pageAction.actionName) {
+            case "searchForProductAction":
+                await handleProductSearch(pageAction);
+                break;
+            case "selectSearchResult":
+                await handleSelectSearchResult(pageAction);
+                break;
+            case "addToCartAction":
+                await handleAddToCart(pageAction);
+                break;
+        }
     }
 
     return message;
