@@ -3,6 +3,7 @@
 
 import { Readability, isProbablyReaderable } from "@mozilla/readability";
 import { HTMLReducer } from "./htmlReducer";
+import {convert} from "html-to-text";
 
 function isVisible(element: HTMLElement) {
     var html = document.documentElement;
@@ -162,6 +163,20 @@ function getPageHTML(fullSize: boolean, documentHtml: string, frameId: number) {
     reducer.removeDivs = false;
     const reducedHtml = reducer.reduce(documentHtml);
     return reducedHtml;
+}
+
+function getPageText(documentHtml: string, frameId: number) {
+    if (!documentHtml) {
+        setIdsOnAllElements(frameId);
+        documentHtml = document.children[0].outerHTML;
+    }
+
+    const options = {
+        wordwrap: 130,
+      };
+      
+    const text = convert(documentHtml, options);
+    return text;
 }
 
 function getPageHTMLSubFragments(
@@ -584,6 +599,15 @@ chrome.runtime.onMessage.addListener(
                         message.frameId,
                     );
                     sendResponse(html);
+                    break;
+                }
+
+                case "get_page_text": {
+                    const text = getPageText(
+                        message.inputHtml,
+                        message.frameId,
+                    );
+                    sendResponse(text);
                     break;
                 }
 
