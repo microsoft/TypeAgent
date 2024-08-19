@@ -167,9 +167,7 @@ async function executeAction(
     const dispatcherAgent = await getDispatcherAgent(dispatcherAgentName);
 
     // Update the current translator.
-    if (getTranslatorConfig(translatorName).injected) {
-        context.currentTranslatorName = translatorName;
-    }
+    context.currentTranslatorName = translatorName;
 
     if (dispatcherAgent.executeAction === undefined) {
         throw new Error(
