@@ -220,23 +220,27 @@ async function translateRequestWithTranslator(
     );
 
     let generateResponse = false;
-    const onProperty = (prop: string, value: any, partial: boolean) => {
-        if (prop === "actionName") {
-            context.requestIO.status(
-                `[${translatorName}] Translating '${request}' into action '${value}'`,
-            );
-            if (value === "generateResponse") {
-                generateResponse = true;
-            }
-        }
+    const onProperty = context.session.getConfig().stream
+        ? (prop: string, value: any, partial: boolean) => {
+              // TODO: implemented for chat's generate response.
+              // Need to design the interface for agents to use streaming
+              if (prop === "actionName") {
+                  context.requestIO.status(
+                      `[${translatorName}] Translating '${request}' into action '${value}'`,
+                  );
+                  if (value === "generateResponse") {
+                      generateResponse = true;
+                  }
+              }
 
-        if (generateResponse && prop === "parameters.generatedText") {
-            context.requestIO.setActionStatus(
-                `${value}${partial ? "..." : ""}`,
-                0,
-            );
-        }
-    };
+              if (generateResponse && prop === "parameters.generatedText") {
+                  context.requestIO.setActionStatus(
+                      `${value}${partial ? "..." : ""}`,
+                      0,
+                  );
+              }
+          }
+        : undefined;
 
     const response = await translator.translate(
         request,

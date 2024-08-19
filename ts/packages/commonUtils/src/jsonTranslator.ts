@@ -126,7 +126,7 @@ export function enableJsonTranslatorStreaming<T extends object>(
  *
  * @param schemas pass either a single schema text OR schema definitions to compose.
  * @param typeName a single type name to be translated to.
- * @param constraintsValidator optionally validate constraints on reBsponse
+ * @param constraintsValidator optionally validate constraints on response
  * @param instructions Optional additional instructions
  * @param model optional, custom model impl.
  * @returns
