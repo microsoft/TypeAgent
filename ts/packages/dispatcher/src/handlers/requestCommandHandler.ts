@@ -239,6 +239,7 @@ async function translateRequestWithTranslator(
                   context.requestIO.setActionStatus(
                       `${value}${partial ? "..." : ""}`,
                       0,
+                      context.currentTranslatorName,
                   );
               }
           }
