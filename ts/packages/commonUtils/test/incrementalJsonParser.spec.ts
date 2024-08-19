@@ -18,11 +18,16 @@ const testInput: [string, any][] = [
     ["empty string", ""],
 ];
 
+const space = " \t\n\r";
 const stringifiedTestInput = [
     ...testInput.map(
         ([name, input]) => [name, JSON.stringify(input)] as [string, string],
     ),
-    ["escaped", '{ "a": "a\\b\\f\\r\\t\\n\\"\\u1234\\\\\\/"}'],
+    ["escaped", '{"a":"a\\b\\f\\r\\t\\n\\"\\u1234\\\\\\/"}'],
+    [
+        "space",
+        `${space}{${space}"a"${space}:${space}[${space}-1.323e-123${space},${space}2234${space}]${space},${space}"b"${space}:${space}"a"${space}}${space}`,
+    ],
 ];
 describe("Incremental Json Parser", () => {
     describe.each(["full", "leaf"])("%s", (mode) => {
@@ -42,7 +47,6 @@ describe("Incremental Json Parser", () => {
             let called = 0;
             const cb = (prop: string, value: any) => {
                 called++;
-                console.log(value);
                 if (mode === "leaf") {
                     if (value !== null) {
                         expect(typeof value).not.toBe("object");
@@ -65,7 +69,8 @@ describe("Incremental Json Parser", () => {
                       }
                     : undefined,
             );
-            const result = parser(input, true);
+            parser.parse(input);
+            const result = parser.complete();
             expect(result).toBe(true);
             expect(called).toBe(countProps(inputParsed));
         });

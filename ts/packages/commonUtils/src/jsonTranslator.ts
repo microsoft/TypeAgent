@@ -101,16 +101,16 @@ export function enableJsonTranslatorStreaming<T extends object>(
 
         const originalComplete = model.complete;
         try {
-            const incrementalJsonParser = createIncrementalJsonParser(cb, {
+            const parser = createIncrementalJsonParser(cb, {
                 partial: true,
             });
             model.complete = async (prompt: string | PromptSection[]) => {
                 const chunks = [];
                 for await (const chunk of completeStream(prompt)) {
                     chunks.push(chunk);
-                    incrementalJsonParser(chunk);
+                    parser.parse(chunk);
                 }
-                incrementalJsonParser("", true);
+                parser.complete();
                 return success(chunks.join(""));
             };
             return innerFn(request, promptPreamble);
