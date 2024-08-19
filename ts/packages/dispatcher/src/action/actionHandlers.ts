@@ -26,6 +26,7 @@ import { processCommandNoLock } from "../command.js";
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
 import { getUserProfileDir } from "../utils/userData.js";
+import { DispatcherName } from "../handlers/requestCommandHandler.js";
 
 const debugActions = registerDebug("typeagent:actions");
 
@@ -166,9 +167,7 @@ async function executeAction(
     const dispatcherAgent = await getDispatcherAgent(dispatcherAgentName);
 
     // Update the current translator.
-    if (!getTranslatorConfig(translatorName).injected) {
-        context.currentTranslatorName = translatorName;
-    }
+    context.currentTranslatorName = translatorName;
 
     if (dispatcherAgent.executeAction === undefined) {
         throw new Error(
@@ -220,7 +219,11 @@ export async function executeActions(
                 requestIO.getRequestId(),
             );
         } else {
-            requestIO.setActionStatus(result.displayText, actionIndex);
+            requestIO.setActionStatus(
+                result.displayText,
+                actionIndex,
+                context.currentTranslatorName,
+            );
             context.chatHistory.addEntry(
                 result.literalText
                     ? result.literalText

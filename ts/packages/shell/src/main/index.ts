@@ -23,6 +23,7 @@ import {
     RequestId,
     getPrompt,
     getSettingSummary,
+    getTranslatorNameToEmojiMap,
     initializeCommandHandlerContext,
     processCommand,
     partialInput,
@@ -114,6 +115,7 @@ async function triggerRecognitionOnce(context: CommandHandlerContext) {
 function showResult(
     message: string,
     requestId: RequestId,
+    source: string,
     actionIndex?: number,
     groupId?: string,
 ) {
@@ -126,6 +128,7 @@ function showResult(
         "response",
         message,
         requestId,
+        source,
         actionIndex,
         groupId,
     );
@@ -134,6 +137,7 @@ function showResult(
 function sendStatusMessage(
     message: string,
     requestId: RequestId,
+    source: string,
     temporary: boolean = false,
 ) {
     // Ignore message without requestId
@@ -145,6 +149,7 @@ function sendStatusMessage(
         "status-message",
         message,
         requestId,
+        source,
         temporary,
     );
 }
@@ -284,7 +289,8 @@ const clientIO: ClientIO = {
         /* ignore */
     },
     success: sendStatusMessage,
-    status: (message, requestId) => sendStatusMessage(message, requestId, true),
+    status: (message, requestId, source) =>
+        sendStatusMessage(message, requestId, source, true),
     warn: sendStatusMessage,
     error: sendStatusMessage,
     result: showResult,
@@ -390,6 +396,7 @@ app.whenReady().then(async () => {
             mainWindow?.webContents.send(
                 "setting-summary-changed",
                 newSettingSummary,
+                getTranslatorNameToEmojiMap(context),
             );
         }
     });
@@ -402,7 +409,11 @@ app.whenReady().then(async () => {
     ipcMain.on("dom ready", async () => {
         settingSummary = getSettingSummary(context);
         translatorSetPartialInputHandler();
-        mainWindow?.webContents.send("setting-summary-changed", settingSummary);
+        mainWindow?.webContents.send(
+            "setting-summary-changed",
+            settingSummary,
+            getTranslatorNameToEmojiMap(context),
+        );
     });
 
     await initializeSpeech(context);
