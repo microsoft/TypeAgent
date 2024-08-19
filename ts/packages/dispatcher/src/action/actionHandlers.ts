@@ -26,6 +26,7 @@ import { processCommandNoLock } from "../command.js";
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
 import { getUserProfileDir } from "../utils/userData.js";
+import { DispatcherName } from "../handlers/requestCommandHandler.js";
 
 const debugActions = registerDebug("typeagent:actions");
 

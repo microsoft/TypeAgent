@@ -344,7 +344,7 @@ class MessageGroup {
 
         const agentIconDiv = document.createElement("div");
         agentIconDiv.className = "agent-icon";
-        agentIconDiv.innerText = this.agents.get(source as string) as string;
+        agentIconDiv.innerText = this.agents.get(source as string)?.toString().substring(0, 1) as string;
         messageDiv.append(agentIconDiv);
         
         const message = document.createElement("div");

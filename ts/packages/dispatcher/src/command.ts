@@ -21,7 +21,7 @@ import { getConstructionCommandHandlers } from "./handlers/constructionCommandHa
 import { CorrectCommandHandler } from "./handlers/correctCommandHandler.js";
 import { DebugCommandHandler } from "./handlers/debugCommandHandlers.js";
 import { ExplainCommandHandler } from "./handlers/explainCommandHandler.js";
-import { RequestCommandHandler } from "./handlers/requestCommandHandler.js";
+import { DispatcherName, RequestCommandHandler } from "./handlers/requestCommandHandler.js";
 import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js";
 import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
 import { TranslateCommandHandler } from "./handlers/translateCommandHandler.js";
@@ -204,6 +204,7 @@ export async function processCommandNoLock(
         // default to request
         input = `request ${input}`;
     } else {
+        context.currentTranslatorName = DispatcherName;
         input = input.substring(1);
     }
 
