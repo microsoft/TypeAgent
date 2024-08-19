@@ -14,7 +14,7 @@ export type HandlerTable = {
     commands: {
         [key: string]: CommandHandler | HandlerTable;
     };
-    defaultSubCommand: CommandHandler | undefined;
+    defaultSubCommand?: CommandHandler | undefined;
 };
 
 export function getToggleCommandHandlers(
