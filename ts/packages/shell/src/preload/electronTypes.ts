@@ -153,7 +153,7 @@ export interface ClientAPI {
         ) => void,
     ): void;
     onSettingSummaryChanged(
-        callback: (e: Electron.IpcRendererEvent, summary: string) => void,
+        callback: (e: Electron.IpcRendererEvent, summary: string, agents: Map<string, string>) => void,
     ): void;
     onAskYesNo(
         callback: (

@@ -37,8 +37,10 @@ import { makeRequestPromptCreator } from "./common/chatHistoryPrompt.js";
 import { MatchResult } from "../../../cache/dist/constructions/constructions.js";
 import registerDebug from "debug";
 import { getAllActionInfo } from "../translation/actionInfo.js";
+import { getDispatcherAgent } from "../agent/agentConfig.js";
 
 const debugConstValidation = registerDebug("typeagent:const:validation");
+export const DispatcherName = "dispatcher";
 
 async function confirmTranslation(
     elapsedMs: number,
@@ -234,6 +236,7 @@ async function findAssistantForRequest(
     translatorName: string,
     context: CommandHandlerContext,
 ): Promise<NextTranslation | undefined> {
+    context.currentTranslatorName = DispatcherName;
     context.requestIO.status(
         `[switcher] Looking for another assistant to handle request '${request}'`,
     );
@@ -471,6 +474,7 @@ function canExecute(
     requestAction: RequestAction,
     context: CommandHandlerContext,
 ): boolean {
+    context.currentTranslatorName = DispatcherName;
     const requestIO = context.requestIO;
 
     const enabledActions = context.session.getConfig().actions;
@@ -603,6 +607,8 @@ export class RequestCommandHandler implements CommandHandler {
                 `Invalid translation request with translation separator '${RequestAction.Separator}'.  Use @explain if you want to explain a translation.`,
             );
         }
+
+        context.currentTranslatorName = DispatcherName;
 
         const history = context.session.getConfig().history
             ? getChatHistoryForTranslation(context)

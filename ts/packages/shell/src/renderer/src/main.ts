@@ -9,7 +9,7 @@ export function getClientAPI(): ClientAPI {
     return globalThis.api;
 }
 
-function addEvents(chatView: ChatView) {
+function addEvents(chatView: ChatView, agents: Map<string, string>) {
     console.log("add listen event");
     const api = getClientAPI();
     api.onListenEvent((_, name, token, useLocalWhisper) => {
@@ -82,8 +82,13 @@ function addEvents(chatView: ChatView) {
     api.onQuestion(async (_, questionId, message, id, source) => {
         chatView.question(questionId, message, id, source);
     });
-    api.onSettingSummaryChanged((_, summary) => {
+    api.onSettingSummaryChanged((_, summary, registeredAgents) => {
         document.title = summary;
+
+        agents.clear();
+        for(let key of registeredAgents.keys()) {
+            agents.set(key, registeredAgents.get(key) as string);
+        }
     });
     api.onSendInputText((_, message) => {
         chatView.showInputText(message);
@@ -112,13 +117,14 @@ document.addEventListener("DOMContentLoaded", function () {
     const wrapper = document.getElementById("wrapper")!;
     const idGenerator = new IdGenerator();
     const speechInfo = new SpeechInfo();
-    const chatView = new ChatView(idGenerator, speechInfo);
+    const agents = new Map<string, string>();
+    const chatView = new ChatView(idGenerator, speechInfo, agents);
     wrapper.appendChild(chatView.getMessageElm());
     const microphoneSources = document.getElementById(
         "microphoneSources",
     )! as HTMLSelectElement;
 
     enumerateMicrophones(microphoneSources);
-    addEvents(chatView);
+    addEvents(chatView, agents);
     (window as any).electron.ipcRenderer.send("dom ready");
 });

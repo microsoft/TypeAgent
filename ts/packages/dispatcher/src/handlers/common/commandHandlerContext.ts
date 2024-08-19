@@ -49,6 +49,7 @@ import {
 } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
+import { DispatcherName } from "../requestCommandHandler.js";
 
 export interface CommandResult {
     error?: boolean;
@@ -199,7 +200,7 @@ export async function initializeCommandHandlerContext(
         loggerSink.addSink(dbLoggerSink);
     }
 
-    const logger = new ChildLogger(loggerSink, "dispatcher", {
+    const logger = new ChildLogger(loggerSink, DispatcherName, {
         hostName,
         userId: getUserId(),
         sessionId: () => context.session.dir,

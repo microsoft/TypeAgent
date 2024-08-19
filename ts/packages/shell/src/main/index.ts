@@ -23,6 +23,7 @@ import {
     RequestId,
     getPrompt,
     getSettingSummary,
+    getTranslatorNameToEmojiMap,
     initializeCommandHandlerContext,
     processCommand,
     partialInput,
@@ -391,6 +392,7 @@ app.whenReady().then(async () => {
             mainWindow?.webContents.send(
                 "setting-summary-changed",
                 newSettingSummary,
+                getTranslatorNameToEmojiMap(context),
             );
         }
     });
@@ -403,7 +405,7 @@ app.whenReady().then(async () => {
     ipcMain.on("dom ready", async () => {
         settingSummary = getSettingSummary(context);
         translatorSetPartialInputHandler();
-        mainWindow?.webContents.send("setting-summary-changed", settingSummary);
+        mainWindow?.webContents.send("setting-summary-changed", settingSummary, getTranslatorNameToEmojiMap(context));
     });
 
     await initializeSpeech(context);
@@ -572,5 +574,6 @@ function setAppMenu(mainWindow: BrowserWindow) {
                 mainWindow?.setAlwaysOnTop(true, "floating");
             },
         }),
-    );
+       );
 }
+

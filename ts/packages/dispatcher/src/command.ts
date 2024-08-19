@@ -29,6 +29,7 @@ import { getTranslatorConfig } from "./translation/agentTranslators.js";
 import { processRequests, unicodeChar } from "./utils/interactive.js";
 /* ==Experimental== */
 import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
+import { tmpdir } from "node:os";
 /* ==End Experimental== */
 
 class HelpCommandHandler implements CommandHandler {
@@ -283,6 +284,21 @@ export function getSettingSummary(context: CommandHandlerContext) {
     prompt.push("]");
 
     return prompt.join("");
+}
+
+export function getTranslatorNameToEmojiMap(context: CommandHandlerContext) {
+
+    let tMap = new Map<string, string>();
+
+    context.session.useTranslators.forEach(name => {
+        tMap.set(name, getTranslatorConfig(name).emojiChar);
+    });
+
+    tMap.set("dispatcher", "🤖");
+    tMap.set("undefined", "❔");
+    tMap.set("switcher", "↔️");
+
+    return tMap;
 }
 
 export function getPrompt(context: CommandHandlerContext) {

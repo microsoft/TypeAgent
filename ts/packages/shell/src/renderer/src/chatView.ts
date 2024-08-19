@@ -232,6 +232,7 @@ class MessageGroup {
         container: HTMLDivElement,
         requestPromise: Promise<void>,
         timeStamp: Date,
+        public agents: Map<string, string>,
     ) {
         const userMessageContainer = document.createElement("div");
         userMessageContainer.className = "chat-message-right";
@@ -304,10 +305,10 @@ class MessageGroup {
         this.addStatusMessage(`Processing Error: ${error}`, `Shell`, false);
     }
 
-    private ensureStatusMessageDiv() {
+    private ensureStatusMessageDiv(source: string) {
         if (this.statusMessageDiv === undefined) {
             this.statusMessageDiv = document.createElement("div");
-            this.setupAgentMessageDiv(this.statusMessageDiv, "chat-message chat-message-temp", "chat-message-agent");  
+            this.setupAgentMessageDiv(this.statusMessageDiv, "chat-message chat-message-temp", "chat-message-agent", source);  
             this.userMessageContainer.before(this.statusMessageDiv);
         }
 
@@ -315,8 +316,8 @@ class MessageGroup {
     }
 
     public addStatusMessage(message: string, source: string, temporary: boolean) {
-        const div = this.ensureStatusMessageDiv().lastChild as HTMLDivElement;
-        setSource(this.statusMessageDiv as HTMLDivElement, source);
+        const div = this.ensureStatusMessageDiv(source).lastChild as HTMLDivElement;
+        setSource(this.statusMessageDiv as HTMLDivElement, source, this.agents);
 
         let contentDiv: HTMLDivElement;
         if (
@@ -335,7 +336,7 @@ class MessageGroup {
         this.updateStatusMessageDivState();
     }
 
-    public setupAgentMessageDiv(messageDiv: HTMLDivElement, classes: string, messageClass: string) {
+    public setupAgentMessageDiv(messageDiv: HTMLDivElement, classes: string, messageClass: string, source: string) {
         messageDiv.className = classes;
 
         const timestampDiv = createTimestampDiv(new Date(), "chat-timestamp-left");
@@ -343,6 +344,7 @@ class MessageGroup {
 
         const agentIconDiv = document.createElement("div");
         agentIconDiv.className = "agent-icon";
+        agentIconDiv.innerText = this.agents.get(source as string) as string;
         messageDiv.append(agentIconDiv);
         
         const message = document.createElement("div");
@@ -350,15 +352,15 @@ class MessageGroup {
         messageDiv.append(message);
     }
 
-    public ensureAgentMessage(actionIndex?: number) {
+    public ensureAgentMessage(source: string, actionIndex?: number) {
         const index = actionIndex ?? 0;
         const agentMessage = this.agentMessageDivs[index];
         if (agentMessage === undefined) {
-            let beforeElem = this.ensureStatusMessageDiv();
+            let beforeElem = this.ensureStatusMessageDiv(source);
             for (let i = 0; i < index + 1; i++) {
                 if (this.agentMessageDivs[i] === undefined) {
                      this.agentMessageDivs[i] = document.createElement("div");
-                     this.setupAgentMessageDiv(this.agentMessageDivs[i], "chat-message chat-message-left", "chat-message-agent");
+                     this.setupAgentMessageDiv(this.agentMessageDivs[i], "chat-message chat-message-left", "chat-message-agent", source);
 
                     // The chat message list has the style flex-direction: column-reverse;
                     beforeElem.before(this.agentMessageDivs[i]);
@@ -416,8 +418,11 @@ export function createTimestampDiv(timestamp: Date, className: string) {
     return timeStampDiv;
 }
 
-export function setSource(agentMessageDiv: HTMLDivElement, source: string) {
-    (agentMessageDiv.firstChild?.firstChild as HTMLDivElement).innerText = source;
+export function setSource(agentMessageDiv: HTMLDivElement, source: string, agents: Map<string, string>) {
+    (agentMessageDiv.firstChild?.firstChild as HTMLDivElement).innerText = source;  // name
+    
+    const iconDiv: HTMLDivElement = agentMessageDiv.children[1] as HTMLDivElement;
+    iconDiv.innerText = agents.get(source as string) as string;                // icon
 }
 
 export function getSelectionXCoord() {
@@ -510,6 +515,7 @@ export class ChatView {
     constructor(
         private idGenerator: IdGenerator,
         public speechInfo: SpeechInfo,
+        public agents: Map<string, string>
     ) {
         this.topDiv = document.createElement("div");
         this.topDiv.className = "chat-container";
@@ -831,6 +837,7 @@ export class ChatView {
                 this.messageDiv,
                 getClientAPI().processShellRequest(request, id),
                 new Date(),
+                this.agents,
             ),
         );
         this.commandBackStackIndex = -1;
@@ -872,13 +879,13 @@ export class ChatView {
         actionIndex?: number,
         groupId?: string,
     ) {
-        const messageContainer = this.ensureAgentMessage(id, actionIndex) as HTMLDivElement;
+        const messageContainer = this.ensureAgentMessage(id, source, actionIndex) as HTMLDivElement;
         const message = messageContainer.lastChild as HTMLDivElement;
         if (message === undefined) {
             return undefined;
         }
 
-        setSource(messageContainer, source);      
+        setSource(messageContainer, source, this.agents);      
         setContent(message, text);
         if (!groupId) {
             const innerDiv = message.firstChild as HTMLDivElement;
@@ -898,8 +905,8 @@ export class ChatView {
         this.chatInputFocus();
     }
 
-    private ensureAgentMessage(id: string, actionIndex?: number) {
-        return this.getMessageGroup(id)?.ensureAgentMessage(actionIndex);
+    private ensureAgentMessage(id: string, source: string, actionIndex?: number) {
+        return this.getMessageGroup(id)?.ensureAgentMessage(source, actionIndex);
     }
 
     chatInputFocus() {
@@ -914,7 +921,7 @@ export class ChatView {
     }
 
     askYesNo(askYesNoId: number, message: string, requestId: string, source: string) {
-        const agentMessage = this.ensureAgentMessage(requestId);
+        const agentMessage = this.ensureAgentMessage(requestId, source);
         if (agentMessage === undefined) {
             return;
         }
@@ -936,7 +943,7 @@ export class ChatView {
     }
 
     question(questionId: number, message: string, requestId: string, source: string) {
-        const agentMessage = this.ensureAgentMessage(requestId);
+        const agentMessage = this.ensureAgentMessage(requestId, source);
         if (agentMessage === undefined) {
             return;
         }

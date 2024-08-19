@@ -22,6 +22,7 @@ import {
     createTurnImpressionFromLiteral,
 } from "dispatcher-agent";
 import { fileURLToPath } from "node:url";
+import { basename } from "node:path";
 
 export function instantiate(): DispatcherAgent {
     return {
