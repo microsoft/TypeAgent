@@ -12,7 +12,7 @@ export class ShellSettings {
     private static instance: ShellSettings;
    
     public size?: number[] = [ 900, 1200 ];
-    public position?: number[] = [ 0, 0 ];
+    public position?: number[];
     public zoomLevel: number = 1;
     public devTools?: boolean = false;
 
