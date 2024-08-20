@@ -4,6 +4,7 @@
 import * as speechSDK from "microsoft-cognitiveservices-speech-sdk";
 import { SpeechToken } from "../../preload/electronTypes";
 import { WhisperRecognizer } from "./localWhisperClient";
+import { ShellSettings } from "../../main/shellSettings";
 
 export function enumerateMicrophones(microphoneSources: HTMLSelectElement) {
     if (
@@ -41,6 +42,10 @@ export function enumerateMicrophones(microphoneSources: HTMLSelectElement) {
                         opt.value = device.deviceId;
                         console.log(`Device ID: ${device.label}`);
                         opt.appendChild(document.createTextNode(device.label));
+                        
+                        if (device.deviceId == ShellSettings.getinstance().microphoneId && device.label) {
+                            opt.setAttribute("SELECTED", "SELECTED");
+                        }
 
                         microphoneSources.appendChild(opt);
                         deviceIds.add(device.deviceId);
@@ -50,6 +55,16 @@ export function enumerateMicrophones(microphoneSources: HTMLSelectElement) {
         }
 
         microphoneSources.disabled = microphoneSources.options.length == 1;
+    });
+
+    microphoneSources.addEventListener("selectionchange", () => {
+        if (microphoneSources.selectedIndex > -1) {
+            ShellSettings.getinstance().microphoneId = microphoneSources.selectedOptions[0].value;
+            ShellSettings.getinstance().microphoneName = microphoneSources.selectedOptions[0].innerText;
+        } else {
+            ShellSettings.getinstance().microphoneId = undefined;
+            ShellSettings.getinstance().microphoneName = undefined;
+        }
     });
 }
 
