@@ -100,7 +100,6 @@ function createWindow(): void {
 
     mainWindow.on("moved", () => {
         ShellSettings.getinstance().position = mainWindow?.getPosition();
-        console.log("browser window moved to " + mainWindow?.getPosition());
     });
 
     mainWindow.on("resized", () => {
