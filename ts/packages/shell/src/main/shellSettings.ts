@@ -10,30 +10,29 @@ const debugShell = registerDebug("typeagent:shell");
 
 export class ShellSettings {
     private static instance: ShellSettings;
-   
-    public size?: number[] = [ 900, 1200 ];
+
+    public size?: number[] = [900, 1200];
     public position?: number[];
     public zoomLevel: number = 1;
     public devTools?: boolean = false;
 
-    public get width() : number | undefined {
+    public get width(): number | undefined {
         return this.size ? this.size[0] : undefined;
     }
 
-    public get height() : number | undefined {
+    public get height(): number | undefined {
         return this.size ? this.size[1] : undefined;
     }
 
-    public get x() : number | undefined {
+    public get x(): number | undefined {
         return this.position ? this.position[0] : undefined;
     }
 
-    public get y() : number | undefined {
+    public get y(): number | undefined {
         return this.position ? this.position[1] : undefined;
     }
 
     private constructor() {
-
         let settings = ShellSettings.load();
 
         if (settings) {
@@ -49,7 +48,7 @@ export class ShellSettings {
 
     public static get filePath(): string {
         return path.join(app.getPath("userData"), "shellSettings.json");
-    } 
+    }
 
     public static getinstance = (): ShellSettings => {
         if (!ShellSettings.instance) {
@@ -57,20 +56,26 @@ export class ShellSettings {
         }
 
         return ShellSettings.instance;
-    }
+    };
 
-    private static load() : any {
-        debugShell(`Loading shell settings from '${this.filePath}'`, performance.now());
+    private static load(): any {
+        debugShell(
+            `Loading shell settings from '${this.filePath}'`,
+            performance.now(),
+        );
 
         if (existsSync(this.filePath)) {
             return JSON.parse(readFileSync(this.filePath, "utf-8"));
         }
-        
+
         return null;
     }
 
     public save() {
-        debugShell(`Saving settings to '${ShellSettings.filePath}'.`, performance.now());
+        debugShell(
+            `Saving settings to '${ShellSettings.filePath}'.`,
+            performance.now(),
+        );
 
         writeFileSync(ShellSettings.filePath, JSON.stringify(this));
     }

@@ -48,7 +48,7 @@ dotenv.config({ path: envPath });
 process.env.FORCE_COLOR = "true";
 
 // do we need to reset shell settings?
-process.argv.forEach(arg => {
+process.argv.forEach((arg) => {
     if (arg.toLowerCase() == "--setup" && existsSync(ShellSettings.filePath)) {
         unlinkSync(ShellSettings.filePath);
     }
@@ -59,8 +59,7 @@ let mainWindow: BrowserWindow | null = null;
 const time = performance.now();
 debugShell("Starting...");
 function createWindow(): void {
-
-    debugShell("Creating window", performance.now() - time);    
+    debugShell("Creating window", performance.now() - time);
 
     // Create the browser window.
     mainWindow = new BrowserWindow({
@@ -78,7 +77,7 @@ function createWindow(): void {
     });
 
     mainWindow.on("ready-to-show", () => {
-        mainWindow!.show(); 
+        mainWindow!.show();
 
         if (ShellSettings.getinstance().devTools) {
             mainWindow?.webContents.openDevTools();
@@ -91,7 +90,8 @@ function createWindow(): void {
     });
 
     mainWindow.on("close", () => {
-        ShellSettings.getinstance().devTools = mainWindow?.webContents.isDevToolsOpened();
+        ShellSettings.getinstance().devTools =
+            mainWindow?.webContents.isDevToolsOpened();
     });
 
     mainWindow.on("closed", () => {

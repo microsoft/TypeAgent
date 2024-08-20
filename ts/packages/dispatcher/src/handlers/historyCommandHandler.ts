@@ -22,7 +22,7 @@ export class HistoryListCommandHandler implements CommandHandler {
 export function getHistoryCommandHandlers(): HandlerTable {
     return {
         description: "History commands",
-        defaultSubCommand: new HistoryListCommandHandler(), 
+        defaultSubCommand: new HistoryListCommandHandler(),
         commands: {
             list: new HistoryListCommandHandler(),
         },
