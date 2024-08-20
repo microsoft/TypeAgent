@@ -208,6 +208,7 @@ export async function processCommandNoLock(
         // default to request
         input = `request ${input}`;
     } else {
+        context.currentTranslatorName = DispatcherName;
         input = input.substring(1);
     }
 
