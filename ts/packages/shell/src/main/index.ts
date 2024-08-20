@@ -34,6 +34,7 @@ import {
     ActionTemplateSequence,
     SearchMenuItem,
 } from "../preload/electronTypes.js";
+import { ShellSettings } from "./shellSettings.js";
 
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
@@ -49,11 +50,12 @@ let mainWindow: BrowserWindow | null = null;
 const time = performance.now();
 debugShell("Starting...");
 function createWindow(): void {
+
     debugShell("Creating window", performance.now() - time);
     // Create the browser window.
     mainWindow = new BrowserWindow({
-        width: 900,
-        height: 1200,
+        width: ShellSettings.getinstance().width,
+        height: ShellSettings.getinstance().height,
         show: false,
         autoHideMenuBar: true,
         webPreferences: {
