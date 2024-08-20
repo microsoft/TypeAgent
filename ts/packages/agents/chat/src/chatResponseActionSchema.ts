@@ -66,7 +66,7 @@ export interface GenerateResponseAction {
         originalRequest: string;
         // the generated text to show the user; if lookups are used, this text should let the user know a lookup is in progress
         generatedText: string;
-        // ALL the actions and entities present in the user's request
+        // ALL the actions and entities present in the text of the user's request
         userRequestEntities: KnowledgeResponse;
         // ALL the actions and entities present in the generated text
         generatedTextEntities: KnowledgeResponse;
