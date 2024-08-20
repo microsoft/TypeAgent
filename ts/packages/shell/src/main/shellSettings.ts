@@ -34,7 +34,7 @@ export class ShellSettings {
 
     private constructor() {
 
-        let settings = ShellSettings.loadSettings();
+        let settings = ShellSettings.load();
 
         if (settings) {
             if (settings.size) {
@@ -59,7 +59,7 @@ export class ShellSettings {
         return ShellSettings.instance;
     }
 
-    private static loadSettings() : any {
+    private static load() : any {
         debugShell(`Loading shell settings from '${this.filePath}'`, performance.now());
 
         if (existsSync(this.filePath)) {
