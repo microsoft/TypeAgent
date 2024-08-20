@@ -93,6 +93,7 @@ export interface ClientAPI {
             e: Electron.IpcRendererEvent,
             response: string | undefined,
             id: string,
+            source: string,
             actionIndex?: number,
             group_id?: string,
         ) => void,
@@ -119,6 +120,7 @@ export interface ClientAPI {
             e: Electron.IpcRendererEvent,
             message: string,
             id: string,
+            source: string,
             temporary: boolean,
         ) => void,
     ): void;
@@ -156,7 +158,11 @@ export interface ClientAPI {
         ) => void,
     ): void;
     onSettingSummaryChanged(
-        callback: (e: Electron.IpcRendererEvent, summary: string) => void,
+        callback: (
+            e: Electron.IpcRendererEvent,
+            summary: string,
+            agents: Map<string, string>,
+        ) => void,
     ): void;
     onAskYesNo(
         callback: (
@@ -164,6 +170,7 @@ export interface ClientAPI {
             askYesNoId: number,
             message: string,
             requestId: string,
+            source: string,
         ) => void,
     ): void;
     sendYesNo: (askYesNoId: number, accept: boolean) => void;
@@ -173,6 +180,7 @@ export interface ClientAPI {
             questionId: number,
             message: string,
             requestId: string,
+            source: string,
         ) => void,
     ): void;
     sendAnswer: (questionId: number, answer?: string) => void;

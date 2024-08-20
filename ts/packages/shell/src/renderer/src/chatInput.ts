@@ -48,6 +48,8 @@ export class ExpandableTextarea {
                 }
             } else if (event.altKey && handlers.altHandler !== undefined) {
                 handlers.altHandler(this, event);
+            } else if (event.key == "Escape") {
+                this.textEntry.textContent = "";
             }
             return true;
         });
