@@ -3,21 +3,53 @@
 
 import { app } from "electron";
 import registerDebug from "debug";
-//import { readFileSync } from "fs";
+import { readFileSync, existsSync, writeFileSync } from "fs";
+import path from "path";
 
 const debugShell = registerDebug("typeagent:shell");
 
 export class ShellSettings {
     private static instance: ShellSettings;
    
-    public width: number = 900;
-    public height: number = 1200;
-    public x?: number = 0;
-    public y?: number = 0;
+    public size?: number[] = [ 900, 1200 ];
+    public position?: number[] = [ 0, 0 ];
+    public zoomLevel: number = 1;
+    public devTools?: boolean = false;
+
+    public get width() : number | undefined {
+        return this.size ? this.size[0] : undefined;
+    }
+
+    public get height() : number | undefined {
+        return this.size ? this.size[1] : undefined;
+    }
+
+    public get x() : number | undefined {
+        return this.position ? this.position[0] : undefined;
+    }
+
+    public get y() : number | undefined {
+        return this.position ? this.position[1] : undefined;
+    }
 
     private constructor() {
-        ShellSettings.loadSettings("sdlfjdsf");
+
+        let settings = ShellSettings.loadSettings();
+
+        if (settings) {
+            if (settings.size) {
+                this.size = settings.size;
+            }
+
+            this.position = settings.position;
+            this.zoomLevel = settings.zoomLevel;
+            this.devTools = settings.devTools;
+        }
     }
+
+    public static get filePath(): string {
+        return path.join(app.getPath("userData"), "shellSettings.json");
+    } 
 
     public static getinstance = (): ShellSettings => {
         if (!ShellSettings.instance) {
@@ -27,13 +59,19 @@ export class ShellSettings {
         return ShellSettings.instance;
     }
 
-    private static loadSettings(filePath: string) {
-        debugShell("Loading shell settings", performance.now());
+    private static loadSettings() : any {
+        debugShell(`Loading shell settings from '${this.filePath}'`, performance.now());
 
-        console.log(filePath);
-        console.log(app.getPath("userData"));
-        //readFileSync(filePath, "utf-8").toString();
-
+        if (existsSync(this.filePath)) {
+            return JSON.parse(readFileSync(this.filePath, "utf-8"));
+        }
         
+        return null;
+    }
+
+    public save() {
+        debugShell(`Saving settings to '${ShellSettings.filePath}'.`, performance.now());
+
+        writeFileSync(ShellSettings.filePath, JSON.stringify(this));
     }
 }

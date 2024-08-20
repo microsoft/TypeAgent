@@ -35,6 +35,8 @@ import {
     SearchMenuItem,
 } from "../preload/electronTypes.js";
 import { ShellSettings } from "./shellSettings.js";
+import { unlinkSync } from "fs";
+import { existsSync } from "node:fs";
 
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
@@ -45,13 +47,21 @@ dotenv.config({ path: envPath });
 // Make sure we have chalk colors
 process.env.FORCE_COLOR = "true";
 
+// do we need to reset shell settings?
+process.argv.forEach(arg => {
+    if (arg.toLowerCase() == "--setup" && existsSync(ShellSettings.filePath)) {
+        unlinkSync(ShellSettings.filePath);
+    }
+});
+
 let mainWindow: BrowserWindow | null = null;
 
 const time = performance.now();
 debugShell("Starting...");
 function createWindow(): void {
 
-    debugShell("Creating window", performance.now() - time);
+    debugShell("Creating window", performance.now() - time);    
+
     // Create the browser window.
     mainWindow = new BrowserWindow({
         width: ShellSettings.getinstance().width,
@@ -61,16 +71,40 @@ function createWindow(): void {
         webPreferences: {
             preload: join(__dirname, "../preload/index.mjs"),
             sandbox: false,
+            zoomFactor: ShellSettings.getinstance().zoomLevel,
         },
+        x: ShellSettings.getinstance().x,
+        y: ShellSettings.getinstance().y,
     });
 
     mainWindow.on("ready-to-show", () => {
-        mainWindow!.show();
+        mainWindow!.show(); 
+
+        if (ShellSettings.getinstance().devTools) {
+            mainWindow?.webContents.openDevTools();
+        }
     });
 
     mainWindow.webContents.setWindowOpenHandler((details) => {
         shell.openExternal(details.url);
         return { action: "deny" };
+    });
+
+    mainWindow.on("close", () => {
+        ShellSettings.getinstance().devTools = mainWindow?.webContents.isDevToolsOpened();
+    });
+
+    mainWindow.on("closed", () => {
+        ShellSettings.getinstance().save();
+    });
+
+    mainWindow.on("moved", () => {
+        ShellSettings.getinstance().position = mainWindow?.getPosition();
+        console.log("browser window moved to " + mainWindow?.getPosition());
+    });
+
+    mainWindow.on("resized", () => {
+        ShellSettings.getinstance().size = mainWindow?.getSize();
     });
 
     // HMR for renderer base on electron-vite cli.
@@ -468,11 +502,13 @@ app.on("window-all-closed", () => {
 function zoomIn(mainWindow: BrowserWindow) {
     const curr = mainWindow.webContents.zoomLevel;
     mainWindow.webContents.zoomLevel = Math.min(curr + 0.5, 9);
+    ShellSettings.getinstance().zoomLevel = mainWindow.webContents.zoomLevel;
 }
 
 function zoomOut(mainWindow: BrowserWindow) {
     const curr = mainWindow.webContents.zoomLevel;
     mainWindow.webContents.zoomLevel = Math.max(curr - 0.5, -8);
+    ShellSettings.getinstance().zoomLevel = mainWindow.webContents.zoomLevel;
 }
 
 const isMac = process.platform === "darwin";
