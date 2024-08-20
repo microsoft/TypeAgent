@@ -10,7 +10,13 @@ import {
 } from "./models";
 import { FetchThrottler, callApi, callJsonApi } from "./restClient";
 import { getEnvSetting } from "./common";
-import { PromptSection, Result, success, error } from "typechat";
+import {
+    PromptSection,
+    Result,
+    success,
+    error,
+    TypeChatLanguageModel,
+} from "typechat";
 import { readServerEventStream } from "./serverEvents";
 import { priorityQueue } from "async";
 import {
@@ -381,6 +387,12 @@ export function getChatModelSettings(endpoint?: string) {
 
     chatModels.set(endpointKey, settings);
     return settings;
+}
+
+export function supportsStreaming(
+    model: TypeChatLanguageModel,
+): model is ChatModelWithStreaming {
+    return "completeStream" in model;
 }
 
 /**

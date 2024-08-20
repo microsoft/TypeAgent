@@ -167,9 +167,7 @@ async function executeAction(
     const dispatcherAgent = await getDispatcherAgent(dispatcherAgentName);
 
     // Update the current translator.
-    if (getTranslatorConfig(translatorName).injected) {
-        context.currentTranslatorName = translatorName;
-    }
+    context.currentTranslatorName = translatorName;
 
     if (dispatcherAgent.executeAction === undefined) {
         throw new Error(
@@ -221,7 +219,11 @@ export async function executeActions(
                 requestIO.getRequestId(),
             );
         } else {
-            requestIO.setActionStatus(result.displayText, actionIndex, context.currentTranslatorName);
+            requestIO.setActionStatus(
+                result.displayText,
+                actionIndex,
+                context.currentTranslatorName,
+            );
             context.chatHistory.addEntry(
                 result.literalText
                     ? result.literalText

@@ -44,9 +44,22 @@ function addEvents(chatView: ChatView, agents: Map<string, string>) {
         }
     });
     api.onResponse(
-        (_, response, id, source: string, actionIndex?: number, groupId?: string) => {
+        (
+            _,
+            response,
+            id,
+            source: string,
+            actionIndex?: number,
+            groupId?: string,
+        ) => {
             if (response !== undefined) {
-                chatView.addAgentMessage(response, id, source, actionIndex, groupId);
+                chatView.addAgentMessage(
+                    response,
+                    id,
+                    source,
+                    actionIndex,
+                    groupId,
+                );
             }
         },
     );
@@ -86,7 +99,7 @@ function addEvents(chatView: ChatView, agents: Map<string, string>) {
         document.title = summary;
 
         agents.clear();
-        for(let key of registeredAgents.keys()) {
+        for (let key of registeredAgents.keys()) {
             agents.set(key, registeredAgents.get(key) as string);
         }
     });

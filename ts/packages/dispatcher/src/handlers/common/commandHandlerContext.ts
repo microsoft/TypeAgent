@@ -8,9 +8,11 @@ import {
     Logger,
     LoggerSink,
     MultiSinkLogger,
+    TypeChatJsonTranslatorWithStreaming,
     createDebugLoggerSink,
     createLimiter,
     createMongoDBLoggerSink,
+    enableJsonTranslatorStreaming,
 } from "common-utils";
 import {
     AgentCache,
@@ -71,7 +73,7 @@ export type CommandHandlerContext = {
     // Runtime context
     commandLock: Limiter; // Make sure we process one command at a time.
     currentTranslatorName: string;
-    translatorCache: Map<string, TypeChatJsonTranslator<object>>;
+    translatorCache: Map<string, TypeChatJsonTranslatorWithStreaming<object>>;
     agentCache: AgentCache;
     action: { [key: string]: any };
     currentScriptDir: string;
@@ -111,7 +113,8 @@ export function getTranslator(
         config.switch.inline ? config.translators : undefined,
         config.multipleActions,
     );
-    context.translatorCache.set(translatorName, newTranslator);
+    const streamingTranslator = enableJsonTranslatorStreaming(newTranslator);
+    context.translatorCache.set(translatorName, streamingTranslator);
     return newTranslator;
 }
 

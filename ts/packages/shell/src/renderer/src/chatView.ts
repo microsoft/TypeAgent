@@ -237,12 +237,15 @@ class MessageGroup {
         const userMessageContainer = document.createElement("div");
         userMessageContainer.className = "chat-message-right";
 
-        const timeStampDiv = createTimestampDiv(timeStamp, "chat-timestamp-right");
-        userMessageContainer.appendChild(timeStampDiv)
+        const timeStampDiv = createTimestampDiv(
+            timeStamp,
+            "chat-timestamp-right",
+        );
+        userMessageContainer.appendChild(timeStampDiv);
 
         const userMessage = document.createElement("div");
         userMessage.className = "chat-message-user";
-        userMessageContainer.appendChild(userMessage);       
+        userMessageContainer.appendChild(userMessage);
 
         setContent(userMessage, request);
 
@@ -308,15 +311,25 @@ class MessageGroup {
     private ensureStatusMessageDiv(source: string) {
         if (this.statusMessageDiv === undefined) {
             this.statusMessageDiv = document.createElement("div");
-            this.setupAgentMessageDiv(this.statusMessageDiv, "chat-message chat-message-temp", "chat-message-agent", source);  
+            this.setupAgentMessageDiv(
+                this.statusMessageDiv,
+                "chat-message chat-message-temp",
+                "chat-message-agent",
+                source,
+            );
             this.userMessageContainer.before(this.statusMessageDiv);
         }
 
         return this.statusMessageDiv;
     }
 
-    public addStatusMessage(message: string, source: string, temporary: boolean) {
-        const div = this.ensureStatusMessageDiv(source).lastChild as HTMLDivElement;
+    public addStatusMessage(
+        message: string,
+        source: string,
+        temporary: boolean,
+    ) {
+        const div = this.ensureStatusMessageDiv(source)
+            .lastChild as HTMLDivElement;
         setSource(this.statusMessageDiv as HTMLDivElement, source, this.agents);
 
         let contentDiv: HTMLDivElement;
@@ -326,7 +339,7 @@ class MessageGroup {
         ) {
             contentDiv = div.lastChild as HTMLDivElement;
         } else {
-            contentDiv = document.createElement("div");            
+            contentDiv = document.createElement("div");
             div.appendChild(contentDiv);
         }
         this.statusMessages.push({ message, temporary });
@@ -336,17 +349,28 @@ class MessageGroup {
         this.updateStatusMessageDivState();
     }
 
-    public setupAgentMessageDiv(messageDiv: HTMLDivElement, classes: string, messageClass: string, source: string) {
+    public setupAgentMessageDiv(
+        messageDiv: HTMLDivElement,
+        classes: string,
+        messageClass: string,
+        source: string,
+    ) {
         messageDiv.className = classes;
 
-        const timestampDiv = createTimestampDiv(new Date(), "chat-timestamp-left");
+        const timestampDiv = createTimestampDiv(
+            new Date(),
+            "chat-timestamp-left",
+        );
         messageDiv.append(timestampDiv);
 
         const agentIconDiv = document.createElement("div");
         agentIconDiv.className = "agent-icon";
-        agentIconDiv.innerText = this.agents.get(source as string)?.toString().substring(0, 1) as string;
+        agentIconDiv.innerText = this.agents
+            .get(source as string)
+            ?.toString()
+            .substring(0, 1) as string;
         messageDiv.append(agentIconDiv);
-        
+
         const message = document.createElement("div");
         message.className = messageClass;
         messageDiv.append(message);
@@ -359,8 +383,13 @@ class MessageGroup {
             let beforeElem = this.ensureStatusMessageDiv(source);
             for (let i = 0; i < index + 1; i++) {
                 if (this.agentMessageDivs[i] === undefined) {
-                     this.agentMessageDivs[i] = document.createElement("div");
-                     this.setupAgentMessageDiv(this.agentMessageDivs[i], "chat-message chat-message-left", "chat-message-agent", source);
+                    this.agentMessageDivs[i] = document.createElement("div");
+                    this.setupAgentMessageDiv(
+                        this.agentMessageDivs[i],
+                        "chat-message chat-message-left",
+                        "chat-message-agent",
+                        source,
+                    );
 
                     // The chat message list has the style flex-direction: column-reverse;
                     beforeElem.before(this.agentMessageDivs[i]);
@@ -407,22 +436,31 @@ export function createTimestampDiv(timestamp: Date, className: string) {
 
     const nameDiv = document.createElement("div");
     nameDiv.className = "agent-name";
-    timeStampDiv.appendChild(nameDiv);    // name placeholder
-    
+    timeStampDiv.appendChild(nameDiv); // name placeholder
+
     const dateDiv = document.createElement("div");
     dateDiv.className = "timestring";
-    timeStampDiv.appendChild(dateDiv);    // time string
+    timeStampDiv.appendChild(dateDiv); // time string
 
-    setContent(timeStampDiv.lastChild as HTMLElement, timestamp.toLocaleTimeString());
+    setContent(
+        timeStampDiv.lastChild as HTMLElement,
+        timestamp.toLocaleTimeString(),
+    );
 
     return timeStampDiv;
 }
 
-export function setSource(agentMessageDiv: HTMLDivElement, source: string, agents: Map<string, string>) {
-    (agentMessageDiv.firstChild?.firstChild as HTMLDivElement).innerText = source;  // name
-    
-    const iconDiv: HTMLDivElement = agentMessageDiv.children[1] as HTMLDivElement;
-    iconDiv.innerText = agents.get(source as string) as string;                // icon
+export function setSource(
+    agentMessageDiv: HTMLDivElement,
+    source: string,
+    agents: Map<string, string>,
+) {
+    (agentMessageDiv.firstChild?.firstChild as HTMLDivElement).innerText =
+        source; // name
+
+    const iconDiv: HTMLDivElement = agentMessageDiv
+        .children[1] as HTMLDivElement;
+    iconDiv.innerText = agents.get(source as string) as string; // icon
 }
 
 export function getSelectionXCoord() {
@@ -515,7 +553,7 @@ export class ChatView {
     constructor(
         private idGenerator: IdGenerator,
         public speechInfo: SpeechInfo,
-        public agents: Map<string, string>
+        public agents: Map<string, string>,
     ) {
         this.topDiv = document.createElement("div");
         this.topDiv.className = "chat-container";
@@ -564,9 +602,10 @@ export class ChatView {
                 } else if (this.chatInput) {
                     if (!ev.altKey && !ev.ctrlKey) {
                         if (ev.key == "ArrowUp" || ev.key == "ArrowDown") {
-                            const messages = this.messageDiv.querySelectorAll(
-                                ".chat-message-user",
-                            );
+                            const messages =
+                                this.messageDiv.querySelectorAll(
+                                    ".chat-message-user",
+                                );
 
                             if (
                                 ev.key == "ArrowUp" &&
@@ -820,7 +859,12 @@ export class ChatView {
         return messageGroup;
     }
 
-    showStatusMessage(message: string, id: string, source: string, temporary: boolean) {
+    showStatusMessage(
+        message: string,
+        id: string,
+        source: string,
+        temporary: boolean,
+    ) {
         this.getMessageGroup(id)?.addStatusMessage(message, source, temporary);
     }
 
@@ -882,13 +926,17 @@ export class ChatView {
         actionIndex?: number,
         groupId?: string,
     ) {
-        const messageContainer = this.ensureAgentMessage(id, source, actionIndex) as HTMLDivElement;
+        const messageContainer = this.ensureAgentMessage(
+            id,
+            source,
+            actionIndex,
+        ) as HTMLDivElement;
         const message = messageContainer.lastChild as HTMLDivElement;
         if (message === undefined) {
             return undefined;
         }
 
-        setSource(messageContainer, source, this.agents);      
+        setSource(messageContainer, source, this.agents);
         setContent(message, text);
         if (!groupId) {
             const innerDiv = message.firstChild as HTMLDivElement;
@@ -908,8 +956,15 @@ export class ChatView {
         this.chatInputFocus();
     }
 
-    private ensureAgentMessage(id: string, source: string, actionIndex?: number) {
-        return this.getMessageGroup(id)?.ensureAgentMessage(source, actionIndex);
+    private ensureAgentMessage(
+        id: string,
+        source: string,
+        actionIndex?: number,
+    ) {
+        return this.getMessageGroup(id)?.ensureAgentMessage(
+            source,
+            actionIndex,
+        );
     }
 
     chatInputFocus() {
@@ -923,7 +978,12 @@ export class ChatView {
         }, 0);
     }
 
-    askYesNo(askYesNoId: number, message: string, requestId: string, source: string) {
+    askYesNo(
+        askYesNoId: number,
+        message: string,
+        requestId: string,
+        source: string,
+    ) {
         const agentMessage = this.ensureAgentMessage(requestId, source);
         if (agentMessage === undefined) {
             return;
@@ -934,7 +994,12 @@ export class ChatView {
         proposeYesNo(this, askYesNoId, requestId, message, source);
     }
 
-    answerYesNo(questionId: number, answer: boolean, requestId: string, source: string) {
+    answerYesNo(
+        questionId: number,
+        answer: boolean,
+        requestId: string,
+        source: string,
+    ) {
         this.showStatusMessage(
             answer ? "Accepted!" : "Rejected!",
             requestId,
@@ -945,7 +1010,12 @@ export class ChatView {
         this.chatInputFocus();
     }
 
-    question(questionId: number, message: string, requestId: string, source: string) {
+    question(
+        questionId: number,
+        message: string,
+        requestId: string,
+        source: string,
+    ) {
         const agentMessage = this.ensureAgentMessage(requestId, source);
         if (agentMessage === undefined) {
             return;

@@ -52,7 +52,7 @@ export interface ClientIO {
         message: string,
         requestId: RequestId,
         source: string,
-        actionIndex: number,        
+        actionIndex: number,
         groupId?: string,
     ): void;
     updateActionStatus(message: string, groupId: string): void;
@@ -185,7 +185,14 @@ export function getRequestIO(
             actionIndex: number,
             source: string,
             groupId?: string,
-        ) => clientIO.setActionStatus(status, requestId, source, actionIndex, groupId),
+        ) =>
+            clientIO.setActionStatus(
+                status,
+                requestId,
+                source,
+                actionIndex,
+                groupId,
+            ),
 
         isInputEnabled: () => true,
         askYesNo: async (message: string, defaultValue?: boolean) =>
