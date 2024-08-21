@@ -65,11 +65,11 @@ async function handleChatResponse(
             if (chatAction.parameters.generatedText !== undefined) {
                 logEntities(
                     "UR Entities:",
-                    chatAction.parameters.userRequestEntities.entities,
+                    chatAction.parameters.userRequestEntities,
                 );
                 logEntities(
                     "GT Entities:",
-                    chatAction.parameters.generatedTextEntities.entities,
+                    chatAction.parameters.generatedTextEntities,
                 );
                 console.log("Got generated text");
 
@@ -78,13 +78,10 @@ async function handleChatResponse(
                 );
 
                 let entities =
-                    chatAction.parameters.generatedTextEntities.entities || [];
-                if (
-                    chatAction.parameters.userRequestEntities.entities !==
-                    undefined
-                ) {
+                    chatAction.parameters.generatedTextEntities || [];
+                if (chatAction.parameters.userRequestEntities !== undefined) {
                     entities =
-                        chatAction.parameters.userRequestEntities.entities.concat(
+                        chatAction.parameters.userRequestEntities.concat(
                             entities,
                         );
                 }
