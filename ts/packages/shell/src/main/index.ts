@@ -449,11 +449,22 @@ app.whenReady().then(async () => {
             settingSummary,
             getTranslatorNameToEmojiMap(context),
         );
+
+        mainWindow?.webContents.send(
+            "microphone-change-requested",
+            ShellSettings.getinstance().microphoneId,
+            ShellSettings.getinstance().microphoneName,
+        );
     });
 
     await initializeSpeech(context);
     ipcMain.handle("get-localWhisper-status", async () => {
         return typeof context.localWhisper !== "undefined";
+    });
+
+    ipcMain.on("microphone-change-requested", async (_event, micId: string, micName: string) => {
+        ShellSettings.getinstance().microphoneId = micId;
+        ShellSettings.getinstance().microphoneName = micName;
     });
 
     globalShortcut.register("Alt+Right", () => {
@@ -475,7 +486,7 @@ app.whenReady().then(async () => {
         optimizer.watchWindowShortcuts(window);
     });
 
-    createWindow();
+    createWindow();``
 
     app.on("activate", function () {
         // On macOS it's common to re-create a window in the app when the
