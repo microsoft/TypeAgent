@@ -268,7 +268,7 @@ class MessageGroup {
     private requestCompleted() {
         this.completed = true;
         if (this.statusMessages.length === 0) {
-            this.addStatusMessage("Request completed", "Shell", true);
+            this.addStatusMessage("Request completed", "shell", true);
         }
         this.updateStatusMessageDivState();
     }
@@ -1038,7 +1038,7 @@ export class ChatView {
     }
 
     answer(questionId: number, answer: string, requestId: string) {
-        this.showStatusMessage("Answer sent!", requestId, "Shell", true);
+        this.showStatusMessage("Answer sent!", requestId, "shell", true);
         console.log(answer);
         getClientAPI().sendAnswer(questionId, answer);
     }

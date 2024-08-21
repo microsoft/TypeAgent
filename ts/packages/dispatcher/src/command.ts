@@ -305,6 +305,7 @@ export function getTranslatorNameToEmojiMap(context: CommandHandlerContext) {
     tMap.set("dispatcher", "🤖");
     tMap.set("undefined", "❔");
     tMap.set("switcher", "↔️");
+    tMap.set("shell", "🐚");
 
     return tMap;
 }
