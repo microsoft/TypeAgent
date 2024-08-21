@@ -199,7 +199,11 @@ export interface ClientAPI {
         callback: (e: Electron.IpcRendererEvent, key: string) => void,
     ): void;
     onMicrophoneChangeRequested(
-        callback: (e: Electron.IpcRendererEvent, micId: string, micName: string) => void,
+        callback: (
+            e: Electron.IpcRendererEvent,
+            micId: string,
+            micName: string,
+        ) => void,
     ): void;
 }
 

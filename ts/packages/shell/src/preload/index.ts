@@ -82,7 +82,7 @@ const api: ClientAPI = {
     },
     onMicrophoneChangeRequested(callback) {
         ipcRenderer.on("microphone-change-requested", callback);
-    }
+    },
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to

@@ -4,13 +4,22 @@
 //import { ShellSettings } from "../../main/shellSettings";
 import { ClientAPI } from "../../preload/electronTypes";
 import { ChatView } from "./chatView";
-import { SpeechInfo, enumerateMicrophones, recognizeOnce, selectMicrophone } from "./speech";
+import {
+    SpeechInfo,
+    enumerateMicrophones,
+    recognizeOnce,
+    selectMicrophone,
+} from "./speech";
 
 export function getClientAPI(): ClientAPI {
     return globalThis.api;
 }
 
-function addEvents(chatView: ChatView, agents: Map<string, string>, microphoneSelector: HTMLSelectElement) {
+function addEvents(
+    chatView: ChatView,
+    agents: Map<string, string>,
+    microphoneSelector: HTMLSelectElement,
+) {
     console.log("add listen event");
     const api = getClientAPI();
     api.onListenEvent((_, name, token, useLocalWhisper) => {
@@ -120,7 +129,7 @@ function addEvents(chatView: ChatView, agents: Map<string, string>, microphoneSe
     });
     api.onMicrophoneChangeRequested((_, micId, micName) => {
         selectMicrophone(microphoneSelector, micId, micName);
-    } );
+    });
 }
 
 export class IdGenerator {
@@ -142,9 +151,7 @@ document.addEventListener("DOMContentLoaded", function () {
         "microphoneSources",
     )! as HTMLSelectElement;
 
-    enumerateMicrophones(microphoneSources, 
-        window as any,
-    );
+    enumerateMicrophones(microphoneSources, window as any);
 
     addEvents(chatView, agents, microphoneSources);
     (window as any).electron.ipcRenderer.send("dom ready");
