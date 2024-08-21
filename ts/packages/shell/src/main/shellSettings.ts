@@ -15,6 +15,8 @@ export class ShellSettings {
     public position?: number[];
     public zoomLevel: number = 1;
     public devTools?: boolean = false;
+    public microphoneId?: string;
+    public microphoneName?: string;
 
     public get width(): number | undefined {
         return this.size ? this.size[0] : undefined;
@@ -43,6 +45,8 @@ export class ShellSettings {
             this.position = settings.position;
             this.zoomLevel = settings.zoomLevel;
             this.devTools = settings.devTools;
+            this.microphoneId = settings.microphoneId;
+            this.microphoneName = settings.microphoneName;
         }
     }
 

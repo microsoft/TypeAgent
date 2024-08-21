@@ -80,6 +80,9 @@ const api: ClientAPI = {
     onRandomMessageRequested(callback) {
         ipcRenderer.on("random-message-requested", callback);
     },
+    onMicrophoneChangeRequested(callback) {
+        ipcRenderer.on("microphone-change-requested", callback);
+    },
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to
