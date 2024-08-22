@@ -60,6 +60,7 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
             conversation,
             chatModel,
             chatModel,
+            knowLib.conversation.KnowledgeSearchMode.WithActions,
         ),
     };
     context.searchMemory = await createSearchMemory(context);
@@ -128,8 +129,13 @@ export async function loadConversation(
         context.conversation,
         context.chatModel,
         context.chatModel,
-        includeActions,
+        includeActions
+            ? conversation.KnowledgeSearchMode.WithActions
+            : conversation.KnowledgeSearchMode.Default,
     );
+    if (name !== "search") {
+        context.searchMemory = await createSearchMemory(context);
+    }
 }
 
 export async function runPlayChat(): Promise<void> {
@@ -797,7 +803,6 @@ export async function runPlayChat(): Promise<void> {
                 action: {
                     description: "Include actions",
                     type: "boolean",
-                    defaultValue: true,
                 },
                 eval: {
                     description: "Evaluate search query",
@@ -837,6 +842,11 @@ export async function runPlayChat(): Promise<void> {
         };
         if (namedArgs.fallback) {
             searchOptions.fallbackSearch = { maxMatches: 10 };
+        }
+        if (namedArgs.action === undefined) {
+            namedArgs.action =
+                context.searcher.searchMode !==
+                conversation.KnowledgeSearchMode.Default;
         }
         searchOptions.includeActions = namedArgs.action;
         if (!namedArgs.eval) {

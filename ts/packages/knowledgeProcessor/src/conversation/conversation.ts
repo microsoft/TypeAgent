@@ -40,7 +40,7 @@ import {
     KnowledgeExtractor,
     extractKnowledgeFromBlock,
 } from "./knowledge.js";
-import { Filter, SearchAction } from "./knowledgeSearchSchema.js";
+import { Filter, SearchAction } from "./knowledgeSearchWebSchema.js";
 import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
 import { intersectSets, unionSets, uniqueFrom } from "../setOperations.js";

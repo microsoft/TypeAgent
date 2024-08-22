@@ -1,11 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    SearchOptions,
-    lookupAnswersOnWeb,
-    lookupAnswersOnWebPages,
-} from "typeagent";
+import { SearchOptions, lookupAnswersOnWeb } from "typeagent";
 import {
     Conversation,
     ConversationSearchOptions,
@@ -18,9 +14,10 @@ import {
     GetAnswerAction,
     SearchAction,
     WebLookupAction,
-} from "./knowledgeSearchSchema.js";
+} from "./knowledgeSearchWebSchema.js";
 import { SetOp } from "../setOperations.js";
 import {
+    KnowledgeSearchMode,
     KnowledgeActionTranslator,
     createKnowledgeActionTranslator,
 } from "./knowledgeActions.js";
@@ -40,6 +37,7 @@ export type SearchProcessingOptions = {
 };
 
 export interface ConversationSearchProcessor {
+    searchMode: KnowledgeSearchMode;
     actions: KnowledgeActionTranslator;
     answers: AnswerGenerator;
     search(
@@ -56,20 +54,21 @@ export function createSearchProcessor(
     conversation: Conversation,
     actionModel: ChatModel,
     answerModel: ChatModel,
-    includeActions: boolean = true,
+    searchMode: KnowledgeSearchMode = KnowledgeSearchMode.Default,
 ): ConversationSearchProcessor {
-    const searchActions = createKnowledgeActionTranslator(
+    const searchTranslator = createKnowledgeActionTranslator(
         actionModel,
-        includeActions, // Whether to include actions in most defaults
+        searchMode,
     );
-    const searchActions_NoActions = createKnowledgeActionTranslator(
+    const searchTranslator_NoActions = createKnowledgeActionTranslator(
         actionModel,
-        false,
+        KnowledgeSearchMode.Default,
     );
     const answers = createAnswerGenerator(answerModel);
 
     return {
-        actions: searchActions,
+        searchMode,
+        actions: searchTranslator,
         answers,
         search,
         buildContext,
@@ -81,8 +80,8 @@ export function createSearchProcessor(
     ): Promise<SearchActionResponse | undefined> {
         const context = await buildContext(options);
         const actionResult = options.includeActions
-            ? await searchActions.translateSearch(query, context)
-            : await searchActions_NoActions.translateSearch(query, context);
+            ? await searchTranslator.translateSearch(query, context)
+            : await searchTranslator_NoActions.translateSearch(query, context);
         if (!actionResult.success) {
             return undefined;
         }
