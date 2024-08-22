@@ -205,7 +205,7 @@ class ConfigModelSetCommandHandler implements CommandHandler {
             return;
         }
 
-        let kind = "translation";
+        let kind = "translator";
         let model = "";
         if (args.length === 1) {
             if (models.hasOwnProperty(args[0])) {
