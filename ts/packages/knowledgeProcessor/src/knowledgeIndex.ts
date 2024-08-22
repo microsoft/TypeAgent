@@ -10,7 +10,6 @@ import {
     SearchOptions,
     SemanticIndex,
     asyncArray,
-    collections,
     createEmbeddingFolder,
     createObjectFolder,
     createSemanticIndex,
@@ -24,10 +23,10 @@ import {
     union,
     unionArrays,
     unionMultiple,
-    uniqueFrom,
 } from "./setOperations.js";
 import { TextBlock, TextBlockType } from "./text.js";
 import { TemporalLog, createTemporalLog } from "./temporal.js";
+import { TextEmbeddingModel } from "aiclient";
 
 export interface KeyValueIndex<TKeyId, TValueId> {
     get(id: TKeyId): Promise<TValueId[] | undefined>;
@@ -137,6 +136,7 @@ export type TextIndexSettings = {
     caseSensitive: boolean;
     concurrency: number;
     semanticIndex?: boolean | undefined;
+    embeddingModel?: TextEmbeddingModel | undefined;
 };
 
 export async function createTextIndex<TSourceId = any>(
@@ -163,6 +163,7 @@ export async function createTextIndex<TSourceId = any>(
     const semanticIndex = await createSemanticIndexFolder(
         folderPath,
         folderSettings,
+        settings.embeddingModel,
         fSys,
     );
 
@@ -528,6 +529,7 @@ export async function searchIndexText<TTextId = any, TPostingId = any>(
 export async function createSemanticIndexFolder(
     folderPath: string,
     folderSettings?: ObjectFolderSettings,
+    model?: TextEmbeddingModel,
     fSys?: FileSystem,
 ): Promise<SemanticIndex> {
     return createSemanticIndex(
@@ -536,6 +538,7 @@ export async function createSemanticIndexFolder(
             folderSettings,
             fSys,
         ),
+        model,
     );
 }
 

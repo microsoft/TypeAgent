@@ -53,6 +53,7 @@ import {
     ActionSearchResult,
     createActionIndex,
 } from "./actions.js";
+import { TermFilter } from "./knowledgeTermSearchSchema.js";
 
 export interface RecentItems<T> {
     readonly entries: collections.CircularArray<T>;
@@ -139,6 +140,7 @@ export interface Conversation<
         filters: Filter[],
         options: ConversationSearchOptions,
     ): Promise<SearchResponse>;
+    searchTerms(filters: TermFilter[]): Promise<SearchResponse>;
     searchMessages(
         query: string,
         options: SearchOptions,
@@ -411,6 +413,7 @@ export async function createConversation(
         putIndex,
         putNext,
         search,
+        searchTerms,
         searchMessages,
     };
 
@@ -678,6 +681,11 @@ export async function createConversation(
                 actionIndex,
             );
         }
+        return results;
+    }
+
+    async function searchTerms(filters: TermFilter[]): Promise<SearchResponse> {
+        const results = createSearchResponse<MessageId, TopicId, EntityId>();
         return results;
     }
 

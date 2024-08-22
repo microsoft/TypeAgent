@@ -3,7 +3,7 @@
 
 import * as knowLib from "knowledge-processor";
 import { conversation } from "knowledge-processor";
-import { ChatModel, openai } from "aiclient";
+import { ChatModel, TextEmbeddingModel, openai } from "aiclient";
 import {
     CommandHandler,
     CommandMetadata,
@@ -22,6 +22,7 @@ export type ChatContext = {
     storePath: string;
     chatModel: ChatModel;
     chatModelFast: ChatModel;
+    embeddingModel: TextEmbeddingModel;
     maxCharsPerChunk: number;
     topicWindowSize: number;
     searchConcurrency: number;
@@ -37,8 +38,12 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
     const storePath = "/data/testChat";
     const chatModel = openai.createStandardAzureChatModel("GPT_4");
     const chatModelFast = openai.createStandardAzureChatModel("GPT_35_TURBO");
+    const embeddingModel = knowLib.createEmbeddingCache(
+        openai.createEmbeddingModel(),
+        64,
+    );
     const conversationName = "transcript";
-    const conversationSettings = createConversationSettings();
+    const conversationSettings = createConversationSettings(embeddingModel);
 
     //const conversationName = "play";
     const conversation = await createConversation(
@@ -49,6 +54,7 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         storePath,
         chatModel,
         chatModelFast,
+        embeddingModel,
         maxCharsPerChunk: 2048,
         topicWindowSize: 8,
         searchConcurrency: 2,
@@ -67,26 +73,25 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
     return context;
 }
 
-function createConversationSettings(): conversation.ConversationSettings {
+function createConversationSettings(
+    embeddingModel?: TextEmbeddingModel,
+): conversation.ConversationSettings {
     return {
         indexSettings: {
             caseSensitive: false,
             concurrency: 2,
+            embeddingModel,
         },
     };
 }
 export function createConversation(
     rootPath: string,
-    settings?: knowLib.conversation.ConversationSettings,
+    settings: knowLib.conversation.ConversationSettings,
 ): Promise<conversation.Conversation> {
-    return conversation.createConversation(
-        settings ?? createConversationSettings(),
-        rootPath,
-        {
-            cacheNames: true,
-            useWeakRefs: true,
-        },
-    );
+    return conversation.createConversation(settings, rootPath, {
+        cacheNames: true,
+        useWeakRefs: true,
+    });
 }
 
 export async function createSearchMemory(
@@ -95,6 +100,7 @@ export async function createSearchMemory(
     const conversationName = "search";
     const searchConversation = await createConversation(
         path.join(context.storePath, conversationName),
+        createConversationSettings(context.embeddingModel),
     );
     await searchConversation.clear();
 
@@ -123,6 +129,7 @@ export async function loadConversation(
 ) {
     context.conversation = await createConversation(
         path.join(context.storePath, name),
+        createConversationSettings(context.embeddingModel),
     );
     context.conversationName = name;
     context.searcher = conversation.createSearchProcessor(

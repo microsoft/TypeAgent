@@ -40,12 +40,14 @@ import {
 } from "../temporal.js";
 import { toStopDate, toStartDate } from "./knowledgeActions.js";
 import { ConcreteEntity, Facet } from "./knowledgeSchema.js";
+import { TermFilter } from "./knowledgeTermSearchSchema.js";
 
 export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any> {
     readonly settings: TextIndexSettings;
     readonly sequence: TemporalLog<TEntityId, TEntityId[]>;
     readonly nameIndex: TextIndex<TTextId, TEntityId>;
     readonly typeIndex: TextIndex<TTextId, TEntityId>;
+    readonly facetIndex: TextIndex<TTextId, TEntityId>;
     entities(): AsyncIterableIterator<ExtractedEntity<TSourceId>>;
     get(id: TEntityId): Promise<ExtractedEntity<TSourceId> | undefined>;
     getMultiple(ids: TEntityId[]): Promise<ExtractedEntity<TSourceId>[]>;
@@ -63,6 +65,10 @@ export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any> {
 
     search(
         filter: EntityFilter,
+        options: EntitySearchOptions,
+    ): Promise<EntitySearchResult<TEntityId>>;
+    searchTerms(
+        filter: TermFilter,
         options: EntitySearchOptions,
     ): Promise<EntitySearchResult<TEntityId>>;
     loadSourceIds(
@@ -109,11 +115,18 @@ export async function createEntityIndex<TSourceId = string>(
         folderSettings,
         fSys,
     );
+    const facetIndex = await createTextIndex<EntityId>(
+        settings,
+        path.join(rootPath, "facets"),
+        folderSettings,
+        fSys,
+    );
     return {
         settings,
         sequence,
         nameIndex,
         typeIndex,
+        facetIndex,
         entities: entries.allObjects,
         get: entries.get,
         getMultiple,
@@ -123,6 +136,7 @@ export async function createEntityIndex<TSourceId = string>(
         putMultiple,
         putNext,
         search,
+        searchTerms,
         loadSourceIds,
     };
 
@@ -176,16 +190,12 @@ export async function createEntityIndex<TSourceId = string>(
         id?: EntityId,
     ): Promise<EntityId> {
         const entityId = id ? id : await entries.put(extractedEntity);
-        const sourceIds: string[] = [entityId];
-        await nameIndex.put(extractedEntity.value.name, sourceIds);
-        const typeEntries: TextBlock[] = extractedEntity.value.type.map((t) => {
-            return {
-                value: t,
-                sourceIds,
-                type: TextBlockType.Word,
-            };
-        });
-        await typeIndex.putMultiple(typeEntries);
+        const sourceIds: EntityId[] = [entityId];
+        await Promise.all([
+            addName(extractedEntity.value.name, sourceIds),
+            addTypes(extractedEntity.value.type, sourceIds),
+            addFacets(extractedEntity.value.facets, sourceIds),
+        ]);
         return entityId;
     }
 
@@ -200,6 +210,40 @@ export async function createEntityIndex<TSourceId = string>(
         return asyncArray.mapAsync(entities, 1, (entity, i) =>
             put(entity, ids ? ids[i] : undefined),
         );
+    }
+
+    async function addName(name: string, entityIds: EntityId[]): Promise<void> {
+        await nameIndex.put(name, entityIds);
+    }
+
+    async function addTypes(
+        type: string[],
+        entityIds: EntityId[],
+    ): Promise<void> {
+        const typeEntries: TextBlock[] = type.map((t) => {
+            return {
+                value: t,
+                entityIds,
+                type: TextBlockType.Word,
+            };
+        });
+        await typeIndex.putMultiple(typeEntries);
+    }
+
+    async function addFacets(
+        facets: Facet[] | undefined,
+        entityIds: EntityId[],
+    ) {
+        if (facets && facets.length > 0) {
+            const facetEntries: TextBlock[] = facets.map((f) => {
+                return {
+                    value: facetToString(f),
+                    entityIds,
+                    type: TextBlockType.Word,
+                };
+            });
+            await facetIndex.putMultiple(facetEntries);
+        }
     }
 
     async function search(
@@ -263,6 +307,23 @@ export async function createEntityIndex<TSourceId = string>(
         }
         if (options.loadEntities && results.entityIds) {
             results.entities = await getEntities(results.entityIds);
+        }
+        return results;
+    }
+
+    async function searchTerms(
+        filter: TermFilter,
+        options: EntitySearchOptions,
+    ): Promise<EntitySearchResult<EntityId>> {
+        const results = createSearchResults();
+        let typeMatchIds: EntityId[] | undefined;
+        let nameMatchIds: EntityId[] | IterableIterator<EntityId> | undefined;
+        let nameTypeMatchIds: EntityId[] | undefined;
+        if (filter.timeRange) {
+            results.temporalSequence = await sequence.getEntriesInRange(
+                toStartDate(filter.timeRange.startDate),
+                toStopDate(filter.timeRange.stopDate),
+            );
         }
         return results;
     }
