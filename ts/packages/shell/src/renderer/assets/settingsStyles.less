@@ -1,0 +1,120 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+@keyframes extend {
+    0% {
+    }
+
+    100% {
+        height: 20px;
+    }
+}
+
+@keyframes retract {
+    0% {
+    }
+    100% {
+        height: 8px;
+    }
+}
+
+.shadeContainer {
+    position: absolute;
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    background: transparent;
+}
+
+.shade {
+    text-align: center;
+    width: 33%;
+    
+    background-color: pink;
+    opacity: 0.7;
+    margin: 0px 15px;
+    z-index: 1000;
+
+    border-radius: 0px 0px 5px 5px;
+
+    font-size: 0px;
+    font-weight: 500;
+
+    animation: retract 0.1s ease-out 0s forwards;
+}
+
+.shade:hover {
+    cursor: pointer;    
+    font-size: 12px;
+    vertical-align: middle;
+
+    animation: extend 0.1s ease-out 0s forwards;
+}
+
+.shadeIcon {    
+    display: inline-block;
+    margin-top: 10px;
+    width: 24px;
+    height: 24px;
+    vertical-align: baseline;
+}
+
+.shade0 {
+    background-color: #1B263B;
+    color: #ffffff;
+}
+
+.shade1 {    
+    background-color: #415A77;
+    color: #ffffff;
+}
+
+.shade2 {    
+    background-color: #778DA9;
+    color: #ffffff;
+}
+
+.closedTab {
+    display: none;
+}
+
+.tabPage {
+    position: absolute;
+    margin-left: 10%;
+    margin-top: 25%;
+    width: 80%;
+    height: 50%;
+    z-index: 1000;
+    opacity: 0.7;
+    border-radius: 20px;
+}
+
+.tabPageContents {
+    display: inline;
+}
+
+.closeButton {
+    color: #ffffff;
+    border: 2px;
+    background-color: transparent;
+    font-size: 18px;
+    font-weight: 300;
+    float: right;
+    margin: 8px;
+    cursor: pointer;
+}
+
+.title {    
+    text-align: center;
+    width: 100%;
+}
+
+.titleText {
+    display: inline;
+    position: relative;
+    top: -4px;
+    margin-top: 20px;
+    font-size: 24px;
+    margin-left: 8px;
+}
+

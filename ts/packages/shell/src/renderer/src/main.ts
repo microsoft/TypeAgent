@@ -3,7 +3,9 @@
 
 import { ClientAPI } from "../../preload/electronTypes";
 import { ChatView } from "./chatView";
+import { TabView } from "./tabView";
 import { SpeechInfo, enumerateMicrophones, recognizeOnce } from "./speech";
+import { iconHelp, iconMetrics, iconSettings } from "./icon";
 
 export function getClientAPI(): ClientAPI {
     return globalThis.api;
@@ -131,8 +133,13 @@ document.addEventListener("DOMContentLoaded", function () {
     const idGenerator = new IdGenerator();
     const speechInfo = new SpeechInfo();
     const agents = new Map<string, string>();
+
+    const tabs = new TabView(["Settings", "Metrics", "Help"], [iconSettings(), iconMetrics(), iconHelp()]);
+    wrapper.appendChild(tabs.getContainer());
+
     const chatView = new ChatView(idGenerator, speechInfo, agents);
     wrapper.appendChild(chatView.getMessageElm());
+    
     const microphoneSources = document.getElementById(
         "microphoneSources",
     )! as HTMLSelectElement;
