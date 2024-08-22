@@ -109,7 +109,7 @@ export function getTranslator(
     const config = context.session.getConfig();
     const newTranslator = loadAgentJsonTranslator(
         translatorName,
-        undefined,
+        config.models.translator,
         config.switch.inline ? config.translators : undefined,
         config.multipleActions,
     );
@@ -276,6 +276,7 @@ export async function changeContextConfig(
 
     if (
         changed.translators ||
+        changed.models?.translator !== undefined ||
         changed.switch?.inline ||
         changed.multipleActions
     ) {
@@ -311,22 +312,28 @@ export async function changeContextConfig(
 
     // cache and auto save are handled separately
     if (changed.cache !== undefined) {
-        // the cache state is changed.  Auto save is configured in configAgentCache as well.
+        // the cache state is changed.
+        // Auto save and model is configured in configAgentCache as well.
         await configAgentCache(context.session, context.agentCache);
-    } else if (changed.autoSave !== undefined) {
-        // Make sure the cache has a file for a persisted session
-        if (changed.autoSave) {
-            if (context.session.cache) {
-                const cacheDataFilePath =
-                    await context.session.ensureCacheDataFilePath();
-                await context.agentCache.constructionStore.save(
-                    cacheDataFilePath,
-                );
+    } else {
+        if (changed.autoSave !== undefined) {
+            // Make sure the cache has a file for a persisted session
+            if (changed.autoSave) {
+                if (context.session.cache) {
+                    const cacheDataFilePath =
+                        await context.session.ensureCacheDataFilePath();
+                    await context.agentCache.constructionStore.save(
+                        cacheDataFilePath,
+                    );
+                }
             }
+            await context.agentCache.constructionStore.setAutoSave(
+                changed.autoSave,
+            );
         }
-        await context.agentCache.constructionStore.setAutoSave(
-            changed.autoSave,
-        );
+        if (changed.models?.explainer !== undefined) {
+            context.agentCache.model = changed.models.explainer;
+        }
     }
 
     return changed;
