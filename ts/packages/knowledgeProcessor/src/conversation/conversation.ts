@@ -53,7 +53,6 @@ import {
     ActionSearchResult,
     createActionIndex,
 } from "./actions.js";
-import { SearchProcessingOptions } from "./searchProcessor.js";
 
 export interface RecentItems<T> {
     readonly entries: collections.CircularArray<T>;
