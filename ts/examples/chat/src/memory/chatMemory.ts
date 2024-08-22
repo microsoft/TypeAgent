@@ -60,6 +60,7 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
             conversation,
             chatModel,
             chatModel,
+            knowLib.conversation.KnowledgeSearchMode.WithActions,
         ),
     };
     context.searchMemory = await createSearchMemory(context);
@@ -128,8 +129,13 @@ export async function loadConversation(
         context.conversation,
         context.chatModel,
         context.chatModel,
-        includeActions,
+        includeActions
+            ? conversation.KnowledgeSearchMode.WithActions
+            : conversation.KnowledgeSearchMode.Default,
     );
+    if (name !== "search") {
+        context.searchMemory = await createSearchMemory(context);
+    }
 }
 
 export async function runPlayChat(): Promise<void> {
@@ -320,6 +326,7 @@ export async function runPlayChat(): Promise<void> {
                 maxContextLength: context.maxCharsPerChunk,
                 includeSuggestedTopics: false,
                 includeActions: namedArgs.actions,
+                mergeActionKnowledge: false,
             },
         );
         let messages: knowLib.SourceTextBlock[] = await asyncArray.toArray(
@@ -448,6 +455,7 @@ export async function runPlayChat(): Promise<void> {
                 maxContextLength: context.maxCharsPerChunk,
                 includeSuggestedTopics: false,
                 includeActions: namedArgs.actions,
+                mergeActionKnowledge: true,
             },
         );
         context.conversationSettings.indexActions = namedArgs.actions;
@@ -730,9 +738,8 @@ export async function runPlayChat(): Promise<void> {
             if (verbs.length === 0) {
                 verbs = undefined;
             } else if (verbs[0] === "*") {
-                for await (const v of index.verbIndex.text()) {
-                    printer.writeLine(v);
-                }
+                const allVerbs = [...index.verbIndex.text()].sort();
+                printer.writeList(allVerbs, { type: "ul" });
                 return;
             }
         }
@@ -798,7 +805,6 @@ export async function runPlayChat(): Promise<void> {
                 action: {
                     description: "Include actions",
                     type: "boolean",
-                    defaultValue: true,
                 },
                 eval: {
                     description: "Evaluate search query",
@@ -839,6 +845,11 @@ export async function runPlayChat(): Promise<void> {
         if (namedArgs.fallback) {
             searchOptions.fallbackSearch = { maxMatches: 10 };
         }
+        if (namedArgs.action === undefined) {
+            namedArgs.action =
+                context.searcher.searchMode !==
+                conversation.KnowledgeSearchMode.Default;
+        }
         searchOptions.includeActions = namedArgs.action;
         if (!namedArgs.eval) {
             await searchNoEval(query, searchOptions);
@@ -851,6 +862,16 @@ export async function runPlayChat(): Promise<void> {
             return;
         }
         if (result.response) {
+            if (result.action.actionName === "webLookup") {
+                if (result.response.answer) {
+                    printer.writeInColor(
+                        chalk.green,
+                        result.response.answer.answer!,
+                    );
+                }
+                return;
+            }
+
             const timestampA = new Date();
             const entityIndex = await context.conversation.getEntityIndex();
             const topicIndex = await context.conversation.getTopicsIndex(

@@ -18,6 +18,7 @@ import {
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { createRecentItemsWindow } from "./conversation.js";
 import { SourceTextBlock, TextBlock, TextBlockType } from "../text.js";
+import { facetToString, mergeEntityFacet } from "./entities.js";
 
 export interface KnowledgeExtractor {
     next(message: string): Promise<KnowledgeResponse | undefined>;
@@ -28,6 +29,7 @@ export type KnowledgeExtractorSettings = {
     maxContextLength: number;
     includeSuggestedTopics?: boolean | undefined;
     includeActions: boolean;
+    mergeActionKnowledge?: boolean;
 };
 
 export function createKnowledgeExtractor(
@@ -52,8 +54,8 @@ export function createKnowledgeExtractor(
         if (!result.success) {
             return undefined;
         }
-        if (result.data.actions === undefined) {
-            result.data.actions = [];
+        if (settings.mergeActionKnowledge) {
+            mergeActionKnowledge(result.data);
         }
         topics.push(result.data.topics);
         return result.data;
@@ -99,6 +101,32 @@ export function createKnowledgeExtractor(
                 `"""\n${request}\n"""\n` +
                 `The following is the user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
             );
+        }
+    }
+
+    //
+    // Some knowledge found via actions is actually meant for entities...
+    //
+    function mergeActionKnowledge(knowledge: KnowledgeResponse) {
+        if (knowledge.actions === undefined) {
+            knowledge.actions = [];
+        }
+        // Merge all inverse actions into regular actions.
+        if (knowledge.inverseActions && knowledge.inverseActions.length > 0) {
+            knowledge.actions.push(...knowledge.inverseActions);
+            knowledge.inverseActions = [];
+        }
+        // Also merge in any facets into
+        for (const action of knowledge.actions) {
+            if (action.subjectEntityFacet) {
+                const entity = knowledge.entities.find(
+                    (c) => c.name === action.subjectEntityName,
+                );
+                if (entity) {
+                    mergeEntityFacet(entity, action.subjectEntityFacet);
+                }
+                action.subjectEntityFacet = undefined;
+            }
         }
     }
 }
@@ -189,16 +217,19 @@ export function actionToString(action: Action): string {
         text += action.subjectEntityName;
     }
     text += ` [${action.verbs.join(", ")}]`;
+    /*
     if (action.params) {
-        text += "(";
-        text += actionParamsToString(action);
-        text += ")";
+        text += `(${actionParamsToString(action)})`;
     }
+    */
     if (action.objectEntityName !== NoEntityName) {
         text += " ";
         text += action.objectEntityName;
     }
     text += ` {${action.verbTense}}`;
+    if (action.subjectEntityFacet) {
+        text += ` <${facetToString(action.subjectEntityFacet)}>`;
+    }
     return text;
 }
 

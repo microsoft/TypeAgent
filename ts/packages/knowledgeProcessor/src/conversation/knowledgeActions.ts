@@ -8,7 +8,7 @@ import {
     createJsonTranslator,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import { SearchAction } from "./knowledgeSearchSchema.js";
+import { SearchAction } from "./knowledgeSearchWebSchema.js";
 import { dateTime, loadSchema } from "typeagent";
 import { DateTime, DateTimeRange } from "./dateTimeSchema.js";
 
@@ -19,18 +19,19 @@ export interface KnowledgeActionTranslator {
     ): Promise<Result<SearchAction>>;
 }
 
+export enum KnowledgeSearchMode {
+    Default,
+    WithActions,
+    WithActionsAndWeb,
+}
+
 export function createKnowledgeActionTranslator(
     model: TypeChatLanguageModel,
-    includeActions: boolean = true,
+    mode: KnowledgeSearchMode,
 ): KnowledgeActionTranslator {
     const typeName = "SearchAction";
     const schema = loadSchema(
-        [
-            "dateTimeSchema.ts",
-            includeActions
-                ? "knowledgeSearchSchema.ts"
-                : "knowledgeSearchNoActionsSchema.ts",
-        ],
+        ["dateTimeSchema.ts", getSchemaName(mode)],
         import.meta.url,
     );
     const validator = createTypeScriptJsonValidator<SearchAction>(
@@ -61,6 +62,17 @@ export function createKnowledgeActionTranslator(
             `"""\n${request}\n"""\n\n` +
             `The following is a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
         );
+    }
+
+    function getSchemaName(mode: KnowledgeSearchMode): string {
+        switch (mode) {
+            case KnowledgeSearchMode.Default:
+                return "knowledgeSearchNoActionsSchema.ts";
+            case KnowledgeSearchMode.WithActions:
+                return "knowledgeSearchSchema.ts";
+            case KnowledgeSearchMode.WithActionsAndWeb:
+                return "knowledgeSearchWebSchema.ts";
+        }
     }
 }
 

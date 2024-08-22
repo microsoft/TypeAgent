@@ -243,6 +243,21 @@ export function unionSets<T = any>(x?: Set<T>, y?: Set<T>): Set<T> | undefined {
     return y;
 }
 
+export function intersectUnionSets<T = any>(
+    x?: Set<T>,
+    y?: Set<T>,
+): Set<T> | undefined {
+    // We can to do this more optimally...
+    let combined = createFrequencyTable<T>();
+    if (x) {
+        combined.addMultiple(x.values());
+    }
+    if (y) {
+        combined.addMultiple(y.values());
+    }
+    return new Set<T>(combined.getTop());
+}
+
 export function flatten<T>(
     src: Iterable<T>,
     callback?: (value: T) => any | undefined,

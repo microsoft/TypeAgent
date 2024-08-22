@@ -407,3 +407,11 @@ export function matchFacet(x: Facet, y: Facet): boolean {
         return x.value === y.value;
     }
 }
+
+export function mergeEntityFacet(entity: ConcreteEntity, facet: Facet) {
+    entity.facets ??= [];
+    const name = facet.name.toLowerCase();
+    if (!entity.facets.find((f) => f.name.toLowerCase() === name)) {
+        entity.facets.push(facet);
+    }
+}
