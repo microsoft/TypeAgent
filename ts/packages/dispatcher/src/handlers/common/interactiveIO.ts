@@ -3,7 +3,7 @@
 
 import { askYesNo } from "../../utils/interactive.js";
 import readline from "readline/promises";
-import { SearchMenuItem, ActionTemplate } from "common-utils";
+import { SearchMenuItem, ActionTemplateSequence } from "common-utils";
 import chalk from "chalk";
 
 export type RequestId = string | undefined;
@@ -30,14 +30,14 @@ export type SearchMenuContext = {
 // Client provided IO
 export interface ClientIO {
     clear(): void;
-    info(message: string, requestId: RequestId): void;
-    status(message: string, requestId: RequestId): void;
-    success(message: string, requestId: RequestId): void;
-    result(message: string, requestId: RequestId): void;
-    warn(message: string, requestId: RequestId): void;
-    error(message: string, requestId: RequestId): void;
+    info(message: string, requestId: RequestId, source: string): void;
+    status(message: string, requestId: RequestId, source: string): void;
+    success(message: string, requestId: RequestId, source: string): void;
+    result(message: string, requestId: RequestId, source: string): void;
+    warn(message: string, requestId: RequestId, source: string): void;
+    error(message: string, requestId: RequestId, source: string): void;
     actionCommand(
-        actionTemplates: ActionTemplate[],
+        actionTemplates: ActionTemplateSequence,
         command: ActionUICommand,
         requestId: RequestId,
     ): void;
@@ -51,6 +51,7 @@ export interface ClientIO {
     setActionStatus(
         message: string,
         requestId: RequestId,
+        source: string,
         actionIndex: number,
         groupId?: string,
     ): void;
@@ -100,6 +101,7 @@ export interface RequestIO {
     setActionStatus(
         message: string,
         actionIndex: number,
+        source: string,
         groupId?: string,
     ): void;
 
@@ -120,6 +122,7 @@ export interface RequestIO {
             fromUser: boolean;
         },
     ): void;
+    notify(event: "randomCommandSelected", data: { message: string }): void;
 }
 
 export function getConsoleRequestIO(
@@ -158,29 +161,38 @@ export function getConsoleRequestIO(
 export function getRequestIO(
     clientIO: ClientIO,
     requestId: RequestId,
+    source: string,
 ): RequestIO {
     return {
         type: "html",
         getRequestId: () => requestId,
         clear: () => clientIO.clear(),
         info: (input: string | LogFn) =>
-            clientIO.info(getMessage(input), requestId),
+            clientIO.info(getMessage(input), requestId, source),
         status: (input: string | LogFn) =>
-            clientIO.status(chalk.grey(getMessage(input)), requestId),
+            clientIO.status(chalk.grey(getMessage(input)), requestId, source),
         success: (input: string | LogFn) =>
-            clientIO.success(chalk.green(getMessage(input)), requestId),
+            clientIO.success(chalk.green(getMessage(input)), requestId, source),
         warn: (input: string | LogFn) =>
-            clientIO.warn(chalk.yellow(getMessage(input)), requestId),
+            clientIO.warn(chalk.yellow(getMessage(input)), requestId, source),
         error: (input: string | LogFn) =>
-            clientIO.error(chalk.red(getMessage(input)), requestId),
+            clientIO.error(chalk.red(getMessage(input)), requestId, source),
         result: (input: string | LogFn) =>
-            clientIO.result(getMessage(input), requestId),
+            clientIO.result(getMessage(input), requestId, source),
 
         setActionStatus: (
             status: string,
             actionIndex: number,
+            source: string,
             groupId?: string,
-        ) => clientIO.setActionStatus(status, requestId, actionIndex, groupId),
+        ) =>
+            clientIO.setActionStatus(
+                status,
+                requestId,
+                source,
+                actionIndex,
+                groupId,
+            ),
 
         isInputEnabled: () => true,
         askYesNo: async (message: string, defaultValue?: boolean) =>

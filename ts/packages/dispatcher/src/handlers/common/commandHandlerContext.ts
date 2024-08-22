@@ -8,9 +8,11 @@ import {
     Logger,
     LoggerSink,
     MultiSinkLogger,
+    TypeChatJsonTranslatorWithStreaming,
     createDebugLoggerSink,
     createLimiter,
     createMongoDBLoggerSink,
+    enableJsonTranslatorStreaming,
 } from "common-utils";
 import {
     AgentCache,
@@ -49,6 +51,7 @@ import {
 } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
+import { DispatcherName } from "../requestCommandHandler.js";
 
 export interface CommandResult {
     error?: boolean;
@@ -70,7 +73,7 @@ export type CommandHandlerContext = {
     // Runtime context
     commandLock: Limiter; // Make sure we process one command at a time.
     currentTranslatorName: string;
-    translatorCache: Map<string, TypeChatJsonTranslator<object>>;
+    translatorCache: Map<string, TypeChatJsonTranslatorWithStreaming<object>>;
     agentCache: AgentCache;
     action: { [key: string]: any };
     currentScriptDir: string;
@@ -110,7 +113,8 @@ export function getTranslator(
         config.switch.inline ? config.translators : undefined,
         config.multipleActions,
     );
-    context.translatorCache.set(translatorName, newTranslator);
+    const streamingTranslator = enableJsonTranslatorStreaming(newTranslator);
+    context.translatorCache.set(translatorName, streamingTranslator);
     return newTranslator;
 }
 
@@ -199,7 +203,7 @@ export async function initializeCommandHandlerContext(
         loggerSink.addSink(dbLoggerSink);
     }
 
-    const logger = new ChildLogger(loggerSink, "dispatcher", {
+    const logger = new ChildLogger(loggerSink, DispatcherName, {
         hostName,
         userId: getUserId(),
         sessionId: () => context.session.dir,
@@ -218,7 +222,7 @@ export async function initializeCommandHandlerContext(
         dblogging: true,
         clientIO,
         requestIO: clientIO
-            ? getRequestIO(clientIO, undefined)
+            ? getRequestIO(clientIO, undefined, getDefaultTranslatorName())
             : clientIO === undefined
               ? getConsoleRequestIO(stdio)
               : getNullRequestIO(),

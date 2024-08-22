@@ -12,6 +12,7 @@ import {
     getTranslatorConfig,
 } from "../translation/agentTranslators.js";
 import {
+    createTurnImpressionFromLiteral,
     DispatcherAction,
     DispatcherAgentContext,
     TurnImpression,
@@ -25,6 +26,7 @@ import { processCommandNoLock } from "../command.js";
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
 import { getUserProfileDir } from "../utils/userData.js";
+import { DispatcherName } from "../handlers/requestCommandHandler.js";
 
 const debugActions = registerDebug("typeagent:actions");
 
@@ -165,9 +167,7 @@ async function executeAction(
     const dispatcherAgent = await getDispatcherAgent(dispatcherAgentName);
 
     // Update the current translator.
-    if (!getTranslatorConfig(translatorName).injected) {
-        context.currentTranslatorName = translatorName;
-    }
+    context.currentTranslatorName = translatorName;
 
     if (dispatcherAgent.executeAction === undefined) {
         throw new Error(
@@ -200,32 +200,38 @@ export async function executeActions(
     context: CommandHandlerContext,
 ) {
     debugActions(`Executing actions: ${JSON.stringify(actions, undefined, 2)}`);
-    let result: TurnImpression | undefined;
     const requestIO = context.requestIO;
     let actionIndex = 0;
     for (const action of actions) {
-        // TODO: deal with results.
-        result = await executeAction(action, context, actionIndex);
-        if (result !== undefined) {
-            if (debugActions.enabled) {
-                debugActions(turnImpressionToString(result));
-            }
-            if (result.error !== undefined) {
-                requestIO.error(result.error);
-            } else {
-                requestIO.setActionStatus(result.displayText, actionIndex);
-                context.chatHistory.addEntry(
-                    result.literalText,
-                    result.entities,
-                    "assistant",
-                    requestIO.getRequestId(),
-                    result.impressionInterpreter,
-                );
-            }
+        const result =
+            (await executeAction(action, context, actionIndex)) ??
+            createTurnImpressionFromLiteral(`
+                Action ${action.fullActionName} completed.`);
+        if (debugActions.enabled) {
+            debugActions(turnImpressionToString(result));
+        }
+        if (result.error !== undefined) {
+            requestIO.error(result.error);
+            context.chatHistory.addEntry(
+                `Action ${action.fullActionName} failed: ${result.error}`,
+                [],
+                "assistant",
+                requestIO.getRequestId(),
+            );
         } else {
             requestIO.setActionStatus(
-                `Action ${action.fullActionName} completed.`,
+                result.displayText,
                 actionIndex,
+                context.currentTranslatorName,
+            );
+            context.chatHistory.addEntry(
+                result.literalText
+                    ? result.literalText
+                    : `Action ${action.fullActionName} completed.`,
+                result.entities,
+                "assistant",
+                requestIO.getRequestId(),
+                result.impressionInterpreter,
             );
         }
         actionIndex++;

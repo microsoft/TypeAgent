@@ -324,6 +324,7 @@ class ConstructionDeleteCommandHandler implements CommandHandler {
 export function getConstructionCommandHandlers(): HandlerTable {
     return {
         description: "Command to manage the construction store",
+        defaultSubCommand: undefined,
         commands: {
             new: new ConstructionNewCommandHandler(),
             load: new ConstructionLoadCommandHandler(),

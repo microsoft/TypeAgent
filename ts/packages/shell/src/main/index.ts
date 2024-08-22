@@ -23,13 +23,20 @@ import {
     RequestId,
     getPrompt,
     getSettingSummary,
+    getTranslatorNameToEmojiMap,
     initializeCommandHandlerContext,
     processCommand,
     partialInput,
 } from "agent-dispatcher";
 
 import { SearchMenuCommand } from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
-import { ActionTemplate, SearchMenuItem } from "../preload/electronTypes.js";
+import {
+    ActionTemplateSequence,
+    SearchMenuItem,
+} from "../preload/electronTypes.js";
+import { ShellSettings } from "./shellSettings.js";
+import { unlinkSync } from "fs";
+import { existsSync } from "node:fs";
 
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
@@ -40,31 +47,63 @@ dotenv.config({ path: envPath });
 // Make sure we have chalk colors
 process.env.FORCE_COLOR = "true";
 
+// do we need to reset shell settings?
+process.argv.forEach((arg) => {
+    if (arg.toLowerCase() == "--setup" && existsSync(ShellSettings.filePath)) {
+        unlinkSync(ShellSettings.filePath);
+    }
+});
+
 let mainWindow: BrowserWindow | null = null;
 
 const time = performance.now();
 debugShell("Starting...");
 function createWindow(): void {
     debugShell("Creating window", performance.now() - time);
+
     // Create the browser window.
     mainWindow = new BrowserWindow({
-        width: 900,
-        height: 1200,
+        width: ShellSettings.getinstance().width,
+        height: ShellSettings.getinstance().height,
         show: false,
         autoHideMenuBar: true,
         webPreferences: {
             preload: join(__dirname, "../preload/index.mjs"),
             sandbox: false,
+            zoomFactor: ShellSettings.getinstance().zoomLevel,
         },
+        x: ShellSettings.getinstance().x,
+        y: ShellSettings.getinstance().y,
     });
 
     mainWindow.on("ready-to-show", () => {
         mainWindow!.show();
+
+        if (ShellSettings.getinstance().devTools) {
+            mainWindow?.webContents.openDevTools();
+        }
     });
 
     mainWindow.webContents.setWindowOpenHandler((details) => {
         shell.openExternal(details.url);
         return { action: "deny" };
+    });
+
+    mainWindow.on("close", () => {
+        ShellSettings.getinstance().devTools =
+            mainWindow?.webContents.isDevToolsOpened();
+    });
+
+    mainWindow.on("closed", () => {
+        ShellSettings.getinstance().save();
+    });
+
+    mainWindow.on("moved", () => {
+        ShellSettings.getinstance().position = mainWindow?.getPosition();
+    });
+
+    mainWindow.on("resized", () => {
+        ShellSettings.getinstance().size = mainWindow?.getSize();
     });
 
     // HMR for renderer base on electron-vite cli.
@@ -111,6 +150,7 @@ async function triggerRecognitionOnce(context: CommandHandlerContext) {
 function showResult(
     message: string,
     requestId: RequestId,
+    source: string,
     actionIndex?: number,
     groupId?: string,
 ) {
@@ -123,6 +163,7 @@ function showResult(
         "response",
         message,
         requestId,
+        source,
         actionIndex,
         groupId,
     );
@@ -131,6 +172,7 @@ function showResult(
 function sendStatusMessage(
     message: string,
     requestId: RequestId,
+    source: string,
     temporary: boolean = false,
 ) {
     // Ignore message without requestId
@@ -142,6 +184,7 @@ function sendStatusMessage(
         "status-message",
         message,
         requestId,
+        source,
         temporary,
     );
 }
@@ -164,6 +207,16 @@ function markRequestExplained(
         fromCache,
         fromUser,
     );
+}
+
+function updateRandomCommandSelected(requestId: RequestId, message: string) {
+    // Ignore message without requestId
+    if (requestId === undefined) {
+        console.warn("updateRandomCommandSelected: requestId is undefined");
+        return;
+    }
+
+    mainWindow?.webContents.send("update-random-command", requestId, message);
 }
 
 function updateResult(message: string, group_id: string) {
@@ -252,7 +305,7 @@ function searchMenuCommand(
 }
 
 function actionCommand(
-    actionTemplates: ActionTemplate[],
+    actionTemplates: ActionTemplateSequence,
     command: string,
     requestId: RequestId,
 ) {
@@ -271,7 +324,8 @@ const clientIO: ClientIO = {
         /* ignore */
     },
     success: sendStatusMessage,
-    status: (message, requestId) => sendStatusMessage(message, requestId, true),
+    status: (message, requestId, source) =>
+        sendStatusMessage(message, requestId, source, true),
     warn: sendStatusMessage,
     error: sendStatusMessage,
     result: showResult,
@@ -290,6 +344,9 @@ const clientIO: ClientIO = {
                     data.fromCache,
                     data.fromUser,
                 );
+                break;
+            case "randomCommandSelected":
+                updateRandomCommandSelected(requestId, data.message);
                 break;
             default:
             // ignore
@@ -374,6 +431,7 @@ app.whenReady().then(async () => {
             mainWindow?.webContents.send(
                 "setting-summary-changed",
                 newSettingSummary,
+                getTranslatorNameToEmojiMap(context),
             );
         }
     });
@@ -386,7 +444,17 @@ app.whenReady().then(async () => {
     ipcMain.on("dom ready", async () => {
         settingSummary = getSettingSummary(context);
         translatorSetPartialInputHandler();
-        mainWindow?.webContents.send("setting-summary-changed", settingSummary);
+        mainWindow?.webContents.send(
+            "setting-summary-changed",
+            settingSummary,
+            getTranslatorNameToEmojiMap(context),
+        );
+
+        mainWindow?.webContents.send(
+            "microphone-change-requested",
+            ShellSettings.getinstance().microphoneId,
+            ShellSettings.getinstance().microphoneName,
+        );
     });
 
     await initializeSpeech(context);
@@ -394,12 +462,24 @@ app.whenReady().then(async () => {
         return typeof context.localWhisper !== "undefined";
     });
 
+    ipcMain.on(
+        "microphone-change-requested",
+        async (_event, micId: string, micName: string) => {
+            ShellSettings.getinstance().microphoneId = micId;
+            ShellSettings.getinstance().microphoneName = micName;
+        },
+    );
+
     globalShortcut.register("Alt+Right", () => {
         mainWindow?.webContents.send("send-demo-event", "Alt+Right");
     });
 
     globalShortcut.register("F1", () => {
         mainWindow?.webContents.send("help-requested", "F1");
+    });
+
+    globalShortcut.register("F2", () => {
+        mainWindow?.webContents.send("random-message-requested", "F2");
     });
 
     // Default open or close DevTools by F12 in development
@@ -410,6 +490,7 @@ app.whenReady().then(async () => {
     });
 
     createWindow();
+    ``;
 
     app.on("activate", function () {
         // On macOS it's common to re-create a window in the app when the
@@ -435,11 +516,13 @@ app.on("window-all-closed", () => {
 function zoomIn(mainWindow: BrowserWindow) {
     const curr = mainWindow.webContents.zoomLevel;
     mainWindow.webContents.zoomLevel = Math.min(curr + 0.5, 9);
+    ShellSettings.getinstance().zoomLevel = mainWindow.webContents.zoomLevel;
 }
 
 function zoomOut(mainWindow: BrowserWindow) {
     const curr = mainWindow.webContents.zoomLevel;
     mainWindow.webContents.zoomLevel = Math.max(curr - 0.5, -8);
+    ShellSettings.getinstance().zoomLevel = mainWindow.webContents.zoomLevel;
 }
 
 const isMac = process.platform === "darwin";

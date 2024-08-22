@@ -37,8 +37,10 @@ import { makeRequestPromptCreator } from "./common/chatHistoryPrompt.js";
 import { MatchResult } from "../../../cache/dist/constructions/constructions.js";
 import registerDebug from "debug";
 import { getAllActionInfo } from "../translation/actionInfo.js";
+import { getDispatcherAgent } from "../agent/agentConfig.js";
 
 const debugConstValidation = registerDebug("typeagent:const:validation");
+export const DispatcherName = "dispatcher";
 
 async function confirmTranslation(
     elapsedMs: number,
@@ -77,13 +79,24 @@ async function confirmTranslation(
         (name) => !name.startsWith("system."),
     );
     const allActionInfo = getAllActionInfo(translatorNames);
-    let displayMessages = actions.toHTML(prefaceSingle, prefaceMultiple);
-    const accept = await requestIO.askYesNo(displayMessages, true);
+    const templateSequence = actions.toTemplateSequence(
+        prefaceSingle,
+        prefaceMultiple,
+        allActionInfo,
+    );
+    context.clientIO?.actionCommand(
+        templateSequence,
+        "register",
+        context.requestId!,
+    );
+    const accept = await requestIO.askYesNo("reserved", true);
     if (accept) {
         return { requestAction };
     }
 
-    const searchMenuItems = allActionInfo.map((info) => info.item);
+    const searchMenuItems = Array.from(allActionInfo.values()).map(
+        (info) => info.item,
+    );
     context.clientIO?.searchMenuCommand(
         "actions",
         "register",
@@ -95,9 +108,7 @@ async function confirmTranslation(
     context.clientIO?.searchMenuCommand("actions", "legend", actionLegend);
     const answer = await requestIO.question(actionLegend);
     if (answer !== undefined) {
-        const actionInfo = allActionInfo.find(
-            (info) => info.item.matchText === answer,
-        );
+        const actionInfo = allActionInfo.get(answer);
         if (actionInfo && actionInfo.template) {
             console.log(
                 `Selected action: ${actionInfo.template.agent}.${actionInfo.item.matchText}`,
@@ -210,9 +221,34 @@ async function translateRequestWithTranslator(
         history,
     );
 
+    let generateResponse = false;
+    const onProperty = context.session.getConfig().stream
+        ? (prop: string, value: any, partial: boolean) => {
+              // TODO: implemented for chat's generate response.
+              // Need to design the interface for agents to use streaming
+              if (prop === "actionName") {
+                  context.requestIO.status(
+                      `[${translatorName}] Translating '${request}' into action '${value}'`,
+                  );
+                  if (value === "generateResponse") {
+                      generateResponse = true;
+                  }
+              }
+
+              if (generateResponse && prop === "parameters.generatedText") {
+                  context.requestIO.setActionStatus(
+                      `${value}${partial ? "..." : ""}`,
+                      0,
+                      context.currentTranslatorName,
+                  );
+              }
+          }
+        : undefined;
+
     const response = await translator.translate(
         request,
         history?.promptSections,
+        onProperty,
     );
     translator.createRequestPrompt = orp;
     if (!response.success) {
@@ -234,6 +270,7 @@ async function findAssistantForRequest(
     translatorName: string,
     context: CommandHandlerContext,
 ): Promise<NextTranslation | undefined> {
+    context.currentTranslatorName = DispatcherName;
     context.requestIO.status(
         `[switcher] Looking for another assistant to handle request '${request}'`,
     );
@@ -471,6 +508,7 @@ function canExecute(
     requestAction: RequestAction,
     context: CommandHandlerContext,
 ): boolean {
+    context.currentTranslatorName = DispatcherName;
     const requestIO = context.requestIO;
 
     const enabledActions = context.session.getConfig().actions;
@@ -603,6 +641,8 @@ export class RequestCommandHandler implements CommandHandler {
                 `Invalid translation request with translation separator '${RequestAction.Separator}'.  Use @explain if you want to explain a translation.`,
             );
         }
+
+        context.currentTranslatorName = DispatcherName;
 
         const history = context.session.getConfig().history
             ? getChatHistoryForTranslation(context)

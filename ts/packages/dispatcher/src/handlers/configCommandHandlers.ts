@@ -160,6 +160,7 @@ class ExplainerCommandHandler implements CommandHandler {
 export function getConfigCommandHandlers(): HandlerTable {
     return {
         description: "Configuration commands",
+        defaultSubCommand: undefined,
         commands: {
             translator: new TranslatorCommandHandler(),
             action: new ActionCommandHandler(),
@@ -174,6 +175,7 @@ export function getConfigCommandHandlers(): HandlerTable {
             ),
             switch: {
                 description: "auto switch translator",
+                defaultSubCommand: undefined,
                 commands: {
                     ...getToggleCommandHandlers(
                         "switch translator",
@@ -230,8 +232,15 @@ export function getConfigCommandHandlers(): HandlerTable {
                     await changeContextConfig({ bot: enable }, context);
                 },
             ),
+            stream: getToggleHandlerTable(
+                "streaming translation",
+                async (context, enable: boolean) => {
+                    await changeContextConfig({ stream: enable }, context);
+                },
+            ),
             explanation: {
                 description: "Toggle explanation",
+                defaultSubCommand: undefined,
                 commands: {
                     ...getToggleCommandHandlers(
                         "explanation",
@@ -261,6 +270,7 @@ export function getConfigCommandHandlers(): HandlerTable {
             ),
             log: {
                 description: "Toggle logging",
+                defaultSubCommand: undefined,
                 commands: {
                     db: getToggleHandlerTable(
                         "logging",

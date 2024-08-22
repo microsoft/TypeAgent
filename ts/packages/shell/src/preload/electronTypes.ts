@@ -14,13 +14,14 @@ export type SpeechToken = {
 
 export type SearchMenuItem = {
     matchText: string;
+    selectedText: string;
     emojiChar?: string;
     groupName?: string;
 };
 
 export type ActionUICommand = "register" | "replace" | "remove";
 export type ActionInfo = {
-    actionTemplates: ActionTemplate[];
+    actionTemplates: ActionTemplateSequence;
     requestId: string;
 };
 
@@ -66,6 +67,10 @@ export type ActionTemplate = {
     agent: string;
     name: string;
     parameterStructure: TemplateParamObject;
+};
+
+export type ActionTemplateSequence = {
+    templates: ActionTemplate[];
     prefaceSingle?: string;
     prefaceMultiple?: string;
 };
@@ -88,6 +93,7 @@ export interface ClientAPI {
             e: Electron.IpcRendererEvent,
             response: string | undefined,
             id: string,
+            source: string,
             actionIndex?: number,
             group_id?: string,
         ) => void,
@@ -114,13 +120,14 @@ export interface ClientAPI {
             e: Electron.IpcRendererEvent,
             message: string,
             id: string,
+            source: string,
             temporary: boolean,
         ) => void,
     ): void;
     onActionCommand(
         callback: (
             e: Electron.IpcRendererEvent,
-            actionTemplates: ActionTemplate[],
+            actionTemplates: ActionTemplateSequence,
             command: ActionUICommand,
             requestId: string,
         ) => void,
@@ -143,8 +150,19 @@ export interface ClientAPI {
             fromCache?: boolean,
         ) => void,
     ): void;
+    onRandomCommandSelected(
+        callback: (
+            e: Electron.IpcRendererEvent,
+            id: string,
+            message: string,
+        ) => void,
+    ): void;
     onSettingSummaryChanged(
-        callback: (e: Electron.IpcRendererEvent, summary: string) => void,
+        callback: (
+            e: Electron.IpcRendererEvent,
+            summary: string,
+            agents: Map<string, string>,
+        ) => void,
     ): void;
     onAskYesNo(
         callback: (
@@ -152,6 +170,7 @@ export interface ClientAPI {
             askYesNoId: number,
             message: string,
             requestId: string,
+            source: string,
         ) => void,
     ): void;
     sendYesNo: (askYesNoId: number, accept: boolean) => void;
@@ -161,6 +180,7 @@ export interface ClientAPI {
             questionId: number,
             message: string,
             requestId: string,
+            source: string,
         ) => void,
     ): void;
     sendAnswer: (questionId: number, answer?: string) => void;
@@ -174,6 +194,16 @@ export interface ClientAPI {
     ): void;
     onHelpRequested(
         callback: (e: Electron.IpcRendererEvent, key: string) => void,
+    ): void;
+    onRandomMessageRequested(
+        callback: (e: Electron.IpcRendererEvent, key: string) => void,
+    ): void;
+    onMicrophoneChangeRequested(
+        callback: (
+            e: Electron.IpcRendererEvent,
+            micId: string,
+            micName: string,
+        ) => void,
     ): void;
 }
 

@@ -181,11 +181,11 @@ async function htmlTrackNames(
 ) {
     const fetchedTracks = await trackCollection.getTracks(context.service);
     const selectedTracks = fetchedTracks.slice(startIndex, endIndex);
-    let turnImpression = {
+    const turnImpression: TurnImpression = {
         displayText: "",
         literalText: "",
         entities: [],
-    } as TurnImpression;
+    };
     let prevUrl = "";
     if (selectedTracks.length > 1) {
         turnImpression.displayText = `<div class='track-list scroll_enabled'><div>${headText}...</div><ol>\n`;

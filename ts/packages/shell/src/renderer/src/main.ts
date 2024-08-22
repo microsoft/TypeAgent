@@ -1,15 +1,25 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+//import { ShellSettings } from "../../main/shellSettings";
 import { ClientAPI } from "../../preload/electronTypes";
 import { ChatView } from "./chatView";
-import { SpeechInfo, enumerateMicrophones, recognizeOnce } from "./speech";
+import {
+    SpeechInfo,
+    enumerateMicrophones,
+    recognizeOnce,
+    selectMicrophone,
+} from "./speech";
 
 export function getClientAPI(): ClientAPI {
     return globalThis.api;
 }
 
-function addEvents(chatView: ChatView) {
+function addEvents(
+    chatView: ChatView,
+    agents: Map<string, string>,
+    microphoneSelector: HTMLSelectElement,
+) {
     console.log("add listen event");
     const api = getClientAPI();
     api.onListenEvent((_, name, token, useLocalWhisper) => {
@@ -44,9 +54,22 @@ function addEvents(chatView: ChatView) {
         }
     });
     api.onResponse(
-        (_, response, id, actionIndex?: number, groupId?: string) => {
+        (
+            _,
+            response,
+            id,
+            source: string,
+            actionIndex?: number,
+            groupId?: string,
+        ) => {
             if (response !== undefined) {
-                chatView.addAgentMessage(response, id, actionIndex, groupId);
+                chatView.addAgentMessage(
+                    response,
+                    id,
+                    source,
+                    actionIndex,
+                    groupId,
+                );
             }
         },
     );
@@ -67,20 +90,28 @@ function addEvents(chatView: ChatView) {
             chatView.updateGroup(updateMessage, groupId);
         }
     });
-    api.onStatusMessage((_, message, id, temporary) => {
-        chatView.showStatusMessage(message, id, temporary);
+    api.onStatusMessage((_, message, id, source: string, temporary) => {
+        chatView.showStatusMessage(message, id, source, temporary);
     });
     api.onMarkRequestExplained((_, id, timestamp, fromCache) => {
         chatView.markRequestExplained(id, timestamp, fromCache);
     });
-    api.onAskYesNo(async (_, askYesNoId, message, id) => {
-        chatView.askYesNo(askYesNoId, message, id);
+    api.onRandomCommandSelected((_, id, message) => {
+        chatView.randomCommandSelected(id, message);
     });
-    api.onQuestion(async (_, questionId, message, id) => {
-        chatView.question(questionId, message, id);
+    api.onAskYesNo(async (_, askYesNoId, message, id, source) => {
+        chatView.askYesNo(askYesNoId, message, id, source);
     });
-    api.onSettingSummaryChanged((_, summary) => {
+    api.onQuestion(async (_, questionId, message, id, source) => {
+        chatView.question(questionId, message, id, source);
+    });
+    api.onSettingSummaryChanged((_, summary, registeredAgents) => {
         document.title = summary;
+
+        agents.clear();
+        for (let key of registeredAgents.keys()) {
+            agents.set(key, registeredAgents.get(key) as string);
+        }
     });
     api.onSendInputText((_, message) => {
         chatView.showInputText(message);
@@ -91,6 +122,13 @@ function addEvents(chatView: ChatView) {
     api.onHelpRequested((_, key) => {
         console.log(`User asked for help via ${key}`);
         chatView.addUserMessage(`@help`);
+    });
+    api.onRandomMessageRequested((_, key) => {
+        console.log(`User asked for a random message via ${key}`);
+        chatView.addUserMessage(`@random`);
+    });
+    api.onMicrophoneChangeRequested((_, micId, micName) => {
+        selectMicrophone(microphoneSelector, micId, micName);
     });
 }
 
@@ -105,13 +143,16 @@ document.addEventListener("DOMContentLoaded", function () {
     const wrapper = document.getElementById("wrapper")!;
     const idGenerator = new IdGenerator();
     const speechInfo = new SpeechInfo();
-    const chatView = new ChatView(idGenerator, speechInfo);
+    const agents = new Map<string, string>();
+    const chatView = new ChatView(idGenerator, speechInfo, agents);
     wrapper.appendChild(chatView.getMessageElm());
+
     const microphoneSources = document.getElementById(
         "microphoneSources",
     )! as HTMLSelectElement;
 
-    enumerateMicrophones(microphoneSources);
-    addEvents(chatView);
+    enumerateMicrophones(microphoneSources, window as any);
+
+    addEvents(chatView, agents, microphoneSources);
     (window as any).electron.ipcRenderer.send("dom ready");
 });

@@ -141,6 +141,7 @@ type DispatcherConfig = {
     actions: ConfigObject;
     explainerName: string;
     bot: boolean;
+    stream: boolean;
     explanation: boolean;
     switch: {
         inline: boolean;
@@ -173,6 +174,7 @@ export const defaultSessionConfig: SessionConfig = {
     ),
     explainerName: getDefaultExplainerName(),
     bot: true,
+    stream: true,
     explanation: true,
     switch: {
         inline: true,

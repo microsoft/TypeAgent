@@ -5,7 +5,15 @@ import * as speechSDK from "microsoft-cognitiveservices-speech-sdk";
 import { SpeechToken } from "../../preload/electronTypes";
 import { WhisperRecognizer } from "./localWhisperClient";
 
-export function enumerateMicrophones(microphoneSources: HTMLSelectElement) {
+let savedMicId: string | undefined;
+let savedMicName: string | undefined;
+
+export function enumerateMicrophones(
+    microphoneSources: HTMLSelectElement,
+    window: any,
+    micId?: string,
+    micName?: string,
+) {
     if (
         !navigator ||
         !navigator.mediaDevices ||
@@ -16,6 +24,22 @@ export function enumerateMicrophones(microphoneSources: HTMLSelectElement) {
         );
         return;
     }
+
+    microphoneSources.oninput = () => {
+        if (microphoneSources.selectedIndex > -1) {
+            window.electron.ipcRenderer.send(
+                "microphone-change-requested",
+                microphoneSources.selectedOptions[0].value,
+                microphoneSources.selectedOptions[0].innerText,
+            );
+        } else {
+            window.electron.ipcRenderer.send(
+                "microphone-change-requested",
+                undefined,
+                undefined,
+            );
+        }
+    };
 
     navigator.mediaDevices.enumerateDevices().then((devices) => {
         microphoneSources.innerHTML = "";
@@ -42,6 +66,15 @@ export function enumerateMicrophones(microphoneSources: HTMLSelectElement) {
                         console.log(`Device ID: ${device.label}`);
                         opt.appendChild(document.createTextNode(device.label));
 
+                        if (
+                            (device.deviceId == micId &&
+                                device.label == micName) ||
+                            device.deviceId == savedMicId ||
+                            device.label == savedMicName
+                        ) {
+                            opt.setAttribute("SELECTED", "SELECTED");
+                        }
+
                         microphoneSources.appendChild(opt);
                         deviceIds.add(device.deviceId);
                     }
@@ -51,6 +84,26 @@ export function enumerateMicrophones(microphoneSources: HTMLSelectElement) {
 
         microphoneSources.disabled = microphoneSources.options.length == 1;
     });
+}
+
+export function selectMicrophone(
+    microphoneSources: HTMLSelectElement,
+    micId?: string,
+    micName?: string,
+) {
+    savedMicId = micId;
+    savedMicName = micName;
+
+    for (let i = 0; i < microphoneSources.options.length; i++) {
+        if (
+            microphoneSources.options[i].value == micId &&
+            microphoneSources.options[i].innerText == micName
+        ) {
+            microphoneSources.options[i].setAttribute("SELECTED", "SELECTED");
+        } else {
+            microphoneSources.options[i].attributes.removeNamedItem("SELECTED");
+        }
+    }
 }
 
 export class SpeechInfo {
