@@ -7,11 +7,21 @@ export class TabView {
     private tabs: HTMLDivElement[];
     private tabPages: HTMLDivElement[];
 
+    //private activeTab: HTMLDivElement | undefined;
+
     constructor(tabNames: string[], icons: HTMLElement[]) {
         this.mainContainer = document.createElement("div");
         this.tabContainer = document.createElement("div");
         this.tabContainer.className = "shadeContainer";
         this.mainContainer.append(this.tabContainer);
+
+        this.mainContainer.onkeyup = (ev: KeyboardEvent ) => {
+            if (ev.key == "Escape") {
+                // TODO: move to document
+                this.closeTabs();
+                ev.preventDefault();
+            }
+        }
 
         this.tabs = new Array(tabNames.length);
         this.tabPages = new Array(tabNames.length);
@@ -39,6 +49,7 @@ export class TabView {
                     tabPageDiv.classList.remove("closedTab");
                 } else  {
                     tabPageDiv.classList.add("closedTab");
+                    //this.activeTab = tabPageDiv;
                 }
 
                 for (let j = 0; j < this.tabPages.length; j++) {
@@ -47,12 +58,6 @@ export class TabView {
                     }
                 }
             }
-
-            // tabPageDiv.onmouseout = () => {
-            //     console.log(`${tabDiv.innerText} onmouseout`);
-            //     tabPageDiv.classList.add("closedTab");
-            // }
-
             
             this.tabContainer.append(tabDiv);
 
@@ -67,6 +72,7 @@ export class TabView {
 
             closeButton.onclick = () => {
                 tabPageDiv.classList.add("closedTab");
+                //this.activeTab = undefined;
             }
 
             let title = document.createElement("div");
@@ -90,15 +96,11 @@ export class TabView {
         return this.mainContainer;
     }
 
-    // getSettingsTab() {
-    //     return this;
-    // }
+    closeTabs() {
+        for (let j = 0; j < this.tabPages.length; j++) {
+            this.tabPages[j].classList.add("closedTab");
+        }
 
-    // getMetricsTab() {
-    //     return this.metricsTab;
-    // }
-
-    // getHelpTab() {
-    //     return this.helpTab;
-    // }
+        //this.activeTab = undefined;
+    }
 }
