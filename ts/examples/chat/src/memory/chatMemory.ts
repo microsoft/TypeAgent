@@ -326,6 +326,7 @@ export async function runPlayChat(): Promise<void> {
                 maxContextLength: context.maxCharsPerChunk,
                 includeSuggestedTopics: false,
                 includeActions: namedArgs.actions,
+                mergeActionKnowledge: false,
             },
         );
         let messages: knowLib.SourceTextBlock[] = await asyncArray.toArray(
@@ -454,6 +455,7 @@ export async function runPlayChat(): Promise<void> {
                 maxContextLength: context.maxCharsPerChunk,
                 includeSuggestedTopics: false,
                 includeActions: namedArgs.actions,
+                mergeActionKnowledge: true,
             },
         );
         context.conversationSettings.indexActions = namedArgs.actions;
