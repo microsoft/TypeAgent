@@ -137,6 +137,13 @@ document.addEventListener("DOMContentLoaded", function () {
     const tabs = new TabView(["Settings", "Metrics", "Help"], [iconSettings(), iconMetrics(), iconHelp()]);
     wrapper.appendChild(tabs.getContainer());
 
+    document.onkeyup = (ev: KeyboardEvent ) => {
+        if (ev.key == "Escape") {
+            tabs.closeTabs();
+            ev.preventDefault();
+        }
+    }
+
     const chatView = new ChatView(idGenerator, speechInfo, agents);
     wrapper.appendChild(chatView.getMessageElm());
     
