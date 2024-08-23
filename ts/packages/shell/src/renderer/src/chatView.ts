@@ -534,7 +534,7 @@ export class ChatView {
     private topDiv: HTMLDivElement;
     private messageDiv: HTMLDivElement;
     private inputContainer: HTMLDivElement;
-    
+
     private groupToElements: Map<string, HTMLDivElement[]> = new Map();
     private idToMessageGroup: Map<string, MessageGroup> = new Map();
     chatInput: ChatInput;

@@ -85,7 +85,7 @@ const api: ClientAPI = {
     },
     onShowDialog(callback) {
         ipcRenderer.on("show-dialog", callback);
-    }
+    },
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to

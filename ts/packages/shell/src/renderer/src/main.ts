@@ -149,24 +149,30 @@ document.addEventListener("DOMContentLoaded", function () {
     const speechInfo = new SpeechInfo();
     const agents = new Map<string, string>();
 
-    const tabs = new TabView(["Settings", "Metrics", "Help"], [iconSettings(), iconMetrics(), iconHelp()], [iconSettings(), iconMetrics(), iconHelp()]);
+    const tabs = new TabView(
+        ["Settings", "Metrics", "Help"],
+        [iconSettings(), iconMetrics(), iconHelp()],
+        [iconSettings(), iconMetrics(), iconHelp()],
+    );
     wrapper.appendChild(tabs.getContainer());
 
-    document.onkeyup = (ev: KeyboardEvent ) => {
+    document.onkeyup = (ev: KeyboardEvent) => {
         if (ev.key == "Escape") {
             tabs.closeTabs();
             ev.preventDefault();
         }
-    }
+    };
 
     const chatView = new ChatView(idGenerator, speechInfo, agents);
     wrapper.appendChild(chatView.getMessageElm());
 
     const settingsView = new SettingsView();
     tabs.getTabContainerByName("Settings").append(settingsView.getContainer());
-    tabs.getTabContainerByName("Metrics").append(new MetricsView().getContainer());
+    tabs.getTabContainerByName("Metrics").append(
+        new MetricsView().getContainer(),
+    );
     tabs.getTabContainerByName("Help").append(new HelpView().getContainer());
-    
+
     addEvents(chatView, agents, settingsView, tabs);
     (window as any).electron.ipcRenderer.send("dom ready");
 });

@@ -2,153 +2,152 @@
 // Licensed under the MIT License.
 
 @keyframes extend {
-    0% {
-    }
+  0% {
+  }
 
-    100% {
-        height: 20px;
-    }
+  100% {
+    height: 20px;
+  }
 }
 
 @keyframes retract {
-    0% {
-    }
-    100% {
-        height: 8px;
-    }
+  0% {
+  }
+  100% {
+    height: 8px;
+  }
 }
 
 .shadeContainer {
-    position: absolute;
-    width: 100%;
-    display: flex;
-    flex-direction: row;
-    background: transparent;
+  position: absolute;
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  background: transparent;
 }
 
 .shade {
-    text-align: center;
-    width: 33%;
-    
-    background-color: pink;
-    margin: 0px 15px;
-    z-index: 1000;
+  text-align: center;
+  width: 33%;
 
-    border-radius: 0px 0px 5px 5px;
+  background-color: pink;
+  margin: 0px 15px;
+  z-index: 1000;
 
-    font-size: 0px;
-    font-weight: 500;
+  border-radius: 0px 0px 5px 5px;
 
-    height:8px;
-    animation: retract 0.1s ease-out 0s forwards;
+  font-size: 0px;
+  font-weight: 500;
+
+  height: 8px;
+  animation: retract 0.1s ease-out 0s forwards;
 }
 
 .shade .shadeIcon {
-    display: none;
+  display: none;
 }
 
 .shade:hover {
-    cursor: pointer;    
-    font-size: 12px;
-    vertical-align: middle;
+  cursor: pointer;
+  font-size: 12px;
+  vertical-align: middle;
 
-    animation: extend 0.1s ease-out 0s forwards;
+  animation: extend 0.1s ease-out 0s forwards;
 }
 
 .shade:hover .shadeIcon {
-    display: inline-block;
+  display: inline-block;
 }
 
-.shadeIcon {    
-    display: inline-block;
-    margin-top: 3px;
-    width: 14px;
-    height: 14px;
-    vertical-align: baseline;
+.shadeIcon {
+  display: inline-block;
+  margin-top: 3px;
+  width: 14px;
+  height: 14px;
+  vertical-align: baseline;
 }
 
 .shadeTitle {
-    display: inline;
-    margin-left: 3px;
-    position: relative;
-    top: -3px;
+  display: inline;
+  margin-left: 3px;
+  position: relative;
+  top: -3px;
 }
 
 .shade0 {
-    background-color: #1B263B;
-    color: #ffffff;
-    opacity: 0.8;
+  background-color: #1b263b;
+  color: #ffffff;
+  opacity: 0.8;
 }
 
-.shade1 {    
-    background-color: #415A77;
-    color: #ffffff;
-    opacity: 0.9;
+.shade1 {
+  background-color: #415a77;
+  color: #ffffff;
+  opacity: 0.9;
 }
 
-.shade2 {    
-    background-color: #778DA9;
-    color: #ffffff;
-    opacity: 0.95;
+.shade2 {
+  background-color: #778da9;
+  color: #ffffff;
+  opacity: 0.95;
 }
 
 .closedTab {
-    display: none;
+  display: none;
 }
 
 .tabPage {
-    position: absolute;
-    margin-left: 20%;
-    margin-top: 15%;
-    width: 60%;
-    height: 50%;
-    z-index: 1000;
-    border-radius: 20px;
-    overflow-y: auto;
+  position: absolute;
+  margin-left: 20%;
+  margin-top: 15%;
+  width: 60%;
+  height: 50%;
+  z-index: 1000;
+  border-radius: 20px;
+  overflow-y: auto;
 }
 
 .tabPageContents {
-    display: inline;
+  display: inline;
 }
 
-.tabIcon {    
-    display: inline-block;
-    margin-top: 10px;
-    margin-left: 40px;
-    width: 24px;
-    height: 24px;
-    vertical-align: baseline;
+.tabIcon {
+  display: inline-block;
+  margin-top: 10px;
+  margin-left: 40px;
+  width: 24px;
+  height: 24px;
+  vertical-align: baseline;
 }
 
 .closeButton {
-    color: #ffffff;
-    border: 2px;
-    background-color: transparent;
-    font-size: 16px;
-    font-weight: 300;
-    float: right;
-    margin: 8px;
-    cursor: pointer;
+  color: #ffffff;
+  border: 2px;
+  background-color: transparent;
+  font-size: 16px;
+  font-weight: 300;
+  float: right;
+  margin: 8px;
+  cursor: pointer;
 }
 
-.title {    
-    text-align: center;
-    width: 100%;
-    margin-bottom: 20px;
+.title {
+  text-align: center;
+  width: 100%;
+  margin-bottom: 20px;
 }
 
 .titleText {
-    display: inline;
-    position: relative;
-    top: -2.5px;
-    margin-top: 20px;
-    font-size: 24px;
-    margin-left: 8px;
+  display: inline;
+  position: relative;
+  top: -2.5px;
+  margin-top: 20px;
+  font-size: 24px;
+  margin-left: 8px;
 }
 
 .setting-label {
-    color: #FFFFFF;
-    margin-left: 24px;
-    font-size: 12px;
+  color: #ffffff;
+  margin-left: 24px;
+  font-size: 12px;
 }
-

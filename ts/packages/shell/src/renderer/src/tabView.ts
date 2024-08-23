@@ -8,7 +8,7 @@ export class TabView {
     private tabPages: HTMLDivElement[];
     private tabNames: string[];
 
-    getTabContainerByName(name: string) : HTMLDivElement {
+    getTabContainerByName(name: string): HTMLDivElement {
         for (let i = 0; i < this.tabPages.length; i++) {
             if (this.tabNames[i] == name) {
                 return this.tabPages[i].firstChild as HTMLDivElement;
@@ -18,7 +18,11 @@ export class TabView {
         throw new Error("The requested tab doesn't exist.");
     }
 
-    constructor(tabNames: string[], tabIcons: HTMLElement[], tabPageIcons: HTMLElement[]) {
+    constructor(
+        tabNames: string[],
+        tabIcons: HTMLElement[],
+        tabPageIcons: HTMLElement[],
+    ) {
         this.mainContainer = document.createElement("div");
         this.tabContainer = document.createElement("div");
         this.tabContainer.className = "shadeContainer";
@@ -28,8 +32,7 @@ export class TabView {
         this.tabPages = new Array(tabNames.length);
         this.tabNames = new Array(tabNames.length);
 
-        for(let i: number = 0; i < tabNames.length; i++) {
-
+        for (let i: number = 0; i < tabNames.length; i++) {
             let tabDiv = document.createElement("div");
             let tabPageDiv = document.createElement("div");
             this.tabs[i] = tabDiv;
@@ -53,7 +56,7 @@ export class TabView {
                 console.log(`${tabDiv.innerText} clicked`);
                 if (tabPageDiv.classList.contains("closedTab")) {
                     tabPageDiv.classList.remove("closedTab");
-                } else  {
+                } else {
                     tabPageDiv.classList.add("closedTab");
                 }
 
@@ -62,8 +65,8 @@ export class TabView {
                         this.tabPages[j].classList.add("closedTab");
                     }
                 }
-            }
-            
+            };
+
             this.tabContainer.append(tabDiv);
 
             tabPageDiv.id = `_tabPage_${i}`;
@@ -72,12 +75,12 @@ export class TabView {
             let closeButton = document.createElement("input");
             closeButton.type = "button";
             closeButton.value = "X";
-            closeButton.title = `Close ${tabNames[i]} tab`
+            closeButton.title = `Close ${tabNames[i]} tab`;
             closeButton.className = "closeButton";
 
             closeButton.onclick = () => {
                 tabPageDiv.classList.add("closedTab");
-            }
+            };
 
             let title = document.createElement("div");
             tabPageIcons[i].className = "tabIcon";
@@ -88,7 +91,7 @@ export class TabView {
             titleText.className = "titleText";
             title.className = "title";
             title.append(titleText);
-                        
+
             tabPageContents.append(closeButton);
             tabPageContents.append(title);
 

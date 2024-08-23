@@ -4,18 +4,16 @@
 import { enumerateMicrophones } from "./speech";
 
 export class SettingsView {
-
     public microphoneSources: HTMLSelectElement;
     private mainContainer: HTMLDivElement;
 
-    constructor(
-    ) {
+    constructor() {
         this.mainContainer = document.createElement("div");
-        
+
         let mic: HTMLDivElement = document.createElement("div");
         let micPrompt: HTMLDivElement = document.createElement("div");
-        micPrompt.className = "setting-label"
-        micPrompt.innerText = "Microphone"
+        micPrompt.className = "setting-label";
+        micPrompt.innerText = "Microphone";
         mic.append(micPrompt);
 
         this.microphoneSources = document.createElement("select");
@@ -24,12 +22,11 @@ export class SettingsView {
         mic.appendChild(this.microphoneSources);
 
         this.mainContainer.append(mic);
-            
+
         enumerateMicrophones(this.microphoneSources, window);
     }
 
     getContainer() {
         return this.mainContainer;
     }
-
 }

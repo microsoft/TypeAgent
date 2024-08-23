@@ -607,7 +607,7 @@ function setAppMenu(mainWindow: BrowserWindow) {
                     id: "metricsMenu",
                     label: "Show Metrics",
                     click: () => showDialog("Metrics"),
-                }
+                },
             ],
         },
         {
