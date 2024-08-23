@@ -4,7 +4,6 @@
 import {
     FileSystem,
     ObjectFolderSettings,
-    ScoredItem,
     SearchOptions,
     asyncArray,
     dateTime,
@@ -21,20 +20,28 @@ import {
 import { Action } from "./knowledgeSchema.js";
 import path from "path";
 import { ActionFilter } from "./knowledgeSearchSchema.js";
-import { TemporalLog, getRangeOfTemporalSequence } from "../temporal.js";
+import {
+    TemporalLog,
+    getRangeOfTemporalSequence,
+    itemsFromTemporalSequence,
+    filterTemporalSequence,
+} from "../temporal.js";
 import {
     addToSet,
     intersect,
-    intersectMultiple,
     intersectUnionMultiple,
     unionMultiple,
     uniqueFrom,
+    intersectMultiple,
 } from "../setOperations.js";
 import {
     ExtractedAction,
     NoEntityName,
     actionVerbsToString,
 } from "./knowledge.js";
+import { TermFilter } from "./knowledgeTermSearchSchema.js";
+import { toStopDate, toStartDate } from "./knowledgeActions.js";
+import { DateTimeRange } from "./dateTimeSchema.js";
 
 export interface ActionSearchOptions extends SearchOptions {
     verbSearchOptions?: SearchOptions | undefined;
@@ -70,6 +77,10 @@ export interface ActionIndex<TActionId = any, TSourceId = any>
     getActions(ids: TActionId[]): Promise<Action[]>;
     search(
         filter: ActionFilter,
+        options: ActionSearchOptions,
+    ): Promise<ActionSearchResult<TActionId>>;
+    searchTerms(
+        filter: TermFilter,
         options: ActionSearchOptions,
     ): Promise<ActionSearchResult<TActionId>>;
     loadSourceIds(
@@ -131,6 +142,7 @@ export async function createActionIndex<TSourceId = any>(
         getActions,
         getSourceIds,
         search,
+        searchTerms,
         loadSourceIds,
     };
 
@@ -258,6 +270,41 @@ export async function createActionIndex<TSourceId = any>(
         return results;
     }
 
+    async function searchTerms(
+        filter: TermFilter,
+        options: ActionSearchOptions,
+    ): Promise<ActionSearchResult<ActionId>> {
+        const results = createSearchResults<ActionId>();
+        if (filter.timeRange) {
+            results.temporalSequence = await matchTimeRange(filter.timeRange);
+        }
+
+        const names = await getNameIndex();
+        const [subjectToActionIds, objectToActionIds] = await Promise.all([
+            matchTerms(names, subjectIndex, filter.terms, options),
+            matchTerms(names, objectIndex, filter.terms, options),
+        ]);
+        results.actionIds = [
+            ...intersectMultiple(
+                intersectUnionMultiple(subjectToActionIds, objectToActionIds),
+                itemsFromTemporalSequence(results.temporalSequence),
+            ),
+        ];
+        if (results.actionIds && results.temporalSequence) {
+            // The temporal sequence maintains all entity ids seen at a timestamp.
+            // Since we identified specific entity ids, we remove the other ones
+            results.temporalSequence = filterTemporalSequence(
+                results.temporalSequence,
+                results.actionIds,
+            );
+        }
+
+        if (options.loadActions && results.actionIds) {
+            results.actions = await getActions(results.actionIds);
+        }
+        return results;
+    }
+
     async function matchName(
         names: TextIndex<string>,
         nameIndex: KeyValueIndex<string, ActionId>,
@@ -301,6 +348,30 @@ export async function createActionIndex<TSourceId = any>(
                 verbOptions.minScore,
             );
             return matches;
+        }
+        return undefined;
+    }
+
+    async function matchTerms(
+        names: TextIndex<string>,
+        nameIndex: KeyValueIndex<string, ActionId>,
+        terms: string[],
+        options: ActionSearchOptions,
+    ) {
+        const matches = await asyncArray.mapAsync(
+            terms,
+            settings.concurrency,
+            (term) => matchName(names, nameIndex, term, options),
+        );
+        return intersectUnionMultiple(...matches);
+    }
+
+    async function matchTimeRange(timeRange: DateTimeRange | undefined) {
+        if (timeRange) {
+            return await actionStore.sequence.getEntriesInRange(
+                toStartDate(timeRange.startDate),
+                toStopDate(timeRange.stopDate),
+            );
         }
         return undefined;
     }

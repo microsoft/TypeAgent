@@ -43,7 +43,12 @@ import {
 import { Filter, SearchAction } from "./knowledgeSearchWebSchema.js";
 import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
-import { intersectSets, unionSets, uniqueFrom } from "../setOperations.js";
+import {
+    createFrequencyTable,
+    intersectSets,
+    unionSets,
+    uniqueFrom,
+} from "../setOperations.js";
 import { getRangeOfTemporalSequence } from "../temporal.js";
 import { Action, ConcreteEntity } from "./knowledgeSchema.js";
 import { MessageIndex, createMessageIndex } from "./messages.js";
@@ -53,7 +58,7 @@ import {
     ActionSearchResult,
     createActionIndex,
 } from "./actions.js";
-import { SearchProcessingOptions } from "./searchProcessor.js";
+import { SearchTermsAction, TermFilter } from "./knowledgeTermSearchSchema.js";
 
 export interface RecentItems<T> {
     readonly entries: collections.CircularArray<T>;
@@ -138,6 +143,10 @@ export interface Conversation<
     ): Promise<ExtractedKnowledgeIds<TTopicId, TEntityId, TActionId>>;
     search(
         filters: Filter[],
+        options: ConversationSearchOptions,
+    ): Promise<SearchResponse>;
+    searchTerms(
+        filters: TermFilter[],
         options: ConversationSearchOptions,
     ): Promise<SearchResponse>;
     searchMessages(
@@ -412,6 +421,7 @@ export async function createConversation(
         putIndex,
         putNext,
         search,
+        searchTerms,
         searchMessages,
     };
 
@@ -682,6 +692,46 @@ export async function createConversation(
         return results;
     }
 
+    async function searchTerms(
+        filters: TermFilter[],
+        options: ConversationSearchOptions,
+    ): Promise<SearchResponse> {
+        const [entityIndex, topicIndex, actionIndex] = await Promise.all([
+            getEntityIndex(),
+            getTopicsIndex(options.topicLevel),
+            getActionIndex(),
+        ]);
+        const results = createSearchResponse<MessageId, TopicId, EntityId>();
+        for (const filter of filters) {
+            const topicResult = await topicIndex.searchTerms(
+                filter,
+                options.topic,
+            );
+            results.topics.push(topicResult);
+            const entityResult = await entityIndex.searchTerms(
+                filter,
+                options.entity,
+            );
+            results.entities.push(entityResult);
+            if (options.action) {
+                const actionResult = await actionIndex.searchTerms(
+                    filter,
+                    options.action,
+                );
+                results.actions.push(actionResult);
+            }
+        }
+        if (options.loadMessages) {
+            await resolveMessages(
+                results,
+                topicIndex,
+                entityIndex,
+                actionIndex,
+            );
+        }
+        return results;
+    }
+
     async function searchMessages(
         query: string,
         options: SearchOptions,
@@ -851,6 +901,7 @@ export async function createConversationManager(
         if (knowledgeResult) {
             if (knowledgeResult) {
                 const [_, knowledge] = knowledgeResult;
+                // Add next message... this updates the "sequence"
                 const knowledgeIds = await conversation.putNext(
                     message,
                     knowledge,
@@ -866,5 +917,10 @@ export async function createConversationManager(
 
 export type SearchActionResponse = {
     action: SearchAction;
+    response?: SearchResponse | undefined;
+};
+
+export type SearchTermsActionResponse = {
+    action: SearchTermsAction;
     response?: SearchResponse | undefined;
 };

@@ -40,7 +40,7 @@ export function createLRUCache<N, V>(
         get length() {
             return kvTable.size;
         },
-        has: kvTable.has,
+        has: (key) => kvTable.has(key),
         all,
         get,
         put,

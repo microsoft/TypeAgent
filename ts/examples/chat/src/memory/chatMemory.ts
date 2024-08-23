@@ -3,7 +3,7 @@
 
 import * as knowLib from "knowledge-processor";
 import { conversation } from "knowledge-processor";
-import { ChatModel, openai } from "aiclient";
+import { ChatModel, TextEmbeddingModel, openai } from "aiclient";
 import {
     CommandHandler,
     CommandMetadata,
@@ -17,11 +17,13 @@ import chalk from "chalk";
 import { PlayPrinter } from "./chatMemoryPrinter.js";
 import { timestampBlocks } from "./importer.js";
 import path from "path";
+import fs from "fs";
 
 export type ChatContext = {
     storePath: string;
     chatModel: ChatModel;
     chatModelFast: ChatModel;
+    embeddingModel: TextEmbeddingModel;
     maxCharsPerChunk: number;
     topicWindowSize: number;
     searchConcurrency: number;
@@ -37,8 +39,12 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
     const storePath = "/data/testChat";
     const chatModel = openai.createStandardAzureChatModel("GPT_4");
     const chatModelFast = openai.createStandardAzureChatModel("GPT_35_TURBO");
+    const embeddingModel = knowLib.createEmbeddingCache(
+        openai.createEmbeddingModel(),
+        64,
+    );
     const conversationName = "transcript";
-    const conversationSettings = createConversationSettings();
+    const conversationSettings = createConversationSettings(embeddingModel);
 
     //const conversationName = "play";
     const conversation = await createConversation(
@@ -49,6 +55,7 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         storePath,
         chatModel,
         chatModelFast,
+        embeddingModel,
         maxCharsPerChunk: 2048,
         topicWindowSize: 8,
         searchConcurrency: 2,
@@ -67,26 +74,25 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
     return context;
 }
 
-function createConversationSettings(): conversation.ConversationSettings {
+function createConversationSettings(
+    embeddingModel?: TextEmbeddingModel,
+): conversation.ConversationSettings {
     return {
         indexSettings: {
             caseSensitive: false,
             concurrency: 2,
+            embeddingModel,
         },
     };
 }
 export function createConversation(
     rootPath: string,
-    settings?: knowLib.conversation.ConversationSettings,
+    settings: knowLib.conversation.ConversationSettings,
 ): Promise<conversation.Conversation> {
-    return conversation.createConversation(
-        settings ?? createConversationSettings(),
-        rootPath,
-        {
-            cacheNames: true,
-            useWeakRefs: true,
-        },
-    );
+    return conversation.createConversation(settings, rootPath, {
+        cacheNames: true,
+        useWeakRefs: true,
+    });
 }
 
 export async function createSearchMemory(
@@ -95,6 +101,7 @@ export async function createSearchMemory(
     const conversationName = "search";
     const searchConversation = await createConversation(
         path.join(context.storePath, conversationName),
+        createConversationSettings(context.embeddingModel),
     );
     await searchConversation.clear();
 
@@ -120,9 +127,12 @@ export async function loadConversation(
     context: ChatContext,
     name: string,
     includeActions = true,
-) {
+): Promise<boolean> {
+    const storePath = path.join(context.storePath, name);
+    const exists = fs.existsSync(storePath);
     context.conversation = await createConversation(
-        path.join(context.storePath, name),
+        storePath,
+        createConversationSettings(context.embeddingModel),
     );
     context.conversationName = name;
     context.searcher = conversation.createSearchProcessor(
@@ -136,6 +146,7 @@ export async function loadConversation(
     if (name !== "search") {
         context.searchMemory = await createSearchMemory(context);
     }
+    return exists;
 }
 
 export async function runPlayChat(): Promise<void> {
@@ -152,6 +163,7 @@ export async function runPlayChat(): Promise<void> {
         entities,
         actions,
         search,
+        searchTerms,
     };
     addStandardHandlers(handlers);
 
@@ -281,7 +293,19 @@ export async function runPlayChat(): Promise<void> {
     async function load(args: string[], io: InteractiveIo) {
         if (args.length > 0) {
             const namedArgs = parseNamedArguments(args, loadDef());
-            await loadConversation(context, namedArgs.name, namedArgs.actions);
+            if (
+                await loadConversation(
+                    context,
+                    namedArgs.name,
+                    namedArgs.actions,
+                )
+            ) {
+                printer.writeLine(`Loaded ${namedArgs.name}`);
+            } else {
+                printer.writeLine(
+                    `Created ${chalk.red("NEW")} conversation: ${namedArgs.name}`,
+                );
+            }
         } else {
             printer.writeLine(context.conversationName);
         }
@@ -896,6 +920,62 @@ export async function runPlayChat(): Promise<void> {
         }
     }
 
+    handlers.searchTerms.metadata = searchDef();
+    async function searchTerms(
+        args: string[],
+        io: InteractiveIo,
+    ): Promise<void> {
+        const timestampQ = new Date();
+        const namedArgs = parseNamedArguments(args, searchDef());
+        const maxMatches = namedArgs.maxMatches;
+        const minScore = namedArgs.minScore;
+        let query = namedArgs.query.trim();
+        if (!query || query.length === 0) {
+            return;
+        }
+        const searchOptions: conversation.SearchProcessingOptions = {
+            maxMatches,
+            minScore,
+            maxMessages: 15,
+            includeTimeRange: true,
+            combinationSetOp: knowLib.sets.SetOp.IntersectUnion,
+            actionPreprocess: (action) => printer.writeJson(action),
+        };
+        if (namedArgs.fallback) {
+            searchOptions.fallbackSearch = { maxMatches: 10 };
+        }
+        if (namedArgs.action === undefined) {
+            namedArgs.action =
+                context.searcher.searchMode !==
+                conversation.KnowledgeSearchMode.Default;
+        }
+        searchOptions.includeActions = namedArgs.action;
+        if (!namedArgs.eval) {
+            await searchNoEval(query, searchOptions);
+            return;
+        }
+
+        const result = await context.searcher.searchTerms(query, searchOptions);
+        if (!result) {
+            printer.writeError("No result");
+            return;
+        }
+        if (result.response && result.response.answer) {
+            writeResultStats(result.response);
+            if (result.response.answer.answer) {
+                const answer = result.response.answer.answer;
+                printer.writeInColor(chalk.green, answer);
+                if (namedArgs.save) {
+                    recordQuestionAnswer(query, timestampQ, answer, new Date());
+                }
+            } else if (result.response.answer.whyNoAnswer) {
+                const answer = result.response.answer.whyNoAnswer;
+                printer.writeInColor(chalk.red, answer);
+            }
+            printer.writeLine();
+        }
+    }
+
     async function searchNoEval(
         query: string,
         searchOptions: conversation.SearchProcessingOptions,
@@ -950,7 +1030,7 @@ export async function runPlayChat(): Promise<void> {
         rr: conversation.SearchActionResponse,
         debugInfo: boolean,
     ) {
-        writeResultStats(rr);
+        writeResultStats(rr.response);
         if (rr.response) {
             const action: conversation.SearchAction = rr.action;
             switch (action.actionName) {
@@ -1022,31 +1102,33 @@ export async function runPlayChat(): Promise<void> {
         }
     }
 
-    function writeResultStats(rr: conversation.SearchActionResponse): void {
-        if (rr.response !== undefined) {
-            const allTopics = rr.response.mergeAllTopics();
+    function writeResultStats(
+        response: conversation.SearchResponse | undefined,
+    ): void {
+        if (response !== undefined) {
+            const allTopics = response.mergeAllTopics();
             if (allTopics && allTopics.length > 0) {
                 printer.writeLine(`Topic Hit Count: ${allTopics.length}`);
             } else {
-                const topicIds = new Set(rr.response.allTopicIds());
+                const topicIds = new Set(response.allTopicIds());
                 printer.writeLine(`Topic Hit Count: ${topicIds.size}`);
             }
-            const allEntities = rr.response.mergeAllEntities(10);
+            const allEntities = response.mergeAllEntities(10);
             if (allEntities && allEntities.length > 0) {
                 printer.writeLine(`Entity Hit Count: ${allEntities.length}`);
             } else {
-                const entityIds = new Set(rr.response.allEntityIds());
+                const entityIds = new Set(response.allEntityIds());
                 printer.writeLine(
                     `Entity to Message Hit Count: ${entityIds.size}`,
                 );
             }
-            const allActions = [...rr.response.allActionIds()];
+            const allActions = [...response.allActionIds()];
             if (allActions && allActions.length > 0) {
                 printer.writeLine(`Action Hit Count: ${allActions.length}`);
             }
-            if (rr.response?.messages) {
+            if (response.messages) {
                 printer.writeLine(
-                    `Message Hit Count: ${rr.response.messages ? rr.response.messages.length : 0}`,
+                    `Message Hit Count: ${response.messages ? response.messages.length : 0}`,
                 );
             }
         }

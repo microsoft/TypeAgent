@@ -11,12 +11,17 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 import { SearchAction } from "./knowledgeSearchWebSchema.js";
 import { dateTime, loadSchema } from "typeagent";
 import { DateTime, DateTimeRange } from "./dateTimeSchema.js";
+import { SearchTermsAction } from "./knowledgeTermSearchSchema.js";
 
 export interface KnowledgeActionTranslator {
     translateSearch(
         userRequest: string,
         context?: PromptSection[],
     ): Promise<Result<SearchAction>>;
+    translateSearchTerms(
+        userRequest: string,
+        context?: PromptSection[],
+    ): Promise<Result<SearchTermsAction>>;
 }
 
 export enum KnowledgeSearchMode {
@@ -30,12 +35,12 @@ export function createKnowledgeActionTranslator(
     mode: KnowledgeSearchMode,
 ): KnowledgeActionTranslator {
     const typeName = "SearchAction";
-    const schema = loadSchema(
+    const searchActionSchema = loadSchema(
         ["dateTimeSchema.ts", getSchemaName(mode)],
         import.meta.url,
     );
     const validator = createTypeScriptJsonValidator<SearchAction>(
-        schema,
+        searchActionSchema,
         typeName,
     );
     const knowledgeActionTranslator = createJsonTranslator<SearchAction>(
@@ -43,8 +48,21 @@ export function createKnowledgeActionTranslator(
         validator,
     );
     knowledgeActionTranslator.createRequestPrompt = createRequestPrompt;
+
+    const searchTermsTranslator = createJsonTranslator<SearchTermsAction>(
+        model,
+        createTypeScriptJsonValidator<SearchTermsAction>(
+            loadSchema(
+                ["dateTimeSchema.ts", "knowledgeTermSearchSchema.ts"],
+                import.meta.url,
+            ),
+            "SearchTermsAction",
+        ),
+    );
+
     return {
         translateSearch,
+        translateSearchTerms,
     };
 
     async function translateSearch(
@@ -54,10 +72,17 @@ export function createKnowledgeActionTranslator(
         return knowledgeActionTranslator.translate(userRequest, context);
     }
 
+    async function translateSearchTerms(
+        userRequest: string,
+        context?: PromptSection[],
+    ): Promise<Result<SearchTermsAction>> {
+        return searchTermsTranslator.translate(userRequest, context);
+    }
+
     function createRequestPrompt(request: string) {
         return (
             `You are a service who translates user requests into a JSON object of type "${typeName}" according to the following TypeScript definitions:\n` +
-            `\`\`\`\n${schema}\`\`\`\n` +
+            `\`\`\`\n${searchActionSchema}\`\`\`\n` +
             `The following is a user request about a conversation between one or more users and assistants:\n` +
             `"""\n${request}\n"""\n\n` +
             `The following is a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
