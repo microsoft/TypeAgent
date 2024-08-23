@@ -709,6 +709,14 @@ export async function createConversation(
             );
             results.entities.push(entityResult);
         }
+        if (options.loadMessages) {
+            await resolveMessages(
+                results,
+                topicIndex,
+                entityIndex,
+                actionIndex,
+            );
+        }
         return results;
     }
 
