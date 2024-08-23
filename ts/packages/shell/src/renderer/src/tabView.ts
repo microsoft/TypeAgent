@@ -105,4 +105,14 @@ export class TabView {
             this.tabPages[j].classList.add("closedTab");
         }
     }
+
+    showTab(tabName: string) {
+        for (let j = 0; j < this.tabPages.length; j++) {
+            if (this.tabNames[j] == tabName) {
+                this.tabPages[j].classList.remove("closedTab");
+            } else {
+                this.tabPages[j].classList.add("closedTab");
+            }
+        }
+    }
 }

@@ -525,6 +525,10 @@ function zoomOut(mainWindow: BrowserWindow) {
     ShellSettings.getinstance().zoomLevel = mainWindow.webContents.zoomLevel;
 }
 
+function showDialog(dialogName: string) {
+    mainWindow?.webContents.send("show-dialog", dialogName);
+}
+
 const isMac = process.platform === "darwin";
 
 function setupZoomHandlers(mainWindow: BrowserWindow) {
@@ -591,6 +595,22 @@ function setAppMenu(mainWindow: BrowserWindow) {
             submenu: [],
         },
         {
+            id: "settingsMenu",
+            label: "Settings",
+            click: () => showDialog("Settings"),
+        },
+        {
+            id: "infoMenu",
+            label: "Info",
+            submenu: [
+                {
+                    id: "metricsMenu",
+                    label: "Show Metrics",
+                    click: () => showDialog("Metrics"),
+                }
+            ],
+        },
+        {
             id: "windowMenu",
             role: "windowMenu",
         },
@@ -599,6 +619,7 @@ function setAppMenu(mainWindow: BrowserWindow) {
             submenu: [
                 {
                     label: "Learn More",
+                    click: () => showDialog("Help"),
                 },
             ],
         },

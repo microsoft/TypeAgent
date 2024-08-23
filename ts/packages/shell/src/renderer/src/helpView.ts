@@ -13,11 +13,13 @@ export class HelpView {
                             <div>Try entering <b>@help</b> (or press F1) for a list of commands. Some commands operate on their own while
                             others require sub-commands, for example: <b>@config</b>.  To see the list of sub-commands you can run 
                             <b>@help <i>&lt;command&gt;</i></b>.</div><br/><br/>
-<!--
-                            Frequent commands:<br/><br/>
-                            <b>@clear</b> - clears all messages from the shell<br/>
-                            <b>@random</b> - Issues a random request that may or may not be serviceable depending on which domain agents are enabled.<br/>
--->                            
+
+                            Keyboard Shortcuts:<br/><br/>
+                            <b>F1</b> - show help message (<b>@help</b>).<br/>
+                            <b>F2</b> - issue random request (<b>@random</b>).<br/>
+                            <b>Alt</b> - Show menu.<br/>
+                            <b>Alt+M</b> - Start speech recognition.<br/>
+                            
                         </div>`;
     }
 

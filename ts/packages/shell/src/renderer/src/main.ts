@@ -9,6 +9,7 @@ import { SpeechInfo, recognizeOnce, selectMicrophone } from "./speech";
 import { iconHelp, iconMetrics, iconSettings } from "./icon";
 import { SettingsView } from "./settingsView";
 import { HelpView } from "./helpView";
+import { MetricsView } from "./metricsView";
 
 export function getClientAPI(): ClientAPI {
     return globalThis.api;
@@ -17,7 +18,8 @@ export function getClientAPI(): ClientAPI {
 function addEvents(
     chatView: ChatView,
     agents: Map<string, string>,
-    microphoneSelector: HTMLSelectElement,
+    settingsView: SettingsView,
+    tabsView: TabView,
 ) {
     console.log("add listen event");
     const api = getClientAPI();
@@ -127,7 +129,10 @@ function addEvents(
         chatView.addUserMessage(`@random`);
     });
     api.onMicrophoneChangeRequested((_, micId, micName) => {
-        selectMicrophone(microphoneSelector, micId, micName);
+        selectMicrophone(settingsView.microphoneSources, micId, micName);
+    });
+    api.onShowDialog((_, key) => {
+        tabsView.showTab(key);
     });
 }
 
@@ -159,8 +164,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const settingsView = new SettingsView();
     tabs.getTabContainerByName("Settings").append(settingsView.getContainer());
+    tabs.getTabContainerByName("Metrics").append(new MetricsView().getContainer());
     tabs.getTabContainerByName("Help").append(new HelpView().getContainer());
     
-    addEvents(chatView, agents, settingsView.microphoneSources);
+    addEvents(chatView, agents, settingsView, tabs);
     (window as any).electron.ipcRenderer.send("dom ready");
 });
