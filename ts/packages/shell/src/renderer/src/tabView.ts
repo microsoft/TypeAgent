@@ -6,6 +6,17 @@ export class TabView {
     private tabContainer: HTMLDivElement;
     private tabs: HTMLDivElement[];
     private tabPages: HTMLDivElement[];
+    private tabNames: string[];
+
+    getTabContainerByName(name: string) : HTMLDivElement {
+        for (let i = 0; i < this.tabPages.length; i++) {
+            if (this.tabNames[i] == name) {
+                return this.tabPages[i].firstChild as HTMLDivElement;
+            }
+        }
+
+        throw new Error("The requested tab doesn't exist.");
+    }
 
     constructor(tabNames: string[], tabIcons: HTMLElement[], tabPageIcons: HTMLElement[]) {
         this.mainContainer = document.createElement("div");
@@ -15,6 +26,7 @@ export class TabView {
 
         this.tabs = new Array(tabNames.length);
         this.tabPages = new Array(tabNames.length);
+        this.tabNames = new Array(tabNames.length);
 
         for(let i: number = 0; i < tabNames.length; i++) {
 
@@ -22,6 +34,7 @@ export class TabView {
             let tabPageDiv = document.createElement("div");
             this.tabs[i] = tabDiv;
             this.tabPages[i] = tabPageDiv;
+            this.tabNames[i] = tabNames[i];
 
             tabDiv.className = `shade shade${i}`;
 

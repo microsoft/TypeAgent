@@ -534,7 +534,7 @@ export class ChatView {
     private topDiv: HTMLDivElement;
     private messageDiv: HTMLDivElement;
     private inputContainer: HTMLDivElement;
-    private microphoneSources: HTMLSelectElement;
+    
     private groupToElements: Map<string, HTMLDivElement[]> = new Map();
     private idToMessageGroup: Map<string, MessageGroup> = new Map();
     chatInput: ChatInput;
@@ -557,10 +557,6 @@ export class ChatView {
     ) {
         this.topDiv = document.createElement("div");
         this.topDiv.className = "chat-container";
-        this.microphoneSources = document.createElement("select");
-        this.microphoneSources.id = "microphoneSources";
-        this.microphoneSources.className = "chat-input-micSelector";
-        this.topDiv.appendChild(this.microphoneSources);
         this.messageDiv = document.createElement("div");
         this.messageDiv.className = "chat scroll_enabled";
         this.chatInput = new ChatInput(
