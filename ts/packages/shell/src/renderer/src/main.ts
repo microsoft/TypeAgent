@@ -134,7 +134,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const speechInfo = new SpeechInfo();
     const agents = new Map<string, string>();
 
-    const tabs = new TabView(["Settings", "Metrics", "Help"], [iconSettings(), iconMetrics(), iconHelp()]);
+    const tabs = new TabView(["Settings", "Metrics", "Help"], [iconSettings(), iconMetrics(), iconHelp()], [iconSettings(), iconMetrics(), iconHelp()]);
     wrapper.appendChild(tabs.getContainer());
 
     document.onkeyup = (ev: KeyboardEvent ) => {

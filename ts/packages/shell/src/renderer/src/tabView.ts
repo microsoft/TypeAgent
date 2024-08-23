@@ -7,21 +7,11 @@ export class TabView {
     private tabs: HTMLDivElement[];
     private tabPages: HTMLDivElement[];
 
-    //private activeTab: HTMLDivElement | undefined;
-
-    constructor(tabNames: string[], icons: HTMLElement[]) {
+    constructor(tabNames: string[], tabIcons: HTMLElement[], tabPageIcons: HTMLElement[]) {
         this.mainContainer = document.createElement("div");
         this.tabContainer = document.createElement("div");
         this.tabContainer.className = "shadeContainer";
         this.mainContainer.append(this.tabContainer);
-
-        this.mainContainer.onkeyup = (ev: KeyboardEvent ) => {
-            if (ev.key == "Escape") {
-                // TODO: move to document
-                this.closeTabs();
-                ev.preventDefault();
-            }
-        }
 
         this.tabs = new Array(tabNames.length);
         this.tabPages = new Array(tabNames.length);
@@ -40,16 +30,18 @@ export class TabView {
             tabPageDiv.append(tabPageContents);
 
             let tabTitle = document.createElement("div");
+            tabTitle.className = "shadeTitle";
             tabTitle.innerText = tabNames[i];
+            tabIcons[i].className = "shadeIcon";
+            tabDiv.append(tabIcons[i]);
             tabDiv.append(tabTitle);
-            
+
             tabDiv.onclick = () => {
                 console.log(`${tabDiv.innerText} clicked`);
                 if (tabPageDiv.classList.contains("closedTab")) {
                     tabPageDiv.classList.remove("closedTab");
                 } else  {
                     tabPageDiv.classList.add("closedTab");
-                    //this.activeTab = tabPageDiv;
                 }
 
                 for (let j = 0; j < this.tabPages.length; j++) {
@@ -72,12 +64,11 @@ export class TabView {
 
             closeButton.onclick = () => {
                 tabPageDiv.classList.add("closedTab");
-                //this.activeTab = undefined;
             }
 
             let title = document.createElement("div");
-            icons[i].className = "shadeIcon";
-            title.append(icons[i]);
+            tabPageIcons[i].className = "tabIcon";
+            title.append(tabPageIcons[i]);
 
             let titleText = document.createElement("div");
             titleText.innerText = tabNames[i];
@@ -100,7 +91,5 @@ export class TabView {
         for (let j = 0; j < this.tabPages.length; j++) {
             this.tabPages[j].classList.add("closedTab");
         }
-
-        //this.activeTab = undefined;
     }
 }
