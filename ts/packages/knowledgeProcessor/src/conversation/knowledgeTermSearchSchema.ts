@@ -10,6 +10,10 @@ import { DateTimeRange } from "./dateTimeSchema.js";
 
 export type TermFilter = {
     // Search indexes for following terms
+    // Terms are nouns, verbs, adverbs that define entities, actions and topics
+    // - the name of an entity or thing such as "Bach", "Great Gatsby", "frog" or "piano"
+    // - the types of the entity such as "speaker", "person", "artist", "animal", "object", "instrument", "school", "room", "museum", "food" etc.
+    // - specific, inherent, defining, or non-immediate facet of an entity such as "blue", "old", "famous", "sister", "aunt_of", "weight: 4 kg"
     terms: string[];
     // Use only if request explicitly asks for time range
     timeRange?: DateTimeRange | undefined; // in this time range

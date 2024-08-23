@@ -228,7 +228,7 @@ export function createSearchProcessor(
     ): Promise<SearchResponse> {
         const topLevelTopicSummary = false;
         const topicLevel = topLevelTopicSummary ? 2 : 1;
-        const style: ResponseStyle = "Paragraph";
+        let style: ResponseStyle | undefined; //"Paragraph";
         const searchOptions: ConversationSearchOptions = {
             entity: {
                 maxMatches: options.maxMatches,
@@ -435,7 +435,7 @@ export function createSearchProcessor(
 
     async function fallbackSearch(
         query: string,
-        style: ResponseStyle,
+        style: ResponseStyle | undefined,
         response: SearchResponse,
         options: SearchOptions,
     ) {

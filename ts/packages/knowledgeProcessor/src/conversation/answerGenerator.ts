@@ -12,7 +12,7 @@ import { ResponseStyle } from "./knowledgeSearchWebSchema.js";
 export interface AnswerGenerator {
     generateAnswer(
         question: string,
-        style: ResponseStyle,
+        style: ResponseStyle | undefined,
         response: SearchResponse,
         higherPrecision: boolean,
     ): Promise<AnswerResponse | undefined>;
@@ -41,22 +41,22 @@ export function createAnswerGenerator(
 
     async function generateAnswer(
         question: string,
-        style: ResponseStyle,
+        style: ResponseStyle | undefined,
         response: SearchResponse,
         higherPrecision: boolean,
     ): Promise<AnswerResponse | undefined> {
         return generateAnswerWithModel(
             question,
-            response,
             style,
+            response,
             higherPrecision,
         );
     }
 
     async function generateAnswerWithModel(
         question: string,
+        answerStyle: ResponseStyle | undefined,
         response: SearchResponse,
-        answerStyle: ResponseStyle,
         higherPrecision: boolean,
     ): Promise<AnswerResponse | undefined> {
         const hasMessages = response.messages && response.messages.length > 0;
@@ -94,10 +94,12 @@ export function createAnswerGenerator(
             prompt +=
                 "Don't answer if the topics and entity names/types in the question are not in the conversation history.\n";
         }
-        if (answerStyle === "List") {
-            prompt += `Your answer is a readable list that uses bullet points and newlines appropriately.`;
+        if (answerStyle) {
+            if (answerStyle === "List") {
+                prompt += `Your answer is a readable list that uses bullet points and newlines appropriately.`;
+            }
         } else {
-            // prompt += `Your answer is a concise, readable, to the point, paragraph.`;
+            prompt += `Your answer is readable, with suitable formatting (line breaks, bullet points etc).`;
         }
         let contextSection: PromptSection = {
             role: "user",

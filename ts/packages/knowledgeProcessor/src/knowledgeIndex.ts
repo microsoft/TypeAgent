@@ -346,22 +346,26 @@ export async function createTextIndex<TSourceId = any>(
         minScore?: number,
     ): Promise<void> {
         maxMatches ??= 1;
+        // Check exact match first
         let postings = await get(value);
-        if (postings && postings.length > 0) {
-            hitCounter.addMultiple(postings);
-        }
+        let postingsNearest:
+            | TSourceId[]
+            | IterableIterator<TSourceId>
+            | undefined;
         if (maxMatches > 1) {
             const nearestPostings = await getNearestPostings(
                 value,
                 maxMatches,
                 minScore,
             );
-            for (const p of nearestPostings) {
-                if (p && p.length > 0) {
-                    hitCounter.addMultiple(p);
-                }
+            postingsNearest = unionMultiple(...nearestPostings);
+        } else if (!postings || postings.length === 0) {
+            const textId = await semanticIndex.nearestNeighbor(value, minScore);
+            if (textId) {
+                postingsNearest = await postingFolder.get(textId.item);
             }
         }
+        hitCounter.addMultiple(unionMultiple(postings, postingsNearest));
     }
 
     async function getNearestHitsMultiple(

@@ -294,7 +294,7 @@ export interface FrequencyTable<T> {
     get(value: T): WithFrequency<T> | undefined;
     getFrequency(value: T): number;
     add(value: T): number;
-    addMultiple(values: Iterator<T> | Array<T>): void;
+    addMultiple(values: Iterator<T> | IterableIterator<T> | Array<T>): void;
     keys(): IterableIterator<T>;
     byFrequency(): WithFrequency<T>[];
     getTop(): T[];
@@ -337,7 +337,9 @@ export function createFrequencyTable<T>(
         return freq.count;
     }
 
-    function addMultiple(values: Iterator<T> | Array<T>): void {
+    function addMultiple(
+        values: Iterator<T> | IterableIterator<T> | Array<T>,
+    ): void {
         const x: Iterator<T> = Array.isArray(values) ? values.values() : values;
         let xValue = x.next();
         while (!xValue.done) {
