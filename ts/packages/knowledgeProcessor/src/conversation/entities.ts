@@ -84,6 +84,7 @@ export interface EntitySearchOptions extends SearchOptions {
     nameSearchOptions?: SearchOptions | undefined;
     matchNameToType: boolean;
     combinationSetOp?: SetOp | undefined;
+    topK?: number;
 }
 
 export async function createEntityIndex<TSourceId = string>(
@@ -346,7 +347,7 @@ export async function createEntityIndex<TSourceId = string>(
                     options.minScore,
                 ),
             ]);
-            const entityHits = hitCounter.getTop();
+            const entityHits = hitCounter.getTopK(options.topK ?? 3);
             results.entityIds = [
                 ...intersectMultiple(
                     entityHits,

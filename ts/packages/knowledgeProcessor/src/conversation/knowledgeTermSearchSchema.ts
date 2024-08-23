@@ -8,12 +8,14 @@ import { DateTimeRange } from "./dateTimeSchema.js";
  The message sequence, and any entities, actions and topics in each message are indexed.
  */
 
+// Search indexes for following terms
 export type TermFilter = {
-    // Search indexes for following terms
-    // Terms are nouns, verbs, adverbs that define entities, actions and topics
+    // Terms are one of the following:
+    // Entity Terms:
     // - the name of an entity or thing such as "Bach", "Great Gatsby", "frog" or "piano"
-    // - the types of the entity such as "speaker", "person", "artist", "animal", "object", "instrument", "school", "room", "museum", "food" etc.
-    // - specific, inherent, defining, or non-immediate facet of an entity such as "blue", "old", "famous", "sister", "aunt_of", "weight: 4 kg"
+    // - the *type* of the entity such as "speaker", "person", "artist", "animal", "object", "instrument", "school", "room", "museum", "food" etc.
+    //   An entity can have multiple types; entity types should be single words
+    // - facets: specific, inherent, defining, or non-immediate facet of an entity such as "blue", "old", "famous", "sister", "aunt_of", "weight: 4 kg"
     terms: string[];
     // Use only if request explicitly asks for time range
     timeRange?: DateTimeRange | undefined; // in this time range

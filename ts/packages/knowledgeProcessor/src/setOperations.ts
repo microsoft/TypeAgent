@@ -298,6 +298,7 @@ export interface FrequencyTable<T> {
     keys(): IterableIterator<T>;
     byFrequency(): WithFrequency<T>[];
     getTop(): T[];
+    getTopK(k: number): T[];
 }
 
 export function createFrequencyTable<T>(
@@ -312,6 +313,7 @@ export function createFrequencyTable<T>(
         keys: () => map.keys(),
         byFrequency,
         getTop,
+        getTopK,
     };
 
     function get(value: T): WithFrequency<T> | undefined {
@@ -369,6 +371,30 @@ export function createFrequencyTable<T>(
             }
         }
         return top;
+    }
+
+    // TODO: Optimize.
+    function getTopK(k: number): T[] {
+        const byFreq = byFrequency();
+        const topK: T[] = [];
+        if (k < 1 || byFreq.length === 0) {
+            return topK;
+        }
+        // Find the k'th lowest hit count
+        let i = 0;
+        let prevFreq = byFreq[0].count;
+        let kCount = 1;
+        for (let i = 0; i < byFreq.length; ++i) {
+            if (byFreq[i].count < prevFreq) {
+                kCount++;
+                if (kCount > k) {
+                    break;
+                }
+                prevFreq = byFreq[i].count;
+            }
+            topK.push(byFreq[i].value);
+        }
+        return topK;
     }
 
     function getKey(value: T): any {
