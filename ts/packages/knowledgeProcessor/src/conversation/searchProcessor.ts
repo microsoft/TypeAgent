@@ -392,9 +392,7 @@ export function createSearchProcessor(
         ) {
             const result = await conversation.searchMessages(
                 query,
-                {
-                    maxMatches: processingOptions.maxMessages,
-                },
+                processingOptions,
                 response.messageIds,
             );
             if (result) {
