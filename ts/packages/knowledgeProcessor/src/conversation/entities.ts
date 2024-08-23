@@ -20,9 +20,11 @@ import { ExtractedEntity, knowledgeValueToString } from "./knowledge.js";
 import { TextBlock, TextBlockType } from "../text.js";
 import { EntityFilter } from "./knowledgeSearchSchema.js";
 import {
+    FrequencyTable,
     SetOp,
     WithFrequency,
     addToSet,
+    createFrequencyTable,
     intersect,
     intersectMultiple,
     intersectUnionMultiple,
@@ -62,7 +64,6 @@ export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any> {
         entities: ExtractedEntity<TSourceId>[],
         timestamp?: Date,
     ): Promise<TEntityId[]>;
-
     search(
         filter: EntityFilter,
         options: EntitySearchOptions,
@@ -316,14 +317,52 @@ export async function createEntityIndex<TSourceId = string>(
         options: EntitySearchOptions,
     ): Promise<EntitySearchResult<EntityId>> {
         const results = createSearchResults();
-        let typeMatchIds: EntityId[] | undefined;
-        let nameMatchIds: EntityId[] | IterableIterator<EntityId> | undefined;
-        let nameTypeMatchIds: EntityId[] | undefined;
         if (filter.timeRange) {
             results.temporalSequence = await sequence.getEntriesInRange(
                 toStartDate(filter.timeRange.startDate),
                 toStopDate(filter.timeRange.stopDate),
             );
+        }
+        if (filter.terms && filter.terms.length > 0) {
+            const hitCounter = createFrequencyTable<EntityId>();
+            await Promise.all([
+                nameIndex.getNearestHitsMultiple(
+                    filter.terms,
+                    hitCounter,
+                    options.nameSearchOptions?.maxMatches ?? options.maxMatches,
+                    options.nameSearchOptions?.minScore ?? options.minScore,
+                ),
+                typeIndex.getNearestHitsMultiple(
+                    filter.terms,
+                    hitCounter,
+                    options.maxMatches,
+                    options.minScore,
+                ),
+                facetIndex.getNearestHitsMultiple(
+                    filter.terms,
+                    hitCounter,
+                    options.maxMatches,
+                    options.minScore,
+                ),
+            ]);
+            const entityHits = hitCounter.getTop();
+            results.entityIds = [
+                ...intersectMultiple(
+                    entityHits,
+                    itemsFromTemporalSequence(results.temporalSequence),
+                ),
+            ];
+        }
+        if (results.entityIds && results.temporalSequence) {
+            // The temporal sequence maintains all entity ids seen at a timestamp.
+            // Since we identified specific entity ids, we remove the other ones
+            results.temporalSequence = filterTemporalSequence(
+                results.temporalSequence,
+                results.entityIds,
+            );
+        }
+        if (options.loadEntities && results.entityIds) {
+            results.entities = await getEntities(results.entityIds);
         }
         return results;
     }

@@ -16,6 +16,7 @@ import {
     removeDir,
 } from "typeagent";
 import {
+    FrequencyTable,
     SetOp,
     intersectMultiple,
     intersectUnionMultiple,
@@ -104,6 +105,18 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         maxMatches?: number,
         minScore?: number,
     ): Promise<TSourceId[]>;
+    getNearestHits(
+        value: string,
+        hitCounter: FrequencyTable<TSourceId>,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<void>;
+    getNearestHitsMultiple(
+        values: string[],
+        hitCounter: FrequencyTable<TSourceId>,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<void>;
     getNearestMultiple(
         values: string[],
         combineOp: SetOp,
@@ -181,6 +194,8 @@ export async function createTextIndex<TSourceId = any>(
         put,
         putMultiple,
         getNearest,
+        getNearestHits,
+        getNearestHitsMultiple,
         getNearestMultiple,
         getNearestText,
         getNearestTextMultiple,
@@ -308,15 +323,10 @@ export async function createTextIndex<TSourceId = any>(
         let postings = await get(value);
         let postingsNearest: TSourceId[] | undefined;
         if (maxMatches > 1) {
-            const nearestText = await semanticIndex.nearestNeighbors(
+            const nearestPostings = await getNearestPostings(
                 value,
                 maxMatches,
                 minScore,
-            );
-            const nearestPostings = await asyncArray.mapAsync(
-                nearestText,
-                settings.concurrency,
-                (m) => postingFolder.get(m.item),
             );
             postingsNearest = [...unionMultiple(...nearestPostings)];
         } else if (!postings || postings.length === 0) {
@@ -327,6 +337,42 @@ export async function createTextIndex<TSourceId = any>(
         }
         postings = unionArrays(postings, postingsNearest);
         return postings ?? [];
+    }
+
+    async function getNearestHits(
+        value: string,
+        hitCounter: FrequencyTable<TSourceId>,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<void> {
+        maxMatches ??= 1;
+        let postings = await get(value);
+        if (postings && postings.length > 0) {
+            hitCounter.addMultiple(postings);
+        }
+        if (maxMatches > 1) {
+            const nearestPostings = await getNearestPostings(
+                value,
+                maxMatches,
+                minScore,
+            );
+            for (const p of nearestPostings) {
+                if (p && p.length > 0) {
+                    hitCounter.addMultiple(p);
+                }
+            }
+        }
+    }
+
+    async function getNearestHitsMultiple(
+        values: string[],
+        hitCounter: FrequencyTable<TSourceId>,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<void> {
+        return asyncArray.forEachAsync(values, settings.concurrency, (v) =>
+            getNearestHits(v, hitCounter, maxMatches, minScore),
+        );
     }
 
     async function getNearestMultiple(
@@ -470,6 +516,22 @@ export async function createTextIndex<TSourceId = any>(
             }
         }
         return map;
+    }
+
+    async function getNearestPostings(
+        value: string,
+        maxMatches?: number,
+        minScore?: number,
+    ) {
+        maxMatches ??= 1;
+        const nearestText = await semanticIndex.nearestNeighbors(
+            value,
+            maxMatches,
+            minScore,
+        );
+        return asyncArray.mapAsync(nearestText, settings.concurrency, (m) =>
+            postingFolder.get(m.item),
+        );
     }
 
     function textToId(

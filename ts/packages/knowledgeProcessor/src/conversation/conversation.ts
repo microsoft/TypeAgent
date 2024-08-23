@@ -43,7 +43,12 @@ import {
 import { Filter, SearchAction } from "./knowledgeSearchWebSchema.js";
 import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
-import { intersectSets, unionSets, uniqueFrom } from "../setOperations.js";
+import {
+    createFrequencyTable,
+    intersectSets,
+    unionSets,
+    uniqueFrom,
+} from "../setOperations.js";
 import { getRangeOfTemporalSequence } from "../temporal.js";
 import { Action, ConcreteEntity } from "./knowledgeSchema.js";
 import { MessageIndex, createMessageIndex } from "./messages.js";
@@ -140,7 +145,10 @@ export interface Conversation<
         filters: Filter[],
         options: ConversationSearchOptions,
     ): Promise<SearchResponse>;
-    searchTerms(filters: TermFilter[]): Promise<SearchResponse>;
+    searchTerms(
+        filters: TermFilter[],
+        options: ConversationSearchOptions,
+    ): Promise<SearchResponse>;
     searchMessages(
         query: string,
         options: SearchOptions,
@@ -684,8 +692,19 @@ export async function createConversation(
         return results;
     }
 
-    async function searchTerms(filters: TermFilter[]): Promise<SearchResponse> {
+    async function searchTerms(
+        filters: TermFilter[],
+        options: ConversationSearchOptions,
+    ): Promise<SearchResponse> {
+        const [entityIndex, topicIndex, actionIndex] = await Promise.all([
+            getEntityIndex(),
+            getTopicsIndex(options.topicLevel),
+            getActionIndex(),
+        ]);
         const results = createSearchResponse<MessageId, TopicId, EntityId>();
+        for (const filter of filters) {
+            await entityIndex.searchTerms(filter, options.entity);
+        }
         return results;
     }
 
