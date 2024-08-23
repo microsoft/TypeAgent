@@ -6,13 +6,13 @@ import { PromptSection } from "typechat";
 import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
 import { flatten } from "../setOperations.js";
-import { SearchActionResponse, SearchResponse } from "./conversation.js";
-import { GetAnswerAction, ResponseStyle } from "./knowledgeSearchSchema.js";
+import { SearchResponse } from "./conversation.js";
+import { ResponseStyle } from "./knowledgeSearchWebSchema.js";
 
 export interface AnswerGenerator {
     generateAnswer(
         question: string,
-        action: GetAnswerAction,
+        style: ResponseStyle | undefined,
         response: SearchResponse,
         higherPrecision: boolean,
     ): Promise<AnswerResponse | undefined>;
@@ -41,26 +41,22 @@ export function createAnswerGenerator(
 
     async function generateAnswer(
         question: string,
-        action: GetAnswerAction,
+        style: ResponseStyle | undefined,
         response: SearchResponse,
         higherPrecision: boolean,
     ): Promise<AnswerResponse | undefined> {
-        if (returnTopicList(action, response)) {
-            return generateTopicList(response);
-        }
-
         return generateAnswerWithModel(
             question,
+            style,
             response,
-            action.parameters.responseStyle,
             higherPrecision,
         );
     }
 
     async function generateAnswerWithModel(
         question: string,
+        answerStyle: ResponseStyle | undefined,
         response: SearchResponse,
-        answerStyle: ResponseStyle,
         higherPrecision: boolean,
     ): Promise<AnswerResponse | undefined> {
         const hasMessages = response.messages && response.messages.length > 0;
@@ -98,10 +94,12 @@ export function createAnswerGenerator(
             prompt +=
                 "Don't answer if the topics and entity names/types in the question are not in the conversation history.\n";
         }
-        if (answerStyle === "List") {
-            prompt += `Your answer is a readable list that uses bullet points and newlines appropriately.`;
+        if (answerStyle) {
+            if (answerStyle === "List") {
+                prompt += `Your answer is a readable list that uses bullet points and newlines appropriately.`;
+            }
         } else {
-            // prompt += `Your answer is a concise, readable, to the point, paragraph.`;
+            prompt += `Your answer is readable, with suitable formatting (line breaks, bullet points etc).`;
         }
         let contextSection: PromptSection = {
             role: "user",
@@ -109,42 +107,5 @@ export function createAnswerGenerator(
         };
         const result = await translator.translate(prompt, [contextSection]);
         return result.success ? result.data : undefined;
-    }
-
-    function returnTopicList(
-        action: GetAnswerAction,
-        response: SearchResponse,
-    ): boolean {
-        /*
-        const params = action.parameters;
-        return (
-            params.responseStyle === "List" &&
-            params.select.length === 1 &&
-            params.select[0] === "Topics" &&
-            response.topics.length > 0
-        );
-        */
-        return false;
-    }
-
-    function generateTopicList(response: SearchResponse): AnswerResponse {
-        let answer = "Here is some of what we talked about:\n";
-        for (const topicResponse of response.topics) {
-            if (topicResponse.topics && topicResponse.topics.length > 0) {
-                answer += toBulletList(topicResponse.topics);
-            }
-        }
-        return {
-            type: "Answered",
-            answer,
-        };
-    }
-
-    function toBulletList(values: string[]): string {
-        let text = "";
-        for (const value of values) {
-            text += "• " + value + "\n";
-        }
-        return text;
     }
 }
