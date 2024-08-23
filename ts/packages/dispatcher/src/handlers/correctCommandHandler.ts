@@ -14,7 +14,7 @@ export class CorrectCommandHandler implements CommandHandler {
         if (context.lastExplanation === undefined) {
             throw new Error("No last explanation to correct");
         }
-        const result = await context.agentCache.correctExplaination(
+        const result = await context.agentCache.correctExplanation(
             context.lastRequestAction,
             context.lastExplanation,
             input,
