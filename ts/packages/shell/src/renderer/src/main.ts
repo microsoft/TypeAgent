@@ -5,7 +5,7 @@
 import { ClientAPI } from "../../preload/electronTypes";
 import { ChatView } from "./chatView";
 import { TabView } from "./tabView";
-import { SpeechInfo, recognizeOnce } from "./speech";
+import { SpeechInfo, recognizeOnce, selectMicrophone } from "./speech";
 import { iconHelp, iconMetrics, iconSettings } from "./icon";
 import { SettingsView } from "./settingsView";
 
