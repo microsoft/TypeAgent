@@ -44,12 +44,20 @@
     animation: retract 0.1s ease-out 0s forwards;
 }
 
+.shade .shadeIcon {
+    display: none;
+}
+
 .shade:hover {
     cursor: pointer;    
     font-size: 12px;
     vertical-align: middle;
 
     animation: extend 0.1s ease-out 0s forwards;
+}
+
+.shade:hover .shadeIcon {
+    display: inline-block;
 }
 
 .shadeIcon {    
