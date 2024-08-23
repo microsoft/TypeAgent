@@ -16,6 +16,9 @@ export type TermFilter = {
     // - the *type* of the entity such as "speaker", "person", "artist", "animal", "object", "instrument", "school", "room", "museum", "food" etc.
     //   An entity can have multiple types; entity types should be single words
     // - facets: specific, inherent, defining, or non-immediate facet of an entity such as "blue", "old", "famous", "sister", "aunt_of", "weight: 4 kg"
+    // Action Terms:
+    // - verbs
+    // - subject, object, indirectObject
     terms: string[];
     // Use only if request explicitly asks for time range
     timeRange?: DateTimeRange | undefined; // in this time range
