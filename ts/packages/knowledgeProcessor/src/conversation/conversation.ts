@@ -703,7 +703,11 @@ export async function createConversation(
         ]);
         const results = createSearchResponse<MessageId, TopicId, EntityId>();
         for (const filter of filters) {
-            await entityIndex.searchTerms(filter, options.entity);
+            const entityResult = await entityIndex.searchTerms(
+                filter,
+                options.entity,
+            );
+            results.entities.push(entityResult);
         }
         return results;
     }

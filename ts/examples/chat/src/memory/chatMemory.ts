@@ -17,6 +17,7 @@ import chalk from "chalk";
 import { PlayPrinter } from "./chatMemoryPrinter.js";
 import { timestampBlocks } from "./importer.js";
 import path from "path";
+import fs from "fs";
 
 export type ChatContext = {
     storePath: string;
@@ -126,9 +127,11 @@ export async function loadConversation(
     context: ChatContext,
     name: string,
     includeActions = true,
-) {
+): Promise<boolean> {
+    const storePath = path.join(context.storePath, name);
+    const exists = fs.existsSync(storePath);
     context.conversation = await createConversation(
-        path.join(context.storePath, name),
+        storePath,
         createConversationSettings(context.embeddingModel),
     );
     context.conversationName = name;
@@ -143,6 +146,7 @@ export async function loadConversation(
     if (name !== "search") {
         context.searchMemory = await createSearchMemory(context);
     }
+    return exists;
 }
 
 export async function runPlayChat(): Promise<void> {
@@ -289,7 +293,19 @@ export async function runPlayChat(): Promise<void> {
     async function load(args: string[], io: InteractiveIo) {
         if (args.length > 0) {
             const namedArgs = parseNamedArguments(args, loadDef());
-            await loadConversation(context, namedArgs.name, namedArgs.actions);
+            if (
+                await loadConversation(
+                    context,
+                    namedArgs.name,
+                    namedArgs.actions,
+                )
+            ) {
+                printer.writeLine(`Loaded ${namedArgs.name}`);
+            } else {
+                printer.writeLine(
+                    `Created ${chalk.red("NEW")} conversation: ${namedArgs.name}`,
+                );
+            }
         } else {
             printer.writeLine(context.conversationName);
         }
@@ -945,6 +961,7 @@ export async function runPlayChat(): Promise<void> {
             return;
         }
         if (result.response && result.response.answer) {
+            writeResultStats(result.response);
             if (result.response.answer.answer) {
                 const answer = result.response.answer.answer;
                 printer.writeInColor(chalk.green, answer);
@@ -1013,7 +1030,7 @@ export async function runPlayChat(): Promise<void> {
         rr: conversation.SearchActionResponse,
         debugInfo: boolean,
     ) {
-        writeResultStats(rr);
+        writeResultStats(rr.response);
         if (rr.response) {
             const action: conversation.SearchAction = rr.action;
             switch (action.actionName) {
@@ -1085,31 +1102,33 @@ export async function runPlayChat(): Promise<void> {
         }
     }
 
-    function writeResultStats(rr: conversation.SearchActionResponse): void {
-        if (rr.response !== undefined) {
-            const allTopics = rr.response.mergeAllTopics();
+    function writeResultStats(
+        response: conversation.SearchResponse | undefined,
+    ): void {
+        if (response !== undefined) {
+            const allTopics = response.mergeAllTopics();
             if (allTopics && allTopics.length > 0) {
                 printer.writeLine(`Topic Hit Count: ${allTopics.length}`);
             } else {
-                const topicIds = new Set(rr.response.allTopicIds());
+                const topicIds = new Set(response.allTopicIds());
                 printer.writeLine(`Topic Hit Count: ${topicIds.size}`);
             }
-            const allEntities = rr.response.mergeAllEntities(10);
+            const allEntities = response.mergeAllEntities(10);
             if (allEntities && allEntities.length > 0) {
                 printer.writeLine(`Entity Hit Count: ${allEntities.length}`);
             } else {
-                const entityIds = new Set(rr.response.allEntityIds());
+                const entityIds = new Set(response.allEntityIds());
                 printer.writeLine(
                     `Entity to Message Hit Count: ${entityIds.size}`,
                 );
             }
-            const allActions = [...rr.response.allActionIds()];
+            const allActions = [...response.allActionIds()];
             if (allActions && allActions.length > 0) {
                 printer.writeLine(`Action Hit Count: ${allActions.length}`);
             }
-            if (rr.response?.messages) {
+            if (response.messages) {
                 printer.writeLine(
-                    `Message Hit Count: ${rr.response.messages ? rr.response.messages.length : 0}`,
+                    `Message Hit Count: ${response.messages ? response.messages.length : 0}`,
                 );
             }
         }
