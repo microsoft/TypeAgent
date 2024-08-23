@@ -708,6 +708,13 @@ export async function createConversation(
                 options.entity,
             );
             results.entities.push(entityResult);
+            if (options.action) {
+                const actionResult = await actionIndex.searchTerms(
+                    filter,
+                    options.action,
+                );
+                results.actions.push(actionResult);
+            }
         }
         if (options.loadMessages) {
             await resolveMessages(

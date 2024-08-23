@@ -20,7 +20,6 @@ import { ExtractedEntity, knowledgeValueToString } from "./knowledge.js";
 import { TextBlock, TextBlockType } from "../text.js";
 import { EntityFilter } from "./knowledgeSearchSchema.js";
 import {
-    FrequencyTable,
     SetOp,
     WithFrequency,
     addToSet,
