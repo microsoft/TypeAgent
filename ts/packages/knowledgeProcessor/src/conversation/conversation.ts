@@ -58,7 +58,7 @@ import {
     ActionSearchResult,
     createActionIndex,
 } from "./actions.js";
-import { TermFilter } from "./knowledgeTermSearchSchema.js";
+import { SearchTermsAction, TermFilter } from "./knowledgeTermSearchSchema.js";
 
 export interface RecentItems<T> {
     readonly entries: collections.CircularArray<T>;
@@ -892,5 +892,10 @@ export async function createConversationManager(
 
 export type SearchActionResponse = {
     action: SearchAction;
+    response?: SearchResponse | undefined;
+};
+
+export type SearchTermsActionResponse = {
+    action: SearchTermsAction;
     response?: SearchResponse | undefined;
 };

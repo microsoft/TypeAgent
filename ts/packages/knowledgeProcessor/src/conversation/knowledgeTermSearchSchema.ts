@@ -15,7 +15,7 @@ export type TermFilter = {
     timeRange?: DateTimeRange | undefined; // in this time range
 };
 
-export type MemoryAnswerAction = {
+export type GetAnswerWithTermsAction = {
     actionName: "getAnswer";
     parameters: {
         filters: TermFilter[];
@@ -26,4 +26,4 @@ export type UnknownSearchAction = {
     actionName: "unknown";
 };
 
-export type MemorySearchAction = MemoryAnswerAction | UnknownSearchAction;
+export type SearchTermsAction = GetAnswerWithTermsAction | UnknownSearchAction;

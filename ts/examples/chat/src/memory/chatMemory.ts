@@ -159,6 +159,7 @@ export async function runPlayChat(): Promise<void> {
         entities,
         actions,
         search,
+        searchTerms,
     };
     addStandardHandlers(handlers);
 
@@ -900,6 +901,61 @@ export async function runPlayChat(): Promise<void> {
                     recordQuestionAnswer(query, timestampQ, answer, timestampA);
                 }
             }
+        }
+    }
+
+    handlers.searchTerms.metadata = searchDef();
+    async function searchTerms(
+        args: string[],
+        io: InteractiveIo,
+    ): Promise<void> {
+        const timestampQ = new Date();
+        const namedArgs = parseNamedArguments(args, searchDef());
+        const maxMatches = namedArgs.maxMatches;
+        const minScore = namedArgs.minScore;
+        let query = namedArgs.query.trim();
+        if (!query || query.length === 0) {
+            return;
+        }
+        const searchOptions: conversation.SearchProcessingOptions = {
+            maxMatches,
+            minScore,
+            maxMessages: 15,
+            includeTimeRange: true,
+            combinationSetOp: knowLib.sets.SetOp.IntersectUnion,
+            actionPreprocess: (action) => printer.writeJson(action),
+        };
+        if (namedArgs.fallback) {
+            searchOptions.fallbackSearch = { maxMatches: 10 };
+        }
+        if (namedArgs.action === undefined) {
+            namedArgs.action =
+                context.searcher.searchMode !==
+                conversation.KnowledgeSearchMode.Default;
+        }
+        searchOptions.includeActions = namedArgs.action;
+        if (!namedArgs.eval) {
+            await searchNoEval(query, searchOptions);
+            return;
+        }
+
+        const result = await context.searcher.searchTerms(query, searchOptions);
+        if (!result) {
+            printer.writeError("No result");
+            return;
+        }
+        if (result.response && result.response.answer) {
+            if (result.response.answer.answer) {
+                const answer = result.response.answer.answer;
+                printer.writeInColor(chalk.green, answer);
+                if (namedArgs.save) {
+                    recordQuestionAnswer(query, timestampQ, answer, new Date());
+                }
+            } else if (result.response.answer.whyNoAnswer) {
+                const answer = result.response.answer.whyNoAnswer;
+                printer.writeInColor(chalk.red, answer);
+            }
+            printer.writeLine();
         }
     }
 

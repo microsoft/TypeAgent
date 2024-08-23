@@ -6,13 +6,13 @@ import { PromptSection } from "typechat";
 import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
 import { flatten } from "../setOperations.js";
-import { SearchActionResponse, SearchResponse } from "./conversation.js";
-import { GetAnswerAction, ResponseStyle } from "./knowledgeSearchSchema.js";
+import { SearchResponse } from "./conversation.js";
+import { ResponseStyle } from "./knowledgeSearchWebSchema.js";
 
 export interface AnswerGenerator {
     generateAnswer(
         question: string,
-        action: GetAnswerAction,
+        style: ResponseStyle,
         response: SearchResponse,
         higherPrecision: boolean,
     ): Promise<AnswerResponse | undefined>;
@@ -41,18 +41,14 @@ export function createAnswerGenerator(
 
     async function generateAnswer(
         question: string,
-        action: GetAnswerAction,
+        style: ResponseStyle,
         response: SearchResponse,
         higherPrecision: boolean,
     ): Promise<AnswerResponse | undefined> {
-        if (returnTopicList(action, response)) {
-            return generateTopicList(response);
-        }
-
         return generateAnswerWithModel(
             question,
             response,
-            action.parameters.responseStyle,
+            style,
             higherPrecision,
         );
     }
@@ -109,42 +105,5 @@ export function createAnswerGenerator(
         };
         const result = await translator.translate(prompt, [contextSection]);
         return result.success ? result.data : undefined;
-    }
-
-    function returnTopicList(
-        action: GetAnswerAction,
-        response: SearchResponse,
-    ): boolean {
-        /*
-        const params = action.parameters;
-        return (
-            params.responseStyle === "List" &&
-            params.select.length === 1 &&
-            params.select[0] === "Topics" &&
-            response.topics.length > 0
-        );
-        */
-        return false;
-    }
-
-    function generateTopicList(response: SearchResponse): AnswerResponse {
-        let answer = "Here is some of what we talked about:\n";
-        for (const topicResponse of response.topics) {
-            if (topicResponse.topics && topicResponse.topics.length > 0) {
-                answer += toBulletList(topicResponse.topics);
-            }
-        }
-        return {
-            type: "Answered",
-            answer,
-        };
-    }
-
-    function toBulletList(values: string[]): string {
-        let text = "";
-        for (const value of values) {
-            text += "• " + value + "\n";
-        }
-        return text;
     }
 }
