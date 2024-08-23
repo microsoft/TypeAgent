@@ -288,9 +288,11 @@ body {
 }
 
 .chat-input-micSelector {
-  border: none;
-  align-self: flex-end;
-  background-color: transparent;
+  border: 0px;
+  margin-left: 25px;
+  background-color: white;
+  width: 100%;
+  max-width: 85%;
 }
 
 .chat-timestamp {
@@ -480,4 +482,22 @@ span.ansi-bright-white-fg {
 
 .clickable {
   cursor: pointer;
+}
+
+.metrics {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  max-height: 90%;
+  margin-left: 20px;
+}
+
+.metric-row {
+  display: flex;
+  margin-left: 10px;
+  margin-bottom: 10px;
+}
+
+.metric-label {
+  margin-right: 5px;
 }
