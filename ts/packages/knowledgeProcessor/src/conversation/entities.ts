@@ -197,6 +197,7 @@ export async function createEntityIndex<TSourceId = string>(
             addTypes(extractedEntity.value.type, sourceIds),
             addFacets(extractedEntity.value.facets, sourceIds),
         ]);
+
         return entityId;
     }
 
@@ -213,18 +214,18 @@ export async function createEntityIndex<TSourceId = string>(
         );
     }
 
-    async function addName(name: string, entityIds: EntityId[]): Promise<void> {
-        await nameIndex.put(name, entityIds);
+    async function addName(name: string, sourceIds: EntityId[]): Promise<void> {
+        await nameIndex.put(name, sourceIds);
     }
 
     async function addTypes(
         type: string[],
-        entityIds: EntityId[],
+        sourceIds: EntityId[],
     ): Promise<void> {
         const typeEntries: TextBlock[] = type.map((t) => {
             return {
                 value: t,
-                entityIds,
+                sourceIds,
                 type: TextBlockType.Word,
             };
         });
@@ -233,13 +234,13 @@ export async function createEntityIndex<TSourceId = string>(
 
     async function addFacets(
         facets: Facet[] | undefined,
-        entityIds: EntityId[],
+        sourceIds: EntityId[],
     ) {
         if (facets && facets.length > 0) {
             const facetEntries: TextBlock[] = facets.map((f) => {
                 return {
                     value: facetToString(f),
-                    entityIds,
+                    sourceIds,
                     type: TextBlockType.Word,
                 };
             });
