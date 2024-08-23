@@ -8,6 +8,7 @@ import { TabView } from "./tabView";
 import { SpeechInfo, recognizeOnce, selectMicrophone } from "./speech";
 import { iconHelp, iconMetrics, iconSettings } from "./icon";
 import { SettingsView } from "./settingsView";
+import { HelpView } from "./helpView";
 
 export function getClientAPI(): ClientAPI {
     return globalThis.api;
@@ -157,8 +158,8 @@ document.addEventListener("DOMContentLoaded", function () {
     wrapper.appendChild(chatView.getMessageElm());
 
     const settingsView = new SettingsView();
-    const settingsTab = tabs.getTabContainerByName("Settings");
-    settingsTab.append(settingsView.getContainer());
+    tabs.getTabContainerByName("Settings").append(settingsView.getContainer());
+    tabs.getTabContainerByName("Help").append(new HelpView().getContainer());
     
     addEvents(chatView, agents, settingsView.microphoneSources);
     (window as any).electron.ipcRenderer.send("dom ready");
