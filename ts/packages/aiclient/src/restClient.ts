@@ -4,6 +4,7 @@
 import { success, error, Result } from "typechat";
 import registerDebug from "debug";
 
+const debugUrl = registerDebug("typeagent:rest:url");
 const debugHeader = registerDebug("typeagent:rest:header");
 
 /**
@@ -255,6 +256,7 @@ async function fetchWithTimeout(
     options?: RequestInit,
     timeoutMs?: number,
 ): Promise<Response> {
+    debugUrl(url);
     if (!timeoutMs || timeoutMs <= 0) {
         return fetch(url, options);
     }

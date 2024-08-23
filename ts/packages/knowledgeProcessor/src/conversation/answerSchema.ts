@@ -9,7 +9,7 @@ export type AnswerResponse = {
     // use "NoAnswer" if no answer found in the conversation history
     type: AnswerRelevance;
     // the answer to display if the conversation history can be used to answer the user's question
-    answer?: string;
+    answer?: string | undefined;
     // If NoAnswer, explain why..
     // particularly explain why you didn't use any supplied entities
     whyNoAnswer?: string;

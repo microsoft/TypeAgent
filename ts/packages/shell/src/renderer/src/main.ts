@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+//import { ShellSettings } from "../../main/shellSettings";
 import { ClientAPI } from "../../preload/electronTypes";
 import { ChatView } from "./chatView";
 import { TabView } from "./tabView";
@@ -12,7 +13,11 @@ export function getClientAPI(): ClientAPI {
     return globalThis.api;
 }
 
-function addEvents(chatView: ChatView, agents: Map<string, string>) {
+function addEvents(
+    chatView: ChatView,
+    agents: Map<string, string>,
+    microphoneSelector: HTMLSelectElement,
+) {
     console.log("add listen event");
     const api = getClientAPI();
     api.onListenEvent((_, name, token, useLocalWhisper) => {
@@ -120,6 +125,9 @@ function addEvents(chatView: ChatView, agents: Map<string, string>) {
         console.log(`User asked for a random message via ${key}`);
         chatView.addUserMessage(`@random`);
     });
+    api.onMicrophoneChangeRequested((_, micId, micName) => {
+        selectMicrophone(microphoneSelector, micId, micName);
+    });
 }
 
 export class IdGenerator {
@@ -152,6 +160,6 @@ document.addEventListener("DOMContentLoaded", function () {
     const settingsTab = tabs.getTabContainerByName("Settings");
     settingsTab.append(settingsView.getContainer());
     
-    addEvents(chatView, agents);
+    addEvents(chatView, agents, settingsView.microphoneSources);
     (window as any).electron.ipcRenderer.send("dom ready");
 });

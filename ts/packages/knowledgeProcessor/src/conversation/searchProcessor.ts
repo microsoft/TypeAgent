@@ -1,20 +1,23 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SearchOptions } from "typeagent";
+import { SearchOptions, lookupAnswersOnWeb } from "typeagent";
 import {
     Conversation,
     ConversationSearchOptions,
     SearchActionResponse,
     SearchResponse,
+    createSearchResponse,
 } from "./conversation.js";
 import {
     Filter,
     GetAnswerAction,
     SearchAction,
-} from "./knowledgeSearchSchema.js";
+    WebLookupAction,
+} from "./knowledgeSearchWebSchema.js";
 import { SetOp } from "../setOperations.js";
 import {
+    KnowledgeSearchMode,
     KnowledgeActionTranslator,
     createKnowledgeActionTranslator,
 } from "./knowledgeActions.js";
@@ -34,6 +37,7 @@ export type SearchProcessingOptions = {
 };
 
 export interface ConversationSearchProcessor {
+    searchMode: KnowledgeSearchMode;
     actions: KnowledgeActionTranslator;
     answers: AnswerGenerator;
     search(
@@ -50,20 +54,21 @@ export function createSearchProcessor(
     conversation: Conversation,
     actionModel: ChatModel,
     answerModel: ChatModel,
-    includeActions: boolean = true,
+    searchMode: KnowledgeSearchMode = KnowledgeSearchMode.Default,
 ): ConversationSearchProcessor {
-    const searchActions = createKnowledgeActionTranslator(
+    const searchTranslator = createKnowledgeActionTranslator(
         actionModel,
-        includeActions, // Whether to include actions in most defaults
+        searchMode,
     );
-    const searchActions_NoActions = createKnowledgeActionTranslator(
+    const searchTranslator_NoActions = createKnowledgeActionTranslator(
         actionModel,
-        false,
+        KnowledgeSearchMode.Default,
     );
     const answers = createAnswerGenerator(answerModel);
 
     return {
-        actions: searchActions,
+        searchMode,
+        actions: searchTranslator,
         answers,
         search,
         buildContext,
@@ -75,8 +80,8 @@ export function createSearchProcessor(
     ): Promise<SearchActionResponse | undefined> {
         const context = await buildContext(options);
         const actionResult = options.includeActions
-            ? await searchActions.translateSearch(query, context)
-            : await searchActions_NoActions.translateSearch(query, context);
+            ? await searchTranslator.translateSearch(query, context)
+            : await searchTranslator_NoActions.translateSearch(query, context);
         if (!actionResult.success) {
             return undefined;
         }
@@ -92,6 +97,9 @@ export function createSearchProcessor(
                 break;
             case "getAnswer":
                 rr.response = await handleGetAnswers(query, rr.action, options);
+                break;
+            case "webLookup":
+                rr.response = await handleLookup(query, rr.action, options);
                 break;
         }
 
@@ -159,7 +167,7 @@ export function createSearchProcessor(
             action.parameters.filters,
             searchOptions,
         );
-        await adjustResponse(query, action, response, options);
+        await adjustResponse(query, action, response, searchOptions, options);
         response.answer = await answers.generateAnswer(
             query,
             action,
@@ -167,8 +175,6 @@ export function createSearchProcessor(
             false,
         );
         if (response.answer?.type === "NoAnswer" && options.fallbackSearch) {
-            //response.entities = [];
-            //response.topics = [];
             // Try an approximate match
             const sResult = await conversation.searchMessages(
                 query,
@@ -185,6 +191,29 @@ export function createSearchProcessor(
                 );
             }
         }
+        return response;
+    }
+
+    async function handleLookup(
+        query: string,
+        lookup: WebLookupAction,
+        options: SearchProcessingOptions,
+    ): Promise<SearchResponse> {
+        const answer = await lookupAnswersOnWeb(
+            answerModel,
+            query,
+            options.maxMatches,
+            {
+                maxCharsPerChunk: 4096,
+                maxTextLengthToSearch: 4096 * 16,
+                rewriteForReadability: false,
+            },
+        );
+        const response = createSearchResponse(1);
+        response.answer = {
+            type: answer.answer.type === "NoAnswer" ? "NoAnswer" : "Answered",
+            answer: answer.answer.answer,
+        };
         return response;
     }
 
@@ -251,7 +280,8 @@ export function createSearchProcessor(
         query: string,
         action: GetAnswerAction,
         response: SearchResponse,
-        options: SearchProcessingOptions,
+        options: ConversationSearchOptions,
+        processingOptions: SearchProcessingOptions,
     ): Promise<void> {
         if (
             action.parameters.responseType == "Topics" &&
@@ -260,27 +290,30 @@ export function createSearchProcessor(
             await ensureEntitiesLoaded(response);
         }
         if (
-            response.messages &&
-            response.messages.length > options.maxMessages
+            (!response.messages &&
+                options.loadMessages &&
+                processingOptions.fallbackSearch) ||
+            (response.messages &&
+                response.messages.length > processingOptions.maxMessages)
         ) {
             const result = await conversation.searchMessages(
                 query,
                 {
-                    maxMatches: options.maxMessages,
+                    maxMatches: processingOptions.maxMessages,
                 },
                 response.messageIds,
             );
             if (result) {
                 response.messageIds = result.messageIds;
                 response.messages = result.messages;
-            } else {
+            } else if (response.messages) {
                 response.messageIds = response.messageIds!.slice(
                     0,
-                    options.maxMessages,
+                    processingOptions.maxMessages,
                 );
                 response.messages = response.messages.slice(
                     0,
-                    options.maxMessages,
+                    processingOptions.maxMessages,
                 );
             }
         }

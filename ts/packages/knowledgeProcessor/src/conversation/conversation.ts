@@ -40,7 +40,7 @@ import {
     KnowledgeExtractor,
     extractKnowledgeFromBlock,
 } from "./knowledge.js";
-import { Filter, SearchAction } from "./knowledgeSearchSchema.js";
+import { Filter, SearchAction } from "./knowledgeSearchWebSchema.js";
 import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
 import { intersectSets, unionSets, uniqueFrom } from "../setOperations.js";
@@ -53,6 +53,7 @@ import {
     ActionSearchResult,
     createActionIndex,
 } from "./actions.js";
+import { SearchProcessingOptions } from "./searchProcessor.js";
 
 export interface RecentItems<T> {
     readonly entries: collections.CircularArray<T>;
@@ -745,9 +746,10 @@ export async function createConversation(
         entityMessageIds = intersectSets(entityMessageIds, actionMessageIds);
         let messageIds = intersectSets(topicMessageIds, entityMessageIds);
         if (!messageIds || messageIds.size === 0) {
-            // If nothing in common, try a union.
             //messageIds = topicMessageIds;
+            // If nothing in common, try a union.
             messageIds = unionSets(topicMessageIds, entityMessageIds);
+            //messageIds = intersectUnionSets(topicMessageIds, entityMessageIds);
         }
         if (messageIds && messageIds.size > 0) {
             results.messageIds = [...messageIds.values()].sort();

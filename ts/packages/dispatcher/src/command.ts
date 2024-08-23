@@ -287,9 +287,25 @@ export function getSettingSummary(context: CommandHandlerContext) {
         ).values(),
     );
     prompt.push("  [", translators.join(""));
-    if (context.agentCache.explainerName !== getDefaultExplainerName()) {
-        prompt.push(` (explainer: ${context.agentCache.explainerName})`);
+    if (context.session.getConfig().models.translator !== "") {
+        prompt.push(
+            ` (model: ${context.session.getConfig().models.translator})`,
+        );
     }
+    if (context.agentCache.explainerName !== getDefaultExplainerName()) {
+        prompt.push(` (explainer: ${context.agentCache.explainerName}`);
+        if (context.session.getConfig().models.explainer !== "") {
+            prompt.push(
+                ` model: ${context.session.getConfig().models.translator}`,
+            );
+        }
+        prompt.push(")");
+    } else if (context.session.getConfig().models.explainer !== "") {
+        prompt.push(
+            ` (explainer model: ${context.session.getConfig().models.explainer})`,
+        );
+    }
+
     prompt.push("]");
 
     return prompt.join("");

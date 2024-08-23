@@ -226,7 +226,7 @@ async function translateRequestWithTranslator(
         ? (prop: string, value: any, partial: boolean) => {
               // TODO: implemented for chat's generate response.
               // Need to design the interface for agents to use streaming
-              if (prop === "actionName") {
+              if (prop === "actionName" && !partial) {
                   context.requestIO.status(
                       `[${translatorName}] Translating '${request}' into action '${value}'`,
                   );
