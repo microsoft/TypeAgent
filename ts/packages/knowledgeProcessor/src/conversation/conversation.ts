@@ -703,6 +703,11 @@ export async function createConversation(
         ]);
         const results = createSearchResponse<MessageId, TopicId, EntityId>();
         for (const filter of filters) {
+            const topicResult = await topicIndex.searchTerms(
+                filter,
+                options.topic,
+            );
+            results.topics.push(topicResult);
             const entityResult = await entityIndex.searchTerms(
                 filter,
                 options.entity,
@@ -896,6 +901,7 @@ export async function createConversationManager(
         if (knowledgeResult) {
             if (knowledgeResult) {
                 const [_, knowledge] = knowledgeResult;
+                // Add next message... this updates the "sequence"
                 const knowledgeIds = await conversation.putNext(
                     message,
                     knowledge,
