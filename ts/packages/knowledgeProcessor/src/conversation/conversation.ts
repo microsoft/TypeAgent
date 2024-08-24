@@ -703,16 +703,19 @@ export async function createConversation(
         ]);
         const results = createSearchResponse<MessageId, TopicId, EntityId>();
         for (const filter of filters) {
+            // Only search actions if (a) actions are enabled (b) we have an action filter
             const topicResult = await topicIndex.searchTerms(
                 filter,
                 options.topic,
             );
             results.topics.push(topicResult);
+
             const entityResult = await entityIndex.searchTerms(
                 filter,
                 options.entity,
             );
             results.entities.push(entityResult);
+
             if (options.action) {
                 const actionResult = await actionIndex.searchTerms(
                     filter,
