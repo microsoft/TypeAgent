@@ -226,7 +226,7 @@ export function createSearchProcessor(
         action: GetAnswerWithTermsAction,
         options: SearchProcessingOptions,
     ): Promise<SearchResponse> {
-        const topLevelTopicSummary = false;
+        const topLevelTopicSummary = isSummaryRequest(action);
         const topicLevel = topLevelTopicSummary ? 2 : 1;
         let style: ResponseStyle | undefined; //"Paragraph";
         const searchOptions: ConversationSearchOptions = {
@@ -308,6 +308,16 @@ export function createSearchProcessor(
             params.responseType === "Topics" &&
             !params.filters.some((f) => f.filterType !== "Topic")
         );
+    }
+
+    function isSummaryRequest(action: GetAnswerWithTermsAction): boolean {
+        const filters = action.parameters.filters;
+        for (const filter of filters) {
+            if (filter.terms && filter.terms.length > 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     function hasActionFilter(action: GetAnswerAction): boolean {
