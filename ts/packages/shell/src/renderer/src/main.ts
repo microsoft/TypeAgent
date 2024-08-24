@@ -157,5 +157,8 @@ document.addEventListener("DOMContentLoaded", function () {
     tabs.getTabContainerByName("Help").append(new HelpView().getContainer());
 
     addEvents(chatView, agents, settingsView, tabs);
+
+    chatView.chatInputFocus();
+
     (window as any).electron.ipcRenderer.send("dom ready");
 });
