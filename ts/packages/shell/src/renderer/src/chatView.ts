@@ -329,7 +329,7 @@ class MessageGroup {
         temporary: boolean,
     ) {
         const div = this.ensureStatusMessageDiv(source)
-            .lastChild as HTMLDivElement;
+            .lastChild?.previousSibling as HTMLDivElement;
         setSource(this.statusMessageDiv as HTMLDivElement, source, this.agents);
 
         let contentDiv: HTMLDivElement;
@@ -374,6 +374,11 @@ class MessageGroup {
         const message = document.createElement("div");
         message.className = messageClass;
         messageDiv.append(message);
+
+        const metrics = document.createElement("div");
+        metrics.className = "chat-message-metrics";
+        messageDiv.append(metrics);
+        metrics.innerText = "This is a test..."
     }
 
     public ensureAgentMessage(source: string, actionIndex?: number) {
@@ -927,7 +932,7 @@ export class ChatView {
             source,
             actionIndex,
         ) as HTMLDivElement;
-        const message = messageContainer.lastChild as HTMLDivElement;
+        const message = messageContainer.lastChild?.previousSibling as HTMLDivElement;
         if (message === undefined) {
             return undefined;
         }

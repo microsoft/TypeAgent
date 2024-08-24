@@ -209,7 +209,7 @@ body {
 .chat-message-temp {
   .chat-message-left;
   font-style: italic;
-  color: darkgreen;
+  color: #002B3D;
   padding: 6px 15px 8px 15px;
 }
 
@@ -226,9 +226,23 @@ body {
 
 .chat-message-agent {
   .chat-message;
+  margin-bottom: 0px;
   margin-left: 30px;
-  background-color: @chat-input-bg;
+  background-color: #D6F3FF;
   padding: 6px 15px 8px 15px;
+}
+
+.chat-message-metrics {
+  background-color: #C2EDFF;
+  margin-top: -5px;
+  margin-bottom: 8px;
+  border-radius: 0px 0px 8px 8px;
+  font-size: 8px;
+  margin-left: 30px;
+  padding: 5px;
+  z-index: 100;
+  position: relative;
+  text-align: right;
 }
 
 .agent-icon {
