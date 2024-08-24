@@ -16,7 +16,7 @@ import {
     Entity,
 } from "typeagent";
 import { ChatModel, bing, openai } from "aiclient";
-import { DispatcherAgent, RequestIO } from "dispatcher-agent";
+import { DispatcherAgent, DispatcherAgentIO } from "dispatcher-agent";
 import { PromptSection } from "typechat";
 import {
     DispatcherAction,
@@ -25,7 +25,6 @@ import {
     createTurnImpressionFromLiteral,
 } from "dispatcher-agent";
 import { fileURLToPath } from "node:url";
-import { basename } from "node:path";
 
 export function instantiate(): DispatcherAgent {
     return {
@@ -239,7 +238,7 @@ type LookupSettings = {
 
 async function handleLookup(
     chatAction: LookupAndGenerateResponseAction,
-    requestIO: RequestIO,
+    requestIO: DispatcherAgentIO,
     actionIndex: number,
     settings: LookupSettings,
 ): Promise<TurnImpression> {
@@ -362,7 +361,7 @@ function updateTurnImpression(
 async function runLookup(
     lookup: string,
     context: LookupContext,
-    requestIO: RequestIO,
+    requestIO: DispatcherAgentIO,
     actionIndex: number,
     settings: LookupSettings,
     concurrency: number,
