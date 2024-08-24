@@ -163,21 +163,17 @@ function showResult(
 }
 
 function sendStatusMessage(
-    message: string,
-    requestId: RequestId,
-    source: string,
+    message: IAgentMessage,
     temporary: boolean = false,
 ) {
     // Ignore message without requestId
-    if (requestId === undefined) {
+    if (message.requestId === undefined) {
         console.warn(`sendStatusMessage: requestId is undefined. ${message}`);
         return;
     }
     mainWindow?.webContents.send(
         "status-message",
         message,
-        requestId,
-        source,
         temporary,
     );
 }
@@ -317,8 +313,8 @@ const clientIO: ClientIO = {
         /* ignore */
     },
     success: sendStatusMessage,
-    status: (message, requestId, source) =>
-        sendStatusMessage(message, requestId, source, true),
+    status: (message) =>
+        sendStatusMessage(message, true),
     warn: sendStatusMessage,
     error: sendStatusMessage,
     result: showResult,

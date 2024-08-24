@@ -29,7 +29,7 @@ export type SearchMenuContext = {
 
 export interface IAgentMessage {
     message: string;
-    requestId: RequestId;
+    requestId: string | undefined;
     source: string;
     actionIndex?: number | undefined;
     groupId?: string | undefined;
@@ -44,12 +44,12 @@ export interface IMessageMetrics {
 // Client provided IO
 export interface ClientIO {
     clear(): void;
-    info(message: string, requestId: RequestId, source: string): void;
-        status(message: string, requestId: RequestId, source: string): void;
-    success(message: string, requestId: RequestId, source: string): void;
+    info(message: IAgentMessage): void;
+    status(message: IAgentMessage): void;
+    success(message: IAgentMessage): void;
     result(message: IAgentMessage): void;
-    warn(message: string, requestId: RequestId, source: string): void;
-    error(message: string, requestId: RequestId, source: string): void;
+    warn(message: IAgentMessage): void;
+    error(message: IAgentMessage): void;
     actionCommand(
         actionTemplates: ActionTemplateSequence,
         command: ActionUICommand,
@@ -180,15 +180,15 @@ export function getRequestIO(
         getRequestId: () => requestId,
         clear: () => clientIO.clear(),
         info: (input: string | LogFn) =>
-            clientIO.info(getMessage(input), requestId, source),
+            clientIO.info(makeClientIOMessage(getMessage(input), requestId, source)),
         status: (input: string | LogFn) =>
-            clientIO.status(chalk.grey(getMessage(input)), requestId, source),
+            clientIO.status(makeClientIOMessage(chalk.grey(getMessage(input)), requestId, source)),
         success: (input: string | LogFn) =>
-            clientIO.success(chalk.green(getMessage(input)), requestId, source),
+            clientIO.success(makeClientIOMessage(chalk.green(getMessage(input)), requestId, source)),
         warn: (input: string | LogFn) =>
-            clientIO.warn(chalk.yellow(getMessage(input)), requestId, source),
+            clientIO.warn(makeClientIOMessage(chalk.yellow(getMessage(input)), requestId, source)),
         error: (input: string | LogFn) =>
-            clientIO.error(chalk.red(getMessage(input)), requestId, source),
+            clientIO.error(makeClientIOMessage(chalk.red(getMessage(input)), requestId, source)),
         result: (input: string | LogFn) =>
             clientIO.result(makeClientIOMessage(getMessage(input), requestId, source)),
 

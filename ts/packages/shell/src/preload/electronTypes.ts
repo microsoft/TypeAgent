@@ -77,7 +77,7 @@ export type ActionTemplateSequence = {
 
 export interface IAgentMessage {
     message: string;
-    requestId: string;
+    requestId?: string | undefined;
     source: string;
     actionIndex?: number | undefined;
     groupId?: string | undefined;
@@ -122,9 +122,7 @@ export interface ClientAPI {
     onStatusMessage(
         callback: (
             e: Electron.IpcRendererEvent,
-            message: string,
-            id: string,
-            source: string,
+            message: IAgentMessage,
             temporary: boolean,
         ) => void,
     ): void;

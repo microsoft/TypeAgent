@@ -74,8 +74,8 @@ function addEvents(
             chatView.updateGroup(updateMessage, groupId);
         }
     });
-    api.onStatusMessage((_, message, id, source: string, temporary) => {
-        chatView.showStatusMessage(message, id, source, temporary);
+    api.onStatusMessage((_, message, temporary) => {
+        chatView.showStatusMessage(message, temporary);
     });
     api.onMarkRequestExplained((_, id, timestamp, fromCache) => {
         chatView.markRequestExplained(id, timestamp, fromCache);

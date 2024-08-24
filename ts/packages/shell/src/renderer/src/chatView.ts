@@ -862,12 +862,10 @@ export class ChatView {
     }
 
     showStatusMessage(
-        message: string,
-        id: string,
-        source: string,
+        msg: IAgentMessage,
         temporary: boolean,
     ) {
-        this.getMessageGroup(id)?.addStatusMessage(message, source, temporary);
+        this.getMessageGroup(msg.requestId as string)?.addStatusMessage(msg.message, msg.source, temporary);
     }
 
     clear() {
@@ -925,7 +923,7 @@ export class ChatView {
         msg: IAgentMessage
     ) {
         const text: string = msg.message;
-        const id: string = msg.requestId;
+        const id: string = msg.requestId as string;
         const source: string = msg.source;
         const actionIndex: number | undefined = msg.actionIndex;
         let groupId: string | undefined = msg.groupId;
@@ -1004,10 +1002,12 @@ export class ChatView {
         requestId: string,
         source: string,
     ) {
-        this.showStatusMessage(
-            answer ? "Accepted!" : "Rejected!",
+        let message = answer ? "Accepted!" : "Rejected!";
+        this.showStatusMessage({
+            message,
             requestId,
             source,
+            },
             true,
         );
         getClientAPI().sendYesNo(questionId, answer);
@@ -1025,7 +1025,7 @@ export class ChatView {
             return;
         }
         agentMessage.innerHTML = "";
-        this.showStatusMessage(message, requestId, source, true);
+        this.showStatusMessage({message, requestId, source}, true);
         if (this.searchMenu) {
             this.searchMenuAnswerHandler = (item) => {
                 this.answer(questionId, item.selectedText, requestId);
@@ -1042,7 +1042,9 @@ export class ChatView {
     }
 
     answer(questionId: number, answer: string, requestId: string) {
-        this.showStatusMessage("Answer sent!", requestId, "shell", true);
+        let message = "Answer sent!";
+        let source = "shell";
+        this.showStatusMessage({ message, requestId, source}, true);
         console.log(answer);
         getClientAPI().sendAnswer(questionId, answer);
     }
