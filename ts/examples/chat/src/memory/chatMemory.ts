@@ -103,7 +103,7 @@ export async function createSearchMemory(
         path.join(context.storePath, conversationName),
         createConversationSettings(context.embeddingModel),
     );
-    await searchConversation.clear();
+    await searchConversation.clear(true);
 
     return conversation.createConversationManager(
         conversationName,

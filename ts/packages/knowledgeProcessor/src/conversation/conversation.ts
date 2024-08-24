@@ -43,12 +43,7 @@ import {
 import { Filter, SearchAction } from "./knowledgeSearchWebSchema.js";
 import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
-import {
-    createFrequencyTable,
-    intersectSets,
-    unionSets,
-    uniqueFrom,
-} from "../setOperations.js";
+import { intersectSets, unionSets, uniqueFrom } from "../setOperations.js";
 import { getRangeOfTemporalSequence } from "../temporal.js";
 import { Action, ConcreteEntity } from "./knowledgeSchema.js";
 import { MessageIndex, createMessageIndex } from "./messages.js";
@@ -131,7 +126,11 @@ export interface Conversation<
     removeKnowledge(): Promise<void>;
     removeActions(): Promise<void>;
     removeMessageIndex(): Promise<void>;
-    clear(): Promise<void>;
+    /**
+     *
+     * @param removeMessages If you want the original messages also removed. Set to false if you just want to rebuild the indexes
+     */
+    clear(removeMessages: boolean): Promise<void>;
 
     putIndex(
         knowledge: ExtractedKnowledge<MessageId>,
@@ -506,9 +505,12 @@ export async function createConversation(
         messageIndex = undefined;
     }
 
-    async function clear(): Promise<void> {
+    async function clear(removeMessages: boolean): Promise<void> {
         await removeMessageIndex();
         await removeKnowledge();
+        if (removeMessages) {
+            await messages.clear();
+        }
     }
 
     async function loadTopicIndex(name: string): Promise<TopicIndex> {
