@@ -1,0 +1,153 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+@keyframes extend {
+  0% {
+  }
+
+  100% {
+    height: 20px;
+  }
+}
+
+@keyframes retract {
+  0% {
+  }
+  100% {
+    height: 8px;
+  }
+}
+
+.shadeContainer {
+  position: absolute;
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  background: transparent;
+}
+
+.shade {
+  text-align: center;
+  width: 33%;
+
+  background-color: pink;
+  margin: 0px 15px;
+  z-index: 1000;
+
+  border-radius: 0px 0px 5px 5px;
+
+  font-size: 0px;
+  font-weight: 500;
+
+  height: 8px;
+  animation: retract 0.1s ease-out 0s forwards;
+}
+
+.shade .shadeIcon {
+  display: none;
+}
+
+.shade:hover {
+  cursor: pointer;
+  font-size: 12px;
+  vertical-align: middle;
+
+  animation: extend 0.1s ease-out 0s forwards;
+}
+
+.shade:hover .shadeIcon {
+  display: inline-block;
+}
+
+.shadeIcon {
+  display: inline-block;
+  margin-top: 3px;
+  width: 14px;
+  height: 14px;
+  vertical-align: baseline;
+}
+
+.shadeTitle {
+  display: inline;
+  margin-left: 3px;
+  position: relative;
+  top: -3px;
+}
+
+.shade0 {
+  background-color: #1b263b;
+  color: #ffffff;
+  opacity: 0.8;
+}
+
+.shade1 {
+  background-color: #415a77;
+  color: #ffffff;
+  opacity: 0.9;
+}
+
+.shade2 {
+  background-color: #778da9;
+  color: #ffffff;
+  opacity: 0.95;
+}
+
+.closedTab {
+  display: none;
+}
+
+.tabPage {
+  position: absolute;
+  margin-left: 20%;
+  margin-top: 15%;
+  width: 60%;
+  height: 50%;
+  z-index: 1000;
+  border-radius: 20px;
+  overflow-y: auto;
+}
+
+.tabPageContents {
+  display: inline;
+}
+
+.tabIcon {
+  display: inline-block;
+  margin-top: 10px;
+  margin-left: 40px;
+  width: 24px;
+  height: 24px;
+  vertical-align: baseline;
+}
+
+.closeButton {
+  color: #ffffff;
+  border: 2px;
+  background-color: transparent;
+  font-size: 16px;
+  font-weight: 300;
+  float: right;
+  margin: 8px;
+  cursor: pointer;
+}
+
+.title {
+  text-align: center;
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.titleText {
+  display: inline;
+  position: relative;
+  top: -2.5px;
+  margin-top: 20px;
+  font-size: 24px;
+  margin-left: 8px;
+}
+
+.setting-label {
+  color: #ffffff;
+  margin-left: 24px;
+  font-size: 12px;
+}

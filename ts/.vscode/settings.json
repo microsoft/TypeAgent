@@ -3,5 +3,8 @@
     "cSpell.words": [
         "lightgray",
         "openai"
-    ]
+    ],
+    "[html]": {
+        "editor.defaultFormatter": "vscode.html-language-features"
+    }
 }
