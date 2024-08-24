@@ -648,13 +648,12 @@ export class RequestCommandHandler implements CommandHandler {
             ? getChatHistoryForTranslation(context)
             : undefined;
         if (history) {
-            let entities = [];
             // prefetch entities here
             context.chatHistory.addEntry(
                 request,
                 [],
                 "user",
-                context.requestIO.getRequestId(),
+                context.requestId,
             );
         }
         const match = await matchRequest(request, context, history);

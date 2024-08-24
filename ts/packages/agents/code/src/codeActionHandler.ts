@@ -21,7 +21,7 @@ type CodeActionContext = {
     webSocket: WebSocket | undefined;
 };
 
-function initializeCodeContext(): CodeActionContext {
+async function initializeCodeContext(): Promise<CodeActionContext> {
     return {
         webSocket: undefined,
     };

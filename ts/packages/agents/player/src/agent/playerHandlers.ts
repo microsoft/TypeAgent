@@ -34,7 +34,7 @@ type PlayerActionContext = {
     searchContext?: SearchMenuContext;
 };
 
-function initializePlayerContext() {
+async function initializePlayerContext() {
     return {
         spotify: undefined,
     };

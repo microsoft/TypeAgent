@@ -88,7 +88,6 @@ function getMessage(input: string | LogFn) {
 
 export interface RequestIO {
     type: "html" | "text";
-    getRequestId(): RequestId;
     clear(): void;
     info(message: string | LogFn): void;
     status(message: string | LogFn): void;
@@ -130,7 +129,6 @@ export function getConsoleRequestIO(
 ): RequestIO {
     return {
         type: "text",
-        getRequestId: () => undefined,
         clear: () => console.clear(),
         info: (input: string | LogFn) => console.info(getMessage(input)),
         status: (input: string | LogFn) =>
@@ -165,7 +163,6 @@ export function getRequestIO(
 ): RequestIO {
     return {
         type: "html",
-        getRequestId: () => requestId,
         clear: () => clientIO.clear(),
         info: (input: string | LogFn) =>
             clientIO.info(getMessage(input), requestId, source),
@@ -208,7 +205,6 @@ export function getRequestIO(
 export function getNullRequestIO(): RequestIO {
     return {
         type: "text",
-        getRequestId: () => undefined,
         clear: () => {},
         info: () => {},
         status: () => {},
