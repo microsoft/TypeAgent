@@ -17,7 +17,7 @@ import {
     createKnowledgeStore,
     createTextIndex,
 } from "../knowledgeIndex.js";
-import { Action } from "./knowledgeSchema.js";
+import { Action, VerbTense } from "./knowledgeSchema.js";
 import path from "path";
 import { ActionFilter } from "./knowledgeSearchSchema.js";
 import {
@@ -280,13 +280,25 @@ export async function createActionIndex<TSourceId = any>(
         }
 
         const names = await getNameIndex();
-        const [subjectToActionIds, objectToActionIds] = await Promise.all([
+        const [
+            subjectToActionIds,
+            objectToActionIds,
+            indirectToObjectIds,
+            verbToActionIds,
+        ] = await Promise.all([
             matchTerms(names, subjectIndex, filter.terms, options),
             matchTerms(names, objectIndex, filter.terms, options),
+            matchTerms(names, indirectObjectIndex, filter.terms, options),
+            matchVerbTerms(filter.verbs, undefined, options),
         ]);
         results.actionIds = [
             ...intersectMultiple(
-                intersectUnionMultiple(subjectToActionIds, objectToActionIds),
+                intersectUnionMultiple(
+                    subjectToActionIds,
+                    objectToActionIds,
+                    indirectToObjectIds,
+                    verbToActionIds,
+                ),
                 itemsFromTemporalSequence(results.temporalSequence),
             ),
         ];
@@ -338,16 +350,11 @@ export async function createActionIndex<TSourceId = any>(
         options: ActionSearchOptions,
     ): Promise<ActionId[] | undefined> {
         if (filter.verbFilter && filter.verbFilter.verbs.length > 0) {
-            const verbOptions = options.verbSearchOptions ?? options;
-            const matches = await verbIndex.getNearest(
-                actionVerbsToString(
-                    filter.verbFilter.verbs,
-                    filter.verbFilter.verbTense,
-                ),
-                verbOptions.maxMatches,
-                verbOptions.minScore,
+            return matchVerbTerms(
+                filter.verbFilter.verbs,
+                filter.verbFilter.verbTense,
+                options,
             );
-            return matches;
         }
         return undefined;
     }
@@ -364,6 +371,23 @@ export async function createActionIndex<TSourceId = any>(
             (term) => matchName(names, nameIndex, term, options),
         );
         return intersectUnionMultiple(...matches);
+    }
+
+    async function matchVerbTerms(
+        verbs: string[] | undefined,
+        verbTense: VerbTense | undefined,
+        options: ActionSearchOptions,
+    ): Promise<ActionId[] | undefined> {
+        if (verbs && verbs.length > 0) {
+            const verbOptions = options.verbSearchOptions ?? options;
+            const matches = await verbIndex.getNearest(
+                actionVerbsToString(verbs, verbTense),
+                verbOptions.maxMatches,
+                verbOptions.minScore,
+            );
+            return matches;
+        }
+        return undefined;
     }
 
     async function matchTimeRange(timeRange: DateTimeRange | undefined) {
