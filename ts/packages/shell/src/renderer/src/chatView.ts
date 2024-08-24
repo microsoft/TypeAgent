@@ -11,6 +11,7 @@ import {
     ActionInfo,
     ActionTemplateSequence,
     ActionUICommand,
+    IAgentMessage,
     SearchMenuItem,
 } from "../../preload/electronTypes";
 import { ActionCascade } from "./ActionCascade";
@@ -921,12 +922,14 @@ export class ChatView {
     }
 
     addAgentMessage(
-        text: string,
-        id: string,
-        source: string,
-        actionIndex?: number,
-        groupId?: string,
+        msg: IAgentMessage
     ) {
+        const text: string = msg.message;
+        const id: string = msg.requestId;
+        const source: string = msg.source;
+        const actionIndex: number | undefined = msg.actionIndex;
+        let groupId: string | undefined = msg.groupId;
+
         const messageContainer = this.ensureAgentMessage(
             id,
             source,

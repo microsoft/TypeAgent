@@ -55,24 +55,7 @@ function addEvents(
         }
     });
     api.onResponse(
-        (
-            _,
-            response,
-            id,
-            source: string,
-            actionIndex?: number,
-            groupId?: string,
-        ) => {
-            if (response !== undefined) {
-                chatView.addAgentMessage(
-                    response,
-                    id,
-                    source,
-                    actionIndex,
-                    groupId,
-                );
-            }
-        },
+        (_, agentMessage) => { chatView.addAgentMessage(agentMessage); }
     );
     api.onSetPartialInputHandler((_, enabled) => {
         chatView.enablePartialInputHandler(enabled);

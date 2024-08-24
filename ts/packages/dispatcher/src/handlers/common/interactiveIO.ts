@@ -27,13 +27,21 @@ export type SearchMenuContext = {
     choices?: string[];
 };
 
+export interface IAgentMessage {
+    message: string;
+    requestId: RequestId;
+    source: string;
+    actionIndex?: number | undefined;
+    groupId?: string | undefined;
+}
+
 // Client provided IO
 export interface ClientIO {
     clear(): void;
     info(message: string, requestId: RequestId, source: string): void;
-    status(message: string, requestId: RequestId, source: string): void;
+        status(message: string, requestId: RequestId, source: string): void;
     success(message: string, requestId: RequestId, source: string): void;
-    result(message: string, requestId: RequestId, source: string): void;
+    result(message: IAgentMessage): void;
     warn(message: string, requestId: RequestId, source: string): void;
     error(message: string, requestId: RequestId, source: string): void;
     actionCommand(
@@ -48,13 +56,7 @@ export interface ClientIO {
         choices?: SearchMenuItem[],
         visible?: boolean,
     ): void;
-    setActionStatus(
-        message: string,
-        requestId: RequestId,
-        source: string,
-        actionIndex: number,
-        groupId?: string,
-    ): void;
+    setActionStatus(message: IAgentMessage): void;
     updateActionStatus(message: string, groupId: string): void;
     askYesNo(
         message: string,
@@ -158,6 +160,10 @@ export function getConsoleRequestIO(
     };
 }
 
+function makeClientIOMessage(message: string, requestId: RequestId, source: string, actionIndex?: number, groupId?: string) : IAgentMessage {
+    return { message, requestId, source, actionIndex, groupId };
+}
+
 export function getRequestIO(
     clientIO: ClientIO,
     requestId: RequestId,
@@ -178,7 +184,7 @@ export function getRequestIO(
         error: (input: string | LogFn) =>
             clientIO.error(chalk.red(getMessage(input)), requestId, source),
         result: (input: string | LogFn) =>
-            clientIO.result(getMessage(input), requestId, source),
+            clientIO.result(makeClientIOMessage(getMessage(input), requestId, source)),
 
         setActionStatus: (
             status: string,
@@ -187,11 +193,13 @@ export function getRequestIO(
             groupId?: string,
         ) =>
             clientIO.setActionStatus(
+                makeClientIOMessage(
                 status,
                 requestId,
                 source,
                 actionIndex,
                 groupId,
+                )
             ),
 
         isInputEnabled: () => true,

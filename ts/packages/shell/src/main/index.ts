@@ -32,6 +32,7 @@ import {
 import { SearchMenuCommand } from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
 import {
     ActionTemplateSequence,
+    IAgentMessage,
     SearchMenuItem,
 } from "../preload/electronTypes.js";
 import { ShellSettings } from "./shellSettings.js";
@@ -148,24 +149,16 @@ async function triggerRecognitionOnce(context: CommandHandlerContext) {
 }
 
 function showResult(
-    message: string,
-    requestId: RequestId,
-    source: string,
-    actionIndex?: number,
-    groupId?: string,
+    message: IAgentMessage
 ) {
     // Ignore message without requestId
-    if (requestId === undefined) {
+    if (message.requestId === undefined) {
         console.warn("showResult: requestId is undefined");
         return;
     }
     mainWindow?.webContents.send(
         "response",
-        message,
-        requestId,
-        source,
-        actionIndex,
-        groupId,
+        message
     );
 }
 

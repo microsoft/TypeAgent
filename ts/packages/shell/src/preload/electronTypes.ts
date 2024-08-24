@@ -75,6 +75,14 @@ export type ActionTemplateSequence = {
     prefaceMultiple?: string;
 };
 
+export interface IAgentMessage {
+    message: string;
+    requestId: string;
+    source: string;
+    actionIndex?: number | undefined;
+    groupId?: string | undefined;
+}
+
 // end duplicate type section
 
 export interface ClientAPI {
@@ -91,11 +99,7 @@ export interface ClientAPI {
     onResponse(
         callback: (
             e: Electron.IpcRendererEvent,
-            response: string | undefined,
-            id: string,
-            source: string,
-            actionIndex?: number,
-            group_id?: string,
+            message: IAgentMessage,
         ) => void,
     ): void;
     onUpdate(
