@@ -3,7 +3,7 @@
 
 import { askYesNo } from "../../utils/interactive.js";
 import readline from "readline/promises";
-import { SearchMenuItem, ActionTemplateSequence } from "common-utils";
+import { SearchMenuItem, ActionTemplateSequence, StopWatch } from "common-utils";
 import chalk from "chalk";
 
 export type RequestId = string | undefined;
@@ -33,6 +33,12 @@ export interface IAgentMessage {
     source: string;
     actionIndex?: number | undefined;
     groupId?: string | undefined;
+    metrics?: IMessageMetrics;
+}
+
+export interface IMessageMetrics {
+    duration: number;
+    marks?: Map<string, number>;
 }
 
 // Client provided IO
