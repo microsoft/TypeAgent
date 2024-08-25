@@ -16,6 +16,7 @@ import {
 } from "./crosswordPageUtilities.mjs";
 
 import { BrowserConnector } from "./browserConnector.mjs";
+import { handleCommercedAction } from "./commerce/actionHandler.mjs";
 
 export function instantiate(): DispatcherAgent {
   return {
@@ -139,6 +140,9 @@ async function executeBrowserAction(
       } else if (action.translatorName === "browser.crossword") {
         const crosswordResult = await handleCrosswordAction(action, context);
         return createTurnImpressionFromLiteral(crosswordResult);
+      } else if (action.translatorName === "browser.commerce") {
+        const commerceResult = await handleCommercedAction(action, context);
+        return createTurnImpressionFromLiteral(commerceResult);
       }
 
       webSocketEndpoint.send(

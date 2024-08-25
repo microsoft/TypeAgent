@@ -252,4 +252,13 @@ export class BrowserConnector {
 
     return this.sendActionToBrowser(textAction);
   }
+
+  async awaitPageLoad() {
+    const action = {
+      actionName: "awaitPageLoad",
+      parameters: {},
+    };
+
+    return this.sendActionToBrowser(action, "translatedAction");
+  }
 }

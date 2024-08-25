@@ -25,6 +25,15 @@
         "schemaFile": "./crosswordActionsSchema.mts",
         "schemaType": "CrosswordActions"
       }
+    },
+    "commerce": {
+      "defaultEnabled": false,
+      "actionDefaultEnabled": false,
+      "schema": {
+        "description": "This allows users to interact with e-commerce websites puzzle.",
+        "schemaFile": "./commerce/schema/pageAction.mts",
+        "schemaType": "ShoppingPlan"
+      }
     }
   }
 }
