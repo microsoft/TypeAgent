@@ -53,3 +53,7 @@ export type ShoppingAction =
     | SearchForProductAction
     | SelectSearchResult
     | UnknownAction;
+
+export type ShoppingPlan = {
+    steps: ShoppingAction[];
+};

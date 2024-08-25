@@ -205,6 +205,9 @@ export interface ClientAPI {
             micName: string,
         ) => void,
     ): void;
+    onShowDialog(
+        callback: (e: Electron.IpcRendererEvent, key: string) => void,
+    ): void;
 }
 
 export interface ElectronWindowFields {

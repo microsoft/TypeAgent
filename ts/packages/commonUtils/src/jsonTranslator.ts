@@ -137,7 +137,6 @@ export function createJsonTranslatorFromSchemaDef<T extends object>(
     constraintsValidator?: TypeChatConstraintsValidator<T>, // Optional
     instructions?: PromptSection[],
     model?: string | TypeChatLanguageModel, // optional
-    enableStreaming?: boolean,
 ) {
     if (typeof model !== "object") {
         model = ai.createChatModel(model, {

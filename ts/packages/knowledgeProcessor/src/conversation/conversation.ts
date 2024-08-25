@@ -53,7 +53,7 @@ import {
     ActionSearchResult,
     createActionIndex,
 } from "./actions.js";
-import { SearchProcessingOptions } from "./searchProcessor.js";
+import { SearchTermsAction, TermFilter } from "./knowledgeTermSearchSchema.js";
 
 export interface RecentItems<T> {
     readonly entries: collections.CircularArray<T>;
@@ -126,7 +126,11 @@ export interface Conversation<
     removeKnowledge(): Promise<void>;
     removeActions(): Promise<void>;
     removeMessageIndex(): Promise<void>;
-    clear(): Promise<void>;
+    /**
+     *
+     * @param removeMessages If you want the original messages also removed. Set to false if you just want to rebuild the indexes
+     */
+    clear(removeMessages: boolean): Promise<void>;
 
     putIndex(
         knowledge: ExtractedKnowledge<MessageId>,
@@ -138,6 +142,10 @@ export interface Conversation<
     ): Promise<ExtractedKnowledgeIds<TTopicId, TEntityId, TActionId>>;
     search(
         filters: Filter[],
+        options: ConversationSearchOptions,
+    ): Promise<SearchResponse>;
+    searchTerms(
+        filters: TermFilter[],
         options: ConversationSearchOptions,
     ): Promise<SearchResponse>;
     searchMessages(
@@ -412,6 +420,7 @@ export async function createConversation(
         putIndex,
         putNext,
         search,
+        searchTerms,
         searchMessages,
     };
 
@@ -496,9 +505,12 @@ export async function createConversation(
         messageIndex = undefined;
     }
 
-    async function clear(): Promise<void> {
+    async function clear(removeMessages: boolean): Promise<void> {
         await removeMessageIndex();
         await removeKnowledge();
+        if (removeMessages) {
+            await messages.clear();
+        }
     }
 
     async function loadTopicIndex(name: string): Promise<TopicIndex> {
@@ -682,6 +694,49 @@ export async function createConversation(
         return results;
     }
 
+    async function searchTerms(
+        filters: TermFilter[],
+        options: ConversationSearchOptions,
+    ): Promise<SearchResponse> {
+        const [entityIndex, topicIndex, actionIndex] = await Promise.all([
+            getEntityIndex(),
+            getTopicsIndex(options.topicLevel),
+            getActionIndex(),
+        ]);
+        const results = createSearchResponse<MessageId, TopicId, EntityId>();
+        for (const filter of filters) {
+            // Only search actions if (a) actions are enabled (b) we have an action filter
+            const topicResult = await topicIndex.searchTerms(
+                filter,
+                options.topic,
+            );
+            results.topics.push(topicResult);
+
+            const entityResult = await entityIndex.searchTerms(
+                filter,
+                options.entity,
+            );
+            results.entities.push(entityResult);
+
+            if (options.action) {
+                const actionResult = await actionIndex.searchTerms(
+                    filter,
+                    options.action,
+                );
+                results.actions.push(actionResult);
+            }
+        }
+        if (options.loadMessages) {
+            await resolveMessages(
+                results,
+                topicIndex,
+                entityIndex,
+                actionIndex,
+            );
+        }
+        return results;
+    }
+
     async function searchMessages(
         query: string,
         options: SearchOptions,
@@ -851,6 +906,7 @@ export async function createConversationManager(
         if (knowledgeResult) {
             if (knowledgeResult) {
                 const [_, knowledge] = knowledgeResult;
+                // Add next message... this updates the "sequence"
                 const knowledgeIds = await conversation.putNext(
                     message,
                     knowledge,
@@ -866,5 +922,10 @@ export async function createConversationManager(
 
 export type SearchActionResponse = {
     action: SearchAction;
+    response?: SearchResponse | undefined;
+};
+
+export type SearchTermsActionResponse = {
+    action: SearchTermsAction;
     response?: SearchResponse | undefined;
 };

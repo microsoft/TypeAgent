@@ -4,12 +4,12 @@
 //import { ShellSettings } from "../../main/shellSettings";
 import { ClientAPI } from "../../preload/electronTypes";
 import { ChatView } from "./chatView";
-import {
-    SpeechInfo,
-    enumerateMicrophones,
-    recognizeOnce,
-    selectMicrophone,
-} from "./speech";
+import { TabView } from "./tabView";
+import { SpeechInfo, recognizeOnce, selectMicrophone } from "./speech";
+import { iconHelp, iconMetrics, iconSettings } from "./icon";
+import { SettingsView } from "./settingsView";
+import { HelpView } from "./helpView";
+import { MetricsView } from "./metricsView";
 
 export function getClientAPI(): ClientAPI {
     return globalThis.api;
@@ -18,7 +18,8 @@ export function getClientAPI(): ClientAPI {
 function addEvents(
     chatView: ChatView,
     agents: Map<string, string>,
-    microphoneSelector: HTMLSelectElement,
+    settingsView: SettingsView,
+    tabsView: TabView,
 ) {
     console.log("add listen event");
     const api = getClientAPI();
@@ -128,7 +129,10 @@ function addEvents(
         chatView.addUserMessage(`@random`);
     });
     api.onMicrophoneChangeRequested((_, micId, micName) => {
-        selectMicrophone(microphoneSelector, micId, micName);
+        selectMicrophone(settingsView.microphoneSources, micId, micName);
+    });
+    api.onShowDialog((_, key) => {
+        tabsView.showTab(key);
     });
 }
 
@@ -144,15 +148,31 @@ document.addEventListener("DOMContentLoaded", function () {
     const idGenerator = new IdGenerator();
     const speechInfo = new SpeechInfo();
     const agents = new Map<string, string>();
+
+    const tabs = new TabView(
+        ["Settings", "Metrics", "Help"],
+        [iconSettings(), iconMetrics(), iconHelp()],
+        [iconSettings(), iconMetrics(), iconHelp()],
+    );
+    wrapper.appendChild(tabs.getContainer());
+
+    document.onkeyup = (ev: KeyboardEvent) => {
+        if (ev.key == "Escape") {
+            tabs.closeTabs();
+            ev.preventDefault();
+        }
+    };
+
     const chatView = new ChatView(idGenerator, speechInfo, agents);
     wrapper.appendChild(chatView.getMessageElm());
 
-    const microphoneSources = document.getElementById(
-        "microphoneSources",
-    )! as HTMLSelectElement;
+    const settingsView = new SettingsView();
+    tabs.getTabContainerByName("Settings").append(settingsView.getContainer());
+    tabs.getTabContainerByName("Metrics").append(
+        new MetricsView().getContainer(),
+    );
+    tabs.getTabContainerByName("Help").append(new HelpView().getContainer());
 
-    enumerateMicrophones(microphoneSources, window as any);
-
-    addEvents(chatView, agents, microphoneSources);
+    addEvents(chatView, agents, settingsView, tabs);
     (window as any).electron.ipcRenderer.send("dom ready");
 });

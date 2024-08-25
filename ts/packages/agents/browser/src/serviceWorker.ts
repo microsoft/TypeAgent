@@ -591,17 +591,34 @@ async function getTabHTMLFragments(
                 );
 
                 if (frameHTML) {
+                    const frameText = await chrome.tabs.sendMessage(
+                        targetTab.id!,
+                        {
+                            type: "get_page_text",
+                            inputHtml: frameHTML,
+                            frameId: frames[i].frameId,
+                        },
+                        { frameId: frames[i].frameId },
+                    );
+
                     if (downloadAsFile) {
                         await downloadStringAsFile(
                             targetTab,
                             frameHTML,
                             `tabHTML_${frames[i].frameId}.html`,
                         );
+
+                        await downloadStringAsFile(
+                            targetTab,
+                            frameText,
+                            `tabText_${frames[i].frameId}.txt`,
+                        );
                     }
 
                     htmlFragments.push({
                         frameId: frames[i].frameId,
                         content: frameHTML,
+                        text: frameText,
                     });
                 }
             } catch {}

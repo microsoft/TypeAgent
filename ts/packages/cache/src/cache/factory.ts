@@ -70,7 +70,7 @@ export class AgentCacheFactory {
         const customFactory = this.getCustomExplainerFactory?.(explainerName);
         const cache = new Map<string | undefined, GenericExplainer>();
         const factory = (translator: string | undefined, model?: string) => {
-            const existing = cache.get(translator);
+            const existing = cache.get(`${translator ?? ""}|${model ?? ""}`);
             if (existing) {
                 return existing;
             }

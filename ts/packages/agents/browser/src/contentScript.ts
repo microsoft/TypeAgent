@@ -3,6 +3,7 @@
 
 import { Readability, isProbablyReaderable } from "@mozilla/readability";
 import { HTMLReducer } from "./htmlReducer";
+import { convert } from "html-to-text";
 
 function isVisible(element: HTMLElement) {
     var html = document.documentElement;
@@ -162,6 +163,20 @@ function getPageHTML(fullSize: boolean, documentHtml: string, frameId: number) {
     reducer.removeDivs = false;
     const reducedHtml = reducer.reduce(documentHtml);
     return reducedHtml;
+}
+
+function getPageText(documentHtml: string, frameId: number) {
+    if (!documentHtml) {
+        setIdsOnAllElements(frameId);
+        documentHtml = document.children[0].outerHTML;
+    }
+
+    const options = {
+        wordwrap: 130,
+    };
+
+    const text = convert(documentHtml, options);
+    return text;
 }
 
 function getPageHTMLSubFragments(
@@ -412,9 +427,28 @@ function daysIntoYear() {
 function setIdsOnAllElements(frameId: number) {
     const allElements = Array.from(document.getElementsByTagName("*"));
     const idPrefix = `id_${daysIntoYear()}_${frameId}_`;
+    const formattingTags = [
+        "BR",
+        "P",
+        "B",
+        "I",
+        "U",
+        "STRONG",
+        "TEMPLATE",
+        "IFRAME",
+        "H1",
+        "H2",
+        "H3",
+        "H4",
+        "H5",
+        "H6",
+    ];
     let i = 0;
     allElements.forEach((element: Element) => {
-        if (!element.hasAttribute("id")) {
+        if (
+            !element.hasAttribute("id") &&
+            !(element.tagName in formattingTags)
+        ) {
             element.setAttribute("id", idPrefix + i.toString());
             i++;
         }
@@ -584,6 +618,15 @@ chrome.runtime.onMessage.addListener(
                         message.frameId,
                     );
                     sendResponse(html);
+                    break;
+                }
+
+                case "get_page_text": {
+                    const text = getPageText(
+                        message.inputHtml,
+                        message.frameId,
+                    );
+                    sendResponse(text);
                     break;
                 }
 

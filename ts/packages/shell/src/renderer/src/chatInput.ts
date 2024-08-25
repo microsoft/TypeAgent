@@ -50,6 +50,7 @@ export class ExpandableTextarea {
                 handlers.altHandler(this, event);
             } else if (event.key == "Escape") {
                 this.textEntry.textContent = "";
+                event.preventDefault();
             }
             return true;
         });
