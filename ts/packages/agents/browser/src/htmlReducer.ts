@@ -107,7 +107,7 @@ export class HTMLReducer {
         this.removeMiscAttributes(doc);
         this.replaceLinks(doc);
         this.removeCommentNodes(doc);
-        
+
         let reduced = doc.documentElement.outerHTML;
         reduced = reduced.replace(/<!DOCTYPE[^>]*>/, "");
 

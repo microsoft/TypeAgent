@@ -72,7 +72,7 @@ export async function getBoardSchema(
           agent.getCluesTextThenSelectors([candidateFragments[i]]),
         );
       }
-      
+
       const clueResults = await Promise.all(cluePromises);
 
       for (let i = 0; i < clueResults.length; i++) {
