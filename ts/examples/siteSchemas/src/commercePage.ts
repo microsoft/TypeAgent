@@ -109,6 +109,9 @@ async function translateShoppingMessage(request: string) {
             case "addToCartAction":
                 await handleAddToCart(pageAction);
                 break;
+            case "answerPageQuestion":
+                await handlePageChat(pageAction);
+                break;                
         }
     }
 
@@ -162,6 +165,20 @@ async function handleAddToCart(action: any) {
         await browser.clickOn(targetProduct.addToCartButton.cssSelector);
     }
 }
+
+async function handlePageChat(action: any) {
+    const htmlFragments = await browser.getHtmlFragments();
+    const screenshot = await browser.getCurrentPageScreenshot();
+    
+    const response = await agent.getPageChatResponse(
+        action.question,
+        htmlFragments,
+        screenshot
+    );
+
+    console.log(response);
+}
+
 
 if (pageState) {
     processRequests("🛒> ", process.argv[2], async (request: string) => {

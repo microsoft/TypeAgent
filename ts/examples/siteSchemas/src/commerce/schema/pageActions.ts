@@ -38,6 +38,14 @@ export type SelectSearchResult = {
     };
 };
 
+// select this action when the user's request needs an answer based on the content on the current webpage
+export type AnswerQuestionBasedOnPage = {
+    actionName: "answerPageQuestion";
+    parameters: {
+        question: string;
+    };
+};
+
 export type UnknownAction = {
     actionName: "unknown";
     parameters: {
@@ -52,6 +60,7 @@ export type ShoppingAction =
     | LookupAtStoreAction
     | SearchForProductAction
     | SelectSearchResult
+    | AnswerQuestionBasedOnPage
     | UnknownAction;
 
 export type ShoppingPlan = {

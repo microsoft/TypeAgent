@@ -11,6 +11,7 @@ import { PromptSection } from "typechat";
 export type HtmlFragments = {
     frameId: string;
     content: string;
+    text?: string;
     cssSelector?: string;
 };
 
