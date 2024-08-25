@@ -177,6 +177,17 @@ export class HTMLReducer {
         });
     }
 
+    private removeDataAttributes(doc: Document): void {
+        const elements = doc.querySelectorAll("*");
+        elements.forEach((element) => {
+            for (const attr of element.attributes) {
+                if (attr.name.startsWith("data-")) {
+                    element.removeAttribute(attr.name);
+                }
+            }
+        });
+    }
+
     private replaceLinks(doc: Document): void {
         const elements = doc.querySelectorAll("*");
         elements.forEach((element) => {
