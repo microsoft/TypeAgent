@@ -183,6 +183,7 @@ export async function runPlayChat(): Promise<void> {
         importPlay,
         importTranscript,
         load,
+        history,
         replay,
         knowledge,
         buildIndex,
@@ -211,6 +212,8 @@ export async function runPlayChat(): Promise<void> {
         if (context.searchMemorySearcher) {
             const args = ["--query", line];
             await searchConversation(context.searchMemorySearcher, false, args);
+        } else {
+            printer.writeLine("No search history");
         }
     }
 
@@ -219,6 +222,16 @@ export async function runPlayChat(): Promise<void> {
     // COMMANDS
     //
     //--------------------
+
+    handlers.history.metadata = "Display search history.";
+    async function history(args: string[], io: InteractiveIo): Promise<void> {
+        if (context.searchMemory) {
+            await writeHistory(context.searchMemory.conversation);
+        } else {
+            printer.writeLine("No search history");
+        }
+    }
+
     handlers.importTranscript.metadata = importChatDef();
     async function importTranscript(
         args: string[],
@@ -298,10 +311,7 @@ export async function runPlayChat(): Promise<void> {
 
     handlers.replay.metadata = "Replay the chat";
     async function replay(args: string[], io: InteractiveIo) {
-        for await (const message of context.conversation.messages.entries()) {
-            printer.writeSourceBlock(message);
-            printer.writeLine();
-        }
+        await writeHistory(context.conversation);
     }
 
     function loadDef(): CommandMetadata {
@@ -974,6 +984,13 @@ export async function runPlayChat(): Promise<void> {
     //--------------------
     // END COMMANDS
     //--------------------
+
+    async function writeHistory(conversation: conversation.Conversation) {
+        for await (const message of conversation.messages.entries()) {
+            printer.writeSourceBlock(message);
+            printer.writeLine();
+        }
+    }
 
     async function searchConversation(
         searcher: conversation.ConversationSearchProcessor,
