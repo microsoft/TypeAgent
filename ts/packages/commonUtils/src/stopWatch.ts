@@ -10,7 +10,11 @@ export class StopWatch {
     private _startTime: number = 0;
     private _elapsedMs: number = 0;
 
-    constructor() {}
+    constructor(start: boolean = false) {
+        if (start) {
+            this.start();
+        }
+    }
 
     public get elapsedMs(): number {
         return this._elapsedMs;

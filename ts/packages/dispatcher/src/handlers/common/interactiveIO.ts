@@ -5,6 +5,7 @@ import { askYesNo } from "../../utils/interactive.js";
 import readline from "readline/promises";
 import { SearchMenuItem, ActionTemplateSequence, StopWatch } from "common-utils";
 import chalk from "chalk";
+import { CommandHandlerContext } from "./commandHandlerContext.js";
 
 export type RequestId = string | undefined;
 
@@ -37,8 +38,8 @@ export interface IAgentMessage {
 }
 
 export interface IMessageMetrics {
-    duration: number;
-    marks?: Map<string, number>;
+    duration: number | undefined;
+    marks?: Map<string, number> | undefined;
 }
 
 // Client provided IO
@@ -96,6 +97,7 @@ function getMessage(input: string | LogFn) {
 
 export interface RequestIO {
     type: "html" | "text";
+    context: CommandHandlerContext | undefined;
     getRequestId(): RequestId;
     clear(): void;
     info(message: string | LogFn): void;
@@ -138,6 +140,7 @@ export function getConsoleRequestIO(
 ): RequestIO {
     return {
         type: "text",
+        context: undefined,
         getRequestId: () => undefined,
         clear: () => console.clear(),
         info: (input: string | LogFn) => console.info(getMessage(input)),
@@ -166,31 +169,33 @@ export function getConsoleRequestIO(
     };
 }
 
-function makeClientIOMessage(message: string, requestId: RequestId, source: string, actionIndex?: number, groupId?: string) : IAgentMessage {
-    return { message, requestId, source, actionIndex, groupId };
+function makeClientIOMessage(context: CommandHandlerContext | undefined, message: string, requestId: RequestId, source: string, actionIndex?: number, groupId?: string) : IAgentMessage {
+    return { message, requestId, source, actionIndex, groupId, metrics: { duration: context?.profiler?.get(requestId)?.elapsedMs } };
 }
 
 export function getRequestIO(
+    context: CommandHandlerContext | undefined,
     clientIO: ClientIO,
     requestId: RequestId,
     source: string,
 ): RequestIO {
     return {
         type: "html",
+        context: context,
         getRequestId: () => requestId,
         clear: () => clientIO.clear(),
         info: (input: string | LogFn) =>
-            clientIO.info(makeClientIOMessage(getMessage(input), requestId, source)),
+            clientIO.info(makeClientIOMessage(context, getMessage(input), requestId, source)),
         status: (input: string | LogFn) =>
-            clientIO.status(makeClientIOMessage(chalk.grey(getMessage(input)), requestId, source)),
+            clientIO.status(makeClientIOMessage(context, chalk.grey(getMessage(input)), requestId, source)),
         success: (input: string | LogFn) =>
-            clientIO.success(makeClientIOMessage(chalk.green(getMessage(input)), requestId, source)),
+            clientIO.success(makeClientIOMessage(context, chalk.green(getMessage(input)), requestId, source)),
         warn: (input: string | LogFn) =>
-            clientIO.warn(makeClientIOMessage(chalk.yellow(getMessage(input)), requestId, source)),
+            clientIO.warn(makeClientIOMessage(context, chalk.yellow(getMessage(input)), requestId, source)),
         error: (input: string | LogFn) =>
-            clientIO.error(makeClientIOMessage(chalk.red(getMessage(input)), requestId, source)),
+            clientIO.error(makeClientIOMessage(context, chalk.red(getMessage(input)), requestId, source)),
         result: (input: string | LogFn) =>
-            clientIO.result(makeClientIOMessage(getMessage(input), requestId, source)),
+            clientIO.result(makeClientIOMessage(context, getMessage(input), requestId, source)),
 
         setActionStatus: (
             status: string,
@@ -200,11 +205,12 @@ export function getRequestIO(
         ) =>
             clientIO.setActionStatus(
                 makeClientIOMessage(
-                status,
-                requestId,
-                source,
-                actionIndex,
-                groupId,
+                    context,
+                    status,
+                    requestId,
+                    source,
+                    actionIndex,
+                    groupId,
                 )
             ),
 
@@ -222,6 +228,7 @@ export function getRequestIO(
 export function getNullRequestIO(): RequestIO {
     return {
         type: "text",
+        context: undefined,
         getRequestId: () => undefined,
         clear: () => {},
         info: () => {},

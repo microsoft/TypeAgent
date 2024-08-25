@@ -12,6 +12,7 @@ import {
     ActionTemplateSequence,
     ActionUICommand,
     IAgentMessage,
+    IMessageMetrics,
     SearchMenuItem,
 } from "../../preload/electronTypes";
 import { ActionCascade } from "./ActionCascade";
@@ -355,6 +356,7 @@ class MessageGroup {
         classes: string,
         messageClass: string,
         source: string,
+        metrics: IMessageMetrics | undefined = undefined
     ) {
         messageDiv.className = classes;
 
@@ -376,17 +378,31 @@ class MessageGroup {
         message.className = messageClass;
         messageDiv.append(message);
 
-        const metrics = document.createElement("div");
-        metrics.className = "chat-message-metrics";
-        messageDiv.append(metrics);
-        metrics.innerText = "This is a test..."
+        const metricsDiv = document.createElement("div");
+        metricsDiv.className = "chat-message-metrics";
+        messageDiv.append(metricsDiv);
+
+        if (metrics) {
+            if (metrics.duration) {
+                if (metrics.duration < 1) {
+                    metricsDiv.innerText = `${metrics.duration.toFixed(3)} [ms]`;
+                } else {
+                    metricsDiv.innerText = `${metrics.duration.toFixed(1)} [ms]`
+                }
+            }
+            else {
+                metricsDiv.innerText = "no performance data available";
+            }
+        } else {
+            metricsDiv.innerText = "no performance data available";
+        }
     }
 
-    public ensureAgentMessage(source: string, actionIndex?: number) {
-        const index = actionIndex ?? 0;
+    public ensureAgentMessage(msg: IAgentMessage) {
+        const index = msg.actionIndex ?? 0;
         const agentMessage = this.agentMessageDivs[index];
         if (agentMessage === undefined) {
-            let beforeElem = this.ensureStatusMessageDiv(source);
+            let beforeElem = this.ensureStatusMessageDiv(msg.source);
             for (let i = 0; i < index + 1; i++) {
                 if (this.agentMessageDivs[i] === undefined) {
                     this.agentMessageDivs[i] = document.createElement("div");
@@ -394,7 +410,8 @@ class MessageGroup {
                         this.agentMessageDivs[i],
                         "chat-message chat-message-left",
                         "chat-message-agent",
-                        source,
+                        msg.source,
+                        msg.metrics
                     );
 
                     // The chat message list has the style flex-direction: column-reverse;
@@ -923,16 +940,10 @@ export class ChatView {
         msg: IAgentMessage
     ) {
         const text: string = msg.message;
-        const id: string = msg.requestId as string;
         const source: string = msg.source;
-        const actionIndex: number | undefined = msg.actionIndex;
         let groupId: string | undefined = msg.groupId;
 
-        const messageContainer = this.ensureAgentMessage(
-            id,
-            source,
-            actionIndex,
-        ) as HTMLDivElement;
+        const messageContainer = this.ensureAgentMessage(msg) as HTMLDivElement;
         const message = messageContainer.lastChild?.previousSibling as HTMLDivElement;
         if (message === undefined) {
             return undefined;
@@ -958,15 +969,8 @@ export class ChatView {
         this.chatInputFocus();
     }
 
-    private ensureAgentMessage(
-        id: string,
-        source: string,
-        actionIndex?: number,
-    ) {
-        return this.getMessageGroup(id)?.ensureAgentMessage(
-            source,
-            actionIndex,
-        );
+    private ensureAgentMessage(msg: IAgentMessage) {
+        return this.getMessageGroup(msg.requestId as string)?.ensureAgentMessage(msg);
     }
 
     chatInputFocus() {
@@ -986,7 +990,7 @@ export class ChatView {
         requestId: string,
         source: string,
     ) {
-        const agentMessage = this.ensureAgentMessage(requestId, source);
+        const agentMessage = this.ensureAgentMessage({ message: "", requestId, source});
         if (agentMessage === undefined) {
             return;
         }
@@ -1020,7 +1024,7 @@ export class ChatView {
         requestId: string,
         source: string,
     ) {
-        const agentMessage = this.ensureAgentMessage(requestId, source);
+        const agentMessage = this.ensureAgentMessage({ message: "", requestId, source });
         if (agentMessage === undefined) {
             return;
         }

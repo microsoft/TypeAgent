@@ -8,6 +8,7 @@ import {
     Logger,
     LoggerSink,
     MultiSinkLogger,
+    StopWatch,
     TypeChatJsonTranslatorWithStreaming,
     createDebugLoggerSink,
     createLimiter,
@@ -52,6 +53,8 @@ import {
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
 import { DispatcherName } from "../requestCommandHandler.js";
+import { CommandHandler } from "./commandHandler.js";
+import { Profiler } from "./profiler.js";
 
 export interface CommandResult {
     error?: boolean;
@@ -85,6 +88,8 @@ export type CommandHandlerContext = {
     // For @correct
     lastRequestAction?: RequestAction;
     lastExplanation?: object;
+
+    profiler: Profiler | undefined;
 };
 
 export function updateCorrectionContext(
@@ -222,7 +227,7 @@ export async function initializeCommandHandlerContext(
         dblogging: true,
         clientIO,
         requestIO: clientIO
-            ? getRequestIO(clientIO, undefined, getDefaultTranslatorName())
+            ? getRequestIO(undefined, clientIO, undefined, getDefaultTranslatorName())
             : clientIO === undefined
               ? getConsoleRequestIO(stdio)
               : getNullRequestIO(),
@@ -238,7 +243,10 @@ export async function initializeCommandHandlerContext(
         logger,
         serviceHost: serviceHost,
         localWhisper: undefined,
+        profiler: new Profiler(),
     };
+
+    context.requestIO.context = context;
 
     await updateActionContext(context.session.getConfig().actions, context);
     return context;
