@@ -178,7 +178,7 @@ export async function extractKnowledgeFromBlock(
             : undefined;
 
     const actions: ExtractedAction[] | undefined =
-        knowledgeResponse.actions.length > 0
+        knowledgeResponse.actions && knowledgeResponse.actions.length > 0
             ? knowledgeResponse.actions.map((value) => {
                   return { value, sourceIds };
               })
