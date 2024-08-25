@@ -110,7 +110,7 @@ export class ECommerceSiteAgent<T extends object> {
         fragments?: HtmlFragments[],
         screenshot?: string,
     ) {
-        const screenshotSection = getScreenshotPromptSection(screenshot);
+        const screenshotSection = getScreenshotPromptSection(screenshot, "");
         const htmlSection = getHtmlPromptSection(fragments);
         const prefixSection = getBootstrapPrefixPromptSection();
         const promptSections = [
