@@ -32,13 +32,14 @@ function getBootstrapPrefixPromptSection() {
 function getHtmlPromptSection(fragments: HtmlFragments[] | undefined) {
     let htmlSection = [];
     if (fragments) {
-        const inputHtml = JSON.stringify(fragments, undefined, 2);
+        const contentFragments = fragments.map((a) => a.content);
+        //const inputHtml = JSON.stringify(contentFragments, undefined, 2);
         htmlSection.push({
             type: "text",
             text: `
           Here are HTML fragments from the page.
           '''
-          ${inputHtml}
+          ${contentFragments}
           '''
       `,
         });
@@ -46,7 +47,10 @@ function getHtmlPromptSection(fragments: HtmlFragments[] | undefined) {
     return htmlSection;
 }
 
-function getScreenshotPromptSection(screenshot: string | undefined) {
+function getScreenshotPromptSection(
+    screenshot: string | undefined,
+    pageTextContent: string | undefined,
+) {
     let screenshotSection = [];
     if (screenshot) {
         screenshotSection.push({
@@ -60,12 +64,14 @@ function getScreenshotPromptSection(screenshot: string | undefined) {
                 url: screenshot,
             },
         });
-
+    }
+    if (pageTextContent) {
         screenshotSection.push({
             type: "text",
-            text: `Use the top left corner as coordinate 0,0 and draw a virtual grid of 1x1 pixels, 
-                   where x values increase for each pixel as you go from left to right, and y values increase 
-                   as you go from top to bottom. 
+            text: `Here is the text content of the page
+            '''
+            ${pageTextContent}
+            '''            
             `,
         });
     }

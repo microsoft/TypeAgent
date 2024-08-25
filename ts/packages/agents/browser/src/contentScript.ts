@@ -3,7 +3,7 @@
 
 import { Readability, isProbablyReaderable } from "@mozilla/readability";
 import { HTMLReducer } from "./htmlReducer";
-import {convert} from "html-to-text";
+import { convert } from "html-to-text";
 
 function isVisible(element: HTMLElement) {
     var html = document.documentElement;
@@ -173,8 +173,8 @@ function getPageText(documentHtml: string, frameId: number) {
 
     const options = {
         wordwrap: 130,
-      };
-      
+    };
+
     const text = convert(documentHtml, options);
     return text;
 }
@@ -427,9 +427,28 @@ function daysIntoYear() {
 function setIdsOnAllElements(frameId: number) {
     const allElements = Array.from(document.getElementsByTagName("*"));
     const idPrefix = `id_${daysIntoYear()}_${frameId}_`;
+    const formattingTags = [
+        "BR",
+        "P",
+        "B",
+        "I",
+        "U",
+        "STRONG",
+        "TEMPLATE",
+        "IFRAME",
+        "H1",
+        "H2",
+        "H3",
+        "H4",
+        "H5",
+        "H6",
+    ];
     let i = 0;
     allElements.forEach((element: Element) => {
-        if (!element.hasAttribute("id")) {
+        if (
+            !element.hasAttribute("id") &&
+            !(element.tagName in formattingTags)
+        ) {
             element.setAttribute("id", idPrefix + i.toString());
             i++;
         }

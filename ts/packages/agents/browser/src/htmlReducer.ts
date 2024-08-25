@@ -107,7 +107,7 @@ export class HTMLReducer {
         this.removeMiscAttributes(doc);
         this.replaceLinks(doc);
         this.removeCommentNodes(doc);
-
+        
         let reduced = doc.documentElement.outerHTML;
         reduced = reduced.replace(/<!DOCTYPE[^>]*>/, "");
 
@@ -174,6 +174,17 @@ export class HTMLReducer {
                     element.removeAttribute(attr);
                 }
             });
+        });
+    }
+
+    private removeDataAttributes(doc: Document): void {
+        const elements = doc.querySelectorAll("*");
+        elements.forEach((element) => {
+            for (const attr of element.attributes) {
+                if (attr.name.startsWith("data-")) {
+                    element.removeAttribute(attr.name);
+                }
+            }
         });
     }
 

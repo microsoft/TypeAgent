@@ -30,7 +30,11 @@ export async function getBoardSchema(
 
     for (let i = 0; i < htmlFragments.length; i++) {
       // skip html fragments that are too short to contain crossword
-      if ((htmlFragments[i].content.length < 500) || (!htmlFragments[i].text) || (htmlFragments[i].text.length < 200)) {
+      if (
+        htmlFragments[i].content.length < 500 ||
+        !htmlFragments[i].text ||
+        htmlFragments[i].text.length < 200
+      ) {
         continue;
       }
 
@@ -68,21 +72,21 @@ export async function getBoardSchema(
           agent.getCluesTextThenSelectors([candidateFragments[i]]),
         );
       }
-
+      
       const clueResults = await Promise.all(cluePromises);
 
       for (let i = 0; i < clueResults.length; i++) {
         const cluesResponse = clueResults[i];
 
         if (cluesResponse && cluesResponse.success) {
-          if(cluesResponse.data){
-          const data = cluesResponse.data as Crossword;
-          if (data.across.length > 3 && data.down.length > 3) {
-            // save schema to cache
-            await browser.setCurrentPageSchema(url!, data);
-            return data;
+          if (cluesResponse.data) {
+            const data = cluesResponse.data as Crossword;
+            if (data.across.length > 3 && data.down.length > 3) {
+              // save schema to cache
+              await browser.setCurrentPageSchema(url!, data);
+              return data;
+            }
           }
-        }
         }
       }
 

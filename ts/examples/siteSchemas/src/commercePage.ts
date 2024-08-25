@@ -42,26 +42,30 @@ function createCommerceAgent(
 }
 
 async function getPageSchema(
-    url: string,
+    pageType: string,
     htmlFragments: HtmlFragments[],
     agent: ECommerceSiteAgent<ShoppingPlan>,
 ) {
     let response;
-    if (url.startsWith("https://www.homedepot.com/s/")) {
-        response = await agent.getPageData(
-            CommercePageType.SearchResults,
-            htmlFragments,
-        );
-    } else if (url.startsWith("https://www.homedepot.com/p/")) {
-        response = await agent.getPageData(
-            CommercePageType.ProductDetails,
-            htmlFragments,
-        );
-    } else {
-        response = await agent.getPageData(
-            CommercePageType.Landing,
-            htmlFragments,
-        );
+    switch (pageType) {
+        case "searchResults":
+            response = await agent.getPageData(
+                CommercePageType.SearchResults,
+                htmlFragments,
+            );
+            break;
+        case "productDetails":
+            response = await agent.getPageData(
+                CommercePageType.ProductDetails,
+                htmlFragments,
+            );
+            break;
+        default:
+            response = await agent.getPageData(
+                CommercePageType.Landing,
+                htmlFragments,
+            );
+            break;
     }
 
     if (!response.success) {
@@ -72,10 +76,9 @@ async function getPageSchema(
     return response.data;
 }
 
-async function getCurrentPageSchema<T extends object>() {
-    const url = await browser.getPageUrl();
+async function getCurrentPageSchema<T extends object>(pageType: string) {
     const htmlFragments = await browser.getHtmlFragments();
-    const currentPage = await getPageSchema(url!, htmlFragments, agent);
+    const currentPage = await getPageSchema(pageType, htmlFragments, agent);
     return currentPage as T;
 }
 
@@ -113,23 +116,25 @@ async function translateShoppingMessage(request: string) {
 }
 
 async function handleProductSearch(action: any) {
+    const pageInfo = await getCurrentPageSchema<LandingPage>("landingPage");
     if (!pageState) {
         console.log("Page state is missing");
         return;
     }
 
-    const pageInfo = pageState as LandingPage;
+    //const pageInfo = pageState as LandingPage;
     const searchSelector = pageInfo.searchBox.cssSelector;
 
     await browser.clickOn(searchSelector);
     await browser.enterTextIn(action.parameters.productName, searchSelector);
     await browser.clickOn(pageInfo.searchBox.submitButtonCssSelector);
+    await new Promise((r) => setTimeout(r, 200));
     await browser.awaitPageLoad();
 }
 
 async function handleSelectSearchResult(action: any) {
     // get current page state
-    const pageInfo = await getCurrentPageSchema<SearchPage>();
+    const pageInfo = await getCurrentPageSchema<SearchPage>("searchResults");
 
     if (!pageInfo) {
         console.error("Page state is missing");
@@ -138,12 +143,14 @@ async function handleSelectSearchResult(action: any) {
 
     const targetProduct = pageInfo.productTiles[action.parameters.position];
     await browser.clickOn(targetProduct.detailsLinkSelector);
+    await new Promise((r) => setTimeout(r, 200));
     await browser.awaitPageLoad();
 }
 
 async function handleAddToCart(action: any) {
     // get current page state
-    const pageInfo = await getCurrentPageSchema<ProductDetailsPage>();
+    const pageInfo =
+        await getCurrentPageSchema<ProductDetailsPage>("productDetails");
 
     if (!pageInfo) {
         console.error("Page state is missing");

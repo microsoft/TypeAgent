@@ -19,7 +19,7 @@ export type HtmlFragments = {
   frameId: string;
   content: string;
   text?: string;
-  cssSelector?: string;  
+  cssSelector?: string;
 };
 
 function getBootstrapPrefixPromptSection() {
@@ -35,7 +35,8 @@ function getBootstrapPrefixPromptSection() {
 function getHtmlPromptSection(fragments: HtmlFragments[] | undefined) {
   let htmlSection = [];
   if (fragments) {
-    const inputHtml = JSON.stringify(fragments, undefined, 2);
+    const textFragments = fragments.map((a) => a.content);
+    const inputHtml = JSON.stringify(textFragments, undefined, 2);
     htmlSection.push({
       role: "user",
       content: `
@@ -52,7 +53,7 @@ function getHtmlPromptSection(fragments: HtmlFragments[] | undefined) {
 function getHtmlTextOnlyPromptSection(fragments: HtmlFragments[] | undefined) {
   let htmlSection = [];
   if (fragments) {
-    const textFragments = fragments.map(a => a.text);
+    const textFragments = fragments.map((a) => a.text);
     const inputText = JSON.stringify(textFragments, undefined, 2);
     htmlSection.push({
       role: "user",
@@ -169,7 +170,10 @@ export class CrosswordPageTranslator<T extends object> {
     return promptSections;
   }
 
-  getSelectorsForCluesTextSections(fragments: HtmlFragments[], partialData: Crossword) {
+  getSelectorsForCluesTextSections(
+    fragments: HtmlFragments[],
+    partialData: Crossword,
+  ) {
     const htmlSection = getHtmlPromptSection(fragments);
     const prefixSection = getBootstrapPrefixPromptSection();
     const promptSections = [
@@ -278,7 +282,10 @@ export class CrosswordPageTranslator<T extends object> {
     return response;
   }
 
-  async getCluesSelectorsForText(fragments: HtmlFragments[], partialData: Crossword) {
+  async getCluesSelectorsForText(
+    fragments: HtmlFragments[],
+    partialData: Crossword,
+  ) {
     const promptSections = this.getSelectorsForCluesTextSections(
       fragments,
       partialData,
@@ -294,12 +301,21 @@ export class CrosswordPageTranslator<T extends object> {
   }
 
   async getCluesTextThenSelectors(fragments: HtmlFragments[]) {
+    console.time("getting clues text");
     const cluesTextResult = await this.getCluesText(fragments);
-    if(cluesTextResult.success){
+    console.timeLog("getting clues text");
+    if (cluesTextResult.success) {
+      console.time("getting clues css selectors");
       const cluesTextPortion = cluesTextResult.data as Crossword;
-      return this.getCluesSelectorsForText(fragments, cluesTextPortion);
-      // const cluesTextWithSelectorsResult = await this.getCluesSelectorsForText(fragments, cluesTextPortion);
-      //return cluesTextWithSelectorsResult;
+      // return this.getCluesSelectorsForText(fragments, cluesTextPortion);
+      const cluesTextWithSelectorsResult = await this.getCluesSelectorsForText(
+        fragments,
+        cluesTextPortion,
+      );
+      console.timeLog("getting clues css selectors");
+
+      return cluesTextWithSelectorsResult;
+
       /*
       if(cluesTextWithSelectorsResult.success){
         const consolidatedCrossword = cluesTextWithSelectorsResult.data as Crossword;
