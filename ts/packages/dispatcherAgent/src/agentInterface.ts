@@ -64,7 +64,7 @@ export interface DispatcherAgentContext<T = any> {
     readonly context: T;
 
     // TODO: review if these should be exposed.
-    readonly requestIO: RequestIO;
+    readonly requestIO: DispatcherAgentIO;
     readonly requestId: RequestId;
     readonly sessionStorage: Storage | undefined;
     readonly profileStorage: Storage; // storage that are preserved across sessions
@@ -111,7 +111,7 @@ export interface Storage {
 // TODO: review if these should be exposed. Duplicated from dispatcher's interactiveIO.ts
 export type RequestId = string | undefined;
 type LogFn = (log: (message?: string) => void) => void;
-export interface RequestIO {
+export interface DispatcherAgentIO {
     type: "html" | "text";
     getRequestId(): RequestId;
     clear(): void;
@@ -127,21 +127,6 @@ export interface RequestIO {
         message: string,
         actionIndex: number,
         groupId?: string,
-    ): void;
-
-    // Input
-    isInputEnabled(): boolean;
-    askYesNo(message: string, defaultValue?: boolean): Promise<boolean>;
-
-    // returns undefined if input is disabled
-    question(message: string): Promise<string | undefined>;
-    notify(
-        event: "explained",
-        data: {
-            time: string;
-            fromCache: boolean;
-            fromUser: boolean;
-        },
     ): void;
 }
 

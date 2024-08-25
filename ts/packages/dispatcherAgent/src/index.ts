@@ -5,6 +5,7 @@ export {
     TopLevelTranslatorConfig,
     HierarchicalTranslatorConfig,
     DispatcherAgent,
+    DispatcherAgentIO,
     DispatcherAction,
     DispatcherActionWithParameters,
     DispatcherAgentContext,
@@ -13,6 +14,5 @@ export {
     Storage,
     StorageEncoding,
     TokenCachePersistence,
-    RequestIO,
 } from "./agentInterface.js";
 export * from "./memory.js";
