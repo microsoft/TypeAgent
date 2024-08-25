@@ -385,9 +385,11 @@ class MessageGroup {
         if (metrics) {
             if (metrics.duration) {
                 if (metrics.duration < 1) {
-                    metricsDiv.innerText = `${metrics.duration.toFixed(3)} [ms]`;
+                    metricsDiv.innerText = `${metrics.duration.toFixed(3)}ms`;
+                } else if (metrics.duration > 1000) {
+                    metricsDiv.innerText = `${(metrics.duration / 1000).toFixed(1)}s`
                 } else {
-                    metricsDiv.innerText = `${metrics.duration.toFixed(1)} [ms]`
+                    metricsDiv.innerText = `${metrics.duration.toFixed(1)}ms`;
                 }
             }
             else {
