@@ -88,8 +88,6 @@ export type CommandHandlerContext = {
     // For @correct
     lastRequestAction?: RequestAction;
     lastExplanation?: object;
-
-    profiler: Profiler | undefined;
 };
 
 export function updateCorrectionContext(
@@ -243,7 +241,6 @@ export async function initializeCommandHandlerContext(
         logger,
         serviceHost: serviceHost,
         localWhisper: undefined,
-        profiler: new Profiler(),
     };
 
     context.requestIO.context = context;
