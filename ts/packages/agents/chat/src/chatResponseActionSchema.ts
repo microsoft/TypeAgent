@@ -22,7 +22,7 @@ export interface GenerateResponseAction {
     parameters: {
         // the original request from the user
         originalRequest: string;
-        // the generated text to show the user; if lookups are used, this text should let the user know a lookup is in progress
+        // the generated text to show the user; this should be a complete response to the user's request
         generatedText: string;
         // ALL the actions and entities present in the text of the user's request
         userRequestEntities: Entity[];
