@@ -121,12 +121,6 @@ export async function createSearchMemory(
         conversationName,
         context.storePath,
         true,
-        conversation.createKnowledgeExtractor(context.chatModel, {
-            windowSize: 8,
-            maxContextLength: context.maxCharsPerChunk,
-            includeSuggestedTopics: false,
-            includeActions: true,
-        }),
     );
     const searchProcessor = createSearchProcessor(
         searchMemory.conversation,

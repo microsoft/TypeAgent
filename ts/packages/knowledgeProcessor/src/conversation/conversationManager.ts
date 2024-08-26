@@ -11,7 +11,13 @@ import {
     createConversation,
     createConversationTopicMerger,
 } from "./conversation.js";
-import { KnowledgeExtractor, extractKnowledgeFromBlock } from "./knowledge.js";
+import {
+    KnowledgeExtractor,
+    extractKnowledgeFromBlock,
+    KnowledgeExtractorSettings,
+    createKnowledgeExtractor,
+} from "./knowledge.js";
+
 import { createEmbeddingCache } from "../modelCache.js";
 
 export interface ConversationManager {
@@ -22,25 +28,36 @@ export interface ConversationManager {
     //search(query: string): Promise<SearchTermsActionResponse | undefined>;
 }
 
+/**
+ * Creates a conversation manager with standard defaults.
+ */
 export async function createConversationManager(
     conversationName: string,
     rootPath: string,
     createNew: boolean,
-    knowledgeExtractor: KnowledgeExtractor,
 ): Promise<ConversationManager> {
     const embeddingModel = defaultEmbeddingModel();
     const knowledgeModel = defaultKnowledgeModel();
+
     const conversationSettings = defaultConversationSettings();
+    const folderSettings = defaultFolderSettings();
     const topicMergeWindowSize = 4;
+    const maxCharsPerChunk = 2048;
 
     const conversation = await createConversation(
         conversationSettings,
         path.join(rootPath, conversationName),
-        defaultFolderSettings(),
+        folderSettings,
     );
     if (createNew) {
         await conversation.clear(true);
     }
+    const knowledgeExtractorSettings = defaultKnowledgeExtractorSettings();
+    const knowledgeExtractor = createKnowledgeExtractor(
+        knowledgeModel,
+        knowledgeExtractorSettings,
+    );
+
     const topicMerger = await createConversationTopicMerger(
         knowledgeModel,
         conversation,
@@ -95,6 +112,15 @@ export async function createConversationManager(
                 concurrency: 2,
                 embeddingModel,
             },
+        };
+    }
+
+    function defaultKnowledgeExtractorSettings(): KnowledgeExtractorSettings {
+        return {
+            windowSize: 8,
+            maxContextLength: maxCharsPerChunk,
+            includeSuggestedTopics: false,
+            includeActions: true,
         };
     }
 
