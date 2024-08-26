@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import path from "path";
-import { ChatModel, TextEmbeddingModel, openai } from "aiclient";
+import { openai } from "aiclient";
 import { ObjectFolderSettings } from "typeagent";
 import { TextBlock, SourceTextBlock } from "../text.js";
 import {
@@ -10,22 +10,31 @@ import {
     ConversationSettings,
     createConversation,
     createConversationTopicMerger,
+    SearchTermsActionResponse,
 } from "./conversation.js";
 import {
-    KnowledgeExtractor,
     extractKnowledgeFromBlock,
     KnowledgeExtractorSettings,
     createKnowledgeExtractor,
 } from "./knowledge.js";
-
+import {
+    ConversationSearchProcessor,
+    createSearchProcessor,
+    SearchProcessingOptions,
+} from "./searchProcessor.js";
 import { createEmbeddingCache } from "../modelCache.js";
+import { KnowledgeSearchMode } from "./knowledgeActions.js";
 
 export interface ConversationManager {
     readonly conversationName: string;
     readonly conversation: Conversation<string, string, string, string>;
+    readonly searchProcessor: ConversationSearchProcessor;
     addMessage(message: TextBlock, timestamp?: Date): Promise<any>;
     addIndex(message: TextBlock, id: any): Promise<void>;
-    //search(query: string): Promise<SearchTermsActionResponse | undefined>;
+    search(
+        query: string,
+        options: SearchProcessingOptions,
+    ): Promise<SearchTermsActionResponse | undefined>;
 }
 
 /**
@@ -36,8 +45,12 @@ export async function createConversationManager(
     rootPath: string,
     createNew: boolean,
 ): Promise<ConversationManager> {
-    const embeddingModel = defaultEmbeddingModel();
-    const knowledgeModel = defaultKnowledgeModel();
+    const embeddingModel = createEmbeddingCache(
+        openai.createEmbeddingModel(),
+        64,
+    );
+    const knowledgeModel = openai.createChatModel();
+    const answerModel = openai.createChatModel();
 
     const conversationSettings = defaultConversationSettings();
     const folderSettings = defaultFolderSettings();
@@ -65,13 +78,22 @@ export async function createConversationManager(
         topicMergeWindowSize,
     );
 
+    const searchProcessor = createSearchProcessor(
+        conversation,
+        knowledgeModel,
+        answerModel,
+        KnowledgeSearchMode.WithActions,
+    );
+
     const messageIndex = await conversation.getMessageIndex();
 
     return {
         conversationName,
         conversation,
+        searchProcessor,
         addMessage,
         addIndex,
+        search,
     };
 
     async function addMessage(
@@ -105,103 +127,12 @@ export async function createConversationManager(
         }
     }
 
-    function defaultConversationSettings(): ConversationSettings {
-        return {
-            indexSettings: {
-                caseSensitive: false,
-                concurrency: 2,
-                embeddingModel,
-            },
-        };
+    async function search(
+        query: string,
+        options: SearchProcessingOptions,
+    ): Promise<SearchTermsActionResponse | undefined> {
+        return searchProcessor.searchTerms(query, options);
     }
-
-    function defaultKnowledgeExtractorSettings(): KnowledgeExtractorSettings {
-        return {
-            windowSize: 8,
-            maxContextLength: maxCharsPerChunk,
-            includeSuggestedTopics: false,
-            includeActions: true,
-        };
-    }
-
-    function defaultFolderSettings(): ObjectFolderSettings {
-        return {
-            cacheNames: true,
-            useWeakRefs: true,
-        };
-    }
-
-    function defaultKnowledgeModel(): ChatModel {
-        return openai.createChatModel();
-    }
-
-    function defaultEmbeddingModel(): TextEmbeddingModel {
-        const model = openai.createEmbeddingModel();
-        return createEmbeddingCache(model, 64);
-    }
-}
-
-/*
-import path from "path";
-import { ChatModel, TextEmbeddingModel, openai } from "aiclient";
-import { ObjectFolderSettings } from "typeagent";
-import {
-    Conversation,
-    ConversationSettings,
-    createConversation,
-    createConversationManager,
-    createConversationTopicMerger,
-} from "./conversation.js";
-import { createSearchProcessor } from "./searchProcessor.js";
-import {
-    KnowledgeExtractorSettings,
-    createKnowledgeExtractor,
-} from "./knowledge.js";
-import { KnowledgeSearchMode } from "./knowledgeActions.js";
-import { createEmbeddingCache } from "../modelCache.js";
-
-export async function createConversationMemory(
-    conversationName: string,
-    rootPath: string,
-) {
-    const knowledgeModel = defaultKnowledgeModel();
-    const answerModel = defaultAnswerModel();
-    const embeddingModel = defaultEmbeddingModel();
-
-    const maxCharsPerChunk = 2048;
-    const topicMergeWindowSize = 4;
-    const conversationSettings = defaultConversationSettings();
-    const knowledgeExtractorSettings = defaultKnowledgeExtractorSettings();
-    const folderSettings = defaultFolderSettings();
-
-    const knowledgeExtractor = createKnowledgeExtractor(
-        knowledgeModel,
-        knowledgeExtractorSettings,
-    );
-    const conversation = await createConversation(
-        conversationSettings,
-        path.join(rootPath, conversationName),
-        folderSettings,
-    );
-    const topicMerger = await createConversationTopicMerger(
-        knowledgeModel,
-        conversation,
-        1, // Merge base topic level 1 into a higher level
-        topicMergeWindowSize,
-    );
-    const memory = await createConversationManager(
-        conversationName,
-        conversation,
-        knowledgeExtractor,
-        topicMerger,
-    );
-    const searchProcessor = createSearchProcessor(
-        conversation,
-        knowledgeModel,
-        answerModel,
-        KnowledgeSearchMode.WithActions,
-    );
-    return [searchMemory, searchProcessor];
 
     function defaultConversationSettings(): ConversationSettings {
         return {
@@ -228,18 +159,4 @@ export async function createConversationMemory(
             useWeakRefs: true,
         };
     }
-
-    function defaultEmbeddingModel(): TextEmbeddingModel {
-        const model = openai.createEmbeddingModel();
-        return createEmbeddingCache(model, 64);
-    }
-
-    function defaultKnowledgeModel(): ChatModel {
-        return openai.createChatModel();
-    }
-
-    function defaultAnswerModel(): ChatModel {
-        return openai.createChatModel();
-    }
 }
-*/

@@ -122,12 +122,7 @@ export async function createSearchMemory(
         context.storePath,
         true,
     );
-    const searchProcessor = createSearchProcessor(
-        searchMemory.conversation,
-        context.chatModel,
-        true,
-    );
-    return [searchMemory, searchProcessor];
+    return [searchMemory, searchMemory.searchProcessor];
 }
 
 export async function loadConversation(
