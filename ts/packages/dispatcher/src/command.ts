@@ -33,7 +33,7 @@ import { getTranslatorConfig } from "./translation/agentTranslators.js";
 import { processRequests, unicodeChar } from "./utils/interactive.js";
 /* ==Experimental== */
 import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
-import { Profiler } from "./handlers/common/profiler.js";
+import { Profiler } from "common-utils";
 /* ==End Experimental== */
 
 class HelpCommandHandler implements CommandHandler {
@@ -225,7 +225,7 @@ export async function processCommandNoLock(
     }
 
     try {
-        Profiler.getInstance().start(context);
+        Profiler.getInstance().start(context.requestId);
         
         const result = resolveCommand(input);
         if (result === undefined) {
@@ -243,7 +243,7 @@ export async function processCommandNoLock(
         context.requestIO.error(`ERROR: ${e.message}`);
         debugInteractive(e.stack);
     } finally {
-        Profiler.getInstance().stop(context);
+        Profiler.getInstance().stop(context.requestId);
     }
 
     context.requestId = undefined;

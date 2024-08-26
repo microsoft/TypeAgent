@@ -54,7 +54,6 @@ import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
 import { DispatcherName } from "../requestCommandHandler.js";
 import { CommandHandler } from "./commandHandler.js";
-import { Profiler } from "./profiler.js";
 
 export interface CommandResult {
     error?: boolean;

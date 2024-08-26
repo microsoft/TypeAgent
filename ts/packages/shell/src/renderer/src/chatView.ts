@@ -474,20 +474,49 @@ export function setSource(
 
 export function updateMetrics(div: HTMLDivElement, metrics?: IMessageMetrics) {
     if (metrics) {
+
+        // clear out previous perf datanpm
+        div.innerHTML = "";
+
+        let timeDiv = document.createElement("div");
+        let marksDiv = document.createElement("div");
+        let marksSubContainer = document.createElement("div");
+        marksDiv.className = "metrics-details";
+
+        marksDiv.append(marksSubContainer);
+
+        div.append(marksDiv);
+
         if (metrics.duration) {
-            if (metrics.duration < 1) {
-                div.innerText = `${metrics.duration.toFixed(3)}ms`;
-            } else if (metrics.duration > 1000) {
-                div.innerHTML = `Time taken: <b>${(metrics.duration / 1000).toFixed(1)}s</b>`
-            } else {
-                div.innerHTML = `Time taken: <b>${metrics.duration.toFixed(1)}ms</b>`;
-            }
+            timeDiv.innerHTML = `Time Taken: <b>${formatTimeReaderFriendly(metrics.duration)}</b>`;
         }
         else {
-            div.innerText = "no performance data available";
+            timeDiv.innerText = "no performance data available";
         }
+        
+        if (metrics.marks) {
+            
+            metrics.marks.forEach((value: number, key: string) => {
+                let mDiv = document.createElement("div");
+                mDiv.innerHTML = `${key}: ${formatTimeReaderFriendly(value)}`;
+                marksSubContainer.append(mDiv);
+            });
+        }
+
+        marksDiv.append(timeDiv);
+
     } else {
         div.innerText = "no performance data available";
+    }
+}
+
+function formatTimeReaderFriendly(time: number) {
+    if (time < 1) {
+        return `${time.toFixed(3)}ms`;
+    } else if (time > 1000) {
+        return `${(time / 1000).toFixed(1)}s`;
+    } else {
+       return `${time.toFixed(1)}ms`;
     }
 }
 

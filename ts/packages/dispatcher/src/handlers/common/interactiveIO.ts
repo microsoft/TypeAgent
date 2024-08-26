@@ -3,10 +3,9 @@
 
 import { askYesNo } from "../../utils/interactive.js";
 import readline from "readline/promises";
-import { SearchMenuItem, ActionTemplateSequence, StopWatch } from "common-utils";
+import { SearchMenuItem, ActionTemplateSequence, Profiler } from "common-utils";
 import chalk from "chalk";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
-import { Profiler } from "./profiler.js";
 
 export type RequestId = string | undefined;
 
@@ -171,7 +170,17 @@ export function getConsoleRequestIO(
 }
 
 function makeClientIOMessage(context: CommandHandlerContext | undefined, message: string, requestId: RequestId, source: string, actionIndex?: number, groupId?: string) : IAgentMessage {
-    return { message, requestId, source, actionIndex, groupId, metrics: { duration: Profiler.getInstance().get(requestId)?.elapsedMs } };
+    return { 
+        message, 
+        requestId, 
+        source, 
+        actionIndex, 
+        groupId, 
+        metrics: { 
+            duration: Profiler.getInstance().get(requestId)?.elapsedMs,
+            marks: Profiler.getInstance().getMarks(requestId)
+        } 
+    };
 }
 
 export function getRequestIO(

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import fs from "node:fs";
-import { StopWatch } from "common-utils";
+import { Profiler, StopWatch } from "common-utils";
 import {
     ChatResponseAction,
     LookupAndGenerateResponseAction,
@@ -57,7 +57,6 @@ async function handleChatResponse(
     context: DispatcherAgentContext<undefined>,
     actionIndex: number,
 ) {
-    const requestIO = context.requestIO;
     console.log(JSON.stringify(chatAction, undefined, 2));
     switch (chatAction.actionName) {
         case "generateResponse": {
@@ -99,14 +98,14 @@ async function handleChatResponse(
                     console.log("Running lookups");
                     return handleLookup(
                         lookupAction,
-                        requestIO,
+                        context,
                         actionIndex,
                         await getLookupSettings(true),
                     );
                 }
                 break;
             }
-            requestIO.error("No information found");
+            context.requestIO.error("No information found");
     }
 }
 
@@ -238,7 +237,7 @@ type LookupSettings = {
 
 async function handleLookup(
     chatAction: LookupAndGenerateResponseAction,
-    requestIO: DispatcherAgentIO,
+    agentContext: DispatcherAgentContext,
     actionIndex: number,
     settings: LookupSettings,
 ): Promise<TurnImpression> {
@@ -262,7 +261,7 @@ async function handleLookup(
     if (lookups.length === 1 && lookUpConfig?.documentConcurrency) {
         documentConcurrency = lookUpConfig.documentConcurrency;
     }
-    requestIO.setActionStatus(lookupToHtml(lookups), actionIndex);
+    agentContext.requestIO.setActionStatus(lookupToHtml(lookups), actionIndex);
     const context: LookupContext = {
         lookups,
         answers: new Map<string, ChunkChatResponse>(),
@@ -274,7 +273,7 @@ async function handleLookup(
             runLookup(
                 l,
                 context,
-                requestIO,
+                agentContext,
                 actionIndex,
                 settings,
                 documentConcurrency,
@@ -283,7 +282,7 @@ async function handleLookup(
     );
     // Capture answers in the turn impression to return
     literalResponse = updateTurnImpression(context, literalResponse);
-    requestIO.setActionStatus(literalResponse.displayText, actionIndex);
+    agentContext.requestIO.setActionStatus(literalResponse.displayText, actionIndex);
     // Generate entities if needed
     if (settings.entityGenModel) {
         const entities = await runEntityExtraction(context, settings);
@@ -361,7 +360,7 @@ function updateTurnImpression(
 async function runLookup(
     lookup: string,
     context: LookupContext,
-    requestIO: DispatcherAgentIO,
+    agentContext: DispatcherAgentContext,
     actionIndex: number,
     settings: LookupSettings,
     concurrency: number,
@@ -370,6 +369,8 @@ async function runLookup(
     //
     // Lookups are implemented using a web search
     //
+    let firstToken: boolean = true;
+
     const stopWatch = new StopWatch();
     stopWatch.start("WEB SEARCH: " + lookup);
     const urls = await searchWeb(lookup, settings.maxSearchResults);
@@ -387,6 +388,13 @@ async function runLookup(
         concurrency,
         getLookupInstructions(),
         (url, answerSoFar) => {
+            if (firstToken) {
+
+                Profiler.getInstance().mark(agentContext.requestId, "firstToken");
+
+                firstToken = false;
+            }
+
             updateLookupProgress(context, lookup, url, answerSoFar);
             updateStatus();
         },
@@ -400,7 +408,7 @@ async function runLookup(
     return answer;
 
     function updateStatus() {
-        requestIO.setActionStatus(lookupProgressAsHtml(context), actionIndex);
+        agentContext.requestIO.setActionStatus(lookupProgressAsHtml(context), actionIndex);
     }
 }
 
