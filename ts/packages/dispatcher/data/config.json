@@ -18,7 +18,8 @@
     },
     "list": {
       "type": "module",
-      "name": "list-agent"
+      "name": "list-agent",
+      "execMode": "separate"
     },
     "browser": {
       "type": "module",

@@ -31,7 +31,7 @@ export type BrowserActionContext = {
   browserConnector: BrowserConnector | undefined;
 };
 
-function initializeBrowserContext(): BrowserActionContext {
+async function initializeBrowserContext(): Promise<BrowserActionContext> {
   return {
     webSocket: undefined,
     crossWordState: undefined,

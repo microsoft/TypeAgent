@@ -52,6 +52,8 @@ import {
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
 import { DispatcherName } from "../requestCommandHandler.js";
+import { DispatcherAgentContext } from "dispatcher-agent";
+import { getDispatcherAgent } from "../../agent/agentConfig.js";
 
 export interface CommandResult {
     error?: boolean;
@@ -62,6 +64,7 @@ export interface CommandResult {
 // Command Handler Context definition.
 export type CommandHandlerContext = {
     session: Session;
+    sessionContext: Map<string, DispatcherAgentContext>;
 
     // Per activation configs
     developerMode?: boolean;
@@ -218,6 +221,7 @@ export async function initializeCommandHandlerContext(
     const clientIO = options?.clientIO;
     const context: CommandHandlerContext = {
         session,
+        sessionContext: new Map<string, DispatcherAgentContext>(),
         explanationAsynchronousMode,
         dblogging: true,
         clientIO,
@@ -256,6 +260,11 @@ export async function setSessionOnCommandHandlerContext(
     session: Session,
 ) {
     context.session = session;
+    for (const [name, sessionContext] of context.sessionContext.entries()) {
+        (await getDispatcherAgent(name)).closeAgentContext?.(sessionContext);
+    }
+    context.sessionContext.clear();
+    context.action = await initializeActionContext();
     context.agentCache = await getAgentCache(context.session, context.logger);
     await updateActionContext(context.session.getConfig().actions, context);
 }
