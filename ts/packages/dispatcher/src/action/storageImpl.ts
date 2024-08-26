@@ -27,7 +27,7 @@ export function getStorage(name: string, baseDir: string): Storage {
                 )
                 .map((item) => item.name);
         },
-        exists: (storagePath: string) => {
+        exists: async (storagePath: string) => {
             const fullPath = getFullPath(storagePath);
             return fs.existsSync(fullPath);
         },

@@ -52,7 +52,7 @@ type CalendarActionContext = {
     interpreter: ImpressionInterpreter;
 };
 
-function initializeCalendarContext() {
+async function initializeCalendarContext() {
     return {
         calendarClient: undefined,
         graphEventIds: undefined,
