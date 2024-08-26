@@ -270,7 +270,7 @@ class MessageGroup {
     private requestCompleted() {
         this.completed = true;
         if (this.statusMessages.length === 0) {
-            this.addStatusMessage("Request completed", "shell", true);
+            this.addStatusMessage({ message: "Request completed", source: "shell" }, true);
         }
         this.updateStatusMessageDivState();
     }
@@ -307,7 +307,7 @@ class MessageGroup {
 
     private requestException(error: any) {
         console.error(error);
-        this.addStatusMessage(`Processing Error: ${error}`, `Shell`, false);
+        this.addStatusMessage({ message: `Processing Error: ${error}`, source: "shell" }, false);
     }
 
     private ensureStatusMessageDiv(source: string) {
@@ -326,13 +326,13 @@ class MessageGroup {
     }
 
     public addStatusMessage(
-        message: string,
-        source: string,
+        msg: IAgentMessage,
         temporary: boolean,
     ) {
-        const div = this.ensureStatusMessageDiv(source)
+        let message = msg.message;
+        const div = this.ensureStatusMessageDiv(msg.source)
             .lastChild?.previousSibling as HTMLDivElement;
-        setSource(this.statusMessageDiv as HTMLDivElement, source, this.agents);
+        setSource(this.statusMessageDiv as HTMLDivElement, msg.source, this.agents);
 
         let contentDiv: HTMLDivElement;
         if (
@@ -343,10 +343,11 @@ class MessageGroup {
         } else {
             contentDiv = document.createElement("div");
             div.appendChild(contentDiv);
-        }
+        }     
         this.statusMessages.push({ message, temporary });
 
         setContent(contentDiv, message);
+        updateMetrics(this.statusMessageDiv?.lastChild as HTMLDivElement, msg.metrics)
 
         this.updateStatusMessageDivState();
     }
@@ -356,7 +357,6 @@ class MessageGroup {
         classes: string,
         messageClass: string,
         source: string,
-        metrics: IMessageMetrics | undefined = undefined
     ) {
         messageDiv.className = classes;
 
@@ -382,22 +382,7 @@ class MessageGroup {
         metricsDiv.className = "chat-message-metrics";
         messageDiv.append(metricsDiv);
 
-        if (metrics) {
-            if (metrics.duration) {
-                if (metrics.duration < 1) {
-                    metricsDiv.innerText = `${metrics.duration.toFixed(3)}ms`;
-                } else if (metrics.duration > 1000) {
-                    metricsDiv.innerText = `${(metrics.duration / 1000).toFixed(1)}s`
-                } else {
-                    metricsDiv.innerText = `${metrics.duration.toFixed(1)}ms`;
-                }
-            }
-            else {
-                metricsDiv.innerText = "no performance data available";
-            }
-        } else {
-            metricsDiv.innerText = "no performance data available";
-        }
+        //updateMetrics(metricsDiv, metrics);
     }
 
     public ensureAgentMessage(msg: IAgentMessage) {
@@ -413,7 +398,6 @@ class MessageGroup {
                         "chat-message chat-message-left",
                         "chat-message-agent",
                         msg.source,
-                        msg.metrics
                     );
 
                     // The chat message list has the style flex-direction: column-reverse;
@@ -487,6 +471,26 @@ export function setSource(
         .children[1] as HTMLDivElement;
     iconDiv.innerText = agents.get(source as string) as string; // icon
 }
+
+export function updateMetrics(div: HTMLDivElement, metrics?: IMessageMetrics) {
+    if (metrics) {
+        if (metrics.duration) {
+            if (metrics.duration < 1) {
+                div.innerText = `${metrics.duration.toFixed(3)}ms`;
+            } else if (metrics.duration > 1000) {
+                div.innerHTML = `Time taken: <b>${(metrics.duration / 1000).toFixed(1)}s</b>`
+            } else {
+                div.innerHTML = `Time taken: <b>${metrics.duration.toFixed(1)}ms</b>`;
+            }
+        }
+        else {
+            div.innerText = "no performance data available";
+        }
+    } else {
+        div.innerText = "no performance data available";
+    }
+}
+
 
 export function getSelectionXCoord() {
     let sel = window.getSelection();
@@ -884,7 +888,7 @@ export class ChatView {
         msg: IAgentMessage,
         temporary: boolean,
     ) {
-        this.getMessageGroup(msg.requestId as string)?.addStatusMessage(msg.message, msg.source, temporary);
+        this.getMessageGroup(msg.requestId as string)?.addStatusMessage(msg, temporary);
     }
 
     clear() {
@@ -953,6 +957,8 @@ export class ChatView {
 
         setSource(messageContainer, source, this.agents);
         setContent(message, text);
+        updateMetrics(messageContainer.lastChild as HTMLDivElement, msg.metrics);
+
         if (!groupId) {
             const innerDiv = message.firstChild as HTMLDivElement;
             if (innerDiv && innerDiv.dataset && innerDiv.dataset.group) {

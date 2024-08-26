@@ -77,7 +77,7 @@ export type ActionTemplateSequence = {
 
 export interface IAgentMessage {
     message: string;
-    requestId: string | undefined;
+    requestId?: string | undefined;
     source: string;
     actionIndex?: number | undefined;
     groupId?: string | undefined;
