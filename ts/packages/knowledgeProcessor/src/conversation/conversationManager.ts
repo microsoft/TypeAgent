@@ -3,7 +3,7 @@
 
 import path from "path";
 import { openai } from "aiclient";
-import { ObjectFolderSettings } from "typeagent";
+import { ObjectFolderSettings, SearchOptions } from "typeagent";
 import { TextBlock, SourceTextBlock } from "../text.js";
 import {
     Conversation,
@@ -24,6 +24,7 @@ import {
 } from "./searchProcessor.js";
 import { createEmbeddingCache } from "../modelCache.js";
 import { KnowledgeSearchMode } from "./knowledgeActions.js";
+import { SetOp } from "../setOperations.js";
 
 export interface ConversationManager {
     readonly conversationName: string;
@@ -33,7 +34,9 @@ export interface ConversationManager {
     addIndex(message: TextBlock, id: any): Promise<void>;
     search(
         query: string,
-        options: SearchProcessingOptions,
+        fuzzySearchOptions?: SearchOptions | undefined,
+        maxMessages?: number | undefined,
+        progress?: ((value: any) => void) | undefined,
     ): Promise<SearchTermsActionResponse | undefined>;
 }
 
@@ -129,9 +132,18 @@ export async function createConversationManager(
 
     async function search(
         query: string,
-        options: SearchProcessingOptions,
+        fuzzySearchOptions?: SearchOptions | undefined,
+        maxMessages?: number | undefined,
+        progress?: ((value: any) => void) | undefined,
     ): Promise<SearchTermsActionResponse | undefined> {
-        return searchProcessor.searchTerms(query, options);
+        return searchProcessor.searchTerms(
+            query,
+            createSearchProcessingSettings(
+                fuzzySearchOptions,
+                maxMessages,
+                progress,
+            ),
+        );
     }
 
     function defaultConversationSettings(): ConversationSettings {
@@ -157,6 +169,26 @@ export async function createConversationManager(
         return {
             cacheNames: true,
             useWeakRefs: true,
+        };
+    }
+
+    function createSearchProcessingSettings(
+        fuzzySearchOptions?: SearchOptions,
+        maxMessages?: number,
+        progress?: (value: any) => void,
+    ): SearchProcessingOptions {
+        fuzzySearchOptions ??= {
+            maxMatches: 2,
+        };
+        fuzzySearchOptions.minScore ??= 0.8;
+        maxMessages ??= 10;
+        return {
+            maxMatches: fuzzySearchOptions.maxMatches,
+            minScore: fuzzySearchOptions.minScore,
+            maxMessages,
+            combinationSetOp: SetOp.IntersectUnion,
+            progress,
+            fallbackSearch: { maxMatches: maxMessages },
         };
     }
 }
