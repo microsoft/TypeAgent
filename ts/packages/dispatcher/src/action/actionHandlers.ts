@@ -86,12 +86,6 @@ function createDispatcherAgentContext(
         issueCommand(command: string) {
             return processCommandNoLock(command, context);
         },
-        getAlternativeAgentContext(name: string) {
-            return context.action[name];
-        },
-        getSessionDirPath() {
-            return context.session.getSessionDirPath();
-        },
         getUpdateActionStatus() {
             return context.clientIO?.updateActionStatus.bind(context.clientIO);
         },
