@@ -11,11 +11,13 @@ import {
     createConversation,
     createConversationTopicMerger,
     SearchTermsActionResponse,
+    ExtractedKnowledgeIds,
 } from "./conversation.js";
 import {
     extractKnowledgeFromBlock,
     KnowledgeExtractorSettings,
     createKnowledgeExtractor,
+    ExtractedKnowledge,
 } from "./knowledge.js";
 import {
     ConversationSearchProcessor,
@@ -25,12 +27,17 @@ import {
 import { createEmbeddingCache } from "../modelCache.js";
 import { KnowledgeSearchMode } from "./knowledgeActions.js";
 import { SetOp } from "../setOperations.js";
+import { ConcreteEntity } from "./knowledgeSchema.js";
 
 export interface ConversationManager {
     readonly conversationName: string;
     readonly conversation: Conversation<string, string, string, string>;
     readonly searchProcessor: ConversationSearchProcessor;
     addMessage(message: TextBlock, timestamp?: Date): Promise<any>;
+    addEntities(
+        entities: ConcreteEntity[],
+        timestamp?: Date,
+    ): Promise<string[] | undefined>;
     addIndex(message: TextBlock, id: any): Promise<void>;
     search(
         query: string,
@@ -48,6 +55,9 @@ export async function createConversationManager(
     rootPath: string,
     createNew: boolean,
 ): Promise<ConversationManager> {
+    type MessageId = string;
+    type EntityId = string;
+
     const embeddingModel = createEmbeddingCache(
         openai.createEmbeddingModel(),
         64,
@@ -95,6 +105,7 @@ export async function createConversationManager(
         conversation,
         searchProcessor,
         addMessage,
+        addEntities,
         addIndex,
         search,
     };
@@ -106,6 +117,30 @@ export async function createConversationManager(
         timestamp ??= new Date();
         const blockId = await conversation.messages.put(message, timestamp);
         await addIndex({ ...message, blockId, timestamp });
+    }
+
+    async function addEntities(
+        entities: ConcreteEntity[],
+        timestamp?: Date,
+    ): Promise<EntityId[] | undefined> {
+        timestamp ??= new Date();
+        if (entities && entities.length > 0) {
+            const sourceIds: MessageId[] = [];
+            const knowledge: ExtractedKnowledge<MessageId> = {
+                entities: entities.map((value) => {
+                    return { value, sourceIds };
+                }),
+            };
+            const knowledgeId = await conversation.knowledge.put(knowledge);
+            const knowledgeIds: ExtractedKnowledgeIds = {};
+            await conversation.addNextEntities(
+                knowledge,
+                knowledgeIds,
+                timestamp,
+            );
+            return knowledgeIds.entityIds;
+        }
+        return undefined;
     }
 
     async function addIndex(message: SourceTextBlock) {
