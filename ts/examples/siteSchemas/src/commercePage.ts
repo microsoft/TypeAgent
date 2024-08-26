@@ -10,8 +10,9 @@ import { CommercePageType, ECommerceSiteAgent } from "./commerce/translator.js";
 import { LandingPage } from "./commerce/schema/landingPage.js";
 import { createBrowserConnector } from "./common/connector.js";
 import { HtmlFragments, getModelVals } from "./common/translator.js";
-import { SearchPage } from "./commerce/schema/searchResultsPage.js";
+// import { SearchPage } from "./commerce/schema/searchResultsPage.js";
 import { ProductDetailsPage } from "./commerce/schema/productDetailsPage.js";
+import { ProductTile } from "./commerce/schema/selectorsSchema.js";
 
 // initialize commerce state
 const agent = createCommerceAgent("GPT_4o");
@@ -134,9 +135,11 @@ async function handleProductSearch(action: any) {
     await new Promise((r) => setTimeout(r, 200));
     await browser.awaitPageLoad();
 }
-
+/*
 async function handleSelectSearchResult(action: any) {
     // get current page state
+    console.time("getting page state for search page");
+   
     const pageInfo = await getCurrentPageSchema<SearchPage>("searchResults");
 
     if (!pageInfo) {
@@ -145,7 +148,39 @@ async function handleSelectSearchResult(action: any) {
     }
 
     const targetProduct = pageInfo.productTiles[action.parameters.position];
+    console.timeLog("getting page state for search page");
+    
+    console.log(JSON.stringify(targetProduct));
+
+    // getCssSelectorForElement
     await browser.clickOn(targetProduct.detailsLinkSelector);
+    await new Promise((r) => setTimeout(r, 200));
+    await browser.awaitPageLoad();
+}
+*/
+
+async function handleSelectSearchResult(action: any) {
+    const request = `Search result: ${action.selectionCriteria}`;
+    const htmlFragments = await browser.getHtmlFragments();
+
+    console.time("getting product tile from search");
+    const response = await agent.getProductTile(
+        request,
+        htmlFragments,
+        undefined,
+    );
+
+    if(!response.success){
+        console.error("Attempt to get product tilefailed");
+        return;
+    }
+
+    const selector = response.data as ProductTile;
+    console.timeLog("getting product tile from search");
+    console.log(JSON.stringify(selector));
+
+    // getCssSelectorForElement
+    await browser.clickOn(selector.detailsLinkSelector);
     await new Promise((r) => setTimeout(r, 200));
     await browser.awaitPageLoad();
 }
@@ -160,7 +195,7 @@ async function handleAddToCart(action: any) {
         return;
     }
 
-    const targetProduct = pageInfo.productInfo;
+    const targetProduct = pageInfo.mainProductInfo;
     if (targetProduct.addToCartButton) {
         await browser.clickOn(targetProduct.addToCartButton.cssSelector);
     }

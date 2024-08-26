@@ -134,6 +134,40 @@ export class ECommerceSiteAgent<T extends object> {
         return promptSections;
     }
 
+    private getCssSelectorForElementPrompt<U extends object>(
+        translator: TypeChatJsonTranslator<U>,
+        userRequest: string,
+        fragments?: HtmlFragments[],
+        screenshot?: string,
+    ) {
+        const screenshotSection = getScreenshotPromptSection(screenshot, fragments);
+        const htmlSection = getHtmlPromptSection(fragments);
+        const prefixSection = getBootstrapPrefixPromptSection();
+        const promptSections = [
+            ...prefixSection,
+            ...screenshotSection,
+            ...htmlSection,
+            {
+                type: "text",
+                text: `
+            Use the layout information provided and the user request below to generate a SINGLE "${translator.validator.getTypeName()}" response using the typescript schema below:
+            
+            '''
+            ${translator.validator.getSchemaText()}
+            '''
+            
+            Here is  user request
+            '''
+            ${userRequest}
+            '''
+
+            The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
+            `,
+            },
+        ];
+        return promptSections;
+    }
+
     private getPageChatResponsePrompt<U extends object>(
         translator: TypeChatJsonTranslator<U>,
         userQuestion: string,
@@ -265,6 +299,36 @@ export class ECommerceSiteAgent<T extends object> {
         const promptSections = this.getPageChatResponsePrompt(
             bootstrapTranslator,
             question,
+            fragments,
+            screenshot,            
+        ) as ContentSection[];
+
+        const response = await bootstrapTranslator.translate("", [
+            { role: "user", content: JSON.stringify(promptSections) },
+        ]);
+        return response;
+    }
+
+    async getProductTile(
+        userRequest: string,
+        fragments?: HtmlFragments[],
+        screenshot?: string,        
+    ) {
+        const schemaPath = path.join(
+            "src",
+            "commerce",
+            "schema",
+            "selectorsSchema.ts",
+        );
+
+        const bootstrapTranslator = this.getBootstrapTranslator(
+            schemaPath,
+            "ProductTile",
+        );
+
+        const promptSections = this.getCssSelectorForElementPrompt(
+            bootstrapTranslator,
+            userRequest,
             fragments,
             screenshot,            
         ) as ContentSection[];

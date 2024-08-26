@@ -33,8 +33,8 @@ export type SearchForProductAction = {
 export type SelectSearchResult = {
     actionName: "selectSearchResult";
     parameters: {
-        position: number;
-        productName?: string;
+        // Selection criteria such as "best rated", "top selling", "first result" etc.
+        selectionCriteria: string;
     };
 };
 
