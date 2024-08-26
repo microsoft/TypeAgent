@@ -117,27 +117,16 @@ export async function createSearchMemory(
     [conversation.ConversationManager, conversation.ConversationSearchProcessor]
 > {
     const conversationName = "search";
-    const searchConversation = await createConversation(
-        path.join(context.storePath, conversationName),
-        createConversationSettings(context.embeddingModel),
-    );
-    await searchConversation.clear(true);
-
     const searchMemory = await conversation.createConversationManager(
         conversationName,
-        searchConversation,
+        context.storePath,
+        true,
         conversation.createKnowledgeExtractor(context.chatModel, {
             windowSize: 8,
             maxContextLength: context.maxCharsPerChunk,
             includeSuggestedTopics: false,
             includeActions: true,
         }),
-        await conversation.createConversationTopicMerger(
-            context.chatModel,
-            searchConversation,
-            1,
-            4,
-        ),
     );
     const searchProcessor = createSearchProcessor(
         searchMemory.conversation,
@@ -190,8 +179,8 @@ export async function runPlayChat(): Promise<void> {
         topics,
         entities,
         actions,
+        searchQuery,
         search,
-        searchTerms,
     };
     addStandardHandlers(handlers);
 
@@ -890,8 +879,11 @@ export async function runPlayChat(): Promise<void> {
             },
         };
     }
-    handlers.search.metadata = searchDef();
-    async function search(args: string[], io: InteractiveIo): Promise<void> {
+    handlers.searchQuery.metadata = searchDef();
+    async function searchQuery(
+        args: string[],
+        io: InteractiveIo,
+    ): Promise<void> {
         const timestampQ = new Date();
         const namedArgs = parseNamedArguments(args, searchDef());
         const maxMatches = namedArgs.maxMatches;
@@ -962,11 +954,8 @@ export async function runPlayChat(): Promise<void> {
         }
     }
 
-    handlers.searchTerms.metadata = searchDef();
-    async function searchTerms(
-        args: string[],
-        io: InteractiveIo,
-    ): Promise<void> {
+    handlers.search.metadata = searchDef();
+    async function search(args: string[], io: InteractiveIo): Promise<void> {
         await searchConversation(context.searcher, true, args);
     }
 
