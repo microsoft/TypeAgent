@@ -66,7 +66,6 @@ export async function createConversationManager(
     createNew: boolean,
 ): Promise<ConversationManager> {
     type MessageId = string;
-    type EntityId = string;
 
     const embeddingModel = createEmbeddingCache(
         openai.createEmbeddingModel(),
@@ -120,7 +119,7 @@ export async function createConversationManager(
 
     async function addMessage(
         messageText: string,
-        entities?: ConcreteEntity[] | undefined,
+        knownEntities?: ConcreteEntity[] | undefined,
         timestamp?: Date,
     ): Promise<any> {
         const message: TextBlock = {
@@ -129,59 +128,44 @@ export async function createConversationManager(
         };
         timestamp ??= new Date();
         const blockId = await conversation.messages.put(message, timestamp);
-        if (entities && entities.length > 0) {
-            await addEntitiesToIndex(blockId, entities, timestamp);
-        } else {
-            await extractKnowledgeAndIndex({ ...message, blockId, timestamp });
-        }
-    }
-
-    async function addEntitiesToIndex(
-        sourceId: MessageId,
-        entities: ConcreteEntity[],
-        timestamp?: Date,
-    ): Promise<EntityId[] | undefined> {
-        timestamp ??= new Date();
-        if (entities && entities.length > 0) {
-            const sourceIds: MessageId[] = [sourceId];
-            const knowledge: ExtractedKnowledge<MessageId> = {
-                entities: entities.map((value) => {
-                    return { value, sourceIds };
-                }),
-            };
-            await conversation.knowledge.put(knowledge);
-            const knowledgeIds: ExtractedKnowledgeIds = {};
-            await conversation.addNextEntities(
-                knowledge,
-                knowledgeIds,
-                timestamp,
-            );
-            await conversation.indexEntities(knowledge, knowledgeIds);
-            return knowledgeIds.entityIds;
-        }
-        return undefined;
-    }
-
-    async function extractKnowledgeAndIndex(message: SourceTextBlock) {
-        await messageIndex.put(message.value, message.blockId);
-        const knowledgeResult = await extractKnowledgeFromBlock(
-            knowledgeExtractor,
-            message,
+        await extractKnowledgeAndIndex(
+            { ...message, blockId, timestamp },
+            knownEntities,
         );
-        if (knowledgeResult) {
+    }
+
+    async function extractKnowledgeAndIndex(
+        message: SourceTextBlock,
+        knownEntities?: ConcreteEntity[] | undefined,
+    ) {
+        await messageIndex.put(message.value, message.blockId);
+        let knowledge: ExtractedKnowledge | undefined;
+        if (knownEntities) {
+            knowledge = entitiesToKnowledge(message.blockId, knownEntities);
+        } else {
+            const knowledgeResult = await extractKnowledgeFromBlock(
+                knowledgeExtractor,
+                message,
+            );
             if (knowledgeResult) {
-                const [_, knowledge] = knowledgeResult;
-                // Add next message... this updates the "sequence"
-                const knowledgeIds = await conversation.putNext(
-                    message,
-                    knowledge,
-                );
-                if (topicMerger) {
-                    const mergedTopic = await topicMerger.next(true, true);
-                }
-                await conversation.putIndex(knowledge, knowledgeIds);
+                knowledge = knowledgeResult[1];
             }
         }
+        if (knowledge) {
+            await indexKnowledge(message, knowledge);
+        }
+    }
+
+    async function indexKnowledge(
+        message: SourceTextBlock,
+        knowledge: ExtractedKnowledge,
+    ): Promise<void> {
+        // Add next message... this updates the "sequence"
+        const knowledgeIds = await conversation.putNext(message, knowledge);
+        if (topicMerger) {
+            const mergedTopic = await topicMerger.next(true, true);
+        }
+        await conversation.putIndex(knowledge, knowledgeIds);
     }
 
     async function search(
@@ -198,6 +182,24 @@ export async function createConversationManager(
                 progress,
             ),
         );
+    }
+
+    function entitiesToKnowledge(
+        sourceId: MessageId,
+        entities: ConcreteEntity[],
+        timestamp?: Date,
+    ): ExtractedKnowledge | undefined {
+        if (entities && entities.length > 0) {
+            timestamp ??= new Date();
+            const sourceIds: MessageId[] = [sourceId];
+            const knowledge: ExtractedKnowledge<MessageId> = {
+                entities: entities.map((value) => {
+                    return { value, sourceIds };
+                }),
+            };
+            return knowledge;
+        }
+        return undefined;
     }
 
     function defaultConversationSettings(): ConversationSettings {

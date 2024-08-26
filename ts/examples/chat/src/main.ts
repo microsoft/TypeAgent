@@ -11,7 +11,7 @@ dotenv.config({ path: envPath });
 
 let chatName = process.argv[2];
 if (!chatName) {
-    chatName = "tests";
+    chatName = "memory";
 }
 switch (chatName) {
     default:
