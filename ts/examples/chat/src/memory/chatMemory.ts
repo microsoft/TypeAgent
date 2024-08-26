@@ -143,7 +143,7 @@ export async function loadConversation(
     return exists;
 }
 
-export async function runPlayChat(): Promise<void> {
+export async function runChatMemory(): Promise<void> {
     let context = await createChatMemoryContext();
     let printer: PlayPrinter;
     const handlers: Record<string, CommandHandler> = {
@@ -1044,17 +1044,13 @@ export async function runPlayChat(): Promise<void> {
                   if (context.searchMemory) {
                       try {
                           await context.searchMemory.addMessage(
-                              {
-                                  type: knowLib.TextBlockType.Paragraph,
-                                  value: `USER:\n${question}`,
-                              },
+                              `USER:\n${question}`,
+                              undefined,
                               timestampQ,
                           );
                           await context.searchMemory.addMessage(
-                              {
-                                  type: knowLib.TextBlockType.Paragraph,
-                                  value: `ASSISTANT:\n${answer}`,
-                              },
+                              `ASSISTANT:\n${answer}`,
+                              undefined,
                               timestampA,
                           );
                       } catch (e) {
