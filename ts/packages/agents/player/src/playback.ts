@@ -4,7 +4,7 @@
 import { getDevices, getPlaybackState, transferPlayback } from "./endpoints.js";
 import { IClientContext } from "./client.js";
 import chalk from "chalk";
-import { TurnImpression } from "dispatcher-agent";
+import { TurnImpression } from "@typeagent/agent-sdk";
 
 // convert milliseconds to elapsed minutes and seconds as a string
 function msToElapsedMinSec(ms: number) {

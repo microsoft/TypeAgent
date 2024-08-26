@@ -8,7 +8,7 @@ import {
     Storage,
     TurnImpression,
     createTurnImpressionFromDisplay,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 import {
     ListAction,
     AddItemsAction,

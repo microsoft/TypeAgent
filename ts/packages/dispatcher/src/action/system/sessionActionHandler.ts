@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { SessionAction } from "../../translation/system/sessionActionSchema.js";
-import { DispatcherAgentContext, DispatcherAction } from "dispatcher-agent";
+import { DispatcherAgentContext, DispatcherAction } from "@typeagent/agent-sdk";
 
 export async function executeSessionAction(
     action: DispatcherAction,

@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { TokenProvider } from "./tokenProvider.js";
-import { Storage } from "dispatcher-agent";
+import { Storage } from "@typeagent/agent-sdk";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, "../../../../.env") });

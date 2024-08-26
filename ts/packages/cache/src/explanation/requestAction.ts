@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { PromptSection } from "typechat";
-import { Entity } from "dispatcher-agent";
+import { Entity } from "@typeagent/agent-sdk";
 import {
     ActionTemplate,
     ActionTemplateSequence,

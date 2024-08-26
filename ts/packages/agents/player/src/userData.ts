@@ -11,7 +11,7 @@ import {
 } from "./endpoints.js";
 import { SpotifyService } from "./service.js";
 import registerDebug from "debug";
-import { Storage } from "dispatcher-agent";
+import { Storage } from "@typeagent/agent-sdk";
 
 const debugSpotify = registerDebug("typeagent:spotify");
 

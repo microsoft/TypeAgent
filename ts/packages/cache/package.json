@@ -32,7 +32,7 @@
     "chalk": "^5.3.0",
     "common-utils": "workspace:*",
     "debug": "^4.3.4",
-    "dispatcher-agent": "workspace:*",
+    "@typeagent/agent-sdk": "workspace:*",
     "typechat": "^0.1.0"
   },
   "devDependencies": {

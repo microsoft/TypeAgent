@@ -26,7 +26,7 @@
   "dependencies": {
     "aiclient": "workspace:*",
     "common-utils": "workspace:*",
-    "dispatcher-agent": "workspace:*",
+    "@typeagent/agent-sdk": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.0"
   },

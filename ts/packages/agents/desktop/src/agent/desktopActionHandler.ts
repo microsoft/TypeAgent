@@ -3,7 +3,7 @@
 
 import { WebSocketMessage, createWebSocket } from "common-utils";
 import { WebSocket } from "ws";
-import { DispatcherAction, DispatcherAgentContext } from "dispatcher-agent";
+import { DispatcherAction, DispatcherAgentContext } from "@typeagent/agent-sdk";
 
 export function instantiate() {
     return {

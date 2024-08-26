@@ -37,7 +37,7 @@
     "common-utils": "workspace:*",
     "debug": "^4.3.4",
     "desktop-automation": "workspace:*",
-    "dispatcher-agent": "workspace:*",
+    "@typeagent/agent-sdk": "workspace:*",
     "email": "workspace:*",
     "glob": "^10.3.12",
     "list-agent": "workspace:*",
