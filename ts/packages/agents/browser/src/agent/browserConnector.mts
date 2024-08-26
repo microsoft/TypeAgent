@@ -53,6 +53,7 @@ export class BrowserConnector {
               data.body
             ) {
               switch (data.messageType) {
+                case "confirmActionWithData":
                 case "confirmAction": {
                   this.webSocket.removeEventListener("message", handler);
                   resolve("OK");
