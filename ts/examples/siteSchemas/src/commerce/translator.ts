@@ -136,13 +136,26 @@ export class ECommerceSiteAgent<T extends object> {
 
     private getCssSelectorForElementPrompt<U extends object>(
         translator: TypeChatJsonTranslator<U>,
-        userRequest: string,
+        userRequest?: string,
         fragments?: HtmlFragments[],
         screenshot?: string,
     ) {
         const screenshotSection = getScreenshotPromptSection(screenshot, fragments);
         const htmlSection = getHtmlPromptSection(fragments);
         const prefixSection = getBootstrapPrefixPromptSection();
+        let requestSection = [];
+        if(userRequest){
+            requestSection.push({                
+                    type: "text",
+                    text: `
+                   
+                Here is  user request
+                '''
+                ${userRequest}
+                '''
+                `
+            })
+        }
         const promptSections = [
             ...prefixSection,
             ...screenshotSection,
@@ -155,12 +168,12 @@ export class ECommerceSiteAgent<T extends object> {
             '''
             ${translator.validator.getSchemaText()}
             '''
-            
-            Here is  user request
-            '''
-            ${userRequest}
-            '''
-
+            `,
+            },
+            ...requestSection,
+            {
+                type: "text",
+                text: `
             The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
             `,
             },
@@ -309,8 +322,9 @@ export class ECommerceSiteAgent<T extends object> {
         return response;
     }
 
-    async getProductTile(
-        userRequest: string,
+    async getPageComponentSchema(        
+        componentTypeName: string,
+        userRequest?: string,
         fragments?: HtmlFragments[],
         screenshot?: string,        
     ) {
@@ -318,12 +332,12 @@ export class ECommerceSiteAgent<T extends object> {
             "src",
             "commerce",
             "schema",
-            "selectorsSchema.ts",
+            "pageComponents.ts",
         );
 
         const bootstrapTranslator = this.getBootstrapTranslator(
             schemaPath,
-            "ProductTile",
+            componentTypeName,
         );
 
         const promptSections = this.getCssSelectorForElementPrompt(
