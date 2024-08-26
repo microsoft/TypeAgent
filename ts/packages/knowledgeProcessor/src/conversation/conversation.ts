@@ -376,11 +376,21 @@ export type ConversationSearchOptions = {
     loadMessages?: boolean;
 };
 
+/**
+ * Create or load a persistent conversation, using the given rootPath as the storage root.
+ * - The conversation is stored in folders below the given root path
+ * - If the rootPath exists, the conversation stored inside it is automatically used.
+ * @param settings
+ * @param rootPath
+ * @param folderSettings (Optional) Flags for object storage
+ * @param fSys (Optional) By default, stored on local file system
+ * @returns
+ */
 export async function createConversation(
     settings: ConversationSettings,
     rootPath: string,
-    folderSettings?: ObjectFolderSettings,
-    fSys?: FileSystem,
+    folderSettings?: ObjectFolderSettings | undefined,
+    fSys?: FileSystem | undefined,
 ): Promise<Conversation<string, string, string>> {
     type MessageId = string;
     type TopicId = string;
@@ -865,59 +875,6 @@ export function createRecentConversationWindow(
         ),
         topics: createRecentItemsWindow<Topic>(windowSize),
     };
-}
-
-export interface ConversationManager {
-    readonly conversationName: string;
-    readonly conversation: Conversation;
-    addMessage(message: TextBlock, timestamp?: Date): Promise<any>;
-    addIndex(message: TextBlock, id: any): Promise<void>;
-}
-
-export async function createConversationManager(
-    conversationName: string,
-    conversation: Conversation,
-    knowledgeExtractor: KnowledgeExtractor,
-    topicMerger: TopicMerger,
-): Promise<ConversationManager> {
-    const messageIndex = await conversation.getMessageIndex();
-    return {
-        conversationName,
-        conversation,
-        addMessage,
-        addIndex,
-    };
-
-    async function addMessage(
-        message: TextBlock,
-        timestamp?: Date,
-    ): Promise<any> {
-        timestamp ??= new Date();
-        const blockId = await conversation.messages.put(message, timestamp);
-        await addIndex({ ...message, blockId, timestamp });
-    }
-
-    async function addIndex(message: SourceTextBlock) {
-        await messageIndex.put(message.value, message.blockId);
-        const knowledgeResult = await extractKnowledgeFromBlock(
-            knowledgeExtractor,
-            message,
-        );
-        if (knowledgeResult) {
-            if (knowledgeResult) {
-                const [_, knowledge] = knowledgeResult;
-                // Add next message... this updates the "sequence"
-                const knowledgeIds = await conversation.putNext(
-                    message,
-                    knowledge,
-                );
-                if (topicMerger) {
-                    const mergedTopic = await topicMerger.next(true, true);
-                }
-                await conversation.putIndex(knowledge, knowledgeIds);
-            }
-        }
-    }
 }
 
 export type SearchActionResponse = {

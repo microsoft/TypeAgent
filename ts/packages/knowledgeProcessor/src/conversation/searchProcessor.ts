@@ -33,10 +33,9 @@ export type SearchProcessingOptions = {
     minScore: number;
     maxMessages: number;
     fallbackSearch?: SearchOptions | undefined;
-    includeTimeRange: boolean;
     combinationSetOp?: SetOp;
     includeActions?: boolean;
-    actionPreprocess?: (action: any) => void;
+    progress?: ((action: any) => void) | undefined;
 };
 
 export interface ConversationSearchProcessor {
@@ -85,7 +84,7 @@ export function createSearchProcessor(
         query: string,
         options: SearchProcessingOptions,
     ): Promise<SearchActionResponse | undefined> {
-        const context = await buildContext(options);
+        const context = await buildContext();
         const actionResult = options.includeActions
             ? await searchTranslator.translateSearch(query, context)
             : await searchTranslator_NoActions.translateSearch(query, context);
@@ -93,8 +92,8 @@ export function createSearchProcessor(
             return undefined;
         }
         let action = actionResult.data;
-        if (options.actionPreprocess) {
-            options.actionPreprocess(action);
+        if (options.progress) {
+            options.progress(action);
         }
         const rr: SearchActionResponse = {
             action,
@@ -117,7 +116,7 @@ export function createSearchProcessor(
         query: string,
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponse | undefined> {
-        const context = await buildContext(options);
+        const context = await buildContext();
         const actionResult = await searchTranslator.translateSearchTerms(
             query,
             context,
@@ -126,8 +125,8 @@ export function createSearchProcessor(
             return undefined;
         }
         let action = actionResult.data;
-        if (options.actionPreprocess) {
-            options.actionPreprocess(action);
+        if (options.progress) {
+            options.progress(action);
         }
         const rr: SearchTermsActionResponse = {
             action,
@@ -142,12 +141,8 @@ export function createSearchProcessor(
         return rr;
     }
 
-    async function buildContext(
-        options: SearchProcessingOptions,
-    ): Promise<PromptSection[] | undefined> {
-        const timeRange = options.includeTimeRange
-            ? await conversation.messages.getTimeRange()
-            : undefined;
+    async function buildContext(): Promise<PromptSection[] | undefined> {
+        const timeRange = await conversation.messages.getTimeRange();
         return timeRange
             ? [
                   {
