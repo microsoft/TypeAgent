@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import {
-    createLanguageModel,
+    //createLanguageModel,
     createJsonTranslator,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
@@ -12,6 +12,7 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 import path from "path";
 import fs from "fs";
 import { ContentSection, HtmlFragments } from "../common/translator.js";
+import { openai as ai } from "aiclient";
 
 export enum CommercePageType {
     Landing,
@@ -89,11 +90,10 @@ export class ECommerceSiteAgent<T extends object> {
     constructor(
         schema: string,
         schemaName: string,
-        vals: Record<string, string>,
+        fastModelName: string,
     ) {
         this.schema = schema;
-
-        this.model = createLanguageModel(vals);
+        this.model = ai.createJsonChatModel(fastModelName);
         const validator = createTypeScriptJsonValidator<T>(
             this.schema,
             schemaName,

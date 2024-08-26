@@ -13,10 +13,13 @@ import {
     CrosswordPresence,
 } from "./crossword/schema/bootstrapSchema.js";
 import { createBrowserConnector } from "./common/connector.js";
-import { HtmlFragments, getModelVals } from "./common/translator.js";
+import { HtmlFragments } from "./common/translator.js";
+import findConfig from "find-config";
+import assert from "assert";
+import dotenv from "dotenv";
 
 // initialize commerce state
-const agent = createCrosswordAgent("GPT_4o");
+const agent = createCrosswordAgent("GPT_4_O");
 const browser = await createBrowserConnector(
     "crossword",
     handleCrosswordAction,
@@ -28,9 +31,12 @@ const htmlFragments = await browser.getHtmlFragments();
 const boardState = await getBoardSchema(url!, htmlFragments, agent);
 
 function createCrosswordAgent(
-    model: "GPT_35_TURBO" | "GPT_4" | "GPT-v" | "GPT_4o",
+    model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O",
 ) {
-    const vals = getModelVals(model);
+    const dotEnvPath = findConfig(".env");
+    assert(dotEnvPath, ".env file not found!");
+    dotenv.config({ path: dotEnvPath});
+    
     const schemaText = fs.readFileSync(
         path.join("src", "crossword", "schema", "actionSchema.ts"),
         "utf8",
@@ -39,7 +45,7 @@ function createCrosswordAgent(
     const agent = new CrosswordAgent<BoardActions>(
         schemaText,
         "BoardActions",
-        vals,
+        model,
     );
     return agent;
 }
