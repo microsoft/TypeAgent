@@ -8,7 +8,7 @@ import {
   DispatcherAgent,
   DispatcherAgentContext,
   createTurnImpressionFromLiteral,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 import { Crossword } from "./crosswordPageSchema.mjs";
 import {
   getBoardSchema,

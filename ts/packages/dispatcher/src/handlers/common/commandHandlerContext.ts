@@ -52,7 +52,7 @@ import {
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
 import { DispatcherName } from "../requestCommandHandler.js";
-import { DispatcherAgentContext } from "dispatcher-agent";
+import { DispatcherAgentContext } from "@typeagent/agent-sdk";
 import { getDispatcherAgent } from "../../agent/agentConfig.js";
 
 export interface CommandResult {

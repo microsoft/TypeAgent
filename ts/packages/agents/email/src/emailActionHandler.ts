@@ -15,7 +15,7 @@ import {
     DispatcherAgent,
     DispatcherAgentContext,
     createTurnImpressionFromDisplay,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 
 export function instantiate(): DispatcherAgent {
     return {

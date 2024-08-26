@@ -5,7 +5,7 @@ import {
     DispatcherAgent,
     HierarchicalTranslatorConfig,
     TopLevelTranslatorConfig,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 import { getDispatcherConfig } from "../utils/config.js";
 import { loadInlineAgent } from "./inlineAgentHandlers.js";
 import { createRequire } from "module";

@@ -9,7 +9,7 @@ import {
     StorageEncoding,
     StorageListOptions,
     TokenCachePersistence,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 
 import { setupInvoke } from "./agentProcessUtil.js";
 import {

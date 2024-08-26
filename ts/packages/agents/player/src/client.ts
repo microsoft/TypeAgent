@@ -67,7 +67,7 @@ import {
     UserData,
 } from "./userData.js";
 import registerDebug from "debug";
-import { Storage, TurnImpression } from "dispatcher-agent";
+import { Storage, TurnImpression } from "@typeagent/agent-sdk";
 
 const debugSpotify = registerDebug("typeagent:spotify");
 

@@ -8,7 +8,7 @@ import axios, { AxiosRequestConfig } from "axios";
 import { translateAxiosError } from "./utils.js";
 import { Server } from "http";
 import querystring from "querystring";
-import { TokenCachePersistence } from "dispatcher-agent";
+import { TokenCachePersistence } from "@typeagent/agent-sdk";
 
 const tokenUri = "https://accounts.spotify.com/api/token";
 function getExpiredDate(expiresIn: number) {

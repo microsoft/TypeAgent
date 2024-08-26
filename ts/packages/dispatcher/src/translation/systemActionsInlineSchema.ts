@@ -3,7 +3,7 @@
 
 import { IAction } from "agent-cache";
 import { TranslatorSchemaDef } from "common-utils";
-import { DispatcherAction } from "dispatcher-agent";
+import { DispatcherAction } from "@typeagent/agent-sdk";
 
 // Multiple Action is what is used and returned from the LLM
 const multipleActionName = "multiple";

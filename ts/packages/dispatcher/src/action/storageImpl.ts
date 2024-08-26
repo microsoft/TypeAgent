@@ -3,7 +3,11 @@
 
 import path from "node:path";
 import fs from "node:fs";
-import { Storage, StorageListOptions, StorageEncoding } from "dispatcher-agent";
+import {
+    Storage,
+    StorageListOptions,
+    StorageEncoding,
+} from "@typeagent/agent-sdk";
 
 import {
     DataProtectionScope,

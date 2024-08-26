@@ -23,7 +23,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "dispatcher-agent": "workspace:*"
+    "@typeagent/agent-sdk": "workspace:*"
   },
   "devDependencies": {
     "prettier": "^3.2.5",
