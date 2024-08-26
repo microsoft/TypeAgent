@@ -12,3 +12,4 @@ export type SearchInput = {
 export type LandingPage = {
     searchBox: SearchInput;
 };
+ 
