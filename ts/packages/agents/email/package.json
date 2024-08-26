@@ -23,9 +23,9 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
     "aiclient": "workspace:*",
     "chalk": "^5.3.0",
-    "@typeagent/agent-sdk": "workspace:*",
     "graph-utils": "workspace:*",
     "typeagent": "workspace:*"
   },
