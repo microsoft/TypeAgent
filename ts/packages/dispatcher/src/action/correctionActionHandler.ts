@@ -5,7 +5,7 @@ import {
     DispatcherAgentContext,
     TurnImpression,
     createTurnImpressionFromLiteral,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 import { CorrectionAction } from "../translation/correctionActionsSchema.js";
 
 export async function executeCorrectionAction(

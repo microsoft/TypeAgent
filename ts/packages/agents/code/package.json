@@ -23,8 +23,8 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
     "common-utils": "workspace:*",
-    "dispatcher-agent": "workspace:*",
     "ws": "^8.17.1"
   },
   "devDependencies": {

@@ -1,10 +1,10 @@
-# Dispatcher Agent Interfaces and Utilities
+# Agent SDK Interfaces and Utilities
 
 This package contains interface definitions and utilities for implementing a Dispatcher Agent.
-[List](../agents/list/) dispatcher agent is a good example and initial template for building a dispatcher agent.
+[List](../agents/list/) agent is a good example and initial template for building a dispatcher agent.
 Go to the [dispatcher README](../dispatcher/README.md) for instructions on how to add a dispatcher agent.
 
-## Dispatcher Agent
+## Agent SDK
 
 To build a dispatcher agent, it needs to provide a manifest and an instantiation entry point.  
 These are declared in the `package.json` as export paths:

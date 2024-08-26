@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { defaultImpressionInterpreter } from "dispatcher-agent";
+import { defaultImpressionInterpreter } from "@typeagent/agent-sdk";
 import { HistoryContext } from "agent-cache";
 import { TypeChatJsonTranslator } from "typechat";
 

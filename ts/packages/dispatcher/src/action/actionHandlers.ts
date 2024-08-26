@@ -17,7 +17,7 @@ import {
     DispatcherAgentContext,
     TurnImpression,
     turnImpressionToString,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 import {
     getDispatcherAgent,
     getDispatcherAgents,

@@ -274,6 +274,25 @@ importers:
         specifier: ^5.0.4
         version: 5.0.4(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.90.0)
 
+  packages/agentSdk:
+    dependencies:
+      typechat:
+        specifier: ^0.1.0
+        version: 0.1.0(typescript@5.4.3)
+    devDependencies:
+      '@types/debug':
+        specifier: ^4.1.10
+        version: 4.1.10
+      prettier:
+        specifier: ^3.2.5
+        version: 3.2.5
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+
   packages/agents/agentUtils/graphUtils:
     dependencies:
       '@azure/identity':
@@ -352,12 +371,12 @@ importers:
       '@mozilla/readability':
         specifier: ^0.5.0
         version: 0.5.0
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
-      dispatcher-agent:
-        specifier: workspace:*
-        version: link:../../dispatcherAgent
       html-to-text:
         specifier: ^9.0.5
         version: 9.0.5
@@ -416,12 +435,12 @@ importers:
 
   packages/agents/calendar:
     dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
       chalk:
         specifier: ^5.3.0
         version: 5.3.0
-      dispatcher-agent:
-        specifier: workspace:*
-        version: link:../../dispatcherAgent
       graph-utils:
         specifier: workspace:*
         version: link:../agentUtils/graphUtils
@@ -438,15 +457,15 @@ importers:
 
   packages/agents/chat:
     dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
-      dispatcher-agent:
-        specifier: workspace:*
-        version: link:../../dispatcherAgent
       typeagent:
         specifier: workspace:*
         version: link:../../typeagent
@@ -469,12 +488,12 @@ importers:
 
   packages/agents/code:
     dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
-      dispatcher-agent:
-        specifier: workspace:*
-        version: link:../../dispatcherAgent
       ws:
         specifier: ^8.17.1
         version: 8.17.1
@@ -494,6 +513,9 @@ importers:
 
   packages/agents/desktop:
     dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
       agent-cache:
         specifier: workspace:*
         version: link:../../cache
@@ -515,9 +537,6 @@ importers:
       debug:
         specifier: ^4.3.4
         version: 4.3.4(supports-color@8.1.1)
-      dispatcher-agent:
-        specifier: workspace:*
-        version: link:../../dispatcherAgent
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
@@ -573,15 +592,15 @@ importers:
 
   packages/agents/email:
     dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
       chalk:
         specifier: ^5.3.0
         version: 5.3.0
-      dispatcher-agent:
-        specifier: workspace:*
-        version: link:../../dispatcherAgent
       graph-utils:
         specifier: workspace:*
         version: link:../agentUtils/graphUtils
@@ -601,9 +620,9 @@ importers:
 
   packages/agents/list:
     dependencies:
-      dispatcher-agent:
+      '@typeagent/agent-sdk':
         specifier: workspace:*
-        version: link:../../dispatcherAgent
+        version: link:../../agentSdk
     devDependencies:
       prettier:
         specifier: ^3.2.5
@@ -617,6 +636,9 @@ importers:
 
   packages/agents/player:
     dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
       axios:
         specifier: ^1.6.1
         version: 1.6.2(debug@4.3.4)
@@ -629,9 +651,6 @@ importers:
       debug:
         specifier: ^4.3.4
         version: 4.3.4(supports-color@8.1.1)
-      dispatcher-agent:
-        specifier: workspace:*
-        version: link:../../dispatcherAgent
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
@@ -697,6 +716,9 @@ importers:
 
   packages/cache:
     dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../agentSdk
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -712,9 +734,6 @@ importers:
       debug:
         specifier: ^4.3.4
         version: 4.3.4(supports-color@8.1.1)
-      dispatcher-agent:
-        specifier: workspace:*
-        version: link:../dispatcherAgent
       typechat:
         specifier: ^0.1.0
         version: 0.1.0(typescript@5.4.3)
@@ -1021,6 +1040,9 @@ importers:
       '@azure/msal-node-extensions':
         specifier: ^1.0.12
         version: 1.0.12
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../agentSdk
       agent-cache:
         specifier: workspace:*
         version: link:../cache
@@ -1051,9 +1073,6 @@ importers:
       desktop-automation:
         specifier: workspace:*
         version: link:../agents/desktop
-      dispatcher-agent:
-        specifier: workspace:*
-        version: link:../dispatcherAgent
       email:
         specifier: workspace:*
         version: link:../agents/email
@@ -1106,25 +1125,6 @@ importers:
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@18.18.7)(ts-node@10.9.1(@types/node@18.18.7)(typescript@5.4.3))
-      prettier:
-        specifier: ^3.2.5
-        version: 3.2.5
-      rimraf:
-        specifier: ^5.0.5
-        version: 5.0.5
-      typescript:
-        specifier: ^5.4.2
-        version: 5.4.3
-
-  packages/dispatcherAgent:
-    dependencies:
-      typechat:
-        specifier: ^0.1.0
-        version: 0.1.0(typescript@5.4.3)
-    devDependencies:
-      '@types/debug':
-        specifier: ^4.1.10
-        version: 4.1.10
       prettier:
         specifier: ^3.2.5
         version: 3.2.5
@@ -13278,7 +13278,7 @@ snapshots:
       watchpack: 2.4.0
       webpack-sources: 3.2.3
     optionalDependencies:
-      webpack-cli: 5.1.4(webpack@5.90.0)
+      webpack-cli: 5.1.4(webpack-dev-server@5.0.4)(webpack@5.90.0)
     transitivePeerDependencies:
       - '@swc/core'
       - esbuild

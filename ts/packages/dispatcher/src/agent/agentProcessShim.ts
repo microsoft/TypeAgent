@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import chlid_process from "child_process";
-import { DispatcherAgent, DispatcherAgentContext } from "dispatcher-agent";
+import { DispatcherAgent, DispatcherAgentContext } from "@typeagent/agent-sdk";
 import {
     AgentContextCallAPI,
     AgentContextInvokeAPI,

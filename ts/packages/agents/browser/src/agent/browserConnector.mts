@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { WebSocketMessage } from "common-utils";
-import { DispatcherAgentContext } from "dispatcher-agent";
+import { DispatcherAgentContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "./browserActionHandler.mjs";
 
 export class BrowserConnector {

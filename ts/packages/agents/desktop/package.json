@@ -28,6 +28,7 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
     "agent-cache": "workspace:*",
     "aiclient": "workspace:*",
     "body-parser": "^1.20.2",
@@ -35,7 +36,6 @@
     "common-utils": "workspace:*",
     "cors": "^2.8.5",
     "debug": "^4.3.4",
-    "dispatcher-agent": "workspace:*",
     "dotenv": "^16.3.1",
     "express": "^4.19.2",
     "open": "^7.0.4",
