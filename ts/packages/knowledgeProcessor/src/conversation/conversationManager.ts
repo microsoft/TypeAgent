@@ -28,6 +28,7 @@ import { createEmbeddingCache } from "../modelCache.js";
 import { KnowledgeSearchMode } from "./knowledgeActions.js";
 import { SetOp } from "../setOperations.js";
 import { ConcreteEntity } from "./knowledgeSchema.js";
+import { mergeEntities } from "./entities.js";
 
 /**
  * A conversation manager lets you dynamically:
@@ -139,20 +140,31 @@ export async function createConversationManager(
         knownEntities?: ConcreteEntity[] | undefined,
     ) {
         await messageIndex.put(message.value, message.blockId);
-        let knowledge: ExtractedKnowledge | undefined;
+        let extractedKnowledge: ExtractedKnowledge | undefined;
+        let knownKnowledge: ExtractedKnowledge | undefined;
         if (knownEntities) {
-            knowledge = entitiesToKnowledge(message.blockId, knownEntities);
-        } else {
-            const knowledgeResult = await extractKnowledgeFromBlock(
-                knowledgeExtractor,
-                message,
+            knownKnowledge = entitiesToKnowledge(
+                message.blockId,
+                knownEntities,
             );
-            if (knowledgeResult) {
-                knowledge = knowledgeResult[1];
-            }
         }
-        if (knowledge) {
-            await indexKnowledge(message, knowledge);
+        const knowledgeResult = await extractKnowledgeFromBlock(
+            knowledgeExtractor,
+            message,
+        );
+        if (knowledgeResult) {
+            extractedKnowledge = knowledgeResult[1];
+        }
+        if (extractedKnowledge) {
+            if (knownKnowledge) {
+                // TODO: merge entities instead of replace
+                extractedKnowledge.entities = knownKnowledge.entities;
+            }
+        } else {
+            extractedKnowledge = knownKnowledge;
+        }
+        if (extractedKnowledge) {
+            await indexKnowledge(message, extractedKnowledge);
         }
     }
 
@@ -201,7 +213,6 @@ export async function createConversationManager(
         }
         return undefined;
     }
-
     function defaultConversationSettings(): ConversationSettings {
         return {
             indexSettings: {
