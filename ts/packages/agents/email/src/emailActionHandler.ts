@@ -29,7 +29,7 @@ type EmailActionContext = {
     mailClient: MailClient | undefined;
 };
 
-function initializeEmailContext() {
+async function initializeEmailContext() {
     return {
         mailClient: undefined,
     };
