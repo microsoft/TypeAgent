@@ -4,18 +4,20 @@
 import path from "path";
 import { openai } from "aiclient";
 import { ObjectFolderSettings, SearchOptions } from "typeagent";
-import { TextBlock, SourceTextBlock } from "../text.js";
+import { TextBlock, SourceTextBlock, TextBlockType } from "../text.js";
 import {
     Conversation,
     ConversationSettings,
     createConversation,
     createConversationTopicMerger,
     SearchTermsActionResponse,
+    ExtractedKnowledgeIds,
 } from "./conversation.js";
 import {
     extractKnowledgeFromBlock,
     KnowledgeExtractorSettings,
     createKnowledgeExtractor,
+    ExtractedKnowledge,
 } from "./knowledge.js";
 import {
     ConversationSearchProcessor,
@@ -25,13 +27,29 @@ import {
 import { createEmbeddingCache } from "../modelCache.js";
 import { KnowledgeSearchMode } from "./knowledgeActions.js";
 import { SetOp } from "../setOperations.js";
+import { ConcreteEntity } from "./knowledgeSchema.js";
+import { mergeEntities } from "./entities.js";
 
+/**
+ * A conversation manager lets you dynamically:
+ *  - add and index messages and entities to a conversation
+ *  - search the conversation
+ */
 export interface ConversationManager {
     readonly conversationName: string;
     readonly conversation: Conversation<string, string, string, string>;
     readonly searchProcessor: ConversationSearchProcessor;
-    addMessage(message: TextBlock, timestamp?: Date): Promise<any>;
-    addIndex(message: TextBlock, id: any): Promise<void>;
+    /**
+     *
+     * @param message
+     * @param entities If entities is NOT supplied, then will extract knowledge from message
+     * @param timestamp
+     */
+    addMessage(
+        messageText: string,
+        entities?: ConcreteEntity[] | undefined,
+        timestamp?: Date,
+    ): Promise<any>;
     search(
         query: string,
         fuzzySearchOptions?: SearchOptions | undefined,
@@ -48,6 +66,8 @@ export async function createConversationManager(
     rootPath: string,
     createNew: boolean,
 ): Promise<ConversationManager> {
+    type MessageId = string;
+
     const embeddingModel = createEmbeddingCache(
         openai.createEmbeddingModel(),
         64,
@@ -95,39 +115,69 @@ export async function createConversationManager(
         conversation,
         searchProcessor,
         addMessage,
-        addIndex,
         search,
     };
 
     async function addMessage(
-        message: TextBlock,
+        messageText: string,
+        knownEntities?: ConcreteEntity[] | undefined,
         timestamp?: Date,
     ): Promise<any> {
+        const message: TextBlock = {
+            value: messageText,
+            type: TextBlockType.Paragraph,
+        };
         timestamp ??= new Date();
         const blockId = await conversation.messages.put(message, timestamp);
-        await addIndex({ ...message, blockId, timestamp });
+        await extractKnowledgeAndIndex(
+            { ...message, blockId, timestamp },
+            knownEntities,
+        );
     }
 
-    async function addIndex(message: SourceTextBlock) {
+    async function extractKnowledgeAndIndex(
+        message: SourceTextBlock,
+        knownEntities?: ConcreteEntity[] | undefined,
+    ) {
         await messageIndex.put(message.value, message.blockId);
+        let extractedKnowledge: ExtractedKnowledge | undefined;
+        let knownKnowledge: ExtractedKnowledge | undefined;
+        if (knownEntities) {
+            knownKnowledge = entitiesToKnowledge(
+                message.blockId,
+                knownEntities,
+            );
+        }
         const knowledgeResult = await extractKnowledgeFromBlock(
             knowledgeExtractor,
             message,
         );
         if (knowledgeResult) {
-            if (knowledgeResult) {
-                const [_, knowledge] = knowledgeResult;
-                // Add next message... this updates the "sequence"
-                const knowledgeIds = await conversation.putNext(
-                    message,
-                    knowledge,
-                );
-                if (topicMerger) {
-                    const mergedTopic = await topicMerger.next(true, true);
-                }
-                await conversation.putIndex(knowledge, knowledgeIds);
-            }
+            extractedKnowledge = knowledgeResult[1];
         }
+        if (extractedKnowledge) {
+            if (knownKnowledge) {
+                // TODO: merge entities instead of replace
+                extractedKnowledge.entities = knownKnowledge.entities;
+            }
+        } else {
+            extractedKnowledge = knownKnowledge;
+        }
+        if (extractedKnowledge) {
+            await indexKnowledge(message, extractedKnowledge);
+        }
+    }
+
+    async function indexKnowledge(
+        message: SourceTextBlock,
+        knowledge: ExtractedKnowledge,
+    ): Promise<void> {
+        // Add next message... this updates the "sequence"
+        const knowledgeIds = await conversation.putNext(message, knowledge);
+        if (topicMerger) {
+            const mergedTopic = await topicMerger.next(true, true);
+        }
+        await conversation.putIndex(knowledge, knowledgeIds);
     }
 
     async function search(
@@ -146,6 +196,23 @@ export async function createConversationManager(
         );
     }
 
+    function entitiesToKnowledge(
+        sourceId: MessageId,
+        entities: ConcreteEntity[],
+        timestamp?: Date,
+    ): ExtractedKnowledge | undefined {
+        if (entities && entities.length > 0) {
+            timestamp ??= new Date();
+            const sourceIds: MessageId[] = [sourceId];
+            const knowledge: ExtractedKnowledge<MessageId> = {
+                entities: entities.map((value) => {
+                    return { value, sourceIds };
+                }),
+            };
+            return knowledge;
+        }
+        return undefined;
+    }
     function defaultConversationSettings(): ConversationSettings {
         return {
             indexSettings: {

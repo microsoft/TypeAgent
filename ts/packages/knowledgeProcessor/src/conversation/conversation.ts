@@ -159,6 +159,16 @@ export interface Conversation<
           }
         | undefined
     >;
+
+    addNextEntities(
+        knowledge: ExtractedKnowledge<MessageId>,
+        knowledgeIds: ExtractedKnowledgeIds<TTopicId, TEntityId, TActionId>,
+        timestamp?: Date | undefined,
+    ): Promise<void>;
+    indexEntities(
+        knowledge: ExtractedKnowledge<MessageId>,
+        knowledgeIds: ExtractedKnowledgeIds<TTopicId, TEntityId, TActionId>,
+    ): Promise<void>;
 }
 
 export type ExtractedKnowledgeIds<
@@ -432,6 +442,9 @@ export async function createConversation(
         search,
         searchTerms,
         searchMessages,
+
+        addNextEntities,
+        indexEntities,
     };
 
     async function getMessageIndex(): Promise<MessageIndex<MessageId>> {
