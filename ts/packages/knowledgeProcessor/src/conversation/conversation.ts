@@ -843,6 +843,7 @@ export async function createConversation(
         const loadedMessages = (await messages.getMultiple(
             ids,
         )) as dateTime.Timestamped<TextBlock<MessageId>>[];
+
         // Return messages in temporal order
         loadedMessages.sort(
             (x, y) => x.timestamp.getTime() - y.timestamp.getTime(),
