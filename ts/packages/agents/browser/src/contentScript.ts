@@ -427,7 +427,7 @@ function daysIntoYear() {
 function setIdsOnAllElements(frameId: number) {
     const allElements = Array.from(document.getElementsByTagName("*"));
     const idPrefix = `id_${daysIntoYear()}_${frameId}_`;
-    const formattingTags = [
+    const skipIdsFor = [
         "BR",
         "P",
         "B",
@@ -442,12 +442,19 @@ function setIdsOnAllElements(frameId: number) {
         "H4",
         "H5",
         "H6",
+        "HEAD",
+        "TITLE",
+        "HTML",
+        "BODY",
+        "SCRIPT",
+        "META",
+        "STYLE",
     ];
     let i = 0;
     allElements.forEach((element: Element) => {
         if (
             !element.hasAttribute("id") &&
-            !(element.tagName in formattingTags)
+            !skipIdsFor.includes(element.tagName)
         ) {
             element.setAttribute("id", idPrefix + i.toString());
             i++;
