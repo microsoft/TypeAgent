@@ -4,6 +4,7 @@
 export * from "./knowledge.js";
 export * from "./knowledgeSchema.js";
 export * from "./knowledgeSearchWebSchema.js";
+export * from "./knowledgeTermSearchSchema.js";
 export * from "./knowledgeActions.js";
 
 export * from "./conversation.js";
