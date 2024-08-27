@@ -28,6 +28,7 @@ export type ChatContext = {
     topicWindowSize: number;
     searchConcurrency: number;
     minScore: number;
+    entityTopK: number;
     conversationName: string;
     conversationSettings: knowLib.conversation.ConversationSettings;
     conversation: knowLib.conversation.Conversation;
@@ -63,7 +64,8 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         conversationName,
         conversationSettings,
         conversation,
-        searcher: createSearchProcessor(conversation, chatModel, true),
+        entityTopK: 8,
+        searcher: createSearchProcessor(conversation, chatModel, true, 8),
     };
     context.searchMemory = await createSearchMemory(context);
     return context;
@@ -95,8 +97,9 @@ export function createSearchProcessor(
     c: conversation.Conversation,
     model: ChatModel,
     includeActions: boolean,
+    entityTopK: number,
 ) {
-    return conversation.createSearchProcessor(
+    const searcher = conversation.createSearchProcessor(
         c,
         model,
         model,
@@ -104,17 +107,21 @@ export function createSearchProcessor(
             ? conversation.KnowledgeSearchMode.WithActions
             : conversation.KnowledgeSearchMode.Default,
     );
+    searcher.answers.settings.topKEntities = entityTopK;
+    return searcher;
 }
 
 export async function createSearchMemory(
     context: ChatContext,
 ): Promise<conversation.ConversationManager> {
     const conversationName = "search";
-    return await conversation.createConversationManager(
+    const memory = await conversation.createConversationManager(
         conversationName,
         context.storePath,
         true,
     );
+    memory.searchProcessor.answers.settings.topKEntities = context.entityTopK;
+    return memory;
 }
 
 export async function loadConversation(
