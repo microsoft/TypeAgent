@@ -257,7 +257,7 @@ export function createSearchProcessor(
                 loadTopics: true,
             },
             topicLevel,
-            loadMessages: true,
+            loadMessages: !topLevelTopicSummary,
         };
         if (options.includeActions) {
             searchOptions.action = {
