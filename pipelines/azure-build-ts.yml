@@ -1,0 +1,80 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  node_version: '18'  # Set the Node.js version here
+  pnpm_version: '9'   # Set the pnpm version here
+  typeagent_repo: 'https://github.com/microsoft/typeagent.git'
+
+jobs:
+- job: build_ts
+  displayName: 'Build TypeScript Project'
+  strategy:
+    matrix:
+      nodeVersion: ['18', '20']
+  steps:
+  - script: |
+      git config --global core.autocrlf false
+    displayName: 'Setup Git LF'
+
+  - script: |
+      git clone $(typeagent_repo) typeagent
+    displayName: 'Clone typeagent Repository'
+
+  - script: |
+      curl -fsSL https://get.pnpm.io/install.sh | sh -
+      export PNPM_HOME="$HOME/.local/share/pnpm"
+      export PATH="$PNPM_HOME:$PATH"
+    displayName: 'Install pnpm'
+    condition: always()
+
+  - task: UseNode@1
+    displayName: 'Setup Node.js'
+    inputs:
+      version: $(nodeVersion)
+      checkLatest: true
+
+  - script: |
+      pnpm install --frozen-lockfile --strict-peer-dependencies
+    displayName: 'Install dependencies'
+    workingDirectory: typeagent/ts
+
+  - script: |
+      npm run build
+    displayName: 'Build'
+    workingDirectory: typeagent/ts
+
+  - script: |
+      npm run test
+    displayName: 'Run Tests'
+    workingDirectory: typeagent/ts
+
+  - script: |
+      npm run lint
+    displayName: 'Lint'
+    workingDirectory: typeagent/ts
+
+  - script: |
+      cd $(Build.SourcesDirectory)/typeagent/ts/packages/agent-sdk/dist
+      npm pack
+    displayName: 'Pack agent-sdk Module'
+
+  - task: npmAuthenticate@0
+    inputs:
+      workingFile: .npmrc
+    displayName: 'Authenticate with Azure Artifacts'
+
+  - script: |
+      npm publish --registry=https://pkgs.dev.azure.com/msctoproj/AI_Systems/_packaging/typeagent/npm/registry/
+    displayName: 'Publish agent-sdk Module'
+    condition: succeeded()
