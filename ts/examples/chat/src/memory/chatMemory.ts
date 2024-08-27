@@ -64,8 +64,8 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         conversationName,
         conversationSettings,
         conversation,
-        entityTopK: 8,
-        searcher: createSearchProcessor(conversation, chatModel, true, 8),
+        entityTopK: 16,
+        searcher: createSearchProcessor(conversation, chatModel, true, 16),
     };
     context.searchMemory = await createSearchMemory(context);
     return context;
@@ -186,7 +186,7 @@ export async function runChatMemory(): Promise<void> {
         if (context.searchMemory) {
             const results = await context.searchMemory.search(line);
             if (results) {
-                await writeSearchTermsResult(results);
+                await writeSearchTermsResult(results, false);
             } else {
                 printer.writeLine("No matches");
             }
@@ -1012,7 +1012,7 @@ export async function runChatMemory(): Promise<void> {
             printer.writeError("No result");
             return;
         }
-        await writeSearchTermsResult(result);
+        await writeSearchTermsResult(result, namedArgs.debug);
         if (result.response && result.response.answer) {
             if (namedArgs.save && recordAnswer) {
                 let answer = result.response.answer.answer;
@@ -1028,9 +1028,12 @@ export async function runChatMemory(): Promise<void> {
 
     async function writeSearchTermsResult(
         result: conversation.SearchTermsActionResponse,
+        stats: boolean,
     ) {
         if (result.response && result.response.answer) {
-            writeResultStats(result.response);
+            if (stats) {
+                writeResultStats(result.response);
+            }
             if (result.response.answer.answer) {
                 const answer = result.response.answer.answer;
                 printer.writeInColor(chalk.green, answer);
@@ -1162,7 +1165,7 @@ export async function runChatMemory(): Promise<void> {
                 const topicIds = new Set(response.allTopicIds());
                 printer.writeLine(`Topic Hit Count: ${topicIds.size}`);
             }
-            const allEntities = response.mergeAllEntities(8);
+            const allEntities = response.mergeAllEntities(16);
             if (allEntities && allEntities.length > 0) {
                 printer.writeLine(`Entity Hit Count: ${allEntities.length}`);
             } else {
