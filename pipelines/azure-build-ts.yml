@@ -15,9 +15,11 @@ pool:
   vmImage: 'ubuntu-latest'
 
 variables:
-  node_version: '18'  # Set the Node.js version here
-  pnpm_version: '9'   # Set the pnpm version here
+  node_version: '18'
+  pnpm_version: '9.0.0'
   typeagent_repo: 'https://github.com/microsoft/typeagent.git'
+  workingDirectory: 'typeagent/ts'
+  ado_registry: 'https://pkgs.dev.azure.com/msctoproj/AI_Systems/_packaging/typeagent/npm/registry/'
 
 jobs:
 - job: build_ts
@@ -35,7 +37,7 @@ jobs:
     displayName: 'Clone typeagent Repository'
 
   - script: |
-      curl -fsSL https://get.pnpm.io/install.sh | sh -
+      curl -fsSL https://get.pnpm.io/v6.14.js | node - add --global pnpm@$(pnpm_version)
       export PNPM_HOME="$HOME/.local/share/pnpm"
       export PATH="$PNPM_HOME:$PATH"
     displayName: 'Install pnpm'
@@ -50,27 +52,27 @@ jobs:
   - script: |
       pnpm install --frozen-lockfile --strict-peer-dependencies
     displayName: 'Install dependencies'
-    workingDirectory: typeagent/ts
+    workingDirectory: $(workingDirectory)
 
   - script: |
       npm run build
     displayName: 'Build'
-    workingDirectory: typeagent/ts
+    workingDirectory: $(workingDirectory)
 
   - script: |
       npm run test
     displayName: 'Run Tests'
-    workingDirectory: typeagent/ts
+    workingDirectory: $(workingDirectory)
 
   - script: |
       npm run lint
     displayName: 'Lint'
-    workingDirectory: typeagent/ts
+    workingDirectory: $(workingDirectory)
 
   - script: |
-      cd $(Build.SourcesDirectory)/typeagent/ts/packages/agent-sdk/dist
+      cd $(Build.SourcesDirectory)/$(workingDirectory)/packages/agentSdk/dist
       npm pack
-    displayName: 'Pack agent-sdk Module'
+    displayName: 'Pack agent-sdk module'
 
   - task: npmAuthenticate@0
     inputs:
@@ -78,6 +80,6 @@ jobs:
     displayName: 'Authenticate with Azure Artifacts'
 
   - script: |
-      npm publish --registry=https://pkgs.dev.azure.com/msctoproj/AI_Systems/_packaging/typeagent/npm/registry/
+      npm publish --registry=$(ado_registry)
     displayName: 'Publish agent-sdk Module'
     condition: succeeded()
