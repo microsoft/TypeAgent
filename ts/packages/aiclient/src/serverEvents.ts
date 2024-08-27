@@ -45,12 +45,13 @@ export async function* readMessages(
                 const message = buffer.slice(0, terminatorPos);
                 yield message;
             }
+            scanStartAt = 0;
             const sliceStartAt = terminatorPos + Delimiters.Message.length;
             if (sliceStartAt >= buffer.length) {
+                buffer = "";
                 break;
             }
             buffer = buffer.slice(sliceStartAt);
-            scanStartAt = 0;
         }
     }
     // Any remaining buffer is ignored as being incomplete

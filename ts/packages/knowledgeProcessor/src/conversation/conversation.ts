@@ -407,6 +407,8 @@ export async function createConversation(
     type EntityId = string;
     type ActionId = string;
 
+    settings.indexActions ??= true;
+
     const messages = await createTextStore(
         { concurrency: settings.indexSettings.concurrency },
         path.join(rootPath, "messages"),
