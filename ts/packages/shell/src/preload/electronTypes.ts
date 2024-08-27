@@ -216,6 +216,9 @@ export interface ClientAPI {
     onShowDialog(
         callback: (e: Electron.IpcRendererEvent, key: string) => void,
     ): void;
+    onHideMenuChanged(
+        callback: (e: Electron.IpcRendererEvent, value: boolean) => void,
+    );
 }
 
 export interface ElectronWindowFields {

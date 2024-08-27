@@ -67,7 +67,7 @@ function createWindow(): void {
         width: ShellSettings.getinstance().width,
         height: ShellSettings.getinstance().height,
         show: false,
-        autoHideMenuBar: true,
+        autoHideMenuBar: ShellSettings.getinstance().hideMenu,
         webPreferences: {
             preload: join(__dirname, "../preload/index.mjs"),
             sandbox: false,
@@ -444,6 +444,8 @@ app.whenReady().then(async () => {
             ShellSettings.getinstance().microphoneId,
             ShellSettings.getinstance().microphoneName,
         );
+
+        mainWindow?.webContents.send("hide-menu-changed", ShellSettings.getinstance().hideMenu);
     });
 
     await initializeSpeech(context);
@@ -456,6 +458,15 @@ app.whenReady().then(async () => {
         async (_event, micId: string, micName: string) => {
             ShellSettings.getinstance().microphoneId = micId;
             ShellSettings.getinstance().microphoneName = micName;
+        },
+    );
+
+    ipcMain.on("hide-menu-changed", (_event, value: boolean) => {
+            ShellSettings.getinstance().hideMenu = value;
+            mainWindow!.autoHideMenuBar = value;
+
+            // if the menu bar is visible it won't auto hide immediately when this is toggled so we have to help it along
+            mainWindow?.setMenuBarVisibility(!value);
         },
     );
 

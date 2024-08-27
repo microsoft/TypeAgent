@@ -117,6 +117,9 @@ function addEvents(
     api.onShowDialog((_, key) => {
         tabsView.showTab(key);
     });
+    api.onHideMenuChanged((_, value) => {
+        settingsView.menuCheckBox.checked = value;
+    });
 }
 
 export class IdGenerator {
@@ -149,7 +152,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const chatView = new ChatView(idGenerator, speechInfo, agents);
     wrapper.appendChild(chatView.getMessageElm());
 
-    const settingsView = new SettingsView();
+    const settingsView = new SettingsView(window);
     tabs.getTabContainerByName("Settings").append(settingsView.getContainer());
     tabs.getTabContainerByName("Metrics").append(
         new MetricsView().getContainer(),
