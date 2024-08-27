@@ -83,6 +83,6 @@ export interface LookupAndGenerateResponseAction {
         // E.g. stock prices, time sensitive data, etc
         // the search strings to look up on the user's behalf should be specific enough to return the correct information
         // it is recommended to include the same entities as in the user request
-        internetLookups: string[];
+        internetLookups?: string[];
     };
 }
