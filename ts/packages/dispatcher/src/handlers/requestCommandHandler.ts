@@ -258,6 +258,11 @@ async function translateRequestWithTranslator(
         onProperty,
     );
     translator.createRequestPrompt = orp;
+
+    // TODO: figure out if we want to keep track of this
+    //Profiler.getInstance().incrementLLMCallCount(context.requestId);
+
+
     if (!response.success) {
         context.requestIO.error(response.message);
         return undefined;

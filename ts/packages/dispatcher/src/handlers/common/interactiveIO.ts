@@ -39,6 +39,8 @@ export interface IAgentMessage {
 
 export interface IMessageMetrics {
     duration: number | undefined;
+    llmCallCount?: number | undefined;
+    entityCount?: number | undefined;
     marks?: Map<string, number> | undefined;
 }
 
@@ -176,10 +178,7 @@ function makeClientIOMessage(context: CommandHandlerContext | undefined, message
         source, 
         actionIndex, 
         groupId, 
-        metrics: { 
-            duration: Profiler.getInstance().get(requestId)?.elapsedMs,
-            marks: Profiler.getInstance().getMarks(requestId)
-        } 
+        metrics: Profiler.getInstance().getMetrics(requestId)
     };
 }
 
