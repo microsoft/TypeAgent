@@ -24,10 +24,15 @@ async function getConfigValues(): Promise<Record<string, string>> {
 }
 
 let webSocket: any = null;
+let configValues: Record<string, string>;
 
 export async function createWebSocket() {
-    const vals = await getConfigValues();
-    const socketEndpoint = vals["WEBSOCKET_HOST"] ?? "ws://localhost:8080/";
+    if (!configValues) {
+        configValues = await getConfigValues();
+    }
+
+    const socketEndpoint =
+        configValues["WEBSOCKET_HOST"] ?? "ws://localhost:8080/";
 
     return new Promise<WebSocket | undefined>((resolve, reject) => {
         const webSocket = new WebSocket(socketEndpoint);
@@ -49,89 +54,99 @@ export async function createWebSocket() {
 }
 
 async function ensureWebsocketConnected() {
-    if (webSocket) {
-        if (webSocket.readyState === WebSocket.OPEN) {
+    return new Promise<WebSocket | undefined>(async (resolve, reject) => {
+        if (webSocket) {
+            if (webSocket.readyState === WebSocket.OPEN) {
+                resolve(webSocket);
+                return;
+            }
+            try {
+                webSocket.close();
+                webSocket = undefined;
+            } catch {}
+        }
+
+        webSocket = await createWebSocket();
+        if (!webSocket) {
+            showBadgeError();
+            resolve(undefined);
             return;
         }
-        try {
-            webSocket.close();
-            webSocket = undefined;
-        } catch {}
-    }
 
-    webSocket = await createWebSocket();
-    if (!webSocket) {
-        showBadgeError();
-        return;
-    }
+        webSocket.binaryType = "blob";
+        keepWebSocketAlive(webSocket);
 
-    webSocket.binaryType = "blob";
-    keepWebSocketAlive(webSocket);
-
-    webSocket.onmessage = async (event: any, isBinary: boolean) => {
-        const text = await event.data.text();
-        const data = JSON.parse(text) as WebSocketMessage;
-        if (data.target == "browser") {
-            if (data.messageType == "translatedAction") {
-                const respose = await runBrowserAction(data.body);
-                if (respose.data) {
-                    webSocket.send(
-                        JSON.stringify({
-                            source: data.target,
-                            target: data.source,
-                            messageType: "confirmActionWithData",
-                            id: data.id,
-                            body: respose,
-                        }),
+        webSocket.onmessage = async (event: any, isBinary: boolean) => {
+            const text = await event.data.text();
+            const data = JSON.parse(text) as WebSocketMessage;
+            if (data.target == "browser") {
+                if (data.messageType == "translatedAction") {
+                    const respose = await runBrowserAction(data.body);
+                    if (respose.data) {
+                        webSocket.send(
+                            JSON.stringify({
+                                source: data.target,
+                                target: data.source,
+                                messageType: "confirmActionWithData",
+                                id: data.id,
+                                body: respose,
+                            }),
+                        );
+                    } else {
+                        webSocket.send(
+                            JSON.stringify({
+                                source: data.target,
+                                target: data.source,
+                                messageType: "confirmAction",
+                                id: data.id,
+                                body: respose.message,
+                            }),
+                        );
+                    }
+                } else if (data.messageType == "siteTranslatorStatus") {
+                    if (data.body.status == "initializing") {
+                        showBadgeBusy();
+                        console.log(`Initializing ${data.body.translator}`);
+                    } else if (data.body.status == "initialized") {
+                        showBadgeHealthy();
+                        console.log(
+                            `Finished initializing ${data.body.translator}`,
+                        );
+                    }
+                } else if (
+                    data.messageType.startsWith("siteTranslatedAction_")
+                ) {
+                    const message = await runSiteAction(
+                        data.messageType,
+                        data.body,
                     );
-                } else {
+
                     webSocket.send(
                         JSON.stringify({
                             source: data.target,
                             target: data.source,
                             messageType: "confirmAction",
                             id: data.id,
-                            body: respose.message,
+                            body: message,
                         }),
                     );
                 }
-            } else if (data.messageType == "siteTranslatorStatus") {
-                if (data.body.status == "initializing") {
-                    showBadgeBusy();
-                    console.log(`Initializing ${data.body.translator}`);
-                } else if (data.body.status == "initialized") {
-                    showBadgeHealthy();
-                    console.log(
-                        `Finished initializing ${data.body.translator}`,
-                    );
-                }
-            } else if (data.messageType.startsWith("siteTranslatedAction_")) {
-                const message = await runSiteAction(
-                    data.messageType,
-                    data.body,
-                );
 
-                webSocket.send(
-                    JSON.stringify({
-                        source: data.target,
-                        target: data.source,
-                        messageType: "confirmAction",
-                        id: data.id,
-                        body: message,
-                    }),
+                console.log(
+                    `Browser websocket client received message: ${text}`,
                 );
             }
+        };
 
-            console.log(`Browser websocket client received message: ${text}`);
-        }
-    };
+        webSocket.onclose = (event: object) => {
+            console.log("websocket connection closed");
+            webSocket = undefined;
+            showBadgeError();
+            reconnectWebSocket();
+        };
 
-    webSocket.onclose = (event: object) => {
-        console.log("websocket connection closed");
-        webSocket = undefined;
-        showBadgeError();
-        reconnectWebSocket();
-    };
+        resolve(webSocket);
+    });
 }
 
 export function keepWebSocketAlive(webSocket: WebSocket) {
@@ -152,15 +167,21 @@ export function keepWebSocketAlive(webSocket: WebSocket) {
     }, 20 * 1000);
 }
 
+let isReconnectRunning = false;
 export function reconnectWebSocket() {
     const connectionCheckIntervalId = setInterval(async () => {
         if (webSocket && webSocket.readyState === WebSocket.OPEN) {
             console.log("Clearing reconnect retry interval");
             clearInterval(connectionCheckIntervalId);
+            isReconnectRunning = false;
             showBadgeHealthy();
         } else {
-            console.log("Retrying connection");
-            await ensureWebsocketConnected();
+            if (!isReconnectRunning) {
+                isReconnectRunning = true;
+                console.log("Retrying connection");
+                await ensureWebsocketConnected();
+                isReconnectRunning = false;
+            }
         }
     }, 5 * 1000);
 }
@@ -1201,9 +1222,14 @@ function showBadgeBusy() {
 
 chrome.action.onClicked.addListener(async (tab) => {
     try {
-        await ensureWebsocketConnected();
-        await toggleSiteTranslator(tab);
-        showBadgeHealthy();
+        const connected = await ensureWebsocketConnected();
+        if (!connected) {
+            reconnectWebSocket();
+            showBadgeError();
+        } else {
+            await toggleSiteTranslator(tab);
+            showBadgeHealthy();
+        }
     } catch {
         reconnectWebSocket();
         showBadgeError();
@@ -1226,7 +1252,12 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
         return;
     }
 
-    await ensureWebsocketConnected();
+    const connected = await ensureWebsocketConnected();
+    if (!connected) {
+        reconnectWebSocket();
+        showBadgeError();
+    }
+
     const targetTab = await getActiveTab();
     await toggleSiteTranslator(targetTab);
 });
@@ -1242,7 +1273,11 @@ chrome.windows.onRemoved.addListener(async (windowId) => {
 chrome.runtime.onStartup.addListener(async () => {
     console.log("Browser Agent Service Worker started");
     try {
-        await ensureWebsocketConnected();
+        const connected = await ensureWebsocketConnected();
+        if (!connected) {
+            reconnectWebSocket();
+            showBadgeError();
+        }
     } catch {
         reconnectWebSocket();
     }

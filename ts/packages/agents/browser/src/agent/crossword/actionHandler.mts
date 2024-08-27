@@ -65,6 +65,7 @@ export async function getBoardSchema(
 */
 
     if (candidateFragments.length > 0) {
+      /*
       let cluePromises = [];
       for (let i = 0; i < candidateFragments.length; i++) {
         cluePromises.push(
@@ -74,6 +75,14 @@ export async function getBoardSchema(
       }
 
       const clueResults = await Promise.all(cluePromises);
+      */
+
+      let clueResults = [];
+      for (let i = 0; i < candidateFragments.length; i++) {
+        clueResults.push(
+          await agent.getCluesTextThenSelectors([candidateFragments[i]]),
+        );
+      }
 
       for (let i = 0; i < clueResults.length; i++) {
         const cluesResponse = clueResults[i];
