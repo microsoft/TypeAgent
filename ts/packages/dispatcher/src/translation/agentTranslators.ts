@@ -29,6 +29,7 @@ export type TranslatorConfig = {
     dataFrameColumns?: { [key: string]: string };
     injected?: boolean; // whether the translator is injected into other domains, default is false
     cached?: boolean; // whether the translator's action should be cached, default is true
+    streamingActions?: string[];
 
     defaultEnabled: boolean;
     actionDefaultEnabled: boolean;
