@@ -17,14 +17,12 @@ import {
     createTurnImpressionFromError,
 } from "@typeagent/agent-sdk";
 import { searchAlbum, searchArtists, searchTracks } from "../client.js";
-import { getUserDataStrings } from "../client.js";
 
 export function instantiate(): DispatcherAgent {
     return {
         initializeAgentContext: initializePlayerContext,
         updateAgentContext: updatePlayerContext,
         executeAction: executePlayerAction,
-        partialInput: playerPartialInput,
         validateWildcardMatch: validatePlayerWildcardMatch,
     };
 }
@@ -51,47 +49,6 @@ async function executePlayerAction(
     return createTurnImpressionFromError(
         "Action translated but not performed. Spotify integration is not enabled.",
     );
-}
-
-function playerPartialInput(
-    partialInputText: string,
-    context: DispatcherAgentContext<PlayerActionContext>,
-) {
-    if (partialInputText.startsWith("play ")) {
-        const prefix = partialInputText.substring(5).toLocaleLowerCase();
-        if (context.context.spotify) {
-            if (!context.context.searchContext) {
-                context.context.searchContext = {
-                    state: "active",
-                    menuId: "player",
-                    lastPrefix: prefix,
-                };
-                const choices = getUserDataStrings(context.context.spotify);
-                const searchMenuItems = choices.map((choice) => ({
-                    matchText: choice,
-                    emojiChar: "🎵",
-                    groupName: "player",
-                    selectedText: choice,
-                }));
-                context.context.searchContext.choices = choices;
-                context.searchMenuCommand(
-                    "player",
-                    "register",
-                    prefix,
-                    searchMenuItems,
-                    true,
-                );
-            } else {
-                context.context.searchContext.lastPrefix = prefix;
-                if (context.context.searchContext.state === "inactive") {
-                    context.context.searchContext.state = "active";
-                    context.searchMenuCommand("player", "show", prefix);
-                } else {
-                    context.searchMenuCommand("player", "complete", prefix);
-                }
-            }
-        }
-    }
 }
 
 async function updatePlayerContext(

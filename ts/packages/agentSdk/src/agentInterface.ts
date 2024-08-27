@@ -53,7 +53,6 @@ export interface DispatcherAgent {
         context: DispatcherAgentContext,
         actionIndex: number, // TODO: can we avoid passing this index?
     ): Promise<any>; // TODO: define return type.
-    partialInput?(text: string, context: DispatcherAgentContext): void;
     validateWildcardMatch?(
         action: DispatcherAction,
         context: DispatcherAgentContext,
@@ -74,14 +73,6 @@ export interface DispatcherAgentContext<T = any> {
     getUpdateActionStatus():
         | ((message: string, group_id: string) => void)
         | undefined;
-
-    searchMenuCommand(
-        menuId: string,
-        command: SearchMenuCommand,
-        prefix?: string,
-        choices?: SearchMenuItem[],
-        visible?: boolean,
-    ): void;
     toggleAgent(name: string, enable: boolean): Promise<void>;
 }
 
