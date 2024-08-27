@@ -495,7 +495,7 @@ export async function runChatMemory(): Promise<void> {
                 mergeActionKnowledge: true,
             },
         );
-        context.conversationSettings.indexActions = namedArgs.actions;
+        context.conversationSettings.indexActions = true; //namedArgs.actions;
         let count = 0;
         const concurrency = namedArgs.concurrency;
         try {
@@ -996,7 +996,11 @@ export async function runChatMemory(): Promise<void> {
             return;
         }
 
-        const result = await searcher.searchTerms(query, searchOptions);
+        const result = await searcher.searchTerms(
+            query,
+            undefined,
+            searchOptions,
+        );
         if (!result) {
             printer.writeError("No result");
             return;

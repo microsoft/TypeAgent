@@ -26,7 +26,11 @@ import {
 import { AnswerGenerator, createAnswerGenerator } from "./answerGenerator.js";
 import { PromptSection } from "typechat";
 import { ChatModel } from "aiclient";
-import { GetAnswerWithTermsAction } from "./knowledgeTermSearchSchema.js";
+import {
+    GetAnswerWithTermsAction,
+    SearchTermsAction,
+    TermFilter,
+} from "./knowledgeTermSearchSchema.js";
 
 export type SearchProcessingOptions = {
     maxMatches: number;
@@ -48,6 +52,7 @@ export interface ConversationSearchProcessor {
     ): Promise<SearchActionResponse | undefined>;
     searchTerms(
         query: string,
+        filters: TermFilter[] | undefined,
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponse | undefined>;
     buildContext(
@@ -114,17 +119,30 @@ export function createSearchProcessor(
 
     async function searchTerms(
         query: string,
+        filters: TermFilter[] | undefined,
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponse | undefined> {
         const context = await buildContext();
-        const actionResult = await searchTranslator.translateSearchTerms(
-            query,
-            context,
-        );
-        if (!actionResult.success) {
-            return undefined;
+        let action: SearchTermsAction | undefined;
+        if (filters && filters.length > 0) {
+            // Filters already provided
+            action = {
+                actionName: "getAnswer",
+                parameters: {
+                    filters,
+                },
+            };
+        } else {
+            const actionResult = await searchTranslator.translateSearchTerms(
+                query,
+                context,
+            );
+            if (!actionResult.success) {
+                return undefined;
+            }
+            action = actionResult.data;
         }
-        let action = actionResult.data;
+
         if (options.progress) {
             options.progress(action);
         }

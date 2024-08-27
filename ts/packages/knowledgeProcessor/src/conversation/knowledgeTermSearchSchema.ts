@@ -8,7 +8,7 @@ import { DateTimeRange } from "./dateTimeSchema.js";
  The message sequence, and any entities, actions and topics in each message are indexed.
  */
 
-// Search indexes for following "bag of words" terms
+// Search indexes for following search terms: typically single word keywords.
 export type TermFilter = {
     // action verb terms to look for
     verbs?: string[];

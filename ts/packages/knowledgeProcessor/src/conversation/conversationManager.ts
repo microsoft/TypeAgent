@@ -30,6 +30,7 @@ import { KnowledgeSearchMode } from "./knowledgeActions.js";
 import { SetOp, unionArrays } from "../setOperations.js";
 import { ConcreteEntity } from "./knowledgeSchema.js";
 import { mergeEntities } from "./entities.js";
+import { TermFilter } from "./knowledgeTermSearchSchema.js";
 
 /**
  * A conversation manager lets you dynamically:
@@ -53,6 +54,7 @@ export interface ConversationManager {
     ): Promise<any>;
     search(
         query: string,
+        termFilters?: TermFilter[] | undefined,
         fuzzySearchOptions?: SearchOptions | undefined,
         maxMessages?: number | undefined,
         progress?: ((value: any) => void) | undefined,
@@ -185,12 +187,14 @@ export async function createConversationManager(
 
     async function search(
         query: string,
+        termFilters?: TermFilter[] | undefined,
         fuzzySearchOptions?: SearchOptions | undefined,
         maxMessages?: number | undefined,
         progress?: ((value: any) => void) | undefined,
     ): Promise<SearchTermsActionResponse | undefined> {
         return searchProcessor.searchTerms(
             query,
+            termFilters,
             createSearchProcessingSettings(
                 fuzzySearchOptions,
                 maxMessages,
