@@ -27,7 +27,7 @@ export function createAnswerGenerator(
     settings?: AnswerGeneratorSettings,
 ): AnswerGenerator {
     settings ??= {
-        topKEntities: 16,
+        topKEntities: 8,
     };
     const translator = createChatTranslator<AnswerResponse>(
         model,
