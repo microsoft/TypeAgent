@@ -121,14 +121,3 @@ export async function getDispatcherAgents() {
     return dispatcherAgents;
 }
 
-export async function getDispatcherAgent(dispatcherAgentName: string) {
-    const dispatcherAgent = (await getDispatcherAgents()).get(
-        dispatcherAgentName,
-    );
-    if (dispatcherAgent === undefined) {
-        throw new Error(
-            `Invalid dispatcher agent name: ${dispatcherAgentName}`,
-        );
-    }
-    return dispatcherAgent;
-}
