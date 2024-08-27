@@ -10,6 +10,7 @@ import { SearchResponse } from "./conversation.js";
 import { ResponseStyle } from "./knowledgeSearchWebSchema.js";
 
 export interface AnswerGenerator {
+    settings: AnswerGeneratorSettings;
     generateAnswer(
         question: string,
         style: ResponseStyle | undefined,
@@ -27,7 +28,7 @@ export function createAnswerGenerator(
     settings?: AnswerGeneratorSettings,
 ): AnswerGenerator {
     settings ??= {
-        topKEntities: 16,
+        topKEntities: 8,
     };
     const translator = createChatTranslator<AnswerResponse>(
         model,
@@ -36,6 +37,7 @@ export function createAnswerGenerator(
     );
 
     return {
+        settings,
         generateAnswer,
     };
 

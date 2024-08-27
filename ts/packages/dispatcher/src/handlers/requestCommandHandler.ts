@@ -13,6 +13,7 @@ import {
 import { CommandHandler } from "./common/commandHandler.js";
 import {
     CommandHandlerContext,
+    getDispatcherAgent,
     getTranslator,
     updateCorrectionContext,
 } from "./common/commandHandlerContext.js";
@@ -20,10 +21,12 @@ import {
 import { getColorElapsedString } from "common-utils";
 import {
     executeActions,
+    streamPartialAction,
     validateWildcardMatch,
 } from "../action/actionHandlers.js";
 import { unicodeChar } from "../utils/interactive.js";
 import {
+    getDispatcherAgentName,
     getInjectedTranslatorForActionName,
     getTranslatorConfig,
     isChangeAssistantAction,
@@ -37,7 +40,6 @@ import { makeRequestPromptCreator } from "./common/chatHistoryPrompt.js";
 import { MatchResult } from "../../../cache/dist/constructions/constructions.js";
 import registerDebug from "debug";
 import { getAllActionInfo } from "../translation/actionInfo.js";
-import { getDispatcherAgent } from "../agent/agentConfig.js";
 
 const debugConstValidation = registerDebug("typeagent:const:validation");
 export const DispatcherName = "dispatcher";
@@ -221,25 +223,33 @@ async function translateRequestWithTranslator(
         history,
     );
 
-    let generateResponse = false;
+    let streamActionTranslatorName: string | undefined = undefined;
+    let streamActionName: string | undefined = undefined;
     const onProperty = context.session.getConfig().stream
         ? (prop: string, value: any, partial: boolean) => {
-              // TODO: implemented for chat's generate response.
-              // Need to design the interface for agents to use streaming
+              // TODO: streaming currently doesn't not support multiple actions
               if (prop === "actionName" && !partial) {
+                  const actionTranslatorName =
+                      getInjectedTranslatorForActionName(value) ??
+                      translatorName;
                   context.requestIO.status(
-                      `[${translatorName}] Translating '${request}' into action '${value}'`,
+                      `[${actionTranslatorName}] Translating '${request}' into action '${value}'`,
                   );
-                  if (value === "generateResponse") {
-                      generateResponse = true;
+                  const config = getTranslatorConfig(actionTranslatorName);
+                  if (config.streamingActions?.includes(value)) {
+                      streamActionTranslatorName = actionTranslatorName;
+                      streamActionName = value;
                   }
               }
 
-              if (generateResponse && prop === "parameters.generatedText") {
-                  context.requestIO.setActionStatus(
-                      `${value}${partial ? "..." : ""}`,
-                      0,
-                      context.currentTranslatorName,
+              if (streamActionTranslatorName) {
+                  streamPartialAction(
+                      streamActionTranslatorName,
+                      streamActionName!,
+                      prop,
+                      value,
+                      partial,
+                      context,
                   );
               }
           }

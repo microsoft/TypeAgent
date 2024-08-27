@@ -15,6 +15,10 @@ export enum AgentInvokeAPI {
     CloseAgentContext = "closeAgentContext",
 }
 
+export enum AgentCallAPI {
+    StreamPartialAction = "streamPartialAction",
+}
+
 export const enum AgentContextCallAPI {
     // DispatcherAgentContext
     AgentIOClear = "agentIOClear",

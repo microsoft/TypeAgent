@@ -29,7 +29,6 @@ import { createEmbeddingCache } from "../modelCache.js";
 import { KnowledgeSearchMode } from "./knowledgeActions.js";
 import { SetOp, unionArrays } from "../setOperations.js";
 import { ConcreteEntity } from "./knowledgeSchema.js";
-import { mergeEntities } from "./entities.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 
 /**
