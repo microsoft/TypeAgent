@@ -89,15 +89,6 @@ function createDispatcherAgentContext(
         getUpdateActionStatus() {
             return context.clientIO?.updateActionStatus.bind(context.clientIO);
         },
-        searchMenuCommand(menuId, command, prefix?, choices?, visible?): void {
-            return context.clientIO?.searchMenuCommand(
-                menuId,
-                command,
-                prefix,
-                choices,
-                visible,
-            );
-        },
         async toggleAgent(name: string, enable: boolean) {
             await changeContextConfig(
                 {
@@ -194,14 +185,8 @@ export async function partialInput(
     text: string,
     context: CommandHandlerContext,
 ) {
-    const dispatcherAgentName = getDispatcherAgentName(
-        context.currentTranslatorName,
-    );
-    const dispatcherAgent = await getDispatcherAgent(dispatcherAgentName);
-    return dispatcherAgent.partialInput?.(
-        text,
-        getDispatcherAgentContext(dispatcherAgentName, context),
-    );
+    // For auto completion
+    throw new Error("NYI");
 }
 
 export async function executeActions(
@@ -212,10 +197,30 @@ export async function executeActions(
     const requestIO = context.requestIO;
     let actionIndex = 0;
     for (const action of actions) {
-        const result =
-            (await executeAction(action, context, actionIndex)) ??
-            createTurnImpressionFromLiteral(`
+        let result: TurnImpression;
+        const returnedResult = await executeAction(
+            action,
+            context,
+            actionIndex,
+        );
+        if (returnedResult === undefined) {
+            result = createTurnImpressionFromLiteral(`
                 Action ${action.fullActionName} completed.`);
+        } else {
+            if (
+                returnedResult.error === undefined &&
+                returnedResult.literalText &&
+                context.conversationManager
+            ) {
+                // TODO: convert entity values to facets
+                context.conversationManager.addMessage(
+                    returnedResult.literalText,
+                    returnedResult.entities,
+                    new Date(),
+                );
+            }
+            result = returnedResult;
+        }
         if (debugActions.enabled) {
             debugActions(turnImpressionToString(result));
         }

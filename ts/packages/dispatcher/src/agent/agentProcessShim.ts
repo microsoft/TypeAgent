@@ -170,14 +170,6 @@ export async function createAgentProcessShim(
                 }),
             );
         },
-        partialInput(text, context: DispatcherAgentContext) {
-            return withContext(context, (contextParams) =>
-                rpc.invoke(AgentInvokeAPI.PartialInput, {
-                    ...contextParams,
-                    text,
-                }),
-            );
-        },
         validateWildcardMatch(action, context: DispatcherAgentContext) {
             return withContext(context, (contextParams) =>
                 rpc.invoke(AgentInvokeAPI.ValidateWildcardMatch, {

@@ -88,26 +88,31 @@ async function handleChatResponse(
                 return result;
             }
         }
-        case "lookupAndGenerateResponse":
-            {
-                const lookupAction =
-                    chatAction as LookupAndGenerateResponseAction;
-                if (
-                    lookupAction.parameters.lookups !== undefined &&
-                    lookupAction.parameters.lookups.length > 0
-                ) {
-                    console.log("Running lookups");
-                    return handleLookup(
-                        lookupAction,
-                        requestIO,
-                        actionIndex,
-                        await getLookupSettings(true),
-                    );
-                }
-                break;
+        case "lookupAndGenerateResponse": {
+            const lookupAction = chatAction as LookupAndGenerateResponseAction;
+            if (
+                lookupAction.parameters.internetLookups !== undefined &&
+                lookupAction.parameters.internetLookups.length > 0
+            ) {
+                console.log("Running lookups");
+                return handleLookup(
+                    lookupAction,
+                    requestIO,
+                    actionIndex,
+                    await getLookupSettings(true),
+                );
             }
-            requestIO.error("No information found");
+            if (
+                lookupAction.parameters.conversationLookupFilters !== undefined
+            ) {
+                const lt = `Not implemented: conversation lookup terms ${JSON.stringify(lookupAction.parameters.conversationLookupFilters)}`;
+
+                const result = createTurnImpressionFromLiteral(lt);
+                return result;
+            }
+        }
     }
+    return createTurnImpressionFromLiteral("No information found");
 }
 
 function logEntities(label: string, entities?: Entity[]): void {
@@ -246,7 +251,7 @@ async function handleLookup(
         "No information found",
     );
 
-    let lookups = chatAction.parameters.lookups;
+    let lookups = chatAction.parameters.internetLookups;
     if (!lookups || lookups.length === 0) {
         return literalResponse;
     }

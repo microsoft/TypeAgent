@@ -142,7 +142,7 @@ export async function loadHistoryFile(
     context: IClientContext,
 ) {
     console.log(`Loading history file: ${historyPath}`);
-    if (!profileStorage.exists(historyPath) || !context.userData) {
+    if (!(await profileStorage.exists(historyPath)) || !context.userData) {
         return;
     }
     let data: undefined | SpotifyRecord[] = undefined;
