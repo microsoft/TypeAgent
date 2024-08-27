@@ -707,9 +707,15 @@ importers:
       '@types/debug':
         specifier: ^4.1.10
         version: 4.1.10
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.7
       '@types/node':
         specifier: ^18.18.7
         version: 18.18.7
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@18.18.7)(ts-node@10.9.1(@types/node@18.18.7)(typescript@5.4.3))
       rimraf:
         specifier: ^5.0.5
         version: 5.0.5
