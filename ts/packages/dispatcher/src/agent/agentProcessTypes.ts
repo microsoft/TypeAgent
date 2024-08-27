@@ -11,7 +11,6 @@ export enum AgentInvokeAPI {
     InitializeAgentContext = "initializeAgentContext",
     UpdateAgentContext = "updateAgentContext",
     ExecuteAction = "executeAction",
-    PartialInput = "partialInput",
     ValidateWildcardMatch = "validateWildcardMatch",
     CloseAgentContext = "closeAgentContext",
 }

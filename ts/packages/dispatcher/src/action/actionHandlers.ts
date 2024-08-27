@@ -89,15 +89,6 @@ function createDispatcherAgentContext(
         getUpdateActionStatus() {
             return context.clientIO?.updateActionStatus.bind(context.clientIO);
         },
-        searchMenuCommand(menuId, command, prefix?, choices?, visible?): void {
-            return context.clientIO?.searchMenuCommand(
-                menuId,
-                command,
-                prefix,
-                choices,
-                visible,
-            );
-        },
         async toggleAgent(name: string, enable: boolean) {
             await changeContextConfig(
                 {
@@ -195,14 +186,8 @@ export async function partialInput(
     text: string,
     context: CommandHandlerContext,
 ) {
-    const dispatcherAgentName = getDispatcherAgentName(
-        context.currentTranslatorName,
-    );
-    const dispatcherAgent = await getDispatcherAgent(dispatcherAgentName);
-    return dispatcherAgent.partialInput?.(
-        text,
-        getDispatcherAgentContext(dispatcherAgentName, context),
-    );
+    // For auto completion
+    throw new Error("NYI");
 }
 
 export async function executeActions(

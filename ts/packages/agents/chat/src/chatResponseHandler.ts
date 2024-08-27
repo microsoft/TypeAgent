@@ -26,6 +26,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { fileURLToPath } from "node:url";
 import { conversation as Conversation } from "knowledge-processor";
+import { create } from "node:domain";
 
 export function instantiate(): DispatcherAgent {
     return {
@@ -110,9 +111,8 @@ async function handleChatResponse(
                     context as any
                 ).conversationManager;
                 if (conversationManager !== undefined) {
-                    console.log(
-                        `Running conversation lookup with filters ${JSON.stringify(lookupAction.parameters.conversationLookupFilters)}`,
-                    );
+                    const lt = `Running conversation lookup with filters ${JSON.stringify(lookupAction.parameters.conversationLookupFilters)}`;
+                    return createTurnImpressionFromLiteral(lt);
                 }
             }
         }
