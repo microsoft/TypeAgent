@@ -212,10 +212,30 @@ export async function executeActions(
     const requestIO = context.requestIO;
     let actionIndex = 0;
     for (const action of actions) {
-        const result =
-            (await executeAction(action, context, actionIndex)) ??
-            createTurnImpressionFromLiteral(`
+        let result: TurnImpression;
+        const returnedResult = await executeAction(
+            action,
+            context,
+            actionIndex,
+        );
+        if (returnedResult === undefined) {
+            result = createTurnImpressionFromLiteral(`
                 Action ${action.fullActionName} completed.`);
+        } else {
+            if (
+                returnedResult.error === undefined &&
+                returnedResult.literalText &&
+                context.conversationManager
+            ) {
+                // TODO: convert entity values to facets
+                context.conversationManager.addMessage(
+                    returnedResult.literalText,
+                    returnedResult.entities,
+                    new Date(),
+                );
+            }
+            result = returnedResult;
+        }
         if (debugActions.enabled) {
             debugActions(turnImpressionToString(result));
         }

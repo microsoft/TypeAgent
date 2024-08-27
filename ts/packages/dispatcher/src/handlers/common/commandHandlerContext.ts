@@ -54,6 +54,7 @@ import { getUserId } from "../../utils/userData.js";
 import { DispatcherName } from "../requestCommandHandler.js";
 import { DispatcherAgentContext } from "@typeagent/agent-sdk";
 import { getDispatcherAgent } from "../../agent/agentConfig.js";
+import { conversation as Conversation } from "knowledge-processor";
 
 export interface CommandResult {
     error?: boolean;
@@ -66,6 +67,7 @@ export type CommandHandlerContext = {
     session: Session;
     sessionContext: Map<string, DispatcherAgentContext>;
 
+    conversationManager?: Conversation.ConversationManager;
     // Per activation configs
     developerMode?: boolean;
     explanationAsynchronousMode: boolean;
@@ -194,6 +196,11 @@ export async function initializeCommandHandlerContext(
     const stdio = options?.stdio;
 
     const session = await getSession(options);
+    const conversationManager = await Conversation.createConversationManager(
+        "conversation",
+        "/data/testChat",
+        false,
+    );
     const dbLoggerSink: LoggerSink | undefined = createMongoDBLoggerSink(
         "telemetrydb",
         "dispatcherlogs",
@@ -221,6 +228,7 @@ export async function initializeCommandHandlerContext(
     const clientIO = options?.clientIO;
     const context: CommandHandlerContext = {
         session,
+        conversationManager,
         sessionContext: new Map<string, DispatcherAgentContext>(),
         explanationAsynchronousMode,
         dblogging: true,
