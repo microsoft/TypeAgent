@@ -28,6 +28,7 @@
     "aiclient": "workspace:*",
     "common-utils": "workspace:*",
     "typeagent": "workspace:*",
+    "knowledge-processor": "workspace:*",
     "typechat": "^0.1.0"
   },
   "devDependencies": {

@@ -45,6 +45,7 @@
     "proper-lockfile": "^4.1.2",
     "schema-parser": "workspace:*",
     "typeagent": "workspace:*",
+    "knowledge-processor": "workspace:*",
     "typechat": "^0.1.0",
     "ws": "^8.17.1"
   },

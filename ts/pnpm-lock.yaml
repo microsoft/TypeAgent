@@ -466,6 +466,9 @@ importers:
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
+      knowledge-processor:
+        specifier: workspace:*
+        version: link:../../knowledgeProcessor
       typeagent:
         specifier: workspace:*
         version: link:../../typeagent
@@ -1079,6 +1082,9 @@ importers:
       glob:
         specifier: ^10.3.12
         version: 10.3.12
+      knowledge-processor:
+        specifier: workspace:*
+        version: link:../knowledgeProcessor
       list-agent:
         specifier: workspace:*
         version: link:../agents/list
