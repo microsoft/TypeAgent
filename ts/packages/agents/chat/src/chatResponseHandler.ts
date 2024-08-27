@@ -111,8 +111,20 @@ async function handleChatResponse(
                     context as any
                 ).conversationManager;
                 if (conversationManager !== undefined) {
-                    const lt = `Running conversation lookup with filters ${JSON.stringify(lookupAction.parameters.conversationLookupFilters)}`;
-                    return createTurnImpressionFromLiteral(lt);
+                    const result = await conversationManager.search(
+                        lookupAction.parameters.originalRequest,
+                        lookupAction.parameters.conversationLookupFilters,
+                    );
+                    if (
+                        result !== undefined &&
+                        result.response !== undefined &&
+                        result.response.answer !== undefined &&
+                        result.response.answer.answer !== undefined
+                    ) {
+                        return createTurnImpressionFromLiteral(
+                            result.response.answer.answer!,
+                        );
+                    }
                 }
             }
         }
