@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import {
-    createLanguageModel,
+    //createLanguageModel,
     createJsonTranslator,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
@@ -12,6 +12,7 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 import path from "path";
 import fs from "fs";
 import { ContentSection, HtmlFragments } from "../common/translator.js";
+import { openai as ai } from "aiclient";
 
 export enum CommercePageType {
     Landing,
@@ -49,7 +50,7 @@ function getHtmlPromptSection(fragments: HtmlFragments[] | undefined) {
 
 function getScreenshotPromptSection(
     screenshot: string | undefined,
-    pageTextContent: string | undefined,
+    fragments: HtmlFragments[] | undefined,
 ) {
     let screenshotSection = [];
     if (screenshot) {
@@ -65,12 +66,13 @@ function getScreenshotPromptSection(
             },
         });
     }
-    if (pageTextContent) {
+    if (fragments) {
+        const textFragments = fragments.map((a) => a.text);
         screenshotSection.push({
             type: "text",
             text: `Here is the text content of the page
             '''
-            ${pageTextContent}
+            ${textFragments}
             '''            
             `,
         });
@@ -85,14 +87,9 @@ export class ECommerceSiteAgent<T extends object> {
     model: TypeChatLanguageModel;
     translator: TypeChatJsonTranslator<T>;
 
-    constructor(
-        schema: string,
-        schemaName: string,
-        vals: Record<string, string>,
-    ) {
+    constructor(schema: string, schemaName: string, fastModelName: string) {
         this.schema = schema;
-
-        this.model = createLanguageModel(vals);
+        this.model = ai.createJsonChatModel(fastModelName);
         const validator = createTypeScriptJsonValidator<T>(
             this.schema,
             schemaName,
@@ -110,7 +107,10 @@ export class ECommerceSiteAgent<T extends object> {
         fragments?: HtmlFragments[],
         screenshot?: string,
     ) {
-        const screenshotSection = getScreenshotPromptSection(screenshot, "");
+        const screenshotSection = getScreenshotPromptSection(
+            screenshot,
+            fragments,
+        );
         const htmlSection = getHtmlPromptSection(fragments);
         const prefixSection = getBootstrapPrefixPromptSection();
         const promptSections = [
@@ -124,6 +124,93 @@ export class ECommerceSiteAgent<T extends object> {
             
             '''
             ${translator.validator.getSchemaText()}
+            '''
+            
+            The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
+            `,
+            },
+        ];
+        return promptSections;
+    }
+
+    private getCssSelectorForElementPrompt<U extends object>(
+        translator: TypeChatJsonTranslator<U>,
+        userRequest?: string,
+        fragments?: HtmlFragments[],
+        screenshot?: string,
+    ) {
+        const screenshotSection = getScreenshotPromptSection(
+            screenshot,
+            fragments,
+        );
+        const htmlSection = getHtmlPromptSection(fragments);
+        const prefixSection = getBootstrapPrefixPromptSection();
+        let requestSection = [];
+        if (userRequest) {
+            requestSection.push({
+                type: "text",
+                text: `
+                   
+                Here is  user request
+                '''
+                ${userRequest}
+                '''
+                `,
+            });
+        }
+        const promptSections = [
+            ...prefixSection,
+            ...screenshotSection,
+            ...htmlSection,
+            {
+                type: "text",
+                text: `
+            Use the layout information provided and the user request below to generate a SINGLE "${translator.validator.getTypeName()}" response using the typescript schema below:
+            
+            '''
+            ${translator.validator.getSchemaText()}
+            '''
+            `,
+            },
+            ...requestSection,
+            {
+                type: "text",
+                text: `
+            The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
+            `,
+            },
+        ];
+        return promptSections;
+    }
+
+    private getPageChatResponsePrompt<U extends object>(
+        translator: TypeChatJsonTranslator<U>,
+        userQuestion: string,
+        fragments?: HtmlFragments[],
+        screenshot?: string,
+    ) {
+        const screenshotSection = getScreenshotPromptSection(
+            screenshot,
+            fragments,
+        );
+        const htmlSection = getHtmlPromptSection(fragments);
+        const prefixSection = getBootstrapPrefixPromptSection();
+        const promptSections = [
+            ...prefixSection,
+            ...screenshotSection,
+            ...htmlSection,
+            {
+                type: "text",
+                text: `
+            Use the layout information provided to generate a "${translator.validator.getTypeName()}" response using the typescript schema below:
+            
+            '''
+            ${translator.validator.getSchemaText()}
+            '''
+
+            Here is the user's question about the page:
+            '''
+            ${userQuestion}
             '''
             
             The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
@@ -199,6 +286,67 @@ export class ECommerceSiteAgent<T extends object> {
 
         const promptSections = this.getPagePromptSections(
             bootstrapTranslator,
+            fragments,
+            screenshot,
+        ) as ContentSection[];
+
+        const response = await bootstrapTranslator.translate("", [
+            { role: "user", content: JSON.stringify(promptSections) },
+        ]);
+        return response;
+    }
+
+    async getPageChatResponse(
+        question: string,
+        fragments?: HtmlFragments[],
+        screenshot?: string,
+    ) {
+        const schemaPath = path.join(
+            "src",
+            "commerce",
+            "schema",
+            "pageChatSchema.ts",
+        );
+
+        const bootstrapTranslator = this.getBootstrapTranslator(
+            schemaPath,
+            "PageChat",
+        );
+
+        const promptSections = this.getPageChatResponsePrompt(
+            bootstrapTranslator,
+            question,
+            fragments,
+            screenshot,
+        ) as ContentSection[];
+
+        const response = await bootstrapTranslator.translate("", [
+            { role: "user", content: JSON.stringify(promptSections) },
+        ]);
+        return response;
+    }
+
+    async getPageComponentSchema(
+        componentTypeName: string,
+        userRequest?: string,
+        fragments?: HtmlFragments[],
+        screenshot?: string,
+    ) {
+        const schemaPath = path.join(
+            "src",
+            "commerce",
+            "schema",
+            "pageComponents.ts",
+        );
+
+        const bootstrapTranslator = this.getBootstrapTranslator(
+            schemaPath,
+            componentTypeName,
+        );
+
+        const promptSections = this.getCssSelectorForElementPrompt(
+            bootstrapTranslator,
+            userRequest,
             fragments,
             screenshot,
         ) as ContentSection[];
