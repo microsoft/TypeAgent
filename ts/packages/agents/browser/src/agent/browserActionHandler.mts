@@ -16,7 +16,7 @@ import {
 } from "./crossword/actionHandler.mjs";
 
 import { BrowserConnector } from "./browserConnector.mjs";
-import { handleCommercedAction } from "./commerce/actionHandler.mjs";
+import { handleCommerceAction } from "./commerce/actionHandler.mjs";
 
 export function instantiate(): DispatcherAgent {
   return {
@@ -141,7 +141,7 @@ async function executeBrowserAction(
         const crosswordResult = await handleCrosswordAction(action, context);
         return createTurnImpressionFromLiteral(crosswordResult);
       } else if (action.translatorName === "browser.commerce") {
-        const commerceResult = await handleCommercedAction(action, context);
+        const commerceResult = await handleCommerceAction(action, context);
         return createTurnImpressionFromLiteral(commerceResult);
       }
 
@@ -154,7 +154,10 @@ async function executeBrowserAction(
           body: action,
         }),
       );
-    } catch {
+    } catch (ex: any) {
+      console.log(ex);
+      console.log(JSON.stringify(ex));
+
       throw new Error("Unable to contact browser backend.");
     }
   } else {

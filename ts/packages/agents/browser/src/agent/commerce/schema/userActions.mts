@@ -62,7 +62,3 @@ export type ShoppingAction =
   | SelectSearchResult
   | AnswerQuestionBasedOnPage
   | UnknownAction;
-
-export type ShoppingPlan = {
-  steps: ShoppingAction[];
-};

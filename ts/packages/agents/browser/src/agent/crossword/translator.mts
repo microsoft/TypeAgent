@@ -296,7 +296,7 @@ export class CrosswordPageTranslator<T extends object> {
         fragments,
         cluesTextPortion,
       );
-      console.timeLog("getting clues css selectors");
+      console.timeEnd("getting clues css selectors");
 
       return cluesTextWithSelectorsResult;
 

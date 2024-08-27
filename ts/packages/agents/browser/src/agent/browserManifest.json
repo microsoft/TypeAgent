@@ -30,9 +30,9 @@
       "defaultEnabled": false,
       "actionDefaultEnabled": false,
       "schema": {
-        "description": "This allows users to interact with e-commerce websites puzzle.",
-        "schemaFile": "./commerce/schema/pageAction.mts",
-        "schemaType": "ShoppingPlan"
+        "description": "This allows users to interact with e-commerce websites to find, compare and purchase various products.",
+        "schemaFile": "./commerce/schema/userActions.mts",
+        "schemaType": "ShoppingAction"
       }
     }
   }

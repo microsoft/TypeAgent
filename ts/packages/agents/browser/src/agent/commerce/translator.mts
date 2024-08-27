@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import {
-  createLanguageModel,
   createJsonTranslator,
   TypeChatJsonTranslator,
   TypeChatLanguageModel,
@@ -11,8 +10,11 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 
 import path from "path";
 import fs from "fs";
+import { openai as ai } from "aiclient";
+
 import { fileURLToPath } from "node:url";
-import { ShoppingPlan } from "./schema/pageAction.mjs";
+import { ShoppingAction } from "./schema/userActions.mjs";
+
 export type HtmlFragments = {
   frameId: string;
   content: string;
@@ -48,7 +50,6 @@ function getHtmlPromptSection(fragments: HtmlFragments[] | undefined) {
   let htmlSection = [];
   if (fragments) {
     const contentFragments = fragments.map((a) => a.content);
-    //const inputHtml = JSON.stringify(contentFragments, undefined, 2);
     htmlSection.push({
       type: "text",
       text: `
@@ -95,46 +96,23 @@ function getScreenshotPromptSection(
 }
 
 export async function createCommercePageTranslator(
-  model: "GPT_4" | "GPT-v" | "GPT_4o",
+  model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O",
 ) {
-  const packageRoot = path.join("..", "..");
+  const packageRoot = path.join("..", "..", "..");
   const pageSchema = await fs.promises.readFile(
     fileURLToPath(
       new URL(
-        path.join(packageRoot, "./src/agent/schema/pageActions.mts"),
+        path.join(packageRoot, "./src/agent/commerce/schema/userActions.mts"),
         import.meta.url,
       ),
     ),
     "utf8",
   );
 
-  let vals: Record<string, string | undefined> = {};
-
-  switch (model) {
-    case "GPT_4": {
-      vals["AZURE_OPENAI_API_KEY"] = process.env["AZURE_OPENAI_API_KEY"];
-      vals["AZURE_OPENAI_ENDPOINT"] = process.env["AZURE_OPENAI_ENDPOINT"];
-      break;
-    }
-    case "GPT_4o": {
-      vals["AZURE_OPENAI_API_KEY"] =
-        process.env["AZURE_OPENAI_API_KEY_GPT_4_O"];
-      vals["AZURE_OPENAI_ENDPOINT"] =
-        process.env["AZURE_OPENAI_ENDPOINT_GPT_4_O"];
-      break;
-    }
-    case "GPT-v": {
-      vals["AZURE_OPENAI_API_KEY"] = process.env["AZURE_OPENAI_API_KEY_GPT_v"];
-      vals["AZURE_OPENAI_ENDPOINT"] =
-        process.env["AZURE_OPENAI_ENDPOINT_GPT_v"];
-      break;
-    }
-  }
-
-  const agent = new ECommerceSiteAgent<ShoppingPlan>(
+  const agent = new ECommerceSiteAgent<ShoppingAction>(
     pageSchema,
-    "ShoppingPlan",
-    vals,
+    "ShoppingAction",
+    model,
   );
   return agent;
 }
@@ -145,26 +123,41 @@ export class ECommerceSiteAgent<T extends object> {
   model: TypeChatLanguageModel;
   translator: TypeChatJsonTranslator<T>;
 
-  constructor(
-    schema: string,
-    schemaName: string,
-    vals: Record<string, string | undefined>,
-  ) {
+  constructor(schema: string, schemaName: string, fastModelName: string) {
     this.schema = schema;
 
-    this.model = createLanguageModel(vals);
+    const apiSettings = ai.azureApiSettingsFromEnv(
+      ai.ModelType.Chat,
+      undefined,
+      fastModelName,
+    );
+    this.model = ai.createChatModel(apiSettings);
     const validator = createTypeScriptJsonValidator<T>(this.schema, schemaName);
     this.translator = createJsonTranslator(this.model, validator);
   }
 
-  private getPagePromptSections<U extends object>(
+  private getCssSelectorForElementPrompt<U extends object>(
     translator: TypeChatJsonTranslator<U>,
+    userRequest?: string,
     fragments?: HtmlFragments[],
     screenshot?: string,
   ) {
     const screenshotSection = getScreenshotPromptSection(screenshot, fragments);
     const htmlSection = getHtmlPromptSection(fragments);
     const prefixSection = getBootstrapPrefixPromptSection();
+    let requestSection = [];
+    if (userRequest) {
+      requestSection.push({
+        type: "text",
+        text: `
+               
+            Here is  user request
+            '''
+            ${userRequest}
+            '''
+            `,
+      });
+    }
     const promptSections = [
       ...prefixSection,
       ...screenshotSection,
@@ -172,14 +165,19 @@ export class ECommerceSiteAgent<T extends object> {
       {
         type: "text",
         text: `
-            Use the layout information provided to generate a "${translator.validator.getTypeName()}" response using the typescript schema below:
-            
-            '''
-            ${translator.validator.getSchemaText()}
-            '''
-            
-            The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
-            `,
+        Use the layout information provided and the user request below to generate a SINGLE "${translator.validator.getTypeName()}" response using the typescript schema below:
+        
+        '''
+        ${translator.validator.getSchemaText()}
+        '''
+        `,
+      },
+      ...requestSection,
+      {
+        type: "text",
+        text: `
+        The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
+        `,
       },
     ];
     return promptSections;
@@ -219,7 +217,15 @@ export class ECommerceSiteAgent<T extends object> {
     return promptSections;
   }
 
-  private getBootstrapTranslator(schemaPath: string, targetType: string) {
+  private getBootstrapTranslator(fileName: string, targetType: string) {
+    const packageRoot = path.join("..", "..", "..");
+    const schemaPath = fileURLToPath(
+      new URL(
+        path.join(packageRoot, `./src/agent/commerce/schema/${fileName}`),
+        import.meta.url,
+      ),
+    );
+
     const pageSchema = fs.readFileSync(schemaPath, "utf8");
 
     const validator = createTypeScriptJsonValidator(pageSchema, targetType);
@@ -233,65 +239,20 @@ export class ECommerceSiteAgent<T extends object> {
     return bootstrapTranslator;
   }
 
-  async getPageData(
-    pageType: CommercePageType,
+  async getPageComponentSchema(
+    componentTypeName: string,
+    userRequest?: string,
     fragments?: HtmlFragments[],
     screenshot?: string,
   ) {
-    let pagePath = "";
-    let pageSchemaType = "";
-    const packageRoot = path.join("..", "..", "..");
-
-    switch (pageType) {
-      case CommercePageType.Landing: {
-        pagePath = path.join(
-          packageRoot,
-          "src",
-          "agent",
-          "commerce",
-          "schema",
-          "landingPage.ts",
-        );
-        pageSchemaType = "LandingPage";
-        break;
-      }
-      case CommercePageType.SearchResults: {
-        pagePath = path.join(
-          packageRoot,
-          "src",
-          "agent",
-          "commerce",
-          "schema",
-          "searchResultsPage.ts",
-        );
-        pageSchemaType = "SearchPage";
-        break;
-      }
-      case CommercePageType.ProductDetails: {
-        pagePath = path.join(
-          packageRoot,
-          "src",
-          "agent",
-          "commerce",
-          "schema",
-          "productDetailsPage.ts",
-        );
-        pageSchemaType = "ProductDetailsPage";
-        break;
-      }
-      default: {
-        throw new Error("Invalid page type");
-        break;
-      }
-    }
-
     const bootstrapTranslator = this.getBootstrapTranslator(
-      pagePath,
-      pageSchemaType,
+      "pageComponents.mts",
+      componentTypeName,
     );
 
-    const promptSections = this.getPagePromptSections(
+    const promptSections = this.getCssSelectorForElementPrompt(
       bootstrapTranslator,
+      userRequest,
       fragments,
       screenshot,
     ) as ContentSection[];
@@ -307,19 +268,8 @@ export class ECommerceSiteAgent<T extends object> {
     fragments?: HtmlFragments[],
     screenshot?: string,
   ) {
-    const packageRoot = path.join("..", "..", "..");
-
-    const schemaPath = path.join(
-      packageRoot,
-      "src",
-      "agent",
-      "commerce",
-      "schema",
-      "pageChatSchema.ts",
-    );
-
     const bootstrapTranslator = this.getBootstrapTranslator(
-      schemaPath,
+      "pageChatSchema.mts",
       "PageChat",
     );
 

@@ -5,62 +5,14 @@ import { DispatcherAgentContext } from "dispatcher-agent";
 
 import { BrowserActionContext } from "../browserActionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
+import { createCommercePageTranslator } from "./translator.mjs";
+import {
+  ProductDetailsHeroTile,
+  ProductTile,
+  SearchInput,
+} from "./schema/pageComponents.mjs";
 
-import { ShoppingPlan } from "./schema/pageAction.mjs";
-
-import { CommercePageType, ECommerceSiteAgent } from "./translator.mjs";
-import { LandingPage } from "./schema/landingPage.mjs";
-import { createCommercePageTranslator, HtmlFragments } from "./translator.mjs";
-
-import { SearchPage } from "./schema/searchResultsPage.mjs";
-import { ProductDetailsPage } from "./schema/productDetailsPage.mjs";
-
-async function getPageSchema(
-  pageType: string,
-  htmlFragments: HtmlFragments[],
-  agent: ECommerceSiteAgent<ShoppingPlan>,
-) {
-  let response;
-  switch (pageType) {
-    case "searchResults":
-      response = await agent.getPageData(
-        CommercePageType.SearchResults,
-        htmlFragments,
-      );
-      break;
-    case "productDetails":
-      response = await agent.getPageData(
-        CommercePageType.ProductDetails,
-        htmlFragments,
-      );
-      break;
-    default:
-      response = await agent.getPageData(
-        CommercePageType.Landing,
-        htmlFragments,
-      );
-      break;
-  }
-
-  if (!response.success) {
-    console.log(response.message);
-    return undefined;
-  }
-
-  return response.data;
-}
-
-async function getCurrentPageSchema<T extends object>(
-  pageType: string,
-  agent: ECommerceSiteAgent<ShoppingPlan>,
-  browser: BrowserConnector,
-) {
-  const htmlFragments = await browser.getHtmlFragments();
-  const currentPage = await getPageSchema(pageType, htmlFragments, agent);
-  return currentPage as T;
-}
-
-export async function handleCommercedAction(
+export async function handleCommerceAction(
   action: any,
   context: DispatcherAgentContext<BrowserActionContext>,
 ) {
@@ -71,78 +23,74 @@ export async function handleCommercedAction(
 
   const browser: BrowserConnector = context.context.browserConnector;
 
-  const agent = await createCommercePageTranslator("GPT_4o");
+  const agent = await createCommercePageTranslator("GPT_4_O");
 
-  for (let pageAction of action.steps) {
-    switch (pageAction.actionName) {
-      case "searchForProductAction":
-        await handleProductSearch(pageAction);
-        break;
-      case "selectSearchResult":
-        await handleSelectSearchResult(pageAction);
-        break;
-      case "addToCartAction":
-        await handleAddToCart(pageAction);
-        break;
-      case "answerPageQuestion":
-        await handlePageChat(pageAction);
-        break;
-    }
+  switch (action.actionName) {
+    case "searchForProductAction":
+      await handleProductSearch(action);
+      break;
+    case "selectSearchResult":
+      await handleSelectSearchResult(action);
+      break;
+    case "addToCartAction":
+      await handleAddToCart(action);
+      break;
+    case "answerPageQuestion":
+      await handlePageChat(action);
+      break;
   }
 
-  async function handleProductSearch(action: any) {
-    const pageInfo = await getCurrentPageSchema<LandingPage>(
-      "landingPage",
-      agent,
-      browser,
+  async function getComponentFromPage(
+    componentType: string,
+    selectionCondition?: string,
+  ) {
+    const htmlFragments = await browser.getHtmlFragments();
+    const timerName = `getting ${componentType} section`;
+
+    console.time(timerName);
+    const response = await agent.getPageComponentSchema(
+      componentType,
+      selectionCondition,
+      htmlFragments,
+      undefined,
     );
-    if (!pageInfo) {
-      console.error("Page state is missing");
+
+    if (!response.success) {
+      console.error("Attempt to get product tilefailed");
       return;
     }
 
-    const searchSelector = pageInfo.searchBox.cssSelector;
+    console.timeEnd(timerName);
+    return response.data;
+  }
+
+  async function handleProductSearch(action: any) {
+    const selector = (await getComponentFromPage("SearchInput")) as SearchInput;
+    const searchSelector = selector.cssSelector;
 
     await browser.clickOn(searchSelector);
     await browser.enterTextIn(action.parameters.productName, searchSelector);
-    await browser.clickOn(pageInfo.searchBox.submitButtonCssSelector);
+    await browser.clickOn(selector.submitButtonCssSelector);
     await new Promise((r) => setTimeout(r, 200));
     await browser.awaitPageLoad();
   }
 
   async function handleSelectSearchResult(action: any) {
-    // get current page state
-    const pageInfo = await getCurrentPageSchema<SearchPage>(
-      "searchResults",
-      agent,
-      browser,
-    );
-
-    if (!pageInfo) {
-      console.error("Page state is missing");
-      return;
-    }
-
-    const targetProduct = pageInfo.productTiles[action.parameters.position];
-    await browser.clickOn(targetProduct.detailsLinkSelector);
+    const request = `Search result: ${action.selectionCriteria}`;
+    const selector = (await getComponentFromPage(
+      "ProductTile",
+      request,
+    )) as ProductTile;
+    await browser.clickOn(selector.detailsLinkSelector);
     await new Promise((r) => setTimeout(r, 200));
     await browser.awaitPageLoad();
   }
 
   async function handleAddToCart(action: any) {
-    // get current page state
-    const pageInfo = await getCurrentPageSchema<ProductDetailsPage>(
-      "productDetails",
-      agent,
-      browser,
-    );
+    const targetProduct = (await getComponentFromPage(
+      "ProductDetailsHeroTile",
+    )) as ProductDetailsHeroTile;
 
-    if (!pageInfo) {
-      console.error("Page state is missing");
-      return;
-    }
-
-    const targetProduct = pageInfo.productInfo;
     if (targetProduct.addToCartButton) {
       await browser.clickOn(targetProduct.addToCartButton.cssSelector);
     }
