@@ -15,7 +15,7 @@ import {
     DispatcherAgent,
     DispatcherAgentContext,
     createTurnImpressionFromDisplay,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 
 export function instantiate(): DispatcherAgent {
     return {
@@ -29,7 +29,7 @@ type EmailActionContext = {
     mailClient: MailClient | undefined;
 };
 
-function initializeEmailContext() {
+async function initializeEmailContext() {
     return {
         mailClient: undefined,
     };

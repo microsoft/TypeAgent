@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Entity, ImpressionInterpreter, getEntityId } from "dispatcher-agent";
+import {
+    Entity,
+    ImpressionInterpreter,
+    getEntityId,
+} from "@typeagent/agent-sdk";
 import { PromptSection } from "typechat";
 type PromptRole = "user" | "assistant" | "system";
 

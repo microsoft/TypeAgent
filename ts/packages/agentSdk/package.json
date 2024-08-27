@@ -1,12 +1,12 @@
 {
-  "name": "dispatcher-agent",
+  "name": "@typeagent/agent-sdk",
   "version": "0.0.1",
   "description": "Interface and class to be an agent",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/packages/dispatcherAgent"
+    "directory": "ts/packages/agentSdk"
   },
   "license": "MIT",
   "author": "Microsoft",

@@ -30,7 +30,7 @@ import {
     createTurnImpressionFromError,
     DispatcherAction,
     DispatcherAgent,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 
 export function instantiate(): DispatcherAgent {
     return {
@@ -52,7 +52,7 @@ type CalendarActionContext = {
     interpreter: ImpressionInterpreter;
 };
 
-function initializeCalendarContext() {
+async function initializeCalendarContext() {
     return {
         calendarClient: undefined,
         graphEventIds: undefined,

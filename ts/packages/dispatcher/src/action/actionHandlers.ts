@@ -17,7 +17,7 @@ import {
     DispatcherAgentContext,
     TurnImpression,
     turnImpressionToString,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 import {
     getDispatcherAgent,
     getDispatcherAgents,
@@ -26,19 +26,33 @@ import { processCommandNoLock } from "../command.js";
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
 import { getUserProfileDir } from "../utils/userData.js";
-import { DispatcherName } from "../handlers/requestCommandHandler.js";
 
 const debugActions = registerDebug("typeagent:actions");
 
 export async function initializeActionContext() {
     return Object.fromEntries(
-        Array.from((await getDispatcherAgents()).entries()).map(
-            ([name, agent]) => [name, agent.initializeAgentContext?.()],
+        await Promise.all(
+            Array.from((await getDispatcherAgents()).entries()).map(
+                async ([name, agent]) => [
+                    name,
+                    await agent.initializeAgentContext?.(),
+                ],
+            ),
         ),
     );
 }
 
 function getDispatcherAgentContext(
+    name: string,
+    context: CommandHandlerContext,
+): DispatcherAgentContext {
+    return (
+        context.sessionContext.get(name) ??
+        createDispatcherAgentContext(name, context)
+    );
+}
+
+function createDispatcherAgentContext(
     name: string,
     context: CommandHandlerContext,
 ): DispatcherAgentContext {
@@ -72,12 +86,6 @@ function getDispatcherAgentContext(
         issueCommand(command: string) {
             return processCommandNoLock(command, context);
         },
-        getAlternativeAgentContext(name: string) {
-            return context.action[name];
-        },
-        getSessionDirPath() {
-            return context.session.getSessionDirPath();
-        },
         getUpdateActionStatus() {
             return context.clientIO?.updateActionStatus.bind(context.clientIO);
         },
@@ -100,6 +108,7 @@ function getDispatcherAgentContext(
             );
         },
     };
+    context.sessionContext.set(name, agentContext);
     return agentContext;
 }
 
@@ -216,7 +225,7 @@ export async function executeActions(
                 `Action ${action.fullActionName} failed: ${result.error}`,
                 [],
                 "assistant",
-                requestIO.getRequestId(),
+                context.requestId,
             );
         } else {
             requestIO.setActionStatus(
@@ -230,7 +239,7 @@ export async function executeActions(
                     : `Action ${action.fullActionName} completed.`,
                 result.entities,
                 "assistant",
-                requestIO.getRequestId(),
+                context.requestId,
                 result.impressionInterpreter,
             );
         }

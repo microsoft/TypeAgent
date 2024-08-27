@@ -33,7 +33,6 @@ export type ChatContext = {
     conversation: knowLib.conversation.Conversation;
     searcher: knowLib.conversation.ConversationSearchProcessor;
     searchMemory?: knowLib.conversation.ConversationManager;
-    searchMemorySearcher?: knowLib.conversation.ConversationSearchProcessor;
 };
 
 export async function createChatMemoryContext(): Promise<ChatContext> {
@@ -66,11 +65,7 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         conversation,
         searcher: createSearchProcessor(conversation, chatModel, true),
     };
-
-    const [searchMemory, searchMemorySearcher] =
-        await createSearchMemory(context);
-    context.searchMemory = searchMemory;
-    context.searchMemorySearcher = searchMemorySearcher;
+    context.searchMemory = await createSearchMemory(context);
     return context;
 }
 
@@ -113,38 +108,13 @@ export function createSearchProcessor(
 
 export async function createSearchMemory(
     context: ChatContext,
-): Promise<
-    [conversation.ConversationManager, conversation.ConversationSearchProcessor]
-> {
+): Promise<conversation.ConversationManager> {
     const conversationName = "search";
-    const searchConversation = await createConversation(
-        path.join(context.storePath, conversationName),
-        createConversationSettings(context.embeddingModel),
-    );
-    await searchConversation.clear(true);
-
-    const searchMemory = await conversation.createConversationManager(
+    return await conversation.createConversationManager(
         conversationName,
-        searchConversation,
-        conversation.createKnowledgeExtractor(context.chatModel, {
-            windowSize: 8,
-            maxContextLength: context.maxCharsPerChunk,
-            includeSuggestedTopics: false,
-            includeActions: true,
-        }),
-        await conversation.createConversationTopicMerger(
-            context.chatModel,
-            searchConversation,
-            1,
-            4,
-        ),
-    );
-    const searchProcessor = createSearchProcessor(
-        searchMemory.conversation,
-        context.chatModel,
+        context.storePath,
         true,
     );
-    return [searchMemory, searchProcessor];
 }
 
 export async function loadConversation(
@@ -168,15 +138,12 @@ export async function loadConversation(
             : conversation.KnowledgeSearchMode.Default,
     );
     if (name !== "search") {
-        const [searchMemory, searchMemorySearcher] =
-            await createSearchMemory(context);
-        context.searchMemory = searchMemory;
-        context.searchMemorySearcher = searchMemorySearcher;
+        context.searchMemory = await createSearchMemory(context);
     }
     return exists;
 }
 
-export async function runPlayChat(): Promise<void> {
+export async function runChatMemory(): Promise<void> {
     let context = await createChatMemoryContext();
     let printer: PlayPrinter;
     const handlers: Record<string, CommandHandler> = {
@@ -190,8 +157,8 @@ export async function runPlayChat(): Promise<void> {
         topics,
         entities,
         actions,
+        searchQuery,
         search,
-        searchTerms,
     };
     addStandardHandlers(handlers);
 
@@ -209,9 +176,13 @@ export async function runPlayChat(): Promise<void> {
         line: string,
         io: InteractiveIo,
     ): Promise<void> {
-        if (context.searchMemorySearcher) {
-            const args = ["--query", line];
-            await searchConversation(context.searchMemorySearcher, false, args);
+        if (context.searchMemory) {
+            const results = await context.searchMemory.search(line);
+            if (results) {
+                await writeSearchTermsResult(results);
+            } else {
+                printer.writeLine("No matches");
+            }
         } else {
             printer.writeLine("No search history");
         }
@@ -890,8 +861,11 @@ export async function runPlayChat(): Promise<void> {
             },
         };
     }
-    handlers.search.metadata = searchDef();
-    async function search(args: string[], io: InteractiveIo): Promise<void> {
+    handlers.searchQuery.metadata = searchDef();
+    async function searchQuery(
+        args: string[],
+        io: InteractiveIo,
+    ): Promise<void> {
         const timestampQ = new Date();
         const namedArgs = parseNamedArguments(args, searchDef());
         const maxMatches = namedArgs.maxMatches;
@@ -904,9 +878,8 @@ export async function runPlayChat(): Promise<void> {
             maxMatches,
             minScore,
             maxMessages: 15,
-            includeTimeRange: true,
             combinationSetOp: knowLib.sets.SetOp.IntersectUnion,
-            actionPreprocess: (action) => printer.writeJson(action),
+            progress: (value) => printer.writeJson(value),
         };
         if (namedArgs.fallback) {
             searchOptions.fallbackSearch = { maxMatches: 10 };
@@ -962,11 +935,8 @@ export async function runPlayChat(): Promise<void> {
         }
     }
 
-    handlers.searchTerms.metadata = searchDef();
-    async function searchTerms(
-        args: string[],
-        io: InteractiveIo,
-    ): Promise<void> {
+    handlers.search.metadata = searchDef();
+    async function search(args: string[], io: InteractiveIo): Promise<void> {
         await searchConversation(context.searcher, true, args);
     }
 
@@ -1009,9 +979,8 @@ export async function runPlayChat(): Promise<void> {
             maxMatches,
             minScore,
             maxMessages: 15,
-            includeTimeRange: true,
             combinationSetOp: knowLib.sets.SetOp.IntersectUnion,
-            actionPreprocess: (action) => printer.writeJson(action),
+            progress: (value) => printer.writeJson(value),
         };
         if (namedArgs.fallback) {
             searchOptions.fallbackSearch = { maxMatches: 10 };
@@ -1032,14 +1001,28 @@ export async function runPlayChat(): Promise<void> {
             printer.writeError("No result");
             return;
         }
+        await writeSearchTermsResult(result);
+        if (result.response && result.response.answer) {
+            if (namedArgs.save && recordAnswer) {
+                let answer = result.response.answer.answer;
+                if (!answer) {
+                    answer = result.response.answer.whyNoAnswer;
+                }
+                if (answer) {
+                    recordQuestionAnswer(query, timestampQ, answer, new Date());
+                }
+            }
+        }
+    }
+
+    async function writeSearchTermsResult(
+        result: conversation.SearchTermsActionResponse,
+    ) {
         if (result.response && result.response.answer) {
             writeResultStats(result.response);
             if (result.response.answer.answer) {
                 const answer = result.response.answer.answer;
                 printer.writeInColor(chalk.green, answer);
-                if (namedArgs.save && recordAnswer) {
-                    recordQuestionAnswer(query, timestampQ, answer, new Date());
-                }
             } else if (result.response.answer.whyNoAnswer) {
                 const answer = result.response.answer.whyNoAnswer;
                 printer.writeInColor(chalk.red, answer);
@@ -1061,17 +1044,13 @@ export async function runPlayChat(): Promise<void> {
                   if (context.searchMemory) {
                       try {
                           await context.searchMemory.addMessage(
-                              {
-                                  type: knowLib.TextBlockType.Paragraph,
-                                  value: `USER:\n${question}`,
-                              },
+                              `USER:\n${question}`,
+                              undefined,
                               timestampQ,
                           );
                           await context.searchMemory.addMessage(
-                              {
-                                  type: knowLib.TextBlockType.Paragraph,
-                                  value: `ASSISTANT:\n${answer}`,
-                              },
+                              `ASSISTANT:\n${answer}`,
+                              undefined,
                               timestampA,
                           );
                       } catch (e) {

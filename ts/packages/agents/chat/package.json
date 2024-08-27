@@ -24,9 +24,9 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
     "aiclient": "workspace:*",
     "common-utils": "workspace:*",
-    "dispatcher-agent": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.0"
   },

@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@azure/msal-node-extensions": "^1.0.12",
+    "@typeagent/agent-sdk": "workspace:*",
     "agent-cache": "workspace:*",
     "aiclient": "workspace:*",
     "browser-automation": "workspace:*",
@@ -37,7 +38,6 @@
     "common-utils": "workspace:*",
     "debug": "^4.3.4",
     "desktop-automation": "workspace:*",
-    "dispatcher-agent": "workspace:*",
     "email": "workspace:*",
     "glob": "^10.3.12",
     "list-agent": "workspace:*",

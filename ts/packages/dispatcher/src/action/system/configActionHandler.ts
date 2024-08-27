@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { ConfigAction } from "../../translation/system/configActionSchema.js";
-import { DispatcherAgentContext, DispatcherAction } from "dispatcher-agent";
+import { DispatcherAgentContext, DispatcherAction } from "@typeagent/agent-sdk";
 
 export async function executeConfigAction(
     action: DispatcherAction,

@@ -5,7 +5,7 @@ import {
     DispatcherAgentContext,
     DispatcherAgent,
     DispatcherAction,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 
 import { executeCorrectionAction } from "../action/correctionActionHandler.js";
 import { executeSessionAction } from "../action/system/sessionActionHandler.js";

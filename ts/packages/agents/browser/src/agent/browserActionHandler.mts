@@ -8,7 +8,7 @@ import {
   DispatcherAgent,
   DispatcherAgentContext,
   createTurnImpressionFromLiteral,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 import { Crossword } from "./crosswordPageSchema.mjs";
 import {
   getBoardSchema,
@@ -31,7 +31,7 @@ export type BrowserActionContext = {
   browserConnector: BrowserConnector | undefined;
 };
 
-function initializeBrowserContext(): BrowserActionContext {
+async function initializeBrowserContext(): Promise<BrowserActionContext> {
   return {
     webSocket: undefined,
     crossWordState: undefined,

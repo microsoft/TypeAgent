@@ -42,7 +42,7 @@ export interface DispatcherActionWithParameters extends DispatcherAction {
 }
 
 export interface DispatcherAgent {
-    initializeAgentContext?(): any;
+    initializeAgentContext?(): Promise<any>;
     updateAgentContext?(
         enable: boolean,
         context: DispatcherAgentContext,
@@ -58,6 +58,7 @@ export interface DispatcherAgent {
         action: DispatcherAction,
         context: DispatcherAgentContext,
     ): Promise<boolean>;
+    closeAgentContext?(context: DispatcherAgentContext): Promise<void>;
 }
 
 export interface DispatcherAgentContext<T = any> {
@@ -70,8 +71,6 @@ export interface DispatcherAgentContext<T = any> {
     readonly profileStorage: Storage; // storage that are preserved across sessions
     currentTranslatorName: string;
     issueCommand(command: string): Promise<void>;
-    getAlternativeAgentContext<T>(name: string): T;
-    getSessionDirPath(): string | undefined;
     getUpdateActionStatus():
         | ((message: string, group_id: string) => void)
         | undefined;
@@ -102,7 +101,7 @@ export interface Storage {
     read(storagePath: string, options: StorageEncoding): Promise<string>;
     write(storagePath: string, data: string): Promise<void>;
     list(storagePath: string, options?: StorageListOptions): Promise<string[]>;
-    exists(storagePath: string): boolean;
+    exists(storagePath: string): Promise<boolean>;
     delete(storagePath: string): Promise<void>;
 
     getTokenCachePersistence(): Promise<TokenCachePersistence>;
@@ -110,17 +109,16 @@ export interface Storage {
 
 // TODO: review if these should be exposed. Duplicated from dispatcher's interactiveIO.ts
 export type RequestId = string | undefined;
-type LogFn = (log: (message?: string) => void) => void;
+
 export interface DispatcherAgentIO {
     type: "html" | "text";
-    getRequestId(): RequestId;
     clear(): void;
-    info(message: string | LogFn): void;
-    status(message: string | LogFn): void;
-    success(message: string | LogFn): void;
-    warn(message: string | LogFn): void;
-    error(message: string | LogFn): void;
-    result(message: string | LogFn): void;
+    info(message: string): void;
+    status(message: string): void;
+    success(message: string): void;
+    warn(message: string): void;
+    error(message: string): void;
+    result(message: string): void;
 
     // Action status
     setActionStatus(

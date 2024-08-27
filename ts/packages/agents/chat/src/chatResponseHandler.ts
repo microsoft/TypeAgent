@@ -16,14 +16,14 @@ import {
     Entity,
 } from "typeagent";
 import { ChatModel, bing, openai } from "aiclient";
-import { DispatcherAgent, DispatcherAgentIO } from "dispatcher-agent";
+import { DispatcherAgent, DispatcherAgentIO } from "@typeagent/agent-sdk";
 import { PromptSection } from "typechat";
 import {
     DispatcherAction,
     DispatcherAgentContext,
     TurnImpression,
     createTurnImpressionFromLiteral,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 import { fileURLToPath } from "node:url";
 
 export function instantiate(): DispatcherAgent {
