@@ -108,6 +108,7 @@ function createDispatcherAgentContext(
             );
         },
     };
+    (agentContext as any).conversationManager = context.conversationManager;
     context.sessionContext.set(name, agentContext);
     return agentContext;
 }

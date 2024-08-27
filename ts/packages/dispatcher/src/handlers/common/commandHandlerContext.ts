@@ -196,9 +196,10 @@ export async function initializeCommandHandlerContext(
     const stdio = options?.stdio;
 
     const session = await getSession(options);
+    const path = session.getSessionDirPath();
     const conversationManager = await Conversation.createConversationManager(
         "conversation",
-        "/data/testChat",
+        path ? path : "/data/testChat",
         false,
     );
     const dbLoggerSink: LoggerSink | undefined = createMongoDBLoggerSink(
