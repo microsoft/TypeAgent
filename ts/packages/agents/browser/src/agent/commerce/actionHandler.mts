@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DispatcherAgentContext } from "dispatcher-agent";
+import { DispatcherAgentContext } from "@typeagent/agent-sdk";
 
 import { BrowserActionContext } from "../browserActionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";

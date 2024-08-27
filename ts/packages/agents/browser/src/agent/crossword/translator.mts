@@ -287,7 +287,8 @@ export class CrosswordPageTranslator<T extends object> {
   async getCluesTextThenSelectors(fragments: HtmlFragments[]) {
     console.time("getting clues text");
     const cluesTextResult = await this.getCluesText(fragments);
-    console.timeLog("getting clues text");
+    console.timeEnd("getting clues text");
+
     if (cluesTextResult.success) {
       console.time("getting clues css selectors");
       const cluesTextPortion = cluesTextResult.data as Crossword;

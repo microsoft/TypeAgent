@@ -35,8 +35,8 @@ function createCrosswordAgent(
 ) {
     const dotEnvPath = findConfig(".env");
     assert(dotEnvPath, ".env file not found!");
-    dotenv.config({ path: dotEnvPath});
-    
+    dotenv.config({ path: dotEnvPath });
+
     const schemaText = fs.readFileSync(
         path.join("src", "crossword", "schema", "actionSchema.ts"),
         "utf8",

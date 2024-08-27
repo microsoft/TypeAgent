@@ -87,11 +87,7 @@ export class ECommerceSiteAgent<T extends object> {
     model: TypeChatLanguageModel;
     translator: TypeChatJsonTranslator<T>;
 
-    constructor(
-        schema: string,
-        schemaName: string,
-        fastModelName: string,
-    ) {
+    constructor(schema: string, schemaName: string, fastModelName: string) {
         this.schema = schema;
         this.model = ai.createJsonChatModel(fastModelName);
         const validator = createTypeScriptJsonValidator<T>(
@@ -111,7 +107,10 @@ export class ECommerceSiteAgent<T extends object> {
         fragments?: HtmlFragments[],
         screenshot?: string,
     ) {
-        const screenshotSection = getScreenshotPromptSection(screenshot, fragments);
+        const screenshotSection = getScreenshotPromptSection(
+            screenshot,
+            fragments,
+        );
         const htmlSection = getHtmlPromptSection(fragments);
         const prefixSection = getBootstrapPrefixPromptSection();
         const promptSections = [
@@ -140,21 +139,24 @@ export class ECommerceSiteAgent<T extends object> {
         fragments?: HtmlFragments[],
         screenshot?: string,
     ) {
-        const screenshotSection = getScreenshotPromptSection(screenshot, fragments);
+        const screenshotSection = getScreenshotPromptSection(
+            screenshot,
+            fragments,
+        );
         const htmlSection = getHtmlPromptSection(fragments);
         const prefixSection = getBootstrapPrefixPromptSection();
         let requestSection = [];
-        if(userRequest){
-            requestSection.push({                
-                    type: "text",
-                    text: `
+        if (userRequest) {
+            requestSection.push({
+                type: "text",
+                text: `
                    
                 Here is  user request
                 '''
                 ${userRequest}
                 '''
-                `
-            })
+                `,
+            });
         }
         const promptSections = [
             ...prefixSection,
@@ -185,9 +187,12 @@ export class ECommerceSiteAgent<T extends object> {
         translator: TypeChatJsonTranslator<U>,
         userQuestion: string,
         fragments?: HtmlFragments[],
-        screenshot?: string,        
+        screenshot?: string,
     ) {
-        const screenshotSection = getScreenshotPromptSection(screenshot, fragments);
+        const screenshotSection = getScreenshotPromptSection(
+            screenshot,
+            fragments,
+        );
         const htmlSection = getHtmlPromptSection(fragments);
         const prefixSection = getBootstrapPrefixPromptSection();
         const promptSections = [
@@ -291,11 +296,10 @@ export class ECommerceSiteAgent<T extends object> {
         return response;
     }
 
-    
     async getPageChatResponse(
         question: string,
         fragments?: HtmlFragments[],
-        screenshot?: string,        
+        screenshot?: string,
     ) {
         const schemaPath = path.join(
             "src",
@@ -313,7 +317,7 @@ export class ECommerceSiteAgent<T extends object> {
             bootstrapTranslator,
             question,
             fragments,
-            screenshot,            
+            screenshot,
         ) as ContentSection[];
 
         const response = await bootstrapTranslator.translate("", [
@@ -322,11 +326,11 @@ export class ECommerceSiteAgent<T extends object> {
         return response;
     }
 
-    async getPageComponentSchema(        
+    async getPageComponentSchema(
         componentTypeName: string,
         userRequest?: string,
         fragments?: HtmlFragments[],
-        screenshot?: string,        
+        screenshot?: string,
     ) {
         const schemaPath = path.join(
             "src",
@@ -344,7 +348,7 @@ export class ECommerceSiteAgent<T extends object> {
             bootstrapTranslator,
             userRequest,
             fragments,
-            screenshot,            
+            screenshot,
         ) as ContentSection[];
 
         const response = await bootstrapTranslator.translate("", [

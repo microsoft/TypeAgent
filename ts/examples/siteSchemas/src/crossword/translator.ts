@@ -84,11 +84,7 @@ export class CrosswordAgent<T extends object> {
     model: ChatModel;
     translator: TypeChatJsonTranslator<T>;
 
-    constructor(
-        schema: string,
-        schemaName: string,
-        fastModelName: string,
-    ) {
+    constructor(schema: string, schemaName: string, fastModelName: string) {
         this.schema = schema;
         this.model = ai.createJsonChatModel(fastModelName);
         const validator = createTypeScriptJsonValidator<T>(
