@@ -25,6 +25,8 @@ import {
     createTurnImpressionFromLiteral,
 } from "@typeagent/agent-sdk";
 import { fileURLToPath } from "node:url";
+import { conversation as Conversation } from "knowledge-processor";
+import { create } from "node:domain";
 
 export function instantiate(): DispatcherAgent {
     return {
@@ -105,10 +107,25 @@ async function handleChatResponse(
             if (
                 lookupAction.parameters.conversationLookupFilters !== undefined
             ) {
-                const lt = `Not implemented: conversation lookup terms ${JSON.stringify(lookupAction.parameters.conversationLookupFilters)}`;
-
-                const result = createTurnImpressionFromLiteral(lt);
-                return result;
+                const conversationManager: Conversation.ConversationManager = (
+                    context as any
+                ).conversationManager;
+                if (conversationManager !== undefined) {
+                    const result = await conversationManager.search(
+                        lookupAction.parameters.originalRequest,
+                        lookupAction.parameters.conversationLookupFilters,
+                    );
+                    if (
+                        result !== undefined &&
+                        result.response !== undefined &&
+                        result.response.answer !== undefined &&
+                        result.response.answer.answer !== undefined
+                    ) {
+                        return createTurnImpressionFromLiteral(
+                            result.response.answer.answer!,
+                        );
+                    }
+                }
             }
         }
     }
