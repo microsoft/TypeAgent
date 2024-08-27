@@ -374,6 +374,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      aiclient:
+        specifier: workspace:*
+        version: link:../../aiclient
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils

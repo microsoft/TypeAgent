@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import {
-  createLanguageModel,
+  //createLanguageModel,
   createJsonTranslator,
   TypeChatJsonTranslator,
   TypeChatLanguageModel,
@@ -10,10 +10,11 @@ import {
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 
-import { Crossword } from "./crosswordPageSchema.mjs";
+import { Crossword } from "./schema/pageSchema.mjs";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { openai as ai } from "aiclient";
 
 export type HtmlFragments = {
   frameId: string;
@@ -69,13 +70,13 @@ function getHtmlTextOnlyPromptSection(fragments: HtmlFragments[] | undefined) {
 }
 
 export async function createCrosswordPageTranslator(
-  model: "GPT_4" | "GPT-v" | "GPT_4o",
+  model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O",
 ) {
-  const packageRoot = path.join("..", "..");
+  const packageRoot = path.join("..", "..", "..");
   const pageSchema = await fs.promises.readFile(
     fileURLToPath(
       new URL(
-        path.join(packageRoot, "./src/agent/crosswordPageSchema.mts"),
+        path.join(packageRoot, "./src/agent/crossword/schema/pageSchema.mts"),
         import.meta.url,
       ),
     ),
@@ -85,41 +86,18 @@ export async function createCrosswordPageTranslator(
   const presenceSchema = await fs.promises.readFile(
     fileURLToPath(
       new URL(
-        path.join(packageRoot, "./src/agent/crosswordPageFrame.mts"),
+        path.join(packageRoot, "./src/agent/crossword/schema/pageFrame.mts"),
         import.meta.url,
       ),
     ),
     "utf8",
   );
 
-  let vals: Record<string, string | undefined> = {};
-
-  switch (model) {
-    case "GPT_4": {
-      vals["AZURE_OPENAI_API_KEY"] = process.env["AZURE_OPENAI_API_KEY"];
-      vals["AZURE_OPENAI_ENDPOINT"] = process.env["AZURE_OPENAI_ENDPOINT"];
-      break;
-    }
-    case "GPT_4o": {
-      vals["AZURE_OPENAI_API_KEY"] =
-        process.env["AZURE_OPENAI_API_KEY_GPT_4_O"];
-      vals["AZURE_OPENAI_ENDPOINT"] =
-        process.env["AZURE_OPENAI_ENDPOINT_GPT_4_O"];
-      break;
-    }
-    case "GPT-v": {
-      vals["AZURE_OPENAI_API_KEY"] = process.env["AZURE_OPENAI_API_KEY_GPT_v"];
-      vals["AZURE_OPENAI_ENDPOINT"] =
-        process.env["AZURE_OPENAI_ENDPOINT_GPT_v"];
-      break;
-    }
-  }
-
   const agent = new CrosswordPageTranslator<Crossword>(
     pageSchema,
     presenceSchema,
     "Crossword",
-    vals,
+    model,
   );
   return agent;
 }
@@ -135,13 +113,19 @@ export class CrosswordPageTranslator<T extends object> {
     schema: string,
     presenceSchema: string,
     schemaName: string,
-    vals: Record<string, string | undefined>,
+    fastModelName: string,
   ) {
     this.schema = schema;
     this.schemaName = schemaName;
     this.presenceSchema = presenceSchema;
 
-    this.model = createLanguageModel(vals);
+    const apiSettings = ai.azureApiSettingsFromEnv(
+      ai.ModelType.Chat,
+      undefined,
+      fastModelName,
+    );
+    this.model = ai.createChatModel(apiSettings);
+
     const validator = createTypeScriptJsonValidator<T>(this.schema, schemaName);
     this.translator = createJsonTranslator(this.model, validator);
   }
@@ -303,7 +287,8 @@ export class CrosswordPageTranslator<T extends object> {
   async getCluesTextThenSelectors(fragments: HtmlFragments[]) {
     console.time("getting clues text");
     const cluesTextResult = await this.getCluesText(fragments);
-    console.timeLog("getting clues text");
+    console.timeEnd("getting clues text");
+
     if (cluesTextResult.success) {
       console.time("getting clues css selectors");
       const cluesTextPortion = cluesTextResult.data as Crossword;
@@ -312,7 +297,7 @@ export class CrosswordPageTranslator<T extends object> {
         fragments,
         cluesTextPortion,
       );
-      console.timeLog("getting clues css selectors");
+      console.timeEnd("getting clues css selectors");
 
       return cluesTextWithSelectorsResult;
 

@@ -757,12 +757,9 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
             type: "setup_commerce",
         });
 
-        /*
         messageType = "enableSiteTranslator";
         messageBody = "browser.commerce";
         currentSiteTranslator = "browser.commerce";
-        currentCrosswordUrl = targetTab.url;
-        */
     }
 
     // trigger translator change
