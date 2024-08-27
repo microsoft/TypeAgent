@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@mozilla/readability": "^0.5.0",
+    "aiclient": "workspace:*",
     "common-utils": "workspace:*",
     "dispatcher-agent": "workspace:*",
     "html-to-text": "^9.0.5",

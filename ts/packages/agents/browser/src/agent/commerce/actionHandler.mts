@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-
 import { DispatcherAgentContext } from "dispatcher-agent";
 
 import { BrowserActionContext } from "../browserActionHandler.mjs";
@@ -51,7 +50,11 @@ async function getPageSchema(
   return response.data;
 }
 
-async function getCurrentPageSchema<T extends object>(pageType: string, agent: ECommerceSiteAgent<ShoppingPlan>, browser: BrowserConnector) {
+async function getCurrentPageSchema<T extends object>(
+  pageType: string,
+  agent: ECommerceSiteAgent<ShoppingPlan>,
+  browser: BrowserConnector,
+) {
   const htmlFragments = await browser.getHtmlFragments();
   const currentPage = await getPageSchema(pageType, htmlFragments, agent);
   return currentPage as T;
@@ -88,7 +91,11 @@ export async function handleCommercedAction(
   }
 
   async function handleProductSearch(action: any) {
-    const pageInfo = await getCurrentPageSchema<LandingPage>("landingPage", agent, browser);
+    const pageInfo = await getCurrentPageSchema<LandingPage>(
+      "landingPage",
+      agent,
+      browser,
+    );
     if (!pageInfo) {
       console.error("Page state is missing");
       return;
@@ -105,7 +112,11 @@ export async function handleCommercedAction(
 
   async function handleSelectSearchResult(action: any) {
     // get current page state
-    const pageInfo = await getCurrentPageSchema<SearchPage>("searchResults", agent, browser);
+    const pageInfo = await getCurrentPageSchema<SearchPage>(
+      "searchResults",
+      agent,
+      browser,
+    );
 
     if (!pageInfo) {
       console.error("Page state is missing");
@@ -120,8 +131,11 @@ export async function handleCommercedAction(
 
   async function handleAddToCart(action: any) {
     // get current page state
-    const pageInfo =
-      await getCurrentPageSchema<ProductDetailsPage>("productDetails", agent, browser);
+    const pageInfo = await getCurrentPageSchema<ProductDetailsPage>(
+      "productDetails",
+      agent,
+      browser,
+    );
 
     if (!pageInfo) {
       console.error("Page state is missing");

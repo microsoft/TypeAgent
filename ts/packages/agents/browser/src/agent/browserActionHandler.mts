@@ -9,11 +9,11 @@ import {
   DispatcherAgentContext,
   createTurnImpressionFromLiteral,
 } from "dispatcher-agent";
-import { Crossword } from "./crosswordPageSchema.mjs";
+import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import {
   getBoardSchema,
   handleCrosswordAction,
-} from "./crosswordPageUtilities.mjs";
+} from "./crossword/actionHandler.mjs";
 
 import { BrowserConnector } from "./browserConnector.mjs";
 import { handleCommercedAction } from "./commerce/actionHandler.mjs";

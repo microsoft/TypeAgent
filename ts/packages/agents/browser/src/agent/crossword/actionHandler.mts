@@ -3,11 +3,11 @@
 
 import jp from "jsonpath";
 import { DispatcherAgentContext } from "dispatcher-agent";
-import { Crossword } from "./crosswordPageSchema.mjs";
-import { CrosswordPresence } from "./crosswordPageFrame.mjs";
-import { createCrosswordPageTranslator } from "./crosswordPageTranslator.mjs";
-import { BrowserActionContext } from "./browserActionHandler.mjs";
-import { BrowserConnector } from "./browserConnector.mjs";
+import { Crossword } from "./schema/pageSchema.mjs";
+import { CrosswordPresence } from "./schema/pageFrame.mjs";
+import { createCrosswordPageTranslator } from "./translator.mjs";
+import { BrowserActionContext } from "../browserActionHandler.mjs";
+import { BrowserConnector } from "../browserConnector.mjs";
 
 export async function getBoardSchema(
   context: DispatcherAgentContext<BrowserActionContext>,
@@ -23,7 +23,7 @@ export async function getBoardSchema(
     return cachedSchema as Crossword;
   } else {
     const htmlFragments = await browser.getHtmlFragments();
-    const agent = await createCrosswordPageTranslator("GPT_4o");
+    const agent = await createCrosswordPageTranslator("GPT_4_O");
 
     let candidateFragments = [];
     let pagePromises = [];
