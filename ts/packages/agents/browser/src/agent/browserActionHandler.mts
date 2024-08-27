@@ -9,13 +9,14 @@ import {
   DispatcherAgentContext,
   createTurnImpressionFromLiteral,
 } from "@typeagent/agent-sdk";
-import { Crossword } from "./crosswordPageSchema.mjs";
+import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import {
   getBoardSchema,
   handleCrosswordAction,
-} from "./crosswordPageUtilities.mjs";
+} from "./crossword/actionHandler.mjs";
 
 import { BrowserConnector } from "./browserConnector.mjs";
+import { handleCommerceAction } from "./commerce/actionHandler.mjs";
 
 export function instantiate(): DispatcherAgent {
   return {
@@ -139,6 +140,9 @@ async function executeBrowserAction(
       } else if (action.translatorName === "browser.crossword") {
         const crosswordResult = await handleCrosswordAction(action, context);
         return createTurnImpressionFromLiteral(crosswordResult);
+      } else if (action.translatorName === "browser.commerce") {
+        const commerceResult = await handleCommerceAction(action, context);
+        return createTurnImpressionFromLiteral(commerceResult);
       }
 
       webSocketEndpoint.send(
@@ -150,7 +154,10 @@ async function executeBrowserAction(
           body: action,
         }),
       );
-    } catch {
+    } catch (ex: any) {
+      console.log(ex);
+      console.log(JSON.stringify(ex));
+
       throw new Error("Unable to contact browser backend.");
     }
   } else {

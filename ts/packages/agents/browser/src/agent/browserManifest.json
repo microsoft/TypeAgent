@@ -13,7 +13,7 @@
       "actionDefaultEnabled": false,
       "schema": {
         "description": "This enables users to explore paleological data. Users can filter fossil data by location, by geological time and by taxon.",
-        "schemaFile": "./paleoBioDbSchema.mts",
+        "schemaFile": "./paleoBioDb/paleoBioDbSchema.mts",
         "schemaType": "PaleoBioDbActions"
       }
     },
@@ -22,8 +22,17 @@
       "actionDefaultEnabled": false,
       "schema": {
         "description": "This allows users to interact with a crossword puzzle.",
-        "schemaFile": "./crosswordActionsSchema.mts",
+        "schemaFile": "./crossword/schema/userActions.mts",
         "schemaType": "CrosswordActions"
+      }
+    },
+    "commerce": {
+      "defaultEnabled": false,
+      "actionDefaultEnabled": false,
+      "schema": {
+        "description": "This allows users to interact with e-commerce websites to find, compare and purchase various products.",
+        "schemaFile": "./commerce/schema/userActions.mts",
+        "schemaType": "ShoppingAction"
       }
     }
   }

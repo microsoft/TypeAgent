@@ -16,9 +16,6 @@ export type ProductTile = {
     price: string;
     rating: string;
 
-    // css selector for text input
-    cssSelector: string;
-
     // CSS Selector for the link to the product details page
     detailsLinkSelector: string;
 

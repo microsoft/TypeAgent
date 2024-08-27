@@ -29,6 +29,7 @@
   "dependencies": {
     "@mozilla/readability": "^0.5.0",
     "@typeagent/agent-sdk": "workspace:*",
+    "aiclient": "workspace:*",
     "common-utils": "workspace:*",
     "html-to-text": "^9.0.5",
     "jsonpath": "^1.1.1",

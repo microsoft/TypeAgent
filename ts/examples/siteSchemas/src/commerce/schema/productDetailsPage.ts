@@ -1,11 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type SearchInput = {
-    // css selector for text input
-    cssSelector: string;
-};
-
 export type AddToCartButton = {
     // css selector for the add to cart button
     cssSelector: string;
@@ -25,7 +20,6 @@ export type ProductTile = {
 };
 
 export type ProductDetailsPage = {
-    productInfo: ProductTile;
+    mainProductInfo: ProductTile;
     relatedProductTiles: ProductTile[];
-    searchBox: SearchInput;
 };
