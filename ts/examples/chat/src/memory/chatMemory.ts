@@ -28,6 +28,7 @@ export type ChatContext = {
     topicWindowSize: number;
     searchConcurrency: number;
     minScore: number;
+    entityTopK: number;
     conversationName: string;
     conversationSettings: knowLib.conversation.ConversationSettings;
     conversation: knowLib.conversation.Conversation;
@@ -63,7 +64,8 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         conversationName,
         conversationSettings,
         conversation,
-        searcher: createSearchProcessor(conversation, chatModel, true),
+        entityTopK: 16,
+        searcher: createSearchProcessor(conversation, chatModel, true, 16),
     };
     context.searchMemory = await createSearchMemory(context);
     return context;
@@ -95,8 +97,9 @@ export function createSearchProcessor(
     c: conversation.Conversation,
     model: ChatModel,
     includeActions: boolean,
+    entityTopK: number,
 ) {
-    return conversation.createSearchProcessor(
+    const searcher = conversation.createSearchProcessor(
         c,
         model,
         model,
@@ -104,17 +107,21 @@ export function createSearchProcessor(
             ? conversation.KnowledgeSearchMode.WithActions
             : conversation.KnowledgeSearchMode.Default,
     );
+    searcher.answers.settings.topKEntities = entityTopK;
+    return searcher;
 }
 
 export async function createSearchMemory(
     context: ChatContext,
 ): Promise<conversation.ConversationManager> {
     const conversationName = "search";
-    return await conversation.createConversationManager(
+    const memory = await conversation.createConversationManager(
         conversationName,
         context.storePath,
         true,
     );
+    memory.searchProcessor.answers.settings.topKEntities = context.entityTopK;
+    return memory;
 }
 
 export async function loadConversation(
@@ -179,7 +186,7 @@ export async function runChatMemory(): Promise<void> {
         if (context.searchMemory) {
             const results = await context.searchMemory.search(line);
             if (results) {
-                await writeSearchTermsResult(results);
+                await writeSearchTermsResult(results, false);
             } else {
                 printer.writeLine("No matches");
             }
@@ -851,7 +858,7 @@ export async function runChatMemory(): Promise<void> {
                 debug: {
                     description: "Show debug info",
                     type: "boolean",
-                    defaultValue: false,
+                    defaultValue: true,
                 },
                 save: {
                     description: "Save the search",
@@ -1005,7 +1012,7 @@ export async function runChatMemory(): Promise<void> {
             printer.writeError("No result");
             return;
         }
-        await writeSearchTermsResult(result);
+        await writeSearchTermsResult(result, namedArgs.debug);
         if (result.response && result.response.answer) {
             if (namedArgs.save && recordAnswer) {
                 let answer = result.response.answer.answer;
@@ -1021,9 +1028,12 @@ export async function runChatMemory(): Promise<void> {
 
     async function writeSearchTermsResult(
         result: conversation.SearchTermsActionResponse,
+        stats: boolean,
     ) {
         if (result.response && result.response.answer) {
-            writeResultStats(result.response);
+            if (stats) {
+                writeResultStats(result.response);
+            }
             if (result.response.answer.answer) {
                 const answer = result.response.answer.answer;
                 printer.writeInColor(chalk.green, answer);
@@ -1155,7 +1165,7 @@ export async function runChatMemory(): Promise<void> {
                 const topicIds = new Set(response.allTopicIds());
                 printer.writeLine(`Topic Hit Count: ${topicIds.size}`);
             }
-            const allEntities = response.mergeAllEntities(8);
+            const allEntities = response.mergeAllEntities(16);
             if (allEntities && allEntities.length > 0) {
                 printer.writeLine(`Entity Hit Count: ${allEntities.length}`);
             } else {
