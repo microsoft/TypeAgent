@@ -67,7 +67,7 @@ import {
     UserData,
 } from "./userData.js";
 import registerDebug from "debug";
-import { Storage, TurnImpression } from "dispatcher-agent";
+import { Storage, TurnImpression } from "@typeagent/agent-sdk";
 
 const debugSpotify = registerDebug("typeagent:spotify");
 
@@ -142,7 +142,7 @@ export async function loadHistoryFile(
     context: IClientContext,
 ) {
     console.log(`Loading history file: ${historyPath}`);
-    if (!profileStorage.exists(historyPath) || !context.userData) {
+    if (!(await profileStorage.exists(historyPath)) || !context.userData) {
         return;
     }
     let data: undefined | SpotifyRecord[] = undefined;

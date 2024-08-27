@@ -52,6 +52,9 @@ import {
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
 import { DispatcherName } from "../requestCommandHandler.js";
+import { DispatcherAgentContext } from "@typeagent/agent-sdk";
+import { getDispatcherAgent } from "../../agent/agentConfig.js";
+import { conversation as Conversation } from "knowledge-processor";
 
 export interface CommandResult {
     error?: boolean;
@@ -62,7 +65,9 @@ export interface CommandResult {
 // Command Handler Context definition.
 export type CommandHandlerContext = {
     session: Session;
+    sessionContext: Map<string, DispatcherAgentContext>;
 
+    conversationManager?: Conversation.ConversationManager;
     // Per activation configs
     developerMode?: boolean;
     explanationAsynchronousMode: boolean;
@@ -191,6 +196,12 @@ export async function initializeCommandHandlerContext(
     const stdio = options?.stdio;
 
     const session = await getSession(options);
+    const path = session.getSessionDirPath();
+    const conversationManager = await Conversation.createConversationManager(
+        "conversation",
+        path ? path : "/data/testChat",
+        false,
+    );
     const dbLoggerSink: LoggerSink | undefined = createMongoDBLoggerSink(
         "telemetrydb",
         "dispatcherlogs",
@@ -218,6 +229,8 @@ export async function initializeCommandHandlerContext(
     const clientIO = options?.clientIO;
     const context: CommandHandlerContext = {
         session,
+        conversationManager,
+        sessionContext: new Map<string, DispatcherAgentContext>(),
         explanationAsynchronousMode,
         dblogging: true,
         clientIO,
@@ -256,6 +269,11 @@ export async function setSessionOnCommandHandlerContext(
     session: Session,
 ) {
     context.session = session;
+    for (const [name, sessionContext] of context.sessionContext.entries()) {
+        (await getDispatcherAgent(name)).closeAgentContext?.(sessionContext);
+    }
+    context.sessionContext.clear();
+    context.action = await initializeActionContext();
     context.agentCache = await getAgentCache(context.session, context.logger);
     await updateActionContext(context.session.getConfig().actions, context);
 }

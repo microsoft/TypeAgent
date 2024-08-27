@@ -26,17 +26,20 @@ import {
 import { AnswerGenerator, createAnswerGenerator } from "./answerGenerator.js";
 import { PromptSection } from "typechat";
 import { ChatModel } from "aiclient";
-import { GetAnswerWithTermsAction } from "./knowledgeTermSearchSchema.js";
+import {
+    GetAnswerWithTermsAction,
+    SearchTermsAction,
+    TermFilter,
+} from "./knowledgeTermSearchSchema.js";
 
 export type SearchProcessingOptions = {
     maxMatches: number;
     minScore: number;
     maxMessages: number;
     fallbackSearch?: SearchOptions | undefined;
-    includeTimeRange: boolean;
     combinationSetOp?: SetOp;
     includeActions?: boolean;
-    actionPreprocess?: (action: any) => void;
+    progress?: ((action: any) => void) | undefined;
 };
 
 export interface ConversationSearchProcessor {
@@ -49,6 +52,7 @@ export interface ConversationSearchProcessor {
     ): Promise<SearchActionResponse | undefined>;
     searchTerms(
         query: string,
+        filters: TermFilter[] | undefined,
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponse | undefined>;
     buildContext(
@@ -85,7 +89,7 @@ export function createSearchProcessor(
         query: string,
         options: SearchProcessingOptions,
     ): Promise<SearchActionResponse | undefined> {
-        const context = await buildContext(options);
+        const context = await buildContext();
         const actionResult = options.includeActions
             ? await searchTranslator.translateSearch(query, context)
             : await searchTranslator_NoActions.translateSearch(query, context);
@@ -93,8 +97,8 @@ export function createSearchProcessor(
             return undefined;
         }
         let action = actionResult.data;
-        if (options.actionPreprocess) {
-            options.actionPreprocess(action);
+        if (options.progress) {
+            options.progress(action);
         }
         const rr: SearchActionResponse = {
             action,
@@ -115,19 +119,32 @@ export function createSearchProcessor(
 
     async function searchTerms(
         query: string,
+        filters: TermFilter[] | undefined,
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponse | undefined> {
-        const context = await buildContext(options);
-        const actionResult = await searchTranslator.translateSearchTerms(
-            query,
-            context,
-        );
-        if (!actionResult.success) {
-            return undefined;
+        const context = await buildContext();
+        let action: SearchTermsAction | undefined;
+        if (filters && filters.length > 0) {
+            // Filters already provided
+            action = {
+                actionName: "getAnswer",
+                parameters: {
+                    filters,
+                },
+            };
+        } else {
+            const actionResult = await searchTranslator.translateSearchTerms(
+                query,
+                context,
+            );
+            if (!actionResult.success) {
+                return undefined;
+            }
+            action = actionResult.data;
         }
-        let action = actionResult.data;
-        if (options.actionPreprocess) {
-            options.actionPreprocess(action);
+
+        if (options.progress) {
+            options.progress(action);
         }
         const rr: SearchTermsActionResponse = {
             action,
@@ -142,12 +159,8 @@ export function createSearchProcessor(
         return rr;
     }
 
-    async function buildContext(
-        options: SearchProcessingOptions,
-    ): Promise<PromptSection[] | undefined> {
-        const timeRange = options.includeTimeRange
-            ? await conversation.messages.getTimeRange()
-            : undefined;
+    async function buildContext(): Promise<PromptSection[] | undefined> {
+        const timeRange = await conversation.messages.getTimeRange();
         return timeRange
             ? [
                   {

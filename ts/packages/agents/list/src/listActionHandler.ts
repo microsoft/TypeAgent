@@ -8,7 +8,7 @@ import {
     Storage,
     TurnImpression,
     createTurnImpressionFromDisplay,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 import {
     ListAction,
     AddItemsAction,
@@ -115,7 +115,7 @@ async function listValidateWildcardMatch(
     return true;
 }
 
-function initializeListContext() {
+async function initializeListContext() {
     return { store: undefined };
 }
 
@@ -210,7 +210,7 @@ async function createListStoreForSession(
 ) {
     let lists: List[] = [];
     // check whether file exists
-    if (storage.exists(listStoreName)) {
+    if (await storage.exists(listStoreName)) {
         const data = await storage.read(listStoreName, "utf8");
         lists = JSON.parse(data);
     } else {
@@ -250,7 +250,7 @@ async function handleListAction(
                     addAction.parameters.listName,
                     addAction.parameters.items,
                 );
-                listContext.store.save();
+                await listContext.store.save();
                 displayText = `Added items: ${addAction.parameters.items} to list ${addAction.parameters.listName}`;
                 result = createTurnImpressionFromDisplay(displayText);
                 result.literalText = `Added item: ${addAction.parameters.items} to list ${addAction.parameters.listName}`;
@@ -279,7 +279,7 @@ async function handleListAction(
                     removeAction.parameters.listName,
                     removeAction.parameters.items,
                 );
-                listContext.store.save();
+                await listContext.store.save();
                 displayText = `Removed items: ${removeAction.parameters.items} from list ${removeAction.parameters.listName}`;
                 result = createTurnImpressionFromDisplay(displayText);
                 result.literalText = `Removed items: ${removeAction.parameters.items} from list ${removeAction.parameters.listName}`;
@@ -310,7 +310,7 @@ async function handleListAction(
                         `Created list: ${createListAction.parameters.listName}`,
                     );
                     displayText = `Created list: ${createListAction.parameters.listName}`;
-                    listContext.store.save();
+                    await listContext.store.save();
                 } else {
                     console.log(
                         `List already exists: ${createListAction.parameters.listName}`,
@@ -350,6 +350,8 @@ async function handleListAction(
             }
             break;
         }
+        default:
+            throw new Error(`Unknown action: ${action.actionName}`);
     }
     return result;
 }

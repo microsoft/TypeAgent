@@ -23,11 +23,11 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
     "axios": "^1.6.1",
     "chalk": "^5.3.0",
     "common-utils": "workspace:*",
     "debug": "^4.3.4",
-    "dispatcher-agent": "workspace:*",
     "dotenv": "^16.3.1",
     "express": "^4.19.2",
     "open": "^7.0.4",

@@ -17,7 +17,7 @@ import {
     DispatcherAgentContext,
     TurnImpression,
     turnImpressionToString,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 import {
     getDispatcherAgent,
     getDispatcherAgents,
@@ -26,19 +26,33 @@ import { processCommandNoLock } from "../command.js";
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
 import { getUserProfileDir } from "../utils/userData.js";
-import { DispatcherName } from "../handlers/requestCommandHandler.js";
 
 const debugActions = registerDebug("typeagent:actions");
 
 export async function initializeActionContext() {
     return Object.fromEntries(
-        Array.from((await getDispatcherAgents()).entries()).map(
-            ([name, agent]) => [name, agent.initializeAgentContext?.()],
+        await Promise.all(
+            Array.from((await getDispatcherAgents()).entries()).map(
+                async ([name, agent]) => [
+                    name,
+                    await agent.initializeAgentContext?.(),
+                ],
+            ),
         ),
     );
 }
 
 function getDispatcherAgentContext(
+    name: string,
+    context: CommandHandlerContext,
+): DispatcherAgentContext {
+    return (
+        context.sessionContext.get(name) ??
+        createDispatcherAgentContext(name, context)
+    );
+}
+
+function createDispatcherAgentContext(
     name: string,
     context: CommandHandlerContext,
 ): DispatcherAgentContext {
@@ -72,23 +86,8 @@ function getDispatcherAgentContext(
         issueCommand(command: string) {
             return processCommandNoLock(command, context);
         },
-        getAlternativeAgentContext(name: string) {
-            return context.action[name];
-        },
-        getSessionDirPath() {
-            return context.session.getSessionDirPath();
-        },
         getUpdateActionStatus() {
             return context.clientIO?.updateActionStatus.bind(context.clientIO);
-        },
-        searchMenuCommand(menuId, command, prefix?, choices?, visible?): void {
-            return context.clientIO?.searchMenuCommand(
-                menuId,
-                command,
-                prefix,
-                choices,
-                visible,
-            );
         },
         async toggleAgent(name: string, enable: boolean) {
             await changeContextConfig(
@@ -100,6 +99,8 @@ function getDispatcherAgentContext(
             );
         },
     };
+    (agentContext as any).conversationManager = context.conversationManager;
+    context.sessionContext.set(name, agentContext);
     return agentContext;
 }
 
@@ -185,14 +186,8 @@ export async function partialInput(
     text: string,
     context: CommandHandlerContext,
 ) {
-    const dispatcherAgentName = getDispatcherAgentName(
-        context.currentTranslatorName,
-    );
-    const dispatcherAgent = await getDispatcherAgent(dispatcherAgentName);
-    return dispatcherAgent.partialInput?.(
-        text,
-        getDispatcherAgentContext(dispatcherAgentName, context),
-    );
+    // For auto completion
+    throw new Error("NYI");
 }
 
 export async function executeActions(
@@ -203,10 +198,30 @@ export async function executeActions(
     const requestIO = context.requestIO;
     let actionIndex = 0;
     for (const action of actions) {
-        const result =
-            (await executeAction(action, context, actionIndex)) ??
-            createTurnImpressionFromLiteral(`
+        let result: TurnImpression;
+        const returnedResult = await executeAction(
+            action,
+            context,
+            actionIndex,
+        );
+        if (returnedResult === undefined) {
+            result = createTurnImpressionFromLiteral(`
                 Action ${action.fullActionName} completed.`);
+        } else {
+            if (
+                returnedResult.error === undefined &&
+                returnedResult.literalText &&
+                context.conversationManager
+            ) {
+                // TODO: convert entity values to facets
+                context.conversationManager.addMessage(
+                    returnedResult.literalText,
+                    returnedResult.entities,
+                    new Date(),
+                );
+            }
+            result = returnedResult;
+        }
         if (debugActions.enabled) {
             debugActions(turnImpressionToString(result));
         }
@@ -216,7 +231,7 @@ export async function executeActions(
                 `Action ${action.fullActionName} failed: ${result.error}`,
                 [],
                 "assistant",
-                requestIO.getRequestId(),
+                context.requestId,
             );
         } else {
             requestIO.setActionStatus(
@@ -230,7 +245,7 @@ export async function executeActions(
                     : `Action ${action.fullActionName} completed.`,
                 result.entities,
                 "assistant",
-                requestIO.getRequestId(),
+                context.requestId,
                 result.impressionInterpreter,
             );
         }

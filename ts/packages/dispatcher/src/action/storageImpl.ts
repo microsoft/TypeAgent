@@ -3,7 +3,11 @@
 
 import path from "node:path";
 import fs from "node:fs";
-import { Storage, StorageListOptions, StorageEncoding } from "dispatcher-agent";
+import {
+    Storage,
+    StorageListOptions,
+    StorageEncoding,
+} from "@typeagent/agent-sdk";
 
 import {
     DataProtectionScope,
@@ -27,7 +31,7 @@ export function getStorage(name: string, baseDir: string): Storage {
                 )
                 .map((item) => item.name);
         },
-        exists: (storagePath: string) => {
+        exists: async (storagePath: string) => {
             const fullPath = getFullPath(storagePath);
             return fs.existsSync(fullPath);
         },

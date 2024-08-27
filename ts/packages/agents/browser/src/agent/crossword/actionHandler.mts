@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import jp from "jsonpath";
-import { DispatcherAgentContext } from "dispatcher-agent";
+import { DispatcherAgentContext } from "@typeagent/agent-sdk";
 import { Crossword } from "./schema/pageSchema.mjs";
 import { CrosswordPresence } from "./schema/pageFrame.mjs";
 import { createCrosswordPageTranslator } from "./translator.mjs";

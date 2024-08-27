@@ -7,7 +7,7 @@ import {
     DispatcherAction,
     DispatcherAgent,
     DispatcherAgentContext,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 
 export function instantiate(): DispatcherAgent {
     return {
@@ -21,7 +21,7 @@ type CodeActionContext = {
     webSocket: WebSocket | undefined;
 };
 
-function initializeCodeContext(): CodeActionContext {
+async function initializeCodeContext(): Promise<CodeActionContext> {
     return {
         webSocket: undefined,
     };

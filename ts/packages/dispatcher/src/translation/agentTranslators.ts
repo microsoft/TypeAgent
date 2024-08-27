@@ -5,7 +5,7 @@ import { createJsonTranslatorFromSchemaDef } from "common-utils";
 import {
     DispatcherAction,
     HierarchicalTranslatorConfig,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 import { TypeChatJsonTranslator } from "typechat";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { getMultipleActionSchemaDef } from "./systemActionsInlineSchema.js";

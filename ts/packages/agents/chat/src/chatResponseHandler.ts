@@ -16,15 +16,17 @@ import {
     Entity,
 } from "typeagent";
 import { ChatModel, bing, openai } from "aiclient";
-import { DispatcherAgent, DispatcherAgentIO } from "dispatcher-agent";
+import { DispatcherAgent, DispatcherAgentIO } from "@typeagent/agent-sdk";
 import { PromptSection } from "typechat";
 import {
     DispatcherAction,
     DispatcherAgentContext,
     TurnImpression,
     createTurnImpressionFromLiteral,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 import { fileURLToPath } from "node:url";
+import { conversation as Conversation } from "knowledge-processor";
+import { create } from "node:domain";
 
 export function instantiate(): DispatcherAgent {
     return {
@@ -88,26 +90,46 @@ async function handleChatResponse(
                 return result;
             }
         }
-        case "lookupAndGenerateResponse":
-            {
-                const lookupAction =
-                    chatAction as LookupAndGenerateResponseAction;
-                if (
-                    lookupAction.parameters.lookups !== undefined &&
-                    lookupAction.parameters.lookups.length > 0
-                ) {
-                    console.log("Running lookups");
-                    return handleLookup(
-                        lookupAction,
-                        requestIO,
-                        actionIndex,
-                        await getLookupSettings(true),
-                    );
-                }
-                break;
+        case "lookupAndGenerateResponse": {
+            const lookupAction = chatAction as LookupAndGenerateResponseAction;
+            if (
+                lookupAction.parameters.internetLookups !== undefined &&
+                lookupAction.parameters.internetLookups.length > 0
+            ) {
+                console.log("Running lookups");
+                return handleLookup(
+                    lookupAction,
+                    requestIO,
+                    actionIndex,
+                    await getLookupSettings(true),
+                );
             }
-            requestIO.error("No information found");
+            if (
+                lookupAction.parameters.conversationLookupFilters !== undefined
+            ) {
+                const conversationManager: Conversation.ConversationManager = (
+                    context as any
+                ).conversationManager;
+                if (conversationManager !== undefined) {
+                    const result = await conversationManager.search(
+                        lookupAction.parameters.originalRequest,
+                        lookupAction.parameters.conversationLookupFilters,
+                    );
+                    if (
+                        result !== undefined &&
+                        result.response !== undefined &&
+                        result.response.answer !== undefined &&
+                        result.response.answer.answer !== undefined
+                    ) {
+                        return createTurnImpressionFromLiteral(
+                            result.response.answer.answer!,
+                        );
+                    }
+                }
+            }
+        }
     }
+    return createTurnImpressionFromLiteral("No information found");
 }
 
 function logEntities(label: string, entities?: Entity[]): void {
@@ -246,7 +268,7 @@ async function handleLookup(
         "No information found",
     );
 
-    let lookups = chatAction.parameters.lookups;
+    let lookups = chatAction.parameters.internetLookups;
     if (!lookups || lookups.length === 0) {
         return literalResponse;
     }

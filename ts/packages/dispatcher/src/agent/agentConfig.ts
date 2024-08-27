@@ -5,19 +5,27 @@ import {
     DispatcherAgent,
     HierarchicalTranslatorConfig,
     TopLevelTranslatorConfig,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 import { getDispatcherConfig } from "../utils/config.js";
 import { loadInlineAgent } from "./inlineAgentHandlers.js";
 import { createRequire } from "module";
 import path from "node:path";
 
+import { createAgentProcessShim } from "./agentProcessShim.js";
+
 export type InlineDispatcherAgentInfo = {
     type?: undefined;
 } & TopLevelTranslatorConfig;
 
+const enum ExecutionMode {
+    SeparateProcess = "separate",
+    DispatcherProcess = "dispatcher",
+}
+
 export type ModuleDispatcherAgentInfo = {
     type: "module";
     name: string;
+    execMode?: ExecutionMode;
 };
 
 export type AgentInfo = (
@@ -68,13 +76,24 @@ export async function getDispatcherAgentConfigs() {
     return dispatcherAgentConfigs;
 }
 
+function enableExecutionMode() {
+    // TODO: change default
+    return process.env.TYPEAGENT_EXECMODE === "1";
+}
+
 async function loadModuleAgent(
-    config: ModuleDispatcherAgentInfo,
+    info: ModuleDispatcherAgentInfo,
 ): Promise<DispatcherAgent> {
-    const module = await import(`${config.name}/agent/handlers`);
+    // TODO: change default
+    const execMode = info.execMode ?? ExecutionMode.DispatcherProcess;
+    if (enableExecutionMode() && execMode === ExecutionMode.SeparateProcess) {
+        return createAgentProcessShim(`${info.name}/agent/handlers`);
+    }
+
+    const module = await import(`${info.name}/agent/handlers`);
     if (typeof module.instantiate !== "function") {
         throw new Error(
-            `Failed to load module agent ${config.name}: missing 'instantiate' function.`,
+            `Failed to load module agent ${info.name}: missing 'instantiate' function.`,
         );
     }
     return module.instantiate();

@@ -41,7 +41,7 @@ export type GetListAction = {
     };
 };
 
-// if the user types text that can not easily be understood as a calendar action, this action is used
+// if the user types text that can not easily be understood as a list action, this action is used
 export interface UnknownAction {
     actionName: "unknown";
     parameters: {

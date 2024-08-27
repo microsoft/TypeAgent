@@ -27,12 +27,12 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
     "aiclient": "workspace:*",
     "async": "^3.2.5",
     "chalk": "^5.3.0",
     "common-utils": "workspace:*",
     "debug": "^4.3.4",
-    "dispatcher-agent": "workspace:*",
     "typechat": "^0.1.0"
   },
   "devDependencies": {
