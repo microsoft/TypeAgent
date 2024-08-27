@@ -390,7 +390,7 @@ async function runLookup(
         (url, answerSoFar) => {
             if (firstToken) {
 
-                Profiler.getInstance().mark(agentContext.requestId, "firstToken");
+                Profiler.getInstance().mark(agentContext.requestId, "First Tokenn");
 
                 firstToken = false;
             }
