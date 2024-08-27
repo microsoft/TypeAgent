@@ -858,7 +858,7 @@ export async function runChatMemory(): Promise<void> {
                 debug: {
                     description: "Show debug info",
                     type: "boolean",
-                    defaultValue: false,
+                    defaultValue: true,
                 },
                 save: {
                     description: "Save the search",
