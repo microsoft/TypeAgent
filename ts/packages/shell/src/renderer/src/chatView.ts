@@ -498,7 +498,7 @@ export function updateMetrics(div: HTMLDivElement, metrics?: IMessageMetrics) {
             
             metrics.marks.forEach((value: number, key: string) => {
                 let mDiv = document.createElement("div");
-                mDiv.innerHTML = `${key}: ${formatTimeReaderFriendly(value)}`;
+                mDiv.innerHTML = `${key}: <b>${formatTimeReaderFriendly(value)}</b>`;
                 marksSubContainer.append(mDiv);
             });
         }
