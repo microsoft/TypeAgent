@@ -3,7 +3,7 @@
 
 import path from "path";
 import { openai } from "aiclient";
-import { ObjectFolderSettings, SearchOptions } from "typeagent";
+import { ObjectFolderSettings, SearchOptions, collections } from "typeagent";
 import { TextBlock, SourceTextBlock, TextBlockType } from "../text.js";
 import {
     Conversation,
@@ -18,6 +18,7 @@ import {
     KnowledgeExtractorSettings,
     createKnowledgeExtractor,
     ExtractedKnowledge,
+    ExtractedEntity,
 } from "./knowledge.js";
 import {
     ConversationSearchProcessor,
@@ -26,7 +27,7 @@ import {
 } from "./searchProcessor.js";
 import { createEmbeddingCache } from "../modelCache.js";
 import { KnowledgeSearchMode } from "./knowledgeActions.js";
-import { SetOp } from "../setOperations.js";
+import { SetOp, unionArrays } from "../setOperations.js";
 import { ConcreteEntity } from "./knowledgeSchema.js";
 import { mergeEntities } from "./entities.js";
 
@@ -157,8 +158,10 @@ export async function createConversationManager(
         }
         if (extractedKnowledge) {
             if (knownKnowledge) {
-                // TODO: merge entities instead of replace
-                extractedKnowledge.entities = knownKnowledge.entities;
+                const merged = new Map<string, ExtractedEntity>();
+                mergeEntities(extractedKnowledge.entities, merged);
+                mergeEntities(knownKnowledge.entities, merged);
+                extractedKnowledge.entities = [...merged.values()];
             }
         } else {
             extractedKnowledge = knownKnowledge;
@@ -213,6 +216,7 @@ export async function createConversationManager(
         }
         return undefined;
     }
+
     function defaultConversationSettings(): ConversationSettings {
         return {
             indexSettings: {
@@ -257,5 +261,27 @@ export async function createConversationManager(
             progress,
             fallbackSearch: { maxMatches: maxMessages },
         };
+    }
+
+    function mergeEntities(
+        entities: ExtractedEntity[] | undefined,
+        merged: Map<string, ExtractedEntity>,
+    ): void {
+        if (entities) {
+            for (const ee of entities) {
+                const entity = ee.value;
+                entity.name = entity.name.toLowerCase();
+                collections.lowerAndSort(entity.type);
+                const existing = merged.get(entity.name);
+                if (existing) {
+                    existing.value.type = unionArrays(
+                        existing.value.type,
+                        entity.type,
+                    )!;
+                } else {
+                    merged.set(entity.name, ee);
+                }
+            }
+        }
     }
 }
