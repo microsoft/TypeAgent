@@ -17,7 +17,7 @@ import {
     updateCorrectionContext,
 } from "./common/commandHandlerContext.js";
 
-import { getColorElapsedString } from "common-utils";
+import { getColorElapsedString, Profiler } from "common-utils";
 import {
     executeActions,
     validateWildcardMatch,
@@ -222,6 +222,7 @@ async function translateRequestWithTranslator(
     );
 
     let generateResponse = false;
+    let firstToken = true;
     const onProperty = context.session.getConfig().stream
         ? (prop: string, value: any, partial: boolean) => {
               // TODO: implemented for chat's generate response.
@@ -236,6 +237,12 @@ async function translateRequestWithTranslator(
               }
 
               if (generateResponse && prop === "parameters.generatedText") {
+
+                if (firstToken) {
+                    Profiler.getInstance().mark(context.requestId, "First Token");
+                    firstToken = false;
+                }
+
                   context.requestIO.setActionStatus(
                       `${value}${partial ? "..." : ""}`,
                       0,
