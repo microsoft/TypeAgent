@@ -36,6 +36,9 @@ export const enum AgentContextInvokeAPI {
     StorageExists = "storageExists",
     StorageDelete = "storageDelete",
 
+    TokenCachePersistenceLoad = "tokenCacheRead",
+    TokenCachePersistenceSave = "tokenCacheWrite",
+
     // Context
     IssueCommand = "issueCommand",
     ToggleAgent = "toggleAgent",

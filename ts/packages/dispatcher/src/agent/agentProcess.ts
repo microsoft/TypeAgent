@@ -94,6 +94,21 @@ const rpc = setupInvoke<AgentContextInvokeAPI, AgentContextCallAPI>(
 );
 
 function getStorage(contextId: number, session: boolean): Storage {
+    const tokenCachePersistence: TokenCachePersistence = {
+        load: async (): Promise<string> => {
+            return rpc.invoke(AgentContextInvokeAPI.TokenCachePersistenceLoad, {
+                contextId,
+                session,
+            });
+        },
+        save: async (data: string): Promise<void> => {
+            return rpc.invoke(AgentContextInvokeAPI.TokenCachePersistenceSave, {
+                contextId,
+                session,
+                data,
+            });
+        },
+    };
     return {
         read: (
             storagePath: string,
@@ -140,8 +155,8 @@ function getStorage(contextId: number, session: boolean): Storage {
             });
         },
 
-        getTokenCachePersistence: (): Promise<TokenCachePersistence> => {
-            throw new Error("NYI");
+        getTokenCachePersistence: async () => {
+            return tokenCachePersistence;
         },
     };
 }

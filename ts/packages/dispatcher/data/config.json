@@ -8,13 +8,15 @@
     "calendar": {
       "type": "module",
       "name": "calendar",
+      "execMode": "separate",
       "imports": [        
         "./test/data/calendar/**/*.json"        
       ]
     },
     "email": {
       "type": "module",
-      "name": "email"
+      "name": "email",
+      "execMode": "separate"
     },
     "list": {
       "type": "module",
@@ -33,42 +35,6 @@
       "type": "module",
       "name": "code-agent"
     },
-    "phrases": {
-      "emojiChar": "🗨️",
-      "defaultEnabled": false,
-      "actionDefaultEnabled": false,
-      "schema": {
-        "description": "Look up phrases in a database",
-        "schemaFile": "./src/handlers/dataFrame/phraseSchema.ts",
-        "schemaType": "DataFrameAction",
-        "dataFrameColumns": {
-          "categoryGroup": "string",
-          "category": "string",
-          "phraseText": "string",
-          "idiomOrSlang": "boolean",
-          "votes": "number"
-        }
-      }
-    },
-    "books": {
-      "emojiChar": "📖",
-      "defaultEnabled": false,
-      "actionDefaultEnabled": false,
-      "schema": {
-        "description": "Look up books in a database",
-        "schemaFile": "./src/handlers/dataFrame/bookSchema.ts",
-        "schemaType": "DataFrameAction",
-        "dataFrameColumns": {
-          "title": "string",
-          "author": "string",
-          "genre": "string",
-          "series": "string",
-          "language": "string",
-          "pageCount": "number",
-          "rating": "number"
-        }
-      }
-    },  
     "chat": {
       "type": "module",
       "name": "chat-agent"
