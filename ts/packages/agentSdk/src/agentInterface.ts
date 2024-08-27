@@ -71,8 +71,6 @@ export interface DispatcherAgentContext<T = any> {
     readonly profileStorage: Storage; // storage that are preserved across sessions
     currentTranslatorName: string;
     issueCommand(command: string): Promise<void>;
-    getAlternativeAgentContext<T>(name: string): T;
-    getSessionDirPath(): string | undefined;
     getUpdateActionStatus():
         | ((message: string, group_id: string) => void)
         | undefined;

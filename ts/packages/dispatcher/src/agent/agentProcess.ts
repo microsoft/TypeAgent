@@ -209,12 +209,6 @@ function createDispatcherAgentContextShim(
                 command,
             });
         },
-        getAlternativeAgentContext: (name: string): any => {
-            throw new Error("NYI");
-        },
-        getSessionDirPath: (): string | undefined => {
-            throw new Error("NYI");
-        },
         getUpdateActionStatus: ():
             | ((message: string, group_id: string) => void)
             | undefined => {
