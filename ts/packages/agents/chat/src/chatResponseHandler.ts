@@ -31,6 +31,7 @@ import { create } from "node:domain";
 export function instantiate(): DispatcherAgent {
     return {
         executeAction: executeChatResponseAction,
+        streamPartialAction: streamPartialChatResponseAction,
     };
 }
 
@@ -496,4 +497,24 @@ function updateLookupProgress(
     }
     progress.answerSoFar = answerSoFar;
     progress.counter++;
+}
+
+function streamPartialChatResponseAction(
+    actionName: string,
+    name: string,
+    value: string,
+    partial: boolean,
+    context: DispatcherAgentContext,
+) {
+    if (actionName !== "generateResponse") {
+        return;
+    }
+
+    if (name === "parameters.generatedText") {
+        context.requestIO.setActionStatus(
+            `${value}${partial ? "..." : ""}`,
+            0,
+            "chat",
+        );
+    }
 }

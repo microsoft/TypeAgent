@@ -35,6 +35,7 @@ import {
 } from "../../session/session.js";
 import {
     getDefaultTranslatorName,
+    getDispatcherAgentName,
     getTranslatorNames,
     loadAgentJsonTranslator,
 } from "../../translation/agentTranslators.js";
@@ -52,8 +53,8 @@ import {
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
 import { DispatcherName } from "../requestCommandHandler.js";
-import { DispatcherAgentContext } from "@typeagent/agent-sdk";
-import { getDispatcherAgent } from "../../agent/agentConfig.js";
+import { DispatcherAgent, DispatcherAgentContext } from "@typeagent/agent-sdk";
+import { getDispatcherAgents } from "../../agent/agentConfig.js";
 import { conversation as Conversation } from "knowledge-processor";
 
 export interface CommandResult {
@@ -64,6 +65,7 @@ export interface CommandResult {
 
 // Command Handler Context definition.
 export type CommandHandlerContext = {
+    agents: Map<string, DispatcherAgent>;
     session: Session;
     sessionContext: Map<string, DispatcherAgentContext>;
 
@@ -227,7 +229,9 @@ export async function initializeCommandHandlerContext(
     }
 
     const clientIO = options?.clientIO;
+    const agents = await getDispatcherAgents();
     const context: CommandHandlerContext = {
+        agents,
         session,
         conversationManager,
         sessionContext: new Map<string, DispatcherAgentContext>(),
@@ -246,7 +250,7 @@ export async function initializeCommandHandlerContext(
         currentTranslatorName: getDefaultTranslatorName(), // REVIEW: just default to the first one on initialize?
         translatorCache: new Map<string, TypeChatJsonTranslator<object>>(),
         currentScriptDir: process.cwd(),
-        action: await initializeActionContext(),
+        action: await initializeActionContext(agents),
         chatHistory: createChatHistory(),
         logger,
         serviceHost: serviceHost,
@@ -270,10 +274,10 @@ export async function setSessionOnCommandHandlerContext(
 ) {
     context.session = session;
     for (const [name, sessionContext] of context.sessionContext.entries()) {
-        (await getDispatcherAgent(name)).closeAgentContext?.(sessionContext);
+        getDispatcherAgent(name, context).closeAgentContext?.(sessionContext);
     }
     context.sessionContext.clear();
-    context.action = await initializeActionContext();
+    context.action = await initializeActionContext(context.agents);
     context.agentCache = await getAgentCache(context.session, context.logger);
     await updateActionContext(context.session.getConfig().actions, context);
 }
@@ -355,4 +359,17 @@ export async function changeContextConfig(
     }
 
     return changed;
+}
+
+export function getDispatcherAgent(
+    dispatcherAgentName: string,
+    context: CommandHandlerContext,
+) {
+    const dispatcherAgent = context.agents.get(dispatcherAgentName);
+    if (dispatcherAgent === undefined) {
+        throw new Error(
+            `Invalid dispatcher agent name: ${dispatcherAgentName}`,
+        );
+    }
+    return dispatcherAgent;
 }

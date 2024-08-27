@@ -21,6 +21,8 @@ export type TermFilter = {
     // Action Terms:
     // - subject, object and indirectObject associated with the verb
     // verbs are not duplicated
+    // Topics Terms:
+    // - use empty term array for summaries
     terms: string[];
     // Use only if request explicitly asks for time range
     timeRange?: DateTimeRange | undefined; // in this time range

@@ -1155,7 +1155,7 @@ export async function runChatMemory(): Promise<void> {
                 const topicIds = new Set(response.allTopicIds());
                 printer.writeLine(`Topic Hit Count: ${topicIds.size}`);
             }
-            const allEntities = response.mergeAllEntities(10);
+            const allEntities = response.mergeAllEntities(8);
             if (allEntities && allEntities.length > 0) {
                 printer.writeLine(`Entity Hit Count: ${allEntities.length}`);
             } else {

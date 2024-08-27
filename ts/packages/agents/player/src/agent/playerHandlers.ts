@@ -13,7 +13,6 @@ import {
     DispatcherAgent,
     DispatcherAgentContext,
     DispatcherAction,
-    SearchMenuContext,
     createTurnImpressionFromError,
 } from "@typeagent/agent-sdk";
 import { searchAlbum, searchArtists, searchTracks } from "../client.js";
@@ -29,7 +28,6 @@ export function instantiate(): DispatcherAgent {
 
 type PlayerActionContext = {
     spotify: IClientContext | undefined;
-    searchContext?: SearchMenuContext;
 };
 
 async function initializePlayerContext() {
