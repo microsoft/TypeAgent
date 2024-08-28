@@ -8,8 +8,8 @@ trigger:
 
 pr:
   branches:
-    include:
-      - main
+    exclude:
+      - "*"
 
 pool:
   vmImage: 'ubuntu-latest'
@@ -19,8 +19,7 @@ variables:
   pnpm_version: '9.0.0'
   typeagent_repo: 'https://github.com/microsoft/typeagent.git'
   workingDirectory: 'typeagent/ts'
-  ado_registry: 'https://pkgs.dev.azure.com/msctoproj/AI_Systems/_packaging/typeagent/npm/registry/'
-
+  ado_registry: '$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_packaging/typeagent/npm/registry/' 
 jobs:
 - job: build_ts
   displayName: 'Build TypeScript Project'
@@ -28,13 +27,8 @@ jobs:
     matrix:
       nodeVersion: ['18', '20']
   steps:
-  - script: |
-      git config --global core.autocrlf false
-    displayName: 'Setup Git LF'
-
-  - script: |
-      git clone $(typeagent_repo) typeagent
-    displayName: 'Clone typeagent Repository'
+  - checkout: self
+    displayName: 'Checkout Repository'
 
   - script: |
       curl -fsSL https://get.pnpm.io/v6.14.js | node - add --global pnpm@$(pnpm_version)
@@ -55,6 +49,16 @@ jobs:
     workingDirectory: $(workingDirectory)
 
   - script: |
+      current_version=$(node -p "require('./package.json').version")
+      new_version="${current_version}-$(Build.BuildId)"
+      echo "##vso[task.setvariable variable=package_version]$new_version"
+      jq ".version=\"$new_version\"" package.json > package.tmp.json
+      mv package.tmp.json package.json
+      echo "Updated package.json to version $new_version"
+    displayName: 'Update Package Version'
+    workingDirectory: $(workingDirectory)/packages/agentSdk
+
+  - script: |
       npm run build
     displayName: 'Build'
     workingDirectory: $(workingDirectory)
@@ -69,17 +73,14 @@ jobs:
     displayName: 'Lint'
     workingDirectory: $(workingDirectory)
 
-  - script: |
-      cd $(Build.SourcesDirectory)/$(workingDirectory)/packages/agentSdk/dist
-      npm pack
-    displayName: 'Pack agent-sdk module'
-
   - task: npmAuthenticate@0
     inputs:
       workingFile: .npmrc
     displayName: 'Authenticate with Azure Artifacts'
 
   - script: |
-      npm publish --registry=$(ado_registry)
-    displayName: 'Publish agent-sdk Module'
+      cd $(Build.SourcesDirectory)/$(workingDirectory)/packages/agentSdk/dist
+      tarball=$(npm pack)
+      npm publish $tarball --registry=$(ado_registry)
+    displayName: 'Pack and Publish agent-sdk Module'
     condition: succeeded()
