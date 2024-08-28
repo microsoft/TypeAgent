@@ -5,6 +5,7 @@ resources:
   repositories:
     - repository: TypeAgent-GH
       type: github
+      endpoint: AI_Systems
       name: microsoft/typeagent
       ref: refs/heads/main
 
