@@ -92,15 +92,16 @@ jobs:
       echo "always-auth=true" >> .npmrc
       cat .npmrc
     displayName: 'Create .npmrc file.'
+    workingDirectory: $(workingDirectory)
 
   - task: npmAuthenticate@0
     inputs:
       workingFile: .npmrc
     displayName: 'Authenticate with Azure Artifacts'
 
-  # - script: |
-  #     cd $(Build.SourcesDirectory)/$(workingDirectory)/packages/agentSdk/dist
-  #     tarball=$(npm pack)
-  #     npm publish $tarball --registry=$(ado_registry)
-  #   displayName: 'Pack and Publish agent-sdk Module'
-  #   condition: succeeded()
+  - script: |
+      cd $(Build.SourcesDirectory)/$(workingDirectory)/packages/agentSdk/dist
+      tarball=$(npm pack)
+      npm publish $tarball --registry=$(ado_registry)
+    displayName: 'Pack and Publish agent-sdk Module'
+    condition: succeeded()
