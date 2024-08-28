@@ -19,7 +19,8 @@ variables:
   pnpm_version: '9.0.0'
   typeagent_repo: 'https://github.com/microsoft/typeagent.git'
   workingDirectory: 'typeagent/ts'
-  ado_registry: '$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_packaging/typeagent/npm/registry/' 
+  ado_registry: '$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_packaging/typeagent/npm/registry/'
+
 jobs:
 - job: build_ts
   displayName: 'Build TypeScript Project'
@@ -72,6 +73,11 @@ jobs:
       npm run lint
     displayName: 'Lint'
     workingDirectory: $(workingDirectory)
+
+  - script: |
+      echo "registry=$(ado_registry)" > .npmrc
+      echo "//$(ado_registry):_authToken=$(System.AccessToken)" >> .npmrc
+    displayName: 'Create .npmrc File with PAT'
 
   - task: npmAuthenticate@0
     inputs:
