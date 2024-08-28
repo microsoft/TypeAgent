@@ -129,6 +129,28 @@ export class ChatInput {
             onKeydown,
         });
         this.inputContainer.appendChild(this.textarea.getTextEntry());
+
+        this.inputContainer.ondragover = (e: DragEvent) => {
+            console.log(e);
+            e.preventDefault();
+        };
+
+        this.inputContainer.ondragenter = (e: DragEvent) => {
+            console.log(e);
+
+            this.getInputContainer().innerText = "Drop image files here...";
+            this.inputContainer.classList.add("chat-input-drag");
+        };
+
+        this.inputContainer.ondragleave = () => {
+            this.getInputContainer().innerText = "";
+            this.inputContainer.classList.remove("chat-input-drag");
+        };
+
+        this.inputContainer.ondrop = (e: DragEvent) => {
+            console.log(e);
+        };
+
         this.micButton = document.createElement("button");
         this.micButton.appendChild(iconMicrophone());
         this.micButton.id = buttonId;
