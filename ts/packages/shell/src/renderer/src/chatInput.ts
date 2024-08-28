@@ -6,6 +6,8 @@ import {
     iconMicrophone,
     iconMicrophoneListening,
     iconMicrophoneDisabled,
+    iconCamera,
+    iconImage
 } from "./icon";
 import { getClientAPI } from "./main";
 import { SpeechInfo, recognizeOnce } from "./speech";
@@ -107,7 +109,9 @@ export function questionInput(
 export class ChatInput {
     inputContainer: HTMLDivElement;
     textarea: ExpandableTextarea;
-    button: HTMLButtonElement;
+    micButton: HTMLButtonElement;
+    picButton: HTMLButtonElement;
+    camButton: HTMLButtonElement;
 
     constructor(
         speechInfo: SpeechInfo,
@@ -125,14 +129,12 @@ export class ChatInput {
             onKeydown,
         });
         this.inputContainer.appendChild(this.textarea.getTextEntry());
-        this.button = document.createElement("button");
-        const mic = iconMicrophone();
-        mic.className = "clickable";
-        this.button.appendChild(mic);
-        this.button.id = buttonId;
-        this.button.className = "chat-input-button";
-        this.inputContainer.appendChild(this.button);
-        this.button.addEventListener("click", async () => {
+        this.micButton = document.createElement("button");
+        this.micButton.appendChild(iconMicrophone());
+        this.micButton.id = buttonId;
+        this.micButton.className = "chat-input-button";
+        this.inputContainer.appendChild(this.micButton);
+        this.micButton.addEventListener("click", async () => {
             const useLocalWhisper =
                 await getClientAPI().getLocalWhisperStatus();
             if (useLocalWhisper) {
@@ -165,13 +167,23 @@ export class ChatInput {
             }
         });
 
+        this.picButton = document.createElement("button");
+        this.picButton.appendChild(iconImage());
+        this.picButton.className = "chat-input-button";
+        this.inputContainer.appendChild(this.picButton)
+
+        this.camButton = document.createElement("button")
+        this.camButton.appendChild(iconCamera());
+        this.camButton.className = "chat-input-button";
+        this.inputContainer.appendChild(this.camButton);
+
         const listeningMic = iconMicrophoneListening();
         listeningMic.className = "chat-message-hidden";
-        this.button.appendChild(listeningMic);
+        this.micButton.appendChild(listeningMic);
 
         const disabledMic = iconMicrophoneDisabled();
         disabledMic.className = "chat-message-hidden";
-        this.button.appendChild(disabledMic);
+        this.micButton.appendChild(disabledMic);
 
         const curSpeechToken = speechInfo.speechToken;
         if (
@@ -207,3 +219,4 @@ export class ChatInput {
         return this.inputContainer;
     }
 }
+
