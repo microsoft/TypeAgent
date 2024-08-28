@@ -43,6 +43,7 @@
     "knowledge-processor": "workspace:*",
     "list-agent": "workspace:*",
     "music": "workspace:*",
+    "photos-agent": "workspace:*",
     "proper-lockfile": "^4.1.2",
     "schema-parser": "workspace:*",
     "typeagent": "workspace:*",
