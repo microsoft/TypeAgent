@@ -4,7 +4,7 @@
 trigger:
   branches:
     include:
-      - main
+      - dev/pialic/ado-bld-pipeline
 
 pr:
   branches:
@@ -86,9 +86,9 @@ jobs:
       workingFile: .npmrc
     displayName: 'Authenticate with Azure Artifacts'
 
-  - script: |
-      cd $(Build.SourcesDirectory)/$(workingDirectory)/packages/agentSdk/dist
-      tarball=$(npm pack)
-      npm publish $tarball --registry=$(ado_registry)
-    displayName: 'Pack and Publish agent-sdk Module'
-    condition: succeeded()
+  # - script: |
+  #     cd $(Build.SourcesDirectory)/$(workingDirectory)/packages/agentSdk/dist
+  #     tarball=$(npm pack)
+  #     npm publish $tarball --registry=$(ado_registry)
+  #   displayName: 'Pack and Publish agent-sdk Module'
+  #   condition: succeeded()
