@@ -7,7 +7,7 @@ This project has two components
 1. .NET code which integrates with Windows shell APIs to manage desktop UI. To build this:
 
    - Launch Visual Studio
-   - Open the repo directory [dotnet/src/autoShell](../../../../dotnet/autoShell/) folder. Build this project.
+   - Open the repo directory [dotnet/autoShell](../../../../dotnet/autoShell/) folder. Build this project.
 
 2. The node process that integrates with TypeAgent. To build this:
    - Go to the repo directory [ts/packages/agents/desktop](./) folder.
