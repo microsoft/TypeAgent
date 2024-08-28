@@ -41,7 +41,7 @@ jobs:
 
   - template: include-install-pnpm.yml
     parameters:
-      buildDirectory: $(Build.SourcesDirectory)
+      buildDirectory: $(Build.SourcesDirectory)/ts
 
   - script: |
       curl -fsSL https://get.pnpm.io/v6.14.js | node - add --global pnpm@$(pnpm_version)
