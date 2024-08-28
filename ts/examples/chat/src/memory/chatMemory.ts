@@ -201,7 +201,7 @@ export async function runChatMemory(): Promise<void> {
         if (context.searchMemory) {
             const results = await context.searchMemory.search(line);
             if (results) {
-                await writeSearchTermsResult(results, false);
+                await writeSearchTermsResult(results, true);
             } else {
                 printer.writeLine("No matches");
             }
