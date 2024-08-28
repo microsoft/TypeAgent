@@ -32,6 +32,7 @@ export type ChatContext = {
     conversationName: string;
     conversationSettings: knowLib.conversation.ConversationSettings;
     conversation: knowLib.conversation.Conversation;
+    conversationManager: knowLib.conversation.ConversationManager;
     searcher: knowLib.conversation.ConversationSearchProcessor;
     searchMemory?: knowLib.conversation.ConversationManager;
 };
@@ -62,6 +63,12 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         searchConcurrency: 2,
         minScore: 0.9,
         conversationName,
+        conversationManager:
+            await knowLib.conversation.createConversationManager(
+                conversationName,
+                conversation,
+                false,
+            ),
         conversationSettings,
         conversation,
         entityTopK: 16,
@@ -127,9 +134,11 @@ export async function createSearchMemory(
 export async function loadConversation(
     context: ChatContext,
     name: string,
+    rootPath?: string,
     includeActions = true,
 ): Promise<boolean> {
-    const storePath = path.join(context.storePath, name);
+    rootPath ??= context.storePath;
+    const storePath = path.join(rootPath, name);
     const exists = fs.existsSync(storePath);
     context.conversation = await createConversation(
         storePath,
@@ -144,6 +153,11 @@ export async function loadConversation(
             ? conversation.KnowledgeSearchMode.WithActions
             : conversation.KnowledgeSearchMode.Default,
     );
+    context.conversationManager = await conversation.createConversationManager(
+        name,
+        context.conversation,
+        false,
+    );
     if (name !== "search") {
         context.searchMemory = await createSearchMemory(context);
     }
@@ -156,6 +170,7 @@ export async function runChatMemory(): Promise<void> {
     const handlers: Record<string, CommandHandler> = {
         importPlay,
         importTranscript,
+        importMessage,
         load,
         history,
         replay,
@@ -287,6 +302,75 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
+    function importMessageDef(): CommandMetadata {
+        return {
+            description: "Imports a text message into the current conversation",
+            options: {
+                message: {
+                    description: "Raw message text to add",
+                    type: "string",
+                },
+                filePath: {
+                    description: "Path to the message file",
+                    type: "path",
+                },
+                ensureUnique: {
+                    description:
+                        "Ensure that this message was not already imported",
+                    type: "boolean",
+                    defaultValue: false,
+                },
+            },
+        };
+    }
+
+    handlers.importMessage.metadata = importMessageDef();
+    async function importMessage(
+        args: string[],
+        io: InteractiveIo,
+    ): Promise<void> {
+        // Temporary: safeguard here to prevent demo issues
+        if (isTestConversation()) {
+            printer.writeError(
+                `Directly updating the TEST ${context.conversationName} conversation is not allowed!`,
+            );
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, importMessageDef());
+        let messageText: string | undefined;
+        if (namedArgs.message) {
+            messageText = namedArgs.message;
+        } else if (namedArgs.filePath) {
+            if (!fs.existsSync(namedArgs.filePath)) {
+                printer.writeError(`${namedArgs.filePath} not found.`);
+                return;
+            }
+            messageText = await readAllText(namedArgs.filePath);
+        }
+        if (messageText) {
+            if (namedArgs.ensureUnique) {
+                const existing = await context.conversation.searchMessages(
+                    messageText,
+                    {
+                        maxMatches: 1,
+                    },
+                );
+                if (
+                    existing &&
+                    existing.messages &&
+                    existing.messages.length > 0
+                ) {
+                    if (messageText === existing.messages[0].value.value) {
+                        printer.writeError("Message already in index");
+                        return;
+                    }
+                }
+            }
+            printer.writeLine("Importing...");
+            await context.conversationManager.addMessage(messageText);
+        }
+    }
+
     handlers.replay.metadata = "Replay the chat";
     async function replay(args: string[], io: InteractiveIo) {
         await writeHistory(context.conversation);
@@ -306,6 +390,10 @@ export async function runChatMemory(): Promise<void> {
                     type: "boolean",
                     defaultValue: true,
                 },
+                rootPath: {
+                    description: "Root path for the conversation",
+                    type: "string",
+                },
             },
         };
     }
@@ -317,6 +405,7 @@ export async function runChatMemory(): Promise<void> {
                 await loadConversation(
                     context,
                     namedArgs.name,
+                    namedArgs.rootPath,
                     namedArgs.actions,
                 )
             ) {
@@ -1510,5 +1599,13 @@ export async function runChatMemory(): Promise<void> {
             return await context.conversation.messages.getMultiple(ids);
         }
         return [];
+    }
+
+    function isTestConversation(): boolean {
+        return (
+            context.conversationName === "transcript" ||
+            context.conversationName === "play" ||
+            context.conversationName === "search"
+        );
     }
 }
