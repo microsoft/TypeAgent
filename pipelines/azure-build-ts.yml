@@ -68,7 +68,6 @@ jobs:
       mv package.tmp.json package.json
       echo "Updated package.json to version $new_version"
       cat package.json
-      cp package.json typeagent/ts/packages/agents/calendar/dist/
     displayName: 'Update Package Version'
     workingDirectory: $(workingDirectory)/packages/agentSdk
 
