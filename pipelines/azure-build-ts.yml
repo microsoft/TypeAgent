@@ -26,12 +26,14 @@ jobs:
   displayName: 'Build TypeScript Project'
   strategy:
     matrix:
-      nodeVersion: ['18', '20']
+      node_18:
+        nodeVersion: '18'
+      node_20:
+        nodeVersion: '20'
   steps:
-  - checkout: gitHubRepo
+  - checkout: git://github.com/microsoft/typeagent@mai
     displayName: 'Checkout TypeAgent Repository'
-    inputs:
-      repository: '$(typeagent_repo)'
+    clean: true
 
   - script: |
       curl -fsSL https://get.pnpm.io/v6.14.js | node - add --global pnpm@$(pnpm_version)
