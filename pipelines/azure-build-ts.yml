@@ -98,6 +98,7 @@ jobs:
     inputs:
       workingFile: .npmrc
     displayName: 'Authenticate with Azure Artifacts'
+    workingDirectory: $(workingDirectory)
 
   - script: |
       cd $(Build.SourcesDirectory)/$(workingDirectory)/packages/agentSdk/dist
