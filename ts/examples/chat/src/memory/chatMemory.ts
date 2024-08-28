@@ -323,7 +323,7 @@ export async function runChatMemory(): Promise<void> {
                 printer.writeLine(`Loaded ${namedArgs.name}`);
             } else {
                 printer.writeLine(
-                    `Created ${chalk.red("NEW")} conversation: ${namedArgs.name}`,
+                    `Created ${chalk.green("NEW")} conversation: ${namedArgs.name}`,
                 );
             }
         } else {
@@ -1174,7 +1174,8 @@ export async function runChatMemory(): Promise<void> {
                     `Entity to Message Hit Count: ${entityIds.size}`,
                 );
             }
-            const allActions = [...response.allActionIds()];
+            const allActions = knowLib.sets.uniqueFrom(response.allActionIds());
+            //const allActions = [...response.allActionIds()];
             if (allActions && allActions.length > 0) {
                 printer.writeLine(`Action Hit Count: ${allActions.length}`);
             }
