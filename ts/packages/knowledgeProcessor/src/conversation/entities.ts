@@ -340,7 +340,7 @@ export async function createEntityIndex<TSourceId = string>(
                     options.minScore,
                 ),
                 facetIndex.getNearestHitsMultiple(
-                    filter.terms,
+                    combineTerms(filter),
                     hitCounter,
                     options.maxMatches,
                     options.minScore,
@@ -366,6 +366,18 @@ export async function createEntityIndex<TSourceId = string>(
             results.entities = await getEntities(results.entityIds);
         }
         return results;
+    }
+
+    function combineTerms(filter: TermFilter): string[] {
+        let terms: string[] | undefined;
+        if (filter.verbs && filter.verbs.length > 0) {
+            terms = [];
+            terms.push(...filter.verbs);
+            if (filter.terms && filter.terms.length > 0) {
+                terms.push(...filter.terms);
+            }
+        }
+        return terms ?? filter.terms;
     }
 
     async function loadSourceIds(

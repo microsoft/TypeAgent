@@ -201,7 +201,7 @@ export async function runChatMemory(): Promise<void> {
         if (context.searchMemory) {
             const results = await context.searchMemory.search(line);
             if (results) {
-                await writeSearchTermsResult(results, false);
+                await writeSearchTermsResult(results, true);
             } else {
                 printer.writeLine("No matches");
             }
@@ -754,8 +754,11 @@ export async function runChatMemory(): Promise<void> {
                 name: {
                     description: "Names to search for",
                 },
-                types: {
-                    description: "Types to search for",
+                type: {
+                    description: "Type to search for",
+                },
+                facet: {
+                    description: "Facet to search for",
                 },
                 exact: {
                     description: "Exact match?",
@@ -767,14 +770,15 @@ export async function runChatMemory(): Promise<void> {
                     defaultValue: 1,
                     type: "number",
                 },
+                facetCount: {
+                    description: "Num facet matches",
+                    defaultValue: 10,
+                    type: "number",
+                },
                 minScore: {
                     description: "Min score",
                     defaultValue: 0,
                     type: "number",
-                },
-                showTopics: {
-                    defaultValue: false,
-                    type: "boolean",
                 },
                 showMessages: {
                     defaultValue: false,
@@ -788,15 +792,29 @@ export async function runChatMemory(): Promise<void> {
         const namedArgs = parseNamedArguments(args, entitiesDef());
         let query = namedArgs.name ?? namedArgs.type;
         if (query) {
-            await searchEntities(
-                query,
-                namedArgs.name !== undefined,
-                namedArgs.exact,
-                namedArgs.count,
-                namedArgs.minScore,
-                namedArgs.showTopics,
-                namedArgs.showMessages,
-            );
+            const isMultipart =
+                namedArgs.facet || (namedArgs.name && namedArgs.type);
+            if (namedArgs.exact || !isMultipart) {
+                await searchEntities(
+                    query,
+                    namedArgs.name !== undefined,
+                    namedArgs.exact,
+                    namedArgs.count,
+                    namedArgs.minScore,
+                    namedArgs.showMessages,
+                );
+            } else {
+                // Multipart query
+                await searchEntities_Multi(
+                    namedArgs.name,
+                    namedArgs.type,
+                    namedArgs.facet,
+                    namedArgs.count,
+                    namedArgs.facetCount,
+                    namedArgs.minScore,
+                    namedArgs.showMessages,
+                );
+            }
             return;
         }
 
@@ -1324,7 +1342,6 @@ export async function runChatMemory(): Promise<void> {
         exact: boolean,
         count: number,
         minScore: number,
-        showTopics?: boolean,
         showMessages?: boolean,
     ) {
         const index = await context.conversation.getEntityIndex();
@@ -1337,13 +1354,52 @@ export async function runChatMemory(): Promise<void> {
         );
         for (const match of matches) {
             printer.writeInColor(chalk.green, `[${match.score}]`);
-            await writeEntitiesById(
-                index,
-                match.item,
-                showTopics,
-                showMessages,
+            await writeEntitiesById(index, match.item, showMessages);
+        }
+    }
+
+    async function searchEntities_Multi(
+        name: string | undefined,
+        type: string | undefined,
+        facet: string | undefined,
+        count: number,
+        faceCount: number,
+        minScore: number,
+        showMessages?: boolean,
+    ) {
+        const index = await context.conversation.getEntityIndex();
+        let nameMatches: string[] | undefined;
+        let typeMatches: string[] | undefined;
+        let facetMatches: string[] | undefined;
+        if (name) {
+            nameMatches = await index.nameIndex.getNearest(
+                name,
+                count,
+                minScore,
             );
         }
+        if (type) {
+            typeMatches = await index.typeIndex.getNearest(
+                type,
+                count,
+                minScore,
+            );
+        }
+        if (facet) {
+            facetMatches = await index.facetIndex.getNearest(
+                facet,
+                faceCount,
+                minScore,
+            );
+        }
+        const matches = [
+            ...knowLib.sets.intersectMultiple(
+                nameMatches,
+                typeMatches,
+                facetMatches,
+            ),
+        ];
+        await writeEntitiesById(index, matches, showMessages);
     }
 
     async function writeExtractedTopics(
@@ -1435,7 +1491,6 @@ export async function runChatMemory(): Promise<void> {
     async function writeEntitiesById(
         index: knowLib.conversation.EntityIndex,
         entityIds: string[],
-        showTopics?: boolean,
         showMessages?: boolean,
     ): Promise<void> {
         if (!entityIds || entityIds.length === 0) {

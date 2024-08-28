@@ -217,6 +217,8 @@ export interface SearchResponse<
     hasTopics(): boolean;
     hasEntities(): boolean;
     hasActions(): boolean;
+    hasMessages(): boolean;
+    hasHits(): boolean;
 }
 
 export function createSearchResponse<
@@ -246,6 +248,8 @@ export function createSearchResponse<
             hasTopics,
             hasEntities,
             hasActions,
+            hasHits,
+            hasMessages,
         };
     return response;
 
@@ -374,6 +378,16 @@ export function createSearchResponse<
             return true;
         }
         return false;
+    }
+
+    function hasMessages(): boolean {
+        return (
+            response.messageIds !== undefined && response.messageIds.length > 0
+        );
+    }
+
+    function hasHits(): boolean {
+        return hasMessages() || hasEntities() || hasTopics();
     }
 }
 
