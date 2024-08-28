@@ -96,7 +96,7 @@ jobs:
 
   - task: npmAuthenticate@0
     inputs:
-      workingFile: .npmrc
+      workingFile: 'ts/.npmrc'
     displayName: 'Authenticate with Azure Artifacts'
     workingDirectory: $(workingDirectory)
 
