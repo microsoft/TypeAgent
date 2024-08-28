@@ -1,0 +1,95 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+trigger:
+  branches:
+    include:
+      - dev/pialic/ado-bld-pipeline
+
+pr:
+  branches:
+    exclude:
+      - "*"
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  node_version: '18'
+  pnpm_version: '9.0.0'
+  typeagent_repo: 'https://github.com/microsoft/typeagent.git'
+  workingDirectory: 'typeagent/ts'
+  ado_registry: '$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_packaging/typeagent/npm/registry/'
+
+jobs:
+- job: build_ts
+  displayName: 'Build TypeScript Project'
+  strategy:
+    matrix:
+      nodeVersion: ['18', '20']
+  steps:
+  - checkout: gitHubRepo
+    displayName: 'Checkout TypeAgent Repository'
+    inputs:
+      repository: '$(typeagent_repo)'
+
+  - script: |
+      curl -fsSL https://get.pnpm.io/v6.14.js | node - add --global pnpm@$(pnpm_version)
+      export PNPM_HOME="$HOME/.local/share/pnpm"
+      export PATH="$PNPM_HOME:$PATH"
+    displayName: 'Install pnpm'
+    condition: always()
+
+  - task: UseNode@1
+    displayName: 'Setup Node.js'
+    inputs:
+      version: $(nodeVersion)
+      checkLatest: true
+
+  - script: |
+      pnpm install --frozen-lockfile --strict-peer-dependencies
+    displayName: 'Install dependencies'
+    workingDirectory: $(workingDirectory)
+
+  - script: |
+      current_version=$(node -p "require('./package.json').version")
+      new_version="${current_version}-$(Build.BuildId)"
+      echo "##vso[task.setvariable variable=package_version]$new_version"
+      jq ".version=\"$new_version\"" package.json > package.tmp.json
+      mv package.tmp.json package.json
+      echo "Updated package.json to version $new_version"
+    displayName: 'Update Package Version'
+    workingDirectory: $(workingDirectory)/packages/agentSdk
+
+  - script: |
+      npm run build
+    displayName: 'Build'
+    workingDirectory: $(workingDirectory)
+
+  - script: |
+      npm run test
+    displayName: 'Run Tests'
+    workingDirectory: $(workingDirectory)
+
+  - script: |
+      npm run lint
+    displayName: 'Lint'
+    workingDirectory: $(workingDirectory)
+
+  - script: |
+      cat $(ado_registry)
+      echo "registry=$(ado_registry)" > .npmrc
+      echo "always-auth=true" >> .npmrc
+    displayName: 'Create .npmrc file.'
+
+  - task: npmAuthenticate@0
+    inputs:
+      workingFile: .npmrc
+    displayName: 'Authenticate with Azure Artifacts'
+
+  - script: |
+      cd $(Build.SourcesDirectory)/$(workingDirectory)/packages/agentSdk/dist
+      tarball=$(npm pack)
+      npm publish $tarball --registry=$(ado_registry)
+    displayName: 'Pack and Publish agent-sdk Module'
+    condition: succeeded()
