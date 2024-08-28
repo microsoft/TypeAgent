@@ -39,6 +39,8 @@ jobs:
         nodeVersion: '20'
   steps:
   - checkout: TypeAgent-GH
+    displayName: 'Checkout TypeAgent Repository'
+    path: 'typeagent'
 
   - script: |
       curl -fsSL https://get.pnpm.io/v6.14.js | node - add --global pnpm@$(pnpm_version)
