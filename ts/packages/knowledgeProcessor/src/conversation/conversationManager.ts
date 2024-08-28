@@ -52,6 +52,14 @@ export interface ConversationManager {
         entities?: ConcreteEntity[] | undefined,
         timestamp?: Date,
     ): Promise<any>;
+    /**
+     * Search the conversation and return an answer
+     * @param query
+     * @param termFilters
+     * @param fuzzySearchOptions
+     * @param maxMessages
+     * @param progress
+     */
     search(
         query: string,
         termFilters?: TermFilter[] | undefined,
@@ -59,6 +67,34 @@ export interface ConversationManager {
         maxMessages?: number | undefined,
         progress?: ((value: any) => void) | undefined,
     ): Promise<SearchTermsActionResponse | undefined>;
+    /**
+     * Search without generating an answer
+     * @param query
+     * @param termFilters
+     * @param fuzzySearchOptions
+     * @param maxMessages
+     * @param progress
+     */
+    getSearchResponse(
+        query: string,
+        termFilters?: TermFilter[] | undefined,
+        fuzzySearchOptions?: SearchOptions | undefined,
+        maxMessages?: number | undefined,
+        progress?: ((value: any) => void) | undefined,
+    ): Promise<SearchTermsActionResponse | undefined>;
+    /**
+     * Generate an answer for a response received from getSearchResponse
+     * @param query
+     * @param searchResponse
+     * @param fuzzySearchOptions
+     * @param maxMessages
+     */
+    generateAnswerForSearchResponse(
+        query: string,
+        searchResponse: SearchTermsActionResponse,
+        fuzzySearchOptions?: SearchOptions | undefined,
+        maxMessages?: number | undefined,
+    ): Promise<SearchTermsActionResponse>;
 }
 
 /**
@@ -121,6 +157,8 @@ export async function createConversationManager(
         searchProcessor,
         addMessage,
         search,
+        getSearchResponse,
+        generateAnswerForSearchResponse,
     };
 
     async function addMessage(
@@ -154,6 +192,35 @@ export async function createConversationManager(
                 progress,
             ),
         );
+    }
+
+    async function getSearchResponse(
+        query: string,
+        termFilters?: TermFilter[] | undefined,
+        fuzzySearchOptions?: SearchOptions | undefined,
+        maxMessages?: number | undefined,
+        progress?: ((value: any) => void) | undefined,
+    ): Promise<SearchTermsActionResponse | undefined> {
+        const options = createSearchProcessingSettings(
+            fuzzySearchOptions,
+            maxMessages,
+            progress,
+        );
+        options.skipAnswerGeneration = true;
+        return searchProcessor.searchTerms(query, termFilters, options);
+    }
+
+    async function generateAnswerForSearchResponse(
+        query: string,
+        searchResponse: SearchTermsActionResponse,
+        fuzzySearchOptions?: SearchOptions | undefined,
+        maxMessages?: number | undefined,
+    ): Promise<SearchTermsActionResponse> {
+        const options = createSearchProcessingSettings(
+            fuzzySearchOptions,
+            maxMessages,
+        );
+        return searchProcessor.generateAnswer(query, searchResponse, options);
     }
 
     function defaultConversationSettings(): ConversationSettings {

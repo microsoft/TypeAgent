@@ -772,7 +772,7 @@ export async function runChatMemory(): Promise<void> {
                 },
                 facetCount: {
                     description: "Num facet matches",
-                    defaultValue: 8,
+                    defaultValue: 10,
                     type: "number",
                 },
                 minScore: {
