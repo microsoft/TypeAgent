@@ -68,6 +68,7 @@ jobs:
       mv package.tmp.json package.json
       echo "Updated package.json to version $new_version"
       cat package.json
+      cp package.json typeagent/ts/packages/agents/calendar/dist/
     displayName: 'Update Package Version'
     workingDirectory: $(workingDirectory)/packages/agentSdk
 
@@ -101,6 +102,7 @@ jobs:
 
   - script: |
       cd $(Build.SourcesDirectory)/$(workingDirectory)/packages/agentSdk/dist
+      cp ../package.json .
       tarball=$(npm pack)
       npm publish $tarball --registry=$(ado_registry)
     displayName: 'Pack and Publish agent-sdk Module'
