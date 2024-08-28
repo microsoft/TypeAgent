@@ -25,7 +25,7 @@ pool:
 variables:
   node_version: '18'
   pnpm_version: '9.0.0'
-  workingDirectory: 'typeagent/ts'
+  workingDirectory: 'ts'
   ado_registry: '$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_packaging/typeagent/npm/registry/'
 
 jobs:
