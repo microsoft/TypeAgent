@@ -28,8 +28,10 @@ jobs:
     matrix:
       nodeVersion: ['18', '20']
   steps:
-  - checkout: self
-    displayName: 'Checkout Repository'
+  - checkout: gitHubRepo
+    displayName: 'Checkout TypeAgent Repository'
+    inputs:
+      repository: '$(typeagent_repo)'
 
   - script: |
       curl -fsSL https://get.pnpm.io/v6.14.js | node - add --global pnpm@$(pnpm_version)
@@ -76,8 +78,8 @@ jobs:
 
   - script: |
       echo "registry=$(ado_registry)" > .npmrc
-      echo "//$(ado_registry):_authToken=$(System.AccessToken)" >> .npmrc
-    displayName: 'Create .npmrc File with PAT'
+      echo "always-auth=true" >> .npmrc
+    displayName: 'Create .npmrc file.'
 
   - task: npmAuthenticate@0
     inputs:
