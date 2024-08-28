@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+<<<<<<< HEAD
 resources:
   repositories:
     - repository: TypeAgent-GH
@@ -9,6 +10,8 @@ resources:
       name: microsoft/typeagent
       ref: refs/heads/main
 
+=======
+>>>>>>> main
 trigger:
   branches:
     include:
@@ -25,13 +28,21 @@ pool:
 variables:
   node_version: '18'
   pnpm_version: '9.0.0'
+<<<<<<< HEAD
   workingDirectory: 'ts'
   
+=======
+  typeagent_repo: 'https://github.com/microsoft/typeagent.git'
+  workingDirectory: 'typeagent/ts'
+  ado_registry: '$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_packaging/typeagent/npm/registry/'
+
+>>>>>>> main
 jobs:
 - job: build_ts
   displayName: 'Build TypeScript Project'
   strategy:
     matrix:
+<<<<<<< HEAD
       node_20:
         nodeVersion: '20'
   steps:
@@ -42,6 +53,14 @@ jobs:
   - template: include-install-pnpm.yml
     parameters:
       buildDirectory: $(Build.SourcesDirectory)/ts
+=======
+      nodeVersion: ['18', '20']
+  steps:
+  - checkout: gitHubRepo
+    displayName: 'Checkout TypeAgent Repository'
+    inputs:
+      repository: '$(typeagent_repo)'
+>>>>>>> main
 
   - script: |
       curl -fsSL https://get.pnpm.io/v6.14.js | node - add --global pnpm@$(pnpm_version)
@@ -88,6 +107,7 @@ jobs:
     workingDirectory: $(workingDirectory)
 
   - script: |
+<<<<<<< HEAD
       echo $(ADO_REGISTRY)
       echo "registry=$(ADO_REGISTRY)" > .npmrc
       echo "always-auth=true" >> .npmrc
@@ -98,12 +118,27 @@ jobs:
   - task: npmAuthenticate@0
     inputs:
       workingFile: 'ts/.npmrc'
+=======
+      cat $(ado_registry)
+      echo "registry=$(ado_registry)" > .npmrc
+      echo "always-auth=true" >> .npmrc
+    displayName: 'Create .npmrc file.'
+
+  - task: npmAuthenticate@0
+    inputs:
+      workingFile: .npmrc
+>>>>>>> main
     displayName: 'Authenticate with Azure Artifacts'
 
   - script: |
       cd $(Build.SourcesDirectory)/$(workingDirectory)/packages/agentSdk/dist
+<<<<<<< HEAD
       cp ../package.json .
       tarball=$(npm pack)
       npm publish $tarball --registry=$(ADO_REGISTRY)
+=======
+      tarball=$(npm pack)
+      npm publish $tarball --registry=$(ado_registry)
+>>>>>>> main
     displayName: 'Pack and Publish agent-sdk Module'
     condition: succeeded()

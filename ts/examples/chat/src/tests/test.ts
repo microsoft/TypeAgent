@@ -207,6 +207,25 @@ export async function testConversationEntities(): Promise<void> {
     } else {
         console.log("bug");
     }
+    // Now do separate search and answer
+    let searchResponse = await testConversation.getSearchResponse(
+        query,
+        filters,
+    );
+    if (searchResponse) {
+        if (searchResponse.response?.hasHits()) {
+            console.log("Has hits");
+        }
+        matches = await testConversation.generateAnswerForSearchResponse(
+            query,
+            searchResponse,
+        );
+        if (matches && matches.response && matches.response.answer) {
+            console.log(matches.response.answer);
+        } else {
+            console.log("bug");
+        }
+    }
 }
 
 export async function runTestCases(): Promise<void> {
