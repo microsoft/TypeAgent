@@ -1,6 +1,13 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+resources:
+  repositories:
+    - repository: TypeAgent-GH
+      type: github
+      name: microsoft/typeagent
+      ref: refs/heads/main
+
 trigger:
   branches:
     include:
@@ -17,7 +24,6 @@ pool:
 variables:
   node_version: '18'
   pnpm_version: '9.0.0'
-  typeagent_repo: 'https://github.com/microsoft/typeagent.git'
   workingDirectory: 'typeagent/ts'
   ado_registry: '$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_packaging/typeagent/npm/registry/'
 
@@ -31,9 +37,7 @@ jobs:
       node_20:
         nodeVersion: '20'
   steps:
-  - checkout: git://github.com/microsoft/typeagent@main
-    displayName: 'Checkout TypeAgent Repository'
-    clean: true
+  - checkout: TypeAgent-GH
 
   - script: |
       curl -fsSL https://get.pnpm.io/v6.14.js | node - add --global pnpm@$(pnpm_version)
@@ -89,9 +93,9 @@ jobs:
       workingFile: .npmrc
     displayName: 'Authenticate with Azure Artifacts'
 
-  - script: |
-      cd $(Build.SourcesDirectory)/$(workingDirectory)/packages/agentSdk/dist
-      tarball=$(npm pack)
-      npm publish $tarball --registry=$(ado_registry)
-    displayName: 'Pack and Publish agent-sdk Module'
-    condition: succeeded()
+  # - script: |
+  #     cd $(Build.SourcesDirectory)/$(workingDirectory)/packages/agentSdk/dist
+  #     tarball=$(npm pack)
+  #     npm publish $tarball --registry=$(ado_registry)
+  #   displayName: 'Pack and Publish agent-sdk Module'
+  #   condition: succeeded()
