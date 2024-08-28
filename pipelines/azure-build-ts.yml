@@ -31,7 +31,7 @@ jobs:
       node_20:
         nodeVersion: '20'
   steps:
-  - checkout: git://github.com/microsoft/typeagent@mai
+  - checkout: git://github.com/microsoft/typeagent@main
     displayName: 'Checkout TypeAgent Repository'
     clean: true
 
