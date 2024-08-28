@@ -35,12 +35,13 @@ jobs:
       node_20:
         nodeVersion: '20'
   steps:
-    - checkout: TypeAgent-GH
-      displayName: 'Checkout TypeAgent Repository'
-      path: 'typeagent'
-    - template: templates/include-install-pnpm.yml
-            parameters:
-              buildDirectory: $(Build.SourcesDirectory)
+  - checkout: TypeAgent-GH
+    displayName: 'Checkout TypeAgent Repository'
+    path: 'typeagent'
+
+  - template: include-install-pnpm.yml
+    parameters:
+      buildDirectory: $(Build.SourcesDirectory)
 
   - script: |
       curl -fsSL https://get.pnpm.io/v6.14.js | node - add --global pnpm@$(pnpm_version)
