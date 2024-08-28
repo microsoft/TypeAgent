@@ -14,6 +14,7 @@ import {
     AddItemsAction,
     RemoveItemsAction,
     CreateListAction,
+    ClearListAction,
     GetListAction,
 } from "./listSchema.js";
 
@@ -347,6 +348,28 @@ async function handleListAction(
                         type: ["list"],
                     },
                 ];
+            }
+            break;
+        }
+        case "clearList": {
+            const clearListAction = action as ClearListAction;
+            if (listContext.store !== undefined) {
+                const list = listContext.store.getList(
+                    clearListAction.parameters.listName,
+                );
+                if (list !== undefined) {
+                    list.itemsSet.clear();
+                    await listContext.store.save();
+                    displayText = `Cleared list: ${clearListAction.parameters.listName}`;
+                    result = createTurnImpressionFromDisplay(displayText);
+                    result.literalText = `Cleared list: ${clearListAction.parameters.listName}`;
+                    result.entities = [
+                        {
+                            name: clearListAction.parameters.listName,
+                            type: ["list"],
+                        },
+                    ];
+                }
             }
             break;
         }

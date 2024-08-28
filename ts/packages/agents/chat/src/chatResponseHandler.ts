@@ -112,21 +112,31 @@ async function handleChatResponse(
                     context as any
                 ).conversationManager;
                 if (conversationManager !== undefined) {
-                    const result = await conversationManager.search(
-                        lookupAction.parameters.originalRequest,
-                        lookupAction.parameters.conversationLookupFilters,
-                    );
-                    if (
-                        result !== undefined &&
-                        result.response !== undefined &&
-                        result.response.answer !== undefined &&
-                        result.response.answer.answer !== undefined
-                    ) {
-                        return createTurnImpressionFromLiteral(
-                            result.response.answer.answer!,
+                    let searchResponse =
+                        await conversationManager.getSearchResponse(
+                            lookupAction.parameters.originalRequest,
+                            lookupAction.parameters.conversationLookupFilters,
                         );
+                    if (searchResponse) {
+                        if (searchResponse.response?.hasHits()) {
+                            console.log("Has hits");
+                        }
+                        const matches =
+                            await conversationManager.generateAnswerForSearchResponse(
+                                lookupAction.parameters.originalRequest,
+                                searchResponse,
+                            );
+                        if (
+                            matches &&
+                            matches.response &&
+                            matches.response.answer
+                        ) {
+                            return createTurnImpressionFromLiteral(
+                                matches.response.answer)
+                        } else {
+                            console.log("bug");
+                        }
                     }
-                }
             }
         }
     }

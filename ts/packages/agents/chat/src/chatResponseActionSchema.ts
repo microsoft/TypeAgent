@@ -14,9 +14,10 @@ export type ChatResponseAction =
     | GenerateResponseAction
     | LookupAndGenerateResponseAction;
 
-// use this GenerateResponseAction if the request should be handled by showing the user a generated message instead of running an action which will generate a message
+// use this GenerateResponseAction if the request should be handled by showing the user a generated message instead of running an action
+// if there is a specific action that will handle the request, even a request for information, use that action instead
 // this is the way to handle requests for general chat information like "what is the weather" or "tell me a joke"
-// prefer this action to switching to a different assistant if the request is for general chat information
+// prefer GenerateResponseAction over switching to a different assistant if the request is for general chat information
 export interface GenerateResponseAction {
     actionName: "generateResponse";
     parameters: {
@@ -76,7 +77,7 @@ export interface LookupAndGenerateResponseAction {
     parameters: {
         // the original request from the user
         originalRequest: string;
-        // if the request is for information from past conversations use the conversation lookup filters
+        // if the request is for private information from past conversations including private events, plans, projects in progress, and other items from discussions with team members or the assistant, use the conversation lookup filters
         conversationLookupFilters?: TermFilter[];
         // if the request is for contemporary internet information including sports scores, news events, or current commerce offerings, use the lookups parameter to request a lookup of the information on the user's behalf; the assistant will generate a response based on the lookup results
         // Lookup *facts* you don't know or if your facts are out of date.
