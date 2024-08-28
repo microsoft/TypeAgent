@@ -67,6 +67,7 @@ jobs:
       jq ".version=\"$new_version\"" package.json > package.tmp.json
       mv package.tmp.json package.json
       echo "Updated package.json to version $new_version"
+      cat package.json
     displayName: 'Update Package Version'
     workingDirectory: $(workingDirectory)/packages/agentSdk
 
@@ -86,9 +87,10 @@ jobs:
     workingDirectory: $(workingDirectory)
 
   - script: |
-      cat $(ado_registry)
+      echo $(ado_registry)
       echo "registry=$(ado_registry)" > .npmrc
       echo "always-auth=true" >> .npmrc
+      cat .npmrc
     displayName: 'Create .npmrc file.'
 
   - task: npmAuthenticate@0
