@@ -26,21 +26,21 @@ variables:
   node_version: '18'
   pnpm_version: '9.0.0'
   workingDirectory: 'ts'
-  ado_registry: '$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_packaging/typeagent/npm/registry/'
-
+  
 jobs:
 - job: build_ts
   displayName: 'Build TypeScript Project'
   strategy:
     matrix:
-      node_18:
-        nodeVersion: '18'
       node_20:
         nodeVersion: '20'
   steps:
-  - checkout: TypeAgent-GH
-    displayName: 'Checkout TypeAgent Repository'
-    path: 'typeagent'
+    - checkout: TypeAgent-GH
+      displayName: 'Checkout TypeAgent Repository'
+      path: 'typeagent'
+    - template: templates/include-install-pnpm.yml
+            parameters:
+              buildDirectory: $(Build.SourcesDirectory)
 
   - script: |
       curl -fsSL https://get.pnpm.io/v6.14.js | node - add --global pnpm@$(pnpm_version)
@@ -87,8 +87,8 @@ jobs:
     workingDirectory: $(workingDirectory)
 
   - script: |
-      echo $(ado_registry)
-      echo "registry=$(ado_registry)" > .npmrc
+      echo $(ADO_REGISTRY)
+      echo "registry=$(ADO_REGISTRY)" > .npmrc
       echo "always-auth=true" >> .npmrc
       cat .npmrc
     displayName: 'Create .npmrc file.'
@@ -103,6 +103,6 @@ jobs:
       cd $(Build.SourcesDirectory)/$(workingDirectory)/packages/agentSdk/dist
       cp ../package.json .
       tarball=$(npm pack)
-      npm publish $tarball --registry=$(ado_registry)
+      npm publish $tarball --registry=$(ADO_REGISTRY)
     displayName: 'Pack and Publish agent-sdk Module'
     condition: succeeded()
