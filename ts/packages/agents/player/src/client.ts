@@ -87,9 +87,6 @@ export interface IClientContext {
     currentTrackList?: ITrackCollection;
     lastTrackStartIndex?: number;
     lastTrackEndIndex?: number;
-    updateActionStatus?:
-        | ((message: string, group_id: string) => void)
-        | undefined;
     userData?: UserData | undefined;
 }
 

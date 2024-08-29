@@ -139,6 +139,14 @@ export async function createAgentProcessShim(
                 return getStorage(param, context).exists(param.storagePath);
             case AgentContextInvokeAPI.StorageDelete:
                 return getStorage(param, context).delete(param.storagePath);
+            case AgentContextInvokeAPI.TokenCachePersistenceLoad:
+                return (
+                    await getStorage(param, context).getTokenCachePersistence()
+                ).load();
+            case AgentContextInvokeAPI.TokenCachePersistenceSave:
+                return (
+                    await getStorage(param, context).getTokenCachePersistence()
+                ).load();
             default:
                 throw new Error(`Unknown invocation: ${name}`);
         }
@@ -214,6 +222,15 @@ export async function createAgentProcessShim(
                     name,
                     value,
                     partial,
+                }),
+            );
+        },
+        getDynamicDisplay(type, displayId, context) {
+            return withContext(context, (contextParams) =>
+                rpc.invoke(AgentInvokeAPI.GetDynamicDisplay, {
+                    ...contextParams,
+                    type,
+                    displayId,
                 }),
             );
         },

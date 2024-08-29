@@ -12,6 +12,7 @@ export enum AgentInvokeAPI {
     UpdateAgentContext = "updateAgentContext",
     ExecuteAction = "executeAction",
     ValidateWildcardMatch = "validateWildcardMatch",
+    GetDynamicDisplay = "getDynamicDisplay",
     CloseAgentContext = "closeAgentContext",
 }
 

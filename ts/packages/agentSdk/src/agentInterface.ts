@@ -34,6 +34,13 @@ export interface AppActionWithParameters extends AppAction {
     parameters: { [key: string]: any };
 }
 
+export type DisplayType = "html" | "text";
+
+export type DynamicDisplay = {
+    content: string;
+    nextRefreshMs: number; // in milliseconds, -1 means no more refresh.
+};
+
 export interface AppAgent {
     initializeAgentContext?(): Promise<any>;
     updateAgentContext?(
@@ -46,7 +53,7 @@ export interface AppAgent {
         name: string,
         value: string,
         partial: boolean,
-        dispatcherContext: SessionContext,
+        context: SessionContext,
     ): void;
     executeAction?(
         action: AppAction,
@@ -56,6 +63,12 @@ export interface AppAgent {
         action: AppAction,
         context: SessionContext,
     ): Promise<boolean>;
+
+    getDynamicDisplay?(
+        type: DisplayType,
+        dynamicDisplayId: string,
+        context: SessionContext,
+    ): Promise<DynamicDisplay>;
     closeAgentContext?(context: SessionContext): Promise<void>;
 }
 
@@ -69,9 +82,6 @@ export interface SessionContext<T = any> {
     readonly profileStorage: Storage; // storage that are preserved across sessions
     currentTranslatorName: string;
     issueCommand(command: string): Promise<void>;
-    getUpdateActionStatus():
-        | ((message: string, group_id: string) => void)
-        | undefined;
     toggleAgent(name: string, enable: boolean): Promise<void>;
 }
 
@@ -99,22 +109,17 @@ export interface Storage {
 
 // TODO: review if these should be exposed. Duplicated from dispatcher's interactiveIO.ts
 export type RequestId = string | undefined;
-
 export interface AppAgentIO {
-    readonly type: "html" | "text";
+    readonly type: DisplayType;
     status(message: string): void;
     success(message: string): void;
 
     // Action status
-    setActionStatus(
-        message: string,
-        actionIndex: number,
-        groupId?: string,
-    ): void;
+    setActionStatus(message: string, actionIndex: number): void;
 }
 
 export interface ActionIO {
-    readonly type: "html" | "text";
+    readonly type: DisplayType;
     setActionDisplay(content: string): void;
 }
 

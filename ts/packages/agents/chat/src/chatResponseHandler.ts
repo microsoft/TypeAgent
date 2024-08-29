@@ -496,10 +496,6 @@ function streamPartialChatResponseAction(
     }
 
     if (name === "parameters.generatedText") {
-        context.agentIO.setActionStatus(
-            `${value}${partial ? "..." : ""}`,
-            0,
-            "chat",
-        );
+        context.agentIO.setActionStatus(`${value}${partial ? "..." : ""}`, 0);
     }
 }

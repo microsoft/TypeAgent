@@ -15,8 +15,11 @@ import {
     AppAction,
     createTurnImpressionFromError,
     ActionContext,
+    DisplayType,
 } from "@typeagent/agent-sdk";
 import { searchAlbum, searchArtists, searchTracks } from "../client.js";
+import { htmlStatus } from "../playback.js";
+import { DynamicDisplay } from "../../../../agentSdk/dist/agentInterface.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -24,6 +27,7 @@ export function instantiate(): AppAgent {
         updateAgentContext: updatePlayerContext,
         executeAction: executePlayerAction,
         validateWildcardMatch: validatePlayerWildcardMatch,
+        getDynamicDisplay: getPlayerDynamicDisplay,
     };
 }
 
@@ -73,7 +77,6 @@ async function updatePlayerContext(
 
 async function enableSpotify(context: SessionContext<PlayerActionContext>) {
     const clientContext = await getClientContext(context.profileStorage);
-    clientContext.updateActionStatus = context.getUpdateActionStatus();
     context.agentContext.spotify = clientContext;
 
     return clientContext.service.retrieveUser().username;
@@ -137,4 +140,25 @@ async function validateArtist(artistName: string, context: IClientContext) {
         );
     }
     return false;
+}
+
+async function getPlayerDynamicDisplay(
+    type: DisplayType,
+    displayId: string,
+    context: SessionContext<PlayerActionContext>,
+): Promise<DynamicDisplay> {
+    if (context.agentContext.spotify === undefined) {
+        return {
+            content: "Spotify integration is not enabled.",
+            nextRefreshMs: -1,
+        };
+    }
+    if (displayId === "status") {
+        const status = await htmlStatus(context.agentContext.spotify);
+        return {
+            content: type === "html" ? status.displayText : status.literalText!,
+            nextRefreshMs: 1000,
+        };
+    }
+    throw new Error(`Invalid displayId ${displayId}`);
 }

@@ -15,5 +15,7 @@ export {
     TokenCachePersistence,
     ActionContext,
     ActionIO,
+    DisplayType,
+    DynamicDisplay,
 } from "./agentInterface.js";
 export * from "./memory.js";

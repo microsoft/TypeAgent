@@ -362,12 +362,12 @@ export async function changeContextConfig(
 }
 
 export function getAppAgent(
-    AppAgentName: string,
+    appAgentName: string,
     context: CommandHandlerContext,
 ) {
-    const AppAgent = context.agents.get(AppAgentName);
-    if (AppAgent === undefined) {
-        throw new Error(`Invalid dispatcher agent name: ${AppAgentName}`);
+    const appAgent = context.agents.get(appAgentName);
+    if (appAgent === undefined) {
+        throw new Error(`Invalid dispatcher agent name: ${appAgentName}`);
     }
-    return AppAgent;
+    return appAgent;
 }

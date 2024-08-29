@@ -55,22 +55,22 @@ async function loadModuleConfig(
 
 async function loadDispatcherConfigs() {
     const infos = getDispatcherConfig().agents;
-    const AppAgents: Map<string, TopLevelTranslatorConfig> = new Map();
+    const appAgents: Map<string, TopLevelTranslatorConfig> = new Map();
     for (const [name, info] of Object.entries(infos)) {
-        AppAgents.set(
+        appAgents.set(
             name,
             info.type === "module" ? await loadModuleConfig(info) : info,
         );
     }
-    return AppAgents;
+    return appAgents;
 }
 
-let AppAgentConfigs: Map<string, TopLevelTranslatorConfig> | undefined;
+let appAgentConfigs: Map<string, TopLevelTranslatorConfig> | undefined;
 export async function getAppAgentConfigs() {
-    if (AppAgentConfigs === undefined) {
-        AppAgentConfigs = await loadDispatcherConfigs();
+    if (appAgentConfigs === undefined) {
+        appAgentConfigs = await loadDispatcherConfigs();
     }
-    return AppAgentConfigs;
+    return appAgentConfigs;
 }
 
 function enableExecutionMode() {
@@ -96,22 +96,22 @@ async function loadModuleAgent(info: ModuleAppAgentInfo): Promise<AppAgent> {
 
 async function loadAppAgents() {
     const configs = getDispatcherConfig().agents;
-    const AppAgents: Map<string, AppAgent> = new Map();
+    const appAgents: Map<string, AppAgent> = new Map();
     for (const [name, config] of Object.entries(configs)) {
-        AppAgents.set(
+        appAgents.set(
             name,
             await (config.type === "module"
                 ? loadModuleAgent(config)
                 : loadInlineAgent(name)),
         );
     }
-    return AppAgents;
+    return appAgents;
 }
 
-let AppAgents: Map<string, AppAgent> | undefined;
+let appAgents: Map<string, AppAgent> | undefined;
 export async function getAppAgents() {
-    if (AppAgents === undefined) {
-        AppAgents = await loadAppAgents();
+    if (appAgents === undefined) {
+        appAgents = await loadAppAgents();
     }
-    return AppAgents;
+    return appAgents;
 }

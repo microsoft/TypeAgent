@@ -17,6 +17,8 @@ import {
     AppAgentIO,
     TurnImpression,
     turnImpressionToString,
+    DynamicDisplay,
+    DisplayType,
 } from "@typeagent/agent-sdk";
 import { processCommandNoLock } from "../command.js";
 import { MatchResult } from "agent-cache";
@@ -97,17 +99,8 @@ function createSessionContext(
         success(message: string) {
             context.requestIO.success(message);
         },
-        setActionStatus(
-            message: string,
-            actionIndex: number,
-            groupId?: string,
-        ) {
-            context.requestIO.setActionStatus(
-                message,
-                actionIndex,
-                name,
-                groupId,
-            );
+        setActionStatus(message: string, actionIndex: number) {
+            context.requestIO.setActionStatus(message, actionIndex, name);
         },
     };
     const agentContext: SessionContext = {
@@ -134,9 +127,6 @@ function createSessionContext(
         },
         issueCommand(command: string) {
             return processCommandNoLock(command, context);
-        },
-        getUpdateActionStatus() {
-            return context.clientIO?.updateActionStatus.bind(context.clientIO);
         },
         async toggleAgent(name: string, enable: boolean) {
             await changeContextConfig(
@@ -184,11 +174,11 @@ async function updateAgentContext(
     enable: boolean,
     context: CommandHandlerContext,
 ) {
-    const AppAgentName = getAppAgentName(translatorName);
-    const AppAgent = getAppAgent(AppAgentName, context);
-    await AppAgent.updateAgentContext?.(
+    const appAgentName = getAppAgentName(translatorName);
+    const appAgent = getAppAgent(appAgentName, context);
+    await appAgent.updateAgentContext?.(
         enable,
-        getSessionContext(AppAgentName, context),
+        getSessionContext(appAgentName, context),
         translatorName,
     );
 }
@@ -211,6 +201,20 @@ export async function partialInput(
     throw new Error("NYI");
 }
 
+export async function getDynamicDisplay(
+    appAgentName: string,
+    type: DisplayType,
+    displayId: string,
+    context: CommandHandlerContext,
+): Promise<DynamicDisplay> {
+    const appAgent = getAppAgent(appAgentName, context);
+    if (appAgent.getDynamicDisplay === undefined) {
+        throw new Error(`Dynamic display not supported by '${appAgentName}'`);
+    }
+    const sessionContext = getSessionContext(appAgentName, context);
+    return appAgent.getDynamicDisplay(type, displayId, sessionContext);
+}
+
 async function executeAction(
     action: Action,
     context: CommandHandlerContext,
@@ -221,20 +225,20 @@ async function executeAction(
     if (translatorName === undefined) {
         throw new Error(`Cannot execute action without translator name.`);
     }
-    const AppAgentName = getAppAgentName(translatorName);
-    const AppAgent = getAppAgent(AppAgentName, context);
+    const appAgentName = getAppAgentName(translatorName);
+    const appAgent = getAppAgent(appAgentName, context);
 
     // Update the current translator.
     context.currentTranslatorName = translatorName;
 
-    if (AppAgent.executeAction === undefined) {
+    if (appAgent.executeAction === undefined) {
         throw new Error(
-            `Agent ${AppAgentName} does not support executeAction.`,
+            `Agent ${appAgentName} does not support executeAction.`,
         );
     }
-    const actionContext = getActionContext(AppAgentName, context, actionIndex);
+    const actionContext = getActionContext(appAgentName, context, actionIndex);
     const returnedResult: TurnImpression | undefined =
-        await AppAgent.executeAction(action, actionContext);
+        await appAgent.executeAction(action, actionContext);
 
     let result: TurnImpression;
     if (returnedResult === undefined) {
@@ -269,6 +273,15 @@ async function executeAction(
         );
     } else {
         actionContext.actionIO.setActionDisplay(result.displayText);
+        if (result.dynamicDisplayId !== undefined) {
+            context.clientIO?.setDynamicDisplay(
+                appAgentName,
+                context.requestId,
+                actionIndex,
+                result.dynamicDisplayId,
+                result.dynamicDisplayNextRefreshMs!,
+            );
+        }
         context.chatHistory.addEntry(
             result.literalText
                 ? result.literalText
@@ -304,14 +317,12 @@ export async function validateWildcardMatch(
         if (translatorName === undefined) {
             continue;
         }
-        const AppAgentName = getAppAgentName(translatorName);
-        const AppAgent = getAppAgent(AppAgentName, context);
-        const dispatcherContext = getSessionContext(AppAgentName, context);
+        const appAgentName = getAppAgentName(translatorName);
+        const appAgent = getAppAgent(appAgentName, context);
+        const sessionContext = getSessionContext(appAgentName, context);
         if (
-            (await AppAgent.validateWildcardMatch?.(
-                action,
-                dispatcherContext,
-            )) === false
+            (await appAgent.validateWildcardMatch?.(action, sessionContext)) ===
+            false
         ) {
             return false;
         }
@@ -327,21 +338,21 @@ export function streamPartialAction(
     partial: boolean,
     context: CommandHandlerContext,
 ) {
-    const AppAgentName = getAppAgentName(translatorName);
-    const AppAgent = getAppAgent(AppAgentName, context);
-    const dispatcherContext = getSessionContext(AppAgentName, context);
-    if (AppAgent.streamPartialAction === undefined) {
+    const appAgentName = getAppAgentName(translatorName);
+    const appAGent = getAppAgent(appAgentName, context);
+    const sessionContext = getSessionContext(appAgentName, context);
+    if (appAGent.streamPartialAction === undefined) {
         // The config declared that there are streaming action, but the agent didn't implement it.
         throw new Error(
-            `Agent ${AppAgentName} does not support streamPartialAction.`,
+            `Agent ${appAgentName} does not support streamPartialAction.`,
         );
     }
 
-    AppAgent.streamPartialAction(
+    appAGent.streamPartialAction(
         actionName,
         name,
         value,
         partial,
-        dispatcherContext,
+        sessionContext,
     );
 }

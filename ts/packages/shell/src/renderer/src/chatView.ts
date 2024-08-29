@@ -14,6 +14,7 @@ import {
     SearchMenuItem,
 } from "../../preload/electronTypes";
 import { ActionCascade } from "./ActionCascade";
+import { DynamicDisplay } from "@typeagent/agent-sdk";
 
 export interface InputChoice {
     element: HTMLElement;
@@ -376,7 +377,11 @@ class MessageGroup {
         messageDiv.append(message);
     }
 
-    public ensureAgentMessage(source: string, actionIndex?: number) {
+    public ensureAgentMessage(
+        source: string,
+        actionIndex?: number,
+        scrollIntoView = true,
+    ) {
         const index = actionIndex ?? 0;
         const agentMessage = this.agentMessageDivs[index];
         if (agentMessage === undefined) {
@@ -397,7 +402,9 @@ class MessageGroup {
                 beforeElem = this.agentMessageDivs[i];
             }
         }
-        this.updateStatusMessageDivState();
+        if (scrollIntoView) {
+            this.updateStatusMessageDivState();
+        }
         return this.agentMessageDivs[index];
     }
 
@@ -530,12 +537,12 @@ export function proposeYesNo(
     chatView.addChoicePanel(choices);
 }
 
+const DynamicDisplayMinRefreshIntervalMs = 15;
 export class ChatView {
     private topDiv: HTMLDivElement;
     private messageDiv: HTMLDivElement;
     private inputContainer: HTMLDivElement;
 
-    private groupToElements: Map<string, HTMLDivElement[]> = new Map();
     private idToMessageGroup: Map<string, MessageGroup> = new Map();
     chatInput: ChatInput;
     idToSearchMenu = new Map<string, SearchMenu>();
@@ -847,6 +854,127 @@ export class ChatView {
         // console.log(`Partial input handler enabled: ${enabled}`);
     }
 
+    private dynamicDisplays: {
+        source: string;
+        id: string;
+        actionIndex: number;
+        displayId: string;
+        nextRefreshTime: number;
+    }[] = [];
+    private timer: number | undefined = undefined;
+    private scheduledRefreshTime: number | undefined = undefined;
+    setDynamicDisplay(
+        source: string,
+        id: string,
+        actionIndex: number,
+        displayId: string,
+        nextRefreshMs: number,
+    ) {
+        const now = Date.now();
+        const agentMessage = this.ensureAgentMessage(
+            id,
+            source,
+            actionIndex,
+            false,
+        );
+        if (agentMessage === undefined) {
+            return;
+        }
+        this.dynamicDisplays.push({
+            source,
+            id,
+            actionIndex,
+            displayId,
+            nextRefreshTime:
+                Math.max(nextRefreshMs, DynamicDisplayMinRefreshIntervalMs) +
+                now,
+        });
+
+        this.scheduleDynamicDisplayRefresh(now);
+    }
+    private scheduleDynamicDisplayRefresh(now: number) {
+        if (this.dynamicDisplays.length === 0) {
+            return;
+        }
+        this.dynamicDisplays.sort(
+            (a, b) => a.nextRefreshTime - b.nextRefreshTime,
+        );
+        const nextRefreshTime = this.dynamicDisplays[0].nextRefreshTime;
+        const scheduledRefreshTime = this.scheduledRefreshTime;
+        if (
+            scheduledRefreshTime === undefined ||
+            nextRefreshTime < scheduledRefreshTime
+        ) {
+            if (this.timer !== undefined) {
+                window.clearInterval(this.timer);
+                this.timer = undefined;
+            }
+            const interval = nextRefreshTime - now;
+            this.scheduledRefreshTime = nextRefreshTime;
+            this.timer = window.setTimeout(() => {
+                this.scheduledRefreshTime = undefined;
+                this.timer = undefined;
+                this.refreshDynamicDisplays();
+            }, interval);
+        }
+    }
+
+    private async refreshDynamicDisplays() {
+        const now = Date.now();
+        let item = this.dynamicDisplays[0];
+        const currentDisplay = new Map<string, DynamicDisplay>();
+        while (item && item.nextRefreshTime <= now) {
+            this.dynamicDisplays.shift()!;
+            const { id, source, actionIndex, displayId } = item;
+            try {
+                // Only call getDynamicDisplay once if there are multiple
+                let result = currentDisplay.get(`${source}:${displayId}`);
+                if (result === undefined) {
+                    result = await getClientAPI().getDynamicDisplay(
+                        source,
+                        displayId,
+                    );
+                    currentDisplay.set(`${source}:${displayId}`, result);
+                }
+                this.addAgentMessage(
+                    result.content,
+                    id,
+                    source,
+                    actionIndex,
+                    false,
+                );
+                if (result.nextRefreshMs !== -1) {
+                    this.dynamicDisplays.push({
+                        source,
+                        id,
+                        actionIndex,
+                        displayId,
+                        nextRefreshTime:
+                            Math.max(
+                                result.nextRefreshMs,
+                                DynamicDisplayMinRefreshIntervalMs,
+                            ) + now,
+                    });
+                }
+            } catch (error: any) {
+                currentDisplay.set(`${source}:${displayId}`, {
+                    content: error.message,
+                    nextRefreshMs: -1,
+                });
+                this.addAgentMessage(
+                    error.message,
+                    id,
+                    source,
+                    actionIndex,
+                    false,
+                );
+            }
+
+            item = this.dynamicDisplays[0];
+        }
+        this.scheduleDynamicDisplayRefresh(now);
+    }
+
     private getMessageGroup(id: string) {
         const messageGroup = this.idToMessageGroup.get(id);
         if (messageGroup === undefined) {
@@ -867,7 +995,6 @@ export class ChatView {
     clear() {
         this.messageDiv.replaceChildren();
         this.idToMessageGroup.clear();
-        this.groupToElements.clear();
         this.commandBackStackIndex = -1;
     }
 
@@ -920,12 +1047,13 @@ export class ChatView {
         id: string,
         source: string,
         actionIndex?: number,
-        groupId?: string,
+        focus = true,
     ) {
         const messageContainer = this.ensureAgentMessage(
             id,
             source,
             actionIndex,
+            focus,
         ) as HTMLDivElement;
         const message = messageContainer.lastChild as HTMLDivElement;
         if (message === undefined) {
@@ -934,32 +1062,21 @@ export class ChatView {
 
         setSource(messageContainer, source, this.agents);
         setContent(message, text);
-        if (!groupId) {
-            const innerDiv = message.firstChild as HTMLDivElement;
-            if (innerDiv && innerDiv.dataset && innerDiv.dataset.group) {
-                console.log(`group: ${innerDiv.dataset.group}`);
-                groupId = innerDiv.dataset.group;
-            }
+        if (focus) {
+            this.chatInputFocus();
         }
-        if (groupId) {
-            let group = this.groupToElements.get(groupId);
-            if (group === undefined) {
-                group = [];
-                this.groupToElements.set(groupId, group);
-            }
-            group.push(message);
-        }
-        this.chatInputFocus();
     }
 
     private ensureAgentMessage(
         id: string,
         source: string,
         actionIndex?: number,
+        scrollIntoView = true,
     ) {
         return this.getMessageGroup(id)?.ensureAgentMessage(
             source,
             actionIndex,
+            scrollIntoView,
         );
     }
 
@@ -1037,15 +1154,6 @@ export class ChatView {
         this.showStatusMessage("Answer sent!", requestId, "shell", true);
         console.log(answer);
         getClientAPI().sendAnswer(questionId, answer);
-    }
-
-    updateGroup(text: string, groupId: string) {
-        const group = this.groupToElements.get(groupId);
-        if (group !== undefined) {
-            for (const message of group) {
-                message.innerHTML = text;
-            }
-        }
     }
 
     getMessageElm() {

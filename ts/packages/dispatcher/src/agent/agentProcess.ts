@@ -70,6 +70,15 @@ async function agentInvokeHandler(name: string, param: any): Promise<any> {
                 param.action,
                 getSessionContextShim(param),
             );
+        case AgentInvokeAPI.GetDynamicDisplay:
+            if (agent.getDynamicDisplay === undefined) {
+                throw new Error("Invalid invocation of getDynamicDisplay");
+            }
+            return agent.getDynamicDisplay(
+                param.type,
+                param.displayId,
+                getSessionContextShim(param),
+            );
         case AgentInvokeAPI.CloseAgentContext:
             const result = await agent.closeAgentContext?.(
                 getSessionContextShim(param),
@@ -170,16 +179,11 @@ function createSessionContextShim(
                 message,
             });
         },
-        setActionStatus: (
-            message: string,
-            actionIndex: number,
-            groupId?: string,
-        ): void => {
+        setActionStatus: (message: string, actionIndex: number): void => {
             rpc.send(AgentContextCallAPI.SetActionStatus, {
                 contextId,
                 message,
                 actionIndex,
-                groupId,
             });
         },
     };
@@ -201,11 +205,6 @@ function createSessionContextShim(
                 contextId,
                 command,
             });
-        },
-        getUpdateActionStatus: ():
-            | ((message: string, group_id: string) => void)
-            | undefined => {
-            throw new Error("NYI");
         },
         toggleAgent: async (name: string, enable: boolean): Promise<void> => {
             return rpc.invoke(AgentContextInvokeAPI.ToggleAgent, {

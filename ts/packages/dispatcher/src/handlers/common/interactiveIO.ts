@@ -53,9 +53,7 @@ export interface ClientIO {
         requestId: RequestId,
         source: string,
         actionIndex: number,
-        groupId?: string,
     ): void;
-    updateActionStatus(message: string, groupId: string): void;
     askYesNo(
         message: string,
         requestId: RequestId,
@@ -75,7 +73,13 @@ export interface ClientIO {
             fromUser: boolean;
         },
     ): void;
-
+    setDynamicDisplay(
+        source: string,
+        requestId: RequestId,
+        actionIndex: number,
+        displayId: string,
+        nextRefreshMs: number,
+    ): void;
     exit(): void;
 }
 
@@ -97,12 +101,7 @@ export interface RequestIO {
     result(message: string | LogFn): void;
 
     // Action status
-    setActionStatus(
-        message: string,
-        actionIndex: number,
-        source: string,
-        groupId?: string,
-    ): void;
+    setActionStatus(message: string, actionIndex: number, source: string): void;
 
     // Input
     isInputEnabled(): boolean;
@@ -181,15 +180,7 @@ export function getRequestIO(
             status: string,
             actionIndex: number,
             source: string,
-            groupId?: string,
-        ) =>
-            clientIO.setActionStatus(
-                status,
-                requestId,
-                source,
-                actionIndex,
-                groupId,
-            ),
+        ) => clientIO.setActionStatus(status, requestId, source, actionIndex),
 
         isInputEnabled: () => true,
         askYesNo: async (message: string, defaultValue?: boolean) =>

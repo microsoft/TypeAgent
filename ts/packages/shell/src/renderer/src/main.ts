@@ -54,25 +54,20 @@ function addEvents(
             }
         }
     });
-    api.onResponse(
-        (
-            _,
-            response,
-            id,
-            source: string,
-            actionIndex?: number,
-            groupId?: string,
-        ) => {
-            if (response !== undefined) {
-                chatView.addAgentMessage(
-                    response,
-                    id,
-                    source,
-                    actionIndex,
-                    groupId,
-                );
-            }
-        },
+    api.onResponse((_, response, id, source: string, actionIndex?: number) => {
+        if (response !== undefined) {
+            chatView.addAgentMessage(response, id, source, actionIndex);
+        }
+    });
+    api.onSetDynamicActionDisplay(
+        (_, source, id, actionIndex, displayId, nextRefreshMs) =>
+            chatView.setDynamicDisplay(
+                source,
+                id,
+                actionIndex,
+                displayId,
+                nextRefreshMs,
+            ),
     );
     api.onSetPartialInputHandler((_, enabled) => {
         chatView.enablePartialInputHandler(enabled);
@@ -85,11 +80,6 @@ function addEvents(
     });
     api.onClear((_) => {
         chatView.clear();
-    });
-    api.onUpdate((_, updateMessage: string, groupId: string) => {
-        if (updateMessage !== undefined) {
-            chatView.updateGroup(updateMessage, groupId);
-        }
     });
     api.onStatusMessage((_, message, id, source: string, temporary) => {
         chatView.showStatusMessage(message, id, source, temporary);
