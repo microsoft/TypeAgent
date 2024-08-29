@@ -271,7 +271,10 @@ class MessageGroup {
     private requestCompleted() {
         this.completed = true;
         if (this.statusMessages.length === 0) {
-            this.addStatusMessage({ message: "Request completed", source: "shell" }, true);
+            this.addStatusMessage(
+                { message: "Request completed", source: "shell" },
+                true,
+            );
         }
         this.updateStatusMessageDivState();
     }
@@ -308,7 +311,10 @@ class MessageGroup {
 
     private requestException(error: any) {
         console.error(error);
-        this.addStatusMessage({ message: `Processing Error: ${error}`, source: "shell" }, false);
+        this.addStatusMessage(
+            { message: `Processing Error: ${error}`, source: "shell" },
+            false,
+        );
     }
 
     private ensureStatusMessageDiv(source: string) {
@@ -326,14 +332,15 @@ class MessageGroup {
         return this.statusMessageDiv;
     }
 
-    public addStatusMessage(
-        msg: IAgentMessage,
-        temporary: boolean,
-    ) {
+    public addStatusMessage(msg: IAgentMessage, temporary: boolean) {
         let message = msg.message;
-        const div = this.ensureStatusMessageDiv(msg.source)
-            .lastChild?.previousSibling as HTMLDivElement;
-        setSource(this.statusMessageDiv as HTMLDivElement, msg.source, this.agents);
+        const div = this.ensureStatusMessageDiv(msg.source).lastChild
+            ?.previousSibling as HTMLDivElement;
+        setSource(
+            this.statusMessageDiv as HTMLDivElement,
+            msg.source,
+            this.agents,
+        );
 
         let contentDiv: HTMLDivElement;
         if (
@@ -344,11 +351,14 @@ class MessageGroup {
         } else {
             contentDiv = document.createElement("div");
             div.appendChild(contentDiv);
-        }     
+        }
         this.statusMessages.push({ message, temporary });
 
         setContent(contentDiv, message);
-        updateMetrics(this.statusMessageDiv?.lastChild as HTMLDivElement, msg.metrics)
+        updateMetrics(
+            this.statusMessageDiv?.lastChild as HTMLDivElement,
+            msg.metrics,
+        );
 
         this.updateStatusMessageDivState();
     }
@@ -477,7 +487,6 @@ export function setSource(
 
 export function updateMetrics(div: HTMLDivElement, metrics?: IMessageMetrics) {
     if (metrics) {
-
         // clear out previous perf datanpm
         div.innerHTML = "";
 
@@ -492,13 +501,11 @@ export function updateMetrics(div: HTMLDivElement, metrics?: IMessageMetrics) {
 
         if (metrics.duration) {
             timeDiv.innerHTML = `Time Taken: <b>${formatTimeReaderFriendly(metrics.duration)}</b>`;
-        }
-        else {
+        } else {
             timeDiv.innerText = "no performance data available";
         }
-        
+
         if (metrics.marks) {
-            
             metrics.marks.forEach((value: number, key: string) => {
                 let mDiv = document.createElement("div");
                 mDiv.innerHTML = `${key}: <b>${formatTimeReaderFriendly(value)}</b>`;
@@ -507,7 +514,6 @@ export function updateMetrics(div: HTMLDivElement, metrics?: IMessageMetrics) {
         }
 
         marksDiv.append(timeDiv);
-
     } else {
         div.innerText = "no performance data available";
     }
@@ -519,10 +525,9 @@ function formatTimeReaderFriendly(time: number) {
     } else if (time > 1000) {
         return `${(time / 1000).toFixed(1)}s`;
     } else {
-       return `${time.toFixed(1)}ms`;
+        return `${time.toFixed(1)}ms`;
     }
 }
-
 
 export function getSelectionXCoord() {
     let sel = window.getSelection();
@@ -926,9 +931,12 @@ export class ChatView {
     ) {
         const now = Date.now();
         const agentMessage = this.ensureAgentMessage(
-            id,
-            source,
-            actionIndex,
+            {
+                message: "",
+                requestId: id,
+                source: source,
+                actionIndex: actionIndex,
+            },
             false,
         );
         if (agentMessage === undefined) {
@@ -991,10 +999,12 @@ export class ChatView {
                     currentDisplay.set(`${source}:${displayId}`, result);
                 }
                 this.addAgentMessage(
-                    result.content,
-                    id,
-                    source,
-                    actionIndex,
+                    {
+                        message: result.content,
+                        requestId: id,
+                        source: source,
+                        actionIndex: actionIndex,
+                    },
                     false,
                 );
                 if (result.nextRefreshMs !== -1) {
@@ -1016,10 +1026,12 @@ export class ChatView {
                     nextRefreshMs: -1,
                 });
                 this.addAgentMessage(
-                    error.message,
-                    id,
-                    source,
-                    actionIndex,
+                    {
+                        message: error.message,
+                        requestId: id,
+                        source: source,
+                        actionIndex: actionIndex,
+                    },
                     false,
                 );
             }
@@ -1037,11 +1049,11 @@ export class ChatView {
         return messageGroup;
     }
 
-    showStatusMessage(
-        msg: IAgentMessage,
-        temporary: boolean,
-    ) {
-        this.getMessageGroup(msg.requestId as string)?.addStatusMessage(msg, temporary);
+    showStatusMessage(msg: IAgentMessage, temporary: boolean) {
+        this.getMessageGroup(msg.requestId as string)?.addStatusMessage(
+            msg,
+            temporary,
+        );
     }
 
     clear() {
@@ -1094,31 +1106,39 @@ export class ChatView {
         }
     }
 
-    addAgentMessage(
-        msg: IAgentMessage,
-        focus = true,
-    ) {
+    addAgentMessage(msg: IAgentMessage, focus = true) {
         const text: string = msg.message;
         const source: string = msg.source;
-        let groupId: string | undefined = msg.groupId;
 
-        const messageContainer = this.ensureAgentMessage(msg, focus) as HTMLDivElement;
-        const message = messageContainer.lastChild?.previousSibling as HTMLDivElement;
+        const messageContainer = this.ensureAgentMessage(
+            msg,
+            focus,
+        ) as HTMLDivElement;
+        const message = messageContainer.lastChild
+            ?.previousSibling as HTMLDivElement;
         if (message === undefined) {
             return undefined;
         }
 
         setSource(messageContainer, source, this.agents);
         setContent(message, text);
-        updateMetrics(messageContainer.lastChild as HTMLDivElement, msg.metrics);
+        updateMetrics(
+            messageContainer.lastChild as HTMLDivElement,
+            msg.metrics,
+        );
 
         if (focus) {
             this.chatInputFocus();
         }
     }
 
-    private ensureAgentMessage(msg: IAgentMessage, scrollIntoView: boolean = true) {
-        return this.getMessageGroup(msg.requestId as string)?.ensureAgentMessage(msg, scrollIntoView);
+    private ensureAgentMessage(
+        msg: IAgentMessage,
+        scrollIntoView: boolean = true,
+    ) {
+        return this.getMessageGroup(
+            msg.requestId as string,
+        )?.ensureAgentMessage(msg, scrollIntoView);
     }
 
     chatInputFocus() {
@@ -1138,7 +1158,11 @@ export class ChatView {
         requestId: string,
         source: string,
     ) {
-        const agentMessage = this.ensureAgentMessage({ message: "", requestId, source});
+        const agentMessage = this.ensureAgentMessage({
+            message: "",
+            requestId,
+            source,
+        });
         if (agentMessage === undefined) {
             return;
         }
@@ -1155,10 +1179,11 @@ export class ChatView {
         source: string,
     ) {
         let message = answer ? "Accepted!" : "Rejected!";
-        this.showStatusMessage({
-            message,
-            requestId,
-            source,
+        this.showStatusMessage(
+            {
+                message,
+                requestId,
+                source,
             },
             true,
         );
@@ -1172,12 +1197,16 @@ export class ChatView {
         requestId: string,
         source: string,
     ) {
-        const agentMessage = this.ensureAgentMessage({ message: "", requestId, source });
+        const agentMessage = this.ensureAgentMessage({
+            message: "",
+            requestId,
+            source,
+        });
         if (agentMessage === undefined) {
             return;
         }
         agentMessage.innerHTML = "";
-        this.showStatusMessage({message, requestId, source}, true);
+        this.showStatusMessage({ message, requestId, source }, true);
         if (this.searchMenu) {
             this.searchMenuAnswerHandler = (item) => {
                 this.answer(questionId, item.selectedText, requestId);
@@ -1196,7 +1225,7 @@ export class ChatView {
     answer(questionId: number, answer: string, requestId: string) {
         let message = "Answer sent!";
         let source = "shell";
-        this.showStatusMessage({ message, requestId, source}, true);
+        this.showStatusMessage({ message, requestId, source }, true);
         console.log(answer);
         getClientAPI().sendAnswer(questionId, answer);
     }

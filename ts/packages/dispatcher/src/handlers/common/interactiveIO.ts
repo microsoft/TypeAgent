@@ -66,7 +66,6 @@ export interface ClientIO {
         visible?: boolean,
     ): void;
     setActionStatus(message: IAgentMessage): void;
-    setActionStatus(message: string, groupId: string): void;
     askYesNo(
         message: string,
         requestId: RequestId,
@@ -172,14 +171,21 @@ export function getConsoleRequestIO(
     };
 }
 
-function makeClientIOMessage(context: CommandHandlerContext | undefined, message: string, requestId: RequestId, source: string, actionIndex?: number, groupId?: string) : IAgentMessage {
-    return { 
-        message, 
-        requestId, 
-        source, 
-        actionIndex, 
-        groupId, 
-        metrics: Profiler.getInstance().getMetrics(requestId)
+function makeClientIOMessage(
+    context: CommandHandlerContext | undefined,
+    message: string,
+    requestId: RequestId,
+    source: string,
+    actionIndex?: number,
+    groupId?: string,
+): IAgentMessage {
+    return {
+        message,
+        requestId,
+        source,
+        actionIndex,
+        groupId,
+        metrics: Profiler.getInstance().getMetrics(requestId),
     };
 }
 
@@ -195,17 +201,59 @@ export function getRequestIO(
         getRequestId: () => requestId,
         clear: () => clientIO.clear(),
         info: (input: string | LogFn) =>
-            clientIO.info(makeClientIOMessage(context, getMessage(input), requestId, source)),
+            clientIO.info(
+                makeClientIOMessage(
+                    context,
+                    getMessage(input),
+                    requestId,
+                    source,
+                ),
+            ),
         status: (input: string | LogFn) =>
-            clientIO.status(makeClientIOMessage(context, chalk.grey(getMessage(input)), requestId, source)),
+            clientIO.status(
+                makeClientIOMessage(
+                    context,
+                    chalk.grey(getMessage(input)),
+                    requestId,
+                    source,
+                ),
+            ),
         success: (input: string | LogFn) =>
-            clientIO.success(makeClientIOMessage(context, chalk.green(getMessage(input)), requestId, source)),
+            clientIO.success(
+                makeClientIOMessage(
+                    context,
+                    chalk.green(getMessage(input)),
+                    requestId,
+                    source,
+                ),
+            ),
         warn: (input: string | LogFn) =>
-            clientIO.warn(makeClientIOMessage(context, chalk.yellow(getMessage(input)), requestId, source)),
+            clientIO.warn(
+                makeClientIOMessage(
+                    context,
+                    chalk.yellow(getMessage(input)),
+                    requestId,
+                    source,
+                ),
+            ),
         error: (input: string | LogFn) =>
-            clientIO.error(makeClientIOMessage(context, chalk.red(getMessage(input)), requestId, source)),
+            clientIO.error(
+                makeClientIOMessage(
+                    context,
+                    chalk.red(getMessage(input)),
+                    requestId,
+                    source,
+                ),
+            ),
         result: (input: string | LogFn) =>
-            clientIO.result(makeClientIOMessage(context, getMessage(input), requestId, source)),
+            clientIO.result(
+                makeClientIOMessage(
+                    context,
+                    getMessage(input),
+                    requestId,
+                    source,
+                ),
+            ),
 
         setActionStatus: (
             status: string,
@@ -221,7 +269,7 @@ export function getRequestIO(
                     source,
                     actionIndex,
                     groupId,
-                )
+                ),
             ),
 
         isInputEnabled: () => true,

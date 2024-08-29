@@ -16,7 +16,7 @@ import {
     Entity,
 } from "typeagent";
 import { ChatModel, bing, openai } from "aiclient";
-import { ActionContext, ActionIO, AppAgent } from "@typeagent/agent-sdk";
+import { ActionContext, AppAgent } from "@typeagent/agent-sdk";
 import { PromptSection } from "typechat";
 import {
     AppAction,
@@ -55,7 +55,6 @@ async function handleChatResponse(
     chatAction: ChatResponseAction,
     context: ActionContext,
 ) {
-    const actionIO = context.actionIO;
     console.log(JSON.stringify(chatAction, undefined, 2));
     switch (chatAction.actionName) {
         case "generateResponse": {
@@ -95,7 +94,7 @@ async function handleChatResponse(
                 console.log("Running lookups");
                 return handleLookup(
                     lookupAction,
-                    actionIO,
+                    context,
                     await getLookupSettings(true),
                 );
             }
@@ -267,7 +266,7 @@ type LookupSettings = {
 
 async function handleLookup(
     chatAction: LookupAndGenerateResponseAction,
-    actionIO: ActionIO,
+    context: ActionContext,
     settings: LookupSettings,
 ): Promise<TurnImpression> {
     let literalResponse = createTurnImpressionFromLiteral(
@@ -290,8 +289,8 @@ async function handleLookup(
     if (lookups.length === 1 && lookUpConfig?.documentConcurrency) {
         documentConcurrency = lookUpConfig.documentConcurrency;
     }
-    actionIO.setActionDisplay(lookupToHtml(lookups));
-    const context: LookupContext = {
+    context.actionIO.setActionDisplay(lookupToHtml(lookups));
+    const lookupContext: LookupContext = {
         lookups,
         answers: new Map<string, ChunkChatResponse>(),
         inProgress: new Map<string, LookupProgress>(),
@@ -299,15 +298,15 @@ async function handleLookup(
     // Run all lookups concurrently
     await Promise.all(
         lookups.map((l) =>
-            runLookup(l, context, actionIO, settings, documentConcurrency),
+            runLookup(l, lookupContext, context, settings, documentConcurrency),
         ),
     );
     // Capture answers in the turn impression to return
-    literalResponse = updateTurnImpression(context, literalResponse);
-    actionIO.setActionDisplay(literalResponse.displayText);
+    literalResponse = updateTurnImpression(lookupContext, literalResponse);
+    context.actionIO.setActionDisplay(literalResponse.displayText);
     // Generate entities if needed
     if (settings.entityGenModel) {
-        const entities = await runEntityExtraction(context, settings);
+        const entities = await runEntityExtraction(lookupContext, settings);
         if (entities.length > 0) {
             literalResponse.entities.push(...entities);
         }
@@ -381,8 +380,8 @@ function updateTurnImpression(
 
 async function runLookup(
     lookup: string,
-    context: LookupContext,
-    actionIO: ActionIO,
+    lookupContext: LookupContext,
+    actionContext: ActionContext,
     settings: LookupSettings,
     concurrency: number,
 ) {
@@ -410,26 +409,30 @@ async function runLookup(
         getLookupInstructions(),
         (url, answerSoFar) => {
             if (firstToken) {
-
-                Profiler.getInstance().mark(agentContext.requestId, "First Token");
+                Profiler.getInstance().mark(
+                    actionContext.sessionContext.requestId,
+                    "First Token",
+                );
 
                 firstToken = false;
             }
 
-            updateLookupProgress(context, lookup, url, answerSoFar);
+            updateLookupProgress(lookupContext, lookup, url, answerSoFar);
             updateStatus();
         },
     );
     stopWatch.stop("GENERATE ANSWER " + lookup);
     if (answer && answer.answerStatus !== "NotAnswered") {
-        context.answers.set(lookup, answer);
+        lookupContext.answers.set(lookup, answer);
     }
-    context.inProgress.delete(lookup);
+    lookupContext.inProgress.delete(lookup);
     updateStatus();
     return answer;
 
     function updateStatus() {
-        actionIO.setActionDisplay(lookupProgressAsHtml(context));
+        actionContext.actionIO.setActionDisplay(
+            lookupProgressAsHtml(lookupContext),
+        );
     }
 }
 

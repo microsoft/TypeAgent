@@ -243,9 +243,9 @@ async function translateRequestWithTranslator(
               }
 
               if (firstToken) {
-                Profiler.getInstance().mark(context.requestId, "First Token");
-                firstToken = false;
-                }
+                  Profiler.getInstance().mark(context.requestId, "First Token");
+                  firstToken = false;
+              }
 
               if (streamActionTranslatorName) {
                   streamPartialAction(
@@ -269,7 +269,6 @@ async function translateRequestWithTranslator(
 
     // TODO: figure out if we want to keep track of this
     //Profiler.getInstance().incrementLLMCallCount(context.requestId);
-
 
     if (!response.success) {
         context.requestIO.error(response.message);

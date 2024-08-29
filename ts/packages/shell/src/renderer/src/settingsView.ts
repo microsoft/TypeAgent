@@ -36,9 +36,12 @@ export class SettingsView {
 
         this.menuCheckBox = document.createElement("input");
         this.menuCheckBox.type = "checkbox";
-        
+
         this.menuCheckBox.onchange = () => {
-            window.electron.ipcRenderer.send("hide-menu-changed", this.menuCheckBox.checked)
+            window.electron.ipcRenderer.send(
+                "hide-menu-changed",
+                this.menuCheckBox.checked,
+            );
         };
 
         menuContainer.append(this.menuCheckBox);

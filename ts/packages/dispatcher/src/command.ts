@@ -226,7 +226,7 @@ export async function processCommandNoLock(
 
     try {
         Profiler.getInstance().start(context.requestId);
-        
+
         const result = resolveCommand(input);
         if (result === undefined) {
             throw new Error(`Unknown command '${input}'`);

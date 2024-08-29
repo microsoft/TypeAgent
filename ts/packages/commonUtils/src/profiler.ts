@@ -6,7 +6,10 @@ import { StopWatch } from "common-utils";
 export class Profiler {
     private static instance: Profiler;
     private timers: Map<string, StopWatch> = new Map<string, StopWatch>();
-    private marks: Map<string, Map<string, number>> = new Map<string, Map<string, number>>();
+    private marks: Map<string, Map<string, number>> = new Map<
+        string,
+        Map<string, number>
+    >();
     private llmCallCount: Map<string, number> = new Map<string, number>();
     private entityCount: Map<string, number> = new Map<string, number>();
 
@@ -19,10 +22,9 @@ export class Profiler {
             Profiler.instance = new Profiler();
         }
         return Profiler.instance;
-    }
-    
-    public start(key: string | undefined) {
+    };
 
+    public start(key: string | undefined) {
         if (key === undefined) {
             return;
         }
@@ -38,7 +40,6 @@ export class Profiler {
     }
 
     public stop(key: string | undefined) {
-
         if (key === undefined) {
             return;
         }
@@ -49,7 +50,6 @@ export class Profiler {
     }
 
     public get(key: string | undefined): StopWatch | undefined {
-
         if (key === undefined) {
             return undefined;
         }
@@ -64,7 +64,6 @@ export class Profiler {
      * @param markName the name of the mark
      */
     public mark(key: string | undefined, markName: string): boolean {
-    
         if (key === undefined || !this.marks.has(key)) {
             return false;
         }
@@ -84,7 +83,6 @@ export class Profiler {
     }
 
     public incrementLLMCallCount(key: string | undefined) {
-        
         if (key === undefined) {
             return undefined;
         }
@@ -94,7 +92,6 @@ export class Profiler {
     }
 
     public setEntityCount(key: string | undefined, value: number) {
-
         if (key === undefined) {
             return undefined;
         }
@@ -112,6 +109,6 @@ export class Profiler {
             llmCallCount: this.llmCallCount.get(key),
             entityCount: this.entityCount.get(key),
             marks: this.getMarks(key),
-        }
+        };
     }
 }

@@ -240,7 +240,12 @@ export async function initializeCommandHandlerContext(
         dblogging: true,
         clientIO,
         requestIO: clientIO
-            ? getRequestIO(undefined, clientIO, undefined, getDefaultTranslatorName())
+            ? getRequestIO(
+                  undefined,
+                  clientIO,
+                  undefined,
+                  getDefaultTranslatorName(),
+              )
             : clientIO === undefined
               ? getConsoleRequestIO(stdio)
               : getNullRequestIO(),

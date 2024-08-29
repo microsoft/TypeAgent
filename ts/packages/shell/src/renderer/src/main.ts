@@ -54,9 +54,9 @@ function addEvents(
             }
         }
     });
-    api.onResponse(
-        (_, agentMessage) => { chatView.addAgentMessage(agentMessage); }
-    );
+    api.onResponse((_, agentMessage) => {
+        chatView.addAgentMessage(agentMessage);
+    });
     api.onSetDynamicActionDisplay(
         (_, source, id, actionIndex, displayId, nextRefreshMs) =>
             chatView.setDynamicDisplay(
@@ -78,11 +78,6 @@ function addEvents(
     });
     api.onClear((_) => {
         chatView.clear();
-    });
-    api.onUpdate((_, updateMessage: string, groupId: string) => {
-        if (updateMessage !== undefined) {
-            chatView.updateGroup(updateMessage, groupId);
-        }
     });
     api.onStatusMessage((_, message, temporary) => {
         chatView.showStatusMessage(message, temporary);

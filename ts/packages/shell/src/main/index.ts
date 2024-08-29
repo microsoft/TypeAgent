@@ -153,34 +153,22 @@ async function triggerRecognitionOnce(context: CommandHandlerContext) {
     );
 }
 
-function showResult(
-    message: IAgentMessage
-) {
+function showResult(message: IAgentMessage) {
     // Ignore message without requestId
     if (message.requestId === undefined) {
         console.warn("showResult: requestId is undefined");
         return;
     }
-    mainWindow?.webContents.send(
-        "response",
-        message
-    );
+    mainWindow?.webContents.send("response", message);
 }
 
-function sendStatusMessage(
-    message: IAgentMessage,
-    temporary: boolean = false,
-) {
+function sendStatusMessage(message: IAgentMessage, temporary: boolean = false) {
     // Ignore message without requestId
     if (message.requestId === undefined) {
         console.warn(`sendStatusMessage: requestId is undefined. ${message}`);
         return;
     }
-    mainWindow?.webContents.send(
-        "status-message",
-        message,
-        temporary,
-    );
+    mainWindow?.webContents.send("status-message", message, temporary);
 }
 
 function markRequestExplained(
@@ -314,8 +302,7 @@ const clientIO: ClientIO = {
         /* ignore */
     },
     success: sendStatusMessage,
-    status: (message) =>
-        sendStatusMessage(message, true),
+    status: (message) => sendStatusMessage(message, true),
     warn: sendStatusMessage,
     error: sendStatusMessage,
     result: showResult,
@@ -468,7 +455,10 @@ app.whenReady().then(async () => {
             ShellSettings.getinstance().microphoneName,
         );
 
-        mainWindow?.webContents.send("hide-menu-changed", ShellSettings.getinstance().hideMenu);
+        mainWindow?.webContents.send(
+            "hide-menu-changed",
+            ShellSettings.getinstance().hideMenu,
+        );
     });
 
     await initializeSpeech(context);
@@ -485,13 +475,12 @@ app.whenReady().then(async () => {
     );
 
     ipcMain.on("hide-menu-changed", (_event, value: boolean) => {
-            ShellSettings.getinstance().hideMenu = value;
-            mainWindow!.autoHideMenuBar = value;
+        ShellSettings.getinstance().hideMenu = value;
+        mainWindow!.autoHideMenuBar = value;
 
-            // if the menu bar is visible it won't auto hide immediately when this is toggled so we have to help it along
-            mainWindow?.setMenuBarVisibility(!value);
-        },
-    );
+        // if the menu bar is visible it won't auto hide immediately when this is toggled so we have to help it along
+        mainWindow?.setMenuBarVisibility(!value);
+    });
 
     globalShortcut.register("Alt+Right", () => {
         mainWindow?.webContents.send("send-demo-event", "Alt+Right");

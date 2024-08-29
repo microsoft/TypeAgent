@@ -17,7 +17,6 @@ export class StopWatch {
     }
 
     public get elapsedMs(): number {
-
         if (this._startTime > 0 && this._elapsedMs == 0) {
             return performance.now() - this._startTime;
         }

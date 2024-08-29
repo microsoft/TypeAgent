@@ -8,7 +8,6 @@ import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 export class HistoryListCommandHandler implements CommandHandler {
     public readonly description = "List history";
     public async run(input: string, context: CommandHandlerContext) {
-
         const history = context.chatHistory;
 
         let index = 0;
