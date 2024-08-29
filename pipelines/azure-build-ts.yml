@@ -1,10 +1,15 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-trigger:
-  branches:
-    include:
-      - dev/pialic/ado-bld-pipeline
+resources:
+  repositories:
+    - repository: TypeAgent-GH
+      type: github
+      endpoint: AI_Systems
+      name: microsoft/typeagent
+      ref: refs/heads/main
+
+trigger: none
 
 pr:
   branches:
@@ -17,21 +22,24 @@ pool:
 variables:
   node_version: '18'
   pnpm_version: '9.0.0'
-  typeagent_repo: 'https://github.com/microsoft/typeagent.git'
-  workingDirectory: 'typeagent/ts'
-  ado_registry: '$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_packaging/typeagent/npm/registry/'
-
+  workingDirectory: 'ts'
+  dist_folder: 'ts/packages/agentSdk/dist'
+  
 jobs:
 - job: build_ts
   displayName: 'Build TypeScript Project'
   strategy:
     matrix:
-      nodeVersion: ['18', '20']
+      node_20:
+        nodeVersion: '20'
   steps:
-  - checkout: gitHubRepo
+  - checkout: TypeAgent-GH
     displayName: 'Checkout TypeAgent Repository'
-    inputs:
-      repository: '$(typeagent_repo)'
+    path: 'typeagent'
+
+  - template: include-install-pnpm.yml
+    parameters:
+      buildDirectory: $(Build.SourcesDirectory)/ts
 
   - script: |
       curl -fsSL https://get.pnpm.io/v6.14.js | node - add --global pnpm@$(pnpm_version)
@@ -58,6 +66,7 @@ jobs:
       jq ".version=\"$new_version\"" package.json > package.tmp.json
       mv package.tmp.json package.json
       echo "Updated package.json to version $new_version"
+      cat package.json
     displayName: 'Update Package Version'
     workingDirectory: $(workingDirectory)/packages/agentSdk
 
@@ -77,19 +86,22 @@ jobs:
     workingDirectory: $(workingDirectory)
 
   - script: |
-      cat $(ado_registry)
-      echo "registry=$(ado_registry)" > .npmrc
+      echo $(ADO_REGISTRY)
+      echo "registry=$(ADO_REGISTRY)" > .npmrc
       echo "always-auth=true" >> .npmrc
+      cat .npmrc
     displayName: 'Create .npmrc file.'
+    workingDirectory: $(dist_folder)
 
   - task: npmAuthenticate@0
     inputs:
-      workingFile: .npmrc
+      workingFile: '$(dist_folder)/.npmrc'
     displayName: 'Authenticate with Azure Artifacts'
 
   - script: |
-      cd $(Build.SourcesDirectory)/$(workingDirectory)/packages/agentSdk/dist
+      cd $(Build.SourcesDirectory)/$(dist_folder)
+      cp ../package.json .
       tarball=$(npm pack)
-      npm publish $tarball --registry=$(ado_registry)
+      npm publish $tarball --registry=$(ADO_REGISTRY)
     displayName: 'Pack and Publish agent-sdk Module'
     condition: succeeded()
