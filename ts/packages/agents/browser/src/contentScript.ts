@@ -149,31 +149,29 @@ function getReadablePageContent() {
     return { error: "Page content cannot be read" };
 }
 
+function markInvisibleNodesForCleanup() {
+    const allElements = Array.from(document.body.getElementsByTagName("*"));
+    allElements.forEach((element: Element) => {
+        if (
+            element instanceof HTMLElement &&
+            element.nodeType == Node.ELEMENT_NODE
+        ) {
+           if (
+                element.hidden
+            ) {
+                element.setAttribute("data-deleteInReducer", "");
+            } else if (element.hasAttribute("data-deleteInReducer")) {
+                // previously hidden element is now visible
+                element.removeAttribute("data-deleteInReducer");
+            }
+        }
+    });
+}
+
 function getPageHTML(fullSize: boolean, documentHtml: string, frameId: number) {
     if (!documentHtml) {
         setIdsOnAllElements(frameId);
-/*
-        const allElements = Array.from(document.body.getElementsByTagName("*"));
-        allElements.forEach((element: Element) => {
-            if (
-                element instanceof HTMLElement &&
-                element.nodeType == Node.ELEMENT_NODE
-            ) {
-                if (
-                    element.hidden ||
-                    !element.checkVisibility({
-                        checkVisibilityCSS: true,
-                        checkOpacity: true,
-                    })
-                ) {
-                    element.setAttribute("data-deleteInReducer", "");
-                } else if (element.hasAttribute("data-deleteInReducer")) {
-                    // previously hidden element is now visible
-                    element.removeAttribute("data-deleteInReducer");
-                }
-            }
-        });
-*/
+        markInvisibleNodesForCleanup();
         documentHtml = document.children[0].outerHTML;
     }
 
@@ -479,6 +477,7 @@ function setIdsOnAllElements(frameId: number) {
         "UL",
         "OL",
         "LI",
+        "LABEL",
     ];
     let i = 0;
     allElements.forEach((element: Element) => {

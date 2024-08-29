@@ -34,12 +34,18 @@ try {
 
         if (req.url) {
             const params = new URLSearchParams(req.url.split("?")[1]);
-
             const clientId = params.get("clientId");
             if (clientId) {
+                for (var client of wss.clients) {
+                    if ((client as any).clientId) {
+                        wss.clients.delete(client);
+                    }
+                }
+
                 (ws as any).clientId = clientId;
             }
         }
+
         debug(`Connection count: ${wss.clients.size}`);
 
         ws.on("message", (message: string) => {
