@@ -160,7 +160,7 @@ function setupDevicePermissinos(mainWindow: BrowserWindow) {
     })
   
     mainWindow.webContents.session.setPermissionCheckHandler((_webContents: WebContents | null, permission, _requestingOrigin, details): boolean => {
-      if (permission === 'usb' && details.securityOrigin === 'file:///') {
+      if ((permission === 'usb' && details.securityOrigin === 'file:///') || (permission === 'media' && (details.securityOrigin?.startsWith("http://localhost") || details.securityOrigin?.startsWith("https://localhost")))) {
         return true
       }
 
@@ -178,13 +178,6 @@ function setupDevicePermissinos(mainWindow: BrowserWindow) {
       }
       return false;
     })
-  
-    mainWindow.webContents.session.setUSBProtectedClassesHandler((details) => {
-      return details.protectedClasses.filter((usbClass) => {
-        // Exclude classes except for audio classes
-        return usbClass.indexOf('audio') === -1
-      })
-    }) 
 }
 
 let speechToken:
