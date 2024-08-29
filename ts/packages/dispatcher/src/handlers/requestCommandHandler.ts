@@ -18,7 +18,7 @@ import {
     updateCorrectionContext,
 } from "./common/commandHandlerContext.js";
 
-import { getColorElapsedString } from "common-utils";
+import { getColorElapsedString, Profiler } from "common-utils";
 import {
     executeActions,
     streamPartialAction,
@@ -222,6 +222,7 @@ async function translateRequestWithTranslator(
         history,
     );
 
+    let firstToken = true;
     let streamActionTranslatorName: string | undefined = undefined;
     let streamActionName: string | undefined = undefined;
     const onProperty = context.session.getConfig().stream
@@ -239,6 +240,11 @@ async function translateRequestWithTranslator(
                       streamActionTranslatorName = actionTranslatorName;
                       streamActionName = value;
                   }
+              }
+
+              if (firstToken) {
+                  Profiler.getInstance().mark(context.requestId, "First Token");
+                  firstToken = false;
               }
 
               if (streamActionTranslatorName) {
@@ -260,6 +266,10 @@ async function translateRequestWithTranslator(
         onProperty,
     );
     translator.createRequestPrompt = orp;
+
+    // TODO: figure out if we want to keep track of this
+    //Profiler.getInstance().incrementLLMCallCount(context.requestId);
+
     if (!response.success) {
         context.requestIO.error(response.message);
         return undefined;

@@ -33,6 +33,7 @@ import {
 import { SearchMenuCommand } from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
 import {
     ActionTemplateSequence,
+    IAgentMessage,
     SearchMenuItem,
 } from "../preload/electronTypes.js";
 import { ShellSettings } from "./shellSettings.js";
@@ -67,7 +68,7 @@ function createWindow(): void {
         width: ShellSettings.getinstance().width,
         height: ShellSettings.getinstance().height,
         show: false,
-        autoHideMenuBar: true,
+        autoHideMenuBar: ShellSettings.getinstance().hideMenu,
         webPreferences: {
             preload: join(__dirname, "../preload/index.mjs"),
             sandbox: false,
@@ -152,44 +153,22 @@ async function triggerRecognitionOnce(context: CommandHandlerContext) {
     );
 }
 
-function showResult(
-    message: string,
-    requestId: RequestId,
-    source: string,
-    actionIndex?: number,
-) {
+function showResult(message: IAgentMessage) {
     // Ignore message without requestId
-    if (requestId === undefined) {
+    if (message.requestId === undefined) {
         console.warn("showResult: requestId is undefined");
         return;
     }
-    mainWindow?.webContents.send(
-        "response",
-        message,
-        requestId,
-        source,
-        actionIndex,
-    );
+    mainWindow?.webContents.send("response", message);
 }
 
-function sendStatusMessage(
-    message: string,
-    requestId: RequestId,
-    source: string,
-    temporary: boolean = false,
-) {
+function sendStatusMessage(message: IAgentMessage, temporary: boolean = false) {
     // Ignore message without requestId
-    if (requestId === undefined) {
+    if (message.requestId === undefined) {
         console.warn(`sendStatusMessage: requestId is undefined. ${message}`);
         return;
     }
-    mainWindow?.webContents.send(
-        "status-message",
-        message,
-        requestId,
-        source,
-        temporary,
-    );
+    mainWindow?.webContents.send("status-message", message, temporary);
 }
 
 function markRequestExplained(
@@ -323,8 +302,7 @@ const clientIO: ClientIO = {
         /* ignore */
     },
     success: sendStatusMessage,
-    status: (message, requestId, source) =>
-        sendStatusMessage(message, requestId, source, true),
+    status: (message) => sendStatusMessage(message, true),
     warn: sendStatusMessage,
     error: sendStatusMessage,
     result: showResult,
@@ -476,6 +454,11 @@ app.whenReady().then(async () => {
             ShellSettings.getinstance().microphoneId,
             ShellSettings.getinstance().microphoneName,
         );
+
+        mainWindow?.webContents.send(
+            "hide-menu-changed",
+            ShellSettings.getinstance().hideMenu,
+        );
     });
 
     await initializeSpeech(context);
@@ -490,6 +473,14 @@ app.whenReady().then(async () => {
             ShellSettings.getinstance().microphoneName = micName;
         },
     );
+
+    ipcMain.on("hide-menu-changed", (_event, value: boolean) => {
+        ShellSettings.getinstance().hideMenu = value;
+        mainWindow!.autoHideMenuBar = value;
+
+        // if the menu bar is visible it won't auto hide immediately when this is toggled so we have to help it along
+        mainWindow?.setMenuBarVisibility(!value);
+    });
 
     globalShortcut.register("Alt+Right", () => {
         mainWindow?.webContents.send("send-demo-event", "Alt+Right");

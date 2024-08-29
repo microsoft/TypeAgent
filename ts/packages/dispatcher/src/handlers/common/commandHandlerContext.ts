@@ -8,6 +8,7 @@ import {
     Logger,
     LoggerSink,
     MultiSinkLogger,
+    StopWatch,
     TypeChatJsonTranslatorWithStreaming,
     createDebugLoggerSink,
     createLimiter,
@@ -239,7 +240,12 @@ export async function initializeCommandHandlerContext(
         dblogging: true,
         clientIO,
         requestIO: clientIO
-            ? getRequestIO(clientIO, undefined, getDefaultTranslatorName())
+            ? getRequestIO(
+                  undefined,
+                  clientIO,
+                  undefined,
+                  getDefaultTranslatorName(),
+              )
             : clientIO === undefined
               ? getConsoleRequestIO(stdio)
               : getNullRequestIO(),
@@ -256,6 +262,8 @@ export async function initializeCommandHandlerContext(
         serviceHost: serviceHost,
         localWhisper: undefined,
     };
+
+    context.requestIO.context = context;
 
     await updateActionContext(context.session.getConfig().actions, context);
     return context;

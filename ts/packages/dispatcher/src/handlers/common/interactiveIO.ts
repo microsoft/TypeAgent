@@ -3,8 +3,9 @@
 
 import { askYesNo } from "../../utils/interactive.js";
 import readline from "readline/promises";
-import { SearchMenuItem, ActionTemplateSequence } from "common-utils";
+import { SearchMenuItem, ActionTemplateSequence, Profiler } from "common-utils";
 import chalk from "chalk";
+import { CommandHandlerContext } from "./commandHandlerContext.js";
 
 export type RequestId = string | undefined;
 
@@ -27,15 +28,31 @@ export type SearchMenuContext = {
     choices?: string[];
 };
 
+export interface IAgentMessage {
+    message: string;
+    requestId: string | undefined;
+    source: string;
+    actionIndex?: number | undefined;
+    groupId?: string | undefined;
+    metrics?: IMessageMetrics;
+}
+
+export interface IMessageMetrics {
+    duration: number | undefined;
+    llmCallCount?: number | undefined;
+    entityCount?: number | undefined;
+    marks?: Map<string, number> | undefined;
+}
+
 // Client provided IO
 export interface ClientIO {
     clear(): void;
-    info(message: string, requestId: RequestId, source: string): void;
-    status(message: string, requestId: RequestId, source: string): void;
-    success(message: string, requestId: RequestId, source: string): void;
-    result(message: string, requestId: RequestId, source: string): void;
-    warn(message: string, requestId: RequestId, source: string): void;
-    error(message: string, requestId: RequestId, source: string): void;
+    info(message: IAgentMessage): void;
+    status(message: IAgentMessage): void;
+    success(message: IAgentMessage): void;
+    result(message: IAgentMessage): void;
+    warn(message: IAgentMessage): void;
+    error(message: IAgentMessage): void;
     actionCommand(
         actionTemplates: ActionTemplateSequence,
         command: ActionUICommand,
@@ -48,12 +65,7 @@ export interface ClientIO {
         choices?: SearchMenuItem[],
         visible?: boolean,
     ): void;
-    setActionStatus(
-        message: string,
-        requestId: RequestId,
-        source: string,
-        actionIndex: number,
-    ): void;
+    setActionStatus(message: IAgentMessage): void;
     askYesNo(
         message: string,
         requestId: RequestId,
@@ -92,6 +104,8 @@ function getMessage(input: string | LogFn) {
 
 export interface RequestIO {
     type: "html" | "text";
+    context: CommandHandlerContext | undefined;
+    getRequestId(): RequestId;
     clear(): void;
     info(message: string | LogFn): void;
     status(message: string | LogFn): void;
@@ -128,6 +142,8 @@ export function getConsoleRequestIO(
 ): RequestIO {
     return {
         type: "text",
+        context: undefined,
+        getRequestId: () => undefined,
         clear: () => console.clear(),
         info: (input: string | LogFn) => console.info(getMessage(input)),
         status: (input: string | LogFn) =>
@@ -155,32 +171,106 @@ export function getConsoleRequestIO(
     };
 }
 
+function makeClientIOMessage(
+    context: CommandHandlerContext | undefined,
+    message: string,
+    requestId: RequestId,
+    source: string,
+    actionIndex?: number,
+    groupId?: string,
+): IAgentMessage {
+    return {
+        message,
+        requestId,
+        source,
+        actionIndex,
+        groupId,
+        metrics: Profiler.getInstance().getMetrics(requestId),
+    };
+}
+
 export function getRequestIO(
+    context: CommandHandlerContext | undefined,
     clientIO: ClientIO,
     requestId: RequestId,
     source: string,
 ): RequestIO {
     return {
         type: "html",
+        context: context,
+        getRequestId: () => requestId,
         clear: () => clientIO.clear(),
         info: (input: string | LogFn) =>
-            clientIO.info(getMessage(input), requestId, source),
+            clientIO.info(
+                makeClientIOMessage(
+                    context,
+                    getMessage(input),
+                    requestId,
+                    source,
+                ),
+            ),
         status: (input: string | LogFn) =>
-            clientIO.status(chalk.grey(getMessage(input)), requestId, source),
+            clientIO.status(
+                makeClientIOMessage(
+                    context,
+                    chalk.grey(getMessage(input)),
+                    requestId,
+                    source,
+                ),
+            ),
         success: (input: string | LogFn) =>
-            clientIO.success(chalk.green(getMessage(input)), requestId, source),
+            clientIO.success(
+                makeClientIOMessage(
+                    context,
+                    chalk.green(getMessage(input)),
+                    requestId,
+                    source,
+                ),
+            ),
         warn: (input: string | LogFn) =>
-            clientIO.warn(chalk.yellow(getMessage(input)), requestId, source),
+            clientIO.warn(
+                makeClientIOMessage(
+                    context,
+                    chalk.yellow(getMessage(input)),
+                    requestId,
+                    source,
+                ),
+            ),
         error: (input: string | LogFn) =>
-            clientIO.error(chalk.red(getMessage(input)), requestId, source),
+            clientIO.error(
+                makeClientIOMessage(
+                    context,
+                    chalk.red(getMessage(input)),
+                    requestId,
+                    source,
+                ),
+            ),
         result: (input: string | LogFn) =>
-            clientIO.result(getMessage(input), requestId, source),
+            clientIO.result(
+                makeClientIOMessage(
+                    context,
+                    getMessage(input),
+                    requestId,
+                    source,
+                ),
+            ),
 
         setActionStatus: (
             status: string,
             actionIndex: number,
             source: string,
-        ) => clientIO.setActionStatus(status, requestId, source, actionIndex),
+            groupId?: string,
+        ) =>
+            clientIO.setActionStatus(
+                makeClientIOMessage(
+                    context,
+                    status,
+                    requestId,
+                    source,
+                    actionIndex,
+                    groupId,
+                ),
+            ),
 
         isInputEnabled: () => true,
         askYesNo: async (message: string, defaultValue?: boolean) =>
@@ -196,6 +286,8 @@ export function getRequestIO(
 export function getNullRequestIO(): RequestIO {
     return {
         type: "text",
+        context: undefined,
+        getRequestId: () => undefined,
         clear: () => {},
         info: () => {},
         status: () => {},

@@ -76,6 +76,20 @@ export type ActionTemplateSequence = {
     prefaceMultiple?: string;
 };
 
+export interface IAgentMessage {
+    message: string;
+    requestId?: string | undefined;
+    source: string;
+    actionIndex?: number | undefined;
+    groupId?: string | undefined;
+    metrics?: IMessageMetrics;
+}
+
+export interface IMessageMetrics {
+    duration: number | undefined;
+    marks?: Map<string, number> | undefined;
+}
+
 // end duplicate type section
 
 export interface ClientAPI {
@@ -93,10 +107,7 @@ export interface ClientAPI {
     onResponse(
         callback: (
             e: Electron.IpcRendererEvent,
-            response: string | undefined,
-            id: string,
-            source: string,
-            actionIndex?: number,
+            message: IAgentMessage,
         ) => void,
     ): void;
     onSetDynamicActionDisplay(
@@ -122,9 +133,7 @@ export interface ClientAPI {
     onStatusMessage(
         callback: (
             e: Electron.IpcRendererEvent,
-            message: string,
-            id: string,
-            source: string,
+            message: IAgentMessage,
             temporary: boolean,
         ) => void,
     ): void;
@@ -212,6 +221,9 @@ export interface ClientAPI {
     onShowDialog(
         callback: (e: Electron.IpcRendererEvent, key: string) => void,
     ): void;
+    onHideMenuChanged(
+        callback: (e: Electron.IpcRendererEvent, value: boolean) => void,
+    );
 }
 
 export interface ElectronWindowFields {

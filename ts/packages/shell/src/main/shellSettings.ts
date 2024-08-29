@@ -17,6 +17,7 @@ export class ShellSettings {
     public devTools?: boolean = false;
     public microphoneId?: string;
     public microphoneName?: string;
+    public hideMenu?: boolean = true;
 
     public get width(): number | undefined {
         return this.size ? this.size[0] : undefined;
@@ -47,6 +48,7 @@ export class ShellSettings {
             this.devTools = settings.devTools;
             this.microphoneId = settings.microphoneId;
             this.microphoneName = settings.microphoneName;
+            this.hideMenu = settings.hideMenu;
         }
     }
 

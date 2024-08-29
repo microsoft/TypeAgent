@@ -89,6 +89,9 @@ const api: ClientAPI = {
     onShowDialog(callback) {
         ipcRenderer.on("show-dialog", callback);
     },
+    onHideMenuChanged(callback) {
+        ipcRenderer.on("hide-menu-changed", callback);
+    },
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to
