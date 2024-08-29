@@ -14,7 +14,7 @@ import {
     createTurnImpressionFromLiteral,
     DispatcherAction,
     DispatcherAgent,
-    DispatcherAgentContext,
+    SessionContext,
     DispatcherAgentIO,
     TurnImpression,
     turnImpressionToString,
@@ -44,7 +44,7 @@ function getActionContext(
     context: CommandHandlerContext,
     actionIndex: number,
 ) {
-    const sessionContext = getDispatcherAgentContext(name, context);
+    const sessionContext = getSessionContext(name, context);
     const actionIO: ActionIO = {
         get type() {
             return sessionContext.agentIO.type;
@@ -55,7 +55,7 @@ function getActionContext(
     };
     return {
         get agentContext() {
-            return sessionContext.context;
+            return sessionContext.agentContext;
         },
         get sessionStorage() {
             return sessionContext.sessionStorage;
@@ -72,20 +72,19 @@ function getActionContext(
     };
 }
 
-function getDispatcherAgentContext(
+function getSessionContext(
     name: string,
     context: CommandHandlerContext,
-): DispatcherAgentContext {
+): SessionContext {
     return (
-        context.sessionContext.get(name) ??
-        createDispatcherAgentContext(name, context)
+        context.sessionContext.get(name) ?? createSessionContext(name, context)
     );
 }
 
-function createDispatcherAgentContext(
+function createSessionContext(
     name: string,
     context: CommandHandlerContext,
-): DispatcherAgentContext {
+): SessionContext {
     const sessionDirPath = context.session.getSessionDirPath();
     const storage = sessionDirPath
         ? getStorage(name, sessionDirPath)
@@ -114,8 +113,8 @@ function createDispatcherAgentContext(
             );
         },
     };
-    const agentContext: DispatcherAgentContext = {
-        get context() {
+    const agentContext: SessionContext = {
+        get agentContext() {
             return context.action[name];
         },
         get agentIO() {
@@ -192,7 +191,7 @@ async function updateAgentContext(
     const dispatcherAgent = getDispatcherAgent(dispatcherAgentName, context);
     await dispatcherAgent.updateAgentContext?.(
         enable,
-        getDispatcherAgentContext(dispatcherAgentName, context),
+        getSessionContext(dispatcherAgentName, context),
         translatorName,
     );
 }
@@ -317,7 +316,7 @@ export async function validateWildcardMatch(
             dispatcherAgentName,
             context,
         );
-        const dispatcherContext = getDispatcherAgentContext(
+        const dispatcherContext = getSessionContext(
             dispatcherAgentName,
             context,
         );
@@ -343,10 +342,7 @@ export function streamPartialAction(
 ) {
     const dispatcherAgentName = getDispatcherAgentName(translatorName);
     const dispatcherAgent = getDispatcherAgent(dispatcherAgentName, context);
-    const dispatcherContext = getDispatcherAgentContext(
-        dispatcherAgentName,
-        context,
-    );
+    const dispatcherContext = getSessionContext(dispatcherAgentName, context);
     if (dispatcherAgent.streamPartialAction === undefined) {
         // The config declared that there are streaming action, but the agent didn't implement it.
         throw new Error(

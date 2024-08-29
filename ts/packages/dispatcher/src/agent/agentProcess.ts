@@ -4,7 +4,7 @@
 import {
     ActionContext,
     DispatcherAgent,
-    DispatcherAgentContext,
+    SessionContext,
     DispatcherAgentIO,
     Storage,
     StorageEncoding,
@@ -50,7 +50,7 @@ async function agentInvokeHandler(name: string, param: any): Promise<any> {
             }
             return agent.updateAgentContext(
                 param.enable,
-                getDispatcherAgentContextShim(param),
+                getSessionContextShim(param),
                 param.translatorName,
             );
         case AgentInvokeAPI.ExecuteAction:
@@ -67,11 +67,11 @@ async function agentInvokeHandler(name: string, param: any): Promise<any> {
             }
             return agent.validateWildcardMatch(
                 param.action,
-                getDispatcherAgentContextShim(param),
+                getSessionContextShim(param),
             );
         case AgentInvokeAPI.CloseAgentContext:
             const result = await agent.closeAgentContext?.(
-                getDispatcherAgentContextShim(param),
+                getSessionContextShim(param),
             );
             unregisterAgentContext(param.agentContextId);
             return result;
@@ -153,11 +153,11 @@ function getStorage(contextId: number, session: boolean): Storage {
     };
 }
 
-function createDispatcherAgentContextShim(
+function createSessionContextShim(
     contextId: number,
     hasSessionStorage: boolean,
     context: any,
-): DispatcherAgentContext<any> {
+): SessionContext<any> {
     const agentIO: DispatcherAgentIO = {
         type: "text", // TODO: get the real value
         status: (message: string): void => {
@@ -183,7 +183,7 @@ function createDispatcherAgentContextShim(
         },
     };
     return {
-        context,
+        agentContext: context,
         get currentTranslatorName(): string {
             throw new Error("NYI");
         },
@@ -236,9 +236,7 @@ function getAgentContext(agentContextId: number) {
     return agentContext;
 }
 
-function getDispatcherAgentContextShim(
-    param: Partial<ContextParams>,
-): DispatcherAgentContext {
+function getSessionContextShim(param: Partial<ContextParams>): SessionContext {
     const { contextId, hasSessionStorage, agentContextId } = param;
     if (contextId === undefined) {
         throw new Error("Invalid context param: missing contextId");
@@ -252,11 +250,7 @@ function getDispatcherAgentContextShim(
             ? getAgentContext(agentContextId)
             : undefined;
 
-    return createDispatcherAgentContextShim(
-        contextId,
-        hasSessionStorage,
-        agentContext,
-    );
+    return createSessionContextShim(contextId, hasSessionStorage, agentContext);
 }
 
 function getActionContextShim(
@@ -268,10 +262,10 @@ function getActionContextShim(
             "Invalid action context param: missing actionContextId",
         );
     }
-    const sessionContext = getDispatcherAgentContextShim(param);
+    const sessionContext = getSessionContextShim(param);
     return {
         get agentContext() {
-            return sessionContext.context;
+            return sessionContext.agentContext;
         },
         get sessionStorage() {
             return sessionContext.sessionStorage;

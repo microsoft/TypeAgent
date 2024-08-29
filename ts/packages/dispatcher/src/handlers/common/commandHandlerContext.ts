@@ -53,7 +53,7 @@ import {
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
 import { DispatcherName } from "../requestCommandHandler.js";
-import { DispatcherAgent, DispatcherAgentContext } from "@typeagent/agent-sdk";
+import { DispatcherAgent, SessionContext } from "@typeagent/agent-sdk";
 import { getDispatcherAgents } from "../../agent/agentConfig.js";
 import { conversation as Conversation } from "knowledge-processor";
 
@@ -67,7 +67,7 @@ export interface CommandResult {
 export type CommandHandlerContext = {
     agents: Map<string, DispatcherAgent>;
     session: Session;
-    sessionContext: Map<string, DispatcherAgentContext>;
+    sessionContext: Map<string, SessionContext>;
 
     conversationManager?: Conversation.ConversationManager;
     // Per activation configs
@@ -234,7 +234,7 @@ export async function initializeCommandHandlerContext(
         agents,
         session,
         conversationManager,
-        sessionContext: new Map<string, DispatcherAgentContext>(),
+        sessionContext: new Map<string, SessionContext>(),
         explanationAsynchronousMode,
         dblogging: true,
         clientIO,

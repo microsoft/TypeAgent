@@ -2,16 +2,16 @@
 // Licensed under the MIT License.
 
 import { WebSocketMessage } from "common-utils";
-import { DispatcherAgentContext } from "@typeagent/agent-sdk";
+import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "./browserActionHandler.mjs";
 
 export class BrowserConnector {
-  private context: DispatcherAgentContext<BrowserActionContext>;
+  private context: SessionContext<BrowserActionContext>;
   private webSocket: any;
 
-  constructor(context: DispatcherAgentContext<BrowserActionContext>) {
+  constructor(context: SessionContext<BrowserActionContext>) {
     this.context = context;
-    this.webSocket = context.context.webSocket;
+    this.webSocket = context.agentContext.webSocket;
   }
 
   async sendActionToBrowser(action: any, messageType?: string) {

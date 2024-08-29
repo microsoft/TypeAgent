@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import {
-    DispatcherAgentContext,
+    SessionContext,
     DispatcherAgent,
     DispatcherAction,
     ActionContext,

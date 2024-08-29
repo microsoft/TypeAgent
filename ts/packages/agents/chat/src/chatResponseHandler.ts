@@ -25,7 +25,7 @@ import {
 import { PromptSection } from "typechat";
 import {
     DispatcherAction,
-    DispatcherAgentContext,
+    SessionContext,
     TurnImpression,
     createTurnImpressionFromLiteral,
 } from "@typeagent/agent-sdk";
@@ -497,7 +497,7 @@ function streamPartialChatResponseAction(
     name: string,
     value: string,
     partial: boolean,
-    context: DispatcherAgentContext,
+    context: SessionContext,
 ) {
     if (actionName !== "generateResponse") {
         return;

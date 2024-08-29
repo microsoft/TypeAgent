@@ -5,7 +5,7 @@ import chlid_process from "child_process";
 import {
     DispatcherAgent,
     ActionContext,
-    DispatcherAgentContext,
+    SessionContext,
 } from "@typeagent/agent-sdk";
 import {
     AgentCallAPI,
@@ -73,15 +73,15 @@ export async function createAgentProcessShim(
             });
         },
     );
-    const contextMap = createContextMap<DispatcherAgentContext<ShimContext>>();
+    const contextMap = createContextMap<SessionContext<ShimContext>>();
     function withContext<T>(
-        context: DispatcherAgentContext<ShimContext>,
+        context: SessionContext<ShimContext>,
         fn: (contextParams: ContextParams) => T,
     ) {
         return fn({
             contextId: contextMap.getId(context),
             hasSessionStorage: context.sessionStorage !== undefined,
-            agentContextId: context.context?.contextId,
+            agentContextId: context.agentContext?.contextId,
         });
     }
 
@@ -104,7 +104,7 @@ export async function createAgentProcessShim(
             },
         );
     }
-    function getStorage(param: any, context: DispatcherAgentContext) {
+    function getStorage(param: any, context: SessionContext) {
         const storage = param.session
             ? context.sessionStorage
             : context.profileStorage;
@@ -177,7 +177,7 @@ export async function createAgentProcessShim(
         },
         updateAgentContext(
             enable,
-            context: DispatcherAgentContext<ShimContext>,
+            context: SessionContext<ShimContext>,
             translatorName,
         ) {
             return withContext(context, (contextParams) =>
@@ -196,7 +196,7 @@ export async function createAgentProcessShim(
                 }),
             );
         },
-        validateWildcardMatch(action, context: DispatcherAgentContext) {
+        validateWildcardMatch(action, context: SessionContext) {
             return withContext(context, (contextParams) =>
                 rpc.invoke(AgentInvokeAPI.ValidateWildcardMatch, {
                     ...contextParams,
@@ -209,7 +209,7 @@ export async function createAgentProcessShim(
             name: string,
             value: string,
             partial: boolean,
-            context: DispatcherAgentContext,
+            context: SessionContext,
         ) {
             return withContext(context, (contextParams) =>
                 rpc.send(AgentCallAPI.StreamPartialAction, {
@@ -221,7 +221,7 @@ export async function createAgentProcessShim(
                 }),
             );
         },
-        closeAgentContext(context: DispatcherAgentContext) {
+        closeAgentContext(context: SessionContext) {
             return withContext(context, (contextParams) =>
                 rpc.invoke(AgentInvokeAPI.CloseAgentContext, {
                     ...contextParams,

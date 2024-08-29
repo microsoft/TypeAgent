@@ -7,7 +7,7 @@ import {
     ActionContext,
     DispatcherAction,
     DispatcherAgent,
-    DispatcherAgentContext,
+    SessionContext,
 } from "@typeagent/agent-sdk";
 
 export function instantiate(): DispatcherAgent {
@@ -30,19 +30,19 @@ async function initializeCodeContext(): Promise<CodeActionContext> {
 
 async function updateCodeContext(
     enable: boolean,
-    context: DispatcherAgentContext<CodeActionContext>,
+    context: SessionContext<CodeActionContext>,
 ): Promise<void> {
     if (enable) {
-        if (context.context.webSocket?.readyState === WebSocket.OPEN) {
+        if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {
             return;
         }
 
         const webSocket = await createWebSocket();
         if (webSocket) {
-            context.context.webSocket = webSocket;
+            context.agentContext.webSocket = webSocket;
             webSocket.onclose = (event: Object) => {
                 console.error("Code webSocket connection closed.");
-                context.context.webSocket = undefined;
+                context.agentContext.webSocket = undefined;
             };
             webSocket.onmessage = async (event: any) => {
                 const text = event.data.toString();
@@ -67,13 +67,13 @@ async function updateCodeContext(
             };
         }
     } else {
-        const webSocket = context.context.webSocket;
+        const webSocket = context.agentContext.webSocket;
         if (webSocket) {
             webSocket.onclose = null;
             webSocket.close();
         }
 
-        context.context.webSocket = undefined;
+        context.agentContext.webSocket = undefined;
     }
 }
 

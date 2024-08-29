@@ -22,7 +22,7 @@ import {
     getNWeeksDateRangeISO,
 } from "./calendarQueryHelper.js";
 import {
-    DispatcherAgentContext,
+    SessionContext,
     Entity,
     ImpressionInterpreter,
     defaultImpressionInterpreter,
@@ -133,17 +133,17 @@ function createImpressionInterpreter(): ImpressionInterpreter {
 
 async function updateCalendarContext(
     enable: boolean,
-    context: DispatcherAgentContext<CalendarActionContext>,
+    context: SessionContext<CalendarActionContext>,
 ): Promise<void> {
     if (enable) {
-        context.context.calendarClient = await createCalendarGraphClient();
+        context.agentContext.calendarClient = await createCalendarGraphClient();
 
-        if (context.context.calendarClient) {
-            context.context.graphEventIds = [];
-            context.context.mapGraphEntity = new Map();
+        if (context.agentContext.calendarClient) {
+            context.agentContext.graphEventIds = [];
+            context.agentContext.mapGraphEntity = new Map();
         }
     } else {
-        context.context.calendarClient = undefined;
+        context.agentContext.calendarClient = undefined;
     }
 }
 

@@ -3,7 +3,7 @@
 
 import {
     ActionContext,
-    DispatcherAgentContext,
+    SessionContext,
     TurnImpression,
     createTurnImpressionFromLiteral,
 } from "@typeagent/agent-sdk";

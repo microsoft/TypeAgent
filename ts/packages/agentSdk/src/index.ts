@@ -8,7 +8,7 @@ export {
     DispatcherAgentIO,
     DispatcherAction,
     DispatcherActionWithParameters,
-    DispatcherAgentContext,
+    SessionContext,
     StorageListOptions,
     Storage,
     StorageEncoding,

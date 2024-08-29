@@ -38,7 +38,7 @@ export interface DispatcherAgent {
     initializeAgentContext?(): Promise<any>;
     updateAgentContext?(
         enable: boolean,
-        context: DispatcherAgentContext,
+        context: SessionContext,
         translatorName: string, // for sub-translators
     ): Promise<void>;
     streamPartialAction?(
@@ -46,7 +46,7 @@ export interface DispatcherAgent {
         name: string,
         value: string,
         partial: boolean,
-        dispatcherContext: DispatcherAgentContext,
+        dispatcherContext: SessionContext,
     ): void;
     executeAction?(
         action: DispatcherAction,
@@ -54,13 +54,13 @@ export interface DispatcherAgent {
     ): Promise<any>; // TODO: define return type.
     validateWildcardMatch?(
         action: DispatcherAction,
-        context: DispatcherAgentContext,
+        context: SessionContext,
     ): Promise<boolean>;
-    closeAgentContext?(context: DispatcherAgentContext): Promise<void>;
+    closeAgentContext?(context: SessionContext): Promise<void>;
 }
 
-export interface DispatcherAgentContext<T = any> {
-    readonly context: T;
+export interface SessionContext<T = any> {
+    readonly agentContext: T;
 
     // TODO: review if these should be exposed.
     readonly agentIO: DispatcherAgentIO;
@@ -125,5 +125,5 @@ export interface ActionContext<T = void> {
     readonly actionIO: ActionIO;
 
     // TODO: remove usage
-    readonly sessionContext: DispatcherAgentContext;
+    readonly sessionContext: SessionContext;
 }

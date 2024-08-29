@@ -14,7 +14,7 @@ import {
     ActionContext,
     DispatcherAction,
     DispatcherAgent,
-    DispatcherAgentContext,
+    SessionContext,
     createTurnImpressionFromDisplay,
 } from "@typeagent/agent-sdk";
 
@@ -38,12 +38,12 @@ async function initializeEmailContext() {
 
 async function updateEmailContext(
     enable: boolean,
-    context: DispatcherAgentContext<EmailActionContext>,
+    context: SessionContext<EmailActionContext>,
 ): Promise<void> {
     if (enable) {
-        context.context.mailClient = await createMailGraphClient();
+        context.agentContext.mailClient = await createMailGraphClient();
     } else {
-        context.context.mailClient = undefined;
+        context.agentContext.mailClient = undefined;
     }
 }
 

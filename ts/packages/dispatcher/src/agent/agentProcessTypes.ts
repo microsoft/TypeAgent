@@ -20,7 +20,7 @@ export enum AgentCallAPI {
 }
 
 export const enum AgentContextCallAPI {
-    // DispatcherAgentContext
+    // SessionContext
     AgentIOStatus = "agentIOStatus",
     AgentIOSuccess = "agentIOSuccess",
     SetActionStatus = "agentIOSetActionStatus",

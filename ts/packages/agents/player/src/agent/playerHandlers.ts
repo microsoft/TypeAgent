@@ -11,7 +11,7 @@ import {
 import chalk from "chalk";
 import {
     DispatcherAgent,
-    DispatcherAgentContext,
+    SessionContext,
     DispatcherAction,
     createTurnImpressionFromError,
     ActionContext,
@@ -52,7 +52,7 @@ async function executePlayerAction(
 
 async function updatePlayerContext(
     enable: boolean,
-    context: DispatcherAgentContext<PlayerActionContext>,
+    context: SessionContext<PlayerActionContext>,
 ) {
     if (enable) {
         const user = await enableSpotify(context);
@@ -60,30 +60,28 @@ async function updatePlayerContext(
             chalk.blue(`Spotify integration enabled. Logged in as ${user}.`),
         );
     } else {
-        const timeoutId = context.context.spotify?.userData?.timeoutId;
+        const timeoutId = context.agentContext.spotify?.userData?.timeoutId;
         if (timeoutId !== undefined) {
             clearTimeout(timeoutId);
         }
-        context.context.spotify = undefined;
+        context.agentContext.spotify = undefined;
     }
 }
 
-async function enableSpotify(
-    context: DispatcherAgentContext<PlayerActionContext>,
-) {
+async function enableSpotify(context: SessionContext<PlayerActionContext>) {
     const clientContext = await getClientContext(context.profileStorage);
     clientContext.updateActionStatus = context.getUpdateActionStatus();
-    context.context.spotify = clientContext;
+    context.agentContext.spotify = clientContext;
 
     return clientContext.service.retrieveUser().username;
 }
 
 async function validatePlayerWildcardMatch(
     action: DispatcherAction,
-    context: DispatcherAgentContext<PlayerActionContext>,
+    context: SessionContext<PlayerActionContext>,
 ) {
     if (action.actionName === "play") {
-        const clientContext = context.context.spotify;
+        const clientContext = context.agentContext.spotify;
         if (clientContext === undefined) {
             // Can't validate without context, assume true
             return true;
