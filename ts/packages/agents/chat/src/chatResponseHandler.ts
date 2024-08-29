@@ -103,7 +103,7 @@ async function handleChatResponse(
                 lookupAction.parameters.conversationLookupFilters !== undefined
             ) {
                 const conversationManager: Conversation.ConversationManager = (
-                    context as any
+                    context.sessionContext as any
                 ).conversationManager;
                 if (conversationManager !== undefined) {
                     let searchResponse =

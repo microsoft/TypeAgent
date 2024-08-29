@@ -103,7 +103,7 @@ function createSessionContext(
             context.requestIO.setActionStatus(message, actionIndex, name);
         },
     };
-    const agentContext: SessionContext = {
+    const sessionContext: SessionContext = {
         get agentContext() {
             return context.action[name];
         },
@@ -138,9 +138,9 @@ function createSessionContext(
             );
         },
     };
-    (agentContext as any).conversationManager = context.conversationManager;
-    context.sessionContext.set(name, agentContext);
-    return agentContext;
+    (sessionContext as any).conversationManager = context.conversationManager;
+    context.sessionContext.set(name, sessionContext);
+    return sessionContext;
 }
 
 export async function updateActionContext(
