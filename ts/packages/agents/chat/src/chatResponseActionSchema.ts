@@ -71,8 +71,8 @@ export type TermFilter = {
     timeRange?: DateTimeRange | undefined; // in this time range
 };
 
-// DO NOT use this action if the request can be handled by a more specific action, like GetListAction for "what's on my grocery list" or StatusAction for "what's the music player volume"
-// this action used to lookup information from past conversations or the internet and generate a response based on the lookup results
+// DO NOT use this action for a request for information stored in application memory, such as a list, playlist, album, table etc.; instead use the information retrieval actions for the specific application storage
+// this action is used to lookup information from past conversations or the internet and generate a response based on the lookup results
 export interface LookupAndGenerateResponseAction {
     actionName: "lookupAndGenerateResponse";
     parameters: {
