@@ -31,9 +31,10 @@ export async function createWebSocket() {
         configValues = await getConfigValues();
     }
 
-    const socketEndpoint =
+    let socketEndpoint =
         configValues["WEBSOCKET_HOST"] ?? "ws://localhost:8080/";
 
+    socketEndpoint += "?clientId=" + chrome.runtime.id;
     return new Promise<WebSocket | undefined>((resolve, reject) => {
         const webSocket = new WebSocket(socketEndpoint);
 
@@ -167,21 +168,15 @@ export function keepWebSocketAlive(webSocket: WebSocket) {
     }, 20 * 1000);
 }
 
-let isReconnectRunning = false;
 export function reconnectWebSocket() {
     const connectionCheckIntervalId = setInterval(async () => {
         if (webSocket && webSocket.readyState === WebSocket.OPEN) {
             console.log("Clearing reconnect retry interval");
             clearInterval(connectionCheckIntervalId);
-            isReconnectRunning = false;
             showBadgeHealthy();
         } else {
-            if (!isReconnectRunning) {
-                isReconnectRunning = true;
-                console.log("Retrying connection");
-                await ensureWebsocketConnected();
-                isReconnectRunning = false;
-            }
+            console.log("Retrying connection");
+            await ensureWebsocketConnected();
         }
     }, 5 * 1000);
 }
