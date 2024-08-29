@@ -91,8 +91,12 @@ function createWindow(): void {
     });
 
     mainWindow.on("close", () => {
-        ShellSettings.getinstance().devTools =
-            mainWindow?.webContents.isDevToolsOpened();
+        if (mainWindow) {
+            ShellSettings.getinstance().zoomLevel =
+                mainWindow.webContents.zoomLevel;
+            ShellSettings.getinstance().devTools =
+                mainWindow.webContents.isDevToolsOpened();
+        }
     });
 
     mainWindow.on("closed", () => {

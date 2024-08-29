@@ -188,13 +188,43 @@ export async function testConversationEntities(): Promise<void> {
         type: ["food"],
     };
     await testConversation.addMessage(testMessage, [entity1, entity2]);
-    const matches = await testConversation.search(
-        "What food did we talk about?",
-    );
+
+    const query = "What food did we talk about?";
+    let matches = await testConversation.search(query);
     if (matches && matches.response && matches.response.answer) {
         console.log(matches.response.answer);
     } else {
         console.log("bug");
+    }
+    const filters: conversation.TermFilter[] = [
+        {
+            terms: ["food"],
+        },
+    ];
+    matches = await testConversation.search(query, filters);
+    if (matches && matches.response && matches.response.answer) {
+        console.log(matches.response.answer);
+    } else {
+        console.log("bug");
+    }
+    // Now do separate search and answer
+    let searchResponse = await testConversation.getSearchResponse(
+        query,
+        filters,
+    );
+    if (searchResponse) {
+        if (searchResponse.response?.hasHits()) {
+            console.log("Has hits");
+        }
+        matches = await testConversation.generateAnswerForSearchResponse(
+            query,
+            searchResponse,
+        );
+        if (matches && matches.response && matches.response.answer) {
+            console.log(matches.response.answer);
+        } else {
+            console.log("bug");
+        }
     }
 }
 

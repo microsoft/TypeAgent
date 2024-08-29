@@ -5,23 +5,18 @@ import { Actions } from "agent-cache";
 import {
     CommandHandlerContext,
     changeContextConfig,
+    getDispatcherAgent,
 } from "../handlers/common/commandHandlerContext.js";
 import registerDebug from "debug";
-import {
-    getDispatcherAgentName,
-    getTranslatorConfig,
-} from "../translation/agentTranslators.js";
+import { getDispatcherAgentName } from "../translation/agentTranslators.js";
 import {
     createTurnImpressionFromLiteral,
     DispatcherAction,
+    DispatcherAgent,
     DispatcherAgentContext,
     TurnImpression,
     turnImpressionToString,
 } from "@typeagent/agent-sdk";
-import {
-    getDispatcherAgent,
-    getDispatcherAgents,
-} from "../agent/agentConfig.js";
 import { processCommandNoLock } from "../command.js";
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
@@ -29,15 +24,15 @@ import { getUserProfileDir } from "../utils/userData.js";
 
 const debugActions = registerDebug("typeagent:actions");
 
-export async function initializeActionContext() {
+export async function initializeActionContext(
+    agents: Map<string, DispatcherAgent>,
+) {
     return Object.fromEntries(
         await Promise.all(
-            Array.from((await getDispatcherAgents()).entries()).map(
-                async ([name, agent]) => [
-                    name,
-                    await agent.initializeAgentContext?.(),
-                ],
-            ),
+            Array.from(agents.entries()).map(async ([name, agent]) => [
+                name,
+                await agent.initializeAgentContext?.(),
+            ]),
         ),
     );
 }
@@ -89,15 +84,6 @@ function createDispatcherAgentContext(
         getUpdateActionStatus() {
             return context.clientIO?.updateActionStatus.bind(context.clientIO);
         },
-        searchMenuCommand(menuId, command, prefix?, choices?, visible?): void {
-            return context.clientIO?.searchMenuCommand(
-                menuId,
-                command,
-                prefix,
-                choices,
-                visible,
-            );
-        },
         async toggleAgent(name: string, enable: boolean) {
             await changeContextConfig(
                 {
@@ -108,6 +94,7 @@ function createDispatcherAgentContext(
             );
         },
     };
+    (agentContext as any).conversationManager = context.conversationManager;
     context.sessionContext.set(name, agentContext);
     return agentContext;
 }
@@ -144,7 +131,7 @@ async function updateAgentContext(
     context: CommandHandlerContext,
 ) {
     const dispatcherAgentName = getDispatcherAgentName(translatorName);
-    const dispatcherAgent = await getDispatcherAgent(dispatcherAgentName);
+    const dispatcherAgent = getDispatcherAgent(dispatcherAgentName, context);
     await dispatcherAgent.updateAgentContext?.(
         enable,
         getDispatcherAgentContext(dispatcherAgentName, context),
@@ -173,7 +160,7 @@ async function executeAction(
         throw new Error(`Cannot execute action without translator name.`);
     }
     const dispatcherAgentName = getDispatcherAgentName(translatorName);
-    const dispatcherAgent = await getDispatcherAgent(dispatcherAgentName);
+    const dispatcherAgent = getDispatcherAgent(dispatcherAgentName, context);
 
     // Update the current translator.
     context.currentTranslatorName = translatorName;
@@ -194,14 +181,8 @@ export async function partialInput(
     text: string,
     context: CommandHandlerContext,
 ) {
-    const dispatcherAgentName = getDispatcherAgentName(
-        context.currentTranslatorName,
-    );
-    const dispatcherAgent = await getDispatcherAgent(dispatcherAgentName);
-    return dispatcherAgent.partialInput?.(
-        text,
-        getDispatcherAgentContext(dispatcherAgentName, context),
-    );
+    // For auto completion
+    throw new Error("NYI");
 }
 
 export async function executeActions(
@@ -212,10 +193,30 @@ export async function executeActions(
     const requestIO = context.requestIO;
     let actionIndex = 0;
     for (const action of actions) {
-        const result =
-            (await executeAction(action, context, actionIndex)) ??
-            createTurnImpressionFromLiteral(`
+        let result: TurnImpression;
+        const returnedResult = await executeAction(
+            action,
+            context,
+            actionIndex,
+        );
+        if (returnedResult === undefined) {
+            result = createTurnImpressionFromLiteral(`
                 Action ${action.fullActionName} completed.`);
+        } else {
+            if (
+                returnedResult.error === undefined &&
+                returnedResult.literalText &&
+                context.conversationManager
+            ) {
+                // TODO: convert entity values to facets
+                context.conversationManager.addMessage(
+                    returnedResult.literalText,
+                    returnedResult.entities,
+                    new Date(),
+                );
+            }
+            result = returnedResult;
+        }
         if (debugActions.enabled) {
             debugActions(turnImpressionToString(result));
         }
@@ -258,7 +259,10 @@ export async function validateWildcardMatch(
             continue;
         }
         const dispatcherAgentName = getDispatcherAgentName(translatorName);
-        const dispatcherAgent = await getDispatcherAgent(dispatcherAgentName);
+        const dispatcherAgent = getDispatcherAgent(
+            dispatcherAgentName,
+            context,
+        );
         const dispatcherContext = getDispatcherAgentContext(
             dispatcherAgentName,
             context,
@@ -273,4 +277,34 @@ export async function validateWildcardMatch(
         }
     }
     return true;
+}
+
+export function streamPartialAction(
+    translatorName: string,
+    actionName: string,
+    name: string,
+    value: string,
+    partial: boolean,
+    context: CommandHandlerContext,
+) {
+    const dispatcherAgentName = getDispatcherAgentName(translatorName);
+    const dispatcherAgent = getDispatcherAgent(dispatcherAgentName, context);
+    const dispatcherContext = getDispatcherAgentContext(
+        dispatcherAgentName,
+        context,
+    );
+    if (dispatcherAgent.streamPartialAction === undefined) {
+        // The config declared that there are streaming action, but the agent didn't implement it.
+        throw new Error(
+            `Agent ${dispatcherAgentName} does not support streamPartialAction.`,
+        );
+    }
+
+    dispatcherAgent.streamPartialAction(
+        actionName,
+        name,
+        value,
+        partial,
+        dispatcherContext,
+    );
 }

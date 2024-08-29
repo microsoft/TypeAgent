@@ -4,6 +4,7 @@
 import chlid_process from "child_process";
 import { DispatcherAgent, DispatcherAgentContext } from "@typeagent/agent-sdk";
 import {
+    AgentCallAPI,
     AgentContextCallAPI,
     AgentContextInvokeAPI,
     AgentInvokeAPI,
@@ -34,9 +35,9 @@ export async function createAgentProcessShim(
     let nextContextId = 0;
     const contextIdMap = new Map<DispatcherAgentContext<ShimContext>, number>();
     const contextMap = new Map<number, DispatcherAgentContext<ShimContext>>();
-    async function withContext(
+    function withContext<T>(
         context: DispatcherAgentContext<ShimContext>,
-        fn: (contextParams: ContextParams) => Promise<any>,
+        fn: (contextParams: ContextParams) => T,
     ) {
         let contextId = contextIdMap.get(context);
         if (contextId === undefined) {
@@ -134,7 +135,7 @@ export async function createAgentProcessShim(
         }
     }
 
-    const rpc = setupInvoke<AgentInvokeAPI>(
+    const rpc = setupInvoke<AgentInvokeAPI, AgentCallAPI>(
         process,
         agentContextInvokeHandler,
         agentContextCallHandler,
@@ -170,19 +171,28 @@ export async function createAgentProcessShim(
                 }),
             );
         },
-        partialInput(text, context: DispatcherAgentContext) {
-            return withContext(context, (contextParams) =>
-                rpc.invoke(AgentInvokeAPI.PartialInput, {
-                    ...contextParams,
-                    text,
-                }),
-            );
-        },
         validateWildcardMatch(action, context: DispatcherAgentContext) {
             return withContext(context, (contextParams) =>
                 rpc.invoke(AgentInvokeAPI.ValidateWildcardMatch, {
                     ...contextParams,
                     action,
+                }),
+            );
+        },
+        streamPartialAction(
+            actionName: string,
+            name: string,
+            value: string,
+            partial: boolean,
+            context: DispatcherAgentContext,
+        ) {
+            return withContext(context, (contextParams) =>
+                rpc.send(AgentCallAPI.StreamPartialAction, {
+                    ...contextParams,
+                    actionName,
+                    name,
+                    value,
+                    partial,
                 }),
             );
         },

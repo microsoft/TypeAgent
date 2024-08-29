@@ -40,6 +40,7 @@
     "desktop-automation": "workspace:*",
     "email": "workspace:*",
     "glob": "^10.3.12",
+    "knowledge-processor": "workspace:*",
     "list-agent": "workspace:*",
     "music": "workspace:*",
     "proper-lockfile": "^4.1.2",

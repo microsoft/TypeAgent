@@ -27,7 +27,7 @@ let programNameIndex: ProgramNameIndex;
 
 function spawnAutomationProcess() {
     const autoShellPath = new URL(
-        "../../../../../dotnet/src/autoShell/bin/Debug/autoShell.exe",
+        "../../../../../dotnet/autoShell/bin/Debug/autoShell.exe",
         import.meta.url,
     );
     const child = spawn(fileURLToPath(autoShellPath));

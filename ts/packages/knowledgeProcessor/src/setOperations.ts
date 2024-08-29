@@ -281,7 +281,7 @@ export function flatten<T>(
     return sort ? flat.sort() : flat;
 }
 
-export function removeUndefined<T>(src: Array<T | undefined>): T[] {
+export function removeUndefined<T = any>(src: Array<T | undefined>): T[] {
     return src.filter((item) => item !== undefined) as T[];
 }
 

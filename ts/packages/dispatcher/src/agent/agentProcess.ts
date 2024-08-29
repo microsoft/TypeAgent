@@ -60,15 +60,6 @@ async function agentInvokeHandler(name: string, param: any): Promise<any> {
                 getDispatcherAgentContextShim(param),
                 param.actionIndex,
             );
-
-        case AgentInvokeAPI.PartialInput:
-            if (agent.partialInput === undefined) {
-                throw new Error("Invalid invocation of partialInput");
-            }
-            return agent.partialInput(
-                param.text,
-                getDispatcherAgentContextShim(param),
-            );
         case AgentInvokeAPI.ValidateWildcardMatch:
             if (agent.validateWildcardMatch === undefined) {
                 throw new Error("Invalid invocation of validateWildcardMatch");
@@ -227,16 +218,6 @@ function createDispatcherAgentContextShim(
         getUpdateActionStatus: ():
             | ((message: string, group_id: string) => void)
             | undefined => {
-            throw new Error("NYI");
-        },
-
-        searchMenuCommand: (
-            menuId: string,
-            command: any, // TODO: Fix the type
-            prefix?: string,
-            choices?: any[], // TODO: Fix the type
-            visible?: boolean,
-        ): void => {
             throw new Error("NYI");
         },
         toggleAgent: async (name: string, enable: boolean): Promise<void> => {

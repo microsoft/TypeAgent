@@ -9,7 +9,6 @@ export {
     DispatcherAction,
     DispatcherActionWithParameters,
     DispatcherAgentContext,
-    SearchMenuContext,
     StorageListOptions,
     Storage,
     StorageEncoding,

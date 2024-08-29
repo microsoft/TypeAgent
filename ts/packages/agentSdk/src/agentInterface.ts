@@ -1,14 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// TODO: remove duplicate type
-export type SearchMenuItem = {
-    matchText: string;
-    selectedText: string;
-    emojiChar?: string;
-    groupName?: string;
-};
-
 export type TopLevelTranslatorConfig = {
     emojiChar: string;
 } & HierarchicalTranslatorConfig;
@@ -28,6 +20,7 @@ export type HierarchicalTranslatorConfig = {
         dataFrameColumns?: { [key: string]: string };
         injected?: boolean; // whether the translator is injected into other domains, default is false
         cached?: boolean; // whether the translator's action should be cached, default is true
+        streamingActions?: string[];
     };
     subTranslators?: { [key: string]: HierarchicalTranslatorConfig };
 };
@@ -48,12 +41,18 @@ export interface DispatcherAgent {
         context: DispatcherAgentContext,
         translatorName: string, // for sub-translators
     ): Promise<void>;
+    streamPartialAction?(
+        actionName: string,
+        name: string,
+        value: string,
+        partial: boolean,
+        dispatcherContext: DispatcherAgentContext,
+    ): void;
     executeAction?(
         action: DispatcherAction,
         context: DispatcherAgentContext,
         actionIndex: number, // TODO: can we avoid passing this index?
     ): Promise<any>; // TODO: define return type.
-    partialInput?(text: string, context: DispatcherAgentContext): void;
     validateWildcardMatch?(
         action: DispatcherAction,
         context: DispatcherAgentContext,
@@ -74,14 +73,6 @@ export interface DispatcherAgentContext<T = any> {
     getUpdateActionStatus():
         | ((message: string, group_id: string) => void)
         | undefined;
-
-    searchMenuCommand(
-        menuId: string,
-        command: SearchMenuCommand,
-        prefix?: string,
-        choices?: SearchMenuItem[],
-        visible?: boolean,
-    ): void;
     toggleAgent(name: string, enable: boolean): Promise<void>;
 }
 
@@ -127,20 +118,3 @@ export interface DispatcherAgentIO {
         groupId?: string,
     ): void;
 }
-
-export type SearchMenuCommand =
-    | "register"
-    | "legend"
-    | "complete"
-    | "cancel"
-    | "show"
-    | "remove";
-
-export type SearchMenuState = "active" | "inactive";
-
-export type SearchMenuContext = {
-    state: SearchMenuState;
-    menuId: string;
-    lastPrefix: string;
-    choices?: string[];
-};

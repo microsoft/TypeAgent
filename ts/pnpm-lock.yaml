@@ -374,6 +374,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      aiclient:
+        specifier: workspace:*
+        version: link:../../aiclient
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
@@ -466,6 +469,9 @@ importers:
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
+      knowledge-processor:
+        specifier: workspace:*
+        version: link:../../knowledgeProcessor
       typeagent:
         specifier: workspace:*
         version: link:../../typeagent
@@ -704,9 +710,15 @@ importers:
       '@types/debug':
         specifier: ^4.1.10
         version: 4.1.10
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.7
       '@types/node':
         specifier: ^18.18.7
         version: 18.18.7
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@18.18.7)(ts-node@10.9.1(@types/node@18.18.7)(typescript@5.4.3))
       rimraf:
         specifier: ^5.0.5
         version: 5.0.5
@@ -1079,6 +1091,9 @@ importers:
       glob:
         specifier: ^10.3.12
         version: 10.3.12
+      knowledge-processor:
+        specifier: workspace:*
+        version: link:../knowledgeProcessor
       list-agent:
         specifier: workspace:*
         version: link:../agents/list

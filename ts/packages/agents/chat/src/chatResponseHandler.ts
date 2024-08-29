@@ -25,10 +25,13 @@ import {
     createTurnImpressionFromLiteral,
 } from "@typeagent/agent-sdk";
 import { fileURLToPath } from "node:url";
+import { conversation as Conversation } from "knowledge-processor";
+import { create } from "node:domain";
 
 export function instantiate(): DispatcherAgent {
     return {
         executeAction: executeChatResponseAction,
+        streamPartialAction: streamPartialChatResponseAction,
     };
 }
 
@@ -245,7 +248,7 @@ async function handleLookup(
         "No information found",
     );
 
-    let lookups = chatAction.parameters.lookups;
+    let lookups = chatAction.parameters.internetLookups;
     if (!lookups || lookups.length === 0) {
         return literalResponse;
     }
@@ -482,4 +485,24 @@ function updateLookupProgress(
     }
     progress.answerSoFar = answerSoFar;
     progress.counter++;
+}
+
+function streamPartialChatResponseAction(
+    actionName: string,
+    name: string,
+    value: string,
+    partial: boolean,
+    context: DispatcherAgentContext,
+) {
+    if (actionName !== "generateResponse") {
+        return;
+    }
+
+    if (name === "parameters.generatedText") {
+        context.requestIO.setActionStatus(
+            `${value}${partial ? "..." : ""}`,
+            0,
+            "chat",
+        );
+    }
 }

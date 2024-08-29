@@ -26,7 +26,11 @@ import {
 import { AnswerGenerator, createAnswerGenerator } from "./answerGenerator.js";
 import { PromptSection } from "typechat";
 import { ChatModel } from "aiclient";
-import { GetAnswerWithTermsAction } from "./knowledgeTermSearchSchema.js";
+import {
+    GetAnswerWithTermsAction,
+    SearchTermsAction,
+    TermFilter,
+} from "./knowledgeTermSearchSchema.js";
 
 export type SearchProcessingOptions = {
     maxMatches: number;
@@ -35,6 +39,7 @@ export type SearchProcessingOptions = {
     fallbackSearch?: SearchOptions | undefined;
     combinationSetOp?: SetOp;
     includeActions?: boolean;
+    skipAnswerGeneration?: boolean;
     progress?: ((action: any) => void) | undefined;
 };
 
@@ -48,8 +53,18 @@ export interface ConversationSearchProcessor {
     ): Promise<SearchActionResponse | undefined>;
     searchTerms(
         query: string,
+        filters: TermFilter[] | undefined,
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponse | undefined>;
+    /**
+     * Generate an answer using a prior search response
+     * @param searchResponse
+     */
+    generateAnswer(
+        query: string,
+        actionResponse: SearchTermsActionResponse,
+        options: SearchProcessingOptions,
+    ): Promise<SearchTermsActionResponse>;
     buildContext(
         options: SearchProcessingOptions,
     ): Promise<PromptSection[] | undefined>;
@@ -78,6 +93,7 @@ export function createSearchProcessor(
         search,
         searchTerms,
         buildContext,
+        generateAnswer,
     };
 
     async function search(
@@ -114,17 +130,30 @@ export function createSearchProcessor(
 
     async function searchTerms(
         query: string,
+        filters: TermFilter[] | undefined,
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponse | undefined> {
         const context = await buildContext();
-        const actionResult = await searchTranslator.translateSearchTerms(
-            query,
-            context,
-        );
-        if (!actionResult.success) {
-            return undefined;
+        let action: SearchTermsAction | undefined;
+        if (filters && filters.length > 0) {
+            // Filters already provided
+            action = {
+                actionName: "getAnswer",
+                parameters: {
+                    filters,
+                },
+            };
+        } else {
+            const actionResult = await searchTranslator.translateSearchTerms(
+                query,
+                context,
+            );
+            if (!actionResult.success) {
+                return undefined;
+            }
+            action = actionResult.data;
         }
-        let action = actionResult.data;
+
         if (options.progress) {
             options.progress(action);
         }
@@ -223,7 +252,6 @@ export function createSearchProcessor(
     ): Promise<SearchResponse> {
         const topLevelTopicSummary = isSummaryRequest(action);
         const topicLevel = topLevelTopicSummary ? 2 : 1;
-        let style: ResponseStyle | undefined; //"Paragraph";
         const searchOptions: ConversationSearchOptions = {
             entity: {
                 maxMatches: options.maxMatches,
@@ -239,7 +267,7 @@ export function createSearchProcessor(
                 loadTopics: true,
             },
             topicLevel,
-            loadMessages: true,
+            loadMessages: !topLevelTopicSummary,
         };
         if (options.includeActions) {
             searchOptions.action = {
@@ -257,9 +285,36 @@ export function createSearchProcessor(
             searchOptions,
         );
         await adjustMessages(query, response, searchOptions, options);
+        if (!options.skipAnswerGeneration) {
+            await generateAnswerForSearchTerms(query, response, options);
+        }
+        return response;
+    }
+
+    async function generateAnswer(
+        query: string,
+        actionResponse: SearchTermsActionResponse,
+        options: SearchProcessingOptions,
+    ): Promise<SearchTermsActionResponse> {
+        if (actionResponse.response) {
+            await generateAnswerForSearchTerms(
+                query,
+                actionResponse.response,
+                options,
+            );
+        }
+        return actionResponse;
+    }
+
+    async function generateAnswerForSearchTerms(
+        query: string,
+        response: SearchResponse,
+        options: SearchProcessingOptions,
+    ) {
+        let style: ResponseStyle | undefined; //"Paragraph";
         response.answer = await answers.generateAnswer(
             query,
-            style,
+            undefined,
             response,
             false,
         );
@@ -271,7 +326,6 @@ export function createSearchProcessor(
                 options.fallbackSearch,
             );
         }
-        return response;
     }
 
     async function handleLookup(

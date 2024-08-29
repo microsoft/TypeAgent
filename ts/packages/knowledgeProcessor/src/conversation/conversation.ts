@@ -43,7 +43,12 @@ import {
 import { Filter, SearchAction } from "./knowledgeSearchWebSchema.js";
 import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
-import { intersectSets, unionSets, uniqueFrom } from "../setOperations.js";
+import {
+    intersectSets,
+    removeUndefined,
+    unionSets,
+    uniqueFrom,
+} from "../setOperations.js";
 import { getRangeOfTemporalSequence } from "../temporal.js";
 import { Action, ConcreteEntity } from "./knowledgeSchema.js";
 import { MessageIndex, createMessageIndex } from "./messages.js";
@@ -212,6 +217,8 @@ export interface SearchResponse<
     hasTopics(): boolean;
     hasEntities(): boolean;
     hasActions(): boolean;
+    hasMessages(): boolean;
+    hasHits(): boolean;
 }
 
 export function createSearchResponse<
@@ -241,6 +248,8 @@ export function createSearchResponse<
             hasTopics,
             hasEntities,
             hasActions,
+            hasHits,
+            hasMessages,
         };
     return response;
 
@@ -370,6 +379,16 @@ export function createSearchResponse<
         }
         return false;
     }
+
+    function hasMessages(): boolean {
+        return (
+            response.messageIds !== undefined && response.messageIds.length > 0
+        );
+    }
+
+    function hasHits(): boolean {
+        return hasMessages() || hasEntities() || hasTopics();
+    }
 }
 
 export type ConversationSettings = {
@@ -406,6 +425,8 @@ export async function createConversation(
     type TopicId = string;
     type EntityId = string;
     type ActionId = string;
+
+    settings.indexActions ??= true;
 
     const messages = await createTextStore(
         { concurrency: settings.indexSettings.concurrency },
@@ -838,9 +859,10 @@ export async function createConversation(
     async function loadMessages(
         ids: MessageId[],
     ): Promise<dateTime.Timestamped<TextBlock<MessageId>>[]> {
-        const loadedMessages = (await messages.getMultiple(
+        let loadedMessages = (await messages.getMultiple(
             ids,
         )) as dateTime.Timestamped<TextBlock<MessageId>>[];
+        loadedMessages = removeUndefined(loadedMessages);
         // Return messages in temporal order
         loadedMessages.sort(
             (x, y) => x.timestamp.getTime() - y.timestamp.getTime(),

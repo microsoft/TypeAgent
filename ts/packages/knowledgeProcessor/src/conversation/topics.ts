@@ -496,9 +496,13 @@ export async function createTopicIndex<TSourceId = string>(
         options: TopicSearchOptions,
     ): Promise<TopicSearchResult<TopicId>> {
         // We will just use the standard topic stuff for now, since that does the same thing
+        const topics =
+            filter.terms && filter.terms.length > 0
+                ? filter.terms.join(" ")
+                : "*";
         const topicFilter: TopicFilter = {
             filterType: "Topic",
-            topics: filter.terms.join(" "),
+            topics,
             timeRange: filter.timeRange,
         };
         return search(topicFilter, options);

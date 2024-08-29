@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
-import { ChatModelWithStreaming, openai as ai } from "aiclient";
+import { ChatModel, openai as ai } from "aiclient";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { ContentSection, HtmlFragments } from "../common/translator.js";
 
@@ -81,19 +81,12 @@ export class CrosswordAgent<T extends object> {
     schema: string;
     boardSchema: string;
 
-    model: ChatModelWithStreaming;
+    model: ChatModel;
     translator: TypeChatJsonTranslator<T>;
 
-    constructor(
-        schema: string,
-        schemaName: string,
-        vals: Record<string, string>,
-    ) {
+    constructor(schema: string, schemaName: string, fastModelName: string) {
         this.schema = schema;
-        const apiSettings = ai.azureApiSettingsFromEnv(ai.ModelType.Chat, vals);
-
-        // this.model = createLanguageModel(vals);
-        this.model = ai.createChatModel(apiSettings);
+        this.model = ai.createJsonChatModel(fastModelName);
         const validator = createTypeScriptJsonValidator<T>(
             this.schema,
             schemaName,

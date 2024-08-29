@@ -45,7 +45,7 @@ export async function createTokenProvider(storage?: Storage) {
     }
 
     // Legacy: clean up old files
-    if (storage?.exists("token.json")) {
+    if (storage && (await storage.exists("token.json"))) {
         await storage.delete("token.json");
     }
 
