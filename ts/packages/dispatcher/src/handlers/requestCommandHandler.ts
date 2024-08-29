@@ -15,7 +15,10 @@ import {
     CommandHandlerContext,
     getAppAgent,
     getTranslator,
+    getActiveTranslatorList,
+    isTranslatorEnabled,
     updateCorrectionContext,
+    isActionEnabled,
 } from "./common/commandHandlerContext.js";
 
 import { getColorElapsedString, Profiler } from "common-utils";
@@ -40,6 +43,7 @@ import { MatchResult } from "../../../cache/dist/constructions/constructions.js"
 import registerDebug from "debug";
 import { getAllActionInfo } from "../translation/actionInfo.js";
 
+const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
 export const DispatcherName = "dispatcher";
 
@@ -76,7 +80,7 @@ async function confirmTranslation(
         "Use the buttons to run or cancel the following action. You can also type Enter to run it or Del to cancel it.";
     const prefaceMultiple =
         "Use the buttons to run or cancel the following sequence of actions. You can also type Enter to run it or Del to cancel it.";
-    const translatorNames = context.session.useTranslators.filter(
+    const translatorNames = getActiveTranslatorList(context).filter(
         (name) => !name.startsWith("system."),
     );
     const allActionInfo = getAllActionInfo(translatorNames);
@@ -153,9 +157,10 @@ async function matchRequest(
     if (constructionStore.isEnabled()) {
         const startTime = performance.now();
         const config = context.session.getConfig();
+        const useTranslators = getActiveTranslatorList(context);
         const matches = constructionStore.match(request, {
             wildcard: config.matchWildcard,
-            useTranslators: context.session.useTranslators,
+            useTranslators,
             history,
         });
 
@@ -178,7 +183,7 @@ async function matchRequest(
                         actions: requestAction.actions,
                         replacedAction,
                         developerMode: context.developerMode,
-                        translators: context.session.useTranslators,
+                        translators: useTranslators,
                         explainerName: context.agentCache.explainerName,
                         matchWildcard: config.matchWildcard,
                         allMatches: matches.map((m) => {
@@ -207,12 +212,15 @@ async function translateRequestWithTranslator(
     context: CommandHandlerContext,
     history?: HistoryContext,
 ) {
-    context.requestIO.status(`[${translatorName}] Translating '${request}'`);
+    context.requestIO.status(
+        `[${translatorName}] Translating '${request}'`,
+        translatorName,
+    );
     const translator = getTranslator(context, translatorName);
 
     const orp = translator.createRequestPrompt;
     if (history) {
-        context.requestIO.info(
+        debugTranslate(
             `Using history for translation. Entities: ${JSON.stringify(history.entities)}`,
         );
     }
@@ -234,6 +242,7 @@ async function translateRequestWithTranslator(
                       translatorName;
                   context.requestIO.status(
                       `[${actionTranslatorName}] Translating '${request}' into action '${value}'`,
+                      actionTranslatorName,
                   );
                   const config = getTranslatorConfig(actionTranslatorName);
                   if (config.streamingActions?.includes(value)) {
@@ -289,12 +298,11 @@ async function findAssistantForRequest(
     translatorName: string,
     context: CommandHandlerContext,
 ): Promise<NextTranslation | undefined> {
-    context.currentTranslatorName = DispatcherName;
     context.requestIO.status(
         `[switcher] Looking for another assistant to handle request '${request}'`,
     );
     const selectTranslator = loadAssistantSelectionJsonTranslator(
-        context.session.useTranslators.filter(
+        getActiveTranslatorList(context).filter(
             (enabledTranslatorName) => translatorName !== enabledTranslatorName,
         ),
     );
@@ -364,6 +372,13 @@ async function finalizeAction(
         }
 
         const { request, nextTranslatorName, searched } = nextTranslation;
+        if (!isTranslatorEnabled(nextTranslatorName, context)) {
+            // this is a bug. May be the translator cache didn't get updated when state change?
+            throw new Error(
+                `Internal error: switch to disabled translator ${nextTranslatorName}`,
+            );
+        }
+
         currentAction = await translateRequestWithTranslator(
             nextTranslatorName,
             request,
@@ -453,13 +468,21 @@ export async function translateRequest(
         context.requestIO.error("No translation found (GPT is off).");
         return;
     }
-    let translatorName = context.currentTranslatorName;
-    if (context.session.getConfig().translators[translatorName] !== true) {
+    // Start with the last translator used
+    let translatorName = context.lastActionTranslatorName;
+    if (!isTranslatorEnabled(translatorName, context)) {
+        debugTranslate(
+            `Translating request using default translator: ${translatorName} not active`,
+        );
         // REVIEW: Just pick the first one.
-        translatorName = context.session.useTranslators[0];
+        translatorName = getActiveTranslatorList(context)[0];
         if (translatorName === undefined) {
             throw new Error("No active translator available");
         }
+    } else {
+        debugTranslate(
+            `Translating request using current translator: ${translatorName}`,
+        );
     }
     const startTime = performance.now();
 
@@ -527,10 +550,8 @@ function canExecute(
     requestAction: RequestAction,
     context: CommandHandlerContext,
 ): boolean {
-    context.currentTranslatorName = DispatcherName;
     const requestIO = context.requestIO;
 
-    const enabledActions = context.session.getConfig().actions;
     const actions = requestAction.actions;
 
     const unknown: Action[] = [];
@@ -541,7 +562,7 @@ function canExecute(
         }
         if (
             action.translatorName &&
-            enabledActions[action.translatorName] !== true
+            !isActionEnabled(action.translatorName, context)
         ) {
             disabled.add(action.translatorName);
         }
@@ -578,7 +599,10 @@ async function requestExecute(
     if (action === undefined) {
         requestIO.status(`Executing multiple actions...`);
     } else {
-        requestIO.status(`Executing action ${action.fullActionName}`);
+        requestIO.status(
+            `Executing action ${action.fullActionName}`,
+            action.translatorName,
+        );
     }
     await executeActions(requestAction.actions, context);
 }
@@ -659,8 +683,6 @@ export class RequestCommandHandler implements CommandHandler {
                 `Invalid translation request with translation separator '${RequestAction.Separator}'.  Use @explain if you want to explain a translation.`,
             );
         }
-
-        context.currentTranslatorName = DispatcherName;
 
         const history = context.session.getConfig().history
             ? getChatHistoryForTranslation(context)

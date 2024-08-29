@@ -43,7 +43,7 @@ export const enum AgentContextInvokeAPI {
 
     // Context
     IssueCommand = "issueCommand",
-    ToggleAgent = "toggleAgent",
+    ToggleTransientAgent = "toggleTransientAgent",
 }
 
 export type InitializeMessage = {

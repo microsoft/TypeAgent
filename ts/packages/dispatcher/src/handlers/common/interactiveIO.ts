@@ -5,6 +5,7 @@ import { askYesNo } from "../../utils/interactive.js";
 import readline from "readline/promises";
 import { SearchMenuItem, ActionTemplateSequence, Profiler } from "common-utils";
 import chalk from "chalk";
+import { DispatcherName } from "../requestCommandHandler.js";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
 
 export type RequestId = string | undefined;
@@ -107,12 +108,12 @@ export interface RequestIO {
     context: CommandHandlerContext | undefined;
     getRequestId(): RequestId;
     clear(): void;
-    info(message: string | LogFn): void;
-    status(message: string | LogFn): void;
-    success(message: string | LogFn): void;
-    warn(message: string | LogFn): void;
-    error(message: string | LogFn): void;
-    result(message: string | LogFn): void;
+    info(message: string | LogFn, source?: string): void;
+    status(message: string | LogFn, source?: string): void;
+    success(message: string | LogFn, source?: string): void;
+    warn(message: string | LogFn, source?: string): void;
+    error(message: string | LogFn, source?: string): void;
+    result(message: string | LogFn, source?: string): void;
 
     // Action status
     setActionStatus(message: string, actionIndex: number, source: string): void;
@@ -193,14 +194,13 @@ export function getRequestIO(
     context: CommandHandlerContext | undefined,
     clientIO: ClientIO,
     requestId: RequestId,
-    source: string,
 ): RequestIO {
     return {
         type: "html",
         context: context,
         getRequestId: () => requestId,
         clear: () => clientIO.clear(),
-        info: (input: string | LogFn) =>
+        info: (input: string | LogFn, source: string = DispatcherName) =>
             clientIO.info(
                 makeClientIOMessage(
                     context,
@@ -209,7 +209,7 @@ export function getRequestIO(
                     source,
                 ),
             ),
-        status: (input: string | LogFn) =>
+        status: (input: string | LogFn, source: string = DispatcherName) =>
             clientIO.status(
                 makeClientIOMessage(
                     context,
@@ -218,7 +218,7 @@ export function getRequestIO(
                     source,
                 ),
             ),
-        success: (input: string | LogFn) =>
+        success: (input: string | LogFn, source: string = DispatcherName) =>
             clientIO.success(
                 makeClientIOMessage(
                     context,
@@ -227,7 +227,7 @@ export function getRequestIO(
                     source,
                 ),
             ),
-        warn: (input: string | LogFn) =>
+        warn: (input: string | LogFn, source: string = DispatcherName) =>
             clientIO.warn(
                 makeClientIOMessage(
                     context,
@@ -236,7 +236,7 @@ export function getRequestIO(
                     source,
                 ),
             ),
-        error: (input: string | LogFn) =>
+        error: (input: string | LogFn, source: string = DispatcherName) =>
             clientIO.error(
                 makeClientIOMessage(
                     context,
@@ -245,7 +245,7 @@ export function getRequestIO(
                     source,
                 ),
             ),
-        result: (input: string | LogFn) =>
+        result: (input: string | LogFn, source: string = DispatcherName) =>
             clientIO.result(
                 makeClientIOMessage(
                     context,

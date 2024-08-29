@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import chlid_process from "child_process";
+import child_process from "child_process";
 import { AppAgent, ActionContext, SessionContext } from "@typeagent/agent-sdk";
 import {
     AgentCallAPI,
@@ -54,7 +54,7 @@ function createContextMap<T>() {
 export async function createAgentProcessShim(
     modulePath: string,
 ): Promise<AppAgent> {
-    const process = chlid_process.fork(
+    const process = child_process.fork(
         fileURLToPath(new URL(`./agentProcess.js`, import.meta.url)),
         [modulePath],
     );
@@ -118,8 +118,8 @@ export async function createAgentProcessShim(
         switch (name) {
             case AgentContextInvokeAPI.IssueCommand:
                 return context.issueCommand(param.command);
-            case AgentContextInvokeAPI.ToggleAgent:
-                return context.toggleAgent(param.name, param.enable);
+            case AgentContextInvokeAPI.ToggleTransientAgent:
+                return context.toggleTransientAgent(param.name, param.enable);
             case AgentContextInvokeAPI.StorageRead:
                 return getStorage(param, context).read(
                     param.storagePath,

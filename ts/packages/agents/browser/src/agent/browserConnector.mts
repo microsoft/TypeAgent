@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { WebSocketMessage } from "common-utils";
-import { SessionContext } from "@typeagent/agent-sdk";
+import { AppAction, SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "./browserActionHandler.mjs";
 
 export class BrowserConnector {
@@ -14,7 +14,7 @@ export class BrowserConnector {
     this.webSocket = context.agentContext.webSocket;
   }
 
-  async sendActionToBrowser(action: any, messageType?: string) {
+  async sendActionToBrowser(action: AppAction, messageType?: string) {
     return new Promise<string | undefined>((resolve, reject) => {
       if (this.webSocket) {
         try {
@@ -26,8 +26,8 @@ export class BrowserConnector {
             requestId = new Date().getTime().toString();
           }
           if (!messageType) {
-            if (this.context.currentTranslatorName.startsWith("browser.")) {
-              messageType = `siteTranslatedAction_${this.context.currentTranslatorName.substring(8)}`;
+            if (action.translatorName!.startsWith("browser.")) {
+              messageType = `siteTranslatedAction_${action.translatorName!.substring(8)}`;
             } else {
               messageType = "translatedAction";
             }

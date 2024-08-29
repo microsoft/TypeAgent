@@ -73,15 +73,15 @@ async function ensureWebsocketConnected() {
         const data = JSON.parse(text) as WebSocketMessage;
         if (data.target == "browser") {
             if (data.messageType == "translatedAction") {
-                const respose = await runBrowserAction(data.body);
-                if (respose.data) {
+                const response = await runBrowserAction(data.body);
+                if (response.data) {
                     webSocket.send(
                         JSON.stringify({
                             source: data.target,
                             target: data.source,
                             messageType: "confirmActionWithData",
                             id: data.id,
-                            body: respose,
+                            body: response,
                         }),
                     );
                 } else {
@@ -91,7 +91,7 @@ async function ensureWebsocketConnected() {
                             target: data.source,
                             messageType: "confirmAction",
                             id: data.id,
-                            body: respose.message,
+                            body: response.message,
                         }),
                     );
                 }

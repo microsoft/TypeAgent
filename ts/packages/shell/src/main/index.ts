@@ -405,7 +405,7 @@ app.whenReady().then(async () => {
     function translatorSetPartialInputHandler() {
         mainWindow?.webContents.send(
             "set-partial-input-handler",
-            context.currentTranslatorName === "player",
+            context.lastActionTranslatorName === "player",
         );
     }
 
