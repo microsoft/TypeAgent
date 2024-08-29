@@ -20,6 +20,9 @@ const api: ClientAPI = {
     sendPartialInput: (text: string) => {
         ipcRenderer.send("partial-input", text);
     },
+    getDynamicDisplay(source: string, id: string) {
+        return ipcRenderer.invoke("get-dynamic-display", source, id);
+    },
     onActionCommand: (callback) => {
         ipcRenderer.on("action-command", callback);
     },
@@ -29,11 +32,11 @@ const api: ClientAPI = {
     onResponse(callback) {
         ipcRenderer.on("response", callback);
     },
+    onSetDynamicActionDisplay(callback) {
+        ipcRenderer.on("set-dynamic-action-display", callback);
+    },
     onStatusMessage(callback) {
         ipcRenderer.on("status-message", callback);
-    },
-    onUpdate(callback) {
-        ipcRenderer.on("update", callback);
     },
     onClear(callback) {
         ipcRenderer.on("clear", callback);

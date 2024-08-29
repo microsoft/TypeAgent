@@ -1,21 +1,24 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Actions } from "agent-cache";
+import { Action, Actions } from "agent-cache";
 import {
     CommandHandlerContext,
     changeContextConfig,
-    getDispatcherAgent,
+    getAppAgent,
 } from "../handlers/common/commandHandlerContext.js";
 import registerDebug from "debug";
-import { getDispatcherAgentName } from "../translation/agentTranslators.js";
+import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
+    ActionIO,
     createTurnImpressionFromLiteral,
-    DispatcherAction,
-    DispatcherAgent,
-    DispatcherAgentContext,
+    AppAgent,
+    SessionContext,
+    AppAgentIO,
     TurnImpression,
     turnImpressionToString,
+    DynamicDisplay,
+    DisplayType,
 } from "@typeagent/agent-sdk";
 import { processCommandNoLock } from "../command.js";
 import { MatchResult } from "agent-cache";
@@ -24,9 +27,7 @@ import { getUserProfileDir } from "../utils/userData.js";
 
 const debugActions = registerDebug("typeagent:actions");
 
-export async function initializeActionContext(
-    agents: Map<string, DispatcherAgent>,
-) {
+export async function initializeActionContext(agents: Map<string, AppAgent>) {
     return Object.fromEntries(
         await Promise.all(
             Array.from(agents.entries()).map(async ([name, agent]) => [
@@ -37,31 +38,77 @@ export async function initializeActionContext(
     );
 }
 
-function getDispatcherAgentContext(
+function getActionContext(
     name: string,
     context: CommandHandlerContext,
-): DispatcherAgentContext {
+    actionIndex: number,
+) {
+    const sessionContext = getSessionContext(name, context);
+    const actionIO: ActionIO = {
+        get type() {
+            return sessionContext.agentIO.type;
+        },
+        setActionDisplay(content: string): void {
+            sessionContext.agentIO.setActionStatus(content, actionIndex);
+        },
+    };
+    return {
+        get agentContext() {
+            return sessionContext.agentContext;
+        },
+        get sessionStorage() {
+            return sessionContext.sessionStorage;
+        },
+        get profileStorage() {
+            return sessionContext.profileStorage;
+        },
+        get sessionContext() {
+            return sessionContext;
+        },
+        get actionIO() {
+            return actionIO;
+        },
+    };
+}
+
+function getSessionContext(
+    name: string,
+    context: CommandHandlerContext,
+): SessionContext {
     return (
-        context.sessionContext.get(name) ??
-        createDispatcherAgentContext(name, context)
+        context.sessionContext.get(name) ?? createSessionContext(name, context)
     );
 }
 
-function createDispatcherAgentContext(
+function createSessionContext(
     name: string,
     context: CommandHandlerContext,
-): DispatcherAgentContext {
+): SessionContext {
     const sessionDirPath = context.session.getSessionDirPath();
     const storage = sessionDirPath
         ? getStorage(name, sessionDirPath)
         : undefined;
     const profileStorage = getStorage(name, getUserProfileDir());
-    const agentContext: DispatcherAgentContext = {
-        get context() {
+    const agentIO: AppAgentIO = {
+        get type() {
+            return context.requestIO.type;
+        },
+        status(message: string) {
+            context.requestIO.status(message);
+        },
+        success(message: string) {
+            context.requestIO.success(message);
+        },
+        setActionStatus(message: string, actionIndex: number) {
+            context.requestIO.setActionStatus(message, actionIndex, name);
+        },
+    };
+    const agentContext: SessionContext = {
+        get agentContext() {
             return context.action[name];
         },
-        get requestIO() {
-            return context.requestIO;
+        get agentIO() {
+            return agentIO;
         },
         get requestId() {
             return context.requestId;
@@ -80,9 +127,6 @@ function createDispatcherAgentContext(
         },
         issueCommand(command: string) {
             return processCommandNoLock(command, context);
-        },
-        getUpdateActionStatus() {
-            return context.clientIO?.updateActionStatus.bind(context.clientIO);
         },
         async toggleAgent(name: string, enable: boolean) {
             await changeContextConfig(
@@ -130,11 +174,11 @@ async function updateAgentContext(
     enable: boolean,
     context: CommandHandlerContext,
 ) {
-    const dispatcherAgentName = getDispatcherAgentName(translatorName);
-    const dispatcherAgent = getDispatcherAgent(dispatcherAgentName, context);
-    await dispatcherAgent.updateAgentContext?.(
+    const appAgentName = getAppAgentName(translatorName);
+    const appAgent = getAppAgent(appAgentName, context);
+    await appAgent.updateAgentContext?.(
         enable,
-        getDispatcherAgentContext(dispatcherAgentName, context),
+        getSessionContext(appAgentName, context),
         translatorName,
     );
 }
@@ -149,34 +193,6 @@ export async function closeActionContext(context: CommandHandlerContext) {
     }
 }
 
-async function executeAction(
-    action: DispatcherAction,
-    context: CommandHandlerContext,
-    actionIndex: number,
-): Promise<TurnImpression | undefined> {
-    const translatorName = action.translatorName;
-
-    if (translatorName === undefined) {
-        throw new Error(`Cannot execute action without translator name.`);
-    }
-    const dispatcherAgentName = getDispatcherAgentName(translatorName);
-    const dispatcherAgent = getDispatcherAgent(dispatcherAgentName, context);
-
-    // Update the current translator.
-    context.currentTranslatorName = translatorName;
-
-    if (dispatcherAgent.executeAction === undefined) {
-        throw new Error(
-            `Agent ${dispatcherAgentName} does not support executeAction.`,
-        );
-    }
-    return dispatcherAgent.executeAction(
-        action,
-        getDispatcherAgentContext(dispatcherAgentName, context),
-        actionIndex,
-    );
-}
-
 export async function partialInput(
     text: string,
     context: CommandHandlerContext,
@@ -185,65 +201,108 @@ export async function partialInput(
     throw new Error("NYI");
 }
 
+export async function getDynamicDisplay(
+    appAgentName: string,
+    type: DisplayType,
+    displayId: string,
+    context: CommandHandlerContext,
+): Promise<DynamicDisplay> {
+    const appAgent = getAppAgent(appAgentName, context);
+    if (appAgent.getDynamicDisplay === undefined) {
+        throw new Error(`Dynamic display not supported by '${appAgentName}'`);
+    }
+    const sessionContext = getSessionContext(appAgentName, context);
+    return appAgent.getDynamicDisplay(type, displayId, sessionContext);
+}
+
+async function executeAction(
+    action: Action,
+    context: CommandHandlerContext,
+    actionIndex: number,
+): Promise<TurnImpression | undefined> {
+    const translatorName = action.translatorName;
+
+    if (translatorName === undefined) {
+        throw new Error(`Cannot execute action without translator name.`);
+    }
+    const appAgentName = getAppAgentName(translatorName);
+    const appAgent = getAppAgent(appAgentName, context);
+
+    // Update the current translator.
+    context.currentTranslatorName = translatorName;
+
+    if (appAgent.executeAction === undefined) {
+        throw new Error(
+            `Agent ${appAgentName} does not support executeAction.`,
+        );
+    }
+    const actionContext = getActionContext(appAgentName, context, actionIndex);
+    const returnedResult: TurnImpression | undefined =
+        await appAgent.executeAction(action, actionContext);
+
+    let result: TurnImpression;
+    if (returnedResult === undefined) {
+        result = createTurnImpressionFromLiteral(
+            `Action ${action.fullActionName} completed.`,
+        );
+    } else {
+        if (
+            returnedResult.error === undefined &&
+            returnedResult.literalText &&
+            context.conversationManager
+        ) {
+            // TODO: convert entity values to facets
+            context.conversationManager.addMessage(
+                returnedResult.literalText,
+                returnedResult.entities,
+                new Date(),
+            );
+        }
+        result = returnedResult;
+    }
+    if (debugActions.enabled) {
+        debugActions(turnImpressionToString(result));
+    }
+    if (result.error !== undefined) {
+        context.requestIO.error(result.error);
+        context.chatHistory.addEntry(
+            `Action ${action.fullActionName} failed: ${result.error}`,
+            [],
+            "assistant",
+            context.requestId,
+        );
+    } else {
+        actionContext.actionIO.setActionDisplay(result.displayText);
+        if (result.dynamicDisplayId !== undefined) {
+            context.clientIO?.setDynamicDisplay(
+                appAgentName,
+                context.requestId,
+                actionIndex,
+                result.dynamicDisplayId,
+                result.dynamicDisplayNextRefreshMs!,
+            );
+        }
+        context.chatHistory.addEntry(
+            result.literalText
+                ? result.literalText
+                : `Action ${action.fullActionName} completed.`,
+            result.entities,
+            "assistant",
+            context.requestId,
+            result.impressionInterpreter,
+        );
+    }
+    return result;
+}
+
 export async function executeActions(
     actions: Actions,
     context: CommandHandlerContext,
 ) {
     debugActions(`Executing actions: ${JSON.stringify(actions, undefined, 2)}`);
-    const requestIO = context.requestIO;
     let actionIndex = 0;
     for (const action of actions) {
-        let result: TurnImpression;
-        const returnedResult = await executeAction(
-            action,
-            context,
-            actionIndex,
-        );
-        if (returnedResult === undefined) {
-            result = createTurnImpressionFromLiteral(`
-                Action ${action.fullActionName} completed.`);
-        } else {
-            if (
-                returnedResult.error === undefined &&
-                returnedResult.literalText &&
-                context.conversationManager
-            ) {
-                // TODO: convert entity values to facets
-                context.conversationManager.addMessage(
-                    returnedResult.literalText,
-                    returnedResult.entities,
-                    new Date(),
-                );
-            }
-            result = returnedResult;
-        }
-        if (debugActions.enabled) {
-            debugActions(turnImpressionToString(result));
-        }
-        if (result.error !== undefined) {
-            requestIO.error(result.error);
-            context.chatHistory.addEntry(
-                `Action ${action.fullActionName} failed: ${result.error}`,
-                [],
-                "assistant",
-                context.requestId,
-            );
-        } else {
-            requestIO.setActionStatus(
-                result.displayText,
-                actionIndex,
-                context.currentTranslatorName,
-            );
-            context.chatHistory.addEntry(
-                result.literalText
-                    ? result.literalText
-                    : `Action ${action.fullActionName} completed.`,
-                result.entities,
-                "assistant",
-                context.requestId,
-                result.impressionInterpreter,
-            );
-        }
+        await executeAction(action, context, actionIndex);
         actionIndex++;
     }
 }
@@ -258,20 +317,12 @@ export async function validateWildcardMatch(
         if (translatorName === undefined) {
             continue;
         }
-        const dispatcherAgentName = getDispatcherAgentName(translatorName);
-        const dispatcherAgent = getDispatcherAgent(
-            dispatcherAgentName,
-            context,
-        );
-        const dispatcherContext = getDispatcherAgentContext(
-            dispatcherAgentName,
-            context,
-        );
+        const appAgentName = getAppAgentName(translatorName);
+        const appAgent = getAppAgent(appAgentName, context);
+        const sessionContext = getSessionContext(appAgentName, context);
         if (
-            (await dispatcherAgent.validateWildcardMatch?.(
-                action,
-                dispatcherContext,
-            )) === false
+            (await appAgent.validateWildcardMatch?.(action, sessionContext)) ===
+            false
         ) {
             return false;
         }
@@ -287,24 +338,21 @@ export function streamPartialAction(
     partial: boolean,
     context: CommandHandlerContext,
 ) {
-    const dispatcherAgentName = getDispatcherAgentName(translatorName);
-    const dispatcherAgent = getDispatcherAgent(dispatcherAgentName, context);
-    const dispatcherContext = getDispatcherAgentContext(
-        dispatcherAgentName,
-        context,
-    );
-    if (dispatcherAgent.streamPartialAction === undefined) {
+    const appAgentName = getAppAgentName(translatorName);
+    const appAGent = getAppAgent(appAgentName, context);
+    const sessionContext = getSessionContext(appAgentName, context);
+    if (appAGent.streamPartialAction === undefined) {
         // The config declared that there are streaming action, but the agent didn't implement it.
         throw new Error(
-            `Agent ${dispatcherAgentName} does not support streamPartialAction.`,
+            `Agent ${appAgentName} does not support streamPartialAction.`,
         );
     }
 
-    dispatcherAgent.streamPartialAction(
+    appAGent.streamPartialAction(
         actionName,
         name,
         value,
         partial,
-        dispatcherContext,
+        sessionContext,
     );
 }

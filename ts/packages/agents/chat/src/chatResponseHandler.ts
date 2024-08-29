@@ -16,28 +16,25 @@ import {
     Entity,
 } from "typeagent";
 import { ChatModel, bing, openai } from "aiclient";
-import { DispatcherAgent, DispatcherAgentIO } from "@typeagent/agent-sdk";
+import { ActionContext, ActionIO, AppAgent } from "@typeagent/agent-sdk";
 import { PromptSection } from "typechat";
 import {
-    DispatcherAction,
-    DispatcherAgentContext,
+    AppAction,
+    SessionContext,
     TurnImpression,
     createTurnImpressionFromLiteral,
 } from "@typeagent/agent-sdk";
 import { fileURLToPath } from "node:url";
 import { conversation as Conversation } from "knowledge-processor";
-import { create } from "node:domain";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
     return {
         executeAction: executeChatResponseAction,
         streamPartialAction: streamPartialChatResponseAction,
     };
 }
 
-function isChatResponseAction(
-    action: DispatcherAction,
-): action is ChatResponseAction {
+function isChatResponseAction(action: AppAction): action is ChatResponseAction {
     return (
         action.actionName === "generateResponse" ||
         action.actionName === "lookupAndGenerateResponse"
@@ -45,21 +42,20 @@ function isChatResponseAction(
 }
 
 export async function executeChatResponseAction(
-    chatAction: DispatcherAction,
-    context: DispatcherAgentContext<undefined>,
-    actionIndex: number,
+    chatAction: AppAction,
+    context: ActionContext,
 ) {
     if (!isChatResponseAction(chatAction)) {
         throw new Error(`Invalid chat action: ${chatAction.actionName}`);
     }
-    return handleChatResponse(chatAction, context, actionIndex);
+    return handleChatResponse(chatAction, context);
 }
 
 async function handleChatResponse(
     chatAction: ChatResponseAction,
-    context: DispatcherAgentContext<undefined>,
-    actionIndex: number,
+    context: ActionContext,
 ) {
+    const actionIO = context.actionIO;
     console.log(JSON.stringify(chatAction, undefined, 2));
     switch (chatAction.actionName) {
         case "generateResponse": {
@@ -90,26 +86,57 @@ async function handleChatResponse(
                 return result;
             }
         }
-        case "lookupAndGenerateResponse":
-            {
-                const lookupAction =
-                    chatAction as LookupAndGenerateResponseAction;
-                if (
-                    lookupAction.parameters.internetLookups !== undefined &&
-                    lookupAction.parameters.internetLookups.length > 0
-                ) {
-                    console.log("Running lookups");
-                    return handleLookup(
-                        lookupAction,
-                        context,
-                        actionIndex,
-                        await getLookupSettings(true),
-                    );
-                }
-                break;
+        case "lookupAndGenerateResponse": {
+            const lookupAction = chatAction as LookupAndGenerateResponseAction;
+            if (
+                lookupAction.parameters.internetLookups !== undefined &&
+                lookupAction.parameters.internetLookups.length > 0
+            ) {
+                console.log("Running lookups");
+                return handleLookup(
+                    lookupAction,
+                    actionIO,
+                    await getLookupSettings(true),
+                );
             }
-            context.requestIO.error("No information found");
+            if (
+                lookupAction.parameters.conversationLookupFilters !== undefined
+            ) {
+                const conversationManager: Conversation.ConversationManager = (
+                    context as any
+                ).conversationManager;
+                if (conversationManager !== undefined) {
+                    let searchResponse =
+                        await conversationManager.getSearchResponse(
+                            lookupAction.parameters.originalRequest,
+                            lookupAction.parameters.conversationLookupFilters,
+                        );
+                    if (searchResponse) {
+                        if (searchResponse.response?.hasHits()) {
+                            console.log("Has hits");
+                        }
+                        const matches =
+                            await conversationManager.generateAnswerForSearchResponse(
+                                lookupAction.parameters.originalRequest,
+                                searchResponse,
+                            );
+                        if (
+                            matches &&
+                            matches.response &&
+                            matches.response.answer
+                        ) {
+                            return createTurnImpressionFromLiteral(
+                                matches.response.answer.answer!,
+                            );
+                        } else {
+                            console.log("bug");
+                        }
+                    }
+                }
+            }
+        }
     }
+    return createTurnImpressionFromLiteral("No information found");
 }
 
 function logEntities(label: string, entities?: Entity[]): void {
@@ -240,8 +267,7 @@ type LookupSettings = {
 
 async function handleLookup(
     chatAction: LookupAndGenerateResponseAction,
-    agentContext: DispatcherAgentContext,
-    actionIndex: number,
+    actionIO: ActionIO,
     settings: LookupSettings,
 ): Promise<TurnImpression> {
     let literalResponse = createTurnImpressionFromLiteral(
@@ -264,7 +290,7 @@ async function handleLookup(
     if (lookups.length === 1 && lookUpConfig?.documentConcurrency) {
         documentConcurrency = lookUpConfig.documentConcurrency;
     }
-    agentContext.requestIO.setActionStatus(lookupToHtml(lookups), actionIndex);
+    actionIO.setActionDisplay(lookupToHtml(lookups));
     const context: LookupContext = {
         lookups,
         answers: new Map<string, ChunkChatResponse>(),
@@ -273,19 +299,12 @@ async function handleLookup(
     // Run all lookups concurrently
     await Promise.all(
         lookups.map((l) =>
-            runLookup(
-                l,
-                context,
-                agentContext,
-                actionIndex,
-                settings,
-                documentConcurrency,
-            ),
+            runLookup(l, context, actionIO, settings, documentConcurrency),
         ),
     );
     // Capture answers in the turn impression to return
     literalResponse = updateTurnImpression(context, literalResponse);
-    agentContext.requestIO.setActionStatus(literalResponse.displayText, actionIndex);
+    actionIO.setActionDisplay(literalResponse.displayText);
     // Generate entities if needed
     if (settings.entityGenModel) {
         const entities = await runEntityExtraction(context, settings);
@@ -349,7 +368,7 @@ function updateTurnImpression(
     if (context.answers.size > 0) {
         literalResponse.literalText = "";
         literalResponse.displayText = answersToHtml(context);
-        for (const [lookup, chatResponse] of context.answers) {
+        for (const [_lookup, chatResponse] of context.answers) {
             literalResponse.literalText += chatResponse.generatedText! + "\n";
             if (chatResponse.entities && chatResponse.entities.length > 0) {
                 literalResponse.entities ??= [];
@@ -363,8 +382,7 @@ function updateTurnImpression(
 async function runLookup(
     lookup: string,
     context: LookupContext,
-    agentContext: DispatcherAgentContext,
-    actionIndex: number,
+    actionIO: ActionIO,
     settings: LookupSettings,
     concurrency: number,
 ) {
@@ -411,7 +429,7 @@ async function runLookup(
     return answer;
 
     function updateStatus() {
-        agentContext.requestIO.setActionStatus(lookupProgressAsHtml(context), actionIndex);
+        actionIO.setActionDisplay(lookupProgressAsHtml(context));
     }
 }
 
@@ -492,17 +510,13 @@ function streamPartialChatResponseAction(
     name: string,
     value: string,
     partial: boolean,
-    context: DispatcherAgentContext,
+    context: SessionContext,
 ) {
     if (actionName !== "generateResponse") {
         return;
     }
 
     if (name === "parameters.generatedText") {
-        context.requestIO.setActionStatus(
-            `${value}${partial ? "..." : ""}`,
-            0,
-            "chat",
-        );
+        context.agentIO.setActionStatus(`${value}${partial ? "..." : ""}`, 0);
     }
 }

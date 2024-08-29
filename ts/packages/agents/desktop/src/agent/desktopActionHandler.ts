@@ -3,7 +3,7 @@
 
 import { WebSocketMessage, createWebSocket } from "common-utils";
 import { WebSocket } from "ws";
-import { DispatcherAction, DispatcherAgentContext } from "@typeagent/agent-sdk";
+import { AppAction, SessionContext } from "@typeagent/agent-sdk";
 
 export function instantiate() {
     return {
@@ -25,19 +25,19 @@ function initializeDesktopContext(): DesktopActionContext {
 
 async function updateDesktopContext(
     enable: boolean,
-    context: DispatcherAgentContext<DesktopActionContext>,
+    context: SessionContext<DesktopActionContext>,
 ): Promise<void> {
     if (enable) {
-        if (context.context.webSocket?.readyState === WebSocket.OPEN) {
+        if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {
             return;
         }
 
         const webSocket = await createWebSocket();
         if (webSocket) {
-            context.context.webSocket = webSocket;
+            context.agentContext.webSocket = webSocket;
             webSocket.onclose = (event: Object) => {
                 console.error("Desktop webSocket connection closed.");
-                context.context.webSocket = undefined;
+                context.agentContext.webSocket = undefined;
             };
             webSocket.onmessage = async (event: any) => {
                 const text = event.data.toString();
@@ -49,14 +49,10 @@ async function updateDesktopContext(
                 ) {
                     switch (data.messageType) {
                         case "confirmAction": {
-                            const requestIO = context.requestIO;
+                            const agentIO = context.agentIO;
                             const requestId = context.requestId;
-                            if (
-                                requestIO &&
-                                requestId &&
-                                data.id === requestId
-                            ) {
-                                requestIO.status(data.body);
+                            if (agentIO && requestId && data.id === requestId) {
+                                agentIO.status(data.body);
                             }
 
                             break;
@@ -66,21 +62,21 @@ async function updateDesktopContext(
             };
         }
     } else {
-        const webSocket = context.context.webSocket;
+        const webSocket = context.agentContext.webSocket;
         if (webSocket) {
             webSocket.onclose = null;
             webSocket.close();
         }
 
-        context.context.webSocket = undefined;
+        context.agentContext.webSocket = undefined;
     }
 }
 
 async function executeDesktopAction(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<DesktopActionContext>,
+    action: AppAction,
+    context: SessionContext<DesktopActionContext>,
 ) {
-    const webSocketEndpoint = context.context.webSocket;
+    const webSocketEndpoint = context.agentContext.webSocket;
     if (webSocketEndpoint) {
         try {
             const requestId = context.requestId;

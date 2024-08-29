@@ -31,6 +31,7 @@
   "dependencies": {
     "@electron-toolkit/preload": "^2.0.0",
     "@electron-toolkit/utils": "^2.0.0",
+    "@typeagent/agent-sdk": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "aiclient": "workspace:*",
     "ansi_up": "^6.0.2",

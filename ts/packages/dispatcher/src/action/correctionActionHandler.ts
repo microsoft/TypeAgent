@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import {
-    DispatcherAgentContext,
+    ActionContext,
+    SessionContext,
     TurnImpression,
     createTurnImpressionFromLiteral,
 } from "@typeagent/agent-sdk";
@@ -10,7 +11,7 @@ import { CorrectionAction } from "../translation/correctionActionsSchema.js";
 
 export async function executeCorrectionAction(
     action: CorrectionAction,
-    context: DispatcherAgentContext<undefined>,
+    context: ActionContext,
 ): Promise<TurnImpression> {
     const { correctionRequest } = action.parameters;
     return createTurnImpressionFromLiteral(

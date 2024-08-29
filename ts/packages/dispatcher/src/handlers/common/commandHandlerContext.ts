@@ -36,7 +36,7 @@ import {
 } from "../../session/session.js";
 import {
     getDefaultTranslatorName,
-    getDispatcherAgentName,
+    getAppAgentName,
     getTranslatorNames,
     loadAgentJsonTranslator,
 } from "../../translation/agentTranslators.js";
@@ -54,9 +54,8 @@ import {
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
 import { DispatcherName } from "../requestCommandHandler.js";
-import { CommandHandler } from "./commandHandler.js";
-import { DispatcherAgent, DispatcherAgentContext } from "@typeagent/agent-sdk";
-import { getDispatcherAgents } from "../../agent/agentConfig.js";
+import { AppAgent, SessionContext } from "@typeagent/agent-sdk";
+import { getAppAgents } from "../../agent/agentConfig.js";
 import { conversation as Conversation } from "knowledge-processor";
 
 export interface CommandResult {
@@ -67,9 +66,9 @@ export interface CommandResult {
 
 // Command Handler Context definition.
 export type CommandHandlerContext = {
-    agents: Map<string, DispatcherAgent>;
+    agents: Map<string, AppAgent>;
     session: Session;
-    sessionContext: Map<string, DispatcherAgentContext>;
+    sessionContext: Map<string, SessionContext>;
 
     conversationManager?: Conversation.ConversationManager;
     // Per activation configs
@@ -231,12 +230,12 @@ export async function initializeCommandHandlerContext(
     }
 
     const clientIO = options?.clientIO;
-    const agents = await getDispatcherAgents();
+    const agents = await getAppAgents();
     const context: CommandHandlerContext = {
         agents,
         session,
         conversationManager,
-        sessionContext: new Map<string, DispatcherAgentContext>(),
+        sessionContext: new Map<string, SessionContext>(),
         explanationAsynchronousMode,
         dblogging: true,
         clientIO,
@@ -278,7 +277,7 @@ export async function setSessionOnCommandHandlerContext(
 ) {
     context.session = session;
     for (const [name, sessionContext] of context.sessionContext.entries()) {
-        getDispatcherAgent(name, context).closeAgentContext?.(sessionContext);
+        getAppAgent(name, context).closeAgentContext?.(sessionContext);
     }
     context.sessionContext.clear();
     context.action = await initializeActionContext(context.agents);
@@ -365,15 +364,13 @@ export async function changeContextConfig(
     return changed;
 }
 
-export function getDispatcherAgent(
-    dispatcherAgentName: string,
+export function getAppAgent(
+    appAgentName: string,
     context: CommandHandlerContext,
 ) {
-    const dispatcherAgent = context.agents.get(dispatcherAgentName);
-    if (dispatcherAgent === undefined) {
-        throw new Error(
-            `Invalid dispatcher agent name: ${dispatcherAgentName}`,
-        );
+    const appAgent = context.agents.get(appAgentName);
+    if (appAgent === undefined) {
+        throw new Error(`Invalid dispatcher agent name: ${appAgentName}`);
     }
-    return dispatcherAgent;
+    return appAgent;
 }

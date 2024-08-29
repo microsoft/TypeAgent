@@ -13,7 +13,7 @@ import {
 import { CommandHandler } from "./common/commandHandler.js";
 import {
     CommandHandlerContext,
-    getDispatcherAgent,
+    getAppAgent,
     getTranslator,
     updateCorrectionContext,
 } from "./common/commandHandlerContext.js";
@@ -26,7 +26,6 @@ import {
 } from "../action/actionHandlers.js";
 import { unicodeChar } from "../utils/interactive.js";
 import {
-    getDispatcherAgentName,
     getInjectedTranslatorForActionName,
     getTranslatorConfig,
     isChangeAssistantAction,
@@ -582,7 +581,6 @@ async function requestExecute(
     } else {
         requestIO.status(`Executing action ${action.fullActionName}`);
     }
-
     await executeActions(requestAction.actions, context);
 }
 
@@ -690,7 +688,13 @@ export class RequestCommandHandler implements CommandHandler {
         }
 
         const { requestAction, fromUser, fromCache } = translationResult;
-
+        if (
+            requestAction !== null &&
+            requestAction !== undefined &&
+            context.conversationManager
+        ) {
+            context.conversationManager.addMessage(request, [], new Date());
+        }
         await requestExecute(requestAction, context);
         await requestExplain(requestAction, context, fromCache, fromUser);
     }

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DispatcherAgentContext } from "@typeagent/agent-sdk";
+import { ActionContext } from "@typeagent/agent-sdk";
 
 import { BrowserActionContext } from "../browserActionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
@@ -14,14 +14,15 @@ import {
 
 export async function handleCommerceAction(
   action: any,
-  context: DispatcherAgentContext<BrowserActionContext>,
+  context: ActionContext<BrowserActionContext>,
 ) {
   let message = "OK";
-  if (!context.context.browserConnector) {
+  if (!context.sessionContext.agentContext.browserConnector) {
     throw new Error("No connection to browser session.");
   }
 
-  const browser: BrowserConnector = context.context.browserConnector;
+  const browser: BrowserConnector =
+    context.sessionContext.agentContext.browserConnector;
 
   const agent = await createCommercePageTranslator("GPT_4_O");
 

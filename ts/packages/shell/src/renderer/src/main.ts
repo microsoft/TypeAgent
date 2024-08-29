@@ -57,6 +57,16 @@ function addEvents(
     api.onResponse(
         (_, agentMessage) => { chatView.addAgentMessage(agentMessage); }
     );
+    api.onSetDynamicActionDisplay(
+        (_, source, id, actionIndex, displayId, nextRefreshMs) =>
+            chatView.setDynamicDisplay(
+                source,
+                id,
+                actionIndex,
+                displayId,
+                nextRefreshMs,
+            ),
+    );
     api.onSetPartialInputHandler((_, enabled) => {
         chatView.enablePartialInputHandler(enabled);
     });

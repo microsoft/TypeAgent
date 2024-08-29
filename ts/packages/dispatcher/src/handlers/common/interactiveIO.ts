@@ -66,7 +66,7 @@ export interface ClientIO {
         visible?: boolean,
     ): void;
     setActionStatus(message: IAgentMessage): void;
-    updateActionStatus(message: string, groupId: string): void;
+    setActionStatus(message: string, groupId: string): void;
     askYesNo(
         message: string,
         requestId: RequestId,
@@ -86,7 +86,13 @@ export interface ClientIO {
             fromUser: boolean;
         },
     ): void;
-
+    setDynamicDisplay(
+        source: string,
+        requestId: RequestId,
+        actionIndex: number,
+        displayId: string,
+        nextRefreshMs: number,
+    ): void;
     exit(): void;
 }
 
@@ -110,12 +116,7 @@ export interface RequestIO {
     result(message: string | LogFn): void;
 
     // Action status
-    setActionStatus(
-        message: string,
-        actionIndex: number,
-        source: string,
-        groupId?: string,
-    ): void;
+    setActionStatus(message: string, actionIndex: number, source: string): void;
 
     // Input
     isInputEnabled(): boolean;
