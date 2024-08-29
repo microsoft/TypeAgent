@@ -152,6 +152,28 @@ function getReadablePageContent() {
 function getPageHTML(fullSize: boolean, documentHtml: string, frameId: number) {
     if (!documentHtml) {
         setIdsOnAllElements(frameId);
+/*
+        const allElements = Array.from(document.body.getElementsByTagName("*"));
+        allElements.forEach((element: Element) => {
+            if (
+                element instanceof HTMLElement &&
+                element.nodeType == Node.ELEMENT_NODE
+            ) {
+                if (
+                    element.hidden ||
+                    !element.checkVisibility({
+                        checkVisibilityCSS: true,
+                        checkOpacity: true,
+                    })
+                ) {
+                    element.setAttribute("data-deleteInReducer", "");
+                } else if (element.hasAttribute("data-deleteInReducer")) {
+                    // previously hidden element is now visible
+                    element.removeAttribute("data-deleteInReducer");
+                }
+            }
+        });
+*/
         documentHtml = document.children[0].outerHTML;
     }
 
@@ -168,7 +190,7 @@ function getPageHTML(fullSize: boolean, documentHtml: string, frameId: number) {
 function getPageText(documentHtml: string, frameId: number) {
     if (!documentHtml) {
         setIdsOnAllElements(frameId);
-        documentHtml = document.children[0].outerHTML;
+        documentHtml = document.body.outerHTML;
     }
 
     const options = {
@@ -449,6 +471,14 @@ function setIdsOnAllElements(frameId: number) {
         "SCRIPT",
         "META",
         "STYLE",
+        "SPAN",
+        "TABLE",
+        "TBODY",
+        "TR",
+        "TD",
+        "UL",
+        "OL",
+        "LI",
     ];
     let i = 0;
     allElements.forEach((element: Element) => {

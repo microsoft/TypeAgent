@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
-import { ChatModel, openai as ai } from "aiclient";
+import { createJsonTranslator, TypeChatJsonTranslator, TypeChatLanguageModel } from "typechat";
+import { openai as ai } from "aiclient";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { ContentSection, HtmlFragments } from "../common/translator.js";
 
@@ -81,7 +81,7 @@ export class CrosswordAgent<T extends object> {
     schema: string;
     boardSchema: string;
 
-    model: ChatModel;
+    model: TypeChatLanguageModel;
     translator: TypeChatJsonTranslator<T>;
 
     constructor(schema: string, schemaName: string, fastModelName: string) {

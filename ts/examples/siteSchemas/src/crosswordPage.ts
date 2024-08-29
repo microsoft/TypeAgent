@@ -7,7 +7,7 @@ import { processRequests } from "typechat/interactive";
 import { BoardActions } from "./crossword/schema/actionSchema.js";
 import { CrosswordAgent } from "./crossword/translator.js";
 import jp from "jsonpath";
-import { evaluateJsonProgram } from "typechat/ts";
+//import { evaluateJsonProgram } from "typechat/ts";
 import {
     CluesTextAndSelectorsList,
     CrosswordPresence,
@@ -57,7 +57,7 @@ async function getBoardSchema(
 ) {
     const cachedSchema: any = await browser.getCurrentPageSchema();
     if (cachedSchema) {
-        return cachedSchema.body as CluesTextAndSelectorsList;
+        return cachedSchema as CluesTextAndSelectorsList;
     } else {
         // check which fragment has a crossword
         let candidateFragments = [];
@@ -93,14 +93,15 @@ async function getBoardSchema(
                 await agent.getCluesTextWithSelectors(filteredFragments);
 
             if (cluesResponse.success) {
-                await browser.setCurrentPageSchema(url, cluesResponse.data);
+                // TEMP: Do not write to cache
+                // await browser.setCurrentPageSchema(url, cluesResponse.data);
                 return cluesResponse.data as CluesTextAndSelectorsList;
             }
         }
     }
     return undefined;
 }
-
+/*
 type Program = {
     "@steps": FunctionCall[];
 };
@@ -175,7 +176,8 @@ async function handleCall(func: string, args: any[]): Promise<unknown> {
     }
     return NaN;
 }
-
+*/
+/*
 async function translateCrosswordMessage(request: string) {
     let message = "OK";
     if (!boardState) {
@@ -200,8 +202,27 @@ async function translateCrosswordMessage(request: string) {
 
     return message;
 }
+*/
 
-async function handleCrosswordAction(action: any) {
+async function translateCrosswordMessage(request: string) {
+    let message = "OK";
+
+    const response = await agent.translator.translate(request);
+    if (!response.success) {
+        console.log(response.message);
+        return message;
+    }
+
+    const pageAction = response.data;
+    console.log(JSON.stringify(pageAction, undefined, 2));
+
+    message = await handleCrosswordAction(pageAction);
+
+    return message;
+}
+
+/*
+async function handleCrosswordAction_prev(action: any) {
     let message = "OK";
     if (boardState) {
         const actionName =
@@ -223,6 +244,46 @@ async function handleCrosswordAction(action: any) {
             );
             const result = await evaluateJsonProgram(program, handleCall);
             console.log(result);
+        }
+    }
+
+    return message;
+}
+*/
+
+export async function handleCrosswordAction(action: any) {
+    let message = "OK";
+
+    if (!boardState) {
+        console.log("Board state is missing");
+        return message;
+    }
+
+    if (action.actionName === "enterText") {
+        const selector = jp.value(
+            boardState,
+            `$.${action.parameters.clueDirection}[?(@.number==${action.parameters.clueNumber})].cssSelector`,
+        );
+
+        if (!selector) {
+            message = `${action.parameters.clueNumber} ${action.parameters.clueDirection} is not a valid position for this crossword`;
+        } else {
+            await browser.clickOn(selector);
+            await browser.enterTextIn(action.parameters.value);
+            message = `OK. Setting the value of ${action.parameters.clueNumber} ${action.parameters.clueDirection} to "${action.parameters.value}"`;
+        }
+    }
+    if (action.actionName === "getClueValue") {
+        if (message === "OK") message = "";
+        const selector = jp.value(
+            boardState,
+            `$.${action.parameters.clueDirection}[?(@.number==${action.parameters.clueNumber})].text`,
+        );
+
+        if (!selector) {
+            message = `${action.parameters.clueNumber} ${action.parameters.clueDirection} is not a valid position for this crossword"`;
+        } else {
+            message = `The clue is: ${selector}`;
         }
     }
 
