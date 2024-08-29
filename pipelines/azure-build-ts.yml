@@ -26,6 +26,7 @@ variables:
   node_version: '18'
   pnpm_version: '9.0.0'
   workingDirectory: 'ts'
+  dist_folder: 'ts/packages/agentSdk/dist'
   
 jobs:
 - job: build_ts
@@ -93,15 +94,15 @@ jobs:
       echo "always-auth=true" >> .npmrc
       cat .npmrc
     displayName: 'Create .npmrc file.'
-    workingDirectory: $(workingDirectory)
+    workingDirectory: $(dist_folder)
 
   - task: npmAuthenticate@0
     inputs:
-      workingFile: 'ts/.npmrc'
+      workingFile: '$(dist_folder)/.npmrc'
     displayName: 'Authenticate with Azure Artifacts'
 
   - script: |
-      cd $(Build.SourcesDirectory)/$(workingDirectory)/packages/agentSdk/dist
+      cd $(Build.SourcesDirectory)/$(dist_folder)
       cp ../package.json .
       tarball=$(npm pack)
       npm publish $tarball --registry=$(ADO_REGISTRY)
