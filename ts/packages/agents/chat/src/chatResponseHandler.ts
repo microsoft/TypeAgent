@@ -95,8 +95,8 @@ async function handleChatResponse(
                 const lookupAction =
                     chatAction as LookupAndGenerateResponseAction;
                 if (
-                    lookupAction.parameters.lookups !== undefined &&
-                    lookupAction.parameters.lookups.length > 0
+                    lookupAction.parameters.internetLookups !== undefined &&
+                    lookupAction.parameters.internetLookups.length > 0
                 ) {
                     console.log("Running lookups");
                     return handleLookup(
@@ -393,7 +393,7 @@ async function runLookup(
         (url, answerSoFar) => {
             if (firstToken) {
 
-                Profiler.getInstance().mark(agentContext.requestId, "First Tokenn");
+                Profiler.getInstance().mark(agentContext.requestId, "First Token");
 
                 firstToken = false;
             }
