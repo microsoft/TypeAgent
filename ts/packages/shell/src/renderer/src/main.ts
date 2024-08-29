@@ -10,6 +10,7 @@ import { iconHelp, iconMetrics, iconSettings } from "./icon";
 import { SettingsView } from "./settingsView";
 import { HelpView } from "./helpView";
 import { MetricsView } from "./metricsView";
+import { CameraView } from "./cameraView";
 
 export function getClientAPI(): ClientAPI {
     return globalThis.api;
@@ -163,8 +164,15 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     };
 
+    const cameraView = new CameraView();
+    wrapper.appendChild(cameraView.getContainer());
+
     const chatView = new ChatView(idGenerator, speechInfo, agents);
     wrapper.appendChild(chatView.getMessageElm());
+
+    chatView.chatInput.camButton.onclick = () => {
+        cameraView.startCamera();
+    }
 
     const settingsView = new SettingsView();
     tabs.getTabContainerByName("Settings").append(settingsView.getContainer());
