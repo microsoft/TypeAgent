@@ -41,8 +41,11 @@ async function executePlayerAction(
     action: AppAction,
     context: ActionContext<PlayerActionContext>,
 ) {
-    if (context.agentContext.spotify) {
-        return handleCall(action as PlayerAction, context.agentContext.spotify);
+    if (context.sessionContext.agentContext.spotify) {
+        return handleCall(
+            action as PlayerAction,
+            context.sessionContext.agentContext.spotify,
+        );
     }
 
     return createTurnImpressionFromError(

@@ -153,7 +153,7 @@ async function executeCalendarAction(
 ) {
     let result = await handleCalendarAction(
         action as CalendarAction,
-        context.agentContext,
+        context.sessionContext.agentContext,
     );
     return result;
 }

@@ -61,7 +61,7 @@ async function handleEmailAction(
     action: EmailAction,
     context: ActionContext<EmailActionContext>,
 ) {
-    const { mailClient } = context.agentContext;
+    const { mailClient } = context.sessionContext.agentContext;
     if (!mailClient || !mailClient?.isGraphClientInitialized()) {
         return "Not handling email actions ...";
     }

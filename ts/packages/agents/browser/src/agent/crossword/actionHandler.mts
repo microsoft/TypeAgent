@@ -101,18 +101,19 @@ export async function handleCrosswordAction(
   context: ActionContext<BrowserActionContext>,
 ) {
   let message = "OK";
-  if (!context.agentContext.browserConnector) {
+  if (!context.sessionContext.agentContext.browserConnector) {
     throw new Error("No connection to browser session.");
   }
 
-  const browser: BrowserConnector = context.agentContext.browserConnector;
+  const browser: BrowserConnector =
+    context.sessionContext.agentContext.browserConnector;
 
-  if (context.agentContext.crossWordState) {
+  if (context.sessionContext.agentContext.crossWordState) {
     const actionName =
       action.actionName ?? action.fullActionName.split(".").at(-1);
     if (actionName === "enterText") {
       const selector = jp.value(
-        context.agentContext.crossWordState,
+        context.sessionContext.agentContext.crossWordState,
         `$.${action.parameters.clueDirection}[?(@.number==${action.parameters.clueNumber})].cssSelector`,
       );
 
@@ -127,7 +128,7 @@ export async function handleCrosswordAction(
     if (actionName === "getClueValue") {
       if (message === "OK") message = "";
       const selector = jp.value(
-        context.agentContext.crossWordState,
+        context.sessionContext.agentContext.crossWordState,
         `$.${action.parameters.clueDirection}[?(@.number==${action.parameters.clueNumber})].text`,
       );
 

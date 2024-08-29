@@ -10,6 +10,7 @@ import {
     StorageEncoding,
     StorageListOptions,
     TokenCachePersistence,
+    ActionIO,
 } from "@typeagent/agent-sdk";
 
 import { setupInvoke } from "./agentProcessUtil.js";
@@ -263,29 +264,23 @@ function getActionContextShim(
         );
     }
     const sessionContext = getSessionContextShim(param);
+    const actionIO: ActionIO = {
+        get type() {
+            return sessionContext.agentIO.type;
+        },
+        setActionDisplay(content: string): void {
+            rpc.send(AgentContextCallAPI.SetActionDisplay, {
+                actionContextId,
+                content,
+            });
+        },
+    };
     return {
-        get agentContext() {
-            return sessionContext.agentContext;
-        },
-        get sessionStorage() {
-            return sessionContext.sessionStorage;
-        },
-        get profileStorage() {
-            return sessionContext.profileStorage;
-        },
         get sessionContext() {
             return sessionContext;
         },
-        actionIO: {
-            get type() {
-                return sessionContext.agentIO.type;
-            },
-            setActionDisplay(content: string): void {
-                rpc.send(AgentContextCallAPI.SetActionDisplay, {
-                    actionContextId,
-                    content,
-                });
-            },
+        get actionIO() {
+            return actionIO;
         },
     };
 }

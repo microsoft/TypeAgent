@@ -17,11 +17,12 @@ export async function handleCommerceAction(
   context: ActionContext<BrowserActionContext>,
 ) {
   let message = "OK";
-  if (!context.agentContext.browserConnector) {
+  if (!context.sessionContext.agentContext.browserConnector) {
     throw new Error("No connection to browser session.");
   }
 
-  const browser: BrowserConnector = context.agentContext.browserConnector;
+  const browser: BrowserConnector =
+    context.sessionContext.agentContext.browserConnector;
 
   const agent = await createCommercePageTranslator("GPT_4_O");
 

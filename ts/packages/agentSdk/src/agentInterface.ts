@@ -119,11 +119,6 @@ export interface ActionIO {
 }
 
 export interface ActionContext<T = void> {
-    readonly agentContext: T;
-    readonly sessionStorage: Storage | undefined;
-    readonly profileStorage: Storage; // storage that are preserved across sessions
     readonly actionIO: ActionIO;
-
-    // TODO: remove usage
-    readonly sessionContext: SessionContext;
+    readonly sessionContext: SessionContext<T>;
 }

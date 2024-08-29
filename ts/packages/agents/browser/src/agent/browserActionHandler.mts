@@ -127,7 +127,7 @@ async function executeBrowserAction(
   action: AppAction,
   context: ActionContext<BrowserActionContext>,
 ) {
-  const webSocketEndpoint = context.agentContext.webSocket;
+  const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
 
   if (webSocketEndpoint) {
     try {

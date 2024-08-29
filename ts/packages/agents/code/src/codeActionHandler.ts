@@ -81,7 +81,7 @@ async function executeCodeAction(
     action: AppAction,
     context: ActionContext<CodeActionContext>,
 ) {
-    const webSocketEndpoint = context.agentContext.webSocket;
+    const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
     if (webSocketEndpoint) {
         try {
             const requestId = context.sessionContext.requestId;

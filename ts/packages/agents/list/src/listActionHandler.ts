@@ -37,7 +37,7 @@ async function executeListAction(
 ) {
     let result = await handleListAction(
         action as ListAction,
-        context.agentContext,
+        context.sessionContext.agentContext,
     );
     return result;
 }
