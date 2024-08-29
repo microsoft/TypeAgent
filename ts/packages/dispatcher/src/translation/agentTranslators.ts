@@ -2,10 +2,7 @@
 // Licensed under the MIT License.
 
 import { createJsonTranslatorFromSchemaDef } from "common-utils";
-import {
-    DispatcherAction,
-    HierarchicalTranslatorConfig,
-} from "@typeagent/agent-sdk";
+import { AppAction, HierarchicalTranslatorConfig } from "@typeagent/agent-sdk";
 import { TypeChatJsonTranslator } from "typechat";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { getMultipleActionSchemaDef } from "./systemActionsInlineSchema.js";
@@ -13,7 +10,7 @@ import { TranslatorSchemaDef, composeTranslatorSchemas } from "common-utils";
 import { getTranslatorActionInfo } from "./actionInfo.js";
 
 import registerDebug from "debug";
-import { getDispatcherAgentConfigs } from "../agent/agentConfig.js";
+import { getAppAgentConfigs } from "../agent/agentConfig.js";
 
 const debugConfig = registerDebug("typeagent:translator:config");
 
@@ -74,7 +71,7 @@ function collectTranslatorConfigs(
 const translatorConfigs: { [key: string]: TranslatorConfig } =
     await (async () => {
         const translatorConfigs = {};
-        const configs = await getDispatcherAgentConfigs();
+        const configs = await getAppAgentConfigs();
         for (const [name, config] of configs.entries()) {
             const emojiChar = config.emojiChar;
             collectTranslatorConfigs(
@@ -102,7 +99,7 @@ export function getTranslatorConfigs() {
     return Object.entries(translatorConfigs);
 }
 
-export function getDispatcherAgentName(translatorName: string) {
+export function getAppAgentName(translatorName: string) {
     return translatorName.split(".")[0];
 }
 
@@ -131,7 +128,7 @@ export type ChangeAssistantAction = {
 };
 
 export function isChangeAssistantAction(
-    action: DispatcherAction,
+    action: AppAction,
 ): action is ChangeAssistantAction {
     return action.actionName === changeAssistantActionName;
 }

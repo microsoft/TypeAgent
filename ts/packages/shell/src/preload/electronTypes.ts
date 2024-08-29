@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { ElectronAPI } from "@electron-toolkit/preload";
+import { DynamicDisplay } from "@typeagent/agent-sdk";
 
 export type SpeechToken = {
     token: string;
@@ -88,6 +89,7 @@ export interface ClientAPI {
     ) => void;
     processShellRequest: (request: string, id: string) => Promise<void>;
     sendPartialInput: (text: string) => void;
+    getDynamicDisplay: (source: string, id: string) => Promise<DynamicDisplay>;
     onResponse(
         callback: (
             e: Electron.IpcRendererEvent,
@@ -95,14 +97,16 @@ export interface ClientAPI {
             id: string,
             source: string,
             actionIndex?: number,
-            group_id?: string,
         ) => void,
     ): void;
-    onUpdate(
+    onSetDynamicActionDisplay(
         callback: (
             e: Electron.IpcRendererEvent,
-            updateMessage: string,
-            group_id: string,
+            source: string,
+            id: string,
+            actionIndex: number,
+            displayId: string,
+            nextRefreshMs: number,
         ) => void,
     ): void;
     onSetPartialInputHandler(

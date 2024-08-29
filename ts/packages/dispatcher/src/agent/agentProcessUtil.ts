@@ -9,8 +9,8 @@ const debugError = registerDebug("typeagent:process:error");
 
 export function setupInvoke<InvokeNames = string, CallNames = string>(
     process: ChildProcess | NodeJS.Process,
-    invokeHandler?: (name: string, param?: any) => Promise<any>,
-    callHandler?: (name: string, param?: any) => void,
+    invokeHandler?: (name: string, param: any) => Promise<any>,
+    callHandler?: (name: string, param: any) => void,
 ) {
     const pending = new Map<
         number,

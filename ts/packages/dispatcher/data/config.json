@@ -3,6 +3,7 @@
     "player": {
       "type": "module",
       "name": "music",
+      "execMode": "separate",
       "imports": ["./test/data/player/**/*.json"]
     },
     "calendar": {

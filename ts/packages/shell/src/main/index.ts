@@ -27,6 +27,7 @@ import {
     initializeCommandHandlerContext,
     processCommand,
     partialInput,
+    getDynamicDisplay,
 } from "agent-dispatcher";
 
 import { SearchMenuCommand } from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
@@ -156,7 +157,6 @@ function showResult(
     requestId: RequestId,
     source: string,
     actionIndex?: number,
-    groupId?: string,
 ) {
     // Ignore message without requestId
     if (requestId === undefined) {
@@ -169,7 +169,6 @@ function showResult(
         requestId,
         source,
         actionIndex,
-        groupId,
     );
 }
 
@@ -221,10 +220,6 @@ function updateRandomCommandSelected(requestId: RequestId, message: string) {
     }
 
     mainWindow?.webContents.send("update-random-command", requestId, message);
-}
-
-function updateResult(message: string, group_id: string) {
-    mainWindow?.webContents.send("update", message, group_id);
 }
 
 let maxAskYesNoId = 0;
@@ -334,7 +329,7 @@ const clientIO: ClientIO = {
     error: sendStatusMessage,
     result: showResult,
     setActionStatus: showResult,
-    updateActionStatus: updateResult,
+    setDynamicDisplay,
     searchMenuCommand,
     actionCommand,
     askYesNo,
@@ -360,6 +355,23 @@ const clientIO: ClientIO = {
         app.quit();
     },
 };
+
+async function setDynamicDisplay(
+    source: string,
+    requestId: RequestId,
+    actionIndex: number,
+    displayId: string,
+    nextRefreshMs: number,
+) {
+    mainWindow?.webContents.send(
+        "set-dynamic-action-display",
+        source,
+        requestId,
+        actionIndex,
+        displayId,
+        nextRefreshMs,
+    );
+}
 
 async function initializeSpeech(context: CommandHandlerContext) {
     const key = process.env["SPEECH_SDK_KEY"];
@@ -445,6 +457,11 @@ app.whenReady().then(async () => {
         }
         partialInput(text, context);
     });
+    ipcMain.handle(
+        "get-dynamic-display",
+        async (_event, appAgentName: string, id: string) =>
+            getDynamicDisplay(appAgentName, "html", id, context),
+    );
     ipcMain.on("dom ready", async () => {
         settingSummary = getSettingSummary(context);
         translatorSetPartialInputHandler();

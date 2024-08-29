@@ -10,19 +10,24 @@ import {
 } from "music";
 import chalk from "chalk";
 import {
-    DispatcherAgent,
-    DispatcherAgentContext,
-    DispatcherAction,
+    AppAgent,
+    SessionContext,
+    AppAction,
     createTurnImpressionFromError,
+    ActionContext,
+    DisplayType,
 } from "@typeagent/agent-sdk";
 import { searchAlbum, searchArtists, searchTracks } from "../client.js";
+import { htmlStatus } from "../playback.js";
+import { DynamicDisplay } from "../../../../agentSdk/dist/agentInterface.js";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializePlayerContext,
         updateAgentContext: updatePlayerContext,
         executeAction: executePlayerAction,
         validateWildcardMatch: validatePlayerWildcardMatch,
+        getDynamicDisplay: getPlayerDynamicDisplay,
     };
 }
 
@@ -37,11 +42,14 @@ async function initializePlayerContext() {
 }
 
 async function executePlayerAction(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<PlayerActionContext>,
+    action: AppAction,
+    context: ActionContext<PlayerActionContext>,
 ) {
-    if (context.context.spotify) {
-        return handleCall(action as PlayerAction, context.context.spotify);
+    if (context.sessionContext.agentContext.spotify) {
+        return handleCall(
+            action as PlayerAction,
+            context.sessionContext.agentContext.spotify,
+        );
     }
 
     return createTurnImpressionFromError(
@@ -51,38 +59,35 @@ async function executePlayerAction(
 
 async function updatePlayerContext(
     enable: boolean,
-    context: DispatcherAgentContext<PlayerActionContext>,
+    context: SessionContext<PlayerActionContext>,
 ) {
     if (enable) {
         const user = await enableSpotify(context);
-        context.requestIO.result(
+        context.agentIO.success(
             chalk.blue(`Spotify integration enabled. Logged in as ${user}.`),
         );
     } else {
-        const timeoutId = context.context.spotify?.userData?.timeoutId;
+        const timeoutId = context.agentContext.spotify?.userData?.timeoutId;
         if (timeoutId !== undefined) {
             clearTimeout(timeoutId);
         }
-        context.context.spotify = undefined;
+        context.agentContext.spotify = undefined;
     }
 }
 
-async function enableSpotify(
-    context: DispatcherAgentContext<PlayerActionContext>,
-) {
+async function enableSpotify(context: SessionContext<PlayerActionContext>) {
     const clientContext = await getClientContext(context.profileStorage);
-    clientContext.updateActionStatus = context.getUpdateActionStatus();
-    context.context.spotify = clientContext;
+    context.agentContext.spotify = clientContext;
 
     return clientContext.service.retrieveUser().username;
 }
 
 async function validatePlayerWildcardMatch(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<PlayerActionContext>,
+    action: AppAction,
+    context: SessionContext<PlayerActionContext>,
 ) {
     if (action.actionName === "play") {
-        const clientContext = context.context.spotify;
+        const clientContext = context.agentContext.spotify;
         if (clientContext === undefined) {
             // Can't validate without context, assume true
             return true;
@@ -135,4 +140,25 @@ async function validateArtist(artistName: string, context: IClientContext) {
         );
     }
     return false;
+}
+
+async function getPlayerDynamicDisplay(
+    type: DisplayType,
+    displayId: string,
+    context: SessionContext<PlayerActionContext>,
+): Promise<DynamicDisplay> {
+    if (context.agentContext.spotify === undefined) {
+        return {
+            content: "Spotify integration is not enabled.",
+            nextRefreshMs: -1,
+        };
+    }
+    if (displayId === "status") {
+        const status = await htmlStatus(context.agentContext.spotify);
+        return {
+            content: type === "html" ? status.displayText : status.literalText!,
+            nextRefreshMs: 1000,
+        };
+    }
+    throw new Error(`Invalid displayId ${displayId}`);
 }

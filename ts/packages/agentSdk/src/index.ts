@@ -4,14 +4,18 @@
 export {
     TopLevelTranslatorConfig,
     HierarchicalTranslatorConfig,
-    DispatcherAgent,
-    DispatcherAgentIO,
-    DispatcherAction,
-    DispatcherActionWithParameters,
-    DispatcherAgentContext,
+    AppAgent,
+    AppAgentIO,
+    AppAction,
+    AppActionWithParameters,
+    SessionContext,
     StorageListOptions,
     Storage,
     StorageEncoding,
     TokenCachePersistence,
+    ActionContext,
+    ActionIO,
+    DisplayType,
+    DynamicDisplay,
 } from "./agentInterface.js";
 export * from "./memory.js";

@@ -19,7 +19,7 @@ When loading dispatcher agent in a NPM package, the dispatcher first loads the m
 ### Instantiation Entry point
 
 The instantiation entry point is the code entry point for a dispatcher agent. After loading the `./agent/handlers` ESM module,
-the `instantiate` function will be call to get an instance of the `DispatcherAgent`. The `DispatcherAgent` provides four optional APIs:
+the `instantiate` function will be call to get an instance of the `AppAgent`. The `AppAgent` provides four optional APIs:
 
 - `initializeAgentContext` - Dispatcher will call after the agent is loaded. It is expected to create a context that will be passed back on all subsequent call to other APIs.
 - `updateAgentContext` - A signal indicating whether the action is enabled or disabled for the agent, allowing it to manage resources such as login. The dispatcher calls this function during initialization or when the user enables or disables actions for the dispatcher agent. Each sub-translator can be enabled or disabled independently and the dispatcher will call this API once for each sub-translator. The `translatorName` parameter can be used to distinguish the sub-translator.

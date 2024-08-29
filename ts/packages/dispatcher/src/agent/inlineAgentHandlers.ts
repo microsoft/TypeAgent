@@ -2,20 +2,21 @@
 // Licensed under the MIT License.
 
 import {
-    DispatcherAgentContext,
-    DispatcherAgent,
-    DispatcherAction,
+    SessionContext,
+    AppAgent,
+    AppAction,
+    ActionContext,
 } from "@typeagent/agent-sdk";
 
 import { executeCorrectionAction } from "../action/correctionActionHandler.js";
 import { executeSessionAction } from "../action/system/sessionActionHandler.js";
 import { executeConfigAction } from "../action/system/configActionHandler.js";
 
-export function loadInlineAgent(name: string): DispatcherAgent {
+export function loadInlineAgent(name: string): AppAgent {
     return inlineHandlers[name] ?? {};
 }
 
-const inlineHandlers: { [key: string]: DispatcherAgent } = {
+const inlineHandlers: { [key: string]: AppAgent } = {
     correction: {
         executeAction: executeCorrectionAction,
     },
@@ -24,10 +25,7 @@ const inlineHandlers: { [key: string]: DispatcherAgent } = {
     },
 };
 
-function executeSystemAction(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<undefined>,
-) {
+function executeSystemAction(action: AppAction, context: ActionContext) {
     switch (action.translatorName) {
         case "system.session":
             return executeSessionAction(action, context);

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import {
-    DispatcherAgent,
+    AppAgent,
     HierarchicalTranslatorConfig,
     TopLevelTranslatorConfig,
 } from "@typeagent/agent-sdk";
@@ -13,7 +13,7 @@ import path from "node:path";
 
 import { createAgentProcessShim } from "./agentProcessShim.js";
 
-export type InlineDispatcherAgentInfo = {
+export type InlineAppAgentInfo = {
     type?: undefined;
 } & TopLevelTranslatorConfig;
 
@@ -22,16 +22,13 @@ const enum ExecutionMode {
     DispatcherProcess = "dispatcher",
 }
 
-export type ModuleDispatcherAgentInfo = {
+export type ModuleAppAgentInfo = {
     type: "module";
     name: string;
     execMode?: ExecutionMode;
 };
 
-export type AgentInfo = (
-    | InlineDispatcherAgentInfo
-    | ModuleDispatcherAgentInfo
-) & {
+export type AgentInfo = (InlineAppAgentInfo | ModuleAppAgentInfo) & {
     imports?: string[]; // for @const import
 };
 
@@ -47,7 +44,7 @@ function patchPaths(config: HierarchicalTranslatorConfig, dir: string) {
 }
 
 async function loadModuleConfig(
-    info: ModuleDispatcherAgentInfo,
+    info: ModuleAppAgentInfo,
 ): Promise<TopLevelTranslatorConfig> {
     const require = createRequire(import.meta.url);
     const manifestPath = require.resolve(`${info.name}/agent/manifest`);
@@ -58,22 +55,22 @@ async function loadModuleConfig(
 
 async function loadDispatcherConfigs() {
     const infos = getDispatcherConfig().agents;
-    const dispatcherAgents: Map<string, TopLevelTranslatorConfig> = new Map();
+    const appAgents: Map<string, TopLevelTranslatorConfig> = new Map();
     for (const [name, info] of Object.entries(infos)) {
-        dispatcherAgents.set(
+        appAgents.set(
             name,
             info.type === "module" ? await loadModuleConfig(info) : info,
         );
     }
-    return dispatcherAgents;
+    return appAgents;
 }
 
-let dispatcherAgentConfigs: Map<string, TopLevelTranslatorConfig> | undefined;
-export async function getDispatcherAgentConfigs() {
-    if (dispatcherAgentConfigs === undefined) {
-        dispatcherAgentConfigs = await loadDispatcherConfigs();
+let appAgentConfigs: Map<string, TopLevelTranslatorConfig> | undefined;
+export async function getAppAgentConfigs() {
+    if (appAgentConfigs === undefined) {
+        appAgentConfigs = await loadDispatcherConfigs();
     }
-    return dispatcherAgentConfigs;
+    return appAgentConfigs;
 }
 
 function enableExecutionMode() {
@@ -81,9 +78,7 @@ function enableExecutionMode() {
     return process.env.TYPEAGENT_EXECMODE === "1";
 }
 
-async function loadModuleAgent(
-    info: ModuleDispatcherAgentInfo,
-): Promise<DispatcherAgent> {
+async function loadModuleAgent(info: ModuleAppAgentInfo): Promise<AppAgent> {
     // TODO: change default
     const execMode = info.execMode ?? ExecutionMode.DispatcherProcess;
     if (enableExecutionMode() && execMode === ExecutionMode.SeparateProcess) {
@@ -99,24 +94,24 @@ async function loadModuleAgent(
     return module.instantiate();
 }
 
-async function loadDispatcherAgents() {
+async function loadAppAgents() {
     const configs = getDispatcherConfig().agents;
-    const dispatcherAgents: Map<string, DispatcherAgent> = new Map();
+    const appAgents: Map<string, AppAgent> = new Map();
     for (const [name, config] of Object.entries(configs)) {
-        dispatcherAgents.set(
+        appAgents.set(
             name,
             await (config.type === "module"
                 ? loadModuleAgent(config)
                 : loadInlineAgent(name)),
         );
     }
-    return dispatcherAgents;
+    return appAgents;
 }
 
-let dispatcherAgents: Map<string, DispatcherAgent> | undefined;
-export async function getDispatcherAgents() {
-    if (dispatcherAgents === undefined) {
-        dispatcherAgents = await loadDispatcherAgents();
+let appAgents: Map<string, AppAgent> | undefined;
+export async function getAppAgents() {
+    if (appAgents === undefined) {
+        appAgents = await loadAppAgents();
     }
-    return dispatcherAgents;
+    return appAgents;
 }
