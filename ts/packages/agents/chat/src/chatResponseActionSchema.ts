@@ -14,9 +14,9 @@ export type ChatResponseAction =
     | GenerateResponseAction
     | LookupAndGenerateResponseAction;
 
-// use this GenerateResponseAction if the request should be handled by showing the user a generated message instead of running an action which will generate a message
+// do not use this action if the request can be handled by any other action
 // this is the way to handle requests for general chat information like "what is the weather" or "tell me a joke"
-// prefer this action to switching to a different assistant if the request is for general chat information
+// prefer GenerateResponseAction over switching to a different assistant if the request is for general chat information
 export interface GenerateResponseAction {
     actionName: "generateResponse";
     parameters: {
@@ -71,12 +71,14 @@ export type TermFilter = {
     timeRange?: DateTimeRange | undefined; // in this time range
 };
 
+// DO NOT use this action for a request for information stored in application memory, such as a list, playlist, album, table etc.; instead use the information retrieval actions for the specific application storage
+// this action is used to lookup information from past conversations or the internet and generate a response based on the lookup results
 export interface LookupAndGenerateResponseAction {
     actionName: "lookupAndGenerateResponse";
     parameters: {
         // the original request from the user
         originalRequest: string;
-        // if the request is for information from past conversations use the conversation lookup filters
+        // if the request is for private information from past conversations including private events, plans, projects in progress, and other items from discussions with team members or the assistant, use the conversation lookup filters
         conversationLookupFilters?: TermFilter[];
         // if the request is for contemporary internet information including sports scores, news events, or current commerce offerings, use the lookups parameter to request a lookup of the information on the user's behalf; the assistant will generate a response based on the lookup results
         // Lookup *facts* you don't know or if your facts are out of date.
