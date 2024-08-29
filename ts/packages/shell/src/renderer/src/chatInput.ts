@@ -130,25 +130,41 @@ export class ChatInput {
         });
         this.inputContainer.appendChild(this.textarea.getTextEntry());
 
-        this.inputContainer.ondragover = (e: DragEvent) => {
-            console.log(e);
-            e.preventDefault();
-        };
+        // this.inputContainer.ondragover = (e: DragEvent) => {
+        //     console.log(e);
+        //     e.preventDefault();
+        // };
 
         this.inputContainer.ondragenter = (e: DragEvent) => {
+            e.preventDefault();
             console.log(e);
 
-            this.getInputContainer().innerText = "Drop image files here...";
+            this.textarea.getTextEntry().innerText = "Drop image files here...";
             this.inputContainer.classList.add("chat-input-drag");
         };
 
-        this.inputContainer.ondragleave = () => {
-            this.getInputContainer().innerText = "";
+        this.inputContainer.ondragleave = (e: DragEvent) => {
+            this.clear();
             this.inputContainer.classList.remove("chat-input-drag");
+            e.preventDefault();
         };
 
-        this.inputContainer.ondrop = (e: DragEvent) => {
+        this.inputContainer.ondrop = async (e: DragEvent) => {
             console.log(e);
+            this.clear();
+
+            if (e.dataTransfer != null && e.dataTransfer.files.length > 0) {
+                let file: File = e.dataTransfer.files[0];
+                let buffer: ArrayBuffer = await file.arrayBuffer();
+                
+                let dropImg: HTMLImageElement = document.createElement("img");
+                dropImg.src = "data:image/png;base64," + this._arrayBufferToBase64(buffer);
+                dropImg.className = "chat-inpput-dropImage";
+
+                this.textarea.getTextEntry().append(dropImg);
+            }
+
+            e.preventDefault();
         };
 
         this.micButton = document.createElement("button");
@@ -239,6 +255,17 @@ export class ChatInput {
 
     getInputContainer() {
         return this.inputContainer;
+    }
+
+    
+    _arrayBufferToBase64(buffer: ArrayBuffer ) {
+        let binary = '';
+        const bytes = new Uint8Array( buffer );
+        const len = bytes.byteLength;
+        for (var i = 0; i < len; i++) {
+            binary += String.fromCharCode( bytes[ i ] );
+        }
+        return window.btoa( binary );
     }
 }
 
