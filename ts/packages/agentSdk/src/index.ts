@@ -13,5 +13,7 @@ export {
     Storage,
     StorageEncoding,
     TokenCachePersistence,
+    ActionContext,
+    ActionIO,
 } from "./agentInterface.js";
 export * from "./memory.js";

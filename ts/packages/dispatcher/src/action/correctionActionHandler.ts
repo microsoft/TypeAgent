@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    ActionContext,
     DispatcherAgentContext,
     TurnImpression,
     createTurnImpressionFromLiteral,
@@ -10,7 +11,7 @@ import { CorrectionAction } from "../translation/correctionActionsSchema.js";
 
 export async function executeCorrectionAction(
     action: CorrectionAction,
-    context: DispatcherAgentContext<undefined>,
+    context: ActionContext,
 ): Promise<TurnImpression> {
     const { correctionRequest } = action.parameters;
     return createTurnImpressionFromLiteral(

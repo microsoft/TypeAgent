@@ -2,28 +2,28 @@
 // Licensed under the MIT License.
 
 import { ConfigAction } from "../../translation/system/configActionSchema.js";
-import { DispatcherAgentContext, DispatcherAction } from "@typeagent/agent-sdk";
+import { DispatcherAction, ActionContext } from "@typeagent/agent-sdk";
 
 export async function executeConfigAction(
     action: DispatcherAction,
-    context: DispatcherAgentContext<undefined>,
+    context: ActionContext,
 ) {
     const configAction = action as unknown as ConfigAction;
     switch (configAction.actionName) {
         case "toggleBot":
-            await context.issueCommand(
+            await context.sessionContext.issueCommand(
                 `@config bot ${configAction.parameters.enable ? "on" : "off"}`,
             );
             break;
 
         case "toggleExplanation":
-            await context.issueCommand(
+            await context.sessionContext.issueCommand(
                 `@config explanation ${configAction.parameters.enable ? "on" : "off"}`,
             );
             break;
 
         case "toggleDeveloperMode":
-            await context.issueCommand(
+            await context.sessionContext.issueCommand(
                 `@config dev ${configAction.parameters.enable ? "on" : "off"}`,
             );
             break;

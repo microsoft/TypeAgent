@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    ActionContext,
     DispatcherAgent,
     DispatcherAgentContext,
     DispatcherAgentIO,
@@ -13,6 +14,7 @@ import {
 
 import { setupInvoke } from "./agentProcessUtil.js";
 import {
+    ActionContextParams,
     AgentContextCallAPI,
     AgentContextInvokeAPI,
     AgentInvokeAPI,
@@ -57,8 +59,7 @@ async function agentInvokeHandler(name: string, param: any): Promise<any> {
             }
             return agent.executeAction(
                 Action.fromJSONObject(param.action),
-                getDispatcherAgentContextShim(param),
-                param.actionIndex,
+                getActionContextShim(param),
             );
         case AgentInvokeAPI.ValidateWildcardMatch:
             if (agent.validateWildcardMatch === undefined) {
@@ -157,14 +158,8 @@ function createDispatcherAgentContextShim(
     hasSessionStorage: boolean,
     context: any,
 ): DispatcherAgentContext<any> {
-    const requestIO: DispatcherAgentIO = {
-        type: "text",
-        clear: (): void => {
-            rpc.send(AgentContextCallAPI.AgentIOClear, { contextId });
-        },
-        info: (message: string): void => {
-            rpc.send(AgentContextCallAPI.AgentIOInfo, { contextId, message });
-        },
+    const agentIO: DispatcherAgentIO = {
+        type: "text", // TODO: get the real value
         status: (message: string): void => {
             rpc.send(AgentContextCallAPI.AgentIOStatus, { contextId, message });
         },
@@ -173,15 +168,6 @@ function createDispatcherAgentContextShim(
                 contextId,
                 message,
             });
-        },
-        warn: (message: string): void => {
-            rpc.send(AgentContextCallAPI.AgentIOWarn, { contextId, message });
-        },
-        error: (message: string): void => {
-            rpc.send(AgentContextCallAPI.AgentIOError, { contextId, message });
-        },
-        result: (message: string): void => {
-            rpc.send(AgentContextCallAPI.AgentIOResult, { contextId, message });
         },
         setActionStatus: (
             message: string,
@@ -201,7 +187,7 @@ function createDispatcherAgentContextShim(
         get currentTranslatorName(): string {
             throw new Error("NYI");
         },
-        requestIO,
+        agentIO,
         get requestId(): string {
             throw new Error("NYI");
         },
@@ -271,6 +257,43 @@ function getDispatcherAgentContextShim(
         hasSessionStorage,
         agentContext,
     );
+}
+
+function getActionContextShim(
+    param: Partial<ActionContextParams>,
+): ActionContext<any> {
+    const actionContextId = param.actionContextId;
+    if (actionContextId === undefined) {
+        throw new Error(
+            "Invalid action context param: missing actionContextId",
+        );
+    }
+    const sessionContext = getDispatcherAgentContextShim(param);
+    return {
+        get agentContext() {
+            return sessionContext.context;
+        },
+        get sessionStorage() {
+            return sessionContext.sessionStorage;
+        },
+        get profileStorage() {
+            return sessionContext.profileStorage;
+        },
+        get sessionContext() {
+            return sessionContext;
+        },
+        actionIO: {
+            get type() {
+                return sessionContext.agentIO.type;
+            },
+            setActionDisplay(content: string): void {
+                rpc.send(AgentContextCallAPI.SetActionDisplay, {
+                    actionContextId,
+                    content,
+                });
+            },
+        },
+    };
 }
 
 process.send!({

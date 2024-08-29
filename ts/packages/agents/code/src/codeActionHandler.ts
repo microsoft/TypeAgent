@@ -4,6 +4,7 @@
 import { WebSocketMessage, createWebSocket } from "common-utils";
 import { WebSocket } from "ws";
 import {
+    ActionContext,
     DispatcherAction,
     DispatcherAgent,
     DispatcherAgentContext,
@@ -53,14 +54,10 @@ async function updateCodeContext(
                 ) {
                     switch (data.messageType) {
                         case "confirmAction": {
-                            const requestIO = context.requestIO;
+                            const agentIO = context.agentIO;
                             const requestId = context.requestId;
-                            if (
-                                requestIO &&
-                                requestId &&
-                                data.id === requestId
-                            ) {
-                                requestIO.status(data.body);
+                            if (agentIO && requestId && data.id === requestId) {
+                                agentIO.status(data.body);
                             }
 
                             break;
@@ -82,12 +79,12 @@ async function updateCodeContext(
 
 async function executeCodeAction(
     action: DispatcherAction,
-    context: DispatcherAgentContext<CodeActionContext>,
+    context: ActionContext<CodeActionContext>,
 ) {
-    const webSocketEndpoint = context.context.webSocket;
+    const webSocketEndpoint = context.agentContext.webSocket;
     if (webSocketEndpoint) {
         try {
-            const requestId = context.requestId;
+            const requestId = context.sessionContext.requestId;
             webSocketEndpoint.send(
                 JSON.stringify({
                     source: "dispatcher",

@@ -14,6 +14,7 @@ import {
     DispatcherAgentContext,
     DispatcherAction,
     createTurnImpressionFromError,
+    ActionContext,
 } from "@typeagent/agent-sdk";
 import { searchAlbum, searchArtists, searchTracks } from "../client.js";
 
@@ -38,10 +39,10 @@ async function initializePlayerContext() {
 
 async function executePlayerAction(
     action: DispatcherAction,
-    context: DispatcherAgentContext<PlayerActionContext>,
+    context: ActionContext<PlayerActionContext>,
 ) {
-    if (context.context.spotify) {
-        return handleCall(action as PlayerAction, context.context.spotify);
+    if (context.agentContext.spotify) {
+        return handleCall(action as PlayerAction, context.agentContext.spotify);
     }
 
     return createTurnImpressionFromError(
@@ -55,7 +56,7 @@ async function updatePlayerContext(
 ) {
     if (enable) {
         const user = await enableSpotify(context);
-        context.requestIO.result(
+        context.agentIO.success(
             chalk.blue(`Spotify integration enabled. Logged in as ${user}.`),
         );
     } else {

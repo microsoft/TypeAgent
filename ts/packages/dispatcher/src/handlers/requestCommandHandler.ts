@@ -26,7 +26,6 @@ import {
 } from "../action/actionHandlers.js";
 import { unicodeChar } from "../utils/interactive.js";
 import {
-    getDispatcherAgentName,
     getInjectedTranslatorForActionName,
     getTranslatorConfig,
     isChangeAssistantAction,

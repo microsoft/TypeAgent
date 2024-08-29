@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    ActionContext,
     DispatcherAction,
     DispatcherAgent,
     DispatcherAgentContext,
@@ -32,9 +33,12 @@ type ListActionContext = {
 
 async function executeListAction(
     action: DispatcherAction,
-    context: DispatcherAgentContext<ListActionContext>,
+    context: ActionContext<ListActionContext>,
 ) {
-    let result = await handleListAction(action as ListAction, context.context);
+    let result = await handleListAction(
+        action as ListAction,
+        context.agentContext,
+    );
     return result;
 }
 

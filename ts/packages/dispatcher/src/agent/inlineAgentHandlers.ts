@@ -5,6 +5,7 @@ import {
     DispatcherAgentContext,
     DispatcherAgent,
     DispatcherAction,
+    ActionContext,
 } from "@typeagent/agent-sdk";
 
 import { executeCorrectionAction } from "../action/correctionActionHandler.js";
@@ -24,10 +25,7 @@ const inlineHandlers: { [key: string]: DispatcherAgent } = {
     },
 };
 
-function executeSystemAction(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<undefined>,
-) {
+function executeSystemAction(action: DispatcherAction, context: ActionContext) {
     switch (action.translatorName) {
         case "system.session":
             return executeSessionAction(action, context);

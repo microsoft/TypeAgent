@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import jp from "jsonpath";
-import { DispatcherAgentContext } from "@typeagent/agent-sdk";
+import { ActionContext, DispatcherAgentContext } from "@typeagent/agent-sdk";
 import { Crossword } from "./schema/pageSchema.mjs";
 import { CrosswordPresence } from "./schema/pageFrame.mjs";
 import { createCrosswordPageTranslator } from "./translator.mjs";
@@ -98,21 +98,21 @@ export async function getBoardSchema(
 
 export async function handleCrosswordAction(
   action: any,
-  context: DispatcherAgentContext<BrowserActionContext>,
+  context: ActionContext<BrowserActionContext>,
 ) {
   let message = "OK";
-  if (!context.context.browserConnector) {
+  if (!context.agentContext.browserConnector) {
     throw new Error("No connection to browser session.");
   }
 
-  const browser: BrowserConnector = context.context.browserConnector;
+  const browser: BrowserConnector = context.agentContext.browserConnector;
 
-  if (context.context.crossWordState) {
+  if (context.agentContext.crossWordState) {
     const actionName =
       action.actionName ?? action.fullActionName.split(".").at(-1);
     if (actionName === "enterText") {
       const selector = jp.value(
-        context.context.crossWordState,
+        context.agentContext.crossWordState,
         `$.${action.parameters.clueDirection}[?(@.number==${action.parameters.clueNumber})].cssSelector`,
       );
 
@@ -127,7 +127,7 @@ export async function handleCrosswordAction(
     if (actionName === "getClueValue") {
       if (message === "OK") message = "";
       const selector = jp.value(
-        context.context.crossWordState,
+        context.agentContext.crossWordState,
         `$.${action.parameters.clueDirection}[?(@.number==${action.parameters.clueNumber})].text`,
       );
 

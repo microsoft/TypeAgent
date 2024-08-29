@@ -30,6 +30,7 @@ import {
     createTurnImpressionFromError,
     DispatcherAction,
     DispatcherAgent,
+    ActionContext,
 } from "@typeagent/agent-sdk";
 
 export function instantiate(): DispatcherAgent {
@@ -148,11 +149,11 @@ async function updateCalendarContext(
 
 async function executeCalendarAction(
     action: DispatcherAction,
-    context: DispatcherAgentContext<CalendarActionContext>,
+    context: ActionContext<CalendarActionContext>,
 ) {
     let result = await handleCalendarAction(
         action as CalendarAction,
-        context.context,
+        context.agentContext,
     );
     return result;
 }

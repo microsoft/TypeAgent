@@ -16,7 +16,12 @@ import {
     Entity,
 } from "typeagent";
 import { ChatModel, bing, openai } from "aiclient";
-import { DispatcherAgent, DispatcherAgentIO } from "@typeagent/agent-sdk";
+import {
+    ActionContext,
+    ActionIO,
+    DispatcherAgent,
+    DispatcherAgentIO,
+} from "@typeagent/agent-sdk";
 import { PromptSection } from "typechat";
 import {
     DispatcherAction,
@@ -46,21 +51,19 @@ function isChatResponseAction(
 
 export async function executeChatResponseAction(
     chatAction: DispatcherAction,
-    context: DispatcherAgentContext<undefined>,
-    actionIndex: number,
+    context: ActionContext,
 ) {
     if (!isChatResponseAction(chatAction)) {
         throw new Error(`Invalid chat action: ${chatAction.actionName}`);
     }
-    return handleChatResponse(chatAction, context, actionIndex);
+    return handleChatResponse(chatAction, context);
 }
 
 async function handleChatResponse(
     chatAction: ChatResponseAction,
-    context: DispatcherAgentContext<undefined>,
-    actionIndex: number,
+    context: ActionContext,
 ) {
-    const requestIO = context.requestIO;
+    const actionIO = context.actionIO;
     console.log(JSON.stringify(chatAction, undefined, 2));
     switch (chatAction.actionName) {
         case "generateResponse": {
@@ -100,8 +103,7 @@ async function handleChatResponse(
                 console.log("Running lookups");
                 return handleLookup(
                     lookupAction,
-                    requestIO,
-                    actionIndex,
+                    actionIO,
                     await getLookupSettings(true),
                 );
             }
@@ -261,8 +263,7 @@ type LookupSettings = {
 
 async function handleLookup(
     chatAction: LookupAndGenerateResponseAction,
-    requestIO: DispatcherAgentIO,
-    actionIndex: number,
+    actionIO: ActionIO,
     settings: LookupSettings,
 ): Promise<TurnImpression> {
     let literalResponse = createTurnImpressionFromLiteral(
@@ -285,7 +286,7 @@ async function handleLookup(
     if (lookups.length === 1 && lookUpConfig?.documentConcurrency) {
         documentConcurrency = lookUpConfig.documentConcurrency;
     }
-    requestIO.setActionStatus(lookupToHtml(lookups), actionIndex);
+    actionIO.setActionDisplay(lookupToHtml(lookups));
     const context: LookupContext = {
         lookups,
         answers: new Map<string, ChunkChatResponse>(),
@@ -294,19 +295,12 @@ async function handleLookup(
     // Run all lookups concurrently
     await Promise.all(
         lookups.map((l) =>
-            runLookup(
-                l,
-                context,
-                requestIO,
-                actionIndex,
-                settings,
-                documentConcurrency,
-            ),
+            runLookup(l, context, actionIO, settings, documentConcurrency),
         ),
     );
     // Capture answers in the turn impression to return
     literalResponse = updateTurnImpression(context, literalResponse);
-    requestIO.setActionStatus(literalResponse.displayText, actionIndex);
+    actionIO.setActionDisplay(literalResponse.displayText);
     // Generate entities if needed
     if (settings.entityGenModel) {
         const entities = await runEntityExtraction(context, settings);
@@ -384,8 +378,7 @@ function updateTurnImpression(
 async function runLookup(
     lookup: string,
     context: LookupContext,
-    requestIO: DispatcherAgentIO,
-    actionIndex: number,
+    actionIO: ActionIO,
     settings: LookupSettings,
     concurrency: number,
 ) {
@@ -423,7 +416,7 @@ async function runLookup(
     return answer;
 
     function updateStatus() {
-        requestIO.setActionStatus(lookupProgressAsHtml(context), actionIndex);
+        actionIO.setActionDisplay(lookupProgressAsHtml(context));
     }
 }
 
@@ -511,7 +504,7 @@ function streamPartialChatResponseAction(
     }
 
     if (name === "parameters.generatedText") {
-        context.requestIO.setActionStatus(
+        context.agentIO.setActionStatus(
             `${value}${partial ? "..." : ""}`,
             0,
             "chat",

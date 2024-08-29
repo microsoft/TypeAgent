@@ -21,14 +21,12 @@ export enum AgentCallAPI {
 
 export const enum AgentContextCallAPI {
     // DispatcherAgentContext
-    AgentIOClear = "agentIOClear",
-    AgentIOInfo = "agentIOInfo",
     AgentIOStatus = "agentIOStatus",
     AgentIOSuccess = "agentIOSuccess",
-    AgentIOWarn = "agentIOWarn",
-    AgentIOError = "agentIOError",
-    AgentIOResult = "agentIOResult",
     SetActionStatus = "agentIOSetActionStatus",
+
+    // ActionContext.actionIO
+    SetActionDisplay = "setActionDisplay",
 }
 
 export const enum AgentContextInvokeAPI {
@@ -56,4 +54,8 @@ export type ContextParams = {
     contextId: number;
     hasSessionStorage: boolean;
     agentContextId: number | undefined;
+};
+
+export type ActionContextParams = ContextParams & {
+    actionContextId: number;
 };

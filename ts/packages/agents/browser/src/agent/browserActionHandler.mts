@@ -4,6 +4,7 @@
 import { WebSocketMessage, createWebSocket } from "common-utils";
 import { WebSocket } from "ws";
 import {
+  ActionContext,
   DispatcherAction,
   DispatcherAgent,
   DispatcherAgentContext,
@@ -123,15 +124,15 @@ async function updateBrowserContext(
 
 async function executeBrowserAction(
   action: DispatcherAction,
-  context: DispatcherAgentContext<BrowserActionContext>,
+  context: ActionContext<BrowserActionContext>,
 ) {
-  const webSocketEndpoint = context.context.webSocket;
+  const webSocketEndpoint = context.agentContext.webSocket;
 
   if (webSocketEndpoint) {
     try {
-      const requestIO = context.requestIO;
-      const requestId = context.requestId;
-      requestIO.status("Running remote action.");
+      const agentIO = context.sessionContext.agentIO;
+      const requestId = context.sessionContext.requestId;
+      agentIO.status("Running remote action.");
 
       let messageType = "translatedAction";
       let target = "browser";

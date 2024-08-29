@@ -2,27 +2,27 @@
 // Licensed under the MIT License.
 
 import { SessionAction } from "../../translation/system/sessionActionSchema.js";
-import { DispatcherAgentContext, DispatcherAction } from "@typeagent/agent-sdk";
+import { DispatcherAction, ActionContext } from "@typeagent/agent-sdk";
 
 export async function executeSessionAction(
     action: DispatcherAction,
-    context: DispatcherAgentContext<undefined>,
+    context: ActionContext,
 ) {
     const sessionAction = action as SessionAction;
     switch (sessionAction.actionName) {
         case "new":
-            await context.issueCommand(
+            await context.sessionContext.issueCommand(
                 `@session new ${sessionAction.parameters.name ?? ""}`,
             );
             break;
         case "list":
-            await context.issueCommand("@session list");
+            await context.sessionContext.issueCommand("@session list");
             break;
         case "showInfo":
-            await context.issueCommand("@session info");
+            await context.sessionContext.issueCommand("@session info");
             break;
         case "toggleHistory":
-            await context.issueCommand(
+            await context.sessionContext.issueCommand(
                 `@session history ${sessionAction.parameters.enable ? "on" : "off"}`,
             );
             break;

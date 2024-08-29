@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Actions } from "agent-cache";
+import { Action, Actions } from "agent-cache";
 import {
     CommandHandlerContext,
     changeContextConfig,
@@ -10,10 +10,12 @@ import {
 import registerDebug from "debug";
 import { getDispatcherAgentName } from "../translation/agentTranslators.js";
 import {
+    ActionIO,
     createTurnImpressionFromLiteral,
     DispatcherAction,
     DispatcherAgent,
     DispatcherAgentContext,
+    DispatcherAgentIO,
     TurnImpression,
     turnImpressionToString,
 } from "@typeagent/agent-sdk";
@@ -37,6 +39,39 @@ export async function initializeActionContext(
     );
 }
 
+function getActionContext(
+    name: string,
+    context: CommandHandlerContext,
+    actionIndex: number,
+) {
+    const sessionContext = getDispatcherAgentContext(name, context);
+    const actionIO: ActionIO = {
+        get type() {
+            return sessionContext.agentIO.type;
+        },
+        setActionDisplay(content: string): void {
+            sessionContext.agentIO.setActionStatus(content, actionIndex);
+        },
+    };
+    return {
+        get agentContext() {
+            return sessionContext.context;
+        },
+        get sessionStorage() {
+            return sessionContext.sessionStorage;
+        },
+        get profileStorage() {
+            return sessionContext.profileStorage;
+        },
+        get sessionContext() {
+            return sessionContext;
+        },
+        get actionIO() {
+            return actionIO;
+        },
+    };
+}
+
 function getDispatcherAgentContext(
     name: string,
     context: CommandHandlerContext,
@@ -56,12 +91,35 @@ function createDispatcherAgentContext(
         ? getStorage(name, sessionDirPath)
         : undefined;
     const profileStorage = getStorage(name, getUserProfileDir());
+    const agentIO: DispatcherAgentIO = {
+        get type() {
+            return context.requestIO.type;
+        },
+        status(message: string) {
+            context.requestIO.status(message);
+        },
+        success(message: string) {
+            context.requestIO.success(message);
+        },
+        setActionStatus(
+            message: string,
+            actionIndex: number,
+            groupId?: string,
+        ) {
+            context.requestIO.setActionStatus(
+                message,
+                actionIndex,
+                name,
+                groupId,
+            );
+        },
+    };
     const agentContext: DispatcherAgentContext = {
         get context() {
             return context.action[name];
         },
-        get requestIO() {
-            return context.requestIO;
+        get agentIO() {
+            return agentIO;
         },
         get requestId() {
             return context.requestId;
@@ -149,8 +207,16 @@ export async function closeActionContext(context: CommandHandlerContext) {
     }
 }
 
+export async function partialInput(
+    text: string,
+    context: CommandHandlerContext,
+) {
+    // For auto completion
+    throw new Error("NYI");
+}
+
 async function executeAction(
-    action: DispatcherAction,
+    action: Action,
     context: CommandHandlerContext,
     actionIndex: number,
 ): Promise<TurnImpression | undefined> {
@@ -170,19 +236,58 @@ async function executeAction(
             `Agent ${dispatcherAgentName} does not support executeAction.`,
         );
     }
-    return dispatcherAgent.executeAction(
-        action,
-        getDispatcherAgentContext(dispatcherAgentName, context),
+    const actionContext = getActionContext(
+        dispatcherAgentName,
+        context,
         actionIndex,
     );
-}
+    const returnedResult: TurnImpression | undefined =
+        await dispatcherAgent.executeAction(action, actionContext);
 
-export async function partialInput(
-    text: string,
-    context: CommandHandlerContext,
-) {
-    // For auto completion
-    throw new Error("NYI");
+    let result: TurnImpression;
+    if (returnedResult === undefined) {
+        result = createTurnImpressionFromLiteral(
+            `Action ${action.fullActionName} completed.`,
+        );
+    } else {
+        if (
+            returnedResult.error === undefined &&
+            returnedResult.literalText &&
+            context.conversationManager
+        ) {
+            // TODO: convert entity values to facets
+            context.conversationManager.addMessage(
+                returnedResult.literalText,
+                returnedResult.entities,
+                new Date(),
+            );
+        }
+        result = returnedResult;
+    }
+    if (debugActions.enabled) {
+        debugActions(turnImpressionToString(result));
+    }
+    if (result.error !== undefined) {
+        context.requestIO.error(result.error);
+        context.chatHistory.addEntry(
+            `Action ${action.fullActionName} failed: ${result.error}`,
+            [],
+            "assistant",
+            context.requestId,
+        );
+    } else {
+        actionContext.actionIO.setActionDisplay(result.displayText);
+        context.chatHistory.addEntry(
+            result.literalText
+                ? result.literalText
+                : `Action ${action.fullActionName} completed.`,
+            result.entities,
+            "assistant",
+            context.requestId,
+            result.impressionInterpreter,
+        );
+    }
+    return result;
 }
 
 export async function executeActions(
@@ -190,60 +295,9 @@ export async function executeActions(
     context: CommandHandlerContext,
 ) {
     debugActions(`Executing actions: ${JSON.stringify(actions, undefined, 2)}`);
-    const requestIO = context.requestIO;
     let actionIndex = 0;
     for (const action of actions) {
-        let result: TurnImpression;
-        const returnedResult = await executeAction(
-            action,
-            context,
-            actionIndex,
-        );
-        if (returnedResult === undefined) {
-            result = createTurnImpressionFromLiteral(`
-                Action ${action.fullActionName} completed.`);
-        } else {
-            if (
-                returnedResult.error === undefined &&
-                returnedResult.literalText &&
-                context.conversationManager
-            ) {
-                // TODO: convert entity values to facets
-                context.conversationManager.addMessage(
-                    returnedResult.literalText,
-                    returnedResult.entities,
-                    new Date(),
-                );
-            }
-            result = returnedResult;
-        }
-        if (debugActions.enabled) {
-            debugActions(turnImpressionToString(result));
-        }
-        if (result.error !== undefined) {
-            requestIO.error(result.error);
-            context.chatHistory.addEntry(
-                `Action ${action.fullActionName} failed: ${result.error}`,
-                [],
-                "assistant",
-                context.requestId,
-            );
-        } else {
-            requestIO.setActionStatus(
-                result.displayText,
-                actionIndex,
-                context.currentTranslatorName,
-            );
-            context.chatHistory.addEntry(
-                result.literalText
-                    ? result.literalText
-                    : `Action ${action.fullActionName} completed.`,
-                result.entities,
-                "assistant",
-                context.requestId,
-                result.impressionInterpreter,
-            );
-        }
+        await executeAction(action, context, actionIndex);
         actionIndex++;
     }
 }

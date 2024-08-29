@@ -50,8 +50,7 @@ export interface DispatcherAgent {
     ): void;
     executeAction?(
         action: DispatcherAction,
-        context: DispatcherAgentContext,
-        actionIndex: number, // TODO: can we avoid passing this index?
+        context: ActionContext<any>,
     ): Promise<any>; // TODO: define return type.
     validateWildcardMatch?(
         action: DispatcherAction,
@@ -64,7 +63,7 @@ export interface DispatcherAgentContext<T = any> {
     readonly context: T;
 
     // TODO: review if these should be exposed.
-    readonly requestIO: DispatcherAgentIO;
+    readonly agentIO: DispatcherAgentIO;
     readonly requestId: RequestId;
     readonly sessionStorage: Storage | undefined;
     readonly profileStorage: Storage; // storage that are preserved across sessions
@@ -102,14 +101,9 @@ export interface Storage {
 export type RequestId = string | undefined;
 
 export interface DispatcherAgentIO {
-    type: "html" | "text";
-    clear(): void;
-    info(message: string): void;
+    readonly type: "html" | "text";
     status(message: string): void;
     success(message: string): void;
-    warn(message: string): void;
-    error(message: string): void;
-    result(message: string): void;
 
     // Action status
     setActionStatus(
@@ -117,4 +111,19 @@ export interface DispatcherAgentIO {
         actionIndex: number,
         groupId?: string,
     ): void;
+}
+
+export interface ActionIO {
+    readonly type: "html" | "text";
+    setActionDisplay(content: string): void;
+}
+
+export interface ActionContext<T = void> {
+    readonly agentContext: T;
+    readonly sessionStorage: Storage | undefined;
+    readonly profileStorage: Storage; // storage that are preserved across sessions
+    readonly actionIO: ActionIO;
+
+    // TODO: remove usage
+    readonly sessionContext: DispatcherAgentContext;
 }

@@ -11,6 +11,7 @@ import {
 import { generateNotes } from "typeagent";
 import { openai } from "aiclient";
 import {
+    ActionContext,
     DispatcherAction,
     DispatcherAgent,
     DispatcherAgentContext,
@@ -48,7 +49,7 @@ async function updateEmailContext(
 
 async function executeEmailAction(
     action: DispatcherAction,
-    context: DispatcherAgentContext<EmailActionContext>,
+    context: ActionContext<EmailActionContext>,
 ) {
     let result = await handleEmailAction(action as EmailAction, context);
     if (result) {
@@ -58,9 +59,9 @@ async function executeEmailAction(
 
 async function handleEmailAction(
     action: EmailAction,
-    context: DispatcherAgentContext<EmailActionContext>,
+    context: ActionContext<EmailActionContext>,
 ) {
-    const { mailClient } = context.context;
+    const { mailClient } = context.agentContext;
     if (!mailClient || !mailClient?.isGraphClientInitialized()) {
         return "Not handling email actions ...";
     }

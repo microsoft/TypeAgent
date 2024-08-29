@@ -18,10 +18,10 @@ export class BrowserConnector {
     return new Promise<string | undefined>((resolve, reject) => {
       if (this.webSocket) {
         try {
-          const requestIO = this.context.requestIO;
+          const agentIO = this.context.agentIO;
           let requestId = this.context.requestId;
           if (requestId) {
-            requestIO.status("Running remote action.");
+            agentIO.status("Running remote action.");
           } else {
             requestId = new Date().getTime().toString();
           }

@@ -49,14 +49,10 @@ async function updateDesktopContext(
                 ) {
                     switch (data.messageType) {
                         case "confirmAction": {
-                            const requestIO = context.requestIO;
+                            const agentIO = context.agentIO;
                             const requestId = context.requestId;
-                            if (
-                                requestIO &&
-                                requestId &&
-                                data.id === requestId
-                            ) {
-                                requestIO.status(data.body);
+                            if (agentIO && requestId && data.id === requestId) {
+                                agentIO.status(data.body);
                             }
 
                             break;
