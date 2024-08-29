@@ -25,16 +25,16 @@ export type HierarchicalTranslatorConfig = {
     subTranslators?: { [key: string]: HierarchicalTranslatorConfig };
 };
 
-export interface DispatcherAction {
+export interface AppAction {
     actionName: string;
     translatorName?: string | undefined;
 }
 
-export interface DispatcherActionWithParameters extends DispatcherAction {
+export interface AppActionWithParameters extends AppAction {
     parameters: { [key: string]: any };
 }
 
-export interface DispatcherAgent {
+export interface AppAgent {
     initializeAgentContext?(): Promise<any>;
     updateAgentContext?(
         enable: boolean,
@@ -49,11 +49,11 @@ export interface DispatcherAgent {
         dispatcherContext: SessionContext,
     ): void;
     executeAction?(
-        action: DispatcherAction,
+        action: AppAction,
         context: ActionContext<any>,
     ): Promise<any>; // TODO: define return type.
     validateWildcardMatch?(
-        action: DispatcherAction,
+        action: AppAction,
         context: SessionContext,
     ): Promise<boolean>;
     closeAgentContext?(context: SessionContext): Promise<void>;
@@ -63,7 +63,7 @@ export interface SessionContext<T = any> {
     readonly agentContext: T;
 
     // TODO: review if these should be exposed.
-    readonly agentIO: DispatcherAgentIO;
+    readonly agentIO: AppAgentIO;
     readonly requestId: RequestId;
     readonly sessionStorage: Storage | undefined;
     readonly profileStorage: Storage; // storage that are preserved across sessions
@@ -100,7 +100,7 @@ export interface Storage {
 // TODO: review if these should be exposed. Duplicated from dispatcher's interactiveIO.ts
 export type RequestId = string | undefined;
 
-export interface DispatcherAgentIO {
+export interface AppAgentIO {
     readonly type: "html" | "text";
     status(message: string): void;
     success(message: string): void;

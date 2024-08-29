@@ -5,17 +5,16 @@ import { Action, Actions } from "agent-cache";
 import {
     CommandHandlerContext,
     changeContextConfig,
-    getDispatcherAgent,
+    getAppAgent,
 } from "../handlers/common/commandHandlerContext.js";
 import registerDebug from "debug";
-import { getDispatcherAgentName } from "../translation/agentTranslators.js";
+import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
     ActionIO,
     createTurnImpressionFromLiteral,
-    DispatcherAction,
-    DispatcherAgent,
+    AppAgent,
     SessionContext,
-    DispatcherAgentIO,
+    AppAgentIO,
     TurnImpression,
     turnImpressionToString,
 } from "@typeagent/agent-sdk";
@@ -26,9 +25,7 @@ import { getUserProfileDir } from "../utils/userData.js";
 
 const debugActions = registerDebug("typeagent:actions");
 
-export async function initializeActionContext(
-    agents: Map<string, DispatcherAgent>,
-) {
+export async function initializeActionContext(agents: Map<string, AppAgent>) {
     return Object.fromEntries(
         await Promise.all(
             Array.from(agents.entries()).map(async ([name, agent]) => [
@@ -90,7 +87,7 @@ function createSessionContext(
         ? getStorage(name, sessionDirPath)
         : undefined;
     const profileStorage = getStorage(name, getUserProfileDir());
-    const agentIO: DispatcherAgentIO = {
+    const agentIO: AppAgentIO = {
         get type() {
             return context.requestIO.type;
         },
@@ -187,11 +184,11 @@ async function updateAgentContext(
     enable: boolean,
     context: CommandHandlerContext,
 ) {
-    const dispatcherAgentName = getDispatcherAgentName(translatorName);
-    const dispatcherAgent = getDispatcherAgent(dispatcherAgentName, context);
-    await dispatcherAgent.updateAgentContext?.(
+    const AppAgentName = getAppAgentName(translatorName);
+    const AppAgent = getAppAgent(AppAgentName, context);
+    await AppAgent.updateAgentContext?.(
         enable,
-        getSessionContext(dispatcherAgentName, context),
+        getSessionContext(AppAgentName, context),
         translatorName,
     );
 }
@@ -224,24 +221,20 @@ async function executeAction(
     if (translatorName === undefined) {
         throw new Error(`Cannot execute action without translator name.`);
     }
-    const dispatcherAgentName = getDispatcherAgentName(translatorName);
-    const dispatcherAgent = getDispatcherAgent(dispatcherAgentName, context);
+    const AppAgentName = getAppAgentName(translatorName);
+    const AppAgent = getAppAgent(AppAgentName, context);
 
     // Update the current translator.
     context.currentTranslatorName = translatorName;
 
-    if (dispatcherAgent.executeAction === undefined) {
+    if (AppAgent.executeAction === undefined) {
         throw new Error(
-            `Agent ${dispatcherAgentName} does not support executeAction.`,
+            `Agent ${AppAgentName} does not support executeAction.`,
         );
     }
-    const actionContext = getActionContext(
-        dispatcherAgentName,
-        context,
-        actionIndex,
-    );
+    const actionContext = getActionContext(AppAgentName, context, actionIndex);
     const returnedResult: TurnImpression | undefined =
-        await dispatcherAgent.executeAction(action, actionContext);
+        await AppAgent.executeAction(action, actionContext);
 
     let result: TurnImpression;
     if (returnedResult === undefined) {
@@ -311,17 +304,11 @@ export async function validateWildcardMatch(
         if (translatorName === undefined) {
             continue;
         }
-        const dispatcherAgentName = getDispatcherAgentName(translatorName);
-        const dispatcherAgent = getDispatcherAgent(
-            dispatcherAgentName,
-            context,
-        );
-        const dispatcherContext = getSessionContext(
-            dispatcherAgentName,
-            context,
-        );
+        const AppAgentName = getAppAgentName(translatorName);
+        const AppAgent = getAppAgent(AppAgentName, context);
+        const dispatcherContext = getSessionContext(AppAgentName, context);
         if (
-            (await dispatcherAgent.validateWildcardMatch?.(
+            (await AppAgent.validateWildcardMatch?.(
                 action,
                 dispatcherContext,
             )) === false
@@ -340,17 +327,17 @@ export function streamPartialAction(
     partial: boolean,
     context: CommandHandlerContext,
 ) {
-    const dispatcherAgentName = getDispatcherAgentName(translatorName);
-    const dispatcherAgent = getDispatcherAgent(dispatcherAgentName, context);
-    const dispatcherContext = getSessionContext(dispatcherAgentName, context);
-    if (dispatcherAgent.streamPartialAction === undefined) {
+    const AppAgentName = getAppAgentName(translatorName);
+    const AppAgent = getAppAgent(AppAgentName, context);
+    const dispatcherContext = getSessionContext(AppAgentName, context);
+    if (AppAgent.streamPartialAction === undefined) {
         // The config declared that there are streaming action, but the agent didn't implement it.
         throw new Error(
-            `Agent ${dispatcherAgentName} does not support streamPartialAction.`,
+            `Agent ${AppAgentName} does not support streamPartialAction.`,
         );
     }
 
-    dispatcherAgent.streamPartialAction(
+    AppAgent.streamPartialAction(
         actionName,
         name,
         value,

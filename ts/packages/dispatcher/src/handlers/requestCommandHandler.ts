@@ -13,7 +13,7 @@ import {
 import { CommandHandler } from "./common/commandHandler.js";
 import {
     CommandHandlerContext,
-    getDispatcherAgent,
+    getAppAgent,
     getTranslator,
     updateCorrectionContext,
 } from "./common/commandHandlerContext.js";

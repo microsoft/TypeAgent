@@ -5,12 +5,12 @@ import { WebSocketMessage, createWebSocket } from "common-utils";
 import { WebSocket } from "ws";
 import {
     ActionContext,
-    DispatcherAction,
-    DispatcherAgent,
+    AppAction,
+    AppAgent,
     SessionContext,
 } from "@typeagent/agent-sdk";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeCodeContext,
         updateAgentContext: updateCodeContext,
@@ -78,7 +78,7 @@ async function updateCodeContext(
 }
 
 async function executeCodeAction(
-    action: DispatcherAction,
+    action: AppAction,
     context: ActionContext<CodeActionContext>,
 ) {
     const webSocketEndpoint = context.agentContext.webSocket;

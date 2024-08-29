@@ -5,8 +5,8 @@ import { WebSocketMessage, createWebSocket } from "common-utils";
 import { WebSocket } from "ws";
 import {
   ActionContext,
-  DispatcherAction,
-  DispatcherAgent,
+  AppAction,
+  AppAgent,
   SessionContext,
   createTurnImpressionFromLiteral,
 } from "@typeagent/agent-sdk";
@@ -19,7 +19,7 @@ import {
 import { BrowserConnector } from "./browserConnector.mjs";
 import { handleCommerceAction } from "./commerce/actionHandler.mjs";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
   return {
     initializeAgentContext: initializeBrowserContext,
     updateAgentContext: updateBrowserContext,
@@ -124,7 +124,7 @@ async function updateBrowserContext(
 }
 
 async function executeBrowserAction(
-  action: DispatcherAction,
+  action: AppAction,
   context: ActionContext<BrowserActionContext>,
 ) {
   const webSocketEndpoint = context.agentContext.webSocket;

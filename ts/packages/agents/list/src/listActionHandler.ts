@@ -3,8 +3,8 @@
 
 import {
     ActionContext,
-    DispatcherAction,
-    DispatcherAgent,
+    AppAction,
+    AppAgent,
     SessionContext,
     Storage,
     TurnImpression,
@@ -18,7 +18,7 @@ import {
     GetListAction,
 } from "./listSchema.js";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeListContext,
         updateAgentContext: updateListContext,
@@ -32,7 +32,7 @@ type ListActionContext = {
 };
 
 async function executeListAction(
-    action: DispatcherAction,
+    action: AppAction,
     context: ActionContext<ListActionContext>,
 ) {
     let result = await handleListAction(
@@ -103,7 +103,7 @@ function validateWildcardItems(
 }
 
 async function listValidateWildcardMatch(
-    action: DispatcherAction,
+    action: AppAction,
     context: SessionContext<ListActionContext>,
 ) {
     if (action.actionName === "addItems") {

@@ -12,13 +12,13 @@ import { generateNotes } from "typeagent";
 import { openai } from "aiclient";
 import {
     ActionContext,
-    DispatcherAction,
-    DispatcherAgent,
+    AppAction,
+    AppAgent,
     SessionContext,
     createTurnImpressionFromDisplay,
 } from "@typeagent/agent-sdk";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeEmailContext,
         updateAgentContext: updateEmailContext,
@@ -48,7 +48,7 @@ async function updateEmailContext(
 }
 
 async function executeEmailAction(
-    action: DispatcherAction,
+    action: AppAction,
     context: ActionContext<EmailActionContext>,
 ) {
     let result = await handleEmailAction(action as EmailAction, context);

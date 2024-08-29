@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 import { ConfigAction } from "../../translation/system/configActionSchema.js";
-import { DispatcherAction, ActionContext } from "@typeagent/agent-sdk";
+import { AppAction, ActionContext } from "@typeagent/agent-sdk";
 
 export async function executeConfigAction(
-    action: DispatcherAction,
+    action: AppAction,
     context: ActionContext,
 ) {
     const configAction = action as unknown as ConfigAction;

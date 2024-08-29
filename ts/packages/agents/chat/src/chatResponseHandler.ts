@@ -16,33 +16,25 @@ import {
     Entity,
 } from "typeagent";
 import { ChatModel, bing, openai } from "aiclient";
-import {
-    ActionContext,
-    ActionIO,
-    DispatcherAgent,
-    DispatcherAgentIO,
-} from "@typeagent/agent-sdk";
+import { ActionContext, ActionIO, AppAgent } from "@typeagent/agent-sdk";
 import { PromptSection } from "typechat";
 import {
-    DispatcherAction,
+    AppAction,
     SessionContext,
     TurnImpression,
     createTurnImpressionFromLiteral,
 } from "@typeagent/agent-sdk";
 import { fileURLToPath } from "node:url";
 import { conversation as Conversation } from "knowledge-processor";
-import { create } from "node:domain";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
     return {
         executeAction: executeChatResponseAction,
         streamPartialAction: streamPartialChatResponseAction,
     };
 }
 
-function isChatResponseAction(
-    action: DispatcherAction,
-): action is ChatResponseAction {
+function isChatResponseAction(action: AppAction): action is ChatResponseAction {
     return (
         action.actionName === "generateResponse" ||
         action.actionName === "lookupAndGenerateResponse"
@@ -50,7 +42,7 @@ function isChatResponseAction(
 }
 
 export async function executeChatResponseAction(
-    chatAction: DispatcherAction,
+    chatAction: AppAction,
     context: ActionContext,
 ) {
     if (!isChatResponseAction(chatAction)) {
@@ -364,7 +356,7 @@ function updateTurnImpression(
     if (context.answers.size > 0) {
         literalResponse.literalText = "";
         literalResponse.displayText = answersToHtml(context);
-        for (const [lookup, chatResponse] of context.answers) {
+        for (const [_lookup, chatResponse] of context.answers) {
             literalResponse.literalText += chatResponse.generatedText! + "\n";
             if (chatResponse.entities && chatResponse.entities.length > 0) {
                 literalResponse.entities ??= [];

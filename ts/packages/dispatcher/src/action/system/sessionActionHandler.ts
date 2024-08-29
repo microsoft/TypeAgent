@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 import { SessionAction } from "../../translation/system/sessionActionSchema.js";
-import { DispatcherAction, ActionContext } from "@typeagent/agent-sdk";
+import { AppAction, ActionContext } from "@typeagent/agent-sdk";
 
 export async function executeSessionAction(
-    action: DispatcherAction,
+    action: AppAction,
     context: ActionContext,
 ) {
     const sessionAction = action as SessionAction;

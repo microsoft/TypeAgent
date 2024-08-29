@@ -35,7 +35,7 @@ import {
 } from "../../session/session.js";
 import {
     getDefaultTranslatorName,
-    getDispatcherAgentName,
+    getAppAgentName,
     getTranslatorNames,
     loadAgentJsonTranslator,
 } from "../../translation/agentTranslators.js";
@@ -53,8 +53,8 @@ import {
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
 import { DispatcherName } from "../requestCommandHandler.js";
-import { DispatcherAgent, SessionContext } from "@typeagent/agent-sdk";
-import { getDispatcherAgents } from "../../agent/agentConfig.js";
+import { AppAgent, SessionContext } from "@typeagent/agent-sdk";
+import { getAppAgents } from "../../agent/agentConfig.js";
 import { conversation as Conversation } from "knowledge-processor";
 
 export interface CommandResult {
@@ -65,7 +65,7 @@ export interface CommandResult {
 
 // Command Handler Context definition.
 export type CommandHandlerContext = {
-    agents: Map<string, DispatcherAgent>;
+    agents: Map<string, AppAgent>;
     session: Session;
     sessionContext: Map<string, SessionContext>;
 
@@ -229,7 +229,7 @@ export async function initializeCommandHandlerContext(
     }
 
     const clientIO = options?.clientIO;
-    const agents = await getDispatcherAgents();
+    const agents = await getAppAgents();
     const context: CommandHandlerContext = {
         agents,
         session,
@@ -274,7 +274,7 @@ export async function setSessionOnCommandHandlerContext(
 ) {
     context.session = session;
     for (const [name, sessionContext] of context.sessionContext.entries()) {
-        getDispatcherAgent(name, context).closeAgentContext?.(sessionContext);
+        getAppAgent(name, context).closeAgentContext?.(sessionContext);
     }
     context.sessionContext.clear();
     context.action = await initializeActionContext(context.agents);
@@ -361,15 +361,13 @@ export async function changeContextConfig(
     return changed;
 }
 
-export function getDispatcherAgent(
-    dispatcherAgentName: string,
+export function getAppAgent(
+    AppAgentName: string,
     context: CommandHandlerContext,
 ) {
-    const dispatcherAgent = context.agents.get(dispatcherAgentName);
-    if (dispatcherAgent === undefined) {
-        throw new Error(
-            `Invalid dispatcher agent name: ${dispatcherAgentName}`,
-        );
+    const AppAgent = context.agents.get(AppAgentName);
+    if (AppAgent === undefined) {
+        throw new Error(`Invalid dispatcher agent name: ${AppAgentName}`);
     }
-    return dispatcherAgent;
+    return AppAgent;
 }

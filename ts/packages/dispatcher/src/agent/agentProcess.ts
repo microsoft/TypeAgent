@@ -3,9 +3,9 @@
 
 import {
     ActionContext,
-    DispatcherAgent,
+    AppAgent,
     SessionContext,
-    DispatcherAgentIO,
+    AppAgentIO,
     Storage,
     StorageEncoding,
     StorageListOptions,
@@ -30,7 +30,7 @@ if (typeof module.instantiate !== "function") {
     );
 }
 
-const agent: DispatcherAgent = module.instantiate();
+const agent: AppAgent = module.instantiate();
 
 async function agentInvokeHandler(name: string, param: any): Promise<any> {
     switch (name) {
@@ -158,7 +158,7 @@ function createSessionContextShim(
     hasSessionStorage: boolean,
     context: any,
 ): SessionContext<any> {
-    const agentIO: DispatcherAgentIO = {
+    const agentIO: AppAgentIO = {
         type: "text", // TODO: get the real value
         status: (message: string): void => {
             rpc.send(AgentContextCallAPI.AgentIOStatus, { contextId, message });

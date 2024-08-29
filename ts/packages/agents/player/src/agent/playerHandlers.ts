@@ -10,15 +10,15 @@ import {
 } from "music";
 import chalk from "chalk";
 import {
-    DispatcherAgent,
+    AppAgent,
     SessionContext,
-    DispatcherAction,
+    AppAction,
     createTurnImpressionFromError,
     ActionContext,
 } from "@typeagent/agent-sdk";
 import { searchAlbum, searchArtists, searchTracks } from "../client.js";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializePlayerContext,
         updateAgentContext: updatePlayerContext,
@@ -38,7 +38,7 @@ async function initializePlayerContext() {
 }
 
 async function executePlayerAction(
-    action: DispatcherAction,
+    action: AppAction,
     context: ActionContext<PlayerActionContext>,
 ) {
     if (context.agentContext.spotify) {
@@ -77,7 +77,7 @@ async function enableSpotify(context: SessionContext<PlayerActionContext>) {
 }
 
 async function validatePlayerWildcardMatch(
-    action: DispatcherAction,
+    action: AppAction,
     context: SessionContext<PlayerActionContext>,
 ) {
     if (action.actionName === "play") {

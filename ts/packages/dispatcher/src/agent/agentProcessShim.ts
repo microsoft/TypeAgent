@@ -2,11 +2,7 @@
 // Licensed under the MIT License.
 
 import chlid_process from "child_process";
-import {
-    DispatcherAgent,
-    ActionContext,
-    SessionContext,
-} from "@typeagent/agent-sdk";
+import { AppAgent, ActionContext, SessionContext } from "@typeagent/agent-sdk";
 import {
     AgentCallAPI,
     AgentContextCallAPI,
@@ -57,7 +53,7 @@ function createContextMap<T>() {
 }
 export async function createAgentProcessShim(
     modulePath: string,
-): Promise<DispatcherAgent> {
+): Promise<AppAgent> {
     const process = chlid_process.fork(
         fileURLToPath(new URL(`./agentProcess.js`, import.meta.url)),
         [modulePath],
@@ -171,7 +167,7 @@ export async function createAgentProcessShim(
         agentContextCallHandler,
     );
 
-    const agent: DispatcherAgent = {
+    const agent: AppAgent = {
         initializeAgentContext(): Promise<ShimContext> {
             return rpc.invoke(AgentInvokeAPI.InitializeAgentContext);
         },
@@ -230,7 +226,7 @@ export async function createAgentProcessShim(
         },
     };
 
-    const result: DispatcherAgent = Object.fromEntries(
+    const result: AppAgent = Object.fromEntries(
         agentInterface.map((name) => [name, agent[name]]),
     );
 

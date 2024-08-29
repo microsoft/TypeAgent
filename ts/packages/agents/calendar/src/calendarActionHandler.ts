@@ -28,12 +28,12 @@ import {
     defaultImpressionInterpreter,
     createTurnImpressionFromDisplay,
     createTurnImpressionFromError,
-    DispatcherAction,
-    DispatcherAgent,
+    AppAction,
+    AppAgent,
     ActionContext,
 } from "@typeagent/agent-sdk";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeCalendarContext,
         updateAgentContext: updateCalendarContext,
@@ -148,7 +148,7 @@ async function updateCalendarContext(
 }
 
 async function executeCalendarAction(
-    action: DispatcherAction,
+    action: AppAction,
     context: ActionContext<CalendarActionContext>,
 ) {
     let result = await handleCalendarAction(

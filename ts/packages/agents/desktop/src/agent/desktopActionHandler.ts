@@ -3,7 +3,7 @@
 
 import { WebSocketMessage, createWebSocket } from "common-utils";
 import { WebSocket } from "ws";
-import { DispatcherAction, SessionContext } from "@typeagent/agent-sdk";
+import { AppAction, SessionContext } from "@typeagent/agent-sdk";
 
 export function instantiate() {
     return {
@@ -73,7 +73,7 @@ async function updateDesktopContext(
 }
 
 async function executeDesktopAction(
-    action: DispatcherAction,
+    action: AppAction,
     context: SessionContext<DesktopActionContext>,
 ) {
     const webSocketEndpoint = context.agentContext.webSocket;
