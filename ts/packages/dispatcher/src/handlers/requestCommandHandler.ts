@@ -571,7 +571,6 @@ async function requestExecute(
     } else {
         requestIO.status(`Executing action ${action.fullActionName}`);
     }
-
     await executeActions(requestAction.actions, context);
 }
 
@@ -679,7 +678,13 @@ export class RequestCommandHandler implements CommandHandler {
         }
 
         const { requestAction, fromUser, fromCache } = translationResult;
-
+        if (
+            requestAction !== null &&
+            requestAction !== undefined &&
+            context.conversationManager
+        ) {
+            context.conversationManager.addMessage(request, [], new Date());
+        }
         await requestExecute(requestAction, context);
         await requestExplain(requestAction, context, fromCache, fromUser);
     }
