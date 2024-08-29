@@ -35,6 +35,7 @@ export type CreateListAction = {
     };
 };
 
+// use this action to show the user what's on the list, for example, "What's on my grocery list?" or "what are the contents of my to do list?"
 export type GetListAction = {
     actionName: "getList";
     parameters: {

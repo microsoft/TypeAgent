@@ -132,11 +132,13 @@ async function handleChatResponse(
                             matches.response.answer
                         ) {
                             return createTurnImpressionFromLiteral(
-                                matches.response.answer)
+                                matches.response.answer.answer!,
+                            );
                         } else {
                             console.log("bug");
                         }
                     }
+                }
             }
         }
     }

@@ -14,8 +14,7 @@ export type ChatResponseAction =
     | GenerateResponseAction
     | LookupAndGenerateResponseAction;
 
-// use this GenerateResponseAction if the request should be handled by showing the user a generated message instead of running an action
-// if there is a specific action that will handle the request, even a request for information, use that action instead
+// do not use this action if the request can be handled by any other action
 // this is the way to handle requests for general chat information like "what is the weather" or "tell me a joke"
 // prefer GenerateResponseAction over switching to a different assistant if the request is for general chat information
 export interface GenerateResponseAction {
@@ -72,6 +71,8 @@ export type TermFilter = {
     timeRange?: DateTimeRange | undefined; // in this time range
 };
 
+// DO NOT use this action if the request can be handled by a more specific action, like GetListAction for "what's on my grocery list" or StatusAction for "what's the music player volume"
+// this action used to lookup information from past conversations or the internet and generate a response based on the lookup results
 export interface LookupAndGenerateResponseAction {
     actionName: "lookupAndGenerateResponse";
     parameters: {
