@@ -20,7 +20,6 @@ import findConfig from "find-config";
 import assert from "assert";
 import { processRequests } from "typechat/interactive";
 
-
 const envPath = findConfig(".env");
 assert(envPath, ".env file not found!");
 dotenv.config({ path: envPath });
