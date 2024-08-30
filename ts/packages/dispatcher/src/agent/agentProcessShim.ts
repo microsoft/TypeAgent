@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import chlid_process from "child_process";
-import { DispatcherAgent, DispatcherAgentContext } from "@typeagent/agent-sdk";
+import child_process from "child_process";
+import { AppAgent, ActionContext, SessionContext } from "@typeagent/agent-sdk";
 import {
     AgentCallAPI,
     AgentContextCallAPI,
@@ -14,10 +14,47 @@ import {
 import { setupInvoke } from "./agentProcessUtil.js";
 import { fileURLToPath } from "url";
 
+function createContextMap<T>() {
+    let nextContextId = 0;
+    let contextIdMap = new Map<T, number>();
+    let contextMap = new Map<number, T>();
+
+    function getId(context: T) {
+        let contextId = contextIdMap.get(context);
+        if (contextId === undefined) {
+            contextId = nextContextId++;
+            contextIdMap.set(context, contextId);
+            contextMap.set(contextId, context);
+        }
+        return contextId;
+    }
+    function get(contextId: number) {
+        const context = contextMap.get(contextId);
+        if (context === undefined) {
+            throw new Error(
+                `Internal error: Invalid contextId ${contextId}${contextId < nextContextId ? " used out of scope" : ""}`,
+            );
+        }
+        return context;
+    }
+
+    function close(context: T) {
+        const contextId = contextIdMap.get(context);
+        if (contextId !== undefined) {
+            contextIdMap.delete(context);
+            contextMap.delete(contextId);
+        }
+    }
+    return {
+        getId,
+        get,
+        close,
+    };
+}
 export async function createAgentProcessShim(
     modulePath: string,
-): Promise<DispatcherAgent> {
-    const process = chlid_process.fork(
+): Promise<AppAgent> {
+    const process = child_process.fork(
         fileURLToPath(new URL(`./agentProcess.js`, import.meta.url)),
         [modulePath],
     );
@@ -32,37 +69,38 @@ export async function createAgentProcessShim(
             });
         },
     );
-    let nextContextId = 0;
-    const contextIdMap = new Map<DispatcherAgentContext<ShimContext>, number>();
-    const contextMap = new Map<number, DispatcherAgentContext<ShimContext>>();
+    const contextMap = createContextMap<SessionContext<ShimContext>>();
     function withContext<T>(
-        context: DispatcherAgentContext<ShimContext>,
+        context: SessionContext<ShimContext>,
         fn: (contextParams: ContextParams) => T,
     ) {
-        let contextId = contextIdMap.get(context);
-        if (contextId === undefined) {
-            contextId = nextContextId++;
-            contextIdMap.set(context, contextId);
-            contextMap.set(contextId, context);
-        }
-
         return fn({
-            contextId,
+            contextId: contextMap.getId(context),
             hasSessionStorage: context.sessionStorage !== undefined,
-            agentContextId: context.context?.contextId,
+            agentContextId: context.agentContext?.contextId,
         });
     }
 
-    function getContext(contextId: number) {
-        const context = contextMap.get(contextId);
-        if (context === undefined) {
-            throw new Error(
-                `Internal error: Invalid contextId ${contextId}${contextId < nextContextId ? " used after action" : ""}`,
-            );
-        }
-        return context;
+    const actionContextMap = createContextMap<ActionContext<ShimContext>>();
+    function withActionContext<T>(
+        actionContext: ActionContext<ShimContext>,
+        fn: (contextParams: { actionContextId: number }) => T,
+    ) {
+        return withContext(
+            actionContext.sessionContext,
+            async (contextParams) => {
+                try {
+                    return await fn({
+                        actionContextId: actionContextMap.getId(actionContext),
+                        ...contextParams,
+                    });
+                } finally {
+                    actionContextMap.close(actionContext);
+                }
+            },
+        );
     }
-    function getStorage(param: any, context: DispatcherAgentContext) {
+    function getStorage(param: any, context: SessionContext) {
         const storage = param.session
             ? context.sessionStorage
             : context.profileStorage;
@@ -76,12 +114,12 @@ export async function createAgentProcessShim(
         name: string,
         param: any,
     ): Promise<any> {
-        const context = getContext(param.contextId);
+        const context = contextMap.get(param.contextId);
         switch (name) {
             case AgentContextInvokeAPI.IssueCommand:
                 return context.issueCommand(param.command);
-            case AgentContextInvokeAPI.ToggleAgent:
-                return context.toggleAgent(param.name, param.enable);
+            case AgentContextInvokeAPI.ToggleTransientAgent:
+                return context.toggleTransientAgent(param.name, param.enable);
             case AgentContextInvokeAPI.StorageRead:
                 return getStorage(param, context).read(
                     param.storagePath,
@@ -101,35 +139,31 @@ export async function createAgentProcessShim(
                 return getStorage(param, context).exists(param.storagePath);
             case AgentContextInvokeAPI.StorageDelete:
                 return getStorage(param, context).delete(param.storagePath);
+            case AgentContextInvokeAPI.TokenCachePersistenceLoad:
+                return (
+                    await getStorage(param, context).getTokenCachePersistence()
+                ).load();
+            case AgentContextInvokeAPI.TokenCachePersistenceSave:
+                return (
+                    await getStorage(param, context).getTokenCachePersistence()
+                ).load();
             default:
                 throw new Error(`Unknown invocation: ${name}`);
         }
     }
 
     function agentContextCallHandler(name: string, param: any) {
-        const context = getContext(param.contextId);
         switch (name) {
-            case AgentContextCallAPI.AgentIOClear:
-                context.requestIO.clear();
-                break;
-            case AgentContextCallAPI.AgentIOInfo:
-                context.requestIO.info(param.message);
-                return;
             case AgentContextCallAPI.AgentIOStatus:
-                context.requestIO.status(param.message);
+                contextMap.get(param.contextId).agentIO.status(param.message);
                 return;
             case AgentContextCallAPI.AgentIOSuccess:
-                context.requestIO.success(param.message);
+                contextMap.get(param.contextId).agentIO.success(param.message);
                 return;
-            case AgentContextCallAPI.AgentIOWarn:
-                context.requestIO.warn(param.message);
-                return;
-            case AgentContextCallAPI.AgentIOError:
-                context.requestIO.error(param.message);
-                return;
-            case AgentContextCallAPI.AgentIOResult:
-                context.requestIO.result(param.message);
-                return;
+            case AgentContextCallAPI.SetActionDisplay:
+                actionContextMap
+                    .get(param.actionContextId)
+                    .actionIO.setActionDisplay(param.content);
             default:
                 throw new Error(`Unknown invocation: ${name}`);
         }
@@ -141,13 +175,13 @@ export async function createAgentProcessShim(
         agentContextCallHandler,
     );
 
-    const agent: DispatcherAgent = {
+    const agent: AppAgent = {
         initializeAgentContext(): Promise<ShimContext> {
             return rpc.invoke(AgentInvokeAPI.InitializeAgentContext);
         },
         updateAgentContext(
             enable,
-            context: DispatcherAgentContext<ShimContext>,
+            context: SessionContext<ShimContext>,
             translatorName,
         ) {
             return withContext(context, (contextParams) =>
@@ -158,20 +192,15 @@ export async function createAgentProcessShim(
                 }),
             );
         },
-        executeAction(
-            action,
-            context: DispatcherAgentContext<ShimContext>,
-            actionIndex,
-        ) {
-            return withContext(context, (contextParams) =>
+        executeAction(action, context: ActionContext<ShimContext>) {
+            return withActionContext(context, (contextParams) =>
                 rpc.invoke(AgentInvokeAPI.ExecuteAction, {
                     ...contextParams,
                     action,
-                    actionIndex,
                 }),
             );
         },
-        validateWildcardMatch(action, context: DispatcherAgentContext) {
+        validateWildcardMatch(action, context: SessionContext) {
             return withContext(context, (contextParams) =>
                 rpc.invoke(AgentInvokeAPI.ValidateWildcardMatch, {
                     ...contextParams,
@@ -184,7 +213,7 @@ export async function createAgentProcessShim(
             name: string,
             value: string,
             partial: boolean,
-            context: DispatcherAgentContext,
+            context: SessionContext,
         ) {
             return withContext(context, (contextParams) =>
                 rpc.send(AgentCallAPI.StreamPartialAction, {
@@ -196,7 +225,16 @@ export async function createAgentProcessShim(
                 }),
             );
         },
-        closeAgentContext(context: DispatcherAgentContext) {
+        getDynamicDisplay(type, displayId, context) {
+            return withContext(context, (contextParams) =>
+                rpc.invoke(AgentInvokeAPI.GetDynamicDisplay, {
+                    ...contextParams,
+                    type,
+                    displayId,
+                }),
+            );
+        },
+        closeAgentContext(context: SessionContext) {
             return withContext(context, (contextParams) =>
                 rpc.invoke(AgentInvokeAPI.CloseAgentContext, {
                     ...contextParams,
@@ -205,18 +243,14 @@ export async function createAgentProcessShim(
         },
     };
 
-    const result: DispatcherAgent = Object.fromEntries(
+    const result: AppAgent = Object.fromEntries(
         agentInterface.map((name) => [name, agent[name]]),
     );
 
     const invokeCloseAgentContext = result.closeAgentContext;
     result.closeAgentContext = async (context) => {
         const result = await invokeCloseAgentContext?.(context);
-        const contextId = contextIdMap.get(context);
-        if (contextId !== undefined) {
-            contextIdMap.delete(context);
-            contextMap.delete(contextId);
-        }
+        contextMap.close(context);
         return result;
     };
     return result;

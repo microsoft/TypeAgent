@@ -2,17 +2,20 @@
 // Licensed under the MIT License.
 
 import {
-    DispatcherAgent,
-    DispatcherAgentContext,
-    DispatcherAgentIO,
+    ActionContext,
+    AppAgent,
+    SessionContext,
+    AppAgentIO,
     Storage,
     StorageEncoding,
     StorageListOptions,
     TokenCachePersistence,
+    ActionIO,
 } from "@typeagent/agent-sdk";
 
 import { setupInvoke } from "./agentProcessUtil.js";
 import {
+    ActionContextParams,
     AgentContextCallAPI,
     AgentContextInvokeAPI,
     AgentInvokeAPI,
@@ -28,7 +31,7 @@ if (typeof module.instantiate !== "function") {
     );
 }
 
-const agent: DispatcherAgent = module.instantiate();
+const agent: AppAgent = module.instantiate();
 
 async function agentInvokeHandler(name: string, param: any): Promise<any> {
     switch (name) {
@@ -48,7 +51,7 @@ async function agentInvokeHandler(name: string, param: any): Promise<any> {
             }
             return agent.updateAgentContext(
                 param.enable,
-                getDispatcherAgentContextShim(param),
+                getSessionContextShim(param),
                 param.translatorName,
             );
         case AgentInvokeAPI.ExecuteAction:
@@ -57,8 +60,7 @@ async function agentInvokeHandler(name: string, param: any): Promise<any> {
             }
             return agent.executeAction(
                 Action.fromJSONObject(param.action),
-                getDispatcherAgentContextShim(param),
-                param.actionIndex,
+                getActionContextShim(param),
             );
         case AgentInvokeAPI.ValidateWildcardMatch:
             if (agent.validateWildcardMatch === undefined) {
@@ -66,11 +68,20 @@ async function agentInvokeHandler(name: string, param: any): Promise<any> {
             }
             return agent.validateWildcardMatch(
                 param.action,
-                getDispatcherAgentContextShim(param),
+                getSessionContextShim(param),
+            );
+        case AgentInvokeAPI.GetDynamicDisplay:
+            if (agent.getDynamicDisplay === undefined) {
+                throw new Error("Invalid invocation of getDynamicDisplay");
+            }
+            return agent.getDynamicDisplay(
+                param.type,
+                param.displayId,
+                getSessionContextShim(param),
             );
         case AgentInvokeAPI.CloseAgentContext:
             const result = await agent.closeAgentContext?.(
-                getDispatcherAgentContextShim(param),
+                getSessionContextShim(param),
             );
             unregisterAgentContext(param.agentContextId);
             return result;
@@ -152,19 +163,13 @@ function getStorage(contextId: number, session: boolean): Storage {
     };
 }
 
-function createDispatcherAgentContextShim(
+function createSessionContextShim(
     contextId: number,
     hasSessionStorage: boolean,
     context: any,
-): DispatcherAgentContext<any> {
-    const requestIO: DispatcherAgentIO = {
-        type: "text",
-        clear: (): void => {
-            rpc.send(AgentContextCallAPI.AgentIOClear, { contextId });
-        },
-        info: (message: string): void => {
-            rpc.send(AgentContextCallAPI.AgentIOInfo, { contextId, message });
-        },
+): SessionContext<any> {
+    const agentIO: AppAgentIO = {
+        type: "text", // TODO: get the real value
         status: (message: string): void => {
             rpc.send(AgentContextCallAPI.AgentIOStatus, { contextId, message });
         },
@@ -174,34 +179,17 @@ function createDispatcherAgentContextShim(
                 message,
             });
         },
-        warn: (message: string): void => {
-            rpc.send(AgentContextCallAPI.AgentIOWarn, { contextId, message });
-        },
-        error: (message: string): void => {
-            rpc.send(AgentContextCallAPI.AgentIOError, { contextId, message });
-        },
-        result: (message: string): void => {
-            rpc.send(AgentContextCallAPI.AgentIOResult, { contextId, message });
-        },
-        setActionStatus: (
-            message: string,
-            actionIndex: number,
-            groupId?: string,
-        ): void => {
+        setActionStatus: (message: string, actionIndex: number): void => {
             rpc.send(AgentContextCallAPI.SetActionStatus, {
                 contextId,
                 message,
                 actionIndex,
-                groupId,
             });
         },
     };
     return {
-        context,
-        get currentTranslatorName(): string {
-            throw new Error("NYI");
-        },
-        requestIO,
+        agentContext: context,
+        agentIO,
         get requestId(): string {
             throw new Error("NYI");
         },
@@ -215,13 +203,11 @@ function createDispatcherAgentContextShim(
                 command,
             });
         },
-        getUpdateActionStatus: ():
-            | ((message: string, group_id: string) => void)
-            | undefined => {
-            throw new Error("NYI");
-        },
-        toggleAgent: async (name: string, enable: boolean): Promise<void> => {
-            return rpc.invoke(AgentContextInvokeAPI.ToggleAgent, {
+        toggleTransientAgent: async (
+            name: string,
+            enable: boolean,
+        ): Promise<void> => {
+            return rpc.invoke(AgentContextInvokeAPI.ToggleTransientAgent, {
                 contextId,
                 name,
                 enable,
@@ -250,9 +236,7 @@ function getAgentContext(agentContextId: number) {
     return agentContext;
 }
 
-function getDispatcherAgentContextShim(
-    param: Partial<ContextParams>,
-): DispatcherAgentContext {
+function getSessionContextShim(param: Partial<ContextParams>): SessionContext {
     const { contextId, hasSessionStorage, agentContextId } = param;
     if (contextId === undefined) {
         throw new Error("Invalid context param: missing contextId");
@@ -266,11 +250,38 @@ function getDispatcherAgentContextShim(
             ? getAgentContext(agentContextId)
             : undefined;
 
-    return createDispatcherAgentContextShim(
-        contextId,
-        hasSessionStorage,
-        agentContext,
-    );
+    return createSessionContextShim(contextId, hasSessionStorage, agentContext);
+}
+
+function getActionContextShim(
+    param: Partial<ActionContextParams>,
+): ActionContext<any> {
+    const actionContextId = param.actionContextId;
+    if (actionContextId === undefined) {
+        throw new Error(
+            "Invalid action context param: missing actionContextId",
+        );
+    }
+    const sessionContext = getSessionContextShim(param);
+    const actionIO: ActionIO = {
+        get type() {
+            return sessionContext.agentIO.type;
+        },
+        setActionDisplay(content: string): void {
+            rpc.send(AgentContextCallAPI.SetActionDisplay, {
+                actionContextId,
+                content,
+            });
+        },
+    };
+    return {
+        get sessionContext() {
+            return sessionContext;
+        },
+        get actionIO() {
+            return actionIO;
+        },
+    };
 }
 
 process.send!({

@@ -12,6 +12,7 @@ export enum AgentInvokeAPI {
     UpdateAgentContext = "updateAgentContext",
     ExecuteAction = "executeAction",
     ValidateWildcardMatch = "validateWildcardMatch",
+    GetDynamicDisplay = "getDynamicDisplay",
     CloseAgentContext = "closeAgentContext",
 }
 
@@ -20,15 +21,13 @@ export enum AgentCallAPI {
 }
 
 export const enum AgentContextCallAPI {
-    // DispatcherAgentContext
-    AgentIOClear = "agentIOClear",
-    AgentIOInfo = "agentIOInfo",
+    // SessionContext
     AgentIOStatus = "agentIOStatus",
     AgentIOSuccess = "agentIOSuccess",
-    AgentIOWarn = "agentIOWarn",
-    AgentIOError = "agentIOError",
-    AgentIOResult = "agentIOResult",
     SetActionStatus = "agentIOSetActionStatus",
+
+    // ActionContext.actionIO
+    SetActionDisplay = "setActionDisplay",
 }
 
 export const enum AgentContextInvokeAPI {
@@ -44,7 +43,7 @@ export const enum AgentContextInvokeAPI {
 
     // Context
     IssueCommand = "issueCommand",
-    ToggleAgent = "toggleAgent",
+    ToggleTransientAgent = "toggleTransientAgent",
 }
 
 export type InitializeMessage = {
@@ -56,4 +55,8 @@ export type ContextParams = {
     contextId: number;
     hasSessionStorage: boolean;
     agentContextId: number | undefined;
+};
+
+export type ActionContextParams = ContextParams & {
+    actionContextId: number;
 };

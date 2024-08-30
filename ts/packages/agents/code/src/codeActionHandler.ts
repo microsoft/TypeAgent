@@ -4,12 +4,13 @@
 import { WebSocketMessage, createWebSocket } from "common-utils";
 import { WebSocket } from "ws";
 import {
-    DispatcherAction,
-    DispatcherAgent,
-    DispatcherAgentContext,
+    ActionContext,
+    AppAction,
+    AppAgent,
+    SessionContext,
 } from "@typeagent/agent-sdk";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeCodeContext,
         updateAgentContext: updateCodeContext,
@@ -29,19 +30,19 @@ async function initializeCodeContext(): Promise<CodeActionContext> {
 
 async function updateCodeContext(
     enable: boolean,
-    context: DispatcherAgentContext<CodeActionContext>,
+    context: SessionContext<CodeActionContext>,
 ): Promise<void> {
     if (enable) {
-        if (context.context.webSocket?.readyState === WebSocket.OPEN) {
+        if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {
             return;
         }
 
         const webSocket = await createWebSocket();
         if (webSocket) {
-            context.context.webSocket = webSocket;
+            context.agentContext.webSocket = webSocket;
             webSocket.onclose = (event: Object) => {
                 console.error("Code webSocket connection closed.");
-                context.context.webSocket = undefined;
+                context.agentContext.webSocket = undefined;
             };
             webSocket.onmessage = async (event: any) => {
                 const text = event.data.toString();
@@ -53,14 +54,10 @@ async function updateCodeContext(
                 ) {
                     switch (data.messageType) {
                         case "confirmAction": {
-                            const requestIO = context.requestIO;
+                            const agentIO = context.agentIO;
                             const requestId = context.requestId;
-                            if (
-                                requestIO &&
-                                requestId &&
-                                data.id === requestId
-                            ) {
-                                requestIO.status(data.body);
+                            if (agentIO && requestId && data.id === requestId) {
+                                agentIO.status(data.body);
                             }
 
                             break;
@@ -70,24 +67,24 @@ async function updateCodeContext(
             };
         }
     } else {
-        const webSocket = context.context.webSocket;
+        const webSocket = context.agentContext.webSocket;
         if (webSocket) {
             webSocket.onclose = null;
             webSocket.close();
         }
 
-        context.context.webSocket = undefined;
+        context.agentContext.webSocket = undefined;
     }
 }
 
 async function executeCodeAction(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<CodeActionContext>,
+    action: AppAction,
+    context: ActionContext<CodeActionContext>,
 ) {
-    const webSocketEndpoint = context.context.webSocket;
+    const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
     if (webSocketEndpoint) {
         try {
-            const requestId = context.requestId;
+            const requestId = context.sessionContext.requestId;
             webSocketEndpoint.send(
                 JSON.stringify({
                     source: "dispatcher",

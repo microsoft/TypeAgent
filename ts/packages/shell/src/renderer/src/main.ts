@@ -54,25 +54,18 @@ function addEvents(
             }
         }
     });
-    api.onResponse(
-        (
-            _,
-            response,
-            id,
-            source: string,
-            actionIndex?: number,
-            groupId?: string,
-        ) => {
-            if (response !== undefined) {
-                chatView.addAgentMessage(
-                    response,
-                    id,
-                    source,
-                    actionIndex,
-                    groupId,
-                );
-            }
-        },
+    api.onResponse((_, agentMessage) => {
+        chatView.addAgentMessage(agentMessage);
+    });
+    api.onSetDynamicActionDisplay(
+        (_, source, id, actionIndex, displayId, nextRefreshMs) =>
+            chatView.setDynamicDisplay(
+                source,
+                id,
+                actionIndex,
+                displayId,
+                nextRefreshMs,
+            ),
     );
     api.onSetPartialInputHandler((_, enabled) => {
         chatView.enablePartialInputHandler(enabled);
@@ -86,13 +79,8 @@ function addEvents(
     api.onClear((_) => {
         chatView.clear();
     });
-    api.onUpdate((_, updateMessage: string, groupId: string) => {
-        if (updateMessage !== undefined) {
-            chatView.updateGroup(updateMessage, groupId);
-        }
-    });
-    api.onStatusMessage((_, message, id, source: string, temporary) => {
-        chatView.showStatusMessage(message, id, source, temporary);
+    api.onStatusMessage((_, message, temporary) => {
+        chatView.showStatusMessage(message, temporary);
     });
     api.onMarkRequestExplained((_, id, timestamp, fromCache) => {
         chatView.markRequestExplained(id, timestamp, fromCache);
@@ -134,6 +122,9 @@ function addEvents(
     api.onShowDialog((_, key) => {
         tabsView.showTab(key);
     });
+    api.onHideMenuChanged((_, value) => {
+        settingsView.menuCheckBox.checked = value;
+    });
 }
 
 export class IdGenerator {
@@ -166,7 +157,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const chatView = new ChatView(idGenerator, speechInfo, agents);
     wrapper.appendChild(chatView.getMessageElm());
 
-    const settingsView = new SettingsView();
+    const settingsView = new SettingsView(window);
     tabs.getTabContainerByName("Settings").append(settingsView.getContainer());
     tabs.getTabContainerByName("Metrics").append(
         new MetricsView().getContainer(),
@@ -174,5 +165,8 @@ document.addEventListener("DOMContentLoaded", function () {
     tabs.getTabContainerByName("Help").append(new HelpView().getContainer());
 
     addEvents(chatView, agents, settingsView, tabs);
+
+    chatView.chatInputFocus();
+
     (window as any).electron.ipcRenderer.send("dom ready");
 });

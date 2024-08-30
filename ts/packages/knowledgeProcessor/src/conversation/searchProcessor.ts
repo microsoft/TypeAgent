@@ -39,6 +39,7 @@ export type SearchProcessingOptions = {
     fallbackSearch?: SearchOptions | undefined;
     combinationSetOp?: SetOp;
     includeActions?: boolean;
+    skipAnswerGeneration?: boolean;
     progress?: ((action: any) => void) | undefined;
 };
 
@@ -55,6 +56,15 @@ export interface ConversationSearchProcessor {
         filters: TermFilter[] | undefined,
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponse | undefined>;
+    /**
+     * Generate an answer using a prior search response
+     * @param searchResponse
+     */
+    generateAnswer(
+        query: string,
+        actionResponse: SearchTermsActionResponse,
+        options: SearchProcessingOptions,
+    ): Promise<SearchTermsActionResponse>;
     buildContext(
         options: SearchProcessingOptions,
     ): Promise<PromptSection[] | undefined>;
@@ -83,6 +93,7 @@ export function createSearchProcessor(
         search,
         searchTerms,
         buildContext,
+        generateAnswer,
     };
 
     async function search(
@@ -241,7 +252,6 @@ export function createSearchProcessor(
     ): Promise<SearchResponse> {
         const topLevelTopicSummary = isSummaryRequest(action);
         const topicLevel = topLevelTopicSummary ? 2 : 1;
-        let style: ResponseStyle | undefined; //"Paragraph";
         const searchOptions: ConversationSearchOptions = {
             entity: {
                 maxMatches: options.maxMatches,
@@ -275,9 +285,36 @@ export function createSearchProcessor(
             searchOptions,
         );
         await adjustMessages(query, response, searchOptions, options);
+        if (!options.skipAnswerGeneration) {
+            await generateAnswerForSearchTerms(query, response, options);
+        }
+        return response;
+    }
+
+    async function generateAnswer(
+        query: string,
+        actionResponse: SearchTermsActionResponse,
+        options: SearchProcessingOptions,
+    ): Promise<SearchTermsActionResponse> {
+        if (actionResponse.response) {
+            await generateAnswerForSearchTerms(
+                query,
+                actionResponse.response,
+                options,
+            );
+        }
+        return actionResponse;
+    }
+
+    async function generateAnswerForSearchTerms(
+        query: string,
+        response: SearchResponse,
+        options: SearchProcessingOptions,
+    ) {
+        let style: ResponseStyle | undefined; //"Paragraph";
         response.answer = await answers.generateAnswer(
             query,
-            style,
+            undefined,
             response,
             false,
         );
@@ -289,7 +326,6 @@ export function createSearchProcessor(
                 options.fallbackSearch,
             );
         }
-        return response;
     }
 
     async function handleLookup(

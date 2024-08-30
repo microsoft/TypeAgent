@@ -2,32 +2,32 @@
 // Licensed under the MIT License.
 
 import { WebSocketMessage } from "common-utils";
-import { DispatcherAgentContext } from "@typeagent/agent-sdk";
+import { AppAction, SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "./browserActionHandler.mjs";
 
 export class BrowserConnector {
-  private context: DispatcherAgentContext<BrowserActionContext>;
+  private context: SessionContext<BrowserActionContext>;
   private webSocket: any;
 
-  constructor(context: DispatcherAgentContext<BrowserActionContext>) {
+  constructor(context: SessionContext<BrowserActionContext>) {
     this.context = context;
-    this.webSocket = context.context.webSocket;
+    this.webSocket = context.agentContext.webSocket;
   }
 
-  async sendActionToBrowser(action: any, messageType?: string) {
+  async sendActionToBrowser(action: AppAction, messageType?: string) {
     return new Promise<any | undefined>((resolve, reject) => {
       if (this.webSocket) {
         try {
-          const requestIO = this.context.requestIO;
+          const agentIO = this.context.agentIO;
           let requestId = this.context.requestId;
           if (requestId) {
-            requestIO.status("Running remote action.");
+            agentIO.status("Running remote action.");
           } else {
             requestId = new Date().getTime().toString();
           }
           if (!messageType) {
-            if (this.context.currentTranslatorName.startsWith("browser.")) {
-              messageType = `browserActionRequest.${this.context.currentTranslatorName.substring(8)}`;
+            if (action.translatorName!.startsWith("browser.")) {
+              messageType = `browserActionRequest.${action.translatorName!.substring(8)}`;
             } else {
               messageType = "browserActionRequest";
             }

@@ -28,9 +28,11 @@ export type ChatContext = {
     topicWindowSize: number;
     searchConcurrency: number;
     minScore: number;
+    entityTopK: number;
     conversationName: string;
     conversationSettings: knowLib.conversation.ConversationSettings;
     conversation: knowLib.conversation.Conversation;
+    conversationManager: knowLib.conversation.ConversationManager;
     searcher: knowLib.conversation.ConversationSearchProcessor;
     searchMemory?: knowLib.conversation.ConversationManager;
 };
@@ -61,9 +63,16 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         searchConcurrency: 2,
         minScore: 0.9,
         conversationName,
+        conversationManager:
+            await knowLib.conversation.createConversationManager(
+                conversationName,
+                conversation,
+                false,
+            ),
         conversationSettings,
         conversation,
-        searcher: createSearchProcessor(conversation, chatModel, true),
+        entityTopK: 16,
+        searcher: createSearchProcessor(conversation, chatModel, true, 16),
     };
     context.searchMemory = await createSearchMemory(context);
     return context;
@@ -95,8 +104,9 @@ export function createSearchProcessor(
     c: conversation.Conversation,
     model: ChatModel,
     includeActions: boolean,
+    entityTopK: number,
 ) {
-    return conversation.createSearchProcessor(
+    const searcher = conversation.createSearchProcessor(
         c,
         model,
         model,
@@ -104,25 +114,31 @@ export function createSearchProcessor(
             ? conversation.KnowledgeSearchMode.WithActions
             : conversation.KnowledgeSearchMode.Default,
     );
+    searcher.answers.settings.topKEntities = entityTopK;
+    return searcher;
 }
 
 export async function createSearchMemory(
     context: ChatContext,
 ): Promise<conversation.ConversationManager> {
     const conversationName = "search";
-    return await conversation.createConversationManager(
+    const memory = await conversation.createConversationManager(
         conversationName,
         context.storePath,
         true,
     );
+    memory.searchProcessor.answers.settings.topKEntities = context.entityTopK;
+    return memory;
 }
 
 export async function loadConversation(
     context: ChatContext,
     name: string,
+    rootPath?: string,
     includeActions = true,
 ): Promise<boolean> {
-    const storePath = path.join(context.storePath, name);
+    rootPath ??= context.storePath;
+    const storePath = path.join(rootPath, name);
     const exists = fs.existsSync(storePath);
     context.conversation = await createConversation(
         storePath,
@@ -137,6 +153,11 @@ export async function loadConversation(
             ? conversation.KnowledgeSearchMode.WithActions
             : conversation.KnowledgeSearchMode.Default,
     );
+    context.conversationManager = await conversation.createConversationManager(
+        name,
+        context.conversation,
+        false,
+    );
     if (name !== "search") {
         context.searchMemory = await createSearchMemory(context);
     }
@@ -149,6 +170,7 @@ export async function runChatMemory(): Promise<void> {
     const handlers: Record<string, CommandHandler> = {
         importPlay,
         importTranscript,
+        importMessage,
         load,
         history,
         replay,
@@ -179,7 +201,7 @@ export async function runChatMemory(): Promise<void> {
         if (context.searchMemory) {
             const results = await context.searchMemory.search(line);
             if (results) {
-                await writeSearchTermsResult(results);
+                await writeSearchTermsResult(results, true);
             } else {
                 printer.writeLine("No matches");
             }
@@ -280,6 +302,75 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
+    function importMessageDef(): CommandMetadata {
+        return {
+            description: "Imports a text message into the current conversation",
+            options: {
+                message: {
+                    description: "Raw message text to add",
+                    type: "string",
+                },
+                filePath: {
+                    description: "Path to the message file",
+                    type: "path",
+                },
+                ensureUnique: {
+                    description:
+                        "Ensure that this message was not already imported",
+                    type: "boolean",
+                    defaultValue: false,
+                },
+            },
+        };
+    }
+
+    handlers.importMessage.metadata = importMessageDef();
+    async function importMessage(
+        args: string[],
+        io: InteractiveIo,
+    ): Promise<void> {
+        // Temporary: safeguard here to prevent demo issues
+        if (isTestConversation()) {
+            printer.writeError(
+                `Directly updating the TEST ${context.conversationName} conversation is not allowed!`,
+            );
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, importMessageDef());
+        let messageText: string | undefined;
+        if (namedArgs.message) {
+            messageText = namedArgs.message;
+        } else if (namedArgs.filePath) {
+            if (!fs.existsSync(namedArgs.filePath)) {
+                printer.writeError(`${namedArgs.filePath} not found.`);
+                return;
+            }
+            messageText = await readAllText(namedArgs.filePath);
+        }
+        if (messageText) {
+            if (namedArgs.ensureUnique) {
+                const existing = await context.conversation.searchMessages(
+                    messageText,
+                    {
+                        maxMatches: 1,
+                    },
+                );
+                if (
+                    existing &&
+                    existing.messages &&
+                    existing.messages.length > 0
+                ) {
+                    if (messageText === existing.messages[0].value.value) {
+                        printer.writeError("Message already in index");
+                        return;
+                    }
+                }
+            }
+            printer.writeLine("Importing...");
+            await context.conversationManager.addMessage(messageText);
+        }
+    }
+
     handlers.replay.metadata = "Replay the chat";
     async function replay(args: string[], io: InteractiveIo) {
         await writeHistory(context.conversation);
@@ -299,6 +390,10 @@ export async function runChatMemory(): Promise<void> {
                     type: "boolean",
                     defaultValue: true,
                 },
+                rootPath: {
+                    description: "Root path for the conversation",
+                    type: "string",
+                },
             },
         };
     }
@@ -310,13 +405,14 @@ export async function runChatMemory(): Promise<void> {
                 await loadConversation(
                     context,
                     namedArgs.name,
+                    namedArgs.rootPath,
                     namedArgs.actions,
                 )
             ) {
                 printer.writeLine(`Loaded ${namedArgs.name}`);
             } else {
                 printer.writeLine(
-                    `Created ${chalk.red("NEW")} conversation: ${namedArgs.name}`,
+                    `Created ${chalk.green("NEW")} conversation: ${namedArgs.name}`,
                 );
             }
         } else {
@@ -658,8 +754,11 @@ export async function runChatMemory(): Promise<void> {
                 name: {
                     description: "Names to search for",
                 },
-                types: {
-                    description: "Types to search for",
+                type: {
+                    description: "Type to search for",
+                },
+                facet: {
+                    description: "Facet to search for",
                 },
                 exact: {
                     description: "Exact match?",
@@ -671,14 +770,15 @@ export async function runChatMemory(): Promise<void> {
                     defaultValue: 1,
                     type: "number",
                 },
+                facetCount: {
+                    description: "Num facet matches",
+                    defaultValue: 10,
+                    type: "number",
+                },
                 minScore: {
                     description: "Min score",
                     defaultValue: 0,
                     type: "number",
-                },
-                showTopics: {
-                    defaultValue: false,
-                    type: "boolean",
                 },
                 showMessages: {
                     defaultValue: false,
@@ -692,15 +792,29 @@ export async function runChatMemory(): Promise<void> {
         const namedArgs = parseNamedArguments(args, entitiesDef());
         let query = namedArgs.name ?? namedArgs.type;
         if (query) {
-            await searchEntities(
-                query,
-                namedArgs.name !== undefined,
-                namedArgs.exact,
-                namedArgs.count,
-                namedArgs.minScore,
-                namedArgs.showTopics,
-                namedArgs.showMessages,
-            );
+            const isMultipart =
+                namedArgs.facet || (namedArgs.name && namedArgs.type);
+            if (namedArgs.exact || !isMultipart) {
+                await searchEntities(
+                    query,
+                    namedArgs.name !== undefined,
+                    namedArgs.exact,
+                    namedArgs.count,
+                    namedArgs.minScore,
+                    namedArgs.showMessages,
+                );
+            } else {
+                // Multipart query
+                await searchEntities_Multi(
+                    namedArgs.name,
+                    namedArgs.type,
+                    namedArgs.facet,
+                    namedArgs.count,
+                    namedArgs.facetCount,
+                    namedArgs.minScore,
+                    namedArgs.showMessages,
+                );
+            }
             return;
         }
 
@@ -851,7 +965,7 @@ export async function runChatMemory(): Promise<void> {
                 debug: {
                     description: "Show debug info",
                     type: "boolean",
-                    defaultValue: false,
+                    defaultValue: true,
                 },
                 save: {
                     description: "Save the search",
@@ -1005,7 +1119,7 @@ export async function runChatMemory(): Promise<void> {
             printer.writeError("No result");
             return;
         }
-        await writeSearchTermsResult(result);
+        await writeSearchTermsResult(result, namedArgs.debug);
         if (result.response && result.response.answer) {
             if (namedArgs.save && recordAnswer) {
                 let answer = result.response.answer.answer;
@@ -1021,9 +1135,12 @@ export async function runChatMemory(): Promise<void> {
 
     async function writeSearchTermsResult(
         result: conversation.SearchTermsActionResponse,
+        stats: boolean,
     ) {
         if (result.response && result.response.answer) {
-            writeResultStats(result.response);
+            if (stats) {
+                writeResultStats(result.response);
+            }
             if (result.response.answer.answer) {
                 const answer = result.response.answer.answer;
                 printer.writeInColor(chalk.green, answer);
@@ -1155,7 +1272,7 @@ export async function runChatMemory(): Promise<void> {
                 const topicIds = new Set(response.allTopicIds());
                 printer.writeLine(`Topic Hit Count: ${topicIds.size}`);
             }
-            const allEntities = response.mergeAllEntities(8);
+            const allEntities = response.mergeAllEntities(16);
             if (allEntities && allEntities.length > 0) {
                 printer.writeLine(`Entity Hit Count: ${allEntities.length}`);
             } else {
@@ -1164,7 +1281,8 @@ export async function runChatMemory(): Promise<void> {
                     `Entity to Message Hit Count: ${entityIds.size}`,
                 );
             }
-            const allActions = [...response.allActionIds()];
+            const allActions = knowLib.sets.uniqueFrom(response.allActionIds());
+            //const allActions = [...response.allActionIds()];
             if (allActions && allActions.length > 0) {
                 printer.writeLine(`Action Hit Count: ${allActions.length}`);
             }
@@ -1224,7 +1342,6 @@ export async function runChatMemory(): Promise<void> {
         exact: boolean,
         count: number,
         minScore: number,
-        showTopics?: boolean,
         showMessages?: boolean,
     ) {
         const index = await context.conversation.getEntityIndex();
@@ -1237,13 +1354,52 @@ export async function runChatMemory(): Promise<void> {
         );
         for (const match of matches) {
             printer.writeInColor(chalk.green, `[${match.score}]`);
-            await writeEntitiesById(
-                index,
-                match.item,
-                showTopics,
-                showMessages,
+            await writeEntitiesById(index, match.item, showMessages);
+        }
+    }
+
+    async function searchEntities_Multi(
+        name: string | undefined,
+        type: string | undefined,
+        facet: string | undefined,
+        count: number,
+        faceCount: number,
+        minScore: number,
+        showMessages?: boolean,
+    ) {
+        const index = await context.conversation.getEntityIndex();
+        let nameMatches: string[] | undefined;
+        let typeMatches: string[] | undefined;
+        let facetMatches: string[] | undefined;
+        if (name) {
+            nameMatches = await index.nameIndex.getNearest(
+                name,
+                count,
+                minScore,
             );
         }
+        if (type) {
+            typeMatches = await index.typeIndex.getNearest(
+                type,
+                count,
+                minScore,
+            );
+        }
+        if (facet) {
+            facetMatches = await index.facetIndex.getNearest(
+                facet,
+                faceCount,
+                minScore,
+            );
+        }
+        const matches = [
+            ...knowLib.sets.intersectMultiple(
+                nameMatches,
+                typeMatches,
+                facetMatches,
+            ),
+        ];
+        await writeEntitiesById(index, matches, showMessages);
     }
 
     async function writeExtractedTopics(
@@ -1335,7 +1491,6 @@ export async function runChatMemory(): Promise<void> {
     async function writeEntitiesById(
         index: knowLib.conversation.EntityIndex,
         entityIds: string[],
-        showTopics?: boolean,
         showMessages?: boolean,
     ): Promise<void> {
         if (!entityIds || entityIds.length === 0) {
@@ -1499,5 +1654,13 @@ export async function runChatMemory(): Promise<void> {
             return await context.conversation.messages.getMultiple(ids);
         }
         return [];
+    }
+
+    function isTestConversation(): boolean {
+        return (
+            context.conversationName === "transcript" ||
+            context.conversationName === "play" ||
+            context.conversationName === "search"
+        );
     }
 }

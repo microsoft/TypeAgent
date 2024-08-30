@@ -27,11 +27,13 @@ import {
     initializeCommandHandlerContext,
     processCommand,
     partialInput,
+    getDynamicDisplay,
 } from "agent-dispatcher";
 
 import { SearchMenuCommand } from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
 import {
     ActionTemplateSequence,
+    IAgentMessage,
     SearchMenuItem,
 } from "../preload/electronTypes.js";
 import { ShellSettings } from "./shellSettings.js";
@@ -66,7 +68,7 @@ function createWindow(): void {
         width: ShellSettings.getinstance().width,
         height: ShellSettings.getinstance().height,
         show: false,
-        autoHideMenuBar: true,
+        autoHideMenuBar: ShellSettings.getinstance().hideMenu,
         webPreferences: {
             preload: join(__dirname, "../preload/index.mjs"),
             sandbox: false,
@@ -90,8 +92,12 @@ function createWindow(): void {
     });
 
     mainWindow.on("close", () => {
-        ShellSettings.getinstance().devTools =
-            mainWindow?.webContents.isDevToolsOpened();
+        if (mainWindow) {
+            ShellSettings.getinstance().zoomLevel =
+                mainWindow.webContents.zoomLevel;
+            ShellSettings.getinstance().devTools =
+                mainWindow.webContents.isDevToolsOpened();
+        }
     });
 
     mainWindow.on("closed", () => {
@@ -147,46 +153,22 @@ async function triggerRecognitionOnce(context: CommandHandlerContext) {
     );
 }
 
-function showResult(
-    message: string,
-    requestId: RequestId,
-    source: string,
-    actionIndex?: number,
-    groupId?: string,
-) {
+function showResult(message: IAgentMessage) {
     // Ignore message without requestId
-    if (requestId === undefined) {
+    if (message.requestId === undefined) {
         console.warn("showResult: requestId is undefined");
         return;
     }
-    mainWindow?.webContents.send(
-        "response",
-        message,
-        requestId,
-        source,
-        actionIndex,
-        groupId,
-    );
+    mainWindow?.webContents.send("response", message);
 }
 
-function sendStatusMessage(
-    message: string,
-    requestId: RequestId,
-    source: string,
-    temporary: boolean = false,
-) {
+function sendStatusMessage(message: IAgentMessage, temporary: boolean = false) {
     // Ignore message without requestId
-    if (requestId === undefined) {
+    if (message.requestId === undefined) {
         console.warn(`sendStatusMessage: requestId is undefined. ${message}`);
         return;
     }
-    mainWindow?.webContents.send(
-        "status-message",
-        message,
-        requestId,
-        source,
-        temporary,
-    );
+    mainWindow?.webContents.send("status-message", message, temporary);
 }
 
 function markRequestExplained(
@@ -217,10 +199,6 @@ function updateRandomCommandSelected(requestId: RequestId, message: string) {
     }
 
     mainWindow?.webContents.send("update-random-command", requestId, message);
-}
-
-function updateResult(message: string, group_id: string) {
-    mainWindow?.webContents.send("update", message, group_id);
 }
 
 let maxAskYesNoId = 0;
@@ -324,13 +302,12 @@ const clientIO: ClientIO = {
         /* ignore */
     },
     success: sendStatusMessage,
-    status: (message, requestId, source) =>
-        sendStatusMessage(message, requestId, source, true),
+    status: (message) => sendStatusMessage(message, true),
     warn: sendStatusMessage,
     error: sendStatusMessage,
     result: showResult,
     setActionStatus: showResult,
-    updateActionStatus: updateResult,
+    setDynamicDisplay,
     searchMenuCommand,
     actionCommand,
     askYesNo,
@@ -356,6 +333,23 @@ const clientIO: ClientIO = {
         app.quit();
     },
 };
+
+async function setDynamicDisplay(
+    source: string,
+    requestId: RequestId,
+    actionIndex: number,
+    displayId: string,
+    nextRefreshMs: number,
+) {
+    mainWindow?.webContents.send(
+        "set-dynamic-action-display",
+        source,
+        requestId,
+        actionIndex,
+        displayId,
+        nextRefreshMs,
+    );
+}
 
 async function initializeSpeech(context: CommandHandlerContext) {
     const key = process.env["SPEECH_SDK_KEY"];
@@ -411,7 +405,7 @@ app.whenReady().then(async () => {
     function translatorSetPartialInputHandler() {
         mainWindow?.webContents.send(
             "set-partial-input-handler",
-            context.currentTranslatorName === "player",
+            context.lastActionTranslatorName === "player",
         );
     }
 
@@ -441,6 +435,11 @@ app.whenReady().then(async () => {
         }
         partialInput(text, context);
     });
+    ipcMain.handle(
+        "get-dynamic-display",
+        async (_event, appAgentName: string, id: string) =>
+            getDynamicDisplay(appAgentName, "html", id, context),
+    );
     ipcMain.on("dom ready", async () => {
         settingSummary = getSettingSummary(context);
         translatorSetPartialInputHandler();
@@ -454,6 +453,11 @@ app.whenReady().then(async () => {
             "microphone-change-requested",
             ShellSettings.getinstance().microphoneId,
             ShellSettings.getinstance().microphoneName,
+        );
+
+        mainWindow?.webContents.send(
+            "hide-menu-changed",
+            ShellSettings.getinstance().hideMenu,
         );
     });
 
@@ -469,6 +473,14 @@ app.whenReady().then(async () => {
             ShellSettings.getinstance().microphoneName = micName;
         },
     );
+
+    ipcMain.on("hide-menu-changed", (_event, value: boolean) => {
+        ShellSettings.getinstance().hideMenu = value;
+        mainWindow!.autoHideMenuBar = value;
+
+        // if the menu bar is visible it won't auto hide immediately when this is toggled so we have to help it along
+        mainWindow?.setMenuBarVisibility(!value);
+    });
 
     globalShortcut.register("Alt+Right", () => {
         mainWindow?.webContents.send("send-demo-event", "Alt+Right");

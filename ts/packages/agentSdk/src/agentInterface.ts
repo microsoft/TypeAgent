@@ -8,6 +8,7 @@ export type TopLevelTranslatorConfig = {
 export type HierarchicalTranslatorConfig = {
     defaultEnabled?: boolean;
     actionDefaultEnabled?: boolean;
+    transient?: boolean; // whether the translator is transient, default is false
     schema?: {
         description: string;
         schemaFile: string;
@@ -25,20 +26,27 @@ export type HierarchicalTranslatorConfig = {
     subTranslators?: { [key: string]: HierarchicalTranslatorConfig };
 };
 
-export interface DispatcherAction {
+export interface AppAction {
     actionName: string;
     translatorName?: string | undefined;
 }
 
-export interface DispatcherActionWithParameters extends DispatcherAction {
+export interface AppActionWithParameters extends AppAction {
     parameters: { [key: string]: any };
 }
 
-export interface DispatcherAgent {
+export type DisplayType = "html" | "text";
+
+export type DynamicDisplay = {
+    content: string;
+    nextRefreshMs: number; // in milliseconds, -1 means no more refresh.
+};
+
+export interface AppAgent {
     initializeAgentContext?(): Promise<any>;
     updateAgentContext?(
         enable: boolean,
-        context: DispatcherAgentContext,
+        context: SessionContext,
         translatorName: string, // for sub-translators
     ): Promise<void>;
     streamPartialAction?(
@@ -46,34 +54,37 @@ export interface DispatcherAgent {
         name: string,
         value: string,
         partial: boolean,
-        dispatcherContext: DispatcherAgentContext,
+        context: SessionContext,
     ): void;
     executeAction?(
-        action: DispatcherAction,
-        context: DispatcherAgentContext,
-        actionIndex: number, // TODO: can we avoid passing this index?
+        action: AppAction,
+        context: ActionContext<any>,
     ): Promise<any>; // TODO: define return type.
     validateWildcardMatch?(
-        action: DispatcherAction,
-        context: DispatcherAgentContext,
+        action: AppAction,
+        context: SessionContext,
     ): Promise<boolean>;
-    closeAgentContext?(context: DispatcherAgentContext): Promise<void>;
+
+    getDynamicDisplay?(
+        type: DisplayType,
+        dynamicDisplayId: string,
+        context: SessionContext,
+    ): Promise<DynamicDisplay>;
+    closeAgentContext?(context: SessionContext): Promise<void>;
 }
 
-export interface DispatcherAgentContext<T = any> {
-    readonly context: T;
+export interface SessionContext<T = any> {
+    readonly agentContext: T;
 
     // TODO: review if these should be exposed.
-    readonly requestIO: DispatcherAgentIO;
+    readonly agentIO: AppAgentIO;
     readonly requestId: RequestId;
     readonly sessionStorage: Storage | undefined;
     readonly profileStorage: Storage; // storage that are preserved across sessions
-    currentTranslatorName: string;
+
+    // can only toggle the sub agent of the current agent
+    toggleTransientAgent(agentName: string, active: boolean): Promise<void>;
     issueCommand(command: string): Promise<void>;
-    getUpdateActionStatus():
-        | ((message: string, group_id: string) => void)
-        | undefined;
-    toggleAgent(name: string, enable: boolean): Promise<void>;
 }
 
 // TODO: only utf8 is supported for now.
@@ -100,21 +111,21 @@ export interface Storage {
 
 // TODO: review if these should be exposed. Duplicated from dispatcher's interactiveIO.ts
 export type RequestId = string | undefined;
-
-export interface DispatcherAgentIO {
-    type: "html" | "text";
-    clear(): void;
-    info(message: string): void;
+export interface AppAgentIO {
+    readonly type: DisplayType;
     status(message: string): void;
     success(message: string): void;
-    warn(message: string): void;
-    error(message: string): void;
-    result(message: string): void;
 
     // Action status
-    setActionStatus(
-        message: string,
-        actionIndex: number,
-        groupId?: string,
-    ): void;
+    setActionStatus(message: string, actionIndex: number): void;
+}
+
+export interface ActionIO {
+    readonly type: DisplayType;
+    setActionDisplay(content: string): void;
+}
+
+export interface ActionContext<T = void> {
+    readonly actionIO: ActionIO;
+    readonly sessionContext: SessionContext<T>;
 }

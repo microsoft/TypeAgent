@@ -89,7 +89,7 @@ async function ensureWebsocketConnected() {
                             target: data.source,
                             messageType: "browserActionResponse",
                             id: data.id,
-                            body: respose,
+                            body: response,
                         }),
                     );
                 } else if (data.messageType == "siteTranslatorStatus") {

@@ -82,6 +82,8 @@ export interface TurnImpression {
     entities: Entity[];
     relationships?: Relationship[] | undefined;
     displayText: string;
+    dynamicDisplayId?: string | undefined;
+    dynamicDisplayNextRefreshMs?: number | undefined;
     error?: string | undefined;
 
     // REVIEW: this is not "remoteable", need to redesign to enable dispatcher agent isolation.

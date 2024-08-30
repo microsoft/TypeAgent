@@ -4,9 +4,10 @@
 import { WebSocketMessage, createWebSocket } from "common-utils";
 import { WebSocket } from "ws";
 import {
-  DispatcherAction,
-  DispatcherAgent,
-  DispatcherAgentContext,
+  ActionContext,
+  AppAction,
+  AppAgent,
+  SessionContext,
   createTurnImpressionFromLiteral,
 } from "@typeagent/agent-sdk";
 import { Crossword } from "./crossword/schema/pageSchema.mjs";
@@ -19,7 +20,7 @@ import { BrowserConnector } from "./browserConnector.mjs";
 import { handleCommerceAction } from "./commerce/actionHandler.mjs";
 import { TabTitleIndex, createTabTitleIndex } from "./tabTitleIndex.mjs";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
   return {
     initializeAgentContext: initializeBrowserContext,
     updateAgentContext: updateBrowserContext,
@@ -45,7 +46,7 @@ async function initializeBrowserContext(): Promise<BrowserActionContext> {
 
 async function updateBrowserContext(
   enable: boolean,
-  context: DispatcherAgentContext<BrowserActionContext>,
+  context: SessionContext<BrowserActionContext>,
   translatorName: string,
 ): Promise<void> {
   if (translatorName !== "browser") {
@@ -53,22 +54,22 @@ async function updateBrowserContext(
     return;
   }
   if (enable) {
-    if (!context.context.tabTitleIndex) {
+    if (!context.agentContext.tabTitleIndex) {
       context.context.tabTitleIndex = createTabTitleIndex();
     }
 
-    if (context.context.webSocket?.readyState === WebSocket.OPEN) {
+    if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {
       return;
     }
 
     const webSocket = await createWebSocket();
     if (webSocket) {
-      context.context.webSocket = webSocket;
-      context.context.browserConnector = new BrowserConnector(context);
+      context.agentContext.webSocket = webSocket;
+      context.agentContext.browserConnector = new BrowserConnector(context);
 
       webSocket.onclose = (event: object) => {
         console.error("Browser webSocket connection closed.");
-        context.context.webSocket = undefined;
+        context.agentContext.webSocket = undefined;
       };
       webSocket.addEventListener("message", async (event: any) => {
         const text = event.data.toString();
@@ -83,23 +84,15 @@ async function updateBrowserContext(
               if (data.body == "browser.crossword") {
                 // initialize crossword state
                 sendSiteTranslatorStatus(data.body, "initializing", context);
-                context.context.crossWordState = await getBoardSchema(context);
+                context.agentContext.crossWordState =
+                  await getBoardSchema(context);
                 sendSiteTranslatorStatus(data.body, "initialized", context);
               }
-
-              if (context.currentTranslatorName !== data.body) {
-                await context.toggleAgent(data.body, true);
-
-                context.currentTranslatorName = data.body;
-              }
+              await context.toggleTransientAgent(data.body, true);
               break;
             }
             case "disableSiteTranslator": {
-              if (context.currentTranslatorName == data.body) {
-                await context.toggleAgent(data.body, false);
-
-                context.currentTranslatorName = "browser";
-              }
+              await context.toggleTransientAgent(data.body, false);
               break;
             }
             case "browserActionResponse": {
@@ -122,27 +115,27 @@ async function updateBrowserContext(
       });
     }
   } else {
-    const webSocket = context.context.webSocket;
+    const webSocket = context.agentContext.webSocket;
     if (webSocket) {
       webSocket.onclose = null;
       webSocket.close();
     }
 
-    context.context.webSocket = undefined;
+    context.agentContext.webSocket = undefined;
   }
 }
 
 async function executeBrowserAction(
-  action: DispatcherAction,
-  context: DispatcherAgentContext<BrowserActionContext>,
+  action: AppAction,
+  context: ActionContext<BrowserActionContext>,
 ) {
-  const webSocketEndpoint = context.context.webSocket;
+  const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
 
   if (webSocketEndpoint) {
     try {
-      const requestIO = context.requestIO;
-      const requestId = context.requestId;
-      requestIO.status("Running remote action.");
+      const agentIO = context.sessionContext.agentIO;
+      const requestId = context.sessionContext.requestId;
+      agentIO.status("Running remote action.");
 
       let messageType = "browserActionRequest";
       let target = "browser";
@@ -179,9 +172,9 @@ async function executeBrowserAction(
 function sendSiteTranslatorStatus(
   translatorName: string,
   status: string,
-  context: DispatcherAgentContext<BrowserActionContext>,
+  context: SessionContext<BrowserActionContext>,
 ) {
-  const webSocketEndpoint = context.context.webSocket;
+  const webSocketEndpoint = context.agentContext.webSocket;
   const requestId = context.requestId;
 
   if (webSocketEndpoint) {

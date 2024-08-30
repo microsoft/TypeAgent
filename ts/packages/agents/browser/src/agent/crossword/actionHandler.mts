@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import jp from "jsonpath";
-import { DispatcherAgentContext } from "@typeagent/agent-sdk";
+import { ActionContext, SessionContext } from "@typeagent/agent-sdk";
 import { Crossword } from "./schema/pageSchema.mjs";
 import { CrosswordPresence } from "./schema/pageFrame.mjs";
 import { createCrosswordPageTranslator } from "./translator.mjs";
@@ -10,13 +10,13 @@ import { BrowserActionContext } from "../browserActionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
 
 export async function getBoardSchema(
-  context: DispatcherAgentContext<BrowserActionContext>,
+  context: SessionContext<BrowserActionContext>,
 ) {
-  if (!context.context.browserConnector) {
+  if (!context.agentContext.browserConnector) {
     throw new Error("No connection to browser session.");
   }
 
-  const browser: BrowserConnector = context.context.browserConnector;
+  const browser: BrowserConnector = context.agentContext.browserConnector;
   const url = await browser.getPageUrl();
   const cachedSchema = await browser.getCurrentPageSchema(url);
   if (cachedSchema) {
@@ -98,21 +98,22 @@ export async function getBoardSchema(
 
 export async function handleCrosswordAction(
   action: any,
-  context: DispatcherAgentContext<BrowserActionContext>,
+  context: ActionContext<BrowserActionContext>,
 ) {
   let message = "OK";
-  if (!context.context.browserConnector) {
+  if (!context.sessionContext.agentContext.browserConnector) {
     throw new Error("No connection to browser session.");
   }
 
-  const browser: BrowserConnector = context.context.browserConnector;
+  const browser: BrowserConnector =
+    context.sessionContext.agentContext.browserConnector;
 
-  if (context.context.crossWordState) {
+  if (context.sessionContext.agentContext.crossWordState) {
     const actionName =
       action.actionName ?? action.fullActionName.split(".").at(-1);
     if (actionName === "enterText") {
       const selector = jp.value(
-        context.context.crossWordState,
+        context.sessionContext.agentContext.crossWordState,
         `$.${action.parameters.clueDirection}[?(@.number==${action.parameters.clueNumber})].cssSelector`,
       );
 
@@ -127,7 +128,7 @@ export async function handleCrosswordAction(
     if (actionName === "getClueValue") {
       if (message === "OK") message = "";
       const selector = jp.value(
-        context.context.crossWordState,
+        context.sessionContext.agentContext.crossWordState,
         `$.${action.parameters.clueDirection}[?(@.number==${action.parameters.clueNumber})].text`,
       );
 

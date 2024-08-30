@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { ElectronAPI } from "@electron-toolkit/preload";
+import { DynamicDisplay } from "@typeagent/agent-sdk";
 
 export type SpeechToken = {
     token: string;
@@ -75,6 +76,20 @@ export type ActionTemplateSequence = {
     prefaceMultiple?: string;
 };
 
+export interface IAgentMessage {
+    message: string;
+    requestId?: string | undefined;
+    source: string;
+    actionIndex?: number | undefined;
+    groupId?: string | undefined;
+    metrics?: IMessageMetrics;
+}
+
+export interface IMessageMetrics {
+    duration: number | undefined;
+    marks?: Map<string, number> | undefined;
+}
+
 // end duplicate type section
 
 export interface ClientAPI {
@@ -88,21 +103,21 @@ export interface ClientAPI {
     ) => void;
     processShellRequest: (request: string, id: string) => Promise<void>;
     sendPartialInput: (text: string) => void;
+    getDynamicDisplay: (source: string, id: string) => Promise<DynamicDisplay>;
     onResponse(
         callback: (
             e: Electron.IpcRendererEvent,
-            response: string | undefined,
-            id: string,
-            source: string,
-            actionIndex?: number,
-            group_id?: string,
+            message: IAgentMessage,
         ) => void,
     ): void;
-    onUpdate(
+    onSetDynamicActionDisplay(
         callback: (
             e: Electron.IpcRendererEvent,
-            updateMessage: string,
-            group_id: string,
+            source: string,
+            id: string,
+            actionIndex: number,
+            displayId: string,
+            nextRefreshMs: number,
         ) => void,
     ): void;
     onSetPartialInputHandler(
@@ -118,9 +133,7 @@ export interface ClientAPI {
     onStatusMessage(
         callback: (
             e: Electron.IpcRendererEvent,
-            message: string,
-            id: string,
-            source: string,
+            message: IAgentMessage,
             temporary: boolean,
         ) => void,
     ): void;
@@ -208,6 +221,9 @@ export interface ClientAPI {
     onShowDialog(
         callback: (e: Electron.IpcRendererEvent, key: string) => void,
     ): void;
+    onHideMenuChanged(
+        callback: (e: Electron.IpcRendererEvent, value: boolean) => void,
+    );
 }
 
 export interface ElectronWindowFields {
