@@ -149,9 +149,27 @@ function getReadablePageContent() {
     return { error: "Page content cannot be read" };
 }
 
+function markInvisibleNodesForCleanup() {
+    const allElements = Array.from(document.body.getElementsByTagName("*"));
+    allElements.forEach((element: Element) => {
+        if (
+            element instanceof HTMLElement &&
+            element.nodeType == Node.ELEMENT_NODE
+        ) {
+            if (element.hidden) {
+                element.setAttribute("data-deleteInReducer", "");
+            } else if (element.hasAttribute("data-deleteInReducer")) {
+                // previously hidden element is now visible
+                element.removeAttribute("data-deleteInReducer");
+            }
+        }
+    });
+}
+
 function getPageHTML(fullSize: boolean, documentHtml: string, frameId: number) {
     if (!documentHtml) {
         setIdsOnAllElements(frameId);
+        markInvisibleNodesForCleanup();
         documentHtml = document.children[0].outerHTML;
     }
 
@@ -168,7 +186,7 @@ function getPageHTML(fullSize: boolean, documentHtml: string, frameId: number) {
 function getPageText(documentHtml: string, frameId: number) {
     if (!documentHtml) {
         setIdsOnAllElements(frameId);
-        documentHtml = document.children[0].outerHTML;
+        documentHtml = document.body.outerHTML;
     }
 
     const options = {
@@ -427,7 +445,7 @@ function daysIntoYear() {
 function setIdsOnAllElements(frameId: number) {
     const allElements = Array.from(document.getElementsByTagName("*"));
     const idPrefix = `id_${daysIntoYear()}_${frameId}_`;
-    const formattingTags = [
+    const skipIdsFor = [
         "BR",
         "P",
         "B",
@@ -442,12 +460,28 @@ function setIdsOnAllElements(frameId: number) {
         "H4",
         "H5",
         "H6",
+        "HEAD",
+        "TITLE",
+        "HTML",
+        "BODY",
+        "SCRIPT",
+        "META",
+        "STYLE",
+        "SPAN",
+        "TABLE",
+        "TBODY",
+        "TR",
+        "TD",
+        "UL",
+        "OL",
+        "LI",
+        "LABEL",
     ];
     let i = 0;
     allElements.forEach((element: Element) => {
         if (
             !element.hasAttribute("id") &&
-            !(element.tagName in formattingTags)
+            !skipIdsFor.includes(element.tagName)
         ) {
             element.setAttribute("id", idPrefix + i.toString());
             i++;

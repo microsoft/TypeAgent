@@ -15,7 +15,7 @@ export class BrowserConnector {
   }
 
   async sendActionToBrowser(action: AppAction, messageType?: string) {
-    return new Promise<string | undefined>((resolve, reject) => {
+    return new Promise<any | undefined>((resolve, reject) => {
       if (this.webSocket) {
         try {
           const agentIO = this.context.agentIO;
@@ -27,9 +27,9 @@ export class BrowserConnector {
           }
           if (!messageType) {
             if (action.translatorName!.startsWith("browser.")) {
-              messageType = `siteTranslatedAction_${action.translatorName!.substring(8)}`;
+              messageType = `browserActionRequest.${action.translatorName!.substring(8)}`;
             } else {
-              messageType = "translatedAction";
+              messageType = "browserActionRequest";
             }
           }
 
@@ -49,17 +49,12 @@ export class BrowserConnector {
             if (
               data.target == "dispatcher" &&
               data.source == "browser" &&
+              data.messageType == "browserActionResponse" &&
               data.id == requestId &&
               data.body
             ) {
-              switch (data.messageType) {
-                case "confirmActionWithData":
-                case "confirmAction": {
-                  this.webSocket.removeEventListener("message", handler);
-                  resolve("OK");
-                  break;
-                }
-              }
+              this.webSocket.removeEventListener("message", handler);
+              resolve(data.body);
             }
           };
 
@@ -75,45 +70,15 @@ export class BrowserConnector {
   }
 
   private async getPageDataFromBrowser(action: any) {
-    return new Promise<string | undefined>((resolve, reject) => {
-      if (this.webSocket) {
-        try {
-          const requestId = new Date().getTime().toString();
-
-          this.webSocket.send(
-            JSON.stringify({
-              source: "dispatcher",
-              target: "browser",
-              messageType: "translatedAction",
-              id: requestId,
-              body: action,
-            }),
-          );
-
-          const handler = (event: any) => {
-            const text = event.data.toString();
-            const data = JSON.parse(text) as WebSocketMessage;
-            if (
-              data.target == "dispatcher" &&
-              data.source == "browser" &&
-              data.id == requestId &&
-              data.body
-            ) {
-              switch (data.messageType) {
-                case "confirmActionWithData": {
-                  this.webSocket.removeEventListener("message", handler);
-                  resolve(data.body.data);
-                  break;
-                }
-              }
-            }
-          };
-
-          this.webSocket.addEventListener("message", handler);
-        } catch {
-          console.log("Unable to contact browser agent.");
-          reject("Unable to contact browser agent.");
-        }
+    return new Promise<string | undefined>(async (resolve, reject) => {
+      const response = await this.sendActionToBrowser(
+        action,
+        "browserActionRequest",
+      );
+      if (response.data) {
+        resolve(response.data);
+      } else {
+        resolve(undefined);
       }
     });
   }
@@ -219,7 +184,7 @@ export class BrowserConnector {
       },
     };
 
-    return this.sendActionToBrowser(schemaAction, "translatedAction");
+    return this.sendActionToBrowser(schemaAction, "browserActionRequest");
   }
 
   async getPageUrl() {
@@ -259,6 +224,6 @@ export class BrowserConnector {
       parameters: {},
     };
 
-    return this.sendActionToBrowser(action, "translatedAction");
+    return this.sendActionToBrowser(action, "browserActionRequest");
   }
 }

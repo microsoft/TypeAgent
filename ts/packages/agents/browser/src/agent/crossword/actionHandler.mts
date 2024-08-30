@@ -68,8 +68,8 @@ export async function getBoardSchema(
       let cluePromises = [];
       for (let i = 0; i < candidateFragments.length; i++) {
         cluePromises.push(
-          // agent.getCluesTextWithSelectors([candidateFragments[i]]),
-          agent.getCluesTextThenSelectors([candidateFragments[i]]),
+          agent.getCluesTextWithSelectors([candidateFragments[i]]),
+          // agent.getCluesTextThenSelectors([candidateFragments[i]]),
         );
       }
 
