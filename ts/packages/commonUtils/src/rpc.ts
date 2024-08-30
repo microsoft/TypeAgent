@@ -1,16 +1,33 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChildProcess } from "child_process";
 import registerDebug from "debug";
 
-const debug = registerDebug("typeagent:process");
-const debugError = registerDebug("typeagent:process:error");
+const debug = registerDebug("typeagent:rpc");
+const debugError = registerDebug("typeagent:rpc:error");
 
-export function setupInvoke<InvokeNames = string, CallNames = string>(
-    process: ChildProcess | NodeJS.Process,
-    invokeHandler?: (name: string, param: any) => Promise<any>,
-    callHandler?: (name: string, param: any) => void,
+// Compatible with ChildProcess | NodeJS.Process
+export type Transport<T = any> = {
+    on(event: "message", cb: (message: Partial<T>) => void): void;
+    on(event: "disconnect", cb: () => void): void;
+    once(event: "message", cb: (message: Partial<T>) => void): void;
+    once(event: "disconnect", cb: () => void): void;
+    off(event: "message", cb: (message: Partial<T>) => void): void;
+    off(event: "disconnect", cb: () => void): void;
+    send(message: T): void;
+};
+
+export function createRpc<
+    InvokeTargetFunctions extends {
+        [key: string]: (param: any) => Promise<any>;
+    },
+    CallTargetFunctions extends { [key: string]: (param: any) => void },
+    InvokeHandlers extends { [key: string]: (param: any) => Promise<any> },
+    CallHandlers extends { [key: string]: (param: any) => void },
+>(
+    transport: Transport,
+    invokeHandlers?: InvokeHandlers,
+    callHandlers?: CallHandlers,
 ) {
     const pending = new Map<
         number,
@@ -23,31 +40,34 @@ export function setupInvoke<InvokeNames = string, CallNames = string>(
     const cb = (message: any) => {
         debug("message", message);
         if (isCallMessage(message)) {
-            if (callHandler === undefined) {
+            const f = callHandlers?.[message.name];
+
+            if (f === undefined) {
                 debugError("No call handler", message);
             } else {
-                callHandler(message.name, message.param);
+                f(message.param);
             }
             return;
         }
         if (isInvokeMessage(message)) {
-            if (invokeHandler === undefined) {
-                process.send!({
+            const f = invokeHandlers?.[message.name];
+            if (f === undefined) {
+                transport.send({
                     type: "invokeError",
                     callId: message.callId,
                     error: "No invoke handler",
                 });
             } else {
-                invokeHandler(message.name, message.param).then(
+                f(message.param).then(
                     (result) => {
-                        process.send!({
+                        transport.send({
                             type: "invokeResult",
                             callId: message.callId,
                             result,
                         });
                     },
                     (error) => {
-                        process.send!({
+                        transport.send({
                             type: "invokeError",
                             callId: message.callId,
                             error: error.message,
@@ -72,15 +92,15 @@ export function setupInvoke<InvokeNames = string, CallNames = string>(
             r.reject(new Error(message.error));
         }
     };
-    process.on("message", cb);
-    process.once("disconnect", () => {
-        process.off("message", cb);
+    transport.on("message", cb);
+    transport.once("disconnect", () => {
+        transport.off("message", cb);
     });
 
     let nextCallId = 0;
     return {
         invoke: async function <T = void>(
-            name: InvokeNames,
+            name: keyof InvokeTargetFunctions,
             param?: any,
         ): Promise<T> {
             const message = {
@@ -91,17 +111,17 @@ export function setupInvoke<InvokeNames = string, CallNames = string>(
             };
             return new Promise<T>((resolve, reject) => {
                 pending.set(message.callId, { resolve, reject });
-                process.send!(message);
+                transport.send!(message);
             });
         },
-        send: (name: CallNames, param?: any) => {
+        send: (name: keyof CallTargetFunctions, param?: any) => {
             const message = {
                 type: "call",
                 callId: nextCallId++,
                 name,
                 param,
             };
-            process.send!(message);
+            transport.send!(message);
         },
     };
 }
@@ -122,27 +142,27 @@ function isInvokeError(message: any): message is InvokeError {
     return message.type === "invokeError";
 }
 
-export type CallMessage = {
+type CallMessage = {
     type: "call";
     callId: number;
     name: string;
     param: any;
 };
 
-export type InvokeMessage = {
+type InvokeMessage = {
     type: "invoke";
     callId: number;
     name: string;
     param: any;
 };
 
-export type InvokeResult<T = void> = {
+type InvokeResult<T = void> = {
     type: "invokeResult";
     callId: number;
     result: T;
 };
 
-export type InvokeError = {
+type InvokeError = {
     type: "invokeError";
     callId: number;
     error: string;

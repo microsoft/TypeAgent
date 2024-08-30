@@ -2,17 +2,27 @@
 // Licensed under the MIT License.
 
 import child_process from "child_process";
-import { AppAgent, ActionContext, SessionContext } from "@typeagent/agent-sdk";
 import {
-    AgentCallAPI,
-    AgentContextCallAPI,
-    AgentContextInvokeAPI,
-    AgentInvokeAPI,
+    AppAgent,
+    ActionContext,
+    SessionContext,
+    StorageListOptions,
+} from "@typeagent/agent-sdk";
+import {
+    AgentCallFunctions,
+    AgentContextCallFunctions,
+    AgentContextInvokeFunctions,
+    AgentInvokeFunctions,
     ContextParams,
-    ShimContext,
 } from "./agentProcessTypes.js";
-import { setupInvoke } from "./agentProcessUtil.js";
+import { createRpc } from "common-utils";
 import { fileURLToPath } from "url";
+
+type ShimContext =
+    | {
+          contextId: number;
+      }
+    | undefined;
 
 function createContextMap<T>() {
     let nextContextId = 0;
@@ -58,7 +68,7 @@ export async function createAgentProcessShim(
         fileURLToPath(new URL(`./agentProcess.js`, import.meta.url)),
         [modulePath],
     );
-    const agentInterface = await new Promise<AgentInvokeAPI[]>(
+    const agentInterface = await new Promise<(keyof AgentInvokeFunctions)[]>(
         (resolve, reject) => {
             process.once("message", (message: any) => {
                 if (message.type === "initialized") {
@@ -100,7 +110,12 @@ export async function createAgentProcessShim(
             },
         );
     }
-    function getStorage(param: any, context: SessionContext) {
+    function getStorage(
+        param: {
+            session: boolean;
+        },
+        context: SessionContext,
+    ) {
         const storage = param.session
             ? context.sessionStorage
             : context.profileStorage;
@@ -110,74 +125,126 @@ export async function createAgentProcessShim(
         return storage;
     }
 
-    async function agentContextInvokeHandler(
-        name: string,
-        param: any,
-    ): Promise<any> {
-        const context = contextMap.get(param.contextId);
-        switch (name) {
-            case AgentContextInvokeAPI.IssueCommand:
-                return context.issueCommand(param.command);
-            case AgentContextInvokeAPI.ToggleTransientAgent:
-                return context.toggleTransientAgent(param.name, param.enable);
-            case AgentContextInvokeAPI.StorageRead:
-                return getStorage(param, context).read(
-                    param.storagePath,
-                    param.options,
-                );
-            case AgentContextInvokeAPI.StorageWrite:
-                return getStorage(param, context).write(
-                    param.storagePath,
-                    param.data,
-                );
-            case AgentContextInvokeAPI.StorageList:
-                return getStorage(param, context).list(
-                    param.storagePath,
-                    param.options,
-                );
-            case AgentContextInvokeAPI.StorageExists:
-                return getStorage(param, context).exists(param.storagePath);
-            case AgentContextInvokeAPI.StorageDelete:
-                return getStorage(param, context).delete(param.storagePath);
-            case AgentContextInvokeAPI.TokenCachePersistenceLoad:
-                return (
-                    await getStorage(param, context).getTokenCachePersistence()
-                ).load();
-            case AgentContextInvokeAPI.TokenCachePersistenceSave:
-                return (
-                    await getStorage(param, context).getTokenCachePersistence()
-                ).load();
-            default:
-                throw new Error(`Unknown invocation: ${name}`);
-        }
-    }
+    const agentContextInvokeHandlers: AgentContextInvokeFunctions = {
+        issueCommand: async (param: any) => {
+            const context = contextMap.get(param.contextId);
+            return context.issueCommand(param.command);
+        },
+        toggleTransientAgent: async (param: {
+            contextId: number;
+            name: string;
+            enable: boolean;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            return context.toggleTransientAgent(param.name, param.enable);
+        },
+        storageRead: async (param: {
+            contextId: number;
+            session: boolean;
+            storagePath: string;
+            options: any;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            return getStorage(param, context).read(
+                param.storagePath,
+                param.options,
+            );
+        },
+        storageWrite: async (param: {
+            contextId: number;
+            session: boolean;
+            storagePath: string;
+            data: string;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            return getStorage(param, context).write(
+                param.storagePath,
+                param.data,
+            );
+        },
+        storageList: async (param: {
+            contextId: number;
+            session: boolean;
+            storagePath: string;
+            options: StorageListOptions;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            return getStorage(param, context).list(
+                param.storagePath,
+                param.options,
+            );
+        },
+        storageExists: async (param: {
+            contextId: number;
+            session: boolean;
+            storagePath: string;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            return getStorage(param, context).exists(param.storagePath);
+        },
+        storageDelete: async (param: {
+            contextId: number;
+            session: boolean;
+            storagePath: string;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            return getStorage(param, context).delete(param.storagePath);
+        },
+        tokenCacheRead: async (param: {
+            contextId: number;
+            session: boolean;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            const storage = getStorage(param, context);
+            return (await storage.getTokenCachePersistence()).load();
+        },
+        tokenCacheWrite: async (param: {
+            contextId: number;
+            session: boolean;
+            token: string;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            const storage = getStorage(param, context);
+            return (await storage.getTokenCachePersistence()).save(param.token);
+        },
+    };
 
-    function agentContextCallHandler(name: string, param: any) {
-        switch (name) {
-            case AgentContextCallAPI.AgentIOStatus:
-                contextMap.get(param.contextId).agentIO.status(param.message);
-                return;
-            case AgentContextCallAPI.AgentIOSuccess:
-                contextMap.get(param.contextId).agentIO.success(param.message);
-                return;
-            case AgentContextCallAPI.SetActionDisplay:
-                actionContextMap
-                    .get(param.actionContextId)
-                    .actionIO.setActionDisplay(param.content);
-            default:
-                throw new Error(`Unknown invocation: ${name}`);
-        }
-    }
+    const agentContextCallHandlers: AgentContextCallFunctions = {
+        agentIOStatus: (param: { contextId: number; message: string }) => {
+            contextMap.get(param.contextId).agentIO.status(param.message);
+        },
+        agentIOSuccess: (param: { contextId: number; message: string }) => {
+            contextMap.get(param.contextId).agentIO.success(param.message);
+        },
+        setActionStatus(param: {
+            contextId: number;
+            message: string;
+            actionIndex: number;
+        }) {
+            contextMap
+                .get(param.contextId)
+                .agentIO.setActionStatus(param.message, param.actionIndex);
+        },
+        setActionDisplay: (param: {
+            actionContextId: number;
+            message: string;
+        }) => {
+            actionContextMap
+                .get(param.actionContextId)
+                .actionIO.setActionDisplay(param.message);
+        },
+    };
 
-    const rpc = setupInvoke<AgentInvokeAPI, AgentCallAPI>(
-        process,
-        agentContextInvokeHandler,
-        agentContextCallHandler,
-    );
+    const rpc = createRpc<
+        AgentInvokeFunctions,
+        AgentCallFunctions,
+        AgentContextInvokeFunctions,
+        AgentContextCallFunctions
+    >(process, agentContextInvokeHandlers, agentContextCallHandlers);
 
     const agent: AppAgent = {
         initializeAgentContext(): Promise<ShimContext> {
-            return rpc.invoke(AgentInvokeAPI.InitializeAgentContext);
+            return rpc.invoke("initializeAgentContext");
         },
         updateAgentContext(
             enable,
@@ -185,7 +252,7 @@ export async function createAgentProcessShim(
             translatorName,
         ) {
             return withContext(context, (contextParams) =>
-                rpc.invoke(AgentInvokeAPI.UpdateAgentContext, {
+                rpc.invoke("updateAgentContext", {
                     ...contextParams,
                     enable,
                     translatorName,
@@ -194,7 +261,7 @@ export async function createAgentProcessShim(
         },
         executeAction(action, context: ActionContext<ShimContext>) {
             return withActionContext(context, (contextParams) =>
-                rpc.invoke(AgentInvokeAPI.ExecuteAction, {
+                rpc.invoke("executeAction", {
                     ...contextParams,
                     action,
                 }),
@@ -202,7 +269,7 @@ export async function createAgentProcessShim(
         },
         validateWildcardMatch(action, context: SessionContext) {
             return withContext(context, (contextParams) =>
-                rpc.invoke(AgentInvokeAPI.ValidateWildcardMatch, {
+                rpc.invoke("validateWildcardMatch", {
                     ...contextParams,
                     action,
                 }),
@@ -216,7 +283,7 @@ export async function createAgentProcessShim(
             context: SessionContext,
         ) {
             return withContext(context, (contextParams) =>
-                rpc.send(AgentCallAPI.StreamPartialAction, {
+                rpc.send("streamPartialAction", {
                     ...contextParams,
                     actionName,
                     name,
@@ -227,7 +294,7 @@ export async function createAgentProcessShim(
         },
         getDynamicDisplay(type, displayId, context) {
             return withContext(context, (contextParams) =>
-                rpc.invoke(AgentInvokeAPI.GetDynamicDisplay, {
+                rpc.invoke("getDynamicDisplay", {
                     ...contextParams,
                     type,
                     displayId,
@@ -236,7 +303,7 @@ export async function createAgentProcessShim(
         },
         closeAgentContext(context: SessionContext) {
             return withContext(context, (contextParams) =>
-                rpc.invoke(AgentInvokeAPI.CloseAgentContext, {
+                rpc.invoke("closeAgentContext", {
                     ...contextParams,
                 }),
             );
