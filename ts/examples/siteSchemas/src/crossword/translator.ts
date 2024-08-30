@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createJsonTranslator, TypeChatJsonTranslator, TypeChatLanguageModel } from "typechat";
+import {
+    createJsonTranslator,
+    TypeChatJsonTranslator,
+    TypeChatLanguageModel,
+} from "typechat";
 import { openai as ai } from "aiclient";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { ContentSection, HtmlFragments } from "../common/translator.js";

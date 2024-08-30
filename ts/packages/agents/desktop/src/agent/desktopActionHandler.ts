@@ -48,7 +48,7 @@ async function updateDesktopContext(
                     data.body
                 ) {
                     switch (data.messageType) {
-                        case "confirmAction": {
+                        case "desktopActionResponse": {
                             const requestIO = context.requestIO;
                             const requestId = context.requestId;
                             if (
@@ -88,7 +88,7 @@ async function executeDesktopAction(
                 JSON.stringify({
                     source: "dispatcher",
                     target: "desktop",
-                    messageType: "translatedAction",
+                    messageType: "desktopActionRequest",
                     id: requestId,
                     body: action,
                 }),

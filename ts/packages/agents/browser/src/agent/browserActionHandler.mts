@@ -17,6 +17,7 @@ import {
 
 import { BrowserConnector } from "./browserConnector.mjs";
 import { handleCommerceAction } from "./commerce/actionHandler.mjs";
+import { TabTitleIndex, createTabTitleIndex } from "./tabTitleIndex.mjs";
 
 export function instantiate(): DispatcherAgent {
   return {
@@ -30,6 +31,7 @@ export type BrowserActionContext = {
   webSocket: WebSocket | undefined;
   crossWordState: Crossword | undefined;
   browserConnector: BrowserConnector | undefined;
+  tabTitleIndex: TabTitleIndex | undefined;
 };
 
 async function initializeBrowserContext(): Promise<BrowserActionContext> {
@@ -37,6 +39,7 @@ async function initializeBrowserContext(): Promise<BrowserActionContext> {
     webSocket: undefined,
     crossWordState: undefined,
     browserConnector: undefined,
+    tabTitleIndex: undefined,
   };
 }
 
@@ -50,6 +53,10 @@ async function updateBrowserContext(
     return;
   }
   if (enable) {
+    if (!context.context.tabTitleIndex) {
+      context.context.tabTitleIndex = createTabTitleIndex();
+    }
+
     if (context.context.webSocket?.readyState === WebSocket.OPEN) {
       return;
     }
@@ -95,15 +102,19 @@ async function updateBrowserContext(
               }
               break;
             }
-            case "confirmAction": {
+            case "browserActionResponse": {
               /*
               const requestIO = context.requestIO;
               const requestId = context.requestId;
               
               if (requestIO && requestId && data.id === requestId) {
-                requestIO.success(data.body);
+                requestIO.success(data.body.message);
               }
               */
+              break;
+            }
+            case "tabIndexRequest": {
+              await handleTabIndexActions(data.body, context, data.id);
               break;
             }
           }
@@ -133,10 +144,10 @@ async function executeBrowserAction(
       const requestId = context.requestId;
       requestIO.status("Running remote action.");
 
-      let messageType = "translatedAction";
+      let messageType = "browserActionRequest";
       let target = "browser";
       if (action.translatorName === "browser.paleoBioDb") {
-        messageType = "siteTranslatedAction_paleoBioDb";
+        messageType = "browserActionRequest.paleoBioDb";
       } else if (action.translatorName === "browser.crossword") {
         const crosswordResult = await handleCrosswordAction(action, context);
         return createTurnImpressionFromLiteral(crosswordResult);
@@ -155,7 +166,6 @@ async function executeBrowserAction(
         }),
       );
     } catch (ex: any) {
-      console.log(ex);
       console.log(JSON.stringify(ex));
 
       throw new Error("Unable to contact browser backend.");
@@ -188,4 +198,70 @@ function sendSiteTranslatorStatus(
       }),
     );
   }
+}
+
+async function handleTabIndexActions(
+  action: any,
+  context: DispatcherAgentContext<BrowserActionContext>,
+  requestId: string | undefined,
+) {
+  const webSocketEndpoint = context.context.webSocket;
+
+  if (webSocketEndpoint && context.context.tabTitleIndex) {
+    try {
+      const actionName =
+        action.actionName ?? action.fullActionName.split(".").at(-1);
+      let responseBody;
+
+      switch (actionName) {
+        case "getTabIdFromIndex": {
+          const matchedTabs = await context.context.tabTitleIndex.search(
+            action.parameters.query,
+            1,
+          );
+          let foundId = -1;
+          if (matchedTabs && matchedTabs.length > 0) {
+            foundId = matchedTabs[0].item.value;
+          }
+          responseBody = foundId;
+          break;
+        }
+        case "addTabIdToIndex": {
+          await context.context.tabTitleIndex.addOrUpdate(
+            action.parameters.title,
+            action.parameters.id,
+          );
+          responseBody = "OK";
+          break;
+        }
+        case "deleteTabIdFromIndex": {
+          await context.context.tabTitleIndex.remove(action.parameters.id);
+          responseBody = "OK";
+          break;
+        }
+        case "resetTabIdToIndex": {
+          await context.context.tabTitleIndex.reset();
+          responseBody = "OK";
+          break;
+        }
+      }
+
+      webSocketEndpoint.send(
+        JSON.stringify({
+          source: "dispatcher",
+          target: "browser",
+          messageType: "tabIndexResponse",
+          id: requestId,
+          body: responseBody,
+        }),
+      );
+    } catch (ex: any) {
+      console.log(JSON.stringify(ex));
+
+      throw new Error("Unable to contact browser backend.");
+    }
+  } else {
+    throw new Error("No websocket connection.");
+  }
+  return undefined;
 }

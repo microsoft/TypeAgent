@@ -156,9 +156,7 @@ function markInvisibleNodesForCleanup() {
             element instanceof HTMLElement &&
             element.nodeType == Node.ELEMENT_NODE
         ) {
-           if (
-                element.hidden
-            ) {
+            if (element.hidden) {
                 element.setAttribute("data-deleteInReducer", "");
             } else if (element.hasAttribute("data-deleteInReducer")) {
                 // previously hidden element is now visible

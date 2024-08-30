@@ -38,7 +38,13 @@ export class HTMLReducer {
 
     nonVisibleNodesSelector: string[] = ["[data-deleteInReducer]"];
 
-    miscTagsToRemove: string[] = ["svg", "cookieJar", "iframe", "nocontent","template"];
+    miscTagsToRemove: string[] = [
+        "svg",
+        "cookieJar",
+        "iframe",
+        "nocontent",
+        "template",
+    ];
 
     mediaElementSelectors: string[] = [
         "img",
@@ -106,12 +112,12 @@ export class HTMLReducer {
         this.removeNodes(doc, this.scriptTagsSelector, this.removeScripts);
         this.removeNodes(doc, this.cookieJarsSelector, this.removeCookieJars);
         this.removeNodes(doc, this.miscTagsToRemove, this.removeMiscTags);
-        
+
         this.removeNodes(
             doc,
             this.nonVisibleNodesSelector,
             this.removeNonVisibleNodes,
-        );    
+        );
 
         this.processMediaElements(doc);
         this.processClassAttributes(doc);
