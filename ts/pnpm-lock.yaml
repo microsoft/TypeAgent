@@ -1257,6 +1257,9 @@ importers:
       '@electron-toolkit/utils':
         specifier: ^2.0.0
         version: 2.0.1(electron@30.0.1)
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../agentSdk
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher

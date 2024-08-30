@@ -55,7 +55,7 @@ async function updateBrowserContext(
   }
   if (enable) {
     if (!context.agentContext.tabTitleIndex) {
-      context.context.tabTitleIndex = createTabTitleIndex();
+      context.agentContext.tabTitleIndex = createTabTitleIndex();
     }
 
     if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {
@@ -195,12 +195,13 @@ function sendSiteTranslatorStatus(
 
 async function handleTabIndexActions(
   action: any,
-  context: DispatcherAgentContext<BrowserActionContext>,
+  context: SessionContext<BrowserActionContext>,
   requestId: string | undefined,
 ) {
-  const webSocketEndpoint = context.context.webSocket;
+  const webSocketEndpoint = context.agentContext.webSocket;
+  const tabTitleIndex = context.agentContext.tabTitleIndex;
 
-  if (webSocketEndpoint && context.context.tabTitleIndex) {
+  if (webSocketEndpoint && tabTitleIndex) {
     try {
       const actionName =
         action.actionName ?? action.fullActionName.split(".").at(-1);
@@ -208,7 +209,7 @@ async function handleTabIndexActions(
 
       switch (actionName) {
         case "getTabIdFromIndex": {
-          const matchedTabs = await context.context.tabTitleIndex.search(
+          const matchedTabs = await tabTitleIndex.search(
             action.parameters.query,
             1,
           );
@@ -220,7 +221,7 @@ async function handleTabIndexActions(
           break;
         }
         case "addTabIdToIndex": {
-          await context.context.tabTitleIndex.addOrUpdate(
+          await tabTitleIndex.addOrUpdate(
             action.parameters.title,
             action.parameters.id,
           );
@@ -228,12 +229,12 @@ async function handleTabIndexActions(
           break;
         }
         case "deleteTabIdFromIndex": {
-          await context.context.tabTitleIndex.remove(action.parameters.id);
+          await tabTitleIndex.remove(action.parameters.id);
           responseBody = "OK";
           break;
         }
         case "resetTabIdToIndex": {
-          await context.context.tabTitleIndex.reset();
+          await tabTitleIndex.reset();
           responseBody = "OK";
           break;
         }
