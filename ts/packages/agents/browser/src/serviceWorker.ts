@@ -82,7 +82,7 @@ async function ensureWebsocketConnected() {
             const data = JSON.parse(text) as WebSocketMessage;
             if (data.target == "browser") {
                 if (data.messageType == "browserActionRequest") {
-                    const respose = await runBrowserAction(data.body);
+                    const response = await runBrowserAction(data.body);
                     webSocket.send(
                         JSON.stringify({
                             source: data.target,
