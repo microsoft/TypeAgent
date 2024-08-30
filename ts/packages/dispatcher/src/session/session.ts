@@ -286,11 +286,6 @@ export class Session {
         this.cacheData = sessionData.cacheData;
     }
 
-    public get useTranslators() {
-        return Object.entries(this.config.translators)
-            .filter(([, value]) => value)
-            .map(([name]) => name);
-    }
     public get explainerName() {
         return this.config.explainerName;
     }

@@ -487,7 +487,7 @@ export function setSource(
 
 export function updateMetrics(div: HTMLDivElement, metrics?: IMessageMetrics) {
     if (metrics) {
-        // clear out previous perf datanpm
+        // clear out previous perf data
         div.innerHTML = "";
 
         let timeDiv = document.createElement("div");
@@ -1005,7 +1005,7 @@ export class ChatView {
                         source: source,
                         actionIndex: actionIndex,
                     },
-                    false,
+                    true,
                 );
                 if (result.nextRefreshMs !== -1) {
                     this.dynamicDisplays.push({
@@ -1032,7 +1032,7 @@ export class ChatView {
                         source: source,
                         actionIndex: actionIndex,
                     },
-                    false,
+                    true,
                 );
             }
 
@@ -1106,13 +1106,13 @@ export class ChatView {
         }
     }
 
-    addAgentMessage(msg: IAgentMessage, focus = true) {
+    addAgentMessage(msg: IAgentMessage, dynamicUpdate = false) {
         const text: string = msg.message;
         const source: string = msg.source;
 
         const messageContainer = this.ensureAgentMessage(
             msg,
-            focus,
+            !dynamicUpdate,
         ) as HTMLDivElement;
         const message = messageContainer.lastChild
             ?.previousSibling as HTMLDivElement;
@@ -1122,12 +1122,12 @@ export class ChatView {
 
         setSource(messageContainer, source, this.agents);
         setContent(message, text);
-        updateMetrics(
-            messageContainer.lastChild as HTMLDivElement,
-            msg.metrics,
-        );
 
-        if (focus) {
+        if (!dynamicUpdate) {
+            updateMetrics(
+                messageContainer.lastChild as HTMLDivElement,
+                msg.metrics,
+            );
             this.chatInputFocus();
         }
     }

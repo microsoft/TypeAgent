@@ -4,7 +4,6 @@
 import { Action, Actions } from "agent-cache";
 import {
     CommandHandlerContext,
-    changeContextConfig,
     getAppAgent,
 } from "../handlers/common/commandHandlerContext.js";
 import registerDebug from "debug";
@@ -25,6 +24,7 @@ import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
 import { getUserProfileDir } from "../utils/userData.js";
 
+const debugAgent = registerDebug("typeagent:agent");
 const debugActions = registerDebug("typeagent:actions");
 
 export async function initializeActionContext(agents: Map<string, AppAgent>) {
@@ -94,10 +94,10 @@ function createSessionContext(
             return context.requestIO.type;
         },
         status(message: string) {
-            context.requestIO.status(message);
+            context.requestIO.status(message, name);
         },
         success(message: string) {
-            context.requestIO.success(message);
+            context.requestIO.success(message, name);
         },
         setActionStatus(message: string, actionIndex: number) {
             context.requestIO.setActionStatus(message, actionIndex, name);
@@ -113,29 +113,45 @@ function createSessionContext(
         get requestId() {
             return context.requestId;
         },
-        get currentTranslatorName() {
-            return context.currentTranslatorName;
-        },
         get sessionStorage() {
             return storage;
         },
         get profileStorage() {
             return profileStorage;
         },
-        set currentTranslatorName(value: string) {
-            context.currentTranslatorName = value;
-        },
         issueCommand(command: string) {
             return processCommandNoLock(command, context);
         },
-        async toggleAgent(name: string, enable: boolean) {
-            await changeContextConfig(
-                {
-                    translators: { [name]: enable },
-                    actions: { [name]: enable },
-                },
-                context,
-            );
+        async toggleTransientAgent(subAgentName: string, enable: boolean) {
+            if (!subAgentName.startsWith(`${name}.`)) {
+                throw new Error(`Invalid sub agent name: ${subAgentName}`);
+            }
+            if (context.transientAgents[subAgentName] === undefined) {
+                throw new Error(
+                    `Transient sub agent not found: ${subAgentName}`,
+                );
+            }
+
+            if (context.transientAgents[subAgentName] === enable) {
+                return;
+            }
+
+            // acquire the lock to prevent change the state while we are processing a command.
+            // WARNING: deadlock if this is call because we are processing a request
+            return context.commandLock(async () => {
+                debugAgent(
+                    `Toggle transient agent: ${subAgentName} to ${enable}`,
+                );
+                context.transientAgents[subAgentName] = enable;
+                // Because of the embedded switcher, we need to clear the cache.
+                context.translatorCache.clear();
+                if (enable) {
+                    // REVIEW: is switch current translator the right behavior?
+                    context.lastActionTranslatorName = subAgentName;
+                } else if (context.lastActionTranslatorName === subAgentName) {
+                    context.lastActionTranslatorName = name;
+                }
+            });
         },
     };
     (sessionContext as any).conversationManager = context.conversationManager;
@@ -156,6 +172,7 @@ export async function updateActionContext(
         } catch (e: any) {
             context.requestIO.error(
                 `[${translatorName}]: Failed to ${enable ? "enable" : "disable"} action: ${e.message}`,
+                translatorName,
             );
             failed[translatorName] = !enable;
             delete newChanged[translatorName];
@@ -228,8 +245,8 @@ async function executeAction(
     const appAgentName = getAppAgentName(translatorName);
     const appAgent = getAppAgent(appAgentName, context);
 
-    // Update the current translator.
-    context.currentTranslatorName = translatorName;
+    // Update the last action translator.
+    context.lastActionTranslatorName = translatorName;
 
     if (appAgent.executeAction === undefined) {
         throw new Error(
@@ -264,7 +281,7 @@ async function executeAction(
         debugActions(turnImpressionToString(result));
     }
     if (result.error !== undefined) {
-        context.requestIO.error(result.error);
+        context.requestIO.error(result.error, translatorName);
         context.chatHistory.addEntry(
             `Action ${action.fullActionName} failed: ${result.error}`,
             [],
@@ -275,7 +292,7 @@ async function executeAction(
         actionContext.actionIO.setActionDisplay(result.displayText);
         if (result.dynamicDisplayId !== undefined) {
             context.clientIO?.setDynamicDisplay(
-                appAgentName,
+                translatorName,
                 context.requestId,
                 actionIndex,
                 result.dynamicDisplayId,

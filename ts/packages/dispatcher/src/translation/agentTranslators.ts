@@ -30,6 +30,7 @@ export type TranslatorConfig = {
 
     defaultEnabled: boolean;
     actionDefaultEnabled: boolean;
+    transient: boolean;
 };
 
 function collectTranslatorConfigs(
@@ -39,9 +40,11 @@ function collectTranslatorConfigs(
     emojiChar: string,
     defaultEnabled: boolean,
     actionDefaultEnabled: boolean,
+    transient: boolean,
 ) {
     defaultEnabled = config.defaultEnabled ?? defaultEnabled;
     actionDefaultEnabled = config.actionDefaultEnabled ?? actionDefaultEnabled;
+    transient = config.transient ?? transient;
 
     if (config.schema) {
         debugConfig(`Adding translator '${name}'`);
@@ -50,6 +53,7 @@ function collectTranslatorConfigs(
             ...config.schema,
             defaultEnabled,
             actionDefaultEnabled,
+            transient,
         };
     }
 
@@ -63,6 +67,7 @@ function collectTranslatorConfigs(
                 emojiChar,
                 defaultEnabled,
                 actionDefaultEnabled,
+                transient,
             );
         }
     }
@@ -81,6 +86,7 @@ const translatorConfigs: { [key: string]: TranslatorConfig } =
                 emojiChar,
                 true, // default to true if not specified
                 true, // default to true if not specified
+                false, // default to false if not specified
             );
         }
         return translatorConfigs;
@@ -199,6 +205,7 @@ function ensureInjectedTranslatorConfig() {
 }
 
 function getInjectedTranslatorConfigs(
+    translatorName: string,
     activeTranslators: { [key: string]: boolean } | undefined,
 ) {
     if (activeTranslators === undefined) {
@@ -207,7 +214,9 @@ function getInjectedTranslatorConfigs(
     return ensureInjectedTranslatorConfig()
         .filter(
             ([name, config]) =>
-                activeTranslators[name] ?? config.defaultEnabled,
+                (name !== translatorName && // don't include itself
+                    activeTranslators[name]) ??
+                config.defaultEnabled,
         )
         .map(([_, config]) => config);
 }
@@ -224,7 +233,10 @@ function getInjectedSchemaDefs(
     multipleActions: boolean = false,
 ): TranslatorSchemaDef[] {
     // Add all injected schemas
-    const injectSchemaConfigs = getInjectedTranslatorConfigs(activeTranslators);
+    const injectSchemaConfigs = getInjectedTranslatorConfigs(
+        translatorName,
+        activeTranslators,
+    );
     const injectedSchemaDefs = injectSchemaConfigs.map(getTranslatorSchemaDef);
 
     // subAction for multiple action

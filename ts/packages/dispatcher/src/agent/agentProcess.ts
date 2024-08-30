@@ -189,9 +189,6 @@ function createSessionContextShim(
     };
     return {
         agentContext: context,
-        get currentTranslatorName(): string {
-            throw new Error("NYI");
-        },
         agentIO,
         get requestId(): string {
             throw new Error("NYI");
@@ -206,8 +203,11 @@ function createSessionContextShim(
                 command,
             });
         },
-        toggleAgent: async (name: string, enable: boolean): Promise<void> => {
-            return rpc.invoke(AgentContextInvokeAPI.ToggleAgent, {
+        toggleTransientAgent: async (
+            name: string,
+            enable: boolean,
+        ): Promise<void> => {
+            return rpc.invoke(AgentContextInvokeAPI.ToggleTransientAgent, {
                 contextId,
                 name,
                 enable,

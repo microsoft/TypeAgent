@@ -8,6 +8,7 @@ export type TopLevelTranslatorConfig = {
 export type HierarchicalTranslatorConfig = {
     defaultEnabled?: boolean;
     actionDefaultEnabled?: boolean;
+    transient?: boolean; // whether the translator is transient, default is false
     schema?: {
         description: string;
         schemaFile: string;
@@ -80,9 +81,10 @@ export interface SessionContext<T = any> {
     readonly requestId: RequestId;
     readonly sessionStorage: Storage | undefined;
     readonly profileStorage: Storage; // storage that are preserved across sessions
-    currentTranslatorName: string;
+
+    // can only toggle the sub agent of the current agent
+    toggleTransientAgent(agentName: string, active: boolean): Promise<void>;
     issueCommand(command: string): Promise<void>;
-    toggleAgent(name: string, enable: boolean): Promise<void>;
 }
 
 // TODO: only utf8 is supported for now.

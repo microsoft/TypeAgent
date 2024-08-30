@@ -11,6 +11,7 @@
     "paleoBioDb": {
       "defaultEnabled": false,
       "actionDefaultEnabled": false,
+      "transient": true,
       "schema": {
         "description": "This enables users to explore paleological data. Users can filter fossil data by location, by geological time and by taxon.",
         "schemaFile": "./paleoBioDb/paleoBioDbSchema.mts",
@@ -20,6 +21,7 @@
     "crossword": {
       "defaultEnabled": false,
       "actionDefaultEnabled": false,
+      "transient": true,
       "schema": {
         "description": "This allows users to interact with a crossword puzzle.",
         "schemaFile": "./crossword/schema/userActions.mts",
@@ -29,6 +31,7 @@
     "commerce": {
       "defaultEnabled": false,
       "actionDefaultEnabled": false,
+      "transient": true,
       "schema": {
         "description": "This allows users to interact with e-commerce websites to find, compare and purchase various products.",
         "schemaFile": "./commerce/schema/userActions.mts",

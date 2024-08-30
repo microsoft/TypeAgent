@@ -36,9 +36,9 @@ import {
 } from "../../session/session.js";
 import {
     getDefaultTranslatorName,
-    getAppAgentName,
     getTranslatorNames,
     loadAgentJsonTranslator,
+    getTranslatorConfigs,
 } from "../../translation/agentTranslators.js";
 import { getCacheFactory } from "../../utils/cacheFactory.js";
 import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
@@ -80,7 +80,7 @@ export type CommandHandlerContext = {
 
     // Runtime context
     commandLock: Limiter; // Make sure we process one command at a time.
-    currentTranslatorName: string;
+    lastActionTranslatorName: string;
     translatorCache: Map<string, TypeChatJsonTranslatorWithStreaming<object>>;
     agentCache: AgentCache;
     action: { [key: string]: any };
@@ -90,6 +90,8 @@ export type CommandHandlerContext = {
     localWhisper: ChildProcess | undefined;
     requestId?: RequestId;
     chatHistory: ChatHistory;
+    transientAgents: { [key: string]: boolean };
+
     // For @correct
     lastRequestAction?: RequestAction;
     lastExplanation?: object;
@@ -118,7 +120,7 @@ export function getTranslator(
     const newTranslator = loadAgentJsonTranslator(
         translatorName,
         config.models.translator,
-        config.switch.inline ? config.translators : undefined,
+        config.switch.inline ? getActiveTranslators(context) : undefined,
         config.multipleActions,
     );
     const streamingTranslator = enableJsonTranslatorStreaming(newTranslator);
@@ -240,12 +242,7 @@ export async function initializeCommandHandlerContext(
         dblogging: true,
         clientIO,
         requestIO: clientIO
-            ? getRequestIO(
-                  undefined,
-                  clientIO,
-                  undefined,
-                  getDefaultTranslatorName(),
-              )
+            ? getRequestIO(undefined, clientIO, undefined)
             : clientIO === undefined
               ? getConsoleRequestIO(stdio)
               : getNullRequestIO(),
@@ -253,7 +250,7 @@ export async function initializeCommandHandlerContext(
         // Runtime context
         commandLock: createLimiter(1), // Make sure we process one command at a time.
         agentCache: await getAgentCache(session, logger),
-        currentTranslatorName: getDefaultTranslatorName(), // REVIEW: just default to the first one on initialize?
+        lastActionTranslatorName: getDefaultTranslatorName(), // REVIEW: just default to the first one on initialize?
         translatorCache: new Map<string, TypeChatJsonTranslator<object>>(),
         currentScriptDir: process.cwd(),
         action: await initializeActionContext(agents),
@@ -261,6 +258,11 @@ export async function initializeCommandHandlerContext(
         logger,
         serviceHost: serviceHost,
         localWhisper: undefined,
+        transientAgents: Object.fromEntries(
+            getTranslatorConfigs()
+                .filter(([, config]) => config.transient)
+                .map(([name]) => [name, false]),
+        ),
     };
 
     context.requestIO.context = context;
@@ -378,4 +380,42 @@ export function getAppAgent(
         throw new Error(`Invalid dispatcher agent name: ${appAgentName}`);
     }
     return appAgent;
+}
+
+export function getActiveTranslatorList(context: CommandHandlerContext) {
+    return Object.entries(context.session.getConfig().translators)
+        .filter(
+            ([name, value]) => value && context.transientAgents[name] !== false,
+        )
+        .map(([name]) => name);
+}
+
+export function getActiveTranslators(context: CommandHandlerContext) {
+    const result = { ...context.session.getConfig().translators };
+    for (const [name, enabled] of Object.entries(context.transientAgents)) {
+        if (enabled === false) {
+            result[name] = false;
+        }
+    }
+    return result;
+}
+
+export function isTranslatorEnabled(
+    translatorName: string,
+    context: CommandHandlerContext,
+) {
+    return (
+        context.session.getConfig().translators[translatorName] === true &&
+        context.transientAgents[translatorName] !== false
+    );
+}
+
+export function isActionEnabled(
+    translatorName: string,
+    context: CommandHandlerContext,
+) {
+    return (
+        context.session.getConfig().actions[translatorName] === true &&
+        context.transientAgents[translatorName] !== false
+    );
 }

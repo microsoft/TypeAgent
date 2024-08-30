@@ -81,20 +81,11 @@ async function updateBrowserContext(
                   await getBoardSchema(context);
                 sendSiteTranslatorStatus(data.body, "initialized", context);
               }
-
-              if (context.currentTranslatorName !== data.body) {
-                await context.toggleAgent(data.body, true);
-
-                context.currentTranslatorName = data.body;
-              }
+              await context.toggleTransientAgent(data.body, true);
               break;
             }
             case "disableSiteTranslator": {
-              if (context.currentTranslatorName == data.body) {
-                await context.toggleAgent(data.body, false);
-
-                context.currentTranslatorName = "browser";
-              }
+              await context.toggleTransientAgent(data.body, false);
               break;
             }
             case "confirmAction": {
