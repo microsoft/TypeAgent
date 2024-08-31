@@ -112,6 +112,7 @@ export class ChatInput {
     micButton: HTMLButtonElement;
     picButton: HTMLButtonElement;
     camButton: HTMLButtonElement;
+    dragTemp: string = "";
 
     constructor(
         speechInfo: SpeechInfo,
@@ -139,13 +140,15 @@ export class ChatInput {
             e.preventDefault();
             console.log(e);
 
+            this.dragTemp = this.textarea.getTextEntry().innerHTML;
+
             this.textarea.getTextEntry().innerText = "Drop image files here...";
             this.inputContainer.classList.add("chat-input-drag");
         };
 
-        this.inputContainer.ondragleave = (e: DragEvent) => {
-            this.clear();
+        this.inputContainer.ondragleave = (e: DragEvent) => {            
             this.inputContainer.classList.remove("chat-input-drag");
+            this.textarea.getTextEntry().innerHTML = this.dragTemp;
             e.preventDefault();
         };
 

@@ -2,16 +2,17 @@
 // Licensed under the MIT License.
 
 import {
-    DispatcherAction,
-    DispatcherAgent,
-    DispatcherAgentContext,
+    ActionContext,
+    AppAction,
+    AppAgent,
+    SessionContext,
     Storage,
     TurnImpression,
     createTurnImpressionFromDisplay,
 } from "@typeagent/agent-sdk";
 import { DescribeAction, PhotoAction } from "./photoSchema.js";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializePhotoContext,
         updateAgentContext: updatePhotoContext,
@@ -25,16 +26,16 @@ type PhotoActionContext = {
 };
 
 async function executePhotoAction(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<PhotoActionContext>,
+    action: AppAction,
+    context: ActionContext<PhotoActionContext>,
 ) {
-    let result = await handlePhotoAction(action as PhotoAction, context.context);
+    let result = await handlePhotoAction(action as PhotoAction, context);
     return result;
 }
 
 async function photoValidateWildcardMatch(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<PhotoActionContext>,
+    action: AppAction,
+    context: SessionContext<PhotoActionContext>,
 ) {
     if (action.actionName === "describePhoto") {
         // TODO: implement?
@@ -48,7 +49,7 @@ async function initializePhotoContext() {
 
 async function updatePhotoContext(
     enable: boolean,
-    context: DispatcherAgentContext<PhotoActionContext>,
+    context: SessionContext<PhotoActionContext>,
 ): Promise<void> {
     if (enable && context.sessionStorage) {
         // context.context.store = await createListStoreForSession(
@@ -56,13 +57,13 @@ async function updatePhotoContext(
         //     "lists.json",
         // );
     } else {
-        context.context.store = undefined;
+        //context.context.store = undefined;
     }
 }
 
 async function handlePhotoAction(
     action: PhotoAction,
-    photoContext: PhotoActionContext,
+    photoContext: ActionContext<PhotoActionContext>,
 ) {
     let result: TurnImpression | undefined = undefined;
     let displayText: string | undefined = undefined;

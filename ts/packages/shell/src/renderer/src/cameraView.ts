@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { iconAccept, iconCamera, iconCancel } from "./icon";
+import { iconAccept, iconCamera, iconCancel, iconRefresh } from "./icon";
 
 export class CameraView {
     private mainContainer: HTMLDivElement;
@@ -13,6 +13,10 @@ export class CameraView {
     private streaming: boolean = false;
     private mediaStream: MediaStream | undefined = undefined;
     private pictureDiv: HTMLDivElement;
+    private snapButton: HTMLButtonElement = document.createElement("button");
+    private acceptButton: HTMLButtonElement = document.createElement("button");
+    private cancelButton: HTMLButtonElement = document.createElement("button");
+    private retryButon: HTMLButtonElement = document.createElement("button");
 
     constructor(saveImageCallback: (image: HTMLImageElement) => void) {
         const videoContainer: HTMLDivElement = document.createElement("div");
@@ -20,29 +24,32 @@ export class CameraView {
         const buttonDiv: HTMLDivElement = document.createElement("div");
         this.canvas = document.createElement("canvas");
         this.video = document.createElement("video");
-        const snapButton: HTMLButtonElement = document.createElement("button");
-        const acceptButton: HTMLButtonElement = document.createElement("button");
-        const cancelButton: HTMLButtonElement = document.createElement("button");
         this.img = document.createElement("img");
 
         this.video.id = "video";
-        snapButton.id = "snapButton";
+        this.snapButton.id = "snapButton";
         this.canvas.id = "canvas";
 
         const cameraIcon = iconCamera("white");
         cameraIcon.className = "camera-button-image";
-        snapButton.append(cameraIcon);
-        snapButton.className = "camera-button camera-button-center"
-        snapButton.onclick = (e: MouseEvent) => {
+        this.snapButton.append(cameraIcon);
+        this.snapButton.className = "camera-button camera-button-center"
+        this.snapButton.onclick = (e: MouseEvent) => {
               this.takePicture();
               e.preventDefault();
+
+              this.acceptButton.classList.remove("camera-hidden");
+              this.snapButton.classList.add("camera-hidden");
+              this.retryButon.classList.remove("camera-hidden");
+              this.video.classList.add("camera-hidden");
+              this.pictureDiv.classList.remove("camera-hidden");
         };
 
         const acceptIcon = iconAccept("white");
         acceptIcon.className = "camera-button-image";
-        acceptButton.append(acceptIcon);
-        acceptButton.className = "camera-button camera-button-grouped";
-        acceptButton.onclick = () => {
+        this.acceptButton.append(acceptIcon);
+        this.acceptButton.className = "camera-button camera-button-grouped camera-hidden";
+        this.acceptButton.onclick = () => {
             this.toggleVisibility();
 
             if (saveImageCallback) {
@@ -52,22 +59,36 @@ export class CameraView {
 
         const closeIcon = iconCancel("white");
         closeIcon.className = "camera-button-image";
-        cancelButton.append(closeIcon);
-        cancelButton.className = "camera-button camera-button-grouped";
-        cancelButton.onclick = () => {
+        this.cancelButton.append(closeIcon);
+        this.cancelButton.className = "camera-button camera-button-grouped";
+        this.cancelButton.onclick = () => {
             this.toggleVisibility();
         }
 
+        const retryIcon = iconRefresh("white");
+        retryIcon.className = "camera-button-image";
+        this.retryButon.append(retryIcon);
+        this.retryButon.className = "camera-button camera-button-grouped camera-hidden";
+        this.retryButon.onclick = () => {
+            this.pictureDiv.classList.add("camera-hidden");
+            this.acceptButton.classList.add("camera-hidden");
+            this.retryButon.classList.add("camera-hidden");
+            this.video.classList.remove("camera-hidden");
+            this.snapButton.classList.remove("camera-hidden");
+        }
+
         buttonDiv.className = "camera-buttons";
-        buttonDiv.append(acceptButton);
-        buttonDiv.append(cancelButton);
+        buttonDiv.append(this.snapButton);
+        buttonDiv.append(this.acceptButton);
+        buttonDiv.append(this.cancelButton);
+        buttonDiv.append(this.retryButon);
 
         this.pictureDiv.className = "picture";        
-        //this.pictureDiv.append(this.img);     
-        this.pictureDiv.append(buttonDiv);
 
         videoContainer.append(this.video);
-        videoContainer.append(snapButton);
+        //videoContainer.append(this.pictureDiv);
+        videoContainer.className = "picture"; 
+
         this.video.oncanplay = () => {
             if (!this.streaming) {
                 this.height = this.video.videoHeight / (this.video.videoWidth / this.width);
@@ -83,8 +104,9 @@ export class CameraView {
         this.mainContainer = document.createElement("div");
         this.mainContainer.className = "camera-container camera-hidden";
         this.mainContainer.append(videoContainer);
-        this.mainContainer.append(this.canvas);
         this.mainContainer.append(this.pictureDiv);
+        this.mainContainer.append(this.canvas);
+        this.mainContainer.append(buttonDiv);
     }
 
     // Capture a photo by fetching the current contents of the video
@@ -109,7 +131,7 @@ export class CameraView {
         
                   this.img = document.createElement("img");
                   this.img.setAttribute("src", url);
-                  this.pictureDiv.lastChild?.before(this.img);
+                  this.pictureDiv.append(this.img);
             }
           });
         } else {
@@ -155,6 +177,12 @@ export class CameraView {
     public toggleVisibility() {
         if (this.getContainer().classList.contains("camera-hidden")) {
             this.getContainer().classList.remove("camera-hidden");
+            this.video.classList.remove("camera-hidden");
+            this.pictureDiv.classList.add("camera-hidden");
+            this.acceptButton.classList.add("camera-hidden");
+            this.snapButton.classList.remove("camera-hidden");
+            this.retryButon.classList.add("camera-hidden");
+
             this.startCamera();
         } else {
             this.getContainer().classList.add("camera-hidden");
