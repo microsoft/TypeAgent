@@ -112,7 +112,7 @@ export class ChatInput {
     micButton: HTMLButtonElement;
     picButton: HTMLButtonElement;
     camButton: HTMLButtonElement;
-    dragTemp: string = "";
+    dragTemp: string | undefined = undefined;
 
     constructor(
         speechInfo: SpeechInfo,
@@ -131,30 +131,43 @@ export class ChatInput {
         });
         this.inputContainer.appendChild(this.textarea.getTextEntry());
 
-        // this.inputContainer.ondragover = (e: DragEvent) => {
-        //     console.log(e);
-        //     e.preventDefault();
-        // };
-
-        this.inputContainer.ondragenter = (e: DragEvent) => {
+        this.textarea.getTextEntry().ondragenter = (e: DragEvent) => {
             e.preventDefault();
             console.log(e);
 
-            this.dragTemp = this.textarea.getTextEntry().innerHTML;
+            if (this.dragTemp === undefined) { 
+                this.dragTemp = this.textarea.getTextEntry().innerHTML;
+            }
+
+            console.log("enter " + this.dragTemp);
 
             this.textarea.getTextEntry().innerText = "Drop image files here...";
-            this.inputContainer.classList.add("chat-input-drag");
+            this.textarea.getTextEntry().classList.add("chat-input-drag");
         };
 
-        this.inputContainer.ondragleave = (e: DragEvent) => {            
-            this.inputContainer.classList.remove("chat-input-drag");
-            this.textarea.getTextEntry().innerHTML = this.dragTemp;
+        this.textarea.getTextEntry().ondragleave = (e: DragEvent) => {            
+            this.textarea.getTextEntry().classList.remove("chat-input-drag");
+
+            if (this.dragTemp) {
+                this.textarea.getTextEntry().innerHTML = this.dragTemp;
+                this.dragTemp = undefined;
+            }
             e.preventDefault();
+
+            console.log("leave " + this.dragTemp);
         };
 
-        this.inputContainer.ondrop = async (e: DragEvent) => {
+        this.textarea.getTextEntry().ondrop = async (e: DragEvent) => {
             console.log(e);
-            this.clear();
+
+            this.textarea.getTextEntry().classList.remove("chat-input-drag");
+            if (this.dragTemp) {
+                this.textarea.getTextEntry().innerHTML = this.dragTemp;                
+            } else {
+                this.clear();
+            }
+
+            this.dragTemp = undefined;
 
             if (e.dataTransfer != null && e.dataTransfer.files.length > 0) {
                 let file: File = e.dataTransfer.files[0];
@@ -254,6 +267,7 @@ export class ChatInput {
 
     clear() {
         this.textarea.getTextEntry().innerText = "";
+        this.dragTemp = undefined;
     }
 
     getInputContainer() {

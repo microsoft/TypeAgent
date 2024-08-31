@@ -156,7 +156,10 @@ document.addEventListener("DOMContentLoaded", function () {
     };
 
     const chatView = new ChatView(idGenerator, speechInfo, agents);
-    const cameraView = new CameraView((image: HTMLImageElement) => { chatView.chatInput.textarea.textEntry.append(image); });
+    const cameraView = new CameraView((image: HTMLImageElement) => { 
+        image.classList.add("chat-inpput-dropImage");
+        chatView.chatInput.textarea.textEntry.append(image); 
+    });
     
     wrapper.appendChild(cameraView.getContainer());
     wrapper.appendChild(chatView.getMessageElm());
