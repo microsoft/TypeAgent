@@ -10,7 +10,7 @@ To deploy the extension locally in your vscode environment, run `pnpm run deploy
 
 ## Features
 
-1. Launch the vschave ode after you installed the extension.
+1. Launch the vscode after you installed the extension.
 2. Launch the typeagent shell or the typeagent cli. These are integrated with the extension and can send commands. You can issue commands from this interface such as:
    - Create a text file
    - Create a readme file with sample table with two rows
@@ -26,7 +26,7 @@ To deploy the extension locally in your vscode environment, run `pnpm run deploy
 
 ## Requirements
 
-This extension works is integrated to work woth the code dipatcher agent. You can manually turn the code agents on using the typeagent cli or shell.
+This extension works is integrated to work with the code app agent in the dispatcher. You can manually turn the code app agent on using the typeagent cli or shell.
 
 ## Trademarks
 

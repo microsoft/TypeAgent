@@ -1,14 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    SessionContext,
-    AppAgent,
-    AppAction,
-    ActionContext,
-} from "@typeagent/agent-sdk";
-
-import { executeCorrectionAction } from "../action/correctionActionHandler.js";
+import { AppAgent, AppAction, ActionContext } from "@typeagent/agent-sdk";
 import { executeSessionAction } from "../action/system/sessionActionHandler.js";
 import { executeConfigAction } from "../action/system/configActionHandler.js";
 
@@ -17,9 +10,6 @@ export function loadInlineAgent(name: string): AppAgent {
 }
 
 const inlineHandlers: { [key: string]: AppAgent } = {
-    correction: {
-        executeAction: executeCorrectionAction,
-    },
     system: {
         executeAction: executeSystemAction,
     },

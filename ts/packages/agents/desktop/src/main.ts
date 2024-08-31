@@ -73,15 +73,17 @@ async function ensureWebsocketConnected() {
         const data = JSON.parse(text) as WebSocketMessage;
         if (data.target == "desktop") {
             if (data.messageType == "desktopActionRequest") {
-                const message = await runDesktopActions(data.body);
+                const message = await runDesktopActions(data.body.action);
 
                 webSocket.send(
                     JSON.stringify({
                         source: data.target,
                         target: data.source,
                         messageType: "desktopActionResponse",
-                        id: data.id,
-                        body: message,
+                        body: {
+                            actionContextId: data.body.callId,
+                            message,
+                        },
                     }),
                 );
             }
