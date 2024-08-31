@@ -164,20 +164,14 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     };
 
-    const cameraView = new CameraView();
-    wrapper.appendChild(cameraView.getContainer());
-
     const chatView = new ChatView(idGenerator, speechInfo, agents);
+    const cameraView = new CameraView((image: HTMLImageElement) => { chatView.chatInput.textarea.textEntry.append(image); });
+    
+    wrapper.appendChild(cameraView.getContainer());
     wrapper.appendChild(chatView.getMessageElm());
 
     chatView.chatInput.camButton.onclick = () => {
-        if (cameraView.getContainer().classList.contains("camera-hidden")) {
-            cameraView.getContainer().classList.remove("camera-hidden");
-            cameraView.startCamera();
-        } else {
-            cameraView.getContainer().classList.add("camera-hidden");
-            cameraView.stopCamera();
-        }        
+        cameraView.toggleVisibility();
     }
 
     const settingsView = new SettingsView();
