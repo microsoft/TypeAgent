@@ -26,7 +26,7 @@ To deploy the extension locally in your vscode environment, run `pnpm run deploy
 
 ## Requirements
 
-This extension works is integrated to work woth the code dipatcher agent. You can manually turn the code agents on using the typeagent cli or shell. 
+This extension works is integrated to work woth the code dipatcher agent. You can manually turn the code agents on using the typeagent cli or shell.
 
 ## Trademarks
 

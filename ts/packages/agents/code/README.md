@@ -24,6 +24,7 @@ You can enable all the sub-agents as part of the code agent by running the follo
 @config action code*
 @config translator code*
 ```
+
 ## Trademarks
 
 This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
