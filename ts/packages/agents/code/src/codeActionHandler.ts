@@ -20,11 +20,15 @@ export function instantiate(): AppAgent {
 
 type CodeActionContext = {
     webSocket: WebSocket | undefined;
+    nextActionContextId: number;
+    actionContextMap: Map<number, ActionContext<CodeActionContext>>;
 };
 
 async function initializeCodeContext(): Promise<CodeActionContext> {
     return {
         webSocket: undefined,
+        nextActionContextId: 0,
+        actionContextMap: new Map(),
     };
 }
 
@@ -33,13 +37,15 @@ async function updateCodeContext(
     context: SessionContext<CodeActionContext>,
 ): Promise<void> {
     if (enable) {
-        if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {
+        const agentContext = context.agentContext;
+        if (agentContext.webSocket?.readyState === WebSocket.OPEN) {
             return;
         }
 
         const webSocket = await createWebSocket();
         if (webSocket) {
-            context.agentContext.webSocket = webSocket;
+            agentContext.webSocket = webSocket;
+            agentContext.actionContextMap = new Map();
             webSocket.onclose = (event: Object) => {
                 console.error("Code webSocket connection closed.");
                 context.agentContext.webSocket = undefined;
@@ -54,10 +60,17 @@ async function updateCodeContext(
                 ) {
                     switch (data.messageType) {
                         case "confirmAction": {
-                            const agentIO = context.agentIO;
-                            const requestId = context.requestId;
-                            if (agentIO && requestId && data.id === requestId) {
-                                agentIO.status(data.body);
+                            const actionContext =
+                                agentContext.actionContextMap.get(
+                                    data.body.actionContextId,
+                                );
+                            if (actionContext) {
+                                actionContext.actionIO.setActionDisplay(
+                                    data.body.message,
+                                );
+                                agentContext.actionContextMap.delete(
+                                    data.body.actionContextId,
+                                );
                             }
 
                             break;
@@ -81,17 +94,21 @@ async function executeCodeAction(
     action: AppAction,
     context: ActionContext<CodeActionContext>,
 ) {
-    const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
+    const agentContext = context.sessionContext.agentContext;
+    const webSocketEndpoint = agentContext.webSocket;
     if (webSocketEndpoint) {
         try {
-            const requestId = context.sessionContext.requestId;
+            const actionContextId = agentContext.nextActionContextId++;
+            agentContext.actionContextMap.set(actionContextId, context);
             webSocketEndpoint.send(
                 JSON.stringify({
                     source: "dispatcher",
                     target: "code",
                     messageType: "translatedAction",
-                    id: requestId,
-                    body: action,
+                    body: {
+                        actionContextId,
+                        action,
+                    },
                 }),
             );
         } catch {

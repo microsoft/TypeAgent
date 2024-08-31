@@ -79,8 +79,7 @@ function enableExecutionMode() {
 }
 
 async function loadModuleAgent(info: ModuleAppAgentInfo): Promise<AppAgent> {
-    // TODO: change default
-    const execMode = info.execMode ?? ExecutionMode.DispatcherProcess;
+    const execMode = info.execMode ?? ExecutionMode.SeparateProcess;
     if (enableExecutionMode() && execMode === ExecutionMode.SeparateProcess) {
         return createAgentProcessShim(`${info.name}/agent/handlers`);
     }

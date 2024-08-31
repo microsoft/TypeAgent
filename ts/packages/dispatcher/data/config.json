@@ -26,30 +26,23 @@
     },
     "browser": {
       "type": "module",
-      "name": "browser-automation"
+      "name": "browser-automation",
+      "execMode": "dispatcher"
     },
     "desktop": {
       "type": "module",
-      "name": "desktop-automation"
+      "name": "desktop-automation",
+      "execMode": "separate"
     },
     "code": {
       "type": "module",
-      "name": "code-agent"
+      "name": "code-agent",
+      "execMode": "separate"
     },
     "chat": {
       "type": "module",
-      "name": "chat-agent"
-    },
-    "correction": {
-      "emojiChar": "❌",
-      "defaultEnabled": false,
-      "schema": {
-        "description": "Correct previous action's translation",
-        "schemaFile": "./src/translation/correctionActionsSchema.ts",
-        "schemaType": "CorrectionAction",
-        "injected" : true,
-        "cached": false
-      }
+      "name": "chat-agent",
+      "execMode": "dispatcher"
     },
     "system": {
       "emojiChar": "🔧",
