@@ -81,7 +81,7 @@ async function ensureWebsocketConnected() {
                         target: data.source,
                         messageType: "desktopActionResponse",
                         body: {
-                            actionContextId: data.body.actionContextId,
+                            actionContextId: data.body.callId,
                             message,
                         },
                     }),

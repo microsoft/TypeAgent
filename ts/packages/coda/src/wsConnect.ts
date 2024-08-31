@@ -39,7 +39,7 @@ async function ensureWebsocketConnected() {
                     messageType: "confirmAction",
                     id: data.id,
                     body: {
-                        actionContextId: data.body.actionContextId,
+                        callId: data.body.callId,
                         message,
                     },
                 }),

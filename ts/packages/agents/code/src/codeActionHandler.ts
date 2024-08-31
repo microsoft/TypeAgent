@@ -19,25 +19,35 @@ export function instantiate(): AppAgent {
 }
 
 type CodeActionContext = {
+    enabled: Set<string>;
     webSocket: WebSocket | undefined;
-    nextActionContextId: number;
-    actionContextMap: Map<number, ActionContext<CodeActionContext>>;
+    nextCallId: number;
+    pendingCall: Map<
+        number,
+        {
+            resolve: () => void;
+            context: ActionContext<CodeActionContext>;
+        }
+    >;
 };
 
 async function initializeCodeContext(): Promise<CodeActionContext> {
     return {
+        enabled: new Set(),
         webSocket: undefined,
-        nextActionContextId: 0,
-        actionContextMap: new Map(),
+        nextCallId: 0,
+        pendingCall: new Map(),
     };
 }
 
 async function updateCodeContext(
     enable: boolean,
     context: SessionContext<CodeActionContext>,
+    translatorName: string,
 ): Promise<void> {
+    const agentContext = context.agentContext;
     if (enable) {
-        const agentContext = context.agentContext;
+        agentContext.enabled.add(translatorName);
         if (agentContext.webSocket?.readyState === WebSocket.OPEN) {
             return;
         }
@@ -45,10 +55,10 @@ async function updateCodeContext(
         const webSocket = await createWebSocket();
         if (webSocket) {
             agentContext.webSocket = webSocket;
-            agentContext.actionContextMap = new Map();
+            agentContext.pendingCall = new Map();
             webSocket.onclose = (event: Object) => {
                 console.error("Code webSocket connection closed.");
-                context.agentContext.webSocket = undefined;
+                agentContext.webSocket = undefined;
             };
             webSocket.onmessage = async (event: any) => {
                 const text = event.data.toString();
@@ -60,17 +70,19 @@ async function updateCodeContext(
                 ) {
                     switch (data.messageType) {
                         case "confirmAction": {
-                            const actionContext =
-                                agentContext.actionContextMap.get(
-                                    data.body.actionContextId,
+                            const pendingCall = agentContext.pendingCall.get(
+                                data.body.callId,
+                            );
+
+                            if (pendingCall) {
+                                agentContext.pendingCall.delete(
+                                    data.body.callId,
                                 );
-                            if (actionContext) {
-                                actionContext.actionIO.setActionDisplay(
+                                const { resolve, context } = pendingCall;
+                                context.actionIO.setActionDisplay(
                                     data.body.message,
                                 );
-                                agentContext.actionContextMap.delete(
-                                    data.body.actionContextId,
-                                );
+                                resolve();
                             }
 
                             break;
@@ -80,13 +92,16 @@ async function updateCodeContext(
             };
         }
     } else {
-        const webSocket = context.agentContext.webSocket;
-        if (webSocket) {
-            webSocket.onclose = null;
-            webSocket.close();
-        }
+        agentContext.enabled.delete(translatorName);
+        if (agentContext.enabled.size === 0) {
+            const webSocket = context.agentContext.webSocket;
+            if (webSocket) {
+                webSocket.onclose = null;
+                webSocket.close();
+            }
 
-        context.agentContext.webSocket = undefined;
+            context.agentContext.webSocket = undefined;
+        }
     }
 }
 
@@ -98,19 +113,24 @@ async function executeCodeAction(
     const webSocketEndpoint = agentContext.webSocket;
     if (webSocketEndpoint) {
         try {
-            const actionContextId = agentContext.nextActionContextId++;
-            agentContext.actionContextMap.set(actionContextId, context);
-            webSocketEndpoint.send(
-                JSON.stringify({
-                    source: "dispatcher",
-                    target: "code",
-                    messageType: "translatedAction",
-                    body: {
-                        actionContextId,
-                        action,
-                    },
-                }),
-            );
+            const callId = agentContext.nextCallId++;
+            return new Promise<void>((resolve) => {
+                agentContext.pendingCall.set(callId, {
+                    resolve,
+                    context,
+                });
+                webSocketEndpoint.send(
+                    JSON.stringify({
+                        source: "dispatcher",
+                        target: "code",
+                        messageType: "translatedAction",
+                        body: {
+                            callId,
+                            action,
+                        },
+                    }),
+                );
+            });
         } catch {
             throw new Error("Unable to contact code backend.");
         }
