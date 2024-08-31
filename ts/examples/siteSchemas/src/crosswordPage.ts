@@ -7,9 +7,8 @@ import { processRequests } from "typechat/interactive";
 import { BoardActions } from "./crossword/schema/actionSchema.js";
 import { CrosswordAgent } from "./crossword/translator.js";
 import jp from "jsonpath";
-//import { evaluateJsonProgram } from "typechat/ts";
 import {
-    CluesTextAndSelectorsList,
+    Crossword,
     CrosswordPresence,
 } from "./crossword/schema/bootstrapSchema.js";
 import { createBrowserConnector } from "./common/connector.js";
@@ -57,7 +56,7 @@ async function getBoardSchema(
 ) {
     const cachedSchema: any = await browser.getCurrentPageSchema();
     if (cachedSchema) {
-        return cachedSchema as CluesTextAndSelectorsList;
+        return cachedSchema as Crossword;
     } else {
         // check which fragment has a crossword
         let candidateFragments = [];
@@ -93,116 +92,14 @@ async function getBoardSchema(
                 await agent.getCluesTextWithSelectors(filteredFragments);
 
             if (cluesResponse.success) {
-                // TEMP: Do not write to cache
+                // TEMP: Do not write to cache while we experiment with different schemas and parsing approaches
                 // await browser.setCurrentPageSchema(url, cluesResponse.data);
-                return cluesResponse.data as CluesTextAndSelectorsList;
+                return cluesResponse.data as Crossword;
             }
         }
     }
     return undefined;
 }
-/*
-type Program = {
-    "@steps": FunctionCall[];
-};
-
-type FunctionCall = {
-    "@func": string;
-    "@args"?: Expression[];
-};
-
-type Expression = JsonValue | FunctionCall | ResultReference;
-
-type JsonValue =
-    | string
-    | number
-    | boolean
-    | null
-    | { [x: string]: Expression }
-    | Expression[];
-
-type ResultReference = {
-    "@ref": number;
-};
-
-function createUpdateCrosswordProgram(
-    text: string,
-    clueNumber: number,
-    direction: "across" | "down",
-): Program {
-    return {
-        "@steps": [
-            {
-                "@func": "getJsonObjectValue",
-                "@args": [
-                    `$.${direction}[?(@.number==${clueNumber})].cssSelector`,
-                ],
-            },
-            {
-                "@func": "clickOnElement",
-                "@args": [{ "@ref": 0 }],
-            },
-            {
-                "@func": "enterTextOnPage",
-                "@args": [text],
-            },
-        ],
-    };
-}
-
-function createGetClueTextProgram(
-    clueNumber: number,
-    direction: "across" | "down",
-): Program {
-    return {
-        "@steps": [
-            {
-                "@func": "getJsonObjectValue",
-                "@args": [`$.${direction}[?(@.number==${clueNumber})].text`],
-            },
-        ],
-    };
-}
-
-async function handleCall(func: string, args: any[]): Promise<unknown> {
-    switch (func) {
-        case "getJsonObjectValue":
-            const result = jp.query(boardState, args[0])[0];
-            return result;
-        case "clickOnElement":
-            return await browser.clickOn(args[0]);
-        case "enterTextOnPage":
-            return await browser.enterTextIn(args[0]);
-    }
-    return NaN;
-}
-*/
-/*
-async function translateCrosswordMessage(request: string) {
-    let message = "OK";
-    if (!boardState) {
-        console.log("Board state is missing");
-        return message;
-    }
-
-    const response = await agent.updateBoardFromCluesList(boardState, request);
-    if (!response.success) {
-        message = response.message;
-        return message;
-    }
-    const boardActions = response.data;
-    console.log(JSON.stringify(boardActions, undefined, 2));
-
-    for (let action of boardActions.actions) {
-        const actionName = action.actionName;
-        if (actionName === "enterText") {
-            browser.sendActionToBrowserAgent(action);
-        }
-    }
-
-    return message;
-}
-*/
 
 async function translateCrosswordMessage(request: string) {
     let message = "OK";
@@ -221,36 +118,6 @@ async function translateCrosswordMessage(request: string) {
     return message;
 }
 
-/*
-async function handleCrosswordAction_prev(action: any) {
-    let message = "OK";
-    if (boardState) {
-        const actionName =
-            action.actionName ?? action.fullActionName.split(".").at(-1);
-        if (actionName === "enterText") {
-            const program = createUpdateCrosswordProgram(
-                action.parameters.value,
-                action.parameters.clueNumber,
-                action.parameters.clueDirection,
-            );
-            const result = await evaluateJsonProgram(program, handleCall);
-            console.log(result);
-        }
-        if (actionName === "getClueValue") {
-            if (message === "OK") message = "";
-            const program = createGetClueTextProgram(
-                action.parameters.clueNumber,
-                action.parameters.clueDirection,
-            );
-            const result = await evaluateJsonProgram(program, handleCall);
-            console.log(result);
-        }
-    }
-
-    return message;
-}
-*/
-
 export async function handleCrosswordAction(action: any) {
     let message = "OK";
 
@@ -260,28 +127,33 @@ export async function handleCrosswordAction(action: any) {
     }
 
     if (action.actionName === "enterText") {
+        const direction = action.parameters.clueDirection;
+        const number = action.parameters.clueNumber;
+        const text = action.parameters.value;
         const selector = jp.value(
             boardState,
-            `$.${action.parameters.clueDirection}[?(@.number==${action.parameters.clueNumber})].cssSelector`,
+            `$.${direction}[?(@.number==${number})].cssSelector`,
         );
 
         if (!selector) {
-            message = `${action.parameters.clueNumber} ${action.parameters.clueDirection} is not a valid position for this crossword`;
+            message = `${number} ${direction} is not a valid position for this crossword`;
         } else {
             await browser.clickOn(selector);
-            await browser.enterTextIn(action.parameters.value);
-            message = `OK. Setting the value of ${action.parameters.clueNumber} ${action.parameters.clueDirection} to "${action.parameters.value}"`;
+            await browser.enterTextIn(text);
+            message = `OK. Setting the value of ${number} ${direction} to "${text}"`;
         }
     }
     if (action.actionName === "getClueValue") {
         if (message === "OK") message = "";
+        const direction = action.parameters.clueDirection;
+        const number = action.parameters.clueNumber;
         const selector = jp.value(
             boardState,
-            `$.${action.parameters.clueDirection}[?(@.number==${action.parameters.clueNumber})].text`,
+            `$.${direction}[?(@.number==${number})].text`,
         );
 
         if (!selector) {
-            message = `${action.parameters.clueNumber} ${action.parameters.clueDirection} is not a valid position for this crossword"`;
+            message = `${number} ${direction} is not a valid position for this crossword"`;
         } else {
             message = `The clue is: ${selector}`;
         }

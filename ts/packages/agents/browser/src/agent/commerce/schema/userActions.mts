@@ -54,7 +54,7 @@ export type UnknownAction = {
   };
 };
 
-export type ShoppingAction =
+export type ShoppingActions =
   | AddToCartAction
   | PickUpAtStoreAction
   | LookupAtStoreAction

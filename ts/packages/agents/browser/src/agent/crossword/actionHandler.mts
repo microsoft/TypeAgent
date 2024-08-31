@@ -6,7 +6,7 @@ import { ActionContext, SessionContext } from "@typeagent/agent-sdk";
 import { Crossword } from "./schema/pageSchema.mjs";
 import { CrosswordPresence } from "./schema/pageFrame.mjs";
 import { createCrosswordPageTranslator } from "./translator.mjs";
-import { BrowserActionContext } from "../browserActionHandler.mjs";
+import { BrowserActionContext } from "../actionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
 
 export async function getBoardSchema(
@@ -105,37 +105,42 @@ export async function handleCrosswordAction(
     throw new Error("No connection to browser session.");
   }
 
-  const browser: BrowserConnector =
-    context.sessionContext.agentContext.browserConnector;
+  const browser = context.sessionContext.agentContext.browserConnector;
+  const crosswordState = context.sessionContext.agentContext.crossWordState;
 
-  if (context.sessionContext.agentContext.crossWordState) {
+  if (crosswordState) {
     const actionName =
       action.actionName ?? action.fullActionName.split(".").at(-1);
     if (actionName === "enterText") {
+      const direction = action.parameters.clueDirection;
+      const number = action.parameters.clueNumber;
+      const text = action.parameters.value;
       const selector = jp.value(
-        context.sessionContext.agentContext.crossWordState,
-        `$.${action.parameters.clueDirection}[?(@.number==${action.parameters.clueNumber})].cssSelector`,
+        crosswordState,
+        `$.${direction}[?(@.number==${number})].cssSelector`,
       );
 
-      if (!selector) {
-        message = `${action.parameters.clueNumber} ${action.parameters.clueDirection} is not a valid position for this crossword`;
-      } else {
+      if (selector) {
         await browser.clickOn(selector);
-        await browser.enterTextIn(action.parameters.value);
-        message = `OK. Setting the value of ${action.parameters.clueNumber} ${action.parameters.clueDirection} to "${action.parameters.value}"`;
+        await browser.enterTextIn(text);
+        message = `OK. Setting the value of ${number} ${direction} to "${text}"`;
+      } else {
+        message = `${number} ${direction} is not a valid position for this crossword`;
       }
     }
     if (actionName === "getClueValue") {
       if (message === "OK") message = "";
+      const direction = action.parameters.clueDirection;
+      const number = action.parameters.clueNumber;
       const selector = jp.value(
-        context.sessionContext.agentContext.crossWordState,
-        `$.${action.parameters.clueDirection}[?(@.number==${action.parameters.clueNumber})].text`,
+        crosswordState,
+        `$.${direction}[?(@.number==${number})].text`,
       );
 
-      if (!selector) {
-        message = `${action.parameters.clueNumber} ${action.parameters.clueDirection} is not a valid position for this crossword"`;
-      } else {
+      if (selector) {
         message = `The clue is: ${selector}`;
+      } else {
+        message = `${number} ${direction} is not a valid position for this crossword"`;
       }
     }
   }

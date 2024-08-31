@@ -5,7 +5,7 @@ import { WebSocketMessage, createWebSocket } from "common-utils";
 import { WebSocket } from "ws";
 import {
   ActionContext,
-  AppAction,
+  AppActionWithParameters,
   AppAgent,
   SessionContext,
   createTurnImpressionFromLiteral,
@@ -126,11 +126,10 @@ async function updateBrowserContext(
 }
 
 async function executeBrowserAction(
-  action: AppAction,
+  action: AppActionWithParameters,
   context: ActionContext<BrowserActionContext>,
 ) {
   const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
-
   if (webSocketEndpoint) {
     try {
       const agentIO = context.sessionContext.agentIO;

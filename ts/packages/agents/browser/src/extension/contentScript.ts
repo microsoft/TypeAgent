@@ -512,87 +512,45 @@ document.addEventListener("fromPaleoDbAutomation", function (e: any) {
     console.log("received", message);
 });
 
-function setupCrosswordScript() {
-    const helper = document.getElementById("crosswordAutomationScript");
+function setupUIEventsScript() {
+    const helper = document.getElementById("uiEventsScript");
     if (helper) {
         return;
     }
 
     var scriptNode = document.createElement("script");
-    scriptNode.id = "crosswordAutomationScript";
-    scriptNode.src = chrome.runtime.getURL("sites/crossword.js");
+    scriptNode.id = "uiEventsScript";
+    scriptNode.src = chrome.runtime.getURL("uiEventsDispatcher.js");
 
     scriptNode.onload = function () {
-        // set background to none on the cressword page
-        document.body.style.background = "none";
-        // sendCrosswordRequest({"actionName": "initialize"})
         // setIdsOnAllElements();
     };
 
     (document.head || document.documentElement).appendChild(scriptNode);
 }
 
-function sendCrosswordRequest(data: any) {
+function sendUIEventsRequest(data: any) {
     document.dispatchEvent(
-        new CustomEvent("toCrosswordAutomation", { detail: data }),
+        new CustomEvent("toUIEventsDispatcher", { detail: data }),
     );
 }
 
-function sendCrosswordRequestData(data: any) {
+function sendUIEventsRequestData(data: any) {
     document.dispatchEvent(
-        new CustomEvent("toCrosswordAutomatioData", { detail: data }),
+        new CustomEvent("toUIEventsDispatcherData", { detail: data }),
     );
 }
 
-document.addEventListener("fromCrosswordAutomation", async function (e: any) {
+document.addEventListener("fromUIEventsDispatcher", async function (e: any) {
     var message = e.detail;
     console.log("received", message);
-
+    /*
     const response = await chrome.runtime.sendMessage({
-        type: "crosswordAction",
+        type: "uiEventsResult",
         data: message,
     });
-    sendCrosswordRequestData(response);
-});
-
-function setupCommerceScript() {
-    const helper = document.getElementById("commerceAutomationScript");
-    if (helper) {
-        return;
-    }
-
-    var scriptNode = document.createElement("script");
-    scriptNode.id = "commerceAutomationScript";
-    scriptNode.src = chrome.runtime.getURL("sites/commerce.js");
-
-    scriptNode.onload = function () {
-        // sendCrosswordRequest({"actionName": "initialize"})
-    };
-
-    (document.head || document.documentElement).appendChild(scriptNode);
-}
-
-function sendCommerceRequest(data: any) {
-    document.dispatchEvent(
-        new CustomEvent("toCommerceAutomation", { detail: data }),
-    );
-}
-
-function sendCommerceRequestData(data: any) {
-    document.dispatchEvent(
-        new CustomEvent("toCommerceAutomatioData", { detail: data }),
-    );
-}
-
-document.addEventListener("fromCommerceAutomation", async function (e: any) {
-    var message = e.detail;
-    console.log("received", message);
-
-    const response = await chrome.runtime.sendMessage({
-        type: "commerceAction",
-        data: message,
-    });
-    sendCommerceRequestData(response);
+    sendUIEventsRequestData(response);
+    */
 });
 
 chrome.runtime.onMessage.addListener(
@@ -690,6 +648,18 @@ chrome.runtime.onMessage.addListener(
                     break;
                 }
 
+                case "setup_ui_events_script": {
+                    setupUIEventsScript();
+                    sendResponse({});
+                    break;
+                }
+
+                case "run_ui_event": {
+                    sendUIEventsRequest(message.action);
+                    sendResponse({});
+                    break;
+                }
+
                 case "setup_paleoBioDb": {
                     setupPaleoDbScript();
                     sendResponse({});
@@ -698,30 +668,6 @@ chrome.runtime.onMessage.addListener(
 
                 case "run_paleoBioDb_action": {
                     sendPaleoDbRequest(message.action);
-                    sendResponse({});
-                    break;
-                }
-
-                case "setup_crossword": {
-                    setupCrosswordScript();
-                    sendResponse({});
-                    break;
-                }
-
-                case "run_crossword_action": {
-                    sendCrosswordRequest(message.action);
-                    sendResponse({});
-                    break;
-                }
-
-                case "setup_commerce": {
-                    setupCommerceScript();
-                    sendResponse({});
-                    break;
-                }
-
-                case "run_commerce_action": {
-                    sendCommerceRequest(message.action);
                     sendResponse({});
                     break;
                 }

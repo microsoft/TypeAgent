@@ -2,8 +2,7 @@
 // Licensed under the MIT License.
 
 import { ActionContext } from "@typeagent/agent-sdk";
-
-import { BrowserActionContext } from "../browserActionHandler.mjs";
+import { BrowserActionContext } from "../actionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
 import { createCommercePageTranslator } from "./translator.mjs";
 import {

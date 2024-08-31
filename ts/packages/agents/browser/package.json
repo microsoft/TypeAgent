@@ -13,8 +13,8 @@
   "author": "Microsoft",
   "sideEffects": false,
   "exports": {
-    "./agent/manifest": "./src/agent/browserManifest.json",
-    "./agent/handlers": "./dist/agent/browserActionHandler.mjs"
+    "./agent/manifest": "./src/agent/manifest.json",
+    "./agent/handlers": "./dist/agent/actionHandler.mjs"
   },
   "main": "index.js",
   "scripts": {
