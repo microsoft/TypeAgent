@@ -171,7 +171,13 @@ document.addEventListener("DOMContentLoaded", function () {
     wrapper.appendChild(chatView.getMessageElm());
 
     chatView.chatInput.camButton.onclick = () => {
-        cameraView.startCamera();
+        if (cameraView.getContainer().classList.contains("camera-hidden")) {
+            cameraView.getContainer().classList.remove("camera-hidden");
+            cameraView.startCamera();
+        } else {
+            cameraView.getContainer().classList.add("camera-hidden");
+            cameraView.stopCamera();
+        }        
     }
 
     const settingsView = new SettingsView();

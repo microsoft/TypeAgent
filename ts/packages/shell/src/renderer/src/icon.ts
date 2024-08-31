@@ -163,8 +163,8 @@ export function iconImage() {
   return createSVGElement(path);
 }
 
-export function iconCamera() {
-  const path = `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+export function iconCamera(fillColor: string = "currentColor") {
+  const path = `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="${fillColor}">
   <path fill-rule="evenodd" clip-rule="evenodd" d="M10.707 3H14.5l.5.5v9l-.5.5h-13l-.5-.5v-9l.5-.5h3.793l.853-.854L6.5 2h3l.354.146.853.854zM2 12h12V4h-3.5l-.354-.146L9.293 3H6.707l-.853.854L5.5 4H2v8zm1.5-7a.5.5 0 1 0 0 1 .5.5 0 0 0 0-1zM8 6a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm0-1a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />
 </svg>`;
   return createSVGElement(path);
@@ -178,5 +178,31 @@ export function iconOpenFile() {
   </g>
   <path d="M5.854 2V2.707L3.854 4.707L3.147 4L4.293 2.854H3C2.46957 2.854 1.96086 3.06471 1.58579 3.43979C1.21071 3.81486 1 4.32357 1 4.854V5.854H0V4.854C0 4.05835 0.31607 3.29529 0.87868 2.73268C1.44129 2.17007 2.20435 1.854 3 1.854H4.293L3.147 0.707L3.854 0L5.854 2Z" fill="#006CBE" />
 </svg>`;
+return createSVGElement(path);
+}
+
+export function iconRefresh(fillColor: string = "currentColor") {
+  const path = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048" fill="${fillColor}">
+  <title>Try again</title>
+  <path d="M2048 1024q0 142-36 273t-103 244-160 207-207 160-245 103-273 37q-142 0-273-36t-245-103-207-160-159-207-103-245-37-273q0-142 36-273t103-244 160-207 207-160T751 37t273-37q111 0 217 23t204 68 185 109 162 147V64q0-26 19-45t45-19q26 0 45 19t19 45v241q0 120 1 241 0 17-2 33t-9 30-20 22-34 9h-512q-26 0-45-19t-19-45q0-26 19-45t45-19h415q-63-90-144-161t-177-120-200-76-214-27q-124 0-238 32t-214 90-181 140-140 181-91 214-32 239q0 124 32 238t90 214 140 182 181 140 214 90 239 32q121 0 234-30t213-88 183-141 145-187q62-106 91-217t30-233q0-26 19-45t45-19q26 0 45 19t19 45z" />
+</svg>`;
+
+  return createSVGElement(path);
+}
+
+export function iconAccept(fillColor: string = "currentColor") {
+  const path = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048" fill="${fillColor}">
+  <title>Use this picture</title>
+  <path d="M171 1109q0-35 25-60t60-25q35 0 60 25l452 452 964-964q25-25 60-25 18 0 33 6t27 18 19 27 7 34q0 35-26 61L828 1682q-25 25-60 25t-60-25l-512-512q-25-25-25-61z" />
+</svg>`;
+
+  return createSVGElement(path);
+}
+
+export function iconCancel(fillColor: string = "currentColor") {
+  const path = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048" fill="${fillColor}">
+  <path d="M1852 316l-707 708 707 708-120 120-708-707-708 707-120-120 707-708-707-708 120-120 708 707 708-707 120 120z" />
+</svg>`;
+
 return createSVGElement(path);
 }

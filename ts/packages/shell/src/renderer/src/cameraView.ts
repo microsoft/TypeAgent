@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { iconCamera } from "./icon";
+import { iconAccept, iconCamera, iconCancel } from "./icon";
 
 export class CameraView {
     private mainContainer: HTMLDivElement;
@@ -11,56 +11,66 @@ export class CameraView {
     private width: number = 320;
     private height: number = 0;
     private streaming: boolean = false;
+    private mediaStream: MediaStream | undefined = undefined;
 
     constructor() {
         const videoContainer: HTMLDivElement = document.createElement("div");
         const pictureDiv: HTMLDivElement = document.createElement("div");
+        const buttonDiv: HTMLDivElement = document.createElement("div");
         this.canvas = document.createElement("canvas");
         this.video = document.createElement("video");
         const snapButton: HTMLButtonElement = document.createElement("button");
+        const acceptButton: HTMLButtonElement = document.createElement("button");
+        const cancelButton: HTMLButtonElement = document.createElement("button");
         this.img = document.createElement("img");
 
         this.video.id = "video";
         snapButton.id = "snapButton";
         this.canvas.id = "canvas";
 
-        snapButton.append(iconCamera());
+        const cameraIcon = iconCamera("white");
+        cameraIcon.className = "camera-button-image";
+        snapButton.append(cameraIcon);
+        snapButton.className = "camera-button camera-button-center"
         snapButton.onclick = (e: MouseEvent) => {
               this.takePicture();
               e.preventDefault();
         };
 
-        pictureDiv.className = "picture"
-        pictureDiv.append(this.img);
+        const acceptIcon = iconAccept("white");
+        acceptIcon.className = "camera-button-image";
+        acceptButton.append(acceptIcon);
+        acceptButton.className = "camera-button camera-button-grouped";
 
-        videoContainer.className = "camera";
+        const closeIcon = iconCancel("white");
+        closeIcon.className = "camera-button-image";
+        cancelButton.append(closeIcon);
+        cancelButton.className = "camera-button camera-button-grouped";
+
+        buttonDiv.className = "camera-buttons";
+        buttonDiv.append(acceptButton);
+        buttonDiv.append(cancelButton);
+
+        pictureDiv.className = "picture";        
+        pictureDiv.append(this.img);     
+        pictureDiv.append(buttonDiv);
+
         videoContainer.append(this.video);
         videoContainer.append(snapButton);
         this.video.oncanplay = () => {
             if (!this.streaming) {
                 this.height = this.video.videoHeight / (this.video.videoWidth / this.width);
-      
-                // Firefox currently has a bug where the height can't be read from
-                // the video, so we will make assumptions if this happens.
-      
-                if (isNaN(this.height)) {
-                    this.height = this.width / (4 / 3);
-                }
-      
+            
                 this.video.width = this.width;
                 this.video.height = this.height;
                 this.canvas.width = this.width;
                 this.canvas.height = this.height;
-                // this.video.setAttribute("width", this.width.toString());
-                // this.video.setAttribute("height", this.height.toString());
-                // this.canvas.setAttribute("width", this.width.toString());
-                // this.canvas.setAttribute("height", this.height.toString());
                 this.streaming = true;
               }            
         }
 
         this.mainContainer = document.createElement("div");
-        this.mainContainer.className = "camera-container";
+        this.mainContainer.className = "camera-container camera-hidden";
         this.mainContainer.append(videoContainer);
         this.mainContainer.append(this.canvas);
         this.mainContainer.append(pictureDiv);
@@ -98,6 +108,7 @@ export class CameraView {
         navigator.mediaDevices
         .getUserMedia({ video: true, audio: false })
         .then((stream) => {
+            this.mediaStream = stream;
           this.video.srcObject = stream;
           this.video.play();
         })
@@ -106,6 +117,14 @@ export class CameraView {
         });
   
         this.clearPhoto();
+    }
+
+    public stopCamera() {
+
+        if (this.mediaStream) {
+            this.mediaStream.getTracks()[0].stop();
+            this.clearPhoto();
+        }
     }
 
     getContainer() {
