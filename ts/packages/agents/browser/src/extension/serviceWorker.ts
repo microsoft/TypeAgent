@@ -1141,7 +1141,7 @@ async function runBrowserAction(action: any) {
             const targetTab = await getActiveTab();
             const response = await chrome.tabs.sendMessage(targetTab.id!, {
                 type: "run_ui_event",
-                action: action
+                action: action,
             });
             break;
         }
@@ -1149,7 +1149,7 @@ async function runBrowserAction(action: any) {
             const targetTab = await getActiveTab();
             const response = await chrome.tabs.sendMessage(targetTab.id!, {
                 type: "run_ui_event",
-                action: action
+                action: action,
             });
             break;
         }
@@ -1157,7 +1157,7 @@ async function runBrowserAction(action: any) {
             const targetTab = await getActiveTab();
             const response = await chrome.tabs.sendMessage(targetTab.id!, {
                 type: "run_ui_event",
-                action: action
+                action: action,
             });
             break;
         }

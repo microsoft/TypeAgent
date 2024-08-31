@@ -3,7 +3,7 @@
 
 import { WebSocketMessage } from "common-utils";
 import { AppActionWithParameters, SessionContext } from "@typeagent/agent-sdk";
-import { BrowserActionContext } from "./browserActionHandler.mjs";
+import { BrowserActionContext } from "./actionHandler.mjs";
 
 export class BrowserConnector {
   private context: SessionContext<BrowserActionContext>;
@@ -14,7 +14,10 @@ export class BrowserConnector {
     this.webSocket = context.agentContext.webSocket;
   }
 
-  async sendActionToBrowser(action: AppActionWithParameters, messageType?: string) {
+  async sendActionToBrowser(
+    action: AppActionWithParameters,
+    messageType?: string,
+  ) {
     return new Promise<any | undefined>((resolve, reject) => {
       if (this.webSocket) {
         try {
@@ -203,8 +206,8 @@ export class BrowserConnector {
   }
 
   async enterTextIn(textValue: string, cssSelector?: string) {
-    let actionName = cssSelector ? "enterTextInElement": "enterTextOnPage";
-    
+    let actionName = cssSelector ? "enterTextInElement" : "enterTextOnPage";
+
     const textAction = {
       actionName: actionName,
       parameters: {

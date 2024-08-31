@@ -11,9 +11,8 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 import path from "path";
 import fs from "fs";
 import { openai as ai } from "aiclient";
-
 import { fileURLToPath } from "node:url";
-import { ShoppingAction } from "./schema/userActions.mjs";
+import { ShoppingActions } from "./schema/userActions.mjs";
 
 export type HtmlFragments = {
   frameId: string;
@@ -109,9 +108,9 @@ export async function createCommercePageTranslator(
     "utf8",
   );
 
-  const agent = new ECommerceSiteAgent<ShoppingAction>(
+  const agent = new ECommerceSiteAgent<ShoppingActions>(
     pageSchema,
-    "ShoppingAction",
+    "ShoppingActions",
     model,
   );
   return agent;

@@ -2,14 +2,12 @@
 // Licensed under the MIT License.
 
 import {
-  //createLanguageModel,
   createJsonTranslator,
   TypeChatJsonTranslator,
   TypeChatLanguageModel,
   PromptSection,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-
 import { Crossword } from "./schema/pageSchema.mjs";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
