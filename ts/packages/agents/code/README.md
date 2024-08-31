@@ -1,6 +1,29 @@
-# code-agent
+# VSCODE Automation Extension
 
-Code dispatcher agent
+The code agent is sample code to demonstrate how to automate vscode.
+
+The code dispatcher agent is not enabled by default. It is integrated to work with the vscode extension [coda](../../coda/README.md). Please deploy the vscode extension to see the code agent in action.
+
+You can enable the code agent by typing these commands in the typeagent cli or shell:
+
+```
+@config translator code.code-debug
+@config action code.code-debug
+```
+
+Please look at the agent [manifest](./src/codeManifest.json) file to look at other sub-agents that are part of the code agent. The code agent shows how to extend an agent to handle a hierarchical set of actions. For instance if you want to run different commands related to debugging an application on vscode, you will want to run these commands:
+
+```
+@config translator code.debug
+@config action code.debug
+```
+
+You can enable all the sub-agents as part of the code agent by running the following commands on the typeagent cli or shell:
+
+```
+@config action code*
+@config translator code*
+```
 
 ## Trademarks
 
