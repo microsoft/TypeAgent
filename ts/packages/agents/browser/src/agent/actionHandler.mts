@@ -4,9 +4,10 @@
 import { WebSocketMessage, createWebSocket } from "common-utils";
 import { WebSocket } from "ws";
 import {
-  DispatcherAction,
-  DispatcherAgent,
-  DispatcherAgentContext,
+  ActionContext,
+  AppActionWithParameters,
+  AppAgent,
+  SessionContext,
   createTurnImpressionFromLiteral,
 } from "@typeagent/agent-sdk";
 import { Crossword } from "./crossword/schema/pageSchema.mjs";
@@ -17,8 +18,9 @@ import {
 
 import { BrowserConnector } from "./browserConnector.mjs";
 import { handleCommerceAction } from "./commerce/actionHandler.mjs";
+import { TabTitleIndex, createTabTitleIndex } from "./tabTitleIndex.mjs";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
   return {
     initializeAgentContext: initializeBrowserContext,
     updateAgentContext: updateBrowserContext,
@@ -30,6 +32,7 @@ export type BrowserActionContext = {
   webSocket: WebSocket | undefined;
   crossWordState: Crossword | undefined;
   browserConnector: BrowserConnector | undefined;
+  tabTitleIndex: TabTitleIndex | undefined;
 };
 
 async function initializeBrowserContext(): Promise<BrowserActionContext> {
@@ -37,12 +40,13 @@ async function initializeBrowserContext(): Promise<BrowserActionContext> {
     webSocket: undefined,
     crossWordState: undefined,
     browserConnector: undefined,
+    tabTitleIndex: undefined,
   };
 }
 
 async function updateBrowserContext(
   enable: boolean,
-  context: DispatcherAgentContext<BrowserActionContext>,
+  context: SessionContext<BrowserActionContext>,
   translatorName: string,
 ): Promise<void> {
   if (translatorName !== "browser") {
@@ -50,18 +54,22 @@ async function updateBrowserContext(
     return;
   }
   if (enable) {
-    if (context.context.webSocket?.readyState === WebSocket.OPEN) {
+    if (!context.agentContext.tabTitleIndex) {
+      context.agentContext.tabTitleIndex = createTabTitleIndex();
+    }
+
+    if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {
       return;
     }
 
     const webSocket = await createWebSocket();
     if (webSocket) {
-      context.context.webSocket = webSocket;
-      context.context.browserConnector = new BrowserConnector(context);
+      context.agentContext.webSocket = webSocket;
+      context.agentContext.browserConnector = new BrowserConnector(context);
 
       webSocket.onclose = (event: object) => {
         console.error("Browser webSocket connection closed.");
-        context.context.webSocket = undefined;
+        context.agentContext.webSocket = undefined;
       };
       webSocket.addEventListener("message", async (event: any) => {
         const text = event.data.toString();
@@ -76,34 +84,30 @@ async function updateBrowserContext(
               if (data.body == "browser.crossword") {
                 // initialize crossword state
                 sendSiteTranslatorStatus(data.body, "initializing", context);
-                context.context.crossWordState = await getBoardSchema(context);
+                context.agentContext.crossWordState =
+                  await getBoardSchema(context);
                 sendSiteTranslatorStatus(data.body, "initialized", context);
               }
-
-              if (context.currentTranslatorName !== data.body) {
-                await context.toggleAgent(data.body, true);
-
-                context.currentTranslatorName = data.body;
-              }
+              await context.toggleTransientAgent(data.body, true);
               break;
             }
             case "disableSiteTranslator": {
-              if (context.currentTranslatorName == data.body) {
-                await context.toggleAgent(data.body, false);
-
-                context.currentTranslatorName = "browser";
-              }
+              await context.toggleTransientAgent(data.body, false);
               break;
             }
-            case "confirmAction": {
+            case "browserActionResponse": {
               /*
               const requestIO = context.requestIO;
               const requestId = context.requestId;
               
               if (requestIO && requestId && data.id === requestId) {
-                requestIO.success(data.body);
+                requestIO.success(data.body.message);
               }
               */
+              break;
+            }
+            case "tabIndexRequest": {
+              await handleTabIndexActions(data.body, context, data.id);
               break;
             }
           }
@@ -111,32 +115,31 @@ async function updateBrowserContext(
       });
     }
   } else {
-    const webSocket = context.context.webSocket;
+    const webSocket = context.agentContext.webSocket;
     if (webSocket) {
       webSocket.onclose = null;
       webSocket.close();
     }
 
-    context.context.webSocket = undefined;
+    context.agentContext.webSocket = undefined;
   }
 }
 
 async function executeBrowserAction(
-  action: DispatcherAction,
-  context: DispatcherAgentContext<BrowserActionContext>,
+  action: AppActionWithParameters,
+  context: ActionContext<BrowserActionContext>,
 ) {
-  const webSocketEndpoint = context.context.webSocket;
-
+  const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
   if (webSocketEndpoint) {
     try {
-      const requestIO = context.requestIO;
-      const requestId = context.requestId;
-      requestIO.status("Running remote action.");
+      const agentIO = context.sessionContext.agentIO;
+      const requestId = context.sessionContext.requestId;
+      agentIO.status("Running remote action.");
 
-      let messageType = "translatedAction";
+      let messageType = "browserActionRequest";
       let target = "browser";
       if (action.translatorName === "browser.paleoBioDb") {
-        messageType = "siteTranslatedAction_paleoBioDb";
+        messageType = "browserActionRequest.paleoBioDb";
       } else if (action.translatorName === "browser.crossword") {
         const crosswordResult = await handleCrosswordAction(action, context);
         return createTurnImpressionFromLiteral(crosswordResult);
@@ -155,7 +158,6 @@ async function executeBrowserAction(
         }),
       );
     } catch (ex: any) {
-      console.log(ex);
       console.log(JSON.stringify(ex));
 
       throw new Error("Unable to contact browser backend.");
@@ -169,9 +171,9 @@ async function executeBrowserAction(
 function sendSiteTranslatorStatus(
   translatorName: string,
   status: string,
-  context: DispatcherAgentContext<BrowserActionContext>,
+  context: SessionContext<BrowserActionContext>,
 ) {
-  const webSocketEndpoint = context.context.webSocket;
+  const webSocketEndpoint = context.agentContext.webSocket;
   const requestId = context.requestId;
 
   if (webSocketEndpoint) {
@@ -188,4 +190,71 @@ function sendSiteTranslatorStatus(
       }),
     );
   }
+}
+
+async function handleTabIndexActions(
+  action: any,
+  context: SessionContext<BrowserActionContext>,
+  requestId: string | undefined,
+) {
+  const webSocketEndpoint = context.agentContext.webSocket;
+  const tabTitleIndex = context.agentContext.tabTitleIndex;
+
+  if (webSocketEndpoint && tabTitleIndex) {
+    try {
+      const actionName =
+        action.actionName ?? action.fullActionName.split(".").at(-1);
+      let responseBody;
+
+      switch (actionName) {
+        case "getTabIdFromIndex": {
+          const matchedTabs = await tabTitleIndex.search(
+            action.parameters.query,
+            1,
+          );
+          let foundId = -1;
+          if (matchedTabs && matchedTabs.length > 0) {
+            foundId = matchedTabs[0].item.value;
+          }
+          responseBody = foundId;
+          break;
+        }
+        case "addTabIdToIndex": {
+          await tabTitleIndex.addOrUpdate(
+            action.parameters.title,
+            action.parameters.id,
+          );
+          responseBody = "OK";
+          break;
+        }
+        case "deleteTabIdFromIndex": {
+          await tabTitleIndex.remove(action.parameters.id);
+          responseBody = "OK";
+          break;
+        }
+        case "resetTabIdToIndex": {
+          await tabTitleIndex.reset();
+          responseBody = "OK";
+          break;
+        }
+      }
+
+      webSocketEndpoint.send(
+        JSON.stringify({
+          source: "dispatcher",
+          target: "browser",
+          messageType: "tabIndexResponse",
+          id: requestId,
+          body: responseBody,
+        }),
+      );
+    } catch (ex: any) {
+      console.log(JSON.stringify(ex));
+
+      throw new Error("Unable to contact browser backend.");
+    }
+  } else {
+    throw new Error("No websocket connection.");
+  }
+  return undefined;
 }

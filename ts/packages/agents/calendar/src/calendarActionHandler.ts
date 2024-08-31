@@ -22,17 +22,18 @@ import {
     getNWeeksDateRangeISO,
 } from "./calendarQueryHelper.js";
 import {
-    DispatcherAgentContext,
+    SessionContext,
     Entity,
     ImpressionInterpreter,
     defaultImpressionInterpreter,
     createTurnImpressionFromDisplay,
     createTurnImpressionFromError,
-    DispatcherAction,
-    DispatcherAgent,
+    AppAction,
+    AppAgent,
+    ActionContext,
 } from "@typeagent/agent-sdk";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeCalendarContext,
         updateAgentContext: updateCalendarContext,
@@ -132,27 +133,27 @@ function createImpressionInterpreter(): ImpressionInterpreter {
 
 async function updateCalendarContext(
     enable: boolean,
-    context: DispatcherAgentContext<CalendarActionContext>,
+    context: SessionContext<CalendarActionContext>,
 ): Promise<void> {
     if (enable) {
-        context.context.calendarClient = await createCalendarGraphClient();
+        context.agentContext.calendarClient = await createCalendarGraphClient();
 
-        if (context.context.calendarClient) {
-            context.context.graphEventIds = [];
-            context.context.mapGraphEntity = new Map();
+        if (context.agentContext.calendarClient) {
+            context.agentContext.graphEventIds = [];
+            context.agentContext.mapGraphEntity = new Map();
         }
     } else {
-        context.context.calendarClient = undefined;
+        context.agentContext.calendarClient = undefined;
     }
 }
 
 async function executeCalendarAction(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<CalendarActionContext>,
+    action: AppAction,
+    context: ActionContext<CalendarActionContext>,
 ) {
     let result = await handleCalendarAction(
         action as CalendarAction,
-        context.context,
+        context.sessionContext.agentContext,
     );
     return result;
 }

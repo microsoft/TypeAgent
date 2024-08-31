@@ -70,23 +70,6 @@ export function enableJsonTranslatorStreaming<T extends object>(
     if (!ai.supportsStreaming(model)) {
         throw new Error("Model does not support streaming");
     }
-    const complete = model.complete.bind(model);
-    const completeStream = model.completeStream.bind(model);
-    model.complete = async (
-        prompt: string | PromptSection[],
-        cb?: () => void,
-    ) => {
-        if (cb === undefined) {
-            return complete(prompt);
-        }
-        const chunks = [];
-        for await (const chunk of completeStream(prompt)) {
-            chunks.push(chunk);
-            cb();
-        }
-        return success(chunks.join(""));
-    };
-
     const innerFn = translator.translate;
     const translatorWithStreaming =
         translator as TypeChatJsonTranslatorWithStreaming<T>;
@@ -105,8 +88,9 @@ export function enableJsonTranslatorStreaming<T extends object>(
                 partial: true,
             });
             model.complete = async (prompt: string | PromptSection[]) => {
+                debug(prompt);
                 const chunks = [];
-                for await (const chunk of completeStream(prompt)) {
+                for await (const chunk of model.completeStream(prompt)) {
                     chunks.push(chunk);
                     parser.parse(chunk);
                 }

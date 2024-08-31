@@ -8,6 +8,7 @@ import {
     Logger,
     LoggerSink,
     MultiSinkLogger,
+    StopWatch,
     TypeChatJsonTranslatorWithStreaming,
     createDebugLoggerSink,
     createLimiter,
@@ -35,9 +36,9 @@ import {
 } from "../../session/session.js";
 import {
     getDefaultTranslatorName,
-    getDispatcherAgentName,
     getTranslatorNames,
     loadAgentJsonTranslator,
+    getTranslatorConfigs,
 } from "../../translation/agentTranslators.js";
 import { getCacheFactory } from "../../utils/cacheFactory.js";
 import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
@@ -53,8 +54,8 @@ import {
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
 import { DispatcherName } from "../requestCommandHandler.js";
-import { DispatcherAgent, DispatcherAgentContext } from "@typeagent/agent-sdk";
-import { getDispatcherAgents } from "../../agent/agentConfig.js";
+import { AppAgent, SessionContext } from "@typeagent/agent-sdk";
+import { getAppAgents } from "../../agent/agentConfig.js";
 import { conversation as Conversation } from "knowledge-processor";
 
 export interface CommandResult {
@@ -65,9 +66,9 @@ export interface CommandResult {
 
 // Command Handler Context definition.
 export type CommandHandlerContext = {
-    agents: Map<string, DispatcherAgent>;
+    agents: Map<string, AppAgent>;
     session: Session;
-    sessionContext: Map<string, DispatcherAgentContext>;
+    sessionContext: Map<string, SessionContext>;
 
     conversationManager?: Conversation.ConversationManager;
     // Per activation configs
@@ -79,7 +80,7 @@ export type CommandHandlerContext = {
 
     // Runtime context
     commandLock: Limiter; // Make sure we process one command at a time.
-    currentTranslatorName: string;
+    lastActionTranslatorName: string;
     translatorCache: Map<string, TypeChatJsonTranslatorWithStreaming<object>>;
     agentCache: AgentCache;
     action: { [key: string]: any };
@@ -89,6 +90,8 @@ export type CommandHandlerContext = {
     localWhisper: ChildProcess | undefined;
     requestId?: RequestId;
     chatHistory: ChatHistory;
+    transientAgents: { [key: string]: boolean };
+
     // For @correct
     lastRequestAction?: RequestAction;
     lastExplanation?: object;
@@ -117,7 +120,7 @@ export function getTranslator(
     const newTranslator = loadAgentJsonTranslator(
         translatorName,
         config.models.translator,
-        config.switch.inline ? config.translators : undefined,
+        config.switch.inline ? getActiveTranslators(context) : undefined,
         config.multipleActions,
     );
     const streamingTranslator = enableJsonTranslatorStreaming(newTranslator);
@@ -229,17 +232,17 @@ export async function initializeCommandHandlerContext(
     }
 
     const clientIO = options?.clientIO;
-    const agents = await getDispatcherAgents();
+    const agents = await getAppAgents();
     const context: CommandHandlerContext = {
         agents,
         session,
         conversationManager,
-        sessionContext: new Map<string, DispatcherAgentContext>(),
+        sessionContext: new Map<string, SessionContext>(),
         explanationAsynchronousMode,
         dblogging: true,
         clientIO,
         requestIO: clientIO
-            ? getRequestIO(clientIO, undefined, getDefaultTranslatorName())
+            ? getRequestIO(undefined, clientIO, undefined)
             : clientIO === undefined
               ? getConsoleRequestIO(stdio)
               : getNullRequestIO(),
@@ -247,7 +250,7 @@ export async function initializeCommandHandlerContext(
         // Runtime context
         commandLock: createLimiter(1), // Make sure we process one command at a time.
         agentCache: await getAgentCache(session, logger),
-        currentTranslatorName: getDefaultTranslatorName(), // REVIEW: just default to the first one on initialize?
+        lastActionTranslatorName: getDefaultTranslatorName(), // REVIEW: just default to the first one on initialize?
         translatorCache: new Map<string, TypeChatJsonTranslator<object>>(),
         currentScriptDir: process.cwd(),
         action: await initializeActionContext(agents),
@@ -255,7 +258,14 @@ export async function initializeCommandHandlerContext(
         logger,
         serviceHost: serviceHost,
         localWhisper: undefined,
+        transientAgents: Object.fromEntries(
+            getTranslatorConfigs()
+                .filter(([, config]) => config.transient)
+                .map(([name]) => [name, false]),
+        ),
     };
+
+    context.requestIO.context = context;
 
     await updateActionContext(context.session.getConfig().actions, context);
     return context;
@@ -274,7 +284,7 @@ export async function setSessionOnCommandHandlerContext(
 ) {
     context.session = session;
     for (const [name, sessionContext] of context.sessionContext.entries()) {
-        getDispatcherAgent(name, context).closeAgentContext?.(sessionContext);
+        getAppAgent(name, context).closeAgentContext?.(sessionContext);
     }
     context.sessionContext.clear();
     context.action = await initializeActionContext(context.agents);
@@ -361,15 +371,51 @@ export async function changeContextConfig(
     return changed;
 }
 
-export function getDispatcherAgent(
-    dispatcherAgentName: string,
+export function getAppAgent(
+    appAgentName: string,
     context: CommandHandlerContext,
 ) {
-    const dispatcherAgent = context.agents.get(dispatcherAgentName);
-    if (dispatcherAgent === undefined) {
-        throw new Error(
-            `Invalid dispatcher agent name: ${dispatcherAgentName}`,
-        );
+    const appAgent = context.agents.get(appAgentName);
+    if (appAgent === undefined) {
+        throw new Error(`Invalid dispatcher agent name: ${appAgentName}`);
     }
-    return dispatcherAgent;
+    return appAgent;
+}
+
+export function getActiveTranslatorList(context: CommandHandlerContext) {
+    return Object.entries(context.session.getConfig().translators)
+        .filter(
+            ([name, value]) => value && context.transientAgents[name] !== false,
+        )
+        .map(([name]) => name);
+}
+
+export function getActiveTranslators(context: CommandHandlerContext) {
+    const result = { ...context.session.getConfig().translators };
+    for (const [name, enabled] of Object.entries(context.transientAgents)) {
+        if (enabled === false) {
+            result[name] = false;
+        }
+    }
+    return result;
+}
+
+export function isTranslatorEnabled(
+    translatorName: string,
+    context: CommandHandlerContext,
+) {
+    return (
+        context.session.getConfig().translators[translatorName] === true &&
+        context.transientAgents[translatorName] !== false
+    );
+}
+
+export function isActionEnabled(
+    translatorName: string,
+    context: CommandHandlerContext,
+) {
+    return (
+        context.session.getConfig().actions[translatorName] === true &&
+        context.transientAgents[translatorName] !== false
+    );
 }

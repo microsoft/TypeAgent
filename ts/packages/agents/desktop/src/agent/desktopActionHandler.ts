@@ -3,7 +3,7 @@
 
 import { WebSocketMessage, createWebSocket } from "common-utils";
 import { WebSocket } from "ws";
-import { DispatcherAction, DispatcherAgentContext } from "@typeagent/agent-sdk";
+import { ActionContext, AppAction, SessionContext } from "@typeagent/agent-sdk";
 
 export function instantiate() {
     return {
@@ -15,29 +15,40 @@ export function instantiate() {
 
 type DesktopActionContext = {
     webSocket: WebSocket | undefined;
+    nextCallId: number;
+    pendingCall: Map<
+        number,
+        {
+            resolve: () => void;
+            context: ActionContext<DesktopActionContext>;
+        }
+    >;
 };
 
 function initializeDesktopContext(): DesktopActionContext {
     return {
         webSocket: undefined,
+        nextCallId: 0,
+        pendingCall: new Map(),
     };
 }
 
 async function updateDesktopContext(
     enable: boolean,
-    context: DispatcherAgentContext<DesktopActionContext>,
+    context: SessionContext<DesktopActionContext>,
 ): Promise<void> {
     if (enable) {
-        if (context.context.webSocket?.readyState === WebSocket.OPEN) {
+        const agentContext = context.agentContext;
+        if (agentContext.webSocket?.readyState === WebSocket.OPEN) {
             return;
         }
 
         const webSocket = await createWebSocket();
         if (webSocket) {
-            context.context.webSocket = webSocket;
+            agentContext.webSocket = webSocket;
             webSocket.onclose = (event: Object) => {
                 console.error("Desktop webSocket connection closed.");
-                context.context.webSocket = undefined;
+                agentContext.webSocket = undefined;
             };
             webSocket.onmessage = async (event: any) => {
                 const text = event.data.toString();
@@ -48,15 +59,20 @@ async function updateDesktopContext(
                     data.body
                 ) {
                     switch (data.messageType) {
-                        case "confirmAction": {
-                            const requestIO = context.requestIO;
-                            const requestId = context.requestId;
-                            if (
-                                requestIO &&
-                                requestId &&
-                                data.id === requestId
-                            ) {
-                                requestIO.status(data.body);
+                        case "desktopActionResponse": {
+                            const pendingCall = agentContext.pendingCall.get(
+                                data.body.callId,
+                            );
+
+                            if (pendingCall) {
+                                agentContext.pendingCall.delete(
+                                    data.body.callId,
+                                );
+                                const { resolve, context } = pendingCall;
+                                context.actionIO.setActionDisplay(
+                                    data.body.message,
+                                );
+                                resolve();
                             }
 
                             break;
@@ -66,33 +82,43 @@ async function updateDesktopContext(
             };
         }
     } else {
-        const webSocket = context.context.webSocket;
+        const webSocket = context.agentContext.webSocket;
         if (webSocket) {
             webSocket.onclose = null;
             webSocket.close();
         }
 
-        context.context.webSocket = undefined;
+        context.agentContext.webSocket = undefined;
     }
 }
 
 async function executeDesktopAction(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<DesktopActionContext>,
+    action: AppAction,
+    context: ActionContext<DesktopActionContext>,
 ) {
-    const webSocketEndpoint = context.context.webSocket;
+    const agentContext = context.sessionContext.agentContext;
+    const webSocketEndpoint = agentContext.webSocket;
     if (webSocketEndpoint) {
         try {
-            const requestId = context.requestId;
-            webSocketEndpoint.send(
-                JSON.stringify({
-                    source: "dispatcher",
-                    target: "desktop",
-                    messageType: "translatedAction",
-                    id: requestId,
-                    body: action,
-                }),
-            );
+            const agentContext = context.sessionContext.agentContext;
+            const callId = agentContext.nextCallId++;
+            return new Promise<void>((resolve) => {
+                agentContext.pendingCall.set(callId, {
+                    resolve,
+                    context,
+                });
+                webSocketEndpoint.send(
+                    JSON.stringify({
+                        source: "dispatcher",
+                        target: "desktop",
+                        messageType: "desktopActionRequest",
+                        body: {
+                            callId,
+                            action,
+                        },
+                    }),
+                );
+            });
         } catch {
             throw new Error("Unable to contact desktop backend.");
         }

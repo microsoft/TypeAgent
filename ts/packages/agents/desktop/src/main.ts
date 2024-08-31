@@ -16,9 +16,12 @@ import {
 
 import WebSocket from "ws";
 import dotenv from "dotenv";
+import findConfig from "find-config";
+import assert from "assert";
 import { processRequests } from "typechat/interactive";
 
-const envPath = new URL("../../../../.env", import.meta.url);
+const envPath = findConfig(".env");
+assert(envPath, ".env file not found!");
 dotenv.config({ path: envPath });
 
 let desktopProcess: ChildProcess | null;
@@ -69,16 +72,18 @@ async function ensureWebsocketConnected() {
         const text = event.data.toString();
         const data = JSON.parse(text) as WebSocketMessage;
         if (data.target == "desktop") {
-            if (data.messageType == "translatedAction") {
-                const message = await runDesktopActions(data.body);
+            if (data.messageType == "desktopActionRequest") {
+                const message = await runDesktopActions(data.body.action);
 
                 webSocket.send(
                     JSON.stringify({
                         source: data.target,
                         target: data.source,
-                        messageType: "confirmAction",
-                        id: data.id,
-                        body: message,
+                        messageType: "desktopActionResponse",
+                        body: {
+                            actionContextId: data.body.callId,
+                            message,
+                        },
                     }),
                 );
             }

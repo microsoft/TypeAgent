@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { StopWatch } from "common-utils";
 import { CommandHandler, HandlerTable } from "./common/commandHandler.js";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 
@@ -15,7 +16,9 @@ export class HistoryListCommandHandler implements CommandHandler {
             output.push(`${index}: ${JSON.stringify(entry, undefined, 2)}`);
             index++;
         }
-        context.requestIO.result(output.join("\n"));
+        const h = output.join("\n");
+
+        context.requestIO.result(h);
     }
 }
 

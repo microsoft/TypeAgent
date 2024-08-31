@@ -2,9 +2,10 @@
 // Licensed under the MIT License.
 
 import {
-    DispatcherAction,
-    DispatcherAgent,
-    DispatcherAgentContext,
+    ActionContext,
+    AppAction,
+    AppAgent,
+    SessionContext,
     Storage,
     TurnImpression,
     createTurnImpressionFromDisplay,
@@ -14,10 +15,11 @@ import {
     AddItemsAction,
     RemoveItemsAction,
     CreateListAction,
+    ClearListAction,
     GetListAction,
 } from "./listSchema.js";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeListContext,
         updateAgentContext: updateListContext,
@@ -31,10 +33,13 @@ type ListActionContext = {
 };
 
 async function executeListAction(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<ListActionContext>,
+    action: AppAction,
+    context: ActionContext<ListActionContext>,
 ) {
-    let result = await handleListAction(action as ListAction, context.context);
+    let result = await handleListAction(
+        action as ListAction,
+        context.sessionContext.agentContext,
+    );
     return result;
 }
 
@@ -88,7 +93,7 @@ function simpleNoun(item: string) {
 
 function validateWildcardItems(
     items: string[],
-    context: DispatcherAgentContext<ListActionContext>,
+    context: SessionContext<ListActionContext>,
 ) {
     for (const item of items) {
         if (!simpleNoun(item)) {
@@ -99,8 +104,8 @@ function validateWildcardItems(
 }
 
 async function listValidateWildcardMatch(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<ListActionContext>,
+    action: AppAction,
+    context: SessionContext<ListActionContext>,
 ) {
     if (action.actionName === "addItems") {
         const addItemsAction = action as AddItemsAction;
@@ -221,15 +226,15 @@ async function createListStoreForSession(
 
 async function updateListContext(
     enable: boolean,
-    context: DispatcherAgentContext<ListActionContext>,
+    context: SessionContext<ListActionContext>,
 ): Promise<void> {
     if (enable && context.sessionStorage) {
-        context.context.store = await createListStoreForSession(
+        context.agentContext.store = await createListStoreForSession(
             context.sessionStorage,
             "lists.json",
         );
     } else {
-        context.context.store = undefined;
+        context.agentContext.store = undefined;
     }
 }
 
@@ -347,6 +352,28 @@ async function handleListAction(
                         type: ["list"],
                     },
                 ];
+            }
+            break;
+        }
+        case "clearList": {
+            const clearListAction = action as ClearListAction;
+            if (listContext.store !== undefined) {
+                const list = listContext.store.getList(
+                    clearListAction.parameters.listName,
+                );
+                if (list !== undefined) {
+                    list.itemsSet.clear();
+                    await listContext.store.save();
+                    displayText = `Cleared list: ${clearListAction.parameters.listName}`;
+                    result = createTurnImpressionFromDisplay(displayText);
+                    result.literalText = `Cleared list: ${clearListAction.parameters.listName}`;
+                    result.entities = [
+                        {
+                            name: clearListAction.parameters.listName,
+                            type: ["list"],
+                        },
+                    ];
+                }
             }
             break;
         }

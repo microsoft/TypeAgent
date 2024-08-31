@@ -15,16 +15,16 @@ import {
     CommandHandler,
     HandlerTable,
 } from "./handlers/common/commandHandler.js";
-import { CommandHandlerContext } from "./handlers/common/commandHandlerContext.js";
+import {
+    CommandHandlerContext,
+    getActiveTranslatorList,
+} from "./handlers/common/commandHandlerContext.js";
 import { getConfigCommandHandlers } from "./handlers/configCommandHandlers.js";
 import { getConstructionCommandHandlers } from "./handlers/constructionCommandHandlers.js";
 import { CorrectCommandHandler } from "./handlers/correctCommandHandler.js";
 import { DebugCommandHandler } from "./handlers/debugCommandHandlers.js";
 import { ExplainCommandHandler } from "./handlers/explainCommandHandler.js";
-import {
-    DispatcherName,
-    RequestCommandHandler,
-} from "./handlers/requestCommandHandler.js";
+import { RequestCommandHandler } from "./handlers/requestCommandHandler.js";
 import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js";
 import { getHistoryCommandHandlers } from "./handlers/historyCommandHandler.js";
 import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
@@ -33,6 +33,7 @@ import { getTranslatorConfig } from "./translation/agentTranslators.js";
 import { processRequests, unicodeChar } from "./utils/interactive.js";
 /* ==Experimental== */
 import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
+import { Profiler } from "common-utils";
 /* ==End Experimental== */
 
 class HelpCommandHandler implements CommandHandler {
@@ -208,21 +209,18 @@ export async function processCommandNoLock(
         // default to request
         input = `request ${input}`;
     } else {
-        context.currentTranslatorName = DispatcherName;
         input = input.substring(1);
     }
 
     const oldRequestIO = context.requestIO;
     context.requestId = requestId;
     if (context.clientIO) {
-        context.requestIO = getRequestIO(
-            context.clientIO,
-            requestId,
-            context.currentTranslatorName,
-        );
+        context.requestIO = getRequestIO(context, context.clientIO, requestId);
     }
 
     try {
+        Profiler.getInstance().start(context.requestId);
+
         const result = resolveCommand(input);
         if (result === undefined) {
             throw new Error(`Unknown command '${input}'`);
@@ -238,6 +236,8 @@ export async function processCommandNoLock(
     } catch (e: any) {
         context.requestIO.error(`ERROR: ${e.message}`);
         debugInteractive(e.stack);
+    } finally {
+        Profiler.getInstance().stop(context.requestId);
     }
 
     context.requestId = undefined;
@@ -273,12 +273,12 @@ export function getSettingSummary(context: CommandHandlerContext) {
         }
     }
 
-    const names = context.session.useTranslators;
+    const names = getActiveTranslatorList(context);
     const ordered = names.filter(
-        (name) => name !== context.currentTranslatorName,
+        (name) => name !== context.lastActionTranslatorName,
     );
     if (ordered.length !== names.length) {
-        ordered.unshift(context.currentTranslatorName);
+        ordered.unshift(context.lastActionTranslatorName);
     }
 
     const translators = Array.from(
@@ -314,7 +314,7 @@ export function getSettingSummary(context: CommandHandlerContext) {
 export function getTranslatorNameToEmojiMap(context: CommandHandlerContext) {
     let tMap = new Map<string, string>();
 
-    context.session.useTranslators.forEach((name) => {
+    getActiveTranslatorList(context).forEach((name) => {
         tMap.set(name, getTranslatorConfig(name).emojiChar);
     });
 

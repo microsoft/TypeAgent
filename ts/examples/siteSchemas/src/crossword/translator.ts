@@ -1,15 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
-import { ChatModel, openai as ai } from "aiclient";
+import {
+    createJsonTranslator,
+    TypeChatJsonTranslator,
+    TypeChatLanguageModel,
+} from "typechat";
+import { openai as ai } from "aiclient";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { ContentSection, HtmlFragments } from "../common/translator.js";
 
 import path from "path";
 import fs from "fs";
 
-import { CluesTextAndSelectorsList } from "./schema/bootstrapSchema.js";
+import { Crossword } from "./schema/bootstrapSchema.js";
 
 function getBootstrapPrefixPromptSection() {
     // TODO: update this to use system role
@@ -81,7 +85,7 @@ export class CrosswordAgent<T extends object> {
     schema: string;
     boardSchema: string;
 
-    model: ChatModel;
+    model: TypeChatLanguageModel;
     translator: TypeChatJsonTranslator<T>;
 
     constructor(schema: string, schemaName: string, fastModelName: string) {
@@ -140,7 +144,7 @@ export class CrosswordAgent<T extends object> {
             {
                 type: "text",
                 text: `
-            Use the layout information provided to generate a "CluesTextAndSelectorsList" response using the typescript schema below.Note that you must include the complete response.
+            Use the layout information provided to generate a "Crossword" response using the typescript schema below.Note that you must include the complete response.
             This MUST include all the clues in the crossword. 
             
             '''
@@ -156,7 +160,7 @@ export class CrosswordAgent<T extends object> {
     }
 
     changeBoardPromptSectionsFromClues(
-        boardMetadata: CluesTextAndSelectorsList,
+        boardMetadata: Crossword,
         intent: string,
     ) {
         const prefixSection = getUpdataBoardPrefixPromptSection();
@@ -212,9 +216,7 @@ export class CrosswordAgent<T extends object> {
             screenshot,
         ) as ContentSection[];
 
-        const bootstrapTranslator = this.getBootstrapTranslator(
-            "CluesTextAndSelectorsList",
-        );
+        const bootstrapTranslator = this.getBootstrapTranslator("Crossword");
 
         const response = await bootstrapTranslator.translate("", [
             { role: "user", content: JSON.stringify(promptSections) },
@@ -240,10 +242,7 @@ export class CrosswordAgent<T extends object> {
         return response;
     }
 
-    async updateBoardFromCluesList(
-        clues: CluesTextAndSelectorsList,
-        intent: string,
-    ) {
+    async updateBoardFromCluesList(clues: Crossword, intent: string) {
         const promptSections = this.changeBoardPromptSectionsFromClues(
             clues,
             intent,

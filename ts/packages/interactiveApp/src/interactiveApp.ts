@@ -642,6 +642,8 @@ export function addStandardHandlers(
     handlers.help = help;
     handlers["--?"] = help;
     handlers.commands = commands;
+    handlers.cls = cls;
+    handlers.cls.metadata = "Clear the screen";
 
     async function help(args: string[], io: InteractiveIo): Promise<void> {
         displayHelp(args, handlers, io);
@@ -649,6 +651,10 @@ export function addStandardHandlers(
 
     async function commands(args: string[], io: InteractiveIo): Promise<void> {
         displayCommands(handlers, io);
+    }
+
+    async function cls(args: string[], io: InteractiveIo): Promise<void> {
+        console.clear();
     }
 }
 

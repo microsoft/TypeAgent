@@ -24,11 +24,17 @@ async function getConfigValues(): Promise<Record<string, string>> {
 }
 
 let webSocket: any = null;
+let configValues: Record<string, string>;
 
 export async function createWebSocket() {
-    const vals = await getConfigValues();
-    const socketEndpoint = vals["WEBSOCKET_HOST"] ?? "ws://localhost:8080/";
+    if (!configValues) {
+        configValues = await getConfigValues();
+    }
 
+    let socketEndpoint =
+        configValues["WEBSOCKET_HOST"] ?? "ws://localhost:8080/";
+
+    socketEndpoint += "?clientId=" + chrome.runtime.id;
     return new Promise<WebSocket | undefined>((resolve, reject) => {
         const webSocket = new WebSocket(socketEndpoint);
 
@@ -49,89 +55,87 @@ export async function createWebSocket() {
 }
 
 async function ensureWebsocketConnected() {
-    if (webSocket) {
-        if (webSocket.readyState === WebSocket.OPEN) {
+    return new Promise<WebSocket | undefined>(async (resolve, reject) => {
+        if (webSocket) {
+            if (webSocket.readyState === WebSocket.OPEN) {
+                resolve(webSocket);
+                return;
+            }
+            try {
+                webSocket.close();
+                webSocket = undefined;
+            } catch {}
+        }
+
+        webSocket = await createWebSocket();
+        if (!webSocket) {
+            showBadgeError();
+            resolve(undefined);
             return;
         }
-        try {
-            webSocket.close();
-            webSocket = undefined;
-        } catch {}
-    }
 
-    webSocket = await createWebSocket();
-    if (!webSocket) {
-        showBadgeError();
-        return;
-    }
+        webSocket.binaryType = "blob";
+        keepWebSocketAlive(webSocket);
 
-    webSocket.binaryType = "blob";
-    keepWebSocketAlive(webSocket);
-
-    webSocket.onmessage = async (event: any, isBinary: boolean) => {
-        const text = await event.data.text();
-        const data = JSON.parse(text) as WebSocketMessage;
-        if (data.target == "browser") {
-            if (data.messageType == "translatedAction") {
-                const respose = await runBrowserAction(data.body);
-                if (respose.data) {
+        webSocket.onmessage = async (event: any, isBinary: boolean) => {
+            const text = await event.data.text();
+            const data = JSON.parse(text) as WebSocketMessage;
+            if (data.target == "browser") {
+                if (data.messageType == "browserActionRequest") {
+                    const response = await runBrowserAction(data.body);
                     webSocket.send(
                         JSON.stringify({
                             source: data.target,
                             target: data.source,
-                            messageType: "confirmActionWithData",
+                            messageType: "browserActionResponse",
                             id: data.id,
-                            body: respose,
+                            body: response,
                         }),
                     );
-                } else {
+                } else if (data.messageType == "siteTranslatorStatus") {
+                    if (data.body.status == "initializing") {
+                        showBadgeBusy();
+                        console.log(`Initializing ${data.body.translator}`);
+                    } else if (data.body.status == "initialized") {
+                        showBadgeHealthy();
+                        console.log(
+                            `Finished initializing ${data.body.translator}`,
+                        );
+                    }
+                } else if (
+                    data.messageType.startsWith("browserActionRequest.")
+                ) {
+                    const message = await runSiteAction(
+                        data.messageType,
+                        data.body,
+                    );
+
                     webSocket.send(
                         JSON.stringify({
                             source: data.target,
                             target: data.source,
-                            messageType: "confirmAction",
+                            messageType: "browserActionResponse",
                             id: data.id,
-                            body: respose.message,
+                            body: message,
                         }),
                     );
                 }
-            } else if (data.messageType == "siteTranslatorStatus") {
-                if (data.body.status == "initializing") {
-                    showBadgeBusy();
-                    console.log(`Initializing ${data.body.translator}`);
-                } else if (data.body.status == "initialized") {
-                    showBadgeHealthy();
-                    console.log(
-                        `Finished initializing ${data.body.translator}`,
-                    );
-                }
-            } else if (data.messageType.startsWith("siteTranslatedAction_")) {
-                const message = await runSiteAction(
-                    data.messageType,
-                    data.body,
-                );
 
-                webSocket.send(
-                    JSON.stringify({
-                        source: data.target,
-                        target: data.source,
-                        messageType: "confirmAction",
-                        id: data.id,
-                        body: message,
-                    }),
+                console.log(
+                    `Browser websocket client received message: ${text}`,
                 );
             }
+        };
 
-            console.log(`Browser websocket client received message: ${text}`);
-        }
-    };
+        webSocket.onclose = (event: object) => {
+            console.log("websocket connection closed");
+            webSocket = undefined;
+            showBadgeError();
+            reconnectWebSocket();
+        };
 
-    webSocket.onclose = (event: object) => {
-        console.log("websocket connection closed");
-        webSocket = undefined;
-        showBadgeError();
-        reconnectWebSocket();
-    };
+        resolve(webSocket);
+    });
 }
 
 export function keepWebSocketAlive(webSocket: WebSocket) {
@@ -177,14 +181,26 @@ async function getActiveTab(): Promise<chrome.tabs.Tab> {
 }
 
 async function getTabByTitle(title: string): Promise<chrome.tabs.Tab | null> {
-    const tabs = await chrome.tabs.query({
-        title: title,
-    });
+    const getTabAction = {
+        actionName: "getTabIdFromIndex",
+        parameters: {
+            query: title,
+        },
+    };
+    const matchedId = await sendActionToTabIndex(getTabAction);
+    if (matchedId) {
+        const tabId = parseInt(matchedId);
+        const targetTab = await chrome.tabs.get(tabId);
+        return targetTab;
+    } else {
+        const tabs = await chrome.tabs.query({
+            title: title,
+        });
 
-    if (tabs && tabs.length > 0) {
-        return tabs[0];
+        if (tabs && tabs.length > 0) {
+            return tabs[0];
+        }
     }
-
     return null;
 }
 
@@ -741,9 +757,9 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
             "https://www.bestcrosswords.com/bestcrosswords/guestconstructor",
         )
     ) {
-        // insert site-specific script
+        // insert ui automation script
         const result = await chrome.tabs.sendMessage(targetTab.id!, {
-            type: "setup_crossword",
+            type: "setup_ui_events_script",
         });
 
         messageType = "enableSiteTranslator";
@@ -753,8 +769,9 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
     }
 
     if (targetTab.url?.startsWith("https://www.homedepot.com/")) {
+        // insert ui automation script
         const result = await chrome.tabs.sendMessage(targetTab.id!, {
-            type: "setup_commerce",
+            type: "setup_ui_events_script",
         });
 
         messageType = "enableSiteTranslator";
@@ -773,6 +790,55 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
             }),
         );
     }
+}
+
+async function sendActionToTabIndex(action: any) {
+    return new Promise<string | undefined>((resolve, reject) => {
+        if (webSocket) {
+            try {
+                const requestId = new Date().getTime().toString();
+                const messageType = "tabIndexRequest";
+
+                webSocket.send(
+                    JSON.stringify({
+                        source: "browser",
+                        target: "dispatcher",
+                        messageType: messageType,
+                        id: requestId,
+                        body: action,
+                    }),
+                );
+
+                const handler = async (event: any) => {
+                    const text = await event.data.text();
+                    const data = JSON.parse(text) as WebSocketMessage;
+                    if (
+                        data.target == "browser" &&
+                        data.source == "dispatcher" &&
+                        data.id == requestId &&
+                        data.body
+                    ) {
+                        switch (data.messageType) {
+                            case "tabIndexResponse": {
+                                webSocket.removeEventListener(
+                                    "message",
+                                    handler,
+                                );
+                                resolve(data.body);
+                                break;
+                            }
+                        }
+                    }
+                };
+
+                webSocket.addEventListener("message", handler);
+            } catch {
+                reject("Unable to contact dispatcher backend.");
+            }
+        } else {
+            throw new Error("No websocket connection.");
+        }
+    });
 }
 
 async function runBrowserAction(action: any) {
@@ -1071,6 +1137,30 @@ async function runBrowserAction(action: any) {
             responseObject = targetTab.url;
             break;
         }
+        case "clickOnElement": {
+            const targetTab = await getActiveTab();
+            const response = await chrome.tabs.sendMessage(targetTab.id!, {
+                type: "run_ui_event",
+                action: action,
+            });
+            break;
+        }
+        case "enterTextInElement": {
+            const targetTab = await getActiveTab();
+            const response = await chrome.tabs.sendMessage(targetTab.id!, {
+                type: "run_ui_event",
+                action: action,
+            });
+            break;
+        }
+        case "enterTextOnPage": {
+            const targetTab = await getActiveTab();
+            const response = await chrome.tabs.sendMessage(targetTab.id!, {
+                type: "run_ui_event",
+                action: action,
+            });
+            break;
+        }
         case "getPageSchema": {
             const targetTab = await getActiveTab();
             const key = action.parameters.url ?? targetTab.url;
@@ -1129,7 +1219,7 @@ async function runBrowserAction(action: any) {
 async function runSiteAction(messageType: string, action: any) {
     let confirmationMessage = "OK";
     switch (messageType) {
-        case "siteTranslatedAction_paleoBioDb": {
+        case "browserActionRequest.paleoBioDb": {
             const targetTab = await getActiveTab();
             const actionName =
                 action.actionName ?? action.fullActionName.split(".").at(-1);
@@ -1154,7 +1244,7 @@ async function runSiteAction(messageType: string, action: any) {
             // to do: update confirmation to include current page screenshot.
             break;
         }
-        case "siteTranslatedAction_crossword": {
+        case "browserActionRequest.crossword": {
             const targetTab = await getActiveTab();
 
             const result = await chrome.tabs.sendMessage(targetTab.id!, {
@@ -1165,7 +1255,7 @@ async function runSiteAction(messageType: string, action: any) {
             // to do: update confirmation to include current page screenshot.
             break;
         }
-        case "siteTranslatedAction_commerce": {
+        case "browserActionRequest.commerce": {
             const targetTab = await getActiveTab();
 
             const result = await chrome.tabs.sendMessage(targetTab.id!, {
@@ -1201,9 +1291,14 @@ function showBadgeBusy() {
 
 chrome.action.onClicked.addListener(async (tab) => {
     try {
-        await ensureWebsocketConnected();
-        await toggleSiteTranslator(tab);
-        showBadgeHealthy();
+        const connected = await ensureWebsocketConnected();
+        if (!connected) {
+            reconnectWebSocket();
+            showBadgeError();
+        } else {
+            await toggleSiteTranslator(tab);
+            showBadgeHealthy();
+        }
     } catch {
         reconnectWebSocket();
         showBadgeError();
@@ -1219,6 +1314,37 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     if (changeInfo.status === "complete" && tab.active) {
         await toggleSiteTranslator(tab);
     }
+    if (changeInfo.title) {
+        const addTabAction = {
+            actionName: "addTabIdToIndex",
+            parameters: {
+                id: tab.id,
+                title: tab.title,
+            },
+        };
+        await sendActionToTabIndex(addTabAction);
+    }
+});
+
+chrome.tabs.onCreated.addListener(async (tab) => {
+    const addTabAction = {
+        actionName: "addTabIdToIndex",
+        parameters: {
+            id: tab.id,
+            title: tab.title,
+        },
+    };
+    await sendActionToTabIndex(addTabAction);
+});
+
+chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
+    const removeTabAction = {
+        actionName: "deleteTabIdFromIndex",
+        parameters: {
+            id: tabId,
+        },
+    };
+    await sendActionToTabIndex(removeTabAction);
 });
 
 chrome.windows.onFocusChanged.addListener(async (windowId) => {
@@ -1226,9 +1352,28 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
         return;
     }
 
-    await ensureWebsocketConnected();
+    const connected = await ensureWebsocketConnected();
+    if (!connected) {
+        reconnectWebSocket();
+        showBadgeError();
+    }
+
     const targetTab = await getActiveTab();
     await toggleSiteTranslator(targetTab);
+
+    const tabs = await chrome.tabs.query({
+        windowId: windowId,
+    });
+    tabs.forEach(async (tab) => {
+        const addTabAction = {
+            actionName: "addTabIdToIndex",
+            parameters: {
+                id: tab.id,
+                title: tab.title,
+            },
+        };
+        await sendActionToTabIndex(addTabAction);
+    });
 });
 
 chrome.windows.onCreated.addListener(async (windowId) => {
@@ -1242,7 +1387,11 @@ chrome.windows.onRemoved.addListener(async (windowId) => {
 chrome.runtime.onStartup.addListener(async () => {
     console.log("Browser Agent Service Worker started");
     try {
-        await ensureWebsocketConnected();
+        const connected = await ensureWebsocketConnected();
+        if (!connected) {
+            reconnectWebSocket();
+            showBadgeError();
+        }
     } catch {
         reconnectWebSocket();
     }

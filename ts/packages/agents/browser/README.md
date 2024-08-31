@@ -15,7 +15,7 @@ To build the browser extension, run `pnpm run build` in this folder. For debug s
 2. Build the extension
 3. Load the unpackaged extension
    - Go to the "manage extensions page" from step #1
-   - Click on "load unpackaged extension". Navigate to the `dist` folder of the browser extension package.
+   - Click on "load unpackaged extension". Navigate to the `dist/extension` folder of the browser extension package.
 
 ## Running the extension
 

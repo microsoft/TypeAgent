@@ -15,7 +15,7 @@
           "type": "node"
         },
         {
-            "name": "Debug Main Process",
+            "name": "Shell (Main process)",
             "type": "node",
             "request": "launch",
             "cwd": "${workspaceRoot}/packages/shell",

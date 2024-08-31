@@ -33,7 +33,7 @@ function simulateMouseClick(targetNode: HTMLElement) {
     );
 }
 
-function clickOnCell(selector: string) {
+function clickOnElement(selector: string) {
     const targetElement = document.querySelector(selector) as HTMLDivElement;
     if (targetElement) {
         simulateMouseClick(targetElement);
@@ -56,7 +56,7 @@ function simulateKeyEvent(targetNode: HTMLElement, character: string) {
     });
 }
 
-function enterLetterInCell(letter: string, selector: string) {
+function enterLetterInElement(letter: string, selector: string) {
     const targetElement = document.querySelector(selector) as HTMLDivElement;
 
     if (targetElement) {
@@ -73,12 +73,6 @@ function enterLetterInCell(letter: string, selector: string) {
     }
 }
 
-function enterTextInCells(text: string, selectors: string[]) {
-    for (var i = 0; i < Math.min(text.length, selectors.length); i++) {
-        enterLetterInCell(text[i], selectors[i]);
-    }
-}
-
 async function enterTextOnPage(text: string) {
     const activeElement = document.activeElement as HTMLElement;
     if (activeElement) {
@@ -89,30 +83,46 @@ async function enterTextOnPage(text: string) {
     }
 }
 
+async function enterTextInElement(text: string, selector: string) {
+    const targetElement = document.querySelector(selector) as HTMLElement;
+    if (targetElement) {
+        if (targetElement instanceof HTMLInputElement) {
+            targetElement.value = text;
+        } else {
+            for (var i = 0; i < text.length; i++) {
+                simulateKeyEvent(targetElement, text[i]);
+                await new Promise((r) => setTimeout(r, 20));
+            }
+        }
+    }
+}
+
 function sendDataToContentScript(data: any) {
     document.dispatchEvent(
-        new CustomEvent("fromCrosswordAutomation", { detail: data }),
+        new CustomEvent("fromUIEventsDispatcher", { detail: data }),
     );
 }
 
-document.addEventListener("toCrosswordAutomation", async function (e: any) {
+document.addEventListener("toUIEventsDispatcher", async function (e: any) {
     var message = e.detail;
     console.log("received", message);
     const actionName =
         message.actionName ?? message.fullActionName.split(".").at(-1);
 
-    if (actionName === "initialize") {
-        // await initializeCrosswordPage();
-    }
-
     if (actionName === "clickOnElement") {
-        clickOnCell(escapeCssSelector(message.parameters.cssSelector));
+        clickOnElement(escapeCssSelector(message.parameters.cssSelector));
     }
-    if (actionName === "enterText") {
+    if (actionName === "enterTextInElement") {
+        await enterTextInElement(
+            message.parameters.value,
+            escapeCssSelector(message.parameters.cssSelector),
+        );
+    }
+    if (actionName === "enterTextOnPage") {
         await enterTextOnPage(message.parameters.value.toUpperCase());
     }
 });
 
 document.addEventListener("DOMContentLoaded", async () => {
-    console.log("Crossword Script initialized");
+    console.log("UI Events Script initialized");
 });
