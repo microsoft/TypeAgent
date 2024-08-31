@@ -11,8 +11,7 @@ module.exports = {
     entry: {
         contentScript: path.join(srcDir, "contentScript.ts"),
         serviceWorker: path.join(srcDir, "serviceWorker.ts"),
-        "sites/commerce": path.join(srcDir, "sites", "commerce.ts"),
-        "sites/crossword": path.join(srcDir, "sites", "crossword.ts"),
+        uiEventsDispatcher: path.join(srcDir, "uiEventsDispatcher.ts"),
         "sites/paleobiodb": path.join(srcDir, "sites", "paleobiodb.ts"),
     },
     output: {

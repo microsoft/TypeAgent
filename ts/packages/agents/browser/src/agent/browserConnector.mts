@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { WebSocketMessage } from "common-utils";
-import { AppAction, SessionContext } from "@typeagent/agent-sdk";
+import { AppActionWithParameters, SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "./browserActionHandler.mjs";
 
 export class BrowserConnector {
@@ -14,7 +14,7 @@ export class BrowserConnector {
     this.webSocket = context.agentContext.webSocket;
   }
 
-  async sendActionToBrowser(action: AppAction, messageType?: string) {
+  async sendActionToBrowser(action: AppActionWithParameters, messageType?: string) {
     return new Promise<any | undefined>((resolve, reject) => {
       if (this.webSocket) {
         try {
@@ -26,11 +26,7 @@ export class BrowserConnector {
             requestId = new Date().getTime().toString();
           }
           if (!messageType) {
-            if (action.translatorName!.startsWith("browser.")) {
-              messageType = `browserActionRequest.${action.translatorName!.substring(8)}`;
-            } else {
-              messageType = "browserActionRequest";
-            }
+            messageType = "browserActionRequest";
           }
 
           this.webSocket.send(
@@ -207,8 +203,10 @@ export class BrowserConnector {
   }
 
   async enterTextIn(textValue: string, cssSelector?: string) {
+    let actionName = cssSelector ? "enterTextInElement": "enterTextOnPage";
+    
     const textAction = {
-      actionName: "enterText",
+      actionName: actionName,
       parameters: {
         value: textValue,
         cssSelector: cssSelector,

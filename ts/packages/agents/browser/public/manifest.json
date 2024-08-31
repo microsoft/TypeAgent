@@ -36,11 +36,7 @@
       "matches": ["https://paleobiodb.org/*"]
     },
     {
-      "resources": ["sites/crossword.js"],
-      "matches": ["https://*/*"]
-    },
-    {
-      "resources": ["sites/commerce.js"],
+      "resources": ["uiEventsDispatcher.js"],
       "matches": ["https://*/*"]
     }
   ],

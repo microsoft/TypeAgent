@@ -757,9 +757,9 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
             "https://www.bestcrosswords.com/bestcrosswords/guestconstructor",
         )
     ) {
-        // insert site-specific script
+        // insert ui automation script
         const result = await chrome.tabs.sendMessage(targetTab.id!, {
-            type: "setup_crossword",
+            type: "setup_ui_events_script",
         });
 
         messageType = "enableSiteTranslator";
@@ -769,8 +769,9 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
     }
 
     if (targetTab.url?.startsWith("https://www.homedepot.com/")) {
+        // insert ui automation script
         const result = await chrome.tabs.sendMessage(targetTab.id!, {
-            type: "setup_commerce",
+            type: "setup_ui_events_script",
         });
 
         messageType = "enableSiteTranslator";
@@ -1134,6 +1135,30 @@ async function runBrowserAction(action: any) {
             const targetTab = await getActiveTab();
             await awaitPageLoad(targetTab);
             responseObject = targetTab.url;
+            break;
+        }
+        case "clickOnElement": {
+            const targetTab = await getActiveTab();
+            const response = await chrome.tabs.sendMessage(targetTab.id!, {
+                type: "run_ui_event",
+                action: action
+            });
+            break;
+        }
+        case "enterTextInElement": {
+            const targetTab = await getActiveTab();
+            const response = await chrome.tabs.sendMessage(targetTab.id!, {
+                type: "run_ui_event",
+                action: action
+            });
+            break;
+        }
+        case "enterTextOnPage": {
+            const targetTab = await getActiveTab();
+            const response = await chrome.tabs.sendMessage(targetTab.id!, {
+                type: "run_ui_event",
+                action: action
+            });
             break;
         }
         case "getPageSchema": {
