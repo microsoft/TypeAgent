@@ -110,9 +110,10 @@ export class ChatInput {
     inputContainer: HTMLDivElement;
     textarea: ExpandableTextarea;
     micButton: HTMLButtonElement;
-    picButton: HTMLButtonElement;
+    picButton: HTMLLabelElement;
     camButton: HTMLButtonElement;
     dragTemp: string | undefined = undefined;
+    input: HTMLInputElement;
 
     constructor(
         speechInfo: SpeechInfo,
@@ -170,14 +171,7 @@ export class ChatInput {
             this.dragTemp = undefined;
 
             if (e.dataTransfer != null && e.dataTransfer.files.length > 0) {
-                let file: File = e.dataTransfer.files[0];
-                let buffer: ArrayBuffer = await file.arrayBuffer();
-                
-                let dropImg: HTMLImageElement = document.createElement("img");
-                dropImg.src = "data:image/png;base64," + this._arrayBufferToBase64(buffer);
-                dropImg.className = "chat-inpput-dropImage";
-
-                this.textarea.getTextEntry().append(dropImg);
+                this.loadImageFile(e.dataTransfer.files[0]);
             }
 
             e.preventDefault();
@@ -221,7 +215,21 @@ export class ChatInput {
             }
         });
 
-        this.picButton = document.createElement("button");
+
+        this.input = document.createElement("input");
+        this.input.type = "file";
+        this.input.classList.add("chat-message-hidden");
+        this.input.id = "image_upload";
+        this.inputContainer.append(this.input);
+        this.input.accept = "image/*,.jpg,.png,.gif";
+        this.input.onchange = () => {
+            if (this.input.files && this.input.files?.length > 0) {
+                this.loadImageFile(this.input.files[0]);
+            }
+        }
+
+        this.picButton = document.createElement("label");
+        this.picButton.htmlFor = this.input.id;
         this.picButton.appendChild(iconImage());
         this.picButton.className = "chat-input-button";
         this.inputContainer.appendChild(this.picButton)
@@ -263,6 +271,16 @@ export class ChatInput {
                     }
                 });
         }
+    }
+
+    async loadImageFile(file: File) {
+        let buffer: ArrayBuffer = await file.arrayBuffer();
+        
+        let dropImg: HTMLImageElement = document.createElement("img");
+        dropImg.src = "data:image/png;base64," + this._arrayBufferToBase64(buffer);
+        dropImg.className = "chat-inpput-dropImage";
+
+        this.textarea.getTextEntry().append(dropImg);
     }
 
     clear() {
