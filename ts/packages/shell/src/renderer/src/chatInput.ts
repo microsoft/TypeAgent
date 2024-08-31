@@ -42,7 +42,7 @@ export class ExpandableTextarea {
             }
             if (event.key === "Enter") {
                 event.preventDefault();
-                const text = this.getEditedText();
+                const text = this.getTextEntry().innerHTML;
                 if (text.length > 0) {
                     handlers.onSend(text);
                     this.textEntry.innerText = "";
