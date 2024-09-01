@@ -10,6 +10,8 @@ import {
     NameValue,
 } from "typeagent";
 import { TextEmbeddingModel, openai } from "aiclient";
+import registerDebug from "debug";
+const debugError = registerDebug("typeagent:desktop:error");
 
 export interface ProgramNameIndex {
     addOrUpdate(programName: string): Promise<void>;
@@ -19,12 +21,36 @@ export interface ProgramNameIndex {
         query: string | NormalizedEmbedding,
         maxMatches: number,
     ): Promise<ScoredItem<NameValue<string>>[]>;
+
+    toJSON(): Record<string, string>;
+}
+
+export function loadProgramNameIndex(
+    vals: Record<string, string | undefined>,
+    json?: Record<string, string>,
+) {
+    const initialEmbeddings = json
+        ? Object.fromEntries(
+              Object.entries(json).map(([key, value]) => [
+                  key,
+                  new Float32Array(
+                      Uint8Array.from(
+                          [...atob(value)].map((c) => c.charCodeAt(0)),
+                      ).buffer,
+                  ),
+              ]),
+          )
+        : undefined;
+
+    return createProgramNameIndex(vals, initialEmbeddings);
 }
 
 export function createProgramNameIndex(
     vals: Record<string, string | undefined>,
+    initialEmbeddings?: Record<string, Float32Array>,
 ) {
-    let programEmbeddings: Record<string, NormalizedEmbedding> = {};
+    let programEmbeddings: Record<string, NormalizedEmbedding> =
+        initialEmbeddings ?? {};
     let embeddingModel: TextEmbeddingModel;
     const configValues = vals;
 
@@ -40,17 +66,33 @@ export function createProgramNameIndex(
         remove,
         reset,
         search,
+        toJSON,
     };
 
+    function toJSON() {
+        // Convert the Float32Array to a base64 string
+        return Object.fromEntries(
+            Object.entries(programEmbeddings).map(([key, value]) => [
+                key,
+                btoa(String.fromCharCode(...new Uint8Array(value.buffer))),
+            ]),
+        );
+    }
+
     async function addOrUpdate(programName: string) {
+        if (programEmbeddings[programName] !== undefined) {
+            return;
+        }
         try {
             const embedding = await generateEmbedding(
                 embeddingModel,
                 programName,
             );
             programEmbeddings[programName] = embedding;
-        } catch {
-            console.log("Could not create embedding for " + programName);
+        } catch (e: any) {
+            debugError(
+                `Could not create embedding for ${programName}. ${e.message}`,
+            );
             // TODO: Retry with back-off for 429 responses
         }
     }

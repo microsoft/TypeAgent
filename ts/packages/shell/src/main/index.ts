@@ -165,7 +165,9 @@ function showResult(message: IAgentMessage) {
 function sendStatusMessage(message: IAgentMessage, temporary: boolean = false) {
     // Ignore message without requestId
     if (message.requestId === undefined) {
-        console.warn(`sendStatusMessage: requestId is undefined. ${message}`);
+        console.warn(
+            `sendStatusMessage: requestId is undefined. ${message.message}`,
+        );
         return;
     }
     mainWindow?.webContents.send("status-message", message, temporary);

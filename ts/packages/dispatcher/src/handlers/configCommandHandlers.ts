@@ -120,12 +120,14 @@ class AgentToggleCommandHandler implements CommandHandler {
             context,
         );
 
-        const changedEntries = Object.entries(changed);
+        const changedEntries = Object.entries(changed).filter(
+            ([_, value]) => value !== undefined,
+        );
         if (changedEntries.length === 0) {
             context.requestIO.warn("No change");
         } else {
             const lines: string[] = [];
-            for (const [kind, options] of Object.entries(changed)) {
+            for (const [kind, options] of changedEntries) {
                 lines.push(`Changes (${kind}):`);
                 for (const [name, value] of Object.entries(options as any)) {
                     lines.push(`  ${name}: ${value ? "enabled" : "disabled"}`);

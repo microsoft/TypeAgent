@@ -16,15 +16,11 @@
     "./agent/manifest": "./src/agent/desktopManifest.json",
     "./agent/handlers": "./dist/agent/desktopActionHandler.js"
   },
-  "main": "dist/main.js",
   "scripts": {
     "build": "npm run tsc",
-    "postbuild": "copyfiles -u 1 \"src/**/*.txt\" \"src/**/*.html\" dist",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
-    "dev": "tsx src/main.ts",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
-    "start": "node dist/main.js",
     "tsc": "tsc -p src"
   },
   "dependencies": {
