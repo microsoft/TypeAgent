@@ -101,7 +101,7 @@ export interface ClientAPI {
             useLocalWhisper?: boolean,
         ) => void,
     ) => void;
-    processShellRequest: (request: string, id: string) => Promise<void>;
+    processShellRequest: (request: string, id: string, images: Uint8Array[]) => Promise<void>;
     sendPartialInput: (text: string) => void;
     getDynamicDisplay: (source: string, id: string) => Promise<DynamicDisplay>;
     onResponse(

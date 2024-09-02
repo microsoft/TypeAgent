@@ -14,8 +14,8 @@ const api: ClientAPI = {
             useLocalWhisper?: boolean,
         ) => void,
     ) => ipcRenderer.on("listen-event", callback),
-    processShellRequest: (request: string, id: string) => {
-        return ipcRenderer.invoke("request", request, id);
+    processShellRequest: (request: string, id: string, images: Uint8Array[]) => {
+        return ipcRenderer.invoke("request", request, id, images);
     },
     sendPartialInput: (text: string) => {
         ipcRenderer.send("partial-input", text);

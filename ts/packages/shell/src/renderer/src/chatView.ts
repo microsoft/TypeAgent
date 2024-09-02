@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { IdGenerator, getClientAPI } from "./main";
-import { ChatInput, ExpandableTextarea, questionInput } from "./chatInput";
+import { _base64ToArrayBuffer, BASE64_IMAGE_SRC, ChatInput, ExpandableTextarea, questionInput } from "./chatInput";
 import { SpeechInfo } from "./speech";
 import { SearchMenu } from "./search";
 import { AnsiUp } from "ansi_up";
@@ -1062,19 +1062,44 @@ export class ChatView {
         this.commandBackStackIndex = -1;
     }
 
-    addUserMessage(request: string) {
+    async addUserMessage(request: string) {
         const id = this.idGenerator.genId();
+
+        let tempDiv: HTMLDivElement = document.createElement("div");
+        tempDiv.innerHTML = request;
+
+        let images = await this.extractMultiModalContent(tempDiv);
+
         this.idToMessageGroup.set(
             id,
             new MessageGroup(
                 request,
                 this.messageDiv,
-                getClientAPI().processShellRequest(request, id),
+                getClientAPI().processShellRequest(tempDiv.innerText, id, images),
                 new Date(),
                 this.agents,
             ),
         );
         this.commandBackStackIndex = -1;
+    }
+
+    async extractMultiModalContent(tempDiv: HTMLDivElement): Promise<Uint8Array[]> {
+        let images = tempDiv.querySelectorAll<HTMLImageElement>(".chat-inpput-dropImage");
+        let retVal: Uint8Array[] = new Array<Uint8Array>(images.length);
+        for (let i = 0; i < images.length; i++) {
+            if (images[i].src.startsWith(BASE64_IMAGE_SRC)) {
+                retVal[i] = _base64ToArrayBuffer(images[i].src.substring(BASE64_IMAGE_SRC.length, images[i].src.length));
+            } else if (images[i].src.startsWith("blob:")) {
+                let response = await fetch(images[i].src);
+                let blob = await response.blob()
+                let ab = await blob.arrayBuffer();
+                retVal[i] = new Uint8Array(ab);
+            } else {
+                console.log("Unknown image source type.");
+            }
+        }
+
+        return retVal
     }
 
     markRequestExplained(id: string, timestamp: string, fromCache?: boolean) {
@@ -1254,3 +1279,4 @@ export class ChatView {
         (window as any).electron.ipcRenderer.send("send-input-text-complete");
     }
 }
+

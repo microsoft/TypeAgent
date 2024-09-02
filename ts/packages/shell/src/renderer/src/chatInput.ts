@@ -12,6 +12,8 @@ import {
 import { getClientAPI } from "./main";
 import { SpeechInfo, recognizeOnce } from "./speech";
 
+export const BASE64_IMAGE_SRC = "data:image/png;base64,";
+
 export interface ExpandableTextareaHandlers {
     onSend: (text: string) => void;
     altHandler?: (eta: ExpandableTextarea, event: KeyboardEvent) => void;
@@ -277,7 +279,7 @@ export class ChatInput {
         let buffer: ArrayBuffer = await file.arrayBuffer();
         
         let dropImg: HTMLImageElement = document.createElement("img");
-        dropImg.src = "data:image/png;base64," + this._arrayBufferToBase64(buffer);
+        dropImg.src = BASE64_IMAGE_SRC + _arrayBufferToBase64(buffer);
         dropImg.className = "chat-inpput-dropImage";
 
         this.textarea.getTextEntry().append(dropImg);
@@ -291,16 +293,26 @@ export class ChatInput {
     getInputContainer() {
         return this.inputContainer;
     }
+}
 
-    
-    _arrayBufferToBase64(buffer: ArrayBuffer ) {
-        let binary = '';
-        const bytes = new Uint8Array( buffer );
-        const len = bytes.byteLength;
-        for (var i = 0; i < len; i++) {
-            binary += String.fromCharCode( bytes[ i ] );
-        }
-        return window.btoa( binary );
+export function _arrayBufferToBase64(buffer: ArrayBuffer ) {
+    let binary = '';
+    const bytes = new Uint8Array( buffer );
+    const len = bytes.byteLength;
+    for (var i = 0; i < len; i++) {
+        binary += String.fromCharCode( bytes[ i ] );
     }
+    return window.btoa( binary );
+}
+
+export function _base64ToArrayBuffer(base64: string): Uint8Array {
+    //const binaryString: Buffer = Buffer.from(base64, 'base64');
+    const binaryString = window.atob(base64);
+    const len = binaryString.length;
+    const bytes: Uint8Array = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
 }
 
