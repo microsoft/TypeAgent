@@ -86,7 +86,6 @@ export class CameraView {
         this.pictureDiv.className = "picture";        
 
         videoContainer.append(this.video);
-        //videoContainer.append(this.pictureDiv);
         videoContainer.className = "picture"; 
 
         this.video.oncanplay = () => {
