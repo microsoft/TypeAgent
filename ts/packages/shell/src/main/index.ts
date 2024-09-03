@@ -308,7 +308,7 @@ const clientIO: ClientIO = {
     warn: sendStatusMessage,
     error: sendStatusMessage,
     result: showResult,
-    setActionStatus: showResult,
+    setActionDisplay: showResult,
     setDynamicDisplay,
     searchMenuCommand,
     actionCommand,

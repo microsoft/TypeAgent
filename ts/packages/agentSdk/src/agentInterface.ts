@@ -111,9 +111,6 @@ export interface AppAgentIO {
     readonly type: DisplayType;
     status(message: string): void;
     success(message: string): void;
-
-    // Action status
-    setActionStatus(message: string, actionIndex: number): void;
 }
 
 export interface ActionIO {

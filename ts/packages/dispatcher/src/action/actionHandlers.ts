@@ -51,7 +51,7 @@ function getActionContext(
             return sessionContext.agentIO.type;
         },
         setActionDisplay(content: string): void {
-            sessionContext.agentIO.setActionStatus(content, actionIndex);
+            context.requestIO.setActionDisplay(content, actionIndex, name);
         },
     };
     return {
@@ -103,9 +103,6 @@ function createSessionContext(
         },
         success(message: string) {
             context.requestIO.success(message, name);
-        },
-        setActionStatus(message: string, actionIndex: number) {
-            context.requestIO.setActionStatus(message, actionIndex, name);
         },
     };
     const sessionContext: SessionContext = {

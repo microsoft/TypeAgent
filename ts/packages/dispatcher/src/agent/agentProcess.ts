@@ -225,13 +225,6 @@ function createSessionContextShim(
                 message,
             });
         },
-        setActionStatus: (message: string, actionIndex: number): void => {
-            rpc.send("setActionStatus", {
-                contextId,
-                message,
-                actionIndex,
-            });
-        },
     };
     return {
         agentContext: context,

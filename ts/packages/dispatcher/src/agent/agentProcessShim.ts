@@ -212,15 +212,6 @@ export async function createAgentProcessShim(
         agentIOSuccess: (param: { contextId: number; message: string }) => {
             contextMap.get(param.contextId).agentIO.success(param.message);
         },
-        setActionStatus(param: {
-            contextId: number;
-            message: string;
-            actionIndex: number;
-        }) {
-            contextMap
-                .get(param.contextId)
-                .agentIO.setActionStatus(param.message, param.actionIndex);
-        },
         setActionDisplay: (param: {
             actionContextId: number;
             message: string;
