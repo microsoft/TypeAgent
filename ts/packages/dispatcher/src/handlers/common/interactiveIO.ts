@@ -34,7 +34,6 @@ export interface IAgentMessage {
     requestId: string | undefined;
     source: string;
     actionIndex?: number | undefined;
-    groupId?: string | undefined;
     metrics?: IMessageMetrics;
 }
 
@@ -178,14 +177,12 @@ function makeClientIOMessage(
     requestId: RequestId,
     source: string,
     actionIndex?: number,
-    groupId?: string,
 ): IAgentMessage {
     return {
         message,
         requestId,
         source,
         actionIndex,
-        groupId,
         metrics: Profiler.getInstance().getMetrics(requestId),
     };
 }
@@ -259,7 +256,6 @@ export function getRequestIO(
             status: string,
             actionIndex: number,
             source: string,
-            groupId?: string,
         ) =>
             clientIO.setActionStatus(
                 makeClientIOMessage(
@@ -268,7 +264,6 @@ export function getRequestIO(
                     requestId,
                     source,
                     actionIndex,
-                    groupId,
                 ),
             ),
 
