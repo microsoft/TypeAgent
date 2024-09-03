@@ -281,9 +281,9 @@ export async function createAgentProcessShim(
             name: string,
             value: string,
             partial: boolean,
-            context: SessionContext,
+            context: ActionContext<ShimContext>,
         ) {
-            return withContext(context, (contextParams) =>
+            return withActionContext(context, (contextParams) =>
                 rpc.send("streamPartialAction", {
                     ...contextParams,
                     actionName,

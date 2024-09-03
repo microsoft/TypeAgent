@@ -18,6 +18,7 @@ import {
     turnImpressionToString,
     DynamicDisplay,
     DisplayType,
+    ActionContext,
 } from "@typeagent/agent-sdk";
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
@@ -350,29 +351,34 @@ export async function validateWildcardMatch(
     return true;
 }
 
-export function streamPartialAction(
+export function startStreamPartialAction(
     translatorName: string,
     actionName: string,
-    name: string,
-    value: string,
-    partial: boolean,
     context: CommandHandlerContext,
 ) {
     const appAgentName = getAppAgentName(translatorName);
-    const appAGent = getAppAgent(appAgentName, context);
-    const sessionContext = getSessionContext(appAgentName, context);
-    if (appAGent.streamPartialAction === undefined) {
+    const appAgent = getAppAgent(appAgentName, context);
+    if (appAgent.streamPartialAction === undefined) {
         // The config declared that there are streaming action, but the agent didn't implement it.
         throw new Error(
             `Agent ${appAgentName} does not support streamPartialAction.`,
         );
     }
 
-    appAGent.streamPartialAction(
-        actionName,
-        name,
-        value,
-        partial,
-        sessionContext,
+    const actionContext = getActionContext(
+        appAgentName,
+        context,
+        context.requestId!,
+        0,
     );
+
+    return (name: string, value: string, partial: boolean) => {
+        appAgent.streamPartialAction!(
+            actionName,
+            name,
+            value,
+            partial,
+            actionContext,
+        );
+    };
 }
