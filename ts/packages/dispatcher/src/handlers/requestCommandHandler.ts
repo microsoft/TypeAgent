@@ -211,7 +211,7 @@ async function translateRequestWithTranslator(
     request: string,
     context: CommandHandlerContext,
     history?: HistoryContext,
-    attachments?: Uint8Array[],
+    attachments?: string[],
 ) {
     context.requestIO.status(
         `[${translatorName}] Translating '${request}'`,
@@ -465,7 +465,7 @@ export async function translateRequest(
     request: string,
     context: CommandHandlerContext,
     history?: HistoryContext,
-    attachments?: Uint8Array[],
+    attachments?: string[],
 ): Promise<TranslationResult | undefined | null> {
     if (!context.session.bot) {
         context.requestIO.error("No translation found (GPT is off).");
@@ -680,7 +680,7 @@ async function requestExplain(
 
 export class RequestCommandHandler implements CommandHandler {
     public readonly description = "Translate and explain a request";
-    public async run(request: string, context: CommandHandlerContext, attachments?: Uint8Array[]) {
+    public async run(request: string, context: CommandHandlerContext, attachments?: string[]) {
         // Don't handle the request if it contains the separator
         if (request.includes(RequestAction.Separator)) {
             throw new Error(

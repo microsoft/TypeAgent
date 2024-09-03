@@ -57,7 +57,7 @@ export default class RequestCommand extends Command {
         );
     }
 
-    loadAttachment(fileName: string | undefined): Uint8Array[] | undefined {
+    loadAttachment(fileName: string | undefined): string[] | undefined {
 
         if (fileName === undefined) {
             return undefined;
@@ -73,9 +73,10 @@ export default class RequestCommand extends Command {
             throw Error(`ERROR: The file '${fileName}' does not exist.`);
         }
 
-        let retVal = new Array<Uint8Array>(1);
-        retVal[0] = readFileSync(fileName);
+        let retVal: string[] = new Array<string>();
+        retVal.push(Buffer.from(readFileSync(fileName)).toString('base64'));
 
-        return retVal;
+        return  retVal;
     }
+
 }

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { IdGenerator, getClientAPI } from "./main";
-import { _base64ToArrayBuffer, ChatInput, ExpandableTextarea, questionInput } from "./chatInput";
+import { ChatInput, ExpandableTextarea, questionInput } from "./chatInput";
 import { SpeechInfo } from "./speech";
 import { SearchMenu } from "./search";
 import { AnsiUp } from "ansi_up";
@@ -1083,18 +1083,18 @@ export class ChatView {
         this.commandBackStackIndex = -1;
     }
 
-    async extractMultiModalContent(tempDiv: HTMLDivElement): Promise<Uint8Array[]> {
+    async extractMultiModalContent(tempDiv: HTMLDivElement): Promise<string[]> {
         let images = tempDiv.querySelectorAll<HTMLImageElement>(".chat-inpput-dropImage");
-        let retVal: Uint8Array[] = new Array<Uint8Array>(images.length);
+        let retVal: string[] = new Array<string>(images.length);
         for (let i = 0; i < images.length; i++) {
             if (images[i].src.startsWith("data:image")) {
                 let startIndex = images[i].src.indexOf("base64,") + 7;
-                retVal[i] = _base64ToArrayBuffer(images[i].src.substring(startIndex, images[i].src.length));
+                retVal[i] = images[i].src.substring(startIndex, images[i].src.length);
             } else if (images[i].src.startsWith("blob:")) {
                 let response = await fetch(images[i].src);
                 let blob = await response.blob()
                 let ab = await blob.arrayBuffer();
-                retVal[i] = new Uint8Array(ab);
+                retVal[i] = `data:image/png;base64,` + _arrayBufferToBase64(ab);
             } else {
                 console.log("Unknown image source type.");
             }
@@ -1279,5 +1279,25 @@ export class ChatView {
 
         (window as any).electron.ipcRenderer.send("send-input-text-complete");
     }
+}
+
+export function _arrayBufferToBase64(buffer: ArrayBuffer ) {
+    let binary = '';
+    const bytes = new Uint8Array( buffer );
+    const len = bytes.byteLength;
+    for (var i = 0; i < len; i++) {
+        binary += String.fromCharCode( bytes[ i ] );
+    }
+    return window.btoa( binary );
+}
+
+export function _base64ToArrayBuffer(base64: string): Uint8Array {
+    const binaryString = window.atob(base64);
+    const len = binaryString.length;
+    const bytes: Uint8Array = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
 }
 

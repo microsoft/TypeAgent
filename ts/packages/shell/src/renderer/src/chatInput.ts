@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatView, setContent } from "./chatView";
+import { _arrayBufferToBase64, ChatView, setContent } from "./chatView";
 import {
     iconMicrophone,
     iconMicrophoneListening,
@@ -297,26 +297,5 @@ export class ChatInput {
     getInputContainer() {
         return this.inputContainer;
     }
-}
-
-export function _arrayBufferToBase64(buffer: ArrayBuffer ) {
-    let binary = '';
-    const bytes = new Uint8Array( buffer );
-    const len = bytes.byteLength;
-    for (var i = 0; i < len; i++) {
-        binary += String.fromCharCode( bytes[ i ] );
-    }
-    return window.btoa( binary );
-}
-
-export function _base64ToArrayBuffer(base64: string): Uint8Array {
-    //const binaryString: Buffer = Buffer.from(base64, 'base64');
-    const binaryString = window.atob(base64);
-    const len = binaryString.length;
-    const bytes: Uint8Array = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes;
 }
 

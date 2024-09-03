@@ -203,7 +203,7 @@ export async function processCommandNoLock(
     originalInput: string,
     context: CommandHandlerContext,
     requestId?: RequestId,
-    attachments?: Uint8Array[],
+    attachments?: string[],
 ) {
     let input = originalInput.trim();
     if (!input.startsWith("@")) {
@@ -249,7 +249,7 @@ export async function processCommand(
     originalInput: string,
     context: CommandHandlerContext,
     requestId?: RequestId,
-    attachments?: Uint8Array[],
+    attachments?: string[],
 ) {
     // Process one command at at time.
     return context.commandLock(async () => {

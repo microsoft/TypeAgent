@@ -468,7 +468,7 @@ app.whenReady().then(async () => {
     }
 
     let settingSummary: string = "";
-    ipcMain.handle("request", async (_event, text: string, id: string, images: Uint8Array[]) => {
+    ipcMain.handle("request", async (_event, text: string, id: string, images: string[]) => {
         if (typeof text !== "string" || typeof id !== "string") {
             throw new Error("Invalid request");
         }
