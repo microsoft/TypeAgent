@@ -6,7 +6,7 @@ import { CommandHandlerContext } from "./commandHandlerContext.js";
 export interface CommandHandler {
     description: string;
     help?: string;
-    run(request: string, context: CommandHandlerContext): Promise<void>;
+    run(request: string, context: CommandHandlerContext, attachments?: Uint8Array[]): Promise<void>;
 }
 
 export type HandlerTable = {

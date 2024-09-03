@@ -203,6 +203,7 @@ export async function processCommandNoLock(
     originalInput: string,
     context: CommandHandlerContext,
     requestId?: RequestId,
+    attachments?: Uint8Array[],
 ) {
     let input = originalInput.trim();
     if (!input.startsWith("@")) {
@@ -227,7 +228,7 @@ export async function processCommandNoLock(
         }
         if (isCommandHandler(result.resolved)) {
             context.logger?.logEvent("command", { originalInput });
-            await result.resolved.run(result.args, context);
+            await result.resolved.run(result.args, context, attachments);
         } else {
             throw new Error(
                 `Command '${input}' requires a subcommand. Try '@help ${input}' for the list of sub commands.`,
@@ -248,10 +249,11 @@ export async function processCommand(
     originalInput: string,
     context: CommandHandlerContext,
     requestId?: RequestId,
+    attachments?: Uint8Array[],
 ) {
     // Process one command at at time.
     return context.commandLock(async () => {
-        return processCommandNoLock(originalInput, context, requestId);
+        return processCommandNoLock(originalInput, context, requestId, attachments);
     });
 }
 

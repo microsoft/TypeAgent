@@ -479,7 +479,12 @@ export function createChatModel(
         if (responseCallback) {
             responseCallback(params, data);
         }
-        return success(data.choices[0].message?.content ?? "");
+
+        if (typeof data.choices[0].message?.content === "string") {
+            return success(data.choices[0].message?.content);    
+        }
+        
+        return success("<multimodal> content");
     }
 
     async function* completeStream(
@@ -524,7 +529,13 @@ export function createChatModel(
                 choices: { delta: PromptSection }[];
             };
             if (data.choices && data.choices.length > 0) {
-                const delta = data.choices[0].delta?.content ?? "";
+                let delta: string = "";
+                if (typeof data.choices[0].delta?.content === "string") {
+                    delta = data.choices[0].delta?.content
+                } else {
+                    delta = "<multimodal content>";
+                }
+
                 if (delta) {
                     yield delta;
                 }

@@ -12,8 +12,6 @@ import {
 import { getClientAPI } from "./main";
 import { SpeechInfo, recognizeOnce } from "./speech";
 
-export const BASE64_IMAGE_SRC = "data:image/png;base64,";
-
 export interface ExpandableTextareaHandlers {
     onSend: (text: string) => void;
     altHandler?: (eta: ExpandableTextarea, event: KeyboardEvent) => void;
@@ -279,7 +277,13 @@ export class ChatInput {
         let buffer: ArrayBuffer = await file.arrayBuffer();
         
         let dropImg: HTMLImageElement = document.createElement("img");
-        dropImg.src = BASE64_IMAGE_SRC + _arrayBufferToBase64(buffer);
+        let mimeType = file.name.toLowerCase().substring(file.name.lastIndexOf(".") + 1, file.name.length);
+
+        if (file.name.toLowerCase().endsWith(".jpg")) {
+            mimeType = "jpeg";
+        }
+
+        dropImg.src = `data:image/${mimeType};base64,` + _arrayBufferToBase64(buffer);
         dropImg.className = "chat-inpput-dropImage";
 
         this.textarea.getTextEntry().append(dropImg);

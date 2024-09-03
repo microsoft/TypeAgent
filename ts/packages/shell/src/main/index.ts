@@ -469,13 +469,12 @@ app.whenReady().then(async () => {
 
     let settingSummary: string = "";
     ipcMain.handle("request", async (_event, text: string, id: string, images: Uint8Array[]) => {
-        console.log(`received ${images.length} images`);
         if (typeof text !== "string" || typeof id !== "string") {
             throw new Error("Invalid request");
         }
         debugShell(getPrompt(context), text);
 
-        await processCommand(text, context, id);
+        await processCommand(text, context, id, images);
         mainWindow?.webContents.send("send-demo-event", "CommandProcessed");
         translatorSetPartialInputHandler();
         const newSettingSummary = getSettingSummary(context);

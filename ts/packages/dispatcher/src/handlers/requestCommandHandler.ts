@@ -211,6 +211,7 @@ async function translateRequestWithTranslator(
     request: string,
     context: CommandHandlerContext,
     history?: HistoryContext,
+    attachments?: Uint8Array[],
 ) {
     context.requestIO.status(
         `[${translatorName}] Translating '${request}'`,
@@ -273,6 +274,7 @@ async function translateRequestWithTranslator(
         request,
         history?.promptSections,
         onProperty,
+        attachments
     );
     translator.createRequestPrompt = orp;
 
@@ -463,6 +465,7 @@ export async function translateRequest(
     request: string,
     context: CommandHandlerContext,
     history?: HistoryContext,
+    attachments?: Uint8Array[],
 ): Promise<TranslationResult | undefined | null> {
     if (!context.session.bot) {
         context.requestIO.error("No translation found (GPT is off).");
@@ -491,6 +494,7 @@ export async function translateRequest(
         request,
         context,
         history,
+        attachments,
     );
     if (action === undefined) {
         return undefined;
@@ -676,7 +680,7 @@ async function requestExplain(
 
 export class RequestCommandHandler implements CommandHandler {
     public readonly description = "Translate and explain a request";
-    public async run(request: string, context: CommandHandlerContext) {
+    public async run(request: string, context: CommandHandlerContext, attachments?: Uint8Array[]) {
         // Don't handle the request if it contains the separator
         if (request.includes(RequestAction.Separator)) {
             throw new Error(
@@ -694,12 +698,14 @@ export class RequestCommandHandler implements CommandHandler {
                 [],
                 "user",
                 context.requestId,
+                undefined,
+                attachments,
             );
         }
         const match = await matchRequest(request, context, history);
         const translationResult =
             match === undefined // undefined means not found
-                ? await translateRequest(request, context, history)
+                ? await translateRequest(request, context, history, attachments)
                 : match; // result or null
 
         if (!translationResult) {

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { IdGenerator, getClientAPI } from "./main";
-import { _base64ToArrayBuffer, BASE64_IMAGE_SRC, ChatInput, ExpandableTextarea, questionInput } from "./chatInput";
+import { _base64ToArrayBuffer, ChatInput, ExpandableTextarea, questionInput } from "./chatInput";
 import { SpeechInfo } from "./speech";
 import { SearchMenu } from "./search";
 import { AnsiUp } from "ansi_up";
@@ -443,7 +443,7 @@ function stripAnsi(text: string): string {
 
 const enableText2Html = true;
 export function setContent(elm: HTMLElement, text: string) {
-    if (text.startsWith("<")) {
+    if (text.indexOf("<") > -1 && text.indexOf("Usage: @") == -1) {
         elm.innerHTML = text;
     } else if (enableText2Html) {
         elm.innerHTML = textToHtml(text);
@@ -1087,8 +1087,9 @@ export class ChatView {
         let images = tempDiv.querySelectorAll<HTMLImageElement>(".chat-inpput-dropImage");
         let retVal: Uint8Array[] = new Array<Uint8Array>(images.length);
         for (let i = 0; i < images.length; i++) {
-            if (images[i].src.startsWith(BASE64_IMAGE_SRC)) {
-                retVal[i] = _base64ToArrayBuffer(images[i].src.substring(BASE64_IMAGE_SRC.length, images[i].src.length));
+            if (images[i].src.startsWith("data:image")) {
+                let startIndex = images[i].src.indexOf("base64,") + 7;
+                retVal[i] = _base64ToArrayBuffer(images[i].src.substring(startIndex, images[i].src.length));
             } else if (images[i].src.startsWith("blob:")) {
                 let response = await fetch(images[i].src);
                 let blob = await response.blob()

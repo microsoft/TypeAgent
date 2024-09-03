@@ -14,7 +14,8 @@ export interface ChatHistoryEntry {
     entities: Entity[];
     role: PromptRole;
     id: string | undefined;
-    interpreter?: ImpressionInterpreter;
+    attachments?: Uint8Array[] | undefined;
+    interpreter?: ImpressionInterpreter;    
 }
 
 export interface ChatHistory {
@@ -28,6 +29,7 @@ export interface ChatHistory {
         role: PromptRole,
         id?: string,
         interpreter?: ImpressionInterpreter,
+        attachments?: Uint8Array[],
     ): void;
     getEntry(id: string): ChatHistoryEntry | undefined;
     getPromptSections(): PromptSection[];
@@ -38,6 +40,7 @@ export function createChatHistory(): ChatHistory {
     const typeMap: Map<string, Entity[]> = new Map();
     const userIdMap: Map<string, number> = new Map();
     const assistantIdMap: Map<string, number> = new Map();
+    const attachmentsMap: Map<string, Uint8Array[]> = new Map();
     return {
         entries: [],
         getPromptSections(maxChars = 2000) {
@@ -68,10 +71,11 @@ export function createChatHistory(): ChatHistory {
             text: string,
             entities: Entity[],
             role: PromptRole = "user",
-            id?: string,
+            id?: string,    
             interpreter?: ImpressionInterpreter,
+            attachments?: Uint8Array[],
         ): void {
-            this.entries.push({ text, entities, role, id });
+            this.entries.push({ text, entities, role, id, attachments });
             const index = this.entries.length - 1;
             if (id) {
                 if (role === "user") {
