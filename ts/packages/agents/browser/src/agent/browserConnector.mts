@@ -6,11 +6,9 @@ import { AppActionWithParameters, SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "./actionHandler.mjs";
 
 export class BrowserConnector {
-  private context: SessionContext<BrowserActionContext>;
   private webSocket: any;
 
   constructor(context: SessionContext<BrowserActionContext>) {
-    this.context = context;
     this.webSocket = context.agentContext.webSocket;
   }
 
@@ -21,13 +19,7 @@ export class BrowserConnector {
     return new Promise<any | undefined>((resolve, reject) => {
       if (this.webSocket) {
         try {
-          const agentIO = this.context.agentIO;
-          let requestId = this.context.requestId;
-          if (requestId) {
-            agentIO.status("Running remote action.");
-          } else {
-            requestId = new Date().getTime().toString();
-          }
+          const callId = new Date().getTime().toString();
           if (!messageType) {
             messageType = "browserActionRequest";
           }
@@ -37,7 +29,7 @@ export class BrowserConnector {
               source: "dispatcher",
               target: "browser",
               messageType: messageType,
-              id: requestId,
+              id: callId,
               body: action,
             }),
           );
@@ -49,7 +41,7 @@ export class BrowserConnector {
               data.target == "dispatcher" &&
               data.source == "browser" &&
               data.messageType == "browserActionResponse" &&
-              data.id == requestId &&
+              data.id == callId &&
               data.body
             ) {
               this.webSocket.removeEventListener("message", handler);

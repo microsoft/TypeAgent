@@ -78,7 +78,6 @@ export interface SessionContext<T = any> {
 
     // TODO: review if these should be exposed.
     readonly agentIO: AppAgentIO;
-    readonly requestId: RequestId;
     readonly sessionStorage: Storage | undefined;
     readonly profileStorage: Storage; // storage that are preserved across sessions
 
@@ -109,8 +108,6 @@ export interface Storage {
     getTokenCachePersistence(): Promise<TokenCachePersistence>;
 }
 
-// TODO: review if these should be exposed. Duplicated from dispatcher's interactiveIO.ts
-export type RequestId = string | undefined;
 export interface AppAgentIO {
     readonly type: DisplayType;
     status(message: string): void;
@@ -128,4 +125,5 @@ export interface ActionIO {
 export interface ActionContext<T = void> {
     readonly actionIO: ActionIO;
     readonly sessionContext: SessionContext<T>;
+    performanceMark(markName: string): void;
 }

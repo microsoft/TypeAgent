@@ -236,9 +236,6 @@ function createSessionContextShim(
     return {
         agentContext: context,
         agentIO,
-        get requestId(): string {
-            throw new Error("NYI");
-        },
         sessionStorage: hasSessionStorage
             ? getStorage(contextId, true)
             : undefined,
@@ -326,6 +323,12 @@ function getActionContextShim(
         },
         get actionIO() {
             return actionIO;
+        },
+        performanceMark: (name: string): void => {
+            rpc.send("performanceMark", {
+                actionContextId,
+                name,
+            });
         },
     };
 }
