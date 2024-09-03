@@ -12,13 +12,12 @@ import {
     ActionIO,
     createTurnImpressionFromLiteral,
     AppAgent,
+    AppAgentEvent,
     SessionContext,
-    AppAgentIO,
     TurnImpression,
     turnImpressionToString,
     DynamicDisplay,
     DisplayType,
-    ActionContext,
 } from "@typeagent/agent-sdk";
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
@@ -48,7 +47,7 @@ function getActionContext(
     const sessionContext = getSessionContext(name, context);
     const actionIO: ActionIO = {
         get type() {
-            return sessionContext.agentIO.type;
+            return context.requestIO.type;
         },
         setActionDisplay(content: string): void {
             context.requestIO.setActionDisplay(content, actionIndex, name);
@@ -94,29 +93,18 @@ function createSessionContext(
         ? getStorage(name, sessionDirPath)
         : undefined;
     const profileStorage = getStorage(name, getUserProfileDir());
-    const agentIO: AppAgentIO = {
-        get type() {
-            return context.requestIO.type;
-        },
-        status(message: string) {
-            context.requestIO.status(message, name);
-        },
-        success(message: string) {
-            context.requestIO.success(message, name);
-        },
-    };
     const sessionContext: SessionContext = {
         get agentContext() {
             return context.action[name];
-        },
-        get agentIO() {
-            return agentIO;
         },
         get sessionStorage() {
             return storage;
         },
         get profileStorage() {
             return profileStorage;
+        },
+        notify(event: AppAgentEvent, data: any) {
+            context.requestIO.notify(event, data, name);
         },
         async toggleTransientAgent(subAgentName: string, enable: boolean) {
             if (!subAgentName.startsWith(`${name}.`)) {

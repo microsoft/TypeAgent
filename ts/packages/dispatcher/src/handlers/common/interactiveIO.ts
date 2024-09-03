@@ -7,6 +7,7 @@ import { SearchMenuItem, ActionTemplateSequence, Profiler } from "common-utils";
 import chalk from "chalk";
 import { DispatcherName } from "../requestCommandHandler.js";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
+import { AppAgentEvent } from "@typeagent/agent-sdk";
 
 export type RequestId = string | undefined;
 
@@ -75,7 +76,12 @@ export interface ClientIO {
         message: string,
         requestId: RequestId,
     ): Promise<string | undefined>;
-    notify(event: string, requestId: RequestId, data: any): void;
+    notify(
+        event: string,
+        requestId: RequestId,
+        data: any,
+        source: string,
+    ): void;
     notify(
         event: "explained",
         requestId: RequestId,
@@ -84,6 +90,7 @@ export interface ClientIO {
             fromCache: boolean;
             fromUser: boolean;
         },
+        source: string,
     ): void;
     setDynamicDisplay(
         source: string,
@@ -138,6 +145,7 @@ export interface RequestIO {
         },
     ): void;
     notify(event: "randomCommandSelected", data: { message: string }): void;
+    notify(event: AppAgentEvent, message: string, source?: string): void;
 }
 
 export function getConsoleRequestIO(
@@ -273,8 +281,8 @@ export function getRequestIO(
             clientIO.askYesNo(message, requestId, defaultValue),
         question: async (message: string) =>
             clientIO.question(message, requestId),
-        notify(event: string, data: any) {
-            clientIO.notify(event, requestId, data);
+        notify(event: string, data: any, source: string = DispatcherName) {
+            clientIO.notify(event, requestId, data, source);
         },
     };
 }

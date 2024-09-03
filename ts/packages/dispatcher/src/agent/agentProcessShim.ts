@@ -7,6 +7,7 @@ import {
     ActionContext,
     SessionContext,
     StorageListOptions,
+    AppAgentEvent,
 } from "@typeagent/agent-sdk";
 import {
     AgentCallFunctions,
@@ -206,11 +207,12 @@ export async function createAgentProcessShim(
     };
 
     const agentContextCallHandlers: AgentContextCallFunctions = {
-        agentIOStatus: (param: { contextId: number; message: string }) => {
-            contextMap.get(param.contextId).agentIO.status(param.message);
-        },
-        agentIOSuccess: (param: { contextId: number; message: string }) => {
-            contextMap.get(param.contextId).agentIO.success(param.message);
+        notify: (param: {
+            contextId: number;
+            event: AppAgentEvent;
+            message: string;
+        }) => {
+            contextMap.get(param.contextId).notify(param.event, param.message);
         },
         setActionDisplay: (param: {
             actionContextId: number;

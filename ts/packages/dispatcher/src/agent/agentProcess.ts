@@ -5,13 +5,13 @@ import {
     ActionContext,
     AppAgent,
     SessionContext,
-    AppAgentIO,
     Storage,
     StorageEncoding,
     StorageListOptions,
     TokenCachePersistence,
     ActionIO,
     DisplayType,
+    AppAgentEvent,
 } from "@typeagent/agent-sdk";
 
 import { createRpc } from "common-utils";
@@ -214,25 +214,19 @@ function createSessionContextShim(
     hasSessionStorage: boolean,
     context: any,
 ): SessionContext<any> {
-    const agentIO: AppAgentIO = {
-        type: "text", // TODO: get the real value
-        status: (message: string): void => {
-            rpc.send("agentIOStatus", { contextId, message });
-        },
-        success: (message: string): void => {
-            rpc.send("agentIOSuccess", {
-                contextId,
-                message,
-            });
-        },
-    };
     return {
         agentContext: context,
-        agentIO,
         sessionStorage: hasSessionStorage
             ? getStorage(contextId, true)
             : undefined,
         profileStorage: getStorage(contextId, false),
+        notify: (event: AppAgentEvent, message: string): void => {
+            rpc.send("notify", {
+                contextId,
+                event,
+                message,
+            });
+        },
         toggleTransientAgent: async (
             name: string,
             enable: boolean,
@@ -294,8 +288,8 @@ function getActionContextShim(
     }
     const sessionContext = getSessionContextShim(param);
     const actionIO: ActionIO = {
-        get type() {
-            return sessionContext.agentIO.type;
+        get type(): DisplayType {
+            return "text";
         },
         setActionDisplay(content: string): void {
             rpc.send("setActionDisplay", {

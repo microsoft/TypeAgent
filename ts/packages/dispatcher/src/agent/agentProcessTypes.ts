@@ -1,12 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DisplayType, StorageListOptions } from "@typeagent/agent-sdk";
+import {
+    AppAgentEvent,
+    DisplayType,
+    StorageListOptions,
+} from "@typeagent/agent-sdk";
 import { JSONAction } from "agent-cache";
 
 export type AgentContextCallFunctions = {
-    agentIOStatus: (param: { contextId: number; message: string }) => void;
-    agentIOSuccess: (param: { contextId: number; message: string }) => void;
+    notify(param: {
+        contextId: number;
+        event: AppAgentEvent;
+        message: string;
+    }): void;
     setActionDisplay: (param: {
         actionContextId: number;
         message: string;
