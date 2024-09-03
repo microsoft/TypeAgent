@@ -57,7 +57,6 @@ export type AgentContextInvokeFunctions = {
         session: boolean;
         token: string;
     }) => Promise<any>;
-    issueCommand: (param: any) => Promise<any>;
     toggleTransientAgent: (param: {
         contextId: number;
         name: string;

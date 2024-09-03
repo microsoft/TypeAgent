@@ -240,12 +240,6 @@ function createSessionContextShim(
             ? getStorage(contextId, true)
             : undefined,
         profileStorage: getStorage(contextId, false),
-        issueCommand: async (command: string): Promise<void> => {
-            return rpc.invoke("issueCommand", {
-                contextId,
-                command,
-            });
-        },
         toggleTransientAgent: async (
             name: string,
             enable: boolean,

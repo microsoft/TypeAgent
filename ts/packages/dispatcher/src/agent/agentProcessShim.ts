@@ -126,10 +126,6 @@ export async function createAgentProcessShim(
     }
 
     const agentContextInvokeHandlers: AgentContextInvokeFunctions = {
-        issueCommand: async (param: any) => {
-            const context = contextMap.get(param.contextId);
-            return context.issueCommand(param.command);
-        },
         toggleTransientAgent: async (param: {
             contextId: number;
             name: string;

@@ -8,7 +8,6 @@ import {
     Logger,
     LoggerSink,
     MultiSinkLogger,
-    StopWatch,
     TypeChatJsonTranslatorWithStreaming,
     createDebugLoggerSink,
     createLimiter,
@@ -55,8 +54,9 @@ import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
 import { DispatcherName } from "../requestCommandHandler.js";
 import { AppAgent, SessionContext } from "@typeagent/agent-sdk";
-import { getAppAgents } from "../../agent/agentConfig.js";
+import { getModuleAgents } from "../../agent/agentConfig.js";
 import { conversation as Conversation } from "knowledge-processor";
+import { loadInlineAgents } from "../../agent/inlineAgentHandlers.js";
 
 export interface CommandResult {
     error?: boolean;
@@ -232,7 +232,7 @@ export async function initializeCommandHandlerContext(
     }
 
     const clientIO = options?.clientIO;
-    const agents = await getAppAgents();
+    const agents = new Map(await getModuleAgents());
     const context: CommandHandlerContext = {
         agents,
         session,
@@ -253,7 +253,7 @@ export async function initializeCommandHandlerContext(
         lastActionTranslatorName: getDefaultTranslatorName(), // REVIEW: just default to the first one on initialize?
         translatorCache: new Map<string, TypeChatJsonTranslator<object>>(),
         currentScriptDir: process.cwd(),
-        action: await initializeActionContext(agents),
+        action: {},
         chatHistory: createChatHistory(),
         logger,
         serviceHost: serviceHost,
@@ -264,6 +264,13 @@ export async function initializeCommandHandlerContext(
                 .map(([name]) => [name, false]),
         ),
     };
+
+    const inlineAgents = loadInlineAgents(context);
+    for (const agent of inlineAgents) {
+        context.agents.set(agent[0], agent[1]);
+    }
+
+    context.action = await initializeActionContext(agents);
 
     context.requestIO.context = context;
 
