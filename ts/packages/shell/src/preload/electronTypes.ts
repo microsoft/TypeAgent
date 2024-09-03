@@ -81,7 +81,6 @@ export interface IAgentMessage {
     requestId?: string | undefined;
     source: string;
     actionIndex?: number | undefined;
-    groupId?: string | undefined;
     metrics?: IMessageMetrics;
 }
 
