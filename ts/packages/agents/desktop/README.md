@@ -9,18 +9,19 @@ This project has two components
    - Launch Visual Studio
    - Open the repo directory [dotnet/autoShell](../../../../dotnet/autoShell/) folder. Build this project.
 
-2. The node process that integrates with TypeAgent. To build this:
-   - Go to the repo directory [ts/packages/agents/desktop](./) folder.
+2. App Agent for TypeAgent that sends actions to the .NET code:
+   - Go to the repo directory [ts/packages/agents/desktop](./) folder (current).
    - Run `pnpm run build`
 
 ## Running the automation
 
-1. In the repo directory [ts/packages/agents/desktop](./), run `pnpm run start`
-2. Launch the [TypeAgent Shell](../../shell) or the [TypeAgent CLI](../../cli). These are integrated with the automation agent and can send commands. You can issue commands from this interface such as:
-   - launch calculator
-   - maximize calculator
-   - tile calculator to the left and chrome to the right
-   - etc.
+Launch the [TypeAgent Shell](../../shell) or the [TypeAgent CLI](../../cli) and enable the app agent with command `@config agent desktop`.
+You can issue commands from these interfaces such as:
+
+- launch calculator
+- maximize calculator
+- tile calculator to the left and chrome to the right
+- etc.
 
 ## Trademarks
 
