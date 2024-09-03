@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import fs from "node:fs";
-import { Profiler, StopWatch } from "common-utils";
+import { StopWatch } from "common-utils";
 import {
     ChatResponseAction,
     LookupAndGenerateResponseAction,
@@ -409,11 +409,7 @@ async function runLookup(
         getLookupInstructions(),
         (url, answerSoFar) => {
             if (firstToken) {
-                Profiler.getInstance().mark(
-                    actionContext.sessionContext.requestId,
-                    "First Token",
-                );
-
+                actionContext.performanceMark("First Token");
                 firstToken = false;
             }
 

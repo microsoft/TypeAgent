@@ -796,7 +796,7 @@ async function sendActionToTabIndex(action: any) {
     return new Promise<string | undefined>((resolve, reject) => {
         if (webSocket) {
             try {
-                const requestId = new Date().getTime().toString();
+                const callId = new Date().getTime().toString();
                 const messageType = "tabIndexRequest";
 
                 webSocket.send(
@@ -804,7 +804,7 @@ async function sendActionToTabIndex(action: any) {
                         source: "browser",
                         target: "dispatcher",
                         messageType: messageType,
-                        id: requestId,
+                        id: callId,
                         body: action,
                     }),
                 );
@@ -815,7 +815,7 @@ async function sendActionToTabIndex(action: any) {
                     if (
                         data.target == "browser" &&
                         data.source == "dispatcher" &&
-                        data.id == requestId &&
+                        data.id == callId &&
                         data.body
                     ) {
                         switch (data.messageType) {

@@ -16,6 +16,7 @@ export type AgentContextCallFunctions = {
         actionContextId: number;
         message: string;
     }) => void;
+    performanceMark: (param: { actionContextId: number; name: string }) => void;
 };
 
 export type AgentContextInvokeFunctions = {

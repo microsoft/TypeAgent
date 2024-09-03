@@ -130,14 +130,14 @@ export class BrowserConnector {
                 try {
                     messageType = messageType ?? this.siteTranslatedActionName;
 
-                    const requestId = new Date().getTime().toString();
+                    const callId = new Date().getTime().toString();
 
                     this.webSocket.send(
                         JSON.stringify({
                             source: this.siteClientName,
                             target: "browser",
                             messageType: messageType,
-                            id: requestId,
+                            id: callId,
                             body: action,
                         }),
                     );
@@ -149,7 +149,7 @@ export class BrowserConnector {
                             data.target == this.siteClientName &&
                             data.source == "browser" &&
                             data.messageType == "browserActionResponse" &&
-                            data.id == requestId &&
+                            data.id == callId &&
                             data.body
                         ) {
                             this.webSocket.removeEventListener(

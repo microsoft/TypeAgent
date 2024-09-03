@@ -23,6 +23,7 @@ import { processCommandNoLock } from "../command.js";
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
 import { getUserProfileDir } from "../utils/userData.js";
+import { Profiler } from "common-utils";
 
 const debugAgent = registerDebug("typeagent:agent");
 const debugActions = registerDebug("typeagent:actions");
@@ -41,6 +42,7 @@ export async function initializeActionContext(agents: Map<string, AppAgent>) {
 function getActionContext(
     name: string,
     context: CommandHandlerContext,
+    requestId: string,
     actionIndex: number,
 ) {
     const sessionContext = getSessionContext(name, context);
@@ -67,6 +69,9 @@ function getActionContext(
         },
         get actionIO() {
             return actionIO;
+        },
+        performanceMark(markName: string) {
+            Profiler.getInstance().mark(requestId, markName);
         },
     };
 }
@@ -109,9 +114,6 @@ function createSessionContext(
         },
         get agentIO() {
             return agentIO;
-        },
-        get requestId() {
-            return context.requestId;
         },
         get sessionStorage() {
             return storage;
@@ -253,7 +255,12 @@ async function executeAction(
             `Agent ${appAgentName} does not support executeAction.`,
         );
     }
-    const actionContext = getActionContext(appAgentName, context, actionIndex);
+    const actionContext = getActionContext(
+        appAgentName,
+        context,
+        context.requestId!,
+        actionIndex,
+    );
     const returnedResult: TurnImpression | undefined =
         await appAgent.executeAction(action, actionContext);
 
