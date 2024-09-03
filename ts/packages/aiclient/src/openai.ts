@@ -335,7 +335,7 @@ export type CompletionUsageStats = {
 // - Endpoint names without the `azure:` or `openai:` prefix will assume it is prefixed with `azure:` and uses `AZURE_OPENAI_ENDPOINT_<name>`
 
 function parseEndPointName(endpoint?: string) {
-    if (endpoint === undefined) {
+    if (endpoint === undefined || endpoint === "") {
         return {
             provider:
                 EnvVars.OPENAI_ENDPOINT in process.env ? "openai" : "azure",
