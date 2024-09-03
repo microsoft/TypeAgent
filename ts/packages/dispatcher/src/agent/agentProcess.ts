@@ -114,7 +114,7 @@ const agentInvokeHandler: AgentInvokeFunctions = {
             param.type,
             param.displayId,
             param.partial,
-            getSessionContextShim(param),
+            getActionContextShim(param),
         );
     },
     async closeAgentContext(param: Partial<ContextParams>): Promise<any> {

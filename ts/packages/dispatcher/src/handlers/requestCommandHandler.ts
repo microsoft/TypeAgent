@@ -24,11 +24,12 @@ import {
 import { getColorElapsedString, Profiler } from "common-utils";
 import {
     executeActions,
-    streamPartialAction,
+    startStreamPartialAction,
     validateWildcardMatch,
 } from "../action/actionHandlers.js";
 import { unicodeChar } from "../utils/interactive.js";
 import {
+    getAppAgentName,
     getInjectedTranslatorForActionName,
     getTranslatorConfig,
     isChangeAssistantAction,
@@ -42,6 +43,7 @@ import { makeRequestPromptCreator } from "./common/chatHistoryPrompt.js";
 import { MatchResult } from "../../../cache/dist/constructions/constructions.js";
 import registerDebug from "debug";
 import { getAllActionInfo } from "../translation/actionInfo.js";
+import { ActionContext } from "@typeagent/agent-sdk";
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
@@ -231,8 +233,10 @@ async function translateRequestWithTranslator(
     );
 
     let firstToken = true;
-    let streamActionTranslatorName: string | undefined = undefined;
-    let streamActionName: string | undefined = undefined;
+    let streamFunction:
+        | ((name: string, value: any, partial: boolean) => void)
+        | undefined;
+
     const onProperty = context.session.getConfig().stream
         ? (prop: string, value: any, partial: boolean) => {
               // TODO: streaming currently doesn't not support multiple actions
@@ -246,8 +250,11 @@ async function translateRequestWithTranslator(
                   );
                   const config = getTranslatorConfig(actionTranslatorName);
                   if (config.streamingActions?.includes(value)) {
-                      streamActionTranslatorName = actionTranslatorName;
-                      streamActionName = value;
+                      streamFunction = startStreamPartialAction(
+                          actionTranslatorName,
+                          value,
+                          context,
+                      );
                   }
               }
 
@@ -256,15 +263,8 @@ async function translateRequestWithTranslator(
                   firstToken = false;
               }
 
-              if (streamActionTranslatorName) {
-                  streamPartialAction(
-                      streamActionTranslatorName,
-                      streamActionName!,
-                      prop,
-                      value,
-                      partial,
-                      context,
-                  );
+              if (streamFunction) {
+                  streamFunction(prop, value, partial);
               }
           }
         : undefined;

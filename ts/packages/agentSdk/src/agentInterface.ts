@@ -54,7 +54,7 @@ export interface AppAgent {
         name: string,
         value: string,
         partial: boolean,
-        context: SessionContext,
+        context: ActionContext<any>,
     ): void;
     executeAction?(
         action: AppAction,
