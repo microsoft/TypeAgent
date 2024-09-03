@@ -1,29 +1,39 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { processCommandNoLock } from "../../command.js";
+import { CommandHandlerContext } from "../../handlers/common/commandHandlerContext.js";
 import { SessionAction } from "../../translation/system/sessionActionSchema.js";
 import { AppAction, ActionContext } from "@typeagent/agent-sdk";
 
 export async function executeSessionAction(
     action: AppAction,
-    context: ActionContext,
+    context: ActionContext<CommandHandlerContext>,
 ) {
     const sessionAction = action as SessionAction;
     switch (sessionAction.actionName) {
         case "new":
-            await context.sessionContext.issueCommand(
+            await processCommandNoLock(
                 `@session new ${sessionAction.parameters.name ?? ""}`,
+                context.sessionContext.agentContext,
             );
             break;
         case "list":
-            await context.sessionContext.issueCommand("@session list");
+            await processCommandNoLock(
+                "@session list",
+                context.sessionContext.agentContext,
+            );
             break;
         case "showInfo":
-            await context.sessionContext.issueCommand("@session info");
+            await processCommandNoLock(
+                "@session info",
+                context.sessionContext.agentContext,
+            );
             break;
         case "toggleHistory":
-            await context.sessionContext.issueCommand(
+            await processCommandNoLock(
                 `@session history ${sessionAction.parameters.enable ? "on" : "off"}`,
+                context.sessionContext.agentContext,
             );
             break;
         default:

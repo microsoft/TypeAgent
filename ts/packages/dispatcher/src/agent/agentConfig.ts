@@ -7,11 +7,11 @@ import {
     TopLevelTranslatorConfig,
 } from "@typeagent/agent-sdk";
 import { getDispatcherConfig } from "../utils/config.js";
-import { loadInlineAgent } from "./inlineAgentHandlers.js";
 import { createRequire } from "module";
 import path from "node:path";
 
 import { createAgentProcessShim } from "./agentProcessShim.js";
+import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
 
 export type InlineAppAgentInfo = {
     type?: undefined;
@@ -93,24 +93,22 @@ async function loadModuleAgent(info: ModuleAppAgentInfo): Promise<AppAgent> {
     return module.instantiate();
 }
 
-async function loadAppAgents() {
+async function loadModuleAgents() {
     const configs = getDispatcherConfig().agents;
-    const appAgents: Map<string, AppAgent> = new Map();
+    const moduleAgents: [string, AppAgent][] = [];
+
     for (const [name, config] of Object.entries(configs)) {
-        appAgents.set(
-            name,
-            await (config.type === "module"
-                ? loadModuleAgent(config)
-                : loadInlineAgent(name)),
-        );
+        if (config.type === "module") {
+            moduleAgents.push([name, await loadModuleAgent(config)]);
+        }
     }
-    return appAgents;
+    return moduleAgents;
 }
 
-let appAgents: Map<string, AppAgent> | undefined;
-export async function getAppAgents() {
-    if (appAgents === undefined) {
-        appAgents = await loadAppAgents();
+let moduleAgents: [string, AppAgent][] | undefined;
+export async function getModuleAgents() {
+    if (moduleAgents === undefined) {
+        moduleAgents = await loadModuleAgents();
     }
-    return appAgents;
+    return moduleAgents;
 }

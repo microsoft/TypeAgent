@@ -19,7 +19,6 @@ import {
     DynamicDisplay,
     DisplayType,
 } from "@typeagent/agent-sdk";
-import { processCommandNoLock } from "../command.js";
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
 import { getUserProfileDir } from "../utils/userData.js";
@@ -120,9 +119,6 @@ function createSessionContext(
         },
         get profileStorage() {
             return profileStorage;
-        },
-        issueCommand(command: string) {
-            return processCommandNoLock(command, context);
         },
         async toggleTransientAgent(subAgentName: string, enable: boolean) {
             if (!subAgentName.startsWith(`${name}.`)) {
