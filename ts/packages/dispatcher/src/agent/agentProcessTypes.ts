@@ -7,11 +7,6 @@ import { JSONAction } from "agent-cache";
 export type AgentContextCallFunctions = {
     agentIOStatus: (param: { contextId: number; message: string }) => void;
     agentIOSuccess: (param: { contextId: number; message: string }) => void;
-    setActionStatus: (param: {
-        contextId: number;
-        message: string;
-        actionIndex: number;
-    }) => void;
     setActionDisplay: (param: {
         actionContextId: number;
         message: string;

@@ -65,7 +65,7 @@ export interface ClientIO {
         choices?: SearchMenuItem[],
         visible?: boolean,
     ): void;
-    setActionStatus(message: IAgentMessage): void;
+    setActionDisplay(message: IAgentMessage): void;
     askYesNo(
         message: string,
         requestId: RequestId,
@@ -105,7 +105,6 @@ function getMessage(input: string | LogFn) {
 export interface RequestIO {
     type: "html" | "text";
     context: CommandHandlerContext | undefined;
-    getRequestId(): RequestId;
     clear(): void;
     info(message: string | LogFn, source?: string): void;
     status(message: string | LogFn, source?: string): void;
@@ -115,7 +114,11 @@ export interface RequestIO {
     result(message: string | LogFn, source?: string): void;
 
     // Action status
-    setActionStatus(message: string, actionIndex: number, source: string): void;
+    setActionDisplay(
+        message: string,
+        actionIndex: number,
+        source: string,
+    ): void;
 
     // Input
     isInputEnabled(): boolean;
@@ -143,7 +146,6 @@ export function getConsoleRequestIO(
     return {
         type: "text",
         context: undefined,
-        getRequestId: () => undefined,
         clear: () => console.clear(),
         info: (input: string | LogFn) => console.info(getMessage(input)),
         status: (input: string | LogFn) =>
@@ -156,7 +158,7 @@ export function getConsoleRequestIO(
         error: (input: string | LogFn) =>
             console.error(chalk.red(getMessage(input))),
 
-        setActionStatus: (status: string) => console.log(chalk.grey(status)),
+        setActionDisplay: (status: string) => console.log(chalk.grey(status)),
 
         isInputEnabled: () => stdio !== undefined,
         askYesNo: async (message: string, defaultValue?: boolean) => {
@@ -195,7 +197,6 @@ export function getRequestIO(
     return {
         type: "html",
         context: context,
-        getRequestId: () => requestId,
         clear: () => clientIO.clear(),
         info: (input: string | LogFn, source: string = DispatcherName) =>
             clientIO.info(
@@ -252,12 +253,12 @@ export function getRequestIO(
                 ),
             ),
 
-        setActionStatus: (
+        setActionDisplay: (
             status: string,
             actionIndex: number,
             source: string,
         ) =>
-            clientIO.setActionStatus(
+            clientIO.setActionDisplay(
                 makeClientIOMessage(
                     context,
                     status,
@@ -282,7 +283,6 @@ export function getNullRequestIO(): RequestIO {
     return {
         type: "text",
         context: undefined,
-        getRequestId: () => undefined,
         clear: () => {},
         info: () => {},
         status: () => {},
@@ -290,7 +290,7 @@ export function getNullRequestIO(): RequestIO {
         warn: () => {},
         error: () => {},
         result: () => {},
-        setActionStatus: () => {},
+        setActionDisplay: () => {},
         isInputEnabled: () => false,
         askYesNo: async () => false,
         question: async () => undefined,
