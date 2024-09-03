@@ -1088,8 +1088,7 @@ export class ChatView {
         let retVal: string[] = new Array<string>(images.length);
         for (let i = 0; i < images.length; i++) {
             if (images[i].src.startsWith("data:image")) {
-                let startIndex = images[i].src.indexOf("base64,") + 7;
-                retVal[i] = images[i].src.substring(startIndex, images[i].src.length);
+                retVal[i] = images[i].src;
             } else if (images[i].src.startsWith("blob:")) {
                 let response = await fetch(images[i].src);
                 let blob = await response.blob()
