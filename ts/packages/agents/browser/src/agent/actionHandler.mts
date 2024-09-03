@@ -132,9 +132,8 @@ async function executeBrowserAction(
   const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
   if (webSocketEndpoint) {
     try {
-      const agentIO = context.sessionContext.agentIO;
-      const requestId = context.sessionContext.requestId;
-      agentIO.status("Running remote action.");
+      const callId = new Date().getTime().toString();
+      context.actionIO.setActionDisplay("Running remote action.");
 
       let messageType = "browserActionRequest";
       let target = "browser";
@@ -153,7 +152,7 @@ async function executeBrowserAction(
           source: "dispatcher",
           target: target,
           messageType,
-          id: requestId,
+          id: callId,
           body: action,
         }),
       );
@@ -174,7 +173,7 @@ function sendSiteTranslatorStatus(
   context: SessionContext<BrowserActionContext>,
 ) {
   const webSocketEndpoint = context.agentContext.webSocket;
-  const requestId = context.requestId;
+  const callId = new Date().getTime().toString();
 
   if (webSocketEndpoint) {
     webSocketEndpoint.send(
@@ -182,7 +181,7 @@ function sendSiteTranslatorStatus(
         source: "dispatcher",
         target: "browser",
         messageType: "siteTranslatorStatus",
-        id: requestId,
+        id: callId,
         body: {
           translator: translatorName,
           status: status,

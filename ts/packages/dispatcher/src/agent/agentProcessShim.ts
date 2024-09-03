@@ -15,7 +15,7 @@ import {
     AgentInvokeFunctions,
     ContextParams,
 } from "./agentProcessTypes.js";
-import { createRpc } from "common-utils";
+import { createRpc, Profiler } from "common-utils";
 import { fileURLToPath } from "url";
 
 type ShimContext =
@@ -232,6 +232,11 @@ export async function createAgentProcessShim(
             actionContextMap
                 .get(param.actionContextId)
                 .actionIO.setActionDisplay(param.message);
+        },
+        performanceMark: (param: { actionContextId: number; name: string }) => {
+            actionContextMap
+                .get(param.actionContextId)
+                .performanceMark(param.name);
         },
     };
 
