@@ -466,7 +466,8 @@ app.whenReady().then(async () => {
         );
 
         mainWindow?.webContents.send(
-            "settings-changed", ShellSettings.getinstance(),
+            "settings-changed",
+            ShellSettings.getinstance(),
         );
     });
 

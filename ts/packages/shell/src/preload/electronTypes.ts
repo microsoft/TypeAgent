@@ -222,7 +222,10 @@ export interface ClientAPI {
         callback: (e: Electron.IpcRendererEvent, key: string) => void,
     ): void;
     onSettingsChanged(
-        callback: (e: Electron.IpcRendererEvent, settings: ShellSettings) => void,
+        callback: (
+            e: Electron.IpcRendererEvent,
+            settings: ShellSettings,
+        ) => void,
     );
 }
 

@@ -110,7 +110,6 @@ export class TabView {
     }
 
     showTab(tabName: string) {
-
         this.mainContainer.classList.remove("closedTab");
 
         for (let j = 0; j < this.tabPages.length; j++) {

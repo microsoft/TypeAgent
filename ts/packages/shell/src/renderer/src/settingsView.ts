@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import { enumerateMicrophones } from "./speech";
-import { defaultSettings, ShellSettingsType } from "../../main/shellSettingsType.js";
+import {
+    defaultSettings,
+    ShellSettingsType,
+} from "../../main/shellSettingsType.js";
 import { TabView } from "./tabView.js";
 
 export class SettingsView {
@@ -42,12 +45,11 @@ export class SettingsView {
         this.menuCheckBox.type = "checkbox";
 
         this.menuCheckBox.onchange = () => {
-
             this.shellSettings.hideMenu = this.menuCheckBox.checked;
 
             window.electron.ipcRenderer.send(
                 "settings-changed",
-                this.shellSettings
+                this.shellSettings,
             );
         };
 
@@ -66,13 +68,12 @@ export class SettingsView {
         this.tabsCheckBox.type = "checkbox";
 
         this.tabsCheckBox.onchange = () => {
-
             console.log("hide tabs changed: " + this.tabsCheckBox.checked);
             this.shellSettings.hideTabs = this.tabsCheckBox.checked;
 
             window.electron.ipcRenderer.send(
                 "settings-changed",
-                this.shellSettings
+                this.shellSettings,
             );
 
             if (this.tabsCheckBox.checked) {
