@@ -39,6 +39,7 @@ import {
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
+import { AppAgentEvent } from "@typeagent/agent-sdk";
 
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
@@ -314,7 +315,7 @@ const clientIO: ClientIO = {
     actionCommand,
     askYesNo,
     question,
-    notify(event: string, requestId: RequestId, data: any) {
+    notify(event: string, requestId: RequestId, data: any, source: string) {
         switch (event) {
             case "explained":
                 markRequestExplained(
@@ -326,6 +327,11 @@ const clientIO: ClientIO = {
                 break;
             case "randomCommandSelected":
                 updateRandomCommandSelected(requestId, data.message);
+                break;
+            case AppAgentEvent.Error:
+            case AppAgentEvent.Warning:
+            case AppAgentEvent.Info:
+                console.log(`[${event}] ${source}: ${data}`);
                 break;
             default:
             // ignore

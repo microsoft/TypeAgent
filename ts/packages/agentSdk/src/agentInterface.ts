@@ -73,13 +73,18 @@ export interface AppAgent {
     closeAgentContext?(context: SessionContext): Promise<void>;
 }
 
+export enum AppAgentEvent {
+    Error = "error",
+    Warning = "warning",
+    Info = "info",
+}
+
 export interface SessionContext<T = any> {
     readonly agentContext: T;
-
-    // TODO: review if these should be exposed.
-    readonly agentIO: AppAgentIO;
     readonly sessionStorage: Storage | undefined;
     readonly profileStorage: Storage; // storage that are preserved across sessions
+
+    notify(event: AppAgentEvent, message: string): void;
 
     // can only toggle the sub agent of the current agent
     toggleTransientAgent(agentName: string, active: boolean): Promise<void>;
@@ -105,12 +110,6 @@ export interface Storage {
     delete(storagePath: string): Promise<void>;
 
     getTokenCachePersistence(): Promise<TokenCachePersistence>;
-}
-
-export interface AppAgentIO {
-    readonly type: DisplayType;
-    status(message: string): void;
-    success(message: string): void;
 }
 
 export interface ActionIO {

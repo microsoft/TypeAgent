@@ -16,10 +16,11 @@ import {
     createTurnImpressionFromError,
     ActionContext,
     DisplayType,
+    AppAgentEvent,
+    DynamicDisplay,
 } from "@typeagent/agent-sdk";
 import { searchAlbum, searchArtists, searchTracks } from "../client.js";
 import { htmlStatus } from "../playback.js";
-import { DynamicDisplay } from "../../../../agentSdk/dist/agentInterface.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -63,7 +64,8 @@ async function updatePlayerContext(
 ) {
     if (enable) {
         const user = await enableSpotify(context);
-        context.agentIO.success(
+        context.notify(
+            AppAgentEvent.Info,
             chalk.blue(`Spotify integration enabled. Logged in as ${user}.`),
         );
     } else {
