@@ -53,7 +53,7 @@ import {
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
 import { DispatcherName } from "../requestCommandHandler.js";
-import { AppAgent, SessionContext } from "@typeagent/agent-sdk";
+import { AppAgent, AppAgentEvent, SessionContext } from "@typeagent/agent-sdk";
 import { getModuleAgents } from "../../agent/agentConfig.js";
 import { conversation as Conversation } from "knowledge-processor";
 import { loadInlineAgents } from "../../agent/inlineAgentHandlers.js";
@@ -192,6 +192,27 @@ async function getSession(options?: InitializeCommandHandlerContextOptions) {
     return session;
 }
 
+function getLoggerSink(isDbEnabled: () => boolean, requestIO: RequestIO) {
+    const debugLoggerSink = createDebugLoggerSink();
+    let dbLoggerSink: LoggerSink | undefined;
+
+    try {
+        dbLoggerSink = createMongoDBLoggerSink(
+            "telemetrydb",
+            "dispatcherlogs",
+            isDbEnabled,
+        );
+    } catch (e) {
+        requestIO.notify(AppAgentEvent.Warning, `DB logging disabled. ${e}`);
+    }
+
+    return new MultiSinkLogger(
+        dbLoggerSink === undefined
+            ? [debugLoggerSink]
+            : [debugLoggerSink, dbLoggerSink],
+    );
+}
+
 export async function initializeCommandHandlerContext(
     hostName: string,
     options?: InitializeCommandHandlerContextOptions,
@@ -207,18 +228,14 @@ export async function initializeCommandHandlerContext(
         path ? path : "/data/testChat",
         false,
     );
-    const dbLoggerSink: LoggerSink | undefined = createMongoDBLoggerSink(
-        "telemetrydb",
-        "dispatcherlogs",
-        () => context.dblogging,
-    );
 
-    const loggerSink = new MultiSinkLogger([createDebugLoggerSink()]);
-
-    if (dbLoggerSink !== undefined) {
-        loggerSink.addSink(dbLoggerSink);
-    }
-
+    const clientIO = options?.clientIO;
+    const requestIO = clientIO
+        ? getRequestIO(undefined, clientIO, undefined)
+        : clientIO === undefined
+          ? getConsoleRequestIO(stdio)
+          : getNullRequestIO();
+    const loggerSink = getLoggerSink(() => context.dblogging, requestIO);
     const logger = new ChildLogger(loggerSink, DispatcherName, {
         hostName,
         userId: getUserId(),
@@ -231,7 +248,6 @@ export async function initializeCommandHandlerContext(
         serviceHost = await createServiceHost();
     }
 
-    const clientIO = options?.clientIO;
     const agents = new Map(await getModuleAgents());
     const context: CommandHandlerContext = {
         agents,
@@ -241,11 +257,7 @@ export async function initializeCommandHandlerContext(
         explanationAsynchronousMode,
         dblogging: true,
         clientIO,
-        requestIO: clientIO
-            ? getRequestIO(undefined, clientIO, undefined)
-            : clientIO === undefined
-              ? getConsoleRequestIO(stdio)
-              : getNullRequestIO(),
+        requestIO,
 
         // Runtime context
         commandLock: createLimiter(1), // Make sure we process one command at a time.
