@@ -783,22 +783,16 @@ async function populateMeetingDetailsFromEvent(
     if (events instanceof Array) {
         if (events && events.length > 0) {
             const displayText = findEventsDisplayHtml(events);
-            const literalText = `Action calendar.${actionName} completed.`;
             let result = createTurnImpressionFromDisplay(displayText);
-            result.literalText = literalText;
             return result;
         } else {
             const displayText = `You have a meeting free day 😊`;
-            const literalText = `Action calendar.${actionName} completed.`;
             let result = createTurnImpressionFromDisplay(displayText);
-            result.literalText = literalText;
             return result;
         }
     } else {
         const displayText = findEventsDisplayHtml(events);
-        const literalText = `Action calendar.${actionName} completed.`;
         let result = createTurnImpressionFromDisplay(displayText);
-        result.literalText = literalText;
         return result;
     }
 }

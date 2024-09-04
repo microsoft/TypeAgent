@@ -84,15 +84,17 @@ export class GraphClient {
             const instance = new GraphClient();
 
             await instance.graphLock(async () => {
-                let loadSettings: boolean = instance.loadMSGraphSettings();
+                if (!GraphClient.instance) {
+                    let loadSettings: boolean = instance.loadMSGraphSettings();
 
-                if (loadSettings) {
-                    let fInitialized =
-                        await instance.initializeGraphFromDeviceCode();
+                    if (loadSettings) {
+                        let fInitialized =
+                            await instance.initializeGraphFromDeviceCode();
 
-                    if (fInitialized && instance._userClient) {
-                        GraphClient.instance = instance;
-                        await instance.loadUserEmailAddresses();
+                        if (fInitialized && instance._userClient) {
+                            GraphClient.instance = instance;
+                            await instance.loadUserEmailAddresses();
+                        }
                     }
                 }
             });
