@@ -52,13 +52,23 @@ export function getStorage(name: string, baseDir: string): Storage {
             return fs.promises.unlink(fullPath);
         },
         getTokenCachePersistence: async () => {
-            return PersistenceCreator.createPersistence({
-                cachePath: getFullPath("token"),
-                dataProtectionScope: DataProtectionScope.CurrentUser,
-                serviceName: `TypeAgent.${name}`,
-                accountName: `TokenCache`,
-                usePlaintextFileOnLinux: false,
-            });
+            try {
+                return PersistenceCreator.createPersistence({
+                    cachePath: getFullPath("token"),
+                    dataProtectionScope: DataProtectionScope.CurrentUser,
+                    serviceName: `TypeAgent.${name}`,
+                    accountName: `TokenCache`,
+                    usePlaintextFileOnLinux: false,
+                });
+            } catch (e: any) {
+                console.error(
+                    `Failed to create token cache persistence for ${name}: ${e.message}`,
+                );
+                return {
+                    load: async () => null,
+                    save: async () => {},
+                };
+            }
         },
     };
 }
