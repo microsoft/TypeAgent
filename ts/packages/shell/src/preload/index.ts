@@ -89,8 +89,8 @@ const api: ClientAPI = {
     onShowDialog(callback) {
         ipcRenderer.on("show-dialog", callback);
     },
-    onHideMenuChanged(callback) {
-        ipcRenderer.on("hide-menu-changed", callback);
+    onSettingsChanged(callback) {
+        ipcRenderer.on("settings-changed", callback);
     },
 };
 
