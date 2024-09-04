@@ -5,6 +5,7 @@
     "schemaFile": "./chatResponseActionSchema.ts",
     "schemaType": "ChatResponseAction",
     "injected": true,
-    "cached": false
+    "cached": false,
+    "streamingActions": ["generateResponse"]
   }
 }

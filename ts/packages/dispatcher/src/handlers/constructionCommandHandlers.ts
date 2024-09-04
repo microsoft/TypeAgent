@@ -18,7 +18,7 @@ import { readTestData } from "../utils/test/testData.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { ConstructionStore, printImportConstructionResult } from "agent-cache";
 import { getSessionCacheDirPath } from "../explorer.js";
-import { getDispatcherAgentName } from "../translation/agentTranslators.js";
+import { getAppAgentName } from "../translation/agentTranslators.js";
 import { RequestIO } from "./common/interactiveIO.js";
 import { parseRequestArgs } from "../utils/args.js";
 import { glob } from "glob";
@@ -232,7 +232,7 @@ async function getImportTranslationFiles(
         const enabledAgents = new Set(
             Object.entries(context.session.getConfig().translators)
                 .filter(([name, enabled]) => enabled)
-                .map(([name]) => getDispatcherAgentName(name)),
+                .map(([name]) => getAppAgentName(name)),
         );
 
         files = Object.entries(infos).flatMap(([name, info]) =>
@@ -324,6 +324,7 @@ class ConstructionDeleteCommandHandler implements CommandHandler {
 export function getConstructionCommandHandlers(): HandlerTable {
     return {
         description: "Command to manage the construction store",
+        defaultSubCommand: undefined,
         commands: {
             new: new ConstructionNewCommandHandler(),
             load: new ConstructionLoadCommandHandler(),

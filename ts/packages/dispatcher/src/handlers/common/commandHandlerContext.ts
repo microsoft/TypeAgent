@@ -8,9 +8,11 @@ import {
     Logger,
     LoggerSink,
     MultiSinkLogger,
+    TypeChatJsonTranslatorWithStreaming,
     createDebugLoggerSink,
     createLimiter,
     createMongoDBLoggerSink,
+    enableJsonTranslatorStreaming,
 } from "common-utils";
 import {
     AgentCache,
@@ -35,6 +37,7 @@ import {
     getDefaultTranslatorName,
     getTranslatorNames,
     loadAgentJsonTranslator,
+    getTranslatorConfigs,
 } from "../../translation/agentTranslators.js";
 import { getCacheFactory } from "../../utils/cacheFactory.js";
 import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
@@ -49,6 +52,11 @@ import {
 } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
+import { DispatcherName } from "../requestCommandHandler.js";
+import { AppAgent, AppAgentEvent, SessionContext } from "@typeagent/agent-sdk";
+import { getModuleAgents } from "../../agent/agentConfig.js";
+import { conversation as Conversation } from "knowledge-processor";
+import { loadInlineAgents } from "../../agent/inlineAgentHandlers.js";
 
 export interface CommandResult {
     error?: boolean;
@@ -58,8 +66,11 @@ export interface CommandResult {
 
 // Command Handler Context definition.
 export type CommandHandlerContext = {
+    agents: Map<string, AppAgent>;
     session: Session;
+    sessionContext: Map<string, SessionContext>;
 
+    conversationManager?: Conversation.ConversationManager;
     // Per activation configs
     developerMode?: boolean;
     explanationAsynchronousMode: boolean;
@@ -69,8 +80,8 @@ export type CommandHandlerContext = {
 
     // Runtime context
     commandLock: Limiter; // Make sure we process one command at a time.
-    currentTranslatorName: string;
-    translatorCache: Map<string, TypeChatJsonTranslator<object>>;
+    lastActionTranslatorName: string;
+    translatorCache: Map<string, TypeChatJsonTranslatorWithStreaming<object>>;
     agentCache: AgentCache;
     action: { [key: string]: any };
     currentScriptDir: string;
@@ -79,6 +90,8 @@ export type CommandHandlerContext = {
     localWhisper: ChildProcess | undefined;
     requestId?: RequestId;
     chatHistory: ChatHistory;
+    transientAgents: { [key: string]: boolean };
+
     // For @correct
     lastRequestAction?: RequestAction;
     lastExplanation?: object;
@@ -106,11 +119,12 @@ export function getTranslator(
     const config = context.session.getConfig();
     const newTranslator = loadAgentJsonTranslator(
         translatorName,
-        undefined,
-        config.switch.inline ? config.translators : undefined,
+        config.models.translator,
+        config.switch.inline ? getActiveTranslators(context) : undefined,
         config.multipleActions,
     );
-    context.translatorCache.set(translatorName, newTranslator);
+    const streamingTranslator = enableJsonTranslatorStreaming(newTranslator);
+    context.translatorCache.set(translatorName, streamingTranslator);
     return newTranslator;
 }
 
@@ -178,6 +192,27 @@ async function getSession(options?: InitializeCommandHandlerContextOptions) {
     return session;
 }
 
+function getLoggerSink(isDbEnabled: () => boolean, requestIO: RequestIO) {
+    const debugLoggerSink = createDebugLoggerSink();
+    let dbLoggerSink: LoggerSink | undefined;
+
+    try {
+        dbLoggerSink = createMongoDBLoggerSink(
+            "telemetrydb",
+            "dispatcherlogs",
+            isDbEnabled,
+        );
+    } catch (e) {
+        requestIO.notify(AppAgentEvent.Warning, `DB logging disabled. ${e}`);
+    }
+
+    return new MultiSinkLogger(
+        dbLoggerSink === undefined
+            ? [debugLoggerSink]
+            : [debugLoggerSink, dbLoggerSink],
+    );
+}
+
 export async function initializeCommandHandlerContext(
     hostName: string,
     options?: InitializeCommandHandlerContextOptions,
@@ -187,19 +222,21 @@ export async function initializeCommandHandlerContext(
     const stdio = options?.stdio;
 
     const session = await getSession(options);
-    const dbLoggerSink: LoggerSink | undefined = createMongoDBLoggerSink(
-        "telemetrydb",
-        "dispatcherlogs",
-        () => context.dblogging,
+    const path = session.getSessionDirPath();
+    const conversationManager = await Conversation.createConversationManager(
+        "conversation",
+        path ? path : "/data/testChat",
+        false,
     );
 
-    const loggerSink = new MultiSinkLogger([createDebugLoggerSink()]);
-
-    if (dbLoggerSink !== undefined) {
-        loggerSink.addSink(dbLoggerSink);
-    }
-
-    const logger = new ChildLogger(loggerSink, "dispatcher", {
+    const clientIO = options?.clientIO;
+    const requestIO = clientIO
+        ? getRequestIO(undefined, clientIO, undefined)
+        : clientIO === undefined
+          ? getConsoleRequestIO(stdio)
+          : getNullRequestIO();
+    const loggerSink = getLoggerSink(() => context.dblogging, requestIO);
+    const logger = new ChildLogger(loggerSink, DispatcherName, {
         hostName,
         userId: getUserId(),
         sessionId: () => context.session.dir,
@@ -211,30 +248,43 @@ export async function initializeCommandHandlerContext(
         serviceHost = await createServiceHost();
     }
 
-    const clientIO = options?.clientIO;
+    const agents = new Map(await getModuleAgents());
     const context: CommandHandlerContext = {
+        agents,
         session,
+        conversationManager,
+        sessionContext: new Map<string, SessionContext>(),
         explanationAsynchronousMode,
         dblogging: true,
         clientIO,
-        requestIO: clientIO
-            ? getRequestIO(clientIO, undefined)
-            : clientIO === undefined
-              ? getConsoleRequestIO(stdio)
-              : getNullRequestIO(),
+        requestIO,
 
         // Runtime context
         commandLock: createLimiter(1), // Make sure we process one command at a time.
         agentCache: await getAgentCache(session, logger),
-        currentTranslatorName: getDefaultTranslatorName(), // REVIEW: just default to the first one on initialize?
+        lastActionTranslatorName: getDefaultTranslatorName(), // REVIEW: just default to the first one on initialize?
         translatorCache: new Map<string, TypeChatJsonTranslator<object>>(),
         currentScriptDir: process.cwd(),
-        action: await initializeActionContext(),
+        action: {},
         chatHistory: createChatHistory(),
         logger,
         serviceHost: serviceHost,
         localWhisper: undefined,
+        transientAgents: Object.fromEntries(
+            getTranslatorConfigs()
+                .filter(([, config]) => config.transient)
+                .map(([name]) => [name, false]),
+        ),
     };
+
+    const inlineAgents = loadInlineAgents(context);
+    for (const agent of inlineAgents) {
+        context.agents.set(agent[0], agent[1]);
+    }
+
+    context.action = await initializeActionContext(agents);
+
+    context.requestIO.context = context;
 
     await updateActionContext(context.session.getConfig().actions, context);
     return context;
@@ -252,6 +302,11 @@ export async function setSessionOnCommandHandlerContext(
     session: Session,
 ) {
     context.session = session;
+    for (const [name, sessionContext] of context.sessionContext.entries()) {
+        getAppAgent(name, context).closeAgentContext?.(sessionContext);
+    }
+    context.sessionContext.clear();
+    context.action = await initializeActionContext(context.agents);
     context.agentCache = await getAgentCache(context.session, context.logger);
     await updateActionContext(context.session.getConfig().actions, context);
 }
@@ -272,6 +327,7 @@ export async function changeContextConfig(
 
     if (
         changed.translators ||
+        changed.models?.translator !== undefined ||
         changed.switch?.inline ||
         changed.multipleActions
     ) {
@@ -307,23 +363,78 @@ export async function changeContextConfig(
 
     // cache and auto save are handled separately
     if (changed.cache !== undefined) {
-        // the cache state is changed.  Auto save is configured in configAgentCache as well.
+        // the cache state is changed.
+        // Auto save and model is configured in configAgentCache as well.
         await configAgentCache(context.session, context.agentCache);
-    } else if (changed.autoSave !== undefined) {
-        // Make sure the cache has a file for a persisted session
-        if (changed.autoSave) {
-            if (context.session.cache) {
-                const cacheDataFilePath =
-                    await context.session.ensureCacheDataFilePath();
-                await context.agentCache.constructionStore.save(
-                    cacheDataFilePath,
-                );
+    } else {
+        if (changed.autoSave !== undefined) {
+            // Make sure the cache has a file for a persisted session
+            if (changed.autoSave) {
+                if (context.session.cache) {
+                    const cacheDataFilePath =
+                        await context.session.ensureCacheDataFilePath();
+                    await context.agentCache.constructionStore.save(
+                        cacheDataFilePath,
+                    );
+                }
             }
+            await context.agentCache.constructionStore.setAutoSave(
+                changed.autoSave,
+            );
         }
-        await context.agentCache.constructionStore.setAutoSave(
-            changed.autoSave,
-        );
+        if (changed.models?.explainer !== undefined) {
+            context.agentCache.model = changed.models.explainer;
+        }
     }
 
     return changed;
+}
+
+export function getAppAgent(
+    appAgentName: string,
+    context: CommandHandlerContext,
+) {
+    const appAgent = context.agents.get(appAgentName);
+    if (appAgent === undefined) {
+        throw new Error(`Invalid dispatcher agent name: ${appAgentName}`);
+    }
+    return appAgent;
+}
+
+export function getActiveTranslatorList(context: CommandHandlerContext) {
+    return Object.entries(context.session.getConfig().translators)
+        .filter(
+            ([name, value]) => value && context.transientAgents[name] !== false,
+        )
+        .map(([name]) => name);
+}
+
+export function getActiveTranslators(context: CommandHandlerContext) {
+    const result = { ...context.session.getConfig().translators };
+    for (const [name, enabled] of Object.entries(context.transientAgents)) {
+        if (enabled === false) {
+            result[name] = false;
+        }
+    }
+    return result;
+}
+
+export function isTranslatorEnabled(
+    translatorName: string,
+    context: CommandHandlerContext,
+) {
+    return (
+        context.session.getConfig().translators[translatorName] === true &&
+        context.transientAgents[translatorName] !== false
+    );
+}
+
+export function isActionEnabled(
+    translatorName: string,
+    context: CommandHandlerContext,
+) {
+    return (
+        context.session.getConfig().actions[translatorName] === true &&
+        context.transientAgents[translatorName] !== false
+    );
 }

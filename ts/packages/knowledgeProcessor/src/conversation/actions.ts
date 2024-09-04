@@ -4,32 +4,49 @@
 import {
     FileSystem,
     ObjectFolderSettings,
-    ScoredItem,
     SearchOptions,
     asyncArray,
     dateTime,
 } from "typeagent";
 import {
+    KeyValueIndex,
     KnowledgeStore,
     TextIndex,
     TextIndexSettings,
     createIndexFolder,
     createKnowledgeStore,
     createTextIndex,
-    searchIndex,
 } from "../knowledgeIndex.js";
 import { Action, VerbTense } from "./knowledgeSchema.js";
 import path from "path";
-import { TextBlock, TextBlockType } from "../text.js";
 import { ActionFilter } from "./knowledgeSearchSchema.js";
-import { getRangeOfTemporalSequence } from "../temporal.js";
-import { SetOp, uniqueFrom } from "../setOperations.js";
-import { EntityIndex } from "./entities.js";
-import { ExtractedAction, actionVerbsToString } from "./knowledge.js";
+import {
+    TemporalLog,
+    getRangeOfTemporalSequence,
+    itemsFromTemporalSequence,
+    filterTemporalSequence,
+} from "../temporal.js";
+import {
+    addToSet,
+    intersect,
+    intersectUnionMultiple,
+    unionMultiple,
+    uniqueFrom,
+    intersectMultiple,
+} from "../setOperations.js";
+import {
+    ExtractedAction,
+    NoEntityName,
+    actionVerbsToString,
+} from "./knowledge.js";
+import { TermFilter } from "./knowledgeTermSearchSchema.js";
+import { toStopDate, toStartDate } from "./knowledgeActions.js";
+import { DateTimeRange } from "./dateTimeSchema.js";
 
 export interface ActionSearchOptions extends SearchOptions {
     verbSearchOptions?: SearchOptions | undefined;
-    entitySearchOptions?: SearchOptions | undefined;
+    nameSearchOptions?: SearchOptions | undefined;
+    loadActions?: boolean | undefined;
 }
 
 export interface ActionSearchResult<TActionId = any> {
@@ -48,17 +65,7 @@ function createSearchResults<TActionId = any>(): ActionSearchResult<TActionId> {
     };
 }
 
-export type ConcreteActionFilter<TEntityId = any> = {
-    // Each verb is typically a word
-    verbs: string[];
-    verbTense: VerbTense;
-    // ASSUMPTION: the following ID arrays are SORTED
-    subjectEntityIds?: TEntityId[] | undefined;
-    objectEntityIds?: TEntityId[] | undefined;
-    indirectObjectEntityIds?: TEntityId[] | undefined;
-};
-
-export interface ActionIndex<TActionId = any, TEntityId = any, TSourceId = any>
+export interface ActionIndex<TActionId = any, TSourceId = any>
     extends KnowledgeStore<ExtractedAction<TSourceId>, TActionId> {
     readonly verbIndex: TextIndex<TActionId>;
 
@@ -72,35 +79,61 @@ export interface ActionIndex<TActionId = any, TEntityId = any, TSourceId = any>
         filter: ActionFilter,
         options: ActionSearchOptions,
     ): Promise<ActionSearchResult<TActionId>>;
-    searchVerbs(
-        verb: string[],
-        tense?: VerbTense,
-        options?: SearchOptions,
-    ): Promise<ScoredItem<TActionId[]>[]>;
+    searchTerms(
+        filter: TermFilter,
+        options: ActionSearchOptions,
+    ): Promise<ActionSearchResult<TActionId>>;
+    loadSourceIds(
+        sourceIdLog: TemporalLog<TSourceId>,
+        results: ActionSearchResult<TActionId>[],
+        unique?: Set<TSourceId>,
+    ): Promise<Set<TSourceId> | undefined>;
 }
 
-export async function createActionIndex<TEntityId = any, TSourceId = any>(
+export async function createActionIndex<TSourceId = any>(
     settings: TextIndexSettings,
-    getEntityIndex: () => Promise<EntityIndex<TEntityId>>,
+    getNameIndex: () => Promise<TextIndex<string>>,
     rootPath: string,
     folderSettings?: ObjectFolderSettings,
     fSys?: FileSystem,
-): Promise<ActionIndex<string, string, TSourceId>> {
-    type EntityId = string;
+): Promise<ActionIndex<string, TSourceId>> {
     type ActionId = string;
-    const actionStore = await createKnowledgeStore<ExtractedAction<TSourceId>>(
-        settings,
-        rootPath,
-        folderSettings,
-        fSys,
-    );
-
-    const verbIndex = await createTextIndex<ActionId>(
-        settings,
-        path.join(rootPath, "verbs"),
-        folderSettings,
-        fSys,
-    );
+    // Initialize indexes
+    const [
+        actionStore,
+        verbIndex,
+        subjectIndex,
+        objectIndex,
+        indirectObjectIndex,
+    ] = await Promise.all([
+        createKnowledgeStore<ExtractedAction<TSourceId>>(
+            settings,
+            rootPath,
+            folderSettings,
+            fSys,
+        ),
+        createTextIndex<ActionId>(
+            settings,
+            path.join(rootPath, "verbs"),
+            folderSettings,
+            fSys,
+        ),
+        createIndexFolder<ActionId>(
+            path.join(rootPath, "subjects"),
+            folderSettings,
+            fSys,
+        ),
+        createIndexFolder<ActionId>(
+            path.join(rootPath, "objects"),
+            folderSettings,
+            fSys,
+        ),
+        createIndexFolder<ActionId>(
+            path.join(rootPath, "indirectObjects"),
+            folderSettings,
+            fSys,
+        ),
+    ]);
     return {
         ...actionStore,
         verbIndex,
@@ -109,7 +142,8 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         getActions,
         getSourceIds,
         search,
-        searchVerbs,
+        searchTerms,
+        loadSourceIds,
     };
 
     async function add(
@@ -117,7 +151,30 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         id?: ActionId,
     ): Promise<ActionId> {
         id = await actionStore.add(action, id);
-        await addVerb(action.value, id);
+        const postings = [id];
+
+        const names = await getNameIndex();
+        await Promise.all([
+            addVerb(action.value, postings),
+            addName(
+                names,
+                subjectIndex,
+                action.value.subjectEntityName,
+                postings,
+            ),
+            addName(
+                names,
+                objectIndex,
+                action.value.objectEntityName,
+                postings,
+            ),
+            addName(
+                names,
+                indirectObjectIndex,
+                action.value.indirectObjectEntityName,
+                postings,
+            ),
+        ]);
         return id;
     }
 
@@ -155,9 +212,26 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         );
     }
 
-    async function addVerb(action: Action, id: ActionId): Promise<void> {
+    async function addVerb(
+        action: Action,
+        actionIds: ActionId[],
+    ): Promise<void> {
         const fullVerb = actionVerbsToString(action.verbs, action.verbTense);
-        await verbIndex.put(fullVerb, [id]);
+        await verbIndex.put(fullVerb, actionIds);
+    }
+
+    async function addName(
+        names: TextIndex<string>,
+        nameIndex: KeyValueIndex<string, ActionId>,
+        name: string,
+        actionIds: ActionId[],
+    ): Promise<void> {
+        if (name && name !== NoEntityName) {
+            const nameId = await names.getId(name);
+            if (nameId) {
+                await nameIndex.put(actionIds, nameId);
+            }
+        }
     }
 
     async function search(
@@ -165,143 +239,201 @@ export async function createActionIndex<TEntityId = any, TSourceId = any>(
         options: ActionSearchOptions,
     ): Promise<ActionSearchResult<ActionId>> {
         const results = createSearchResults<ActionId>();
-        const fullVerb = actionVerbsToString(filter.verbs, filter.verbTense);
-        if (filter.verbs) {
-            const verbOptions = options.verbSearchOptions ?? options;
-            results.actionIds = await verbIndex.getNearest(
-                fullVerb,
-                verbOptions.maxMatches,
-                verbOptions.minScore,
-            );
-        }
-        if (results.actionIds) {
+        const names = await getNameIndex();
+        const [
+            subjectToActionIds,
+            objectToActionIds,
+            indirectObjectToActionIds,
+            verbToActionIds,
+        ] = await Promise.all([
+            matchName(names, subjectIndex, filter.subjectEntityName, options),
+            matchName(names, objectIndex, filter.objectEntityName, options),
+            matchName(
+                names,
+                indirectObjectIndex,
+                filter.indirectObjectEntityName,
+                options,
+            ),
+            matchVerbs(filter, options),
+        ]);
+        results.actionIds = [
+            ...intersectUnionMultiple(
+                subjectToActionIds,
+                objectToActionIds,
+                indirectObjectToActionIds,
+                verbToActionIds,
+            ),
+        ];
+        if (options.loadActions && results.actionIds) {
             results.actions = await getActions(results.actionIds);
-        }
-        if (results.actions && results.actions.length > 0) {
-            // Todo: index
-            filterResults(
-                results,
-                filter,
-                await resolveEntities(
-                    filter,
-                    options.entitySearchOptions ?? options,
-                ),
-            );
         }
         return results;
     }
 
-    async function searchVerbs(
-        verbs: string[],
-        tense?: VerbTense,
-        options?: SearchOptions,
-    ): Promise<ScoredItem<ActionId[]>[]> {
-        const fullVerb = actionVerbsToString(verbs, tense);
-        return searchIndex(
-            verbIndex,
-            fullVerb,
-            false,
-            options?.maxMatches ?? 1,
-            options?.minScore,
-        );
+    async function searchTerms(
+        filter: TermFilter,
+        options: ActionSearchOptions,
+    ): Promise<ActionSearchResult<ActionId>> {
+        const results = createSearchResults<ActionId>();
+        /*
+        if (!filter.verbs || filter.verbs.length === 0) {
+            return results;
+        }
+        */
+
+        if (filter.timeRange) {
+            results.temporalSequence = await matchTimeRange(filter.timeRange);
+        }
+
+        const names = await getNameIndex();
+        const [
+            subjectToActionIds,
+            objectToActionIds,
+            indirectToObjectIds,
+            verbToActionIds,
+        ] = await Promise.all([
+            matchTerms(names, subjectIndex, filter.terms, options),
+            matchTerms(names, objectIndex, filter.terms, options),
+            matchTerms(names, indirectObjectIndex, filter.terms, options),
+            matchVerbTerms(filter.verbs, undefined, options),
+        ]);
+        results.actionIds = [
+            ...intersectMultiple(
+                intersectUnionMultiple(
+                    subjectToActionIds,
+                    objectToActionIds,
+                    indirectToObjectIds,
+                    verbToActionIds,
+                ),
+                itemsFromTemporalSequence(results.temporalSequence),
+            ),
+        ];
+        if (results.actionIds && results.temporalSequence) {
+            // The temporal sequence maintains all entity ids seen at a timestamp.
+            // Since we identified specific entity ids, we remove the other ones
+            results.temporalSequence = filterTemporalSequence(
+                results.temporalSequence,
+                results.actionIds,
+            );
+        }
+
+        if (options.loadActions && results.actionIds) {
+            results.actions = await getActions(results.actionIds);
+        }
+        return results;
     }
 
-    function filterResults(
-        results: ActionSearchResult<ActionId>,
-        filter: ActionFilter,
-        actionEntities: ActionEntities,
-    ) {
-        for (let i = 0; i < results.actions!.length; ) {
-            const action = results.actions![i];
-            if (
-                !filterEntity(
-                    filter.subjectEntityName,
-                    actionEntities.subjects,
-                ) ||
-                !filterEntity(
-                    filter.objectEntityName,
-                    actionEntities.objects,
-                ) ||
-                !filterEntity(
-                    filter.indirectObjectEntityName,
-                    actionEntities.indirectObjects,
-                )
-            ) {
-                removeMatch(results, i);
-            } else {
-                ++i;
+    async function matchName(
+        names: TextIndex<string>,
+        nameIndex: KeyValueIndex<string, ActionId>,
+        name: string | undefined,
+        options: ActionSearchOptions,
+    ): Promise<IterableIterator<ActionId> | undefined> {
+        if (name && name !== NoEntityName) {
+            const nameOptions = options.nameSearchOptions ?? options;
+            // Possible names of entities
+            const nameIds = await names.getNearestText(
+                name,
+                nameOptions.maxMatches,
+                nameOptions.minScore,
+            );
+            if (nameIds && nameIds.length > 0) {
+                // Load all actions for those entities
+                const matches = await nameIndex.getMultiple(
+                    nameIds,
+                    settings.concurrency,
+                );
+                if (matches && matches.length > 0) {
+                    return unionMultiple(...matches);
+                }
             }
         }
+        return undefined;
     }
 
-    function filterEntity(
-        name: string | undefined,
-        entityNames: string[] | undefined,
-    ): boolean {
-        if (entityNames && entityNames.length > 0) {
-            // TODO: consider switch to binary search
-            return name ? entityNames.indexOf(name.toLowerCase()) >= 0 : false;
-        }
-        return true;
-    }
-
-    function removeMatch(results: ActionSearchResult<ActionId>, at: number) {
-        results.actions!.splice(at, 1);
-        results.actionIds!.splice(at, 1);
-    }
-
-    async function resolveEntities(
+    async function matchVerbs(
         filter: ActionFilter,
-        options: SearchOptions,
-    ): Promise<ActionEntities> {
-        const actionEntities: ActionEntities = {};
-        const tasks = [];
-        if (filter.subjectEntityName) {
-            tasks.push(async () => {
-                actionEntities.subjects = await resolveEntityNames(
-                    filter.subjectEntityName!,
-                    options,
-                );
-            });
+        options: ActionSearchOptions,
+    ): Promise<ActionId[] | undefined> {
+        if (filter.verbFilter && filter.verbFilter.verbs.length > 0) {
+            return matchVerbTerms(
+                filter.verbFilter.verbs,
+                filter.verbFilter.verbTense,
+                options,
+            );
         }
-        if (filter.objectEntityName) {
-            tasks.push(async () => {
-                actionEntities.objects = await resolveEntityNames(
-                    filter.objectEntityName!,
-                    options,
-                );
-            });
-        }
-        if (filter.indirectObjectEntityName) {
-            tasks.push(async () => {
-                actionEntities.indirectObjects = await resolveEntityNames(
-                    filter.indirectObjectEntityName!,
-                    options,
-                );
-            });
-        }
-        await Promise.all(tasks);
-        return actionEntities;
+        return undefined;
     }
 
-    async function resolveEntityNames(
-        name: string,
-        options: SearchOptions,
-    ): Promise<string[] | undefined> {
-        const entityIndex = await getEntityIndex();
-        const textIds = await entityIndex.nameIndex.getNearestText(
-            name,
-            options.maxMatches,
-            options.minScore,
+    async function matchTerms(
+        names: TextIndex<string>,
+        nameIndex: KeyValueIndex<string, ActionId>,
+        terms: string[],
+        options: ActionSearchOptions,
+    ) {
+        const matches = await asyncArray.mapAsync(
+            terms,
+            settings.concurrency,
+            (term) => matchName(names, nameIndex, term, options),
         );
-        return (await entityIndex.nameIndex.getTextMultiple(
-            textIds,
-        )) as string[];
+        return intersectUnionMultiple(...matches);
     }
 
-    type ActionEntities = {
-        subjects?: string[] | undefined;
-        objects?: string[] | undefined;
-        indirectObjects?: string[] | undefined;
-    };
+    async function matchVerbTerms(
+        verbs: string[] | undefined,
+        verbTense: VerbTense | undefined,
+        options: ActionSearchOptions,
+    ): Promise<ActionId[] | undefined> {
+        if (verbs && verbs.length > 0) {
+            const verbOptions = options.verbSearchOptions ?? options;
+            const matches = await verbIndex.getNearest(
+                actionVerbsToString(verbs, verbTense),
+                verbOptions.maxMatches,
+                verbOptions.minScore,
+            );
+            return matches;
+        }
+        return undefined;
+    }
+
+    async function matchTimeRange(timeRange: DateTimeRange | undefined) {
+        if (timeRange) {
+            return await actionStore.sequence.getEntriesInRange(
+                toStartDate(timeRange.startDate),
+                toStopDate(timeRange.stopDate),
+            );
+        }
+        return undefined;
+    }
+
+    async function loadSourceIds(
+        sourceIdLog: TemporalLog<TSourceId>,
+        results: ActionSearchResult<ActionId>[],
+        unique?: Set<TSourceId>,
+    ): Promise<Set<TSourceId> | undefined> {
+        if (results.length === 0) {
+            return unique;
+        }
+        unique ??= new Set<TSourceId>();
+        await asyncArray.forEachAsync(
+            results,
+            settings.concurrency,
+            async (a) => {
+                if (a.actionIds && a.actionIds.length > 0) {
+                    const ids = await getSourceIds(a.actionIds);
+                    const timeRange = a.getTemporalRange();
+                    if (timeRange) {
+                        const idRange = await sourceIdLog.getIdsInRange(
+                            timeRange.startDate,
+                            timeRange.stopDate,
+                        );
+                        addToSet(unique, intersect(ids, idRange));
+                    } else {
+                        addToSet(unique, ids);
+                    }
+                }
+            },
+        );
+        return unique.size === 0 ? undefined : unique;
+    }
 }

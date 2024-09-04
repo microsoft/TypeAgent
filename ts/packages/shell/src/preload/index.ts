@@ -20,6 +20,9 @@ const api: ClientAPI = {
     sendPartialInput: (text: string) => {
         ipcRenderer.send("partial-input", text);
     },
+    getDynamicDisplay(source: string, id: string) {
+        return ipcRenderer.invoke("get-dynamic-display", source, id);
+    },
     onActionCommand: (callback) => {
         ipcRenderer.on("action-command", callback);
     },
@@ -29,11 +32,11 @@ const api: ClientAPI = {
     onResponse(callback) {
         ipcRenderer.on("response", callback);
     },
+    onSetDynamicActionDisplay(callback) {
+        ipcRenderer.on("set-dynamic-action-display", callback);
+    },
     onStatusMessage(callback) {
         ipcRenderer.on("status-message", callback);
-    },
-    onUpdate(callback) {
-        ipcRenderer.on("update", callback);
     },
     onClear(callback) {
         ipcRenderer.on("clear", callback);
@@ -46,6 +49,9 @@ const api: ClientAPI = {
     },
     onMarkRequestExplained(callback) {
         ipcRenderer.on("mark-explained", callback);
+    },
+    onRandomCommandSelected(callback) {
+        ipcRenderer.on("update-random-command", callback);
     },
     onAskYesNo(callback) {
         ipcRenderer.on("askYesNo", callback);
@@ -73,6 +79,18 @@ const api: ClientAPI = {
     },
     onHelpRequested(callback) {
         ipcRenderer.on("help-requested", callback);
+    },
+    onRandomMessageRequested(callback) {
+        ipcRenderer.on("random-message-requested", callback);
+    },
+    onMicrophoneChangeRequested(callback) {
+        ipcRenderer.on("microphone-change-requested", callback);
+    },
+    onShowDialog(callback) {
+        ipcRenderer.on("show-dialog", callback);
+    },
+    onHideMenuChanged(callback) {
+        ipcRenderer.on("hide-menu-changed", callback);
     },
 };
 

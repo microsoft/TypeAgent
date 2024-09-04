@@ -1,32 +1,44 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    DispatcherAgentContext,
-    DispatcherAgent,
-    DispatcherAction,
-} from "dispatcher-agent";
-
-import { executeCorrectionAction } from "../action/correctionActionHandler.js";
+import { AppAgent, AppAction, ActionContext } from "@typeagent/agent-sdk";
 import { executeSessionAction } from "../action/system/sessionActionHandler.js";
 import { executeConfigAction } from "../action/system/configActionHandler.js";
+import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
+import { getDispatcherConfig } from "../utils/config.js";
 
-export function loadInlineAgent(name: string): DispatcherAgent {
-    return inlineHandlers[name] ?? {};
+export function loadInlineAgents(context: CommandHandlerContext) {
+    const configs = getDispatcherConfig().agents;
+    const inlineAgents: [string, AppAgent][] = [];
+
+    for (const [name, config] of Object.entries(configs)) {
+        if (config.type !== "module") {
+            inlineAgents.push([name, loadInlineAgent(name, context)]);
+        }
+    }
+    return inlineAgents;
 }
 
-const inlineHandlers: { [key: string]: DispatcherAgent } = {
-    correction: {
-        executeAction: executeCorrectionAction,
-    },
+function loadInlineAgent(
+    name: string,
+    context: CommandHandlerContext,
+): AppAgent {
+    const handlers = inlineHandlers[name];
+    if (handlers === undefined) {
+        throw new Error(`Invalid inline agent name: ${name}`);
+    }
+    return { ...handlers, initializeAgentContext: async () => context };
+}
+
+const inlineHandlers: { [key: string]: AppAgent } = {
     system: {
         executeAction: executeSystemAction,
     },
 };
 
 function executeSystemAction(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<undefined>,
+    action: AppAction,
+    context: ActionContext<CommandHandlerContext>,
 ) {
     switch (action.translatorName) {
         case "system.session":

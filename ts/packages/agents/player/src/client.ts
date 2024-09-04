@@ -67,7 +67,7 @@ import {
     UserData,
 } from "./userData.js";
 import registerDebug from "debug";
-import { Storage, TurnImpression } from "dispatcher-agent";
+import { Storage, TurnImpression } from "@typeagent/agent-sdk";
 
 const debugSpotify = registerDebug("typeagent:spotify");
 
@@ -87,9 +87,6 @@ export interface IClientContext {
     currentTrackList?: ITrackCollection;
     lastTrackStartIndex?: number;
     lastTrackEndIndex?: number;
-    updateActionStatus?:
-        | ((message: string, group_id: string) => void)
-        | undefined;
     userData?: UserData | undefined;
 }
 
@@ -142,7 +139,7 @@ export async function loadHistoryFile(
     context: IClientContext,
 ) {
     console.log(`Loading history file: ${historyPath}`);
-    if (!profileStorage.exists(historyPath) || !context.userData) {
+    if (!(await profileStorage.exists(historyPath)) || !context.userData) {
         return;
     }
     let data: undefined | SpotifyRecord[] = undefined;
@@ -181,11 +178,11 @@ async function htmlTrackNames(
 ) {
     const fetchedTracks = await trackCollection.getTracks(context.service);
     const selectedTracks = fetchedTracks.slice(startIndex, endIndex);
-    let turnImpression = {
+    const turnImpression: TurnImpression = {
         displayText: "",
         literalText: "",
         entities: [],
-    } as TurnImpression;
+    };
     let prevUrl = "";
     if (selectedTracks.length > 1) {
         turnImpression.displayText = `<div class='track-list scroll_enabled'><div>${headText}...</div><ol>\n`;
@@ -313,7 +310,9 @@ async function updateTrackListAndPrint(
 export async function getClientContext(
     profileStorage?: Storage,
 ): Promise<IClientContext> {
-    const service = new SpotifyService(createTokenProvider(profileStorage));
+    const service = new SpotifyService(
+        await createTokenProvider(profileStorage),
+    );
     await service.init();
     const userdata = await getUserProfile(service);
     service.storeUser({

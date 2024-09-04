@@ -3,85 +3,46 @@
     "player": {
       "type": "module",
       "name": "music",
+      "execMode": "separate",
       "imports": ["./test/data/player/**/*.json"]
     },
     "calendar": {
       "type": "module",
       "name": "calendar",
+      "execMode": "separate",
       "imports": [        
         "./test/data/calendar/**/*.json"        
       ]
     },
     "email": {
       "type": "module",
-      "name": "email"
+      "name": "email",
+      "execMode": "separate"
     },
     "list": {
       "type": "module",
-      "name": "list-agent"
+      "name": "list-agent",
+      "execMode": "separate"
     },
     "browser": {
       "type": "module",
-      "name": "browser-automation"
+      "name": "browser-automation",
+      "execMode": "dispatcher"
     },
     "desktop": {
       "type": "module",
-      "name": "desktop-automation"
+      "name": "desktop-automation",
+      "execMode": "separate"
     },
     "code": {
       "type": "module",
-      "name": "code-agent"
+      "name": "code-agent",
+      "execMode": "separate"
     },
-    "phrases": {
-      "emojiChar": "🗨️",
-      "defaultEnabled": false,
-      "actionDefaultEnabled": false,
-      "schema": {
-        "description": "Look up phrases in a database",
-        "schemaFile": "./src/handlers/dataFrame/phraseSchema.ts",
-        "schemaType": "DataFrameAction",
-        "dataFrameColumns": {
-          "categoryGroup": "string",
-          "category": "string",
-          "phraseText": "string",
-          "idiomOrSlang": "boolean",
-          "votes": "number"
-        }
-      }
-    },
-    "books": {
-      "emojiChar": "📖",
-      "defaultEnabled": false,
-      "actionDefaultEnabled": false,
-      "schema": {
-        "description": "Look up books in a database",
-        "schemaFile": "./src/handlers/dataFrame/bookSchema.ts",
-        "schemaType": "DataFrameAction",
-        "dataFrameColumns": {
-          "title": "string",
-          "author": "string",
-          "genre": "string",
-          "series": "string",
-          "language": "string",
-          "pageCount": "number",
-          "rating": "number"
-        }
-      }
-    },  
     "chat": {
       "type": "module",
-      "name": "chat-agent"
-    },
-    "correction": {
-      "emojiChar": "❌",
-      "defaultEnabled": false,
-      "schema": {
-        "description": "Correct previous action's translation",
-        "schemaFile": "./src/translation/correctionActionsSchema.ts",
-        "schemaType": "CorrectionAction",
-        "injected" : true,
-        "cached": false
-      }
+      "name": "chat-agent",
+      "execMode": "dispatcher"
     },
     "system": {
       "emojiChar": "🔧",

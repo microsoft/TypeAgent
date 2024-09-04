@@ -3,7 +3,7 @@
 
 import * as knowLib from "knowledge-processor";
 import { conversation } from "knowledge-processor";
-import { ChatModel, openai } from "aiclient";
+import { ChatModel, TextEmbeddingModel, openai } from "aiclient";
 import {
     CommandHandler,
     CommandMetadata,
@@ -17,18 +17,22 @@ import chalk from "chalk";
 import { PlayPrinter } from "./chatMemoryPrinter.js";
 import { timestampBlocks } from "./importer.js";
 import path from "path";
+import fs from "fs";
 
 export type ChatContext = {
     storePath: string;
     chatModel: ChatModel;
     chatModelFast: ChatModel;
+    embeddingModel: TextEmbeddingModel;
     maxCharsPerChunk: number;
     topicWindowSize: number;
     searchConcurrency: number;
     minScore: number;
+    entityTopK: number;
     conversationName: string;
     conversationSettings: knowLib.conversation.ConversationSettings;
     conversation: knowLib.conversation.Conversation;
+    conversationManager: knowLib.conversation.ConversationManager;
     searcher: knowLib.conversation.ConversationSearchProcessor;
     searchMemory?: knowLib.conversation.ConversationManager;
 };
@@ -37,8 +41,12 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
     const storePath = "/data/testChat";
     const chatModel = openai.createStandardAzureChatModel("GPT_4");
     const chatModelFast = openai.createStandardAzureChatModel("GPT_35_TURBO");
-    const conversationName = "adrian_tchaikovsky";
-    const conversationSettings = createConversationSettings();
+    const embeddingModel = knowLib.createEmbeddingCache(
+        openai.createEmbeddingModel(),
+        64,
+    );
+    const conversationName = "transcript";
+    const conversationSettings = createConversationSettings(embeddingModel);
 
     //const conversationName = "play";
     const conversation = await createConversation(
@@ -49,102 +57,129 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         storePath,
         chatModel,
         chatModelFast,
+        embeddingModel,
         maxCharsPerChunk: 2048,
         topicWindowSize: 8,
         searchConcurrency: 2,
         minScore: 0.9,
         conversationName,
+        conversationManager:
+            await knowLib.conversation.createConversationManager(
+                conversationName,
+                conversation,
+                false,
+            ),
         conversationSettings,
         conversation,
-        searcher: knowLib.conversation.createSearchProcessor(
-            conversation,
-            chatModel,
-            chatModel,
-        ),
+        entityTopK: 16,
+        searcher: createSearchProcessor(conversation, chatModel, true, 16),
     };
     context.searchMemory = await createSearchMemory(context);
     return context;
 }
 
-function createConversationSettings(): conversation.ConversationSettings {
+function createConversationSettings(
+    embeddingModel?: TextEmbeddingModel,
+): conversation.ConversationSettings {
     return {
         indexSettings: {
             caseSensitive: false,
             concurrency: 2,
+            embeddingModel,
         },
     };
 }
+
 export function createConversation(
     rootPath: string,
-    settings?: knowLib.conversation.ConversationSettings,
+    settings: knowLib.conversation.ConversationSettings,
 ): Promise<conversation.Conversation> {
-    return conversation.createConversation(
-        settings ?? createConversationSettings(),
-        rootPath,
-        {
-            cacheNames: true,
-            useWeakRefs: true,
-        },
+    return conversation.createConversation(settings, rootPath, {
+        cacheNames: true,
+        useWeakRefs: true,
+    });
+}
+
+export function createSearchProcessor(
+    c: conversation.Conversation,
+    model: ChatModel,
+    includeActions: boolean,
+    entityTopK: number,
+) {
+    const searcher = conversation.createSearchProcessor(
+        c,
+        model,
+        model,
+        includeActions
+            ? conversation.KnowledgeSearchMode.WithActions
+            : conversation.KnowledgeSearchMode.Default,
     );
+    searcher.answers.settings.topKEntities = entityTopK;
+    return searcher;
 }
 
 export async function createSearchMemory(
     context: ChatContext,
 ): Promise<conversation.ConversationManager> {
     const conversationName = "search";
-    const searchConversation = await createConversation(
-        path.join(context.storePath, conversationName),
-    );
-    await searchConversation.clear();
-
-    return conversation.createConversationManager(
+    const memory = await conversation.createConversationManager(
         conversationName,
-        searchConversation,
-        conversation.createKnowledgeExtractor(context.chatModel, {
-            windowSize: 8,
-            maxContextLength: context.maxCharsPerChunk,
-            includeSuggestedTopics: false,
-            includeActions: false,
-        }),
-        await conversation.createConversationTopicMerger(
-            context.chatModel,
-            searchConversation,
-            1,
-            4,
-        ),
+        context.storePath,
+        true,
     );
+    memory.searchProcessor.answers.settings.topKEntities = context.entityTopK;
+    return memory;
 }
 
 export async function loadConversation(
     context: ChatContext,
     name: string,
+    rootPath?: string,
     includeActions = true,
-) {
+): Promise<boolean> {
+    rootPath ??= context.storePath;
+    const storePath = path.join(rootPath, name);
+    const exists = fs.existsSync(storePath);
     context.conversation = await createConversation(
-        path.join(context.storePath, name),
+        storePath,
+        createConversationSettings(context.embeddingModel),
     );
     context.conversationName = name;
     context.searcher = conversation.createSearchProcessor(
         context.conversation,
         context.chatModel,
         context.chatModel,
-        includeActions,
+        includeActions
+            ? conversation.KnowledgeSearchMode.WithActions
+            : conversation.KnowledgeSearchMode.Default,
     );
+    context.conversationManager = await conversation.createConversationManager(
+        name,
+        context.conversation,
+        false,
+    );
+    if (name !== "search") {
+        context.searchMemory = await createSearchMemory(context);
+    }
+    return exists;
 }
 
-export async function runPlayChat(): Promise<void> {
+export async function runChatMemory(): Promise<void> {
     let context = await createChatMemoryContext();
     let printer: PlayPrinter;
     const handlers: Record<string, CommandHandler> = {
         importPlay,
         importTranscript,
+        importMessage,
         load,
+        history,
         replay,
         knowledge,
         buildIndex,
         topics,
         entities,
         actions,
+        searchQuery,
         search,
     };
     addStandardHandlers(handlers);
@@ -162,21 +197,41 @@ export async function runPlayChat(): Promise<void> {
     async function inputHandler(
         line: string,
         io: InteractiveIo,
-    ): Promise<void> {}
+    ): Promise<void> {
+        if (context.searchMemory) {
+            const results = await context.searchMemory.search(line);
+            if (results) {
+                await writeSearchTermsResult(results, true);
+            } else {
+                printer.writeLine("No matches");
+            }
+        } else {
+            printer.writeLine("No search history");
+        }
+    }
 
     //--------------------
     //
     // COMMANDS
     //
     //--------------------
+
+    handlers.history.metadata = "Display search history.";
+    async function history(args: string[], io: InteractiveIo): Promise<void> {
+        if (context.searchMemory) {
+            await writeHistory(context.searchMemory.conversation);
+        } else {
+            printer.writeLine("No search history");
+        }
+    }
+
     handlers.importTranscript.metadata = importChatDef();
     async function importTranscript(
         args: string[],
         io: InteractiveIo,
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, importChatDef());
-        const chatPath =
-            namedArgs.chatPath ?? "/data/testChat/adrian_tchaikovsky.txt";
+        const chatPath = namedArgs.chatPath ?? "/data/testChat/transcript.txt";
         await loadConversation(context, path.parse(chatPath).name);
         printer.writeLine(`Importing ${chatPath}`);
 
@@ -247,12 +302,78 @@ export async function runPlayChat(): Promise<void> {
         }
     }
 
+    function importMessageDef(): CommandMetadata {
+        return {
+            description: "Imports a text message into the current conversation",
+            options: {
+                message: {
+                    description: "Raw message text to add",
+                    type: "string",
+                },
+                filePath: {
+                    description: "Path to the message file",
+                    type: "path",
+                },
+                ensureUnique: {
+                    description:
+                        "Ensure that this message was not already imported",
+                    type: "boolean",
+                    defaultValue: false,
+                },
+            },
+        };
+    }
+
+    handlers.importMessage.metadata = importMessageDef();
+    async function importMessage(
+        args: string[],
+        io: InteractiveIo,
+    ): Promise<void> {
+        // Temporary: safeguard here to prevent demo issues
+        if (isTestConversation()) {
+            printer.writeError(
+                `Directly updating the TEST ${context.conversationName} conversation is not allowed!`,
+            );
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, importMessageDef());
+        let messageText: string | undefined;
+        if (namedArgs.message) {
+            messageText = namedArgs.message;
+        } else if (namedArgs.filePath) {
+            if (!fs.existsSync(namedArgs.filePath)) {
+                printer.writeError(`${namedArgs.filePath} not found.`);
+                return;
+            }
+            messageText = await readAllText(namedArgs.filePath);
+        }
+        if (messageText) {
+            if (namedArgs.ensureUnique) {
+                const existing = await context.conversation.searchMessages(
+                    messageText,
+                    {
+                        maxMatches: 1,
+                    },
+                );
+                if (
+                    existing &&
+                    existing.messages &&
+                    existing.messages.length > 0
+                ) {
+                    if (messageText === existing.messages[0].value.value) {
+                        printer.writeError("Message already in index");
+                        return;
+                    }
+                }
+            }
+            printer.writeLine("Importing...");
+            await context.conversationManager.addMessage(messageText);
+        }
+    }
+
     handlers.replay.metadata = "Replay the chat";
     async function replay(args: string[], io: InteractiveIo) {
-        for await (const message of context.conversation.messages.entries()) {
-            printer.writeSourceBlock(message);
-            printer.writeLine();
-        }
+        await writeHistory(context.conversation);
     }
 
     function loadDef(): CommandMetadata {
@@ -269,6 +390,10 @@ export async function runPlayChat(): Promise<void> {
                     type: "boolean",
                     defaultValue: true,
                 },
+                rootPath: {
+                    description: "Root path for the conversation",
+                    type: "string",
+                },
             },
         };
     }
@@ -276,7 +401,20 @@ export async function runPlayChat(): Promise<void> {
     async function load(args: string[], io: InteractiveIo) {
         if (args.length > 0) {
             const namedArgs = parseNamedArguments(args, loadDef());
-            await loadConversation(context, namedArgs.name, namedArgs.actions);
+            if (
+                await loadConversation(
+                    context,
+                    namedArgs.name,
+                    namedArgs.rootPath,
+                    namedArgs.actions,
+                )
+            ) {
+                printer.writeLine(`Loaded ${namedArgs.name}`);
+            } else {
+                printer.writeLine(
+                    `Created ${chalk.green("NEW")} conversation: ${namedArgs.name}`,
+                );
+            }
         } else {
             printer.writeLine(context.conversationName);
         }
@@ -321,6 +459,7 @@ export async function runPlayChat(): Promise<void> {
                 maxContextLength: context.maxCharsPerChunk,
                 includeSuggestedTopics: false,
                 includeActions: namedArgs.actions,
+                mergeActionKnowledge: false,
             },
         );
         let messages: knowLib.SourceTextBlock[] = await asyncArray.toArray(
@@ -449,72 +588,78 @@ export async function runPlayChat(): Promise<void> {
                 maxContextLength: context.maxCharsPerChunk,
                 includeSuggestedTopics: false,
                 includeActions: namedArgs.actions,
+                mergeActionKnowledge: true,
             },
         );
-        context.conversationSettings.indexActions = namedArgs.actions;
+        context.conversationSettings.indexActions = true; //namedArgs.actions;
         let count = 0;
         const concurrency = namedArgs.concurrency;
-        for (let i = 0; i < messages.length; i += concurrency) {
-            const slice = messages.slice(i, i + concurrency);
-            if (slice.length === 0) {
-                break;
-            }
-            if (messageIndex) {
-                printer.writeInColor(
-                    chalk.gray,
-                    `[Indexing messages ${i + 1} to ${i + slice.length}]`,
-                );
-                await asyncArray.mapAsync(slice, concurrency, (m) =>
-                    messageIndex.put(m.value, m.blockId),
-                );
-            }
-            if (knowledgeExtractor) {
-                printer.writeInColor(
-                    chalk.gray,
-                    `[Extracting knowledge ${i + 1} to ${i + slice.length}]`,
-                );
-                const knowledgeResults = await asyncArray.mapAsync(
-                    slice,
-                    namedArgs.concurrency,
-                    (message) =>
-                        conversation.extractKnowledgeFromBlock(
-                            knowledgeExtractor,
-                            message,
-                        ),
-                );
-                for (const knowledgeResult of knowledgeResults) {
-                    ++count;
-                    printer.writeLine(
-                        chalk.green(`[${count} / ${messages.length}]`),
+        try {
+            for (let i = 0; i < messages.length; i += concurrency) {
+                const slice = messages.slice(i, i + concurrency);
+                if (slice.length === 0) {
+                    break;
+                }
+                if (messageIndex) {
+                    printer.writeInColor(
+                        chalk.gray,
+                        `[Indexing messages ${i + 1} to ${i + slice.length}]`,
                     );
-                    if (knowledgeResult) {
-                        const [message, knowledge] = knowledgeResult;
-                        await writeKnowledgeResult(message, knowledge);
-                        const knowledgeIds = await context.conversation.putNext(
-                            message,
-                            knowledge,
+                    await asyncArray.mapAsync(slice, concurrency, (m) =>
+                        messageIndex.put(m.value, m.blockId),
+                    );
+                }
+                if (knowledgeExtractor) {
+                    printer.writeInColor(
+                        chalk.gray,
+                        `[Extracting knowledge ${i + 1} to ${i + slice.length}]`,
+                    );
+                    const knowledgeResults = await asyncArray.mapAsync(
+                        slice,
+                        namedArgs.concurrency,
+                        (message) =>
+                            conversation.extractKnowledgeFromBlock(
+                                knowledgeExtractor,
+                                message,
+                            ),
+                    );
+                    for (const knowledgeResult of knowledgeResults) {
+                        ++count;
+                        printer.writeLine(
+                            chalk.green(`[${count} / ${messages.length}]`),
                         );
-                        if (topicMerger) {
-                            const mergedTopic = await topicMerger.next(
-                                true,
-                                true,
-                            );
-                            if (mergedTopic) {
-                                printer.writeTitle("Merged Topic:");
-                                printer.writeTemporalBlock(
-                                    chalk.blueBright,
-                                    mergedTopic,
+                        if (knowledgeResult) {
+                            const [message, knowledge] = knowledgeResult;
+                            await writeKnowledgeResult(message, knowledge);
+                            const knowledgeIds =
+                                await context.conversation.putNext(
+                                    message,
+                                    knowledge,
                                 );
+                            if (topicMerger) {
+                                const mergedTopic = await topicMerger.next(
+                                    true,
+                                    true,
+                                );
+                                if (mergedTopic) {
+                                    printer.writeTitle("Merged Topic:");
+                                    printer.writeTemporalBlock(
+                                        chalk.blueBright,
+                                        mergedTopic,
+                                    );
+                                }
                             }
+                            await context.conversation.putIndex(
+                                knowledge,
+                                knowledgeIds,
+                            );
+                            printer.writeLine();
                         }
-                        await context.conversation.putIndex(
-                            knowledge,
-                            knowledgeIds,
-                        );
-                        printer.writeLine();
                     }
                 }
             }
+        } catch (error) {
+            printer.writeError(`${error}`);
         }
     }
 
@@ -609,8 +754,11 @@ export async function runPlayChat(): Promise<void> {
                 name: {
                     description: "Names to search for",
                 },
-                types: {
-                    description: "Types to search for",
+                type: {
+                    description: "Type to search for",
+                },
+                facet: {
+                    description: "Facet to search for",
                 },
                 exact: {
                     description: "Exact match?",
@@ -622,14 +770,15 @@ export async function runPlayChat(): Promise<void> {
                     defaultValue: 1,
                     type: "number",
                 },
+                facetCount: {
+                    description: "Num facet matches",
+                    defaultValue: 10,
+                    type: "number",
+                },
                 minScore: {
                     description: "Min score",
                     defaultValue: 0,
                     type: "number",
-                },
-                showTopics: {
-                    defaultValue: false,
-                    type: "boolean",
                 },
                 showMessages: {
                     defaultValue: false,
@@ -643,15 +792,29 @@ export async function runPlayChat(): Promise<void> {
         const namedArgs = parseNamedArguments(args, entitiesDef());
         let query = namedArgs.name ?? namedArgs.type;
         if (query) {
-            await searchEntities(
-                query,
-                namedArgs.name !== undefined,
-                namedArgs.exact,
-                namedArgs.count,
-                namedArgs.minScore,
-                namedArgs.showTopics,
-                namedArgs.showMessages,
-            );
+            const isMultipart =
+                namedArgs.facet || (namedArgs.name && namedArgs.type);
+            if (namedArgs.exact || !isMultipart) {
+                await searchEntities(
+                    query,
+                    namedArgs.name !== undefined,
+                    namedArgs.exact,
+                    namedArgs.count,
+                    namedArgs.minScore,
+                    namedArgs.showMessages,
+                );
+            } else {
+                // Multipart query
+                await searchEntities_Multi(
+                    namedArgs.name,
+                    namedArgs.type,
+                    namedArgs.facet,
+                    namedArgs.count,
+                    namedArgs.facetCount,
+                    namedArgs.minScore,
+                    namedArgs.showMessages,
+                );
+            }
             return;
         }
 
@@ -666,15 +829,34 @@ export async function runPlayChat(): Promise<void> {
         return {
             description: "Search for actions",
             options: {
+                subject: {
+                    description: "Action to search for",
+                    defaultValue: conversation.NoEntityName,
+                },
+                object: {
+                    description: "Object to search for",
+                },
                 verb: {
-                    description: "Verb to search for",
+                    description:
+                        "Verb to search for. Compound verbs are comma separated",
                 },
                 tense: {
-                    description: "Verb tense",
+                    description: "Verb tense: past | present | future",
+                    defaultValue: "past",
                 },
                 count: {
-                    description: "Num matches",
+                    description: "Num action matches",
                     defaultValue: 1,
+                    type: "number",
+                },
+                verbCount: {
+                    description: "Num verb matches",
+                    defaultValue: 1,
+                    type: "number",
+                },
+                nameCount: {
+                    description: "Num name matches",
+                    defaultValue: 2,
                     type: "number",
                 },
                 showMessages: {
@@ -686,34 +868,64 @@ export async function runPlayChat(): Promise<void> {
     }
     handlers.actions.metadata = actionsDef();
     async function actions(args: string[], io: InteractiveIo) {
-        const namedArgs = parseNamedArguments(args, actionsDef());
         const index = await context.conversation.getActionIndex();
-        const verb: string = namedArgs.verb;
-        const tense = namedArgs.tense;
-        if (verb) {
-            if (verb === "*") {
-                for await (const v of index.verbIndex.text()) {
-                    printer.writeLine(v);
-                }
-                return;
-            }
-            const matches = await index.searchVerbs([verb], tense, {
-                maxMatches: namedArgs.count,
-            });
-            for (const match of matches) {
-                printer.writeInColor(chalk.green, `[${match.score}]`);
-                await writeActionsById(
-                    index,
-                    match.item,
-                    namedArgs.showMessages,
-                );
-                printer.writeLine();
+        if (args.length === 0) {
+            // Just dump all actions
+            for await (const action of index.entries()) {
+                writeExtractedAction(action);
             }
             return;
         }
 
-        for await (const action of index.entries()) {
-            writeExtractedAction(action);
+        const namedArgs = parseNamedArguments(args, actionsDef());
+        const verb: string = namedArgs.verb;
+        const verbTense = namedArgs.tense;
+        let verbs: string[] | undefined;
+        if (verb) {
+            verbs = knowLib.split(verb, ",", {
+                removeEmpty: true,
+                trim: true,
+            });
+            if (verbs.length === 0) {
+                verbs = undefined;
+            } else if (verbs[0] === "*") {
+                const allVerbs = [...index.verbIndex.text()].sort();
+                printer.writeList(allVerbs, { type: "ul" });
+                return;
+            }
+        }
+        // Full search
+        const filter: conversation.ActionFilter = {
+            filterType: "Action",
+            subjectEntityName: namedArgs.subject,
+            objectEntityName: namedArgs.object,
+        };
+        if (verbs && verbs.length > 0) {
+            filter.verbFilter = {
+                verbs,
+                verbTense,
+            };
+        }
+        const matches = await index.search(filter, {
+            maxMatches: namedArgs.count,
+            verbSearchOptions: {
+                maxMatches: namedArgs.verbCount,
+            },
+            nameSearchOptions: {
+                maxMatches: namedArgs.nameCount,
+            },
+            loadActions: true,
+        });
+        if (matches.actions) {
+            for (const action of matches.actions) {
+                printer.writeLine(conversation.actionToString(action));
+            }
+            if (namedArgs.showMessages && matches.actionIds) {
+                const messages = await loadMessages(
+                    await index.getSourceIds(matches.actionIds),
+                );
+                printer.writeTemporalBlocks(chalk.cyan, messages);
+            }
         }
     }
 
@@ -744,7 +956,6 @@ export async function runPlayChat(): Promise<void> {
                 action: {
                     description: "Include actions",
                     type: "boolean",
-                    defaultValue: true,
                 },
                 eval: {
                     description: "Evaluate search query",
@@ -754,23 +965,21 @@ export async function runPlayChat(): Promise<void> {
                 debug: {
                     description: "Show debug info",
                     type: "boolean",
-                    defaultValue: false,
+                    defaultValue: true,
                 },
                 save: {
                     description: "Save the search",
                     type: "boolean",
                     defaultValue: true,
                 },
-                evidence: {
-                    description: "Include evidence for the answer",
-                    type: "boolean",
-                    defaultValue: false,
-                },
             },
         };
     }
-    handlers.search.metadata = searchDef();
-    async function search(args: string[], io: InteractiveIo): Promise<void> {
+    handlers.searchQuery.metadata = searchDef();
+    async function searchQuery(
+        args: string[],
+        io: InteractiveIo,
+    ): Promise<void> {
         const timestampQ = new Date();
         const namedArgs = parseNamedArguments(args, searchDef());
         const maxMatches = namedArgs.maxMatches;
@@ -783,29 +992,39 @@ export async function runPlayChat(): Promise<void> {
             maxMatches,
             minScore,
             maxMessages: 15,
-            includeTimeRange: true,
             combinationSetOp: knowLib.sets.SetOp.IntersectUnion,
-            actionPreprocess: (action) => printer.writeJson(action),
+            progress: (value) => printer.writeJson(value),
         };
         if (namedArgs.fallback) {
             searchOptions.fallbackSearch = { maxMatches: 10 };
+        }
+        if (namedArgs.action === undefined) {
+            namedArgs.action =
+                context.searcher.searchMode !==
+                conversation.KnowledgeSearchMode.Default;
         }
         searchOptions.includeActions = namedArgs.action;
         if (!namedArgs.eval) {
             await searchNoEval(query, searchOptions);
             return;
         }
-        if (namedArgs.evidence) {
-            query +=
-                "\nInclude your evidence in your response using a separate paragraph";
-        }
+
         const result = await context.searcher.search(query, searchOptions);
         if (!result) {
             printer.writeError("No result");
             return;
         }
-
         if (result.response) {
+            if (result.action.actionName === "webLookup") {
+                if (result.response.answer) {
+                    printer.writeInColor(
+                        chalk.green,
+                        result.response.answer.answer!,
+                    );
+                }
+                return;
+            }
+
             const timestampA = new Date();
             const entityIndex = await context.conversation.getEntityIndex();
             const topicIndex = await context.conversation.getTopicsIndex(
@@ -830,6 +1049,11 @@ export async function runPlayChat(): Promise<void> {
         }
     }
 
+    handlers.search.metadata = searchDef();
+    async function search(args: string[], io: InteractiveIo): Promise<void> {
+        await searchConversation(context.searcher, true, args);
+    }
+
     async function searchNoEval(
         query: string,
         searchOptions: conversation.SearchProcessingOptions,
@@ -845,6 +1069,89 @@ export async function runPlayChat(): Promise<void> {
     // END COMMANDS
     //--------------------
 
+    async function writeHistory(conversation: conversation.Conversation) {
+        for await (const message of conversation.messages.entries()) {
+            printer.writeSourceBlock(message);
+            printer.writeLine();
+        }
+    }
+
+    async function searchConversation(
+        searcher: conversation.ConversationSearchProcessor,
+        recordAnswer: boolean,
+        args: string[],
+    ): Promise<void> {
+        const timestampQ = new Date();
+        const namedArgs = parseNamedArguments(args, searchDef());
+        const maxMatches = namedArgs.maxMatches;
+        const minScore = namedArgs.minScore;
+        let query = namedArgs.query.trim();
+        if (!query || query.length === 0) {
+            return;
+        }
+        const searchOptions: conversation.SearchProcessingOptions = {
+            maxMatches,
+            minScore,
+            maxMessages: 15,
+            combinationSetOp: knowLib.sets.SetOp.IntersectUnion,
+            progress: (value) => printer.writeJson(value),
+        };
+        if (namedArgs.fallback) {
+            searchOptions.fallbackSearch = { maxMatches: 10 };
+        }
+        if (namedArgs.action === undefined) {
+            namedArgs.action =
+                searcher.searchMode !==
+                conversation.KnowledgeSearchMode.Default;
+        }
+        searchOptions.includeActions = namedArgs.action;
+        if (!namedArgs.eval) {
+            await searchNoEval(query, searchOptions);
+            return;
+        }
+
+        const result = await searcher.searchTerms(
+            query,
+            undefined,
+            searchOptions,
+        );
+        if (!result) {
+            printer.writeError("No result");
+            return;
+        }
+        await writeSearchTermsResult(result, namedArgs.debug);
+        if (result.response && result.response.answer) {
+            if (namedArgs.save && recordAnswer) {
+                let answer = result.response.answer.answer;
+                if (!answer) {
+                    answer = result.response.answer.whyNoAnswer;
+                }
+                if (answer) {
+                    recordQuestionAnswer(query, timestampQ, answer, new Date());
+                }
+            }
+        }
+    }
+
+    async function writeSearchTermsResult(
+        result: conversation.SearchTermsActionResponse,
+        stats: boolean,
+    ) {
+        if (result.response && result.response.answer) {
+            if (stats) {
+                writeResultStats(result.response);
+            }
+            if (result.response.answer.answer) {
+                const answer = result.response.answer.answer;
+                printer.writeInColor(chalk.green, answer);
+            } else if (result.response.answer.whyNoAnswer) {
+                const answer = result.response.answer.whyNoAnswer;
+                printer.writeInColor(chalk.red, answer);
+            }
+            printer.writeLine();
+        }
+    }
+
     function recordQuestionAnswer(
         question: string,
         timestampQ: Date,
@@ -858,20 +1165,18 @@ export async function runPlayChat(): Promise<void> {
                   if (context.searchMemory) {
                       try {
                           await context.searchMemory.addMessage(
-                              {
-                                  type: knowLib.TextBlockType.Paragraph,
-                                  value: `USER:\n${question}`,
-                              },
+                              `USER:\n${question}`,
+                              undefined,
                               timestampQ,
                           );
                           await context.searchMemory.addMessage(
-                              {
-                                  type: knowLib.TextBlockType.Paragraph,
-                                  value: `ASSISTANT:\n${answer}`,
-                              },
+                              `ASSISTANT:\n${answer}`,
+                              undefined,
                               timestampA,
                           );
-                      } catch {}
+                      } catch (e) {
+                          printer.writeError(`Error updating history\n${e}`);
+                      }
                   }
               })
             : undefined;
@@ -884,7 +1189,7 @@ export async function runPlayChat(): Promise<void> {
         rr: conversation.SearchActionResponse,
         debugInfo: boolean,
     ) {
-        writeResultStats(rr);
+        writeResultStats(rr.response);
         if (rr.response) {
             const action: conversation.SearchAction = rr.action;
             switch (action.actionName) {
@@ -956,31 +1261,34 @@ export async function runPlayChat(): Promise<void> {
         }
     }
 
-    function writeResultStats(rr: conversation.SearchActionResponse): void {
-        if (rr.response !== undefined) {
-            const allTopics = rr.response.mergeAllTopics();
+    function writeResultStats(
+        response: conversation.SearchResponse | undefined,
+    ): void {
+        if (response !== undefined) {
+            const allTopics = response.mergeAllTopics();
             if (allTopics && allTopics.length > 0) {
                 printer.writeLine(`Topic Hit Count: ${allTopics.length}`);
             } else {
-                const topicIds = new Set(rr.response.allTopicIds());
+                const topicIds = new Set(response.allTopicIds());
                 printer.writeLine(`Topic Hit Count: ${topicIds.size}`);
             }
-            const allEntities = rr.response.mergeAllEntities(10);
+            const allEntities = response.mergeAllEntities(16);
             if (allEntities && allEntities.length > 0) {
                 printer.writeLine(`Entity Hit Count: ${allEntities.length}`);
             } else {
-                const entityIds = new Set(rr.response.allEntityIds());
+                const entityIds = new Set(response.allEntityIds());
                 printer.writeLine(
                     `Entity to Message Hit Count: ${entityIds.size}`,
                 );
             }
-            const allActions = [...rr.response.allActions()];
+            const allActions = knowLib.sets.uniqueFrom(response.allActionIds());
+            //const allActions = [...response.allActionIds()];
             if (allActions && allActions.length > 0) {
                 printer.writeLine(`Action Hit Count: ${allActions.length}`);
             }
-            if (rr.response?.messages) {
+            if (response.messages) {
                 printer.writeLine(
-                    `Message Hit Count: ${rr.response.messages ? rr.response.messages.length : 0}`,
+                    `Message Hit Count: ${response.messages ? response.messages.length : 0}`,
                 );
             }
         }
@@ -1034,7 +1342,6 @@ export async function runPlayChat(): Promise<void> {
         exact: boolean,
         count: number,
         minScore: number,
-        showTopics?: boolean,
         showMessages?: boolean,
     ) {
         const index = await context.conversation.getEntityIndex();
@@ -1047,13 +1354,52 @@ export async function runPlayChat(): Promise<void> {
         );
         for (const match of matches) {
             printer.writeInColor(chalk.green, `[${match.score}]`);
-            await writeEntitiesById(
-                index,
-                match.item,
-                showTopics,
-                showMessages,
+            await writeEntitiesById(index, match.item, showMessages);
+        }
+    }
+
+    async function searchEntities_Multi(
+        name: string | undefined,
+        type: string | undefined,
+        facet: string | undefined,
+        count: number,
+        faceCount: number,
+        minScore: number,
+        showMessages?: boolean,
+    ) {
+        const index = await context.conversation.getEntityIndex();
+        let nameMatches: string[] | undefined;
+        let typeMatches: string[] | undefined;
+        let facetMatches: string[] | undefined;
+        if (name) {
+            nameMatches = await index.nameIndex.getNearest(
+                name,
+                count,
+                minScore,
             );
         }
+        if (type) {
+            typeMatches = await index.typeIndex.getNearest(
+                type,
+                count,
+                minScore,
+            );
+        }
+        if (facet) {
+            facetMatches = await index.facetIndex.getNearest(
+                facet,
+                faceCount,
+                minScore,
+            );
+        }
+        const matches = [
+            ...knowLib.sets.intersectMultiple(
+                nameMatches,
+                typeMatches,
+                facetMatches,
+            ),
+        ];
+        await writeEntitiesById(index, matches, showMessages);
     }
 
     async function writeExtractedTopics(
@@ -1145,7 +1491,6 @@ export async function runPlayChat(): Promise<void> {
     async function writeEntitiesById(
         index: knowLib.conversation.EntityIndex,
         entityIds: string[],
-        showTopics?: boolean,
         showMessages?: boolean,
     ): Promise<void> {
         if (!entityIds || entityIds.length === 0) {
@@ -1171,7 +1516,7 @@ export async function runPlayChat(): Promise<void> {
             }
         }
     }
-
+    /*
     async function writeActionsById(
         index: knowLib.conversation.ActionIndex,
         actionIds: string[],
@@ -1199,6 +1544,7 @@ export async function runPlayChat(): Promise<void> {
             }
         }
     }
+    */
 
     function writeList(title: string, list?: string[]): void {
         if (list && list.length > 0) {
@@ -1308,5 +1654,13 @@ export async function runPlayChat(): Promise<void> {
             return await context.conversation.messages.getMultiple(ids);
         }
         return [];
+    }
+
+    function isTestConversation(): boolean {
+        return (
+            context.conversationName === "transcript" ||
+            context.conversationName === "play" ||
+            context.conversationName === "search"
+        );
     }
 }

@@ -22,17 +22,18 @@ import {
     getNWeeksDateRangeISO,
 } from "./calendarQueryHelper.js";
 import {
-    DispatcherAgentContext,
+    SessionContext,
     Entity,
     ImpressionInterpreter,
     defaultImpressionInterpreter,
     createTurnImpressionFromDisplay,
     createTurnImpressionFromError,
-    DispatcherAction,
-    DispatcherAgent,
-} from "dispatcher-agent";
+    AppAction,
+    AppAgent,
+    ActionContext,
+} from "@typeagent/agent-sdk";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeCalendarContext,
         updateAgentContext: updateCalendarContext,
@@ -52,7 +53,7 @@ type CalendarActionContext = {
     interpreter: ImpressionInterpreter;
 };
 
-function initializeCalendarContext() {
+async function initializeCalendarContext() {
     return {
         calendarClient: undefined,
         graphEventIds: undefined,
@@ -132,27 +133,27 @@ function createImpressionInterpreter(): ImpressionInterpreter {
 
 async function updateCalendarContext(
     enable: boolean,
-    context: DispatcherAgentContext<CalendarActionContext>,
+    context: SessionContext<CalendarActionContext>,
 ): Promise<void> {
     if (enable) {
-        context.context.calendarClient = await createCalendarGraphClient();
+        context.agentContext.calendarClient = await createCalendarGraphClient();
 
-        if (context.context.calendarClient) {
-            context.context.graphEventIds = [];
-            context.context.mapGraphEntity = new Map();
+        if (context.agentContext.calendarClient) {
+            context.agentContext.graphEventIds = [];
+            context.agentContext.mapGraphEntity = new Map();
         }
     } else {
-        context.context.calendarClient = undefined;
+        context.agentContext.calendarClient = undefined;
     }
 }
 
 async function executeCalendarAction(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<CalendarActionContext>,
+    action: AppAction,
+    context: ActionContext<CalendarActionContext>,
 ) {
     let result = await handleCalendarAction(
         action as CalendarAction,
-        context.context,
+        context.sessionContext.agentContext,
     );
     return result;
 }
@@ -402,7 +403,6 @@ export async function handleCalendarAction(
                             createTurnImpressionFromDisplay(displayText);
 
                         if (result && localId) {
-                            result.literalText = `Action calendar.${action.actionName} completed.`;
                             result.entities = [
                                 {
                                     name: `${actionEvent.description}`,
@@ -635,7 +635,6 @@ export async function handleCalendarAction(
 
                     let result = createTurnImpressionFromDisplay(displayText);
                     if (result && localId) {
-                        result.literalText = `Action calendar.${action.actionName} completed.`;
                         result.entities = [
                             {
                                 name: `${actionEvent.description}`,
@@ -729,7 +728,6 @@ export async function handleCalendarAction(
                                             displayText,
                                         );
 
-                                    result.literalText = `Action calendar.${action.actionName} completed.`;
                                     result.entities = [
                                         {
                                             name: `${meeting.subject}`,

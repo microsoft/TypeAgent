@@ -140,7 +140,12 @@ type DispatcherConfig = {
     translators: ConfigObject;
     actions: ConfigObject;
     explainerName: string;
+    models: {
+        translator: string;
+        explainer: string;
+    };
     bot: boolean;
+    stream: boolean;
     explanation: boolean;
     switch: {
         inline: boolean;
@@ -172,7 +177,12 @@ export const defaultSessionConfig: SessionConfig = {
         ]),
     ),
     explainerName: getDefaultExplainerName(),
+    models: {
+        translator: "",
+        explainer: "",
+    },
     bot: true,
+    stream: true,
     explanation: true,
     switch: {
         inline: true,
@@ -276,11 +286,6 @@ export class Session {
         this.cacheData = sessionData.cacheData;
     }
 
-    public get useTranslators() {
-        return Object.entries(this.config.translators)
-            .filter(([, value]) => value)
-            .map(([name]) => name);
-    }
     public get explainerName() {
         return this.config.explainerName;
     }
@@ -403,6 +408,7 @@ export async function configAgentCache(
     session: Session,
     agentCache: AgentCache,
 ) {
+    agentCache.model = session.getConfig().models.explainer;
     agentCache.constructionStore.clear();
     if (session.cache) {
         const cacheData = session.getCacheDataFilePath();

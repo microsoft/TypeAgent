@@ -1,11 +1,9 @@
-## chat example
+## Chat test app
 
-This sample explores ideas in using types and TypeChat for:
+This sample app is used to interactively test the following packages:
 
-- [LLMs for Code analysis](./src/codeChat/)
-- [Conversation memory](./src/memory/)
-
-By default, we run the conversation memory example.
+- [Code Processor](../../packages/codeProcessor/)
+- [Knowledge Processor](../../packages/knowledgeProcessor/)
 
 ## Trademarks
 

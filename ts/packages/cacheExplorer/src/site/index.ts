@@ -234,7 +234,7 @@ async function loadConstructionCache(session: string, cacheName: string) {
             `Failed to load construction cache: ${content.statusText}`,
         );
     }
-    const cacheData = (await content.json()) as any;
+    const cacheData = await content.json();
     return ConstructionCache.fromJSON(cacheData);
 }
 

@@ -1,8 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export { processCommand, getSettingSummary, getPrompt } from "./command.js";
-export { partialInput } from "./action/actionHandlers.js";
+export {
+    processCommand,
+    getSettingSummary,
+    getPrompt,
+    getTranslatorNameToEmojiMap,
+} from "./command.js";
+export { partialInput, getDynamicDisplay } from "./action/actionHandlers.js";
 export { processRequests } from "./utils/interactive.js";
 export { ClientIO, RequestId } from "./handlers/common/interactiveIO.js";
 export {

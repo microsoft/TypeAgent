@@ -3,15 +3,20 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { Path, readJsonFile, writeJsonFile } from "../objStream";
+import { Path } from "../objStream";
 import { NameValue, ScoredItem } from "../memory";
 import { createTopNList } from "../vector/embeddings";
 import { createLazy, insertIntoSorted } from "../lib";
 
+export enum FileNameType {
+    Timestamp,
+    Tick,
+}
 export interface ObjectFolderSettings {
     allowSubFolders?: boolean;
     serializer?: (obj: any) => Buffer;
     deserializer?: (buffer: Buffer) => any;
+    fileNameType?: FileNameType;
     cacheNames?: boolean | undefined; // Default is true
     useWeakRefs?: boolean | undefined; // Default is false
 }
@@ -73,15 +78,13 @@ export interface ObjectFolder<T> {
 export async function createObjectFolder<T>(
     folderPath: Path,
     settings?: ObjectFolderSettings,
-    fsys?: FileSystem,
+    fSys?: FileSystem,
 ): Promise<ObjectFolder<T>> {
     const folderSettings = settings ?? {
         allowSubFolders: false,
     };
-    const fileSystem = fsys ? fsys : fsDefault();
-    const fileNameGenerator = createTimestampNameGenerator((name: string) => {
-        return !fileSystem.exists(fullPath(name));
-    });
+    const fileSystem = fSys ?? fsDefault();
+    const fileNameGenerator = createNameGenerator();
     const fileNames = createLazy<string[]>(
         () => loadFileNames(),
         folderSettings.cacheNames ?? true,
@@ -181,9 +184,15 @@ export async function createObjectFolder<T>(
             const filePath = fullPath(name);
             if (settings?.deserializer) {
                 const buffer = await fileSystem.readBuffer(filePath);
+                if (buffer.length == 0) {
+                    return undefined;
+                }
                 return <T>settings.deserializer(buffer);
             } else {
                 const json = await fileSystem.read(filePath);
+                if (json.length === 0) {
+                    return undefined;
+                }
                 return JSON.parse(<string>json);
             }
         } catch (err: any) {
@@ -348,28 +357,17 @@ export async function createObjectFolder<T>(
             throw new Error("Subfolders not permitted");
         }
     }
-}
 
-export interface StatePersist {
-    load(name: string): Promise<any>;
-    save(name: string, value: any): Promise<void>;
-}
-
-export function createStatePersist(
-    basePath: string,
-    fSys?: FileSystem,
-): StatePersist {
-    fSys ??= fsDefault();
-    return {
-        load,
-        save,
-    };
-
-    function load(name: string): Promise<any> {
-        return readJsonFile(path.join(basePath, name), undefined, fSys);
-    }
-    function save(name: string, value: any): Promise<void> {
-        return writeJsonFile(path.join(basePath, name), value, fSys);
+    function createNameGenerator() {
+        const fileNameType = settings?.fileNameType ?? FileNameType.Timestamp;
+        return createFileNameGenerator(
+            fileNameType === FileNameType.Timestamp
+                ? generateTimestampString
+                : generateTickString,
+            (name: string) => {
+                return !fileSystem.exists(fullPath(name));
+            },
+        );
     }
 }
 
@@ -385,29 +383,9 @@ export function generateTimestampString(timestamp?: Date): string {
     return name;
 }
 
-function* createTimestampNameGenerator(
-    isNameAcceptable: (name: string) => boolean,
-): IterableIterator<string> {
-    let prevName: string = "";
-    while (true) {
-        let nextName = generateTimestampString();
-        if (prevName === nextName && !isNameAcceptable(nextName)) {
-            const extendedName = generateMonotonicName(
-                1,
-                nextName,
-                isNameAcceptable,
-                4,
-            ).name;
-            if (!extendedName) {
-                continue;
-            }
-            prevName = nextName;
-            nextName = extendedName;
-        } else {
-            prevName = nextName;
-        }
-        yield nextName;
-    }
+function generateTickString(timestamp?: Date): string {
+    timestamp ??= new Date();
+    return timestamp.getTime().toString();
 }
 
 const DIR_PREFIX = ".";
@@ -481,6 +459,32 @@ function generateMonotonicName(
         name: name,
         lastCounter: counter,
     };
+}
+
+function* createFileNameGenerator(
+    nameGenerator: () => string,
+    isNameAcceptable: (name: string) => boolean,
+): IterableIterator<string> {
+    let prevName: string = "";
+    while (true) {
+        let nextName = nameGenerator();
+        if (prevName === nextName && !isNameAcceptable(nextName)) {
+            const extendedName = generateMonotonicName(
+                1,
+                nextName,
+                isNameAcceptable,
+                4,
+            ).name;
+            if (!extendedName) {
+                continue;
+            }
+            prevName = nextName;
+            nextName = extendedName;
+        } else {
+            prevName = nextName;
+        }
+        yield nextName;
+    }
 }
 
 /**

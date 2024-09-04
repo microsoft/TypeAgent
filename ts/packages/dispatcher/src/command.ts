@@ -15,7 +15,10 @@ import {
     CommandHandler,
     HandlerTable,
 } from "./handlers/common/commandHandler.js";
-import { CommandHandlerContext } from "./handlers/common/commandHandlerContext.js";
+import {
+    CommandHandlerContext,
+    getActiveTranslatorList,
+} from "./handlers/common/commandHandlerContext.js";
 import { getConfigCommandHandlers } from "./handlers/configCommandHandlers.js";
 import { getConstructionCommandHandlers } from "./handlers/constructionCommandHandlers.js";
 import { CorrectCommandHandler } from "./handlers/correctCommandHandler.js";
@@ -23,11 +26,14 @@ import { DebugCommandHandler } from "./handlers/debugCommandHandlers.js";
 import { ExplainCommandHandler } from "./handlers/explainCommandHandler.js";
 import { RequestCommandHandler } from "./handlers/requestCommandHandler.js";
 import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js";
+import { getHistoryCommandHandlers } from "./handlers/historyCommandHandler.js";
 import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
 import { TranslateCommandHandler } from "./handlers/translateCommandHandler.js";
 import { getTranslatorConfig } from "./translation/agentTranslators.js";
 import { processRequests, unicodeChar } from "./utils/interactive.js";
 /* ==Experimental== */
+import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
+import { Profiler } from "common-utils";
 /* ==End Experimental== */
 
 class HelpCommandHandler implements CommandHandler {
@@ -57,7 +63,7 @@ class HelpCommandHandler implements CommandHandler {
         if (request === "") {
             printHandleTable(handlers, "");
         } else {
-            const result = resolveCommand(request);
+            const result = resolveCommand(request, true);
             if (result === undefined) {
                 throw new Error(`Unknown command '${request}'`);
             }
@@ -111,12 +117,14 @@ const debugInteractive = registerDebug("typeagent:cli:interactive");
 
 const handlers: HandlerTable = {
     description: "Agent Dispatcher Commands",
+    defaultSubCommand: undefined,
     commands: {
         request: new RequestCommandHandler(),
         translate: new TranslateCommandHandler(),
         explain: new ExplainCommandHandler(),
         correct: new CorrectCommandHandler(),
         session: getSessionCommandHandlers(),
+        history: getHistoryCommandHandlers(),
         const: getConstructionCommandHandlers(),
         config: getConfigCommandHandlers(),
         trace: new TraceCommandHandler(),
@@ -135,6 +143,7 @@ const handlers: HandlerTable = {
                 context.clientIO ? context.clientIO.exit() : process.exit(0);
             },
         },
+        random: getRandomCommandHandlers(),
     },
 };
 
@@ -149,21 +158,35 @@ type ResolveCommandResult = {
     args: string;
     command: string;
 };
-function resolveCommand(input: string): ResolveCommandResult | undefined {
+function resolveCommand(
+    input: string,
+    isHelpCommand: boolean = false,
+): ResolveCommandResult | undefined {
     let command: string = "";
     let currentHandlers = handlers;
     const args = input.split(/\s/).filter((s) => s !== "");
     while (true) {
         const subCommand = args.shift();
         if (subCommand === undefined) {
-            return { resolved: currentHandlers, args: "", command };
+            if (
+                currentHandlers.defaultSubCommand != undefined &&
+                !isHelpCommand
+            ) {
+                return {
+                    resolved: currentHandlers.defaultSubCommand,
+                    args: "",
+                    command,
+                };
+            } else {
+                return { resolved: currentHandlers, args: "", command };
+            }
         }
         const action = currentHandlers.commands[subCommand];
         if (action === undefined) {
             throw new Error(
                 `Unknown command '${subCommand}'. ${
                     command
-                        ? ` for '@${command}'. Try @help ${command} for a list of subcommands.`
+                        ? ` for '@${command}'. Try '@help ${command}' for the list of subcommands.`
                         : "Try '@help' for a list of commands."
                 }`,
             );
@@ -192,10 +215,12 @@ export async function processCommandNoLock(
     const oldRequestIO = context.requestIO;
     context.requestId = requestId;
     if (context.clientIO) {
-        context.requestIO = getRequestIO(context.clientIO, requestId);
+        context.requestIO = getRequestIO(context, context.clientIO, requestId);
     }
 
     try {
+        Profiler.getInstance().start(context.requestId);
+
         const result = resolveCommand(input);
         if (result === undefined) {
             throw new Error(`Unknown command '${input}'`);
@@ -204,11 +229,15 @@ export async function processCommandNoLock(
             context.logger?.logEvent("command", { originalInput });
             await result.resolved.run(result.args, context);
         } else {
-            throw new Error(`Command '${input}' requires a subcommand`);
+            throw new Error(
+                `Command '${input}' requires a subcommand. Try '@help ${input}' for the list of sub commands.`,
+            );
         }
     } catch (e: any) {
         context.requestIO.error(`ERROR: ${e.message}`);
         debugInteractive(e.stack);
+    } finally {
+        Profiler.getInstance().stop(context.requestId);
     }
 
     context.requestId = undefined;
@@ -244,12 +273,12 @@ export function getSettingSummary(context: CommandHandlerContext) {
         }
     }
 
-    const names = context.session.useTranslators;
+    const names = getActiveTranslatorList(context);
     const ordered = names.filter(
-        (name) => name !== context.currentTranslatorName,
+        (name) => name !== context.lastActionTranslatorName,
     );
     if (ordered.length !== names.length) {
-        ordered.unshift(context.currentTranslatorName);
+        ordered.unshift(context.lastActionTranslatorName);
     }
 
     const translators = Array.from(
@@ -258,12 +287,43 @@ export function getSettingSummary(context: CommandHandlerContext) {
         ).values(),
     );
     prompt.push("  [", translators.join(""));
-    if (context.agentCache.explainerName !== getDefaultExplainerName()) {
-        prompt.push(` (explainer: ${context.agentCache.explainerName})`);
+    if (context.session.getConfig().models.translator !== "") {
+        prompt.push(
+            ` (model: ${context.session.getConfig().models.translator})`,
+        );
     }
+    if (context.agentCache.explainerName !== getDefaultExplainerName()) {
+        prompt.push(` (explainer: ${context.agentCache.explainerName}`);
+        if (context.session.getConfig().models.explainer !== "") {
+            prompt.push(
+                ` model: ${context.session.getConfig().models.translator}`,
+            );
+        }
+        prompt.push(")");
+    } else if (context.session.getConfig().models.explainer !== "") {
+        prompt.push(
+            ` (explainer model: ${context.session.getConfig().models.explainer})`,
+        );
+    }
+
     prompt.push("]");
 
     return prompt.join("");
+}
+
+export function getTranslatorNameToEmojiMap(context: CommandHandlerContext) {
+    let tMap = new Map<string, string>();
+
+    getActiveTranslatorList(context).forEach((name) => {
+        tMap.set(name, getTranslatorConfig(name).emojiChar);
+    });
+
+    tMap.set("dispatcher", "🤖");
+    tMap.set("undefined", "❔");
+    tMap.set("switcher", "↔️");
+    tMap.set("shell", "🐚");
+
+    return tMap;
 }
 
 export function getPrompt(context: CommandHandlerContext) {

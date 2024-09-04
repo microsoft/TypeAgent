@@ -1,22 +1,33 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+//import { ShellSettings } from "../../main/shellSettings";
 import { ClientAPI } from "../../preload/electronTypes";
 import { ChatView } from "./chatView";
-import { SpeechInfo, enumerateMicrophones, recognizeOnce } from "./speech";
+import { TabView } from "./tabView";
+import { SpeechInfo, recognizeOnce, selectMicrophone } from "./speech";
+import { iconHelp, iconMetrics, iconSettings } from "./icon";
+import { SettingsView } from "./settingsView";
+import { HelpView } from "./helpView";
+import { MetricsView } from "./metricsView";
 
 export function getClientAPI(): ClientAPI {
     return globalThis.api;
 }
 
-function addEvents(chatView: ChatView) {
+function addEvents(
+    chatView: ChatView,
+    agents: Map<string, string>,
+    settingsView: SettingsView,
+    tabsView: TabView,
+) {
     console.log("add listen event");
     const api = getClientAPI();
     api.onListenEvent((_, name, token, useLocalWhisper) => {
         console.log(`listen event: ${name}`);
         if (useLocalWhisper) {
             recognizeOnce(
-                "",
+                undefined,
                 "phraseDiv",
                 "reco",
                 (message: string) => {
@@ -29,7 +40,7 @@ function addEvents(chatView: ChatView) {
                 chatView.speechInfo.speechToken = token;
                 if (name === "Alt+M") {
                     recognizeOnce(
-                        token.token,
+                        token,
                         "phraseDiv",
                         "reco",
                         (message: string) => {
@@ -43,12 +54,18 @@ function addEvents(chatView: ChatView) {
             }
         }
     });
-    api.onResponse(
-        (_, response, id, actionIndex?: number, groupId?: string) => {
-            if (response !== undefined) {
-                chatView.addAgentMessage(response, id, actionIndex, groupId);
-            }
-        },
+    api.onResponse((_, agentMessage) => {
+        chatView.addAgentMessage(agentMessage);
+    });
+    api.onSetDynamicActionDisplay(
+        (_, source, id, actionIndex, displayId, nextRefreshMs) =>
+            chatView.setDynamicDisplay(
+                source,
+                id,
+                actionIndex,
+                displayId,
+                nextRefreshMs,
+            ),
     );
     api.onSetPartialInputHandler((_, enabled) => {
         chatView.enablePartialInputHandler(enabled);
@@ -62,25 +79,28 @@ function addEvents(chatView: ChatView) {
     api.onClear((_) => {
         chatView.clear();
     });
-    api.onUpdate((_, updateMessage: string, groupId: string) => {
-        if (updateMessage !== undefined) {
-            chatView.updateGroup(updateMessage, groupId);
-        }
-    });
-    api.onStatusMessage((_, message, id, temporary) => {
-        chatView.showStatusMessage(message, id, temporary);
+    api.onStatusMessage((_, message, temporary) => {
+        chatView.showStatusMessage(message, temporary);
     });
     api.onMarkRequestExplained((_, id, timestamp, fromCache) => {
         chatView.markRequestExplained(id, timestamp, fromCache);
     });
-    api.onAskYesNo(async (_, askYesNoId, message, id) => {
-        chatView.askYesNo(askYesNoId, message, id);
+    api.onRandomCommandSelected((_, id, message) => {
+        chatView.randomCommandSelected(id, message);
     });
-    api.onQuestion(async (_, questionId, message, id) => {
-        chatView.question(questionId, message, id);
+    api.onAskYesNo(async (_, askYesNoId, message, id, source) => {
+        chatView.askYesNo(askYesNoId, message, id, source);
     });
-    api.onSettingSummaryChanged((_, summary) => {
+    api.onQuestion(async (_, questionId, message, id, source) => {
+        chatView.question(questionId, message, id, source);
+    });
+    api.onSettingSummaryChanged((_, summary, registeredAgents) => {
         document.title = summary;
+
+        agents.clear();
+        for (let key of registeredAgents.keys()) {
+            agents.set(key, registeredAgents.get(key) as string);
+        }
     });
     api.onSendInputText((_, message) => {
         chatView.showInputText(message);
@@ -91,6 +111,19 @@ function addEvents(chatView: ChatView) {
     api.onHelpRequested((_, key) => {
         console.log(`User asked for help via ${key}`);
         chatView.addUserMessage(`@help`);
+    });
+    api.onRandomMessageRequested((_, key) => {
+        console.log(`User asked for a random message via ${key}`);
+        chatView.addUserMessage(`@random`);
+    });
+    api.onMicrophoneChangeRequested((_, micId, micName) => {
+        selectMicrophone(settingsView.microphoneSources, micId, micName);
+    });
+    api.onShowDialog((_, key) => {
+        tabsView.showTab(key);
+    });
+    api.onHideMenuChanged((_, value) => {
+        settingsView.menuCheckBox.checked = value;
     });
 }
 
@@ -105,13 +138,35 @@ document.addEventListener("DOMContentLoaded", function () {
     const wrapper = document.getElementById("wrapper")!;
     const idGenerator = new IdGenerator();
     const speechInfo = new SpeechInfo();
-    const chatView = new ChatView(idGenerator, speechInfo);
-    wrapper.appendChild(chatView.getMessageElm());
-    const microphoneSources = document.getElementById(
-        "microphoneSources",
-    )! as HTMLSelectElement;
+    const agents = new Map<string, string>();
 
-    enumerateMicrophones(microphoneSources);
-    addEvents(chatView);
+    const tabs = new TabView(
+        ["Settings", "Metrics", "Help"],
+        [iconSettings(), iconMetrics(), iconHelp()],
+        [iconSettings(), iconMetrics(), iconHelp()],
+    );
+    wrapper.appendChild(tabs.getContainer());
+
+    document.onkeyup = (ev: KeyboardEvent) => {
+        if (ev.key == "Escape") {
+            tabs.closeTabs();
+            ev.preventDefault();
+        }
+    };
+
+    const chatView = new ChatView(idGenerator, speechInfo, agents);
+    wrapper.appendChild(chatView.getMessageElm());
+
+    const settingsView = new SettingsView(window);
+    tabs.getTabContainerByName("Settings").append(settingsView.getContainer());
+    tabs.getTabContainerByName("Metrics").append(
+        new MetricsView().getContainer(),
+    );
+    tabs.getTabContainerByName("Help").append(new HelpView().getContainer());
+
+    addEvents(chatView, agents, settingsView, tabs);
+
+    chatView.chatInputFocus();
+
     (window as any).electron.ipcRenderer.send("dom ready");
 });

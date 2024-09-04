@@ -8,8 +8,9 @@ export {
     TranslatorSchemaDef,
     InlineTranslatorSchemaDef,
     composeTranslatorSchemas,
+    enableJsonTranslatorStreaming,
+    TypeChatJsonTranslatorWithStreaming,
 } from "./jsonTranslator.js";
-
 export { Limiter, createLimiter } from "./limiter.js";
 export * from "./print.js";
 
@@ -36,4 +37,8 @@ export * from "./webSockets.js";
 
 export * from "./stopWatch.js";
 
+export * from "./profiler.js";
+
 export { simpleStarRegex } from "./simpleStartRegex.js";
+
+export { createRpc } from "./rpc.js";

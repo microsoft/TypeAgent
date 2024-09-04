@@ -2,22 +2,24 @@
 // Licensed under the MIT License.
 
 import {
-    DispatcherAction,
-    DispatcherAgent,
-    DispatcherAgentContext,
+    ActionContext,
+    AppAction,
+    AppAgent,
+    SessionContext,
     Storage,
     TurnImpression,
     createTurnImpressionFromDisplay,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 import {
     ListAction,
     AddItemsAction,
     RemoveItemsAction,
     CreateListAction,
+    ClearListAction,
     GetListAction,
 } from "./listSchema.js";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeListContext,
         updateAgentContext: updateListContext,
@@ -31,10 +33,13 @@ type ListActionContext = {
 };
 
 async function executeListAction(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<ListActionContext>,
+    action: AppAction,
+    context: ActionContext<ListActionContext>,
 ) {
-    let result = await handleListAction(action as ListAction, context.context);
+    let result = await handleListAction(
+        action as ListAction,
+        context.sessionContext.agentContext,
+    );
     return result;
 }
 
@@ -88,7 +93,7 @@ function simpleNoun(item: string) {
 
 function validateWildcardItems(
     items: string[],
-    context: DispatcherAgentContext<ListActionContext>,
+    context: SessionContext<ListActionContext>,
 ) {
     for (const item of items) {
         if (!simpleNoun(item)) {
@@ -99,8 +104,8 @@ function validateWildcardItems(
 }
 
 async function listValidateWildcardMatch(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<ListActionContext>,
+    action: AppAction,
+    context: SessionContext<ListActionContext>,
 ) {
     if (action.actionName === "addItems") {
         const addItemsAction = action as AddItemsAction;
@@ -115,7 +120,7 @@ async function listValidateWildcardMatch(
     return true;
 }
 
-function initializeListContext() {
+async function initializeListContext() {
     return { store: undefined };
 }
 
@@ -210,7 +215,7 @@ async function createListStoreForSession(
 ) {
     let lists: List[] = [];
     // check whether file exists
-    if (storage.exists(listStoreName)) {
+    if (await storage.exists(listStoreName)) {
         const data = await storage.read(listStoreName, "utf8");
         lists = JSON.parse(data);
     } else {
@@ -221,15 +226,15 @@ async function createListStoreForSession(
 
 async function updateListContext(
     enable: boolean,
-    context: DispatcherAgentContext<ListActionContext>,
+    context: SessionContext<ListActionContext>,
 ): Promise<void> {
     if (enable && context.sessionStorage) {
-        context.context.store = await createListStoreForSession(
+        context.agentContext.store = await createListStoreForSession(
             context.sessionStorage,
             "lists.json",
         );
     } else {
-        context.context.store = undefined;
+        context.agentContext.store = undefined;
     }
 }
 
@@ -250,7 +255,7 @@ async function handleListAction(
                     addAction.parameters.listName,
                     addAction.parameters.items,
                 );
-                listContext.store.save();
+                await listContext.store.save();
                 displayText = `Added items: ${addAction.parameters.items} to list ${addAction.parameters.listName}`;
                 result = createTurnImpressionFromDisplay(displayText);
                 result.literalText = `Added item: ${addAction.parameters.items} to list ${addAction.parameters.listName}`;
@@ -279,7 +284,7 @@ async function handleListAction(
                     removeAction.parameters.listName,
                     removeAction.parameters.items,
                 );
-                listContext.store.save();
+                await listContext.store.save();
                 displayText = `Removed items: ${removeAction.parameters.items} from list ${removeAction.parameters.listName}`;
                 result = createTurnImpressionFromDisplay(displayText);
                 result.literalText = `Removed items: ${removeAction.parameters.items} from list ${removeAction.parameters.listName}`;
@@ -310,7 +315,7 @@ async function handleListAction(
                         `Created list: ${createListAction.parameters.listName}`,
                     );
                     displayText = `Created list: ${createListAction.parameters.listName}`;
-                    listContext.store.save();
+                    await listContext.store.save();
                 } else {
                     console.log(
                         `List already exists: ${createListAction.parameters.listName}`,
@@ -350,6 +355,30 @@ async function handleListAction(
             }
             break;
         }
+        case "clearList": {
+            const clearListAction = action as ClearListAction;
+            if (listContext.store !== undefined) {
+                const list = listContext.store.getList(
+                    clearListAction.parameters.listName,
+                );
+                if (list !== undefined) {
+                    list.itemsSet.clear();
+                    await listContext.store.save();
+                    displayText = `Cleared list: ${clearListAction.parameters.listName}`;
+                    result = createTurnImpressionFromDisplay(displayText);
+                    result.literalText = `Cleared list: ${clearListAction.parameters.listName}`;
+                    result.entities = [
+                        {
+                            name: clearListAction.parameters.listName,
+                            type: ["list"],
+                        },
+                    ];
+                }
+            }
+            break;
+        }
+        default:
+            throw new Error(`Unknown action: ${action.actionName}`);
     }
     return result;
 }

@@ -2,23 +2,27 @@
 // Licensed under the MIT License.
 
 import { ElectronAPI } from "@electron-toolkit/preload";
+import { DynamicDisplay } from "@typeagent/agent-sdk";
 
 export type SpeechToken = {
     token: string;
     expire: number;
+    endpoint: string;
+    region: string;
 };
 
 // TODO: remove duplicate types due to package circular dependencies (commonUtils/command.ts is other source)
 
 export type SearchMenuItem = {
     matchText: string;
+    selectedText: string;
     emojiChar?: string;
     groupName?: string;
 };
 
 export type ActionUICommand = "register" | "replace" | "remove";
 export type ActionInfo = {
-    actionTemplates: ActionTemplate[];
+    actionTemplates: ActionTemplateSequence;
     requestId: string;
 };
 
@@ -64,9 +68,26 @@ export type ActionTemplate = {
     agent: string;
     name: string;
     parameterStructure: TemplateParamObject;
+};
+
+export type ActionTemplateSequence = {
+    templates: ActionTemplate[];
     prefaceSingle?: string;
     prefaceMultiple?: string;
 };
+
+export interface IAgentMessage {
+    message: string;
+    requestId?: string | undefined;
+    source: string;
+    actionIndex?: number | undefined;
+    metrics?: IMessageMetrics;
+}
+
+export interface IMessageMetrics {
+    duration: number | undefined;
+    marks?: Map<string, number> | undefined;
+}
 
 // end duplicate type section
 
@@ -81,20 +102,21 @@ export interface ClientAPI {
     ) => void;
     processShellRequest: (request: string, id: string) => Promise<void>;
     sendPartialInput: (text: string) => void;
+    getDynamicDisplay: (source: string, id: string) => Promise<DynamicDisplay>;
     onResponse(
         callback: (
             e: Electron.IpcRendererEvent,
-            response: string | undefined,
-            id: string,
-            actionIndex?: number,
-            group_id?: string,
+            message: IAgentMessage,
         ) => void,
     ): void;
-    onUpdate(
+    onSetDynamicActionDisplay(
         callback: (
             e: Electron.IpcRendererEvent,
-            updateMessage: string,
-            group_id: string,
+            source: string,
+            id: string,
+            actionIndex: number,
+            displayId: string,
+            nextRefreshMs: number,
         ) => void,
     ): void;
     onSetPartialInputHandler(
@@ -110,15 +132,14 @@ export interface ClientAPI {
     onStatusMessage(
         callback: (
             e: Electron.IpcRendererEvent,
-            message: string,
-            id: string,
+            message: IAgentMessage,
             temporary: boolean,
         ) => void,
     ): void;
     onActionCommand(
         callback: (
             e: Electron.IpcRendererEvent,
-            actionTemplates: ActionTemplate[],
+            actionTemplates: ActionTemplateSequence,
             command: ActionUICommand,
             requestId: string,
         ) => void,
@@ -141,8 +162,19 @@ export interface ClientAPI {
             fromCache?: boolean,
         ) => void,
     ): void;
+    onRandomCommandSelected(
+        callback: (
+            e: Electron.IpcRendererEvent,
+            id: string,
+            message: string,
+        ) => void,
+    ): void;
     onSettingSummaryChanged(
-        callback: (e: Electron.IpcRendererEvent, summary: string) => void,
+        callback: (
+            e: Electron.IpcRendererEvent,
+            summary: string,
+            agents: Map<string, string>,
+        ) => void,
     ): void;
     onAskYesNo(
         callback: (
@@ -150,6 +182,7 @@ export interface ClientAPI {
             askYesNoId: number,
             message: string,
             requestId: string,
+            source: string,
         ) => void,
     ): void;
     sendYesNo: (askYesNoId: number, accept: boolean) => void;
@@ -159,6 +192,7 @@ export interface ClientAPI {
             questionId: number,
             message: string,
             requestId: string,
+            source: string,
         ) => void,
     ): void;
     sendAnswer: (questionId: number, answer?: string) => void;
@@ -173,6 +207,22 @@ export interface ClientAPI {
     onHelpRequested(
         callback: (e: Electron.IpcRendererEvent, key: string) => void,
     ): void;
+    onRandomMessageRequested(
+        callback: (e: Electron.IpcRendererEvent, key: string) => void,
+    ): void;
+    onMicrophoneChangeRequested(
+        callback: (
+            e: Electron.IpcRendererEvent,
+            micId: string,
+            micName: string,
+        ) => void,
+    ): void;
+    onShowDialog(
+        callback: (e: Electron.IpcRendererEvent, key: string) => void,
+    ): void;
+    onHideMenuChanged(
+        callback: (e: Electron.IpcRendererEvent, value: boolean) => void,
+    );
 }
 
 export interface ElectronWindowFields {

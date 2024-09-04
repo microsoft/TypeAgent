@@ -33,6 +33,7 @@
     "@microsoft/microsoft-graph-client": "^3.0.7",
     "aiclient": "workspace:*",
     "chalk": "^5.3.0",
+    "common-utils": "workspace:*",
     "date-fns": "^3.4.0",
     "debug": "^4.3.4",
     "dotenv": "^16.3.1",

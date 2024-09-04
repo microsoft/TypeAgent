@@ -3,7 +3,10 @@
 
 import fs from "node:fs";
 import { StopWatch } from "common-utils";
-import { ChatResponseAction } from "./chatResponseActionSchema.js";
+import {
+    ChatResponseAction,
+    LookupAndGenerateResponseAction,
+} from "./chatResponseActionSchema.js";
 import {
     ChunkChatResponse,
     LookupOptions,
@@ -13,81 +16,125 @@ import {
     Entity,
 } from "typeagent";
 import { ChatModel, bing, openai } from "aiclient";
-import { DispatcherAgent, RequestIO } from "dispatcher-agent";
+import { ActionContext, AppAgent } from "@typeagent/agent-sdk";
 import { PromptSection } from "typechat";
 import {
-    DispatcherAction,
-    DispatcherAgentContext,
+    AppAction,
     TurnImpression,
     createTurnImpressionFromLiteral,
-} from "dispatcher-agent";
+} from "@typeagent/agent-sdk";
 import { fileURLToPath } from "node:url";
+import { conversation as Conversation } from "knowledge-processor";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
     return {
         executeAction: executeChatResponseAction,
+        streamPartialAction: streamPartialChatResponseAction,
     };
 }
 
-function isChatResponseAction(
-    action: DispatcherAction,
-): action is ChatResponseAction {
-    return action.actionName === "chatResponse";
+function isChatResponseAction(action: AppAction): action is ChatResponseAction {
+    return (
+        action.actionName === "generateResponse" ||
+        action.actionName === "lookupAndGenerateResponse"
+    );
 }
 
 export async function executeChatResponseAction(
-    chatAction: DispatcherAction,
-    context: DispatcherAgentContext<undefined>,
-    actionIndex: number,
+    chatAction: AppAction,
+    context: ActionContext,
 ) {
     if (!isChatResponseAction(chatAction)) {
         throw new Error(`Invalid chat action: ${chatAction.actionName}`);
     }
-    return handleChatResponse(chatAction, context, actionIndex);
+    return handleChatResponse(chatAction, context);
 }
 
 async function handleChatResponse(
     chatAction: ChatResponseAction,
-    context: DispatcherAgentContext<undefined>,
-    actionIndex: number,
+    context: ActionContext,
 ) {
-    const requestIO = context.requestIO;
     console.log(JSON.stringify(chatAction, undefined, 2));
-    if (
-        chatAction.parameters.lookups !== undefined &&
-        chatAction.parameters.lookups.length > 0
-    ) {
-        console.log("Running lookups");
-        return handleLookup(
-            chatAction,
-            requestIO,
-            actionIndex,
-            await getLookupSettings(true),
-        );
-    }
+    switch (chatAction.actionName) {
+        case "generateResponse": {
+            if (chatAction.parameters.generatedText !== undefined) {
+                logEntities(
+                    "UR Entities:",
+                    chatAction.parameters.userRequestEntities,
+                );
+                logEntities(
+                    "GT Entities:",
+                    chatAction.parameters.generatedTextEntities,
+                );
+                console.log("Got generated text");
 
-    if (chatAction.parameters.generatedText !== undefined) {
-        logEntities("UR Entities:", chatAction.parameters.userRequestEntities);
-        logEntities(
-            "GT Entities:",
-            chatAction.parameters.generatedTextEntities,
-        );
+                const result = createTurnImpressionFromLiteral(
+                    chatAction.parameters.generatedText,
+                );
 
-        console.log("Got generated text");
-        const result = createTurnImpressionFromLiteral(
-            chatAction.parameters.generatedText,
-        );
-
-        let entities = chatAction.parameters.generatedTextEntities || [];
-        if (chatAction.parameters.userRequestEntities !== undefined) {
-            entities =
-                chatAction.parameters.userRequestEntities.concat(entities);
+                let entities =
+                    chatAction.parameters.generatedTextEntities || [];
+                if (chatAction.parameters.userRequestEntities !== undefined) {
+                    entities =
+                        chatAction.parameters.userRequestEntities.concat(
+                            entities,
+                        );
+                }
+                result.entities = entities;
+                return result;
+            }
         }
-        result.entities = entities;
-        return result;
+        case "lookupAndGenerateResponse": {
+            const lookupAction = chatAction as LookupAndGenerateResponseAction;
+            if (
+                lookupAction.parameters.internetLookups !== undefined &&
+                lookupAction.parameters.internetLookups.length > 0
+            ) {
+                console.log("Running lookups");
+                return handleLookup(
+                    lookupAction,
+                    context,
+                    await getLookupSettings(true),
+                );
+            }
+            if (
+                lookupAction.parameters.conversationLookupFilters !== undefined
+            ) {
+                const conversationManager: Conversation.ConversationManager = (
+                    context.sessionContext as any
+                ).conversationManager;
+                if (conversationManager !== undefined) {
+                    let searchResponse =
+                        await conversationManager.getSearchResponse(
+                            lookupAction.parameters.originalRequest,
+                            lookupAction.parameters.conversationLookupFilters,
+                        );
+                    if (searchResponse) {
+                        if (searchResponse.response?.hasHits()) {
+                            console.log("Has hits");
+                        }
+                        const matches =
+                            await conversationManager.generateAnswerForSearchResponse(
+                                lookupAction.parameters.originalRequest,
+                                searchResponse,
+                            );
+                        if (
+                            matches &&
+                            matches.response &&
+                            matches.response.answer
+                        ) {
+                            return createTurnImpressionFromLiteral(
+                                matches.response.answer.answer!,
+                            );
+                        } else {
+                            console.log("bug");
+                        }
+                    }
+                }
+            }
+        }
     }
-
-    requestIO.error("No information found");
+    return createTurnImpressionFromLiteral("No information found");
 }
 
 function logEntities(label: string, entities?: Entity[]): void {
@@ -217,16 +264,15 @@ type LookupSettings = {
 };
 
 async function handleLookup(
-    chatAction: ChatResponseAction,
-    requestIO: RequestIO,
-    actionIndex: number,
+    chatAction: LookupAndGenerateResponseAction,
+    context: ActionContext,
     settings: LookupSettings,
 ): Promise<TurnImpression> {
     let literalResponse = createTurnImpressionFromLiteral(
         "No information found",
     );
 
-    let lookups = chatAction.parameters.lookups;
+    let lookups = chatAction.parameters.internetLookups;
     if (!lookups || lookups.length === 0) {
         return literalResponse;
     }
@@ -242,8 +288,8 @@ async function handleLookup(
     if (lookups.length === 1 && lookUpConfig?.documentConcurrency) {
         documentConcurrency = lookUpConfig.documentConcurrency;
     }
-    requestIO.setActionStatus(lookupToHtml(lookups), actionIndex);
-    const context: LookupContext = {
+    context.actionIO.setActionDisplay(lookupToHtml(lookups));
+    const lookupContext: LookupContext = {
         lookups,
         answers: new Map<string, ChunkChatResponse>(),
         inProgress: new Map<string, LookupProgress>(),
@@ -251,22 +297,15 @@ async function handleLookup(
     // Run all lookups concurrently
     await Promise.all(
         lookups.map((l) =>
-            runLookup(
-                l,
-                context,
-                requestIO,
-                actionIndex,
-                settings,
-                documentConcurrency,
-            ),
+            runLookup(l, lookupContext, context, settings, documentConcurrency),
         ),
     );
     // Capture answers in the turn impression to return
-    literalResponse = updateTurnImpression(context, literalResponse);
-    requestIO.setActionStatus(literalResponse.displayText, actionIndex);
+    literalResponse = updateTurnImpression(lookupContext, literalResponse);
+    context.actionIO.setActionDisplay(literalResponse.displayText);
     // Generate entities if needed
     if (settings.entityGenModel) {
-        const entities = await runEntityExtraction(context, settings);
+        const entities = await runEntityExtraction(lookupContext, settings);
         if (entities.length > 0) {
             literalResponse.entities.push(...entities);
         }
@@ -327,7 +366,7 @@ function updateTurnImpression(
     if (context.answers.size > 0) {
         literalResponse.literalText = "";
         literalResponse.displayText = answersToHtml(context);
-        for (const [lookup, chatResponse] of context.answers) {
+        for (const [_lookup, chatResponse] of context.answers) {
             literalResponse.literalText += chatResponse.generatedText! + "\n";
             if (chatResponse.entities && chatResponse.entities.length > 0) {
                 literalResponse.entities ??= [];
@@ -340,9 +379,8 @@ function updateTurnImpression(
 
 async function runLookup(
     lookup: string,
-    context: LookupContext,
-    requestIO: RequestIO,
-    actionIndex: number,
+    lookupContext: LookupContext,
+    actionContext: ActionContext,
     settings: LookupSettings,
     concurrency: number,
 ) {
@@ -350,6 +388,8 @@ async function runLookup(
     //
     // Lookups are implemented using a web search
     //
+    let firstToken: boolean = true;
+
     const stopWatch = new StopWatch();
     stopWatch.start("WEB SEARCH: " + lookup);
     const urls = await searchWeb(lookup, settings.maxSearchResults);
@@ -367,20 +407,27 @@ async function runLookup(
         concurrency,
         getLookupInstructions(),
         (url, answerSoFar) => {
-            updateLookupProgress(context, lookup, url, answerSoFar);
+            if (firstToken) {
+                actionContext.performanceMark("First Token");
+                firstToken = false;
+            }
+
+            updateLookupProgress(lookupContext, lookup, url, answerSoFar);
             updateStatus();
         },
     );
     stopWatch.stop("GENERATE ANSWER " + lookup);
     if (answer && answer.answerStatus !== "NotAnswered") {
-        context.answers.set(lookup, answer);
+        lookupContext.answers.set(lookup, answer);
     }
-    context.inProgress.delete(lookup);
+    lookupContext.inProgress.delete(lookup);
     updateStatus();
     return answer;
 
     function updateStatus() {
-        requestIO.setActionStatus(lookupProgressAsHtml(context), actionIndex);
+        actionContext.actionIO.setActionDisplay(
+            lookupProgressAsHtml(lookupContext),
+        );
     }
 }
 
@@ -419,7 +466,12 @@ async function searchWeb(
     query: string,
     maxSearchResults: number = 3,
 ): Promise<string[] | undefined> {
-    const searchEngine = await bing.createBingSearch();
+    const searchEngineResult = await bing.createBingSearch();
+    if (!searchEngineResult.success) {
+        console.log(searchEngineResult.message);
+        return undefined;
+    }
+    const searchEngine = searchEngineResult.data;
     const matches = await searchEngine.webSearch(query, {
         count: maxSearchResults,
     });
@@ -449,4 +501,20 @@ function updateLookupProgress(
     }
     progress.answerSoFar = answerSoFar;
     progress.counter++;
+}
+
+function streamPartialChatResponseAction(
+    actionName: string,
+    name: string,
+    value: string,
+    partial: boolean,
+    context: ActionContext,
+) {
+    if (actionName !== "generateResponse") {
+        return;
+    }
+
+    if (name === "parameters.generatedText") {
+        context.actionIO.setActionDisplay(`${value}${partial ? "..." : ""}`);
+    }
 }

@@ -42,6 +42,8 @@ export type Action = {
     objectEntityName: string | "none";
     indirectObjectEntityName: string | "none";
     params?: (string | ActionParam)[];
+    // If the action implies this additional facet or property of the subjectEntity, such as hobbies, activities, interests, personality
+    subjectEntityFacet?: Facet | undefined;
 };
 
 // Detailed and comprehensive knowledge response
@@ -49,6 +51,9 @@ export type KnowledgeResponse = {
     entities: ConcreteEntity[];
     // The 'subjectEntityName' and 'objectEntityName' must correspond to the 'name' of an entity listed in the 'entities' array.
     actions: Action[];
+    // Some actions can ALSO be expressed in a reverse way... e.g. (A give to B) --> (B receive from A) and vice versa
+    // If so, also return the reverse form of the action, full filled out
+    inverseActions: Action[];
     // Detailed, descriptive topics and keyword.
     topics: string[];
 };

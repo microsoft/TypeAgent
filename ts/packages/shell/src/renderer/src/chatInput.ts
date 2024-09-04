@@ -2,7 +2,11 @@
 // Licensed under the MIT License.
 
 import { ChatView, setContent } from "./chatView";
-import { iconMicrophone } from "./icon";
+import {
+    iconMicrophone,
+    iconMicrophoneListening,
+    iconMicrophoneDisabled,
+} from "./icon";
 import { getClientAPI } from "./main";
 import { SpeechInfo, recognizeOnce } from "./speech";
 
@@ -44,6 +48,9 @@ export class ExpandableTextarea {
                 }
             } else if (event.altKey && handlers.altHandler !== undefined) {
                 handlers.altHandler(this, event);
+            } else if (event.key == "Escape") {
+                this.textEntry.textContent = "";
+                event.preventDefault();
             }
             return true;
         });
@@ -120,6 +127,7 @@ export class ChatInput {
         this.inputContainer.appendChild(this.textarea.getTextEntry());
         this.button = document.createElement("button");
         const mic = iconMicrophone();
+        mic.className = "clickable";
         this.button.appendChild(mic);
         this.button.id = buttonId;
         this.button.className = "chat-input-button";
@@ -129,7 +137,7 @@ export class ChatInput {
                 await getClientAPI().getLocalWhisperStatus();
             if (useLocalWhisper) {
                 recognizeOnce(
-                    "",
+                    undefined,
                     inputId,
                     buttonId,
                     messageHandler,
@@ -146,7 +154,7 @@ export class ChatInput {
                 }
                 if (speechInfo.speechToken !== undefined) {
                     recognizeOnce(
-                        speechInfo.speechToken.token,
+                        speechInfo.speechToken,
                         inputId,
                         buttonId,
                         messageHandler,
@@ -156,6 +164,39 @@ export class ChatInput {
                 }
             }
         });
+
+        const listeningMic = iconMicrophoneListening();
+        listeningMic.className = "chat-message-hidden";
+        this.button.appendChild(listeningMic);
+
+        const disabledMic = iconMicrophoneDisabled();
+        disabledMic.className = "chat-message-hidden";
+        this.button.appendChild(disabledMic);
+
+        const curSpeechToken = speechInfo.speechToken;
+        if (
+            curSpeechToken === undefined ||
+            curSpeechToken.expire <= Date.now()
+        ) {
+            getClientAPI()
+                .getSpeechToken()
+                .then((result) => {
+                    speechInfo.speechToken = result;
+
+                    if (result == undefined) {
+                        const button =
+                            document.querySelector<HTMLButtonElement>(
+                                `#${buttonId}`,
+                            )!;
+                        button.disabled = true;
+                        button.children[0].classList.add("chat-message-hidden");
+                        button.children[1].classList.add("chat-message-hidden");
+                        button.children[2].classList.remove(
+                            "chat-message-hidden",
+                        );
+                    }
+                });
+        }
     }
 
     clear() {

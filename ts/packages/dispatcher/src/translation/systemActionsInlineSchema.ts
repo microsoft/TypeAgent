@@ -3,7 +3,7 @@
 
 import { IAction } from "agent-cache";
 import { TranslatorSchemaDef } from "common-utils";
-import { DispatcherAction } from "dispatcher-agent";
+import { AppAction } from "@typeagent/agent-sdk";
 
 // Multiple Action is what is used and returned from the LLM
 const multipleActionName = "multiple";
@@ -18,9 +18,7 @@ export type MultipleAction = {
     };
 };
 
-export function isMultipleAction(
-    action: DispatcherAction,
-): action is MultipleAction {
+export function isMultipleAction(action: AppAction): action is MultipleAction {
     return action.actionName === multipleActionName;
 }
 

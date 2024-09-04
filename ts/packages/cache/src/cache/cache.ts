@@ -56,6 +56,7 @@ export class AgentCache {
     }>;
 
     private readonly logger: Logger | undefined;
+    public model?: string;
     constructor(
         public readonly explainerName: string,
         private readonly getExplainerForTranslator: ExplainerFactory,
@@ -107,7 +108,10 @@ export class AgentCache {
     }
 
     private getExplainerForActions(actions: Actions) {
-        return this.getExplainerForTranslator(actions.action?.translatorName);
+        return this.getExplainerForTranslator(
+            actions.action?.translatorName,
+            this.model,
+        );
     }
 
     private async queueTask(
@@ -238,7 +242,7 @@ export class AgentCache {
         }
     }
 
-    public async correctExplaination(
+    public async correctExplanation(
         requestAction: RequestAction,
         explanation: object,
         correction: string,

@@ -23,13 +23,23 @@ import {
     RequestId,
     getPrompt,
     getSettingSummary,
+    getTranslatorNameToEmojiMap,
     initializeCommandHandlerContext,
     processCommand,
     partialInput,
+    getDynamicDisplay,
 } from "agent-dispatcher";
 
 import { SearchMenuCommand } from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
-import { ActionTemplate, SearchMenuItem } from "../preload/electronTypes.js";
+import {
+    ActionTemplateSequence,
+    IAgentMessage,
+    SearchMenuItem,
+} from "../preload/electronTypes.js";
+import { ShellSettings } from "./shellSettings.js";
+import { unlinkSync } from "fs";
+import { existsSync } from "node:fs";
+import { AppAgentEvent } from "@typeagent/agent-sdk";
 
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
@@ -40,31 +50,69 @@ dotenv.config({ path: envPath });
 // Make sure we have chalk colors
 process.env.FORCE_COLOR = "true";
 
+// do we need to reset shell settings?
+process.argv.forEach((arg) => {
+    if (arg.toLowerCase() == "--setup" && existsSync(ShellSettings.filePath)) {
+        unlinkSync(ShellSettings.filePath);
+    }
+});
+
 let mainWindow: BrowserWindow | null = null;
 
 const time = performance.now();
 debugShell("Starting...");
 function createWindow(): void {
     debugShell("Creating window", performance.now() - time);
+
     // Create the browser window.
     mainWindow = new BrowserWindow({
-        width: 900,
-        height: 1200,
+        width: ShellSettings.getinstance().width,
+        height: ShellSettings.getinstance().height,
         show: false,
-        autoHideMenuBar: true,
+        autoHideMenuBar: ShellSettings.getinstance().hideMenu,
         webPreferences: {
             preload: join(__dirname, "../preload/index.mjs"),
             sandbox: false,
+            zoomFactor: ShellSettings.getinstance().zoomLevel,
         },
+        x: ShellSettings.getinstance().x,
+        y: ShellSettings.getinstance().y,
     });
 
     mainWindow.on("ready-to-show", () => {
         mainWindow!.show();
+
+        if (ShellSettings.getinstance().devTools) {
+            mainWindow?.webContents.openDevTools();
+        }
     });
 
     mainWindow.webContents.setWindowOpenHandler((details) => {
         shell.openExternal(details.url);
         return { action: "deny" };
+    });
+
+    mainWindow.on("close", () => {
+        if (mainWindow) {
+            ShellSettings.getinstance().zoomLevel =
+                mainWindow.webContents.zoomLevel;
+            ShellSettings.getinstance().devTools =
+                mainWindow.webContents.isDevToolsOpened();
+        }
+    });
+
+    mainWindow.on("closed", () => {
+        ShellSettings.getinstance().save();
+    });
+
+    mainWindow.on("moved", () => {
+        ShellSettings.getinstance().position = mainWindow?.getPosition();
+    });
+
+    mainWindow.on("resized", () => {
+        if (mainWindow) {
+            ShellSettings.getinstance().size = mainWindow.getSize();
+        }
     });
 
     // HMR for renderer base on electron-vite cli.
@@ -79,7 +127,9 @@ function createWindow(): void {
     setupZoomHandlers(mainWindow);
 }
 
-let speechToken: { token: string; expire: number } | undefined;
+let speechToken:
+    | { token: string; expire: number; region: string; endpoint: string }
+    | undefined;
 
 async function getSpeechToken() {
     if (speechToken === undefined || speechToken.expire <= Date.now()) {
@@ -88,6 +138,8 @@ async function getSpeechToken() {
         speechToken = {
             token: tokenResponse.token,
             expire: Date.now() + 9 * 60 * 1000, // 9 minutes (token expires in 10 minutes)
+            region: tokenResponse.region,
+            endpoint: tokenResponse.endpoint,
         };
     }
     return speechToken;
@@ -104,42 +156,24 @@ async function triggerRecognitionOnce(context: CommandHandlerContext) {
     );
 }
 
-function showResult(
-    message: string,
-    requestId: RequestId,
-    actionIndex?: number,
-    groupId?: string,
-) {
+function showResult(message: IAgentMessage) {
     // Ignore message without requestId
-    if (requestId === undefined) {
+    if (message.requestId === undefined) {
         console.warn("showResult: requestId is undefined");
         return;
     }
-    mainWindow?.webContents.send(
-        "response",
-        message,
-        requestId,
-        actionIndex,
-        groupId,
-    );
+    mainWindow?.webContents.send("response", message);
 }
 
-function sendStatusMessage(
-    message: string,
-    requestId: RequestId,
-    temporary: boolean = false,
-) {
+function sendStatusMessage(message: IAgentMessage, temporary: boolean = false) {
     // Ignore message without requestId
-    if (requestId === undefined) {
-        console.warn(`sendStatusMessage: requestId is undefined. ${message}`);
+    if (message.requestId === undefined) {
+        console.warn(
+            `sendStatusMessage: requestId is undefined. ${message.message}`,
+        );
         return;
     }
-    mainWindow?.webContents.send(
-        "status-message",
-        message,
-        requestId,
-        temporary,
-    );
+    mainWindow?.webContents.send("status-message", message, temporary);
 }
 
 function markRequestExplained(
@@ -162,8 +196,14 @@ function markRequestExplained(
     );
 }
 
-function updateResult(message: string, group_id: string) {
-    mainWindow?.webContents.send("update", message, group_id);
+function updateRandomCommandSelected(requestId: RequestId, message: string) {
+    // Ignore message without requestId
+    if (requestId === undefined) {
+        console.warn("updateRandomCommandSelected: requestId is undefined");
+        return;
+    }
+
+    mainWindow?.webContents.send("update-random-command", requestId, message);
 }
 
 let maxAskYesNoId = 0;
@@ -248,7 +288,7 @@ function searchMenuCommand(
 }
 
 function actionCommand(
-    actionTemplates: ActionTemplate[],
+    actionTemplates: ActionTemplateSequence,
     command: string,
     requestId: RequestId,
 ) {
@@ -267,17 +307,17 @@ const clientIO: ClientIO = {
         /* ignore */
     },
     success: sendStatusMessage,
-    status: (message, requestId) => sendStatusMessage(message, requestId, true),
+    status: (message) => sendStatusMessage(message, true),
     warn: sendStatusMessage,
     error: sendStatusMessage,
     result: showResult,
-    setActionStatus: showResult,
-    updateActionStatus: updateResult,
+    setActionDisplay: showResult,
+    setDynamicDisplay,
     searchMenuCommand,
     actionCommand,
     askYesNo,
     question,
-    notify(event: string, requestId: RequestId, data: any) {
+    notify(event: string, requestId: RequestId, data: any, source: string) {
         switch (event) {
             case "explained":
                 markRequestExplained(
@@ -286,6 +326,14 @@ const clientIO: ClientIO = {
                     data.fromCache,
                     data.fromUser,
                 );
+                break;
+            case "randomCommandSelected":
+                updateRandomCommandSelected(requestId, data.message);
+                break;
+            case AppAgentEvent.Error:
+            case AppAgentEvent.Warning:
+            case AppAgentEvent.Info:
+                console.log(`[${event}] ${source}: ${data}`);
                 break;
             default:
             // ignore
@@ -296,13 +344,32 @@ const clientIO: ClientIO = {
     },
 };
 
+async function setDynamicDisplay(
+    source: string,
+    requestId: RequestId,
+    actionIndex: number,
+    displayId: string,
+    nextRefreshMs: number,
+) {
+    mainWindow?.webContents.send(
+        "set-dynamic-action-display",
+        source,
+        requestId,
+        actionIndex,
+        displayId,
+        nextRefreshMs,
+    );
+}
+
 async function initializeSpeech(context: CommandHandlerContext) {
     const key = process.env["SPEECH_SDK_KEY"];
     const region = process.env["SPEECH_SDK_REGION"];
+    const endpoint = process.env["SPEECH_SDK_ENDPOINT"] as string;
     if (key && region) {
         await AzureSpeech.initializeAsync({
             azureSpeechSubscriptionKey: key,
             azureSpeechRegion: region,
+            azureSpeechEndpoint: endpoint,
         });
         ipcMain.handle("get-speech-token", async () => {
             return getSpeechToken();
@@ -348,7 +415,7 @@ app.whenReady().then(async () => {
     function translatorSetPartialInputHandler() {
         mainWindow?.webContents.send(
             "set-partial-input-handler",
-            context.currentTranslatorName === "player",
+            context.lastActionTranslatorName === "player",
         );
     }
 
@@ -368,6 +435,7 @@ app.whenReady().then(async () => {
             mainWindow?.webContents.send(
                 "setting-summary-changed",
                 newSettingSummary,
+                getTranslatorNameToEmojiMap(context),
             );
         }
     });
@@ -377,15 +445,51 @@ app.whenReady().then(async () => {
         }
         partialInput(text, context);
     });
+    ipcMain.handle(
+        "get-dynamic-display",
+        async (_event, appAgentName: string, id: string) =>
+            getDynamicDisplay(appAgentName, "html", id, context),
+    );
     ipcMain.on("dom ready", async () => {
         settingSummary = getSettingSummary(context);
         translatorSetPartialInputHandler();
-        mainWindow?.webContents.send("setting-summary-changed", settingSummary);
+        mainWindow?.webContents.send(
+            "setting-summary-changed",
+            settingSummary,
+            getTranslatorNameToEmojiMap(context),
+        );
+
+        mainWindow?.webContents.send(
+            "microphone-change-requested",
+            ShellSettings.getinstance().microphoneId,
+            ShellSettings.getinstance().microphoneName,
+        );
+
+        mainWindow?.webContents.send(
+            "hide-menu-changed",
+            ShellSettings.getinstance().hideMenu,
+        );
     });
 
     await initializeSpeech(context);
     ipcMain.handle("get-localWhisper-status", async () => {
         return typeof context.localWhisper !== "undefined";
+    });
+
+    ipcMain.on(
+        "microphone-change-requested",
+        async (_event, micId: string, micName: string) => {
+            ShellSettings.getinstance().microphoneId = micId;
+            ShellSettings.getinstance().microphoneName = micName;
+        },
+    );
+
+    ipcMain.on("hide-menu-changed", (_event, value: boolean) => {
+        ShellSettings.getinstance().hideMenu = value;
+        mainWindow!.autoHideMenuBar = value;
+
+        // if the menu bar is visible it won't auto hide immediately when this is toggled so we have to help it along
+        mainWindow?.setMenuBarVisibility(!value);
     });
 
     globalShortcut.register("Alt+Right", () => {
@@ -396,6 +500,10 @@ app.whenReady().then(async () => {
         mainWindow?.webContents.send("help-requested", "F1");
     });
 
+    globalShortcut.register("F2", () => {
+        mainWindow?.webContents.send("random-message-requested", "F2");
+    });
+
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.
     // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
@@ -404,6 +512,7 @@ app.whenReady().then(async () => {
     });
 
     createWindow();
+    ``;
 
     app.on("activate", function () {
         // On macOS it's common to re-create a window in the app when the
@@ -429,11 +538,17 @@ app.on("window-all-closed", () => {
 function zoomIn(mainWindow: BrowserWindow) {
     const curr = mainWindow.webContents.zoomLevel;
     mainWindow.webContents.zoomLevel = Math.min(curr + 0.5, 9);
+    ShellSettings.getinstance().zoomLevel = mainWindow.webContents.zoomLevel;
 }
 
 function zoomOut(mainWindow: BrowserWindow) {
     const curr = mainWindow.webContents.zoomLevel;
     mainWindow.webContents.zoomLevel = Math.max(curr - 0.5, -8);
+    ShellSettings.getinstance().zoomLevel = mainWindow.webContents.zoomLevel;
+}
+
+function showDialog(dialogName: string) {
+    mainWindow?.webContents.send("show-dialog", dialogName);
 }
 
 const isMac = process.platform === "darwin";
@@ -502,6 +617,22 @@ function setAppMenu(mainWindow: BrowserWindow) {
             submenu: [],
         },
         {
+            id: "settingsMenu",
+            label: "Settings",
+            click: () => showDialog("Settings"),
+        },
+        {
+            id: "infoMenu",
+            label: "Info",
+            submenu: [
+                {
+                    id: "metricsMenu",
+                    label: "Show Metrics",
+                    click: () => showDialog("Metrics"),
+                },
+            ],
+        },
+        {
             id: "windowMenu",
             role: "windowMenu",
         },
@@ -510,6 +641,7 @@ function setAppMenu(mainWindow: BrowserWindow) {
             submenu: [
                 {
                     label: "Learn More",
+                    click: () => showDialog("Help"),
                 },
             ],
         },

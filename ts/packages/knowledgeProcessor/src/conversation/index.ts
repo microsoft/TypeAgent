@@ -3,11 +3,14 @@
 
 export * from "./knowledge.js";
 export * from "./knowledgeSchema.js";
-export * from "./knowledgeSearchSchema.js";
+export * from "./knowledgeSearchWebSchema.js";
+export * from "./knowledgeTermSearchSchema.js";
 export * from "./knowledgeActions.js";
 
 export * from "./conversation.js";
+export * from "./conversationManager.js";
 export * from "./dateTimeSchema.js";
+export * from "./messages.js";
 export * from "./entities.js";
 export * from "./topics.js";
 export * from "./topicSchema.js";

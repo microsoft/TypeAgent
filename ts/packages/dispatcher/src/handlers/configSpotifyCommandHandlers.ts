@@ -14,6 +14,7 @@ import { getStorage } from "../action/storageImpl.js";
 export function getSpotifyConfigCommandHandlers(): HandlerTable {
     return {
         description: "Configure spotify integration",
+        defaultSubCommand: undefined,
         commands: {
             off: {
                 description: "Turn off spotify integration",
@@ -59,16 +60,6 @@ export function getSpotifyConfigCommandHandlers(): HandlerTable {
                             "Spotify integration is not enabled.",
                         );
                     }
-                },
-            },
-            backend: {
-                description: "Turn on spotify backend integration.",
-                run: async (
-                    request: string,
-                    context: CommandHandlerContext,
-                ) => {
-                    context.action.player.spotify = undefined;
-                    context.action.player.spotifyBackend = true;
                 },
             },
         },

@@ -4,6 +4,7 @@
 import { WebSocket, WebSocketServer } from "ws";
 import { WebSocketMessage } from "common-utils";
 import registerDebug from "debug";
+import { IncomingMessage } from "node:http";
 
 const debug = registerDebug("typeagent:serviceHost");
 
@@ -28,8 +29,24 @@ try {
         process.exit(1);
     });
 
-    wss.on("connection", (ws: WebSocket) => {
+    wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
         debug("New client connected");
+
+        if (req.url) {
+            const params = new URLSearchParams(req.url.split("?")[1]);
+            const clientId = params.get("clientId");
+            if (clientId) {
+                for (var client of wss.clients) {
+                    if ((client as any).clientId) {
+                        wss.clients.delete(client);
+                    }
+                }
+
+                (ws as any).clientId = clientId;
+            }
+        }
+
+        debug(`Connection count: ${wss.clients.size}`);
 
         ws.on("message", (message: string) => {
             try {
