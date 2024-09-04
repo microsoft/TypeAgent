@@ -10,6 +10,7 @@ import { iconHelp, iconMetrics, iconSettings } from "./icon";
 import { SettingsView } from "./settingsView";
 import { HelpView } from "./helpView";
 import { MetricsView } from "./metricsView";
+import { ShellSettings } from "../../main/shellSettings";
 
 export function getClientAPI(): ClientAPI {
     return globalThis.api;
@@ -120,10 +121,26 @@ function addEvents(
         selectMicrophone(settingsView.microphoneSources, micId, micName);
     });
     api.onShowDialog((_, key) => {
+        if (key == "Settings") {
+            settingsView.shellSettings.hideTabs = false;
+            settingsView.tabsCheckBox.checked = false;
+
+            (window as any).electron.ipcRenderer.send(
+                "settings-changed",
+                settingsView.shellSettings,
+            );
+        }
+
         tabsView.showTab(key);
     });
-    api.onHideMenuChanged((_, value) => {
-        settingsView.menuCheckBox.checked = value;
+    api.onSettingsChanged((_, value: ShellSettings) => {
+        settingsView.shellSettings = value;
+        settingsView.menuCheckBox.checked = value.hideMenu;
+        settingsView.tabsCheckBox.checked = value.hideTabs;
+
+        if (value.hideTabs) {
+            tabsView.hide();
+        }
     });
 }
 
@@ -157,7 +174,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const chatView = new ChatView(idGenerator, speechInfo, agents);
     wrapper.appendChild(chatView.getMessageElm());
 
-    const settingsView = new SettingsView(window);
+    const settingsView = new SettingsView(window, tabs);
     tabs.getTabContainerByName("Settings").append(settingsView.getContainer());
     tabs.getTabContainerByName("Metrics").append(
         new MetricsView().getContainer(),
