@@ -53,7 +53,7 @@ export function getStorage(name: string, baseDir: string): Storage {
         },
         getTokenCachePersistence: async () => {
             try {
-                return PersistenceCreator.createPersistence({
+                return await PersistenceCreator.createPersistence({
                     cachePath: getFullPath("token"),
                     dataProtectionScope: DataProtectionScope.CurrentUser,
                     serviceName: `TypeAgent.${name}`,
