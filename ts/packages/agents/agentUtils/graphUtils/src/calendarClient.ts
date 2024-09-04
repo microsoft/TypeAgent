@@ -105,7 +105,7 @@ export class CalendarClient {
 
     startSyncThread() {
         if (this.isGraphClientInitialized()) {
-            const syncInterval = 30 * 60 * 1000; // sync every minute
+            const syncInterval = 30 * 60 * 1000;
             const syncCalendarEvents = async () => {
                 await this.indexCalendarEvents();
             };
