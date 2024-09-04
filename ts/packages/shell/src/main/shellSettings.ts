@@ -5,25 +5,9 @@ import { app } from "electron";
 import registerDebug from "debug";
 import { readFileSync, existsSync, writeFileSync } from "fs";
 import path from "path";
+import { defaultSettings, ShellSettingsType } from "./shellSettingsType.js";
 
 const debugShell = registerDebug("typeagent:shell");
-
-type ShellSettingsType = {
-    size: number[];
-    position?: number[];
-    zoomLevel: number;
-    devTools: boolean;
-    microphoneId?: string;
-    microphoneName?: string;
-    hideMenu: boolean;
-};
-
-const defaultSettings: ShellSettingsType = {
-    size: [900, 1200],
-    zoomLevel: 1,
-    devTools: false,
-    hideMenu: true,
-};
 
 export class ShellSettings implements ShellSettingsType {
     private static instance: ShellSettings;
@@ -35,6 +19,7 @@ export class ShellSettings implements ShellSettingsType {
     public microphoneId?: string;
     public microphoneName?: string;
     public hideMenu: boolean;
+    public hideTabs: boolean;
 
     public get width(): number | undefined {
         return this.size[0];
@@ -65,6 +50,7 @@ export class ShellSettings implements ShellSettingsType {
         this.microphoneId = settings.microphoneId;
         this.microphoneName = settings.microphoneName;
         this.hideMenu = settings.hideMenu;
+        this.hideTabs = settings.hideTabs;
     }
 
     public static get filePath(): string {
