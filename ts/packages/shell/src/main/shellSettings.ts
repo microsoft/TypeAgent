@@ -8,23 +8,40 @@ import path from "path";
 
 const debugShell = registerDebug("typeagent:shell");
 
-export class ShellSettings {
+type ShellSettingsType = {
+    size: number[];
+    position?: number[];
+    zoomLevel: number;
+    devTools: boolean;
+    microphoneId?: string;
+    microphoneName?: string;
+    hideMenu: boolean;
+};
+
+const defaultSettings: ShellSettingsType = {
+    size: [900, 1200],
+    zoomLevel: 1,
+    devTools: false,
+    hideMenu: true,
+};
+
+export class ShellSettings implements ShellSettingsType {
     private static instance: ShellSettings;
 
-    public size?: number[] = [900, 1200];
+    public size: number[];
     public position?: number[];
-    public zoomLevel: number = 1;
-    public devTools?: boolean = false;
+    public zoomLevel: number;
+    public devTools: boolean;
     public microphoneId?: string;
     public microphoneName?: string;
-    public hideMenu?: boolean = true;
+    public hideMenu: boolean;
 
     public get width(): number | undefined {
-        return this.size ? this.size[0] : undefined;
+        return this.size[0];
     }
 
     public get height(): number | undefined {
-        return this.size ? this.size[1] : undefined;
+        return this.size[1];
     }
 
     public get x(): number | undefined {
@@ -36,20 +53,18 @@ export class ShellSettings {
     }
 
     private constructor() {
-        let settings = ShellSettings.load();
+        const settings: ShellSettingsType = {
+            ...defaultSettings,
+            ...ShellSettings.load(),
+        };
 
-        if (settings) {
-            if (settings.size) {
-                this.size = settings.size;
-            }
-
-            this.position = settings.position;
-            this.zoomLevel = settings.zoomLevel;
-            this.devTools = settings.devTools;
-            this.microphoneId = settings.microphoneId;
-            this.microphoneName = settings.microphoneName;
-            this.hideMenu = settings.hideMenu;
-        }
+        this.size = settings.size;
+        this.position = settings.position;
+        this.zoomLevel = settings.zoomLevel;
+        this.devTools = settings.devTools;
+        this.microphoneId = settings.microphoneId;
+        this.microphoneName = settings.microphoneName;
+        this.hideMenu = settings.hideMenu;
     }
 
     public static get filePath(): string {
@@ -64,7 +79,7 @@ export class ShellSettings {
         return ShellSettings.instance;
     };
 
-    private static load(): any {
+    private static load(): Partial<ShellSettingsType> | null {
         debugShell(
             `Loading shell settings from '${this.filePath}'`,
             performance.now(),

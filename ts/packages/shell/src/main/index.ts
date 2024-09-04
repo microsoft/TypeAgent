@@ -110,7 +110,9 @@ function createWindow(): void {
     });
 
     mainWindow.on("resized", () => {
-        ShellSettings.getinstance().size = mainWindow?.getSize();
+        if (mainWindow) {
+            ShellSettings.getinstance().size = mainWindow.getSize();
+        }
     });
 
     // HMR for renderer base on electron-vite cli.
