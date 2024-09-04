@@ -67,6 +67,8 @@ export type AzureApiSettings = {
 export enum EnvVars {
     OPENAI_API_KEY = "OPENAI_API_KEY",
     OPENAI_ENDPOINT = "OPENAI_ENDPOINT",
+    OPENAI_ENDPOINT_EMBEDDING = "OPENAI_ENDPOINT_EMBEDDING",
+
     OPENAI_ORGANIZATION = "OPENAI_ORGANIZATION",
     OPENAI_MODEL = "OPENAI_MODEL",
     OPENAI_RESPONSE_FORMAT = "OPENAI_RESPONSE_FORMAT",
@@ -110,6 +112,7 @@ export function apiSettingsFromEnv(
  * @param requireEndpoint If false (default), falls back to using non-endpoint specific settings
  * @returns
  */
+
 export function openAIApiSettingsFromEnv(
     modelType: ModelType,
     env?: Record<string, string | undefined>,
@@ -123,7 +126,9 @@ export function openAIApiSettingsFromEnv(
         apiKey: getEnvSetting(env, EnvVars.OPENAI_API_KEY, endpointName),
         endpoint: getEnvSetting(
             env,
-            EnvVars.OPENAI_ENDPOINT,
+            modelType === ModelType.Chat
+                ? EnvVars.OPENAI_ENDPOINT
+                : EnvVars.OPENAI_ENDPOINT_EMBEDDING,
             endpointName,
             undefined,
             requireEndpoint,
@@ -154,7 +159,6 @@ export function openAIApiSettingsFromEnv(
         ),
     };
 }
-
 const azureTokenProvider = createAzureTokenProvider(
     AzureTokenScopes.CogServices,
 );
@@ -346,6 +350,9 @@ function parseEndPointName(endpoint?: string) {
     }
     if (endpoint.startsWith("openai:")) {
         return { provider: "openai", name: endpoint.substring(7) };
+    }
+    if (EnvVars.OPENAI_ENDPOINT in process.env) {
+        return { provider: "openai", name: endpoint };
     }
     return {
         provider: "azure",
