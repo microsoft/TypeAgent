@@ -53,7 +53,6 @@ export class TabView {
             tabDiv.append(tabTitle);
 
             tabDiv.onclick = () => {
-                console.log(`${tabDiv.innerText} clicked`);
                 if (tabPageDiv.classList.contains("closedTab")) {
                     tabPageDiv.classList.remove("closedTab");
                 } else {

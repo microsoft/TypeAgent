@@ -121,6 +121,11 @@ function addEvents(
         selectMicrophone(settingsView.microphoneSources, micId, micName);
     });
     api.onShowDialog((_, key) => {
+        if (key == "Settings") {
+            settingsView.shellSettings.hideTabs = false;
+            settingsView.tabsCheckBox.checked = false;
+        }
+
         tabsView.showTab(key);
     });
     api.onSettingsChanged((_, value: ShellSettings) => {
@@ -131,8 +136,6 @@ function addEvents(
         if (value.hideTabs) {
             tabsView.hide();
         }
-
-        console.log(value);
     });
 }
 
