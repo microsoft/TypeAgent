@@ -466,8 +466,7 @@ app.whenReady().then(async () => {
         );
 
         mainWindow?.webContents.send(
-            "hide-menu-changed",
-            ShellSettings.getinstance().hideMenu,
+            "settings-changed", ShellSettings.getinstance(),
         );
     });
 
@@ -484,12 +483,13 @@ app.whenReady().then(async () => {
         },
     );
 
-    ipcMain.on("hide-menu-changed", (_event, value: boolean) => {
-        ShellSettings.getinstance().hideMenu = value;
-        mainWindow!.autoHideMenuBar = value;
+    ipcMain.on("settings-changed", (_event, settings: ShellSettings) => {
+        ShellSettings.getinstance().hideMenu = settings.hideMenu;
+        ShellSettings.getinstance().hideTabs = settings.hideTabs;
+        mainWindow!.autoHideMenuBar = settings.hideMenu;
 
         // if the menu bar is visible it won't auto hide immediately when this is toggled so we have to help it along
-        mainWindow?.setMenuBarVisibility(!value);
+        mainWindow?.setMenuBarVisibility(!settings.hideMenu);
     });
 
     globalShortcut.register("Alt+Right", () => {

@@ -3,6 +3,7 @@
 
 import { ElectronAPI } from "@electron-toolkit/preload";
 import { DynamicDisplay } from "@typeagent/agent-sdk";
+import { ShellSettings } from "../main/shellSettings.js";
 
 export type SpeechToken = {
     token: string;
@@ -220,8 +221,8 @@ export interface ClientAPI {
     onShowDialog(
         callback: (e: Electron.IpcRendererEvent, key: string) => void,
     ): void;
-    onHideMenuChanged(
-        callback: (e: Electron.IpcRendererEvent, value: boolean) => void,
+    onSettingsChanged(
+        callback: (e: Electron.IpcRendererEvent, settings: ShellSettings) => void,
     );
 }
 
