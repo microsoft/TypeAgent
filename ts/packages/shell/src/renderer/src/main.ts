@@ -124,6 +124,11 @@ function addEvents(
         if (key == "Settings") {
             settingsView.shellSettings.hideTabs = false;
             settingsView.tabsCheckBox.checked = false;
+
+            (window as any).electron.ipcRenderer.send(
+                "settings-changed",
+                settingsView.shellSettings,
+            );
         }
 
         tabsView.showTab(key);

@@ -68,7 +68,6 @@ export class SettingsView {
         this.tabsCheckBox.type = "checkbox";
 
         this.tabsCheckBox.onchange = () => {
-            console.log("hide tabs changed: " + this.tabsCheckBox.checked);
             this.shellSettings.hideTabs = this.tabsCheckBox.checked;
 
             window.electron.ipcRenderer.send(
