@@ -4,7 +4,6 @@
 import { LoggerSink, LogEvent } from "./logger.js";
 import { MongoClient } from "mongodb";
 import registerDebug from "debug";
-import chalk from "chalk";
 
 const debugMongo = registerDebug("typeagent:logger:mongodb");
 
@@ -62,11 +61,9 @@ export function createMongoDBLoggerSink(
 ): LoggerSink | undefined {
     const dbUrl = process.env["MONGODB_CONNECTION_STRING"] ?? null;
     if (dbUrl === null || dbUrl === "") {
-        const warning: string =
-            "MONGODB_CONNECTION_STRING environment variable not set";
-        debugMongo(`WARNING: ${warning}}`);
-        console.warn(chalk.yellow(`ERROR: ${warning}`));
-        return undefined;
-    } else
-        return new MongoDBLoggerSink(dbUrl, dbName, collectionName, isEnabled);
+        throw new Error(
+            "MONGODB_CONNECTION_STRING environment variable not set",
+        );
+    }
+    return new MongoDBLoggerSink(dbUrl, dbName, collectionName, isEnabled);
 }
