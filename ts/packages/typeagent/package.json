@@ -28,7 +28,7 @@
     "aiclient": "workspace:*",
     "cheerio": "1.0.0-rc.12",
     "common-utils": "workspace:*",
-    "typechat": "^0.1.0",
+    "typechat": "^0.1.1",
     "typescript": "^5.4.2"
   },
   "devDependencies": {

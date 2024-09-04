@@ -14,7 +14,7 @@ import {
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { TypeChatConstraintsValidator } from "./constraints.js";
 import registerDebug from "debug";
-import { openai as ai } from "aiclient";
+import { openai as ai, ChatMessage } from "aiclient";
 import {
     createIncrementalJsonParser,
     IncrementalJsonValueCallBack,
@@ -92,7 +92,7 @@ export function enableJsonTranslatorStreaming<T extends object>(
             const parser = createIncrementalJsonParser(cb, {
                 partial: true,
             });
-            model.complete = async (prompt: string | PromptSection[]) => {
+            model.complete = async (prompt: string | PromptSection[] | ChatMessage[]) => {
                 debug(prompt);
                 const chunks = [];
                 for await (const chunk of model.completeStream(prompt)) {

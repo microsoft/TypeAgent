@@ -47,7 +47,7 @@
     "proper-lockfile": "^4.1.2",
     "schema-parser": "workspace:*",
     "typeagent": "workspace:*",
-    "typechat": "^0.1.0",
+    "typechat": "^0.1.1",
     "ws": "^8.17.1"
   },
   "devDependencies": {

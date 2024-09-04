@@ -22,7 +22,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "typechat": "^0.1.0"
+    "typechat": "^0.1.1"
   },
   "devDependencies": {
     "@types/debug": "^4.1.10",

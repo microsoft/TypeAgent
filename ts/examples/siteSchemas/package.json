@@ -29,7 +29,7 @@
     "find-config": "^1.0.0",
     "jsonpath": "^1.1.1",
     "typeagent": "workspace:*",
-    "typechat": "^0.1.0",
+    "typechat": "^0.1.1",
     "typescript": "^5.4.2",
     "ws": "^8.17.1"
   },
