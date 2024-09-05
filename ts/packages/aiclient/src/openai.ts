@@ -489,9 +489,9 @@ export function createChatModel(
         return success(data.choices[0].message?.content ?? "");
     }
 
-    async function* completeStream(
+    async function completeStream(
         prompt: string | PromptSection[] | ChatMessage[],
-    ): AsyncIterableIterator<string> {
+    ): Promise<Result<AsyncIterableIterator<string>>> {
         const headerResult = await createApiHeaders(settings);
         if (!headerResult.success) {
             return headerResult;
@@ -522,21 +522,26 @@ export function createChatModel(
         if (!result.success) {
             return result;
         }
-        // Stream chunks back
-        for await (const evt of readServerEventStream(result.data)) {
-            if (evt.data === "[DONE]") {
-                break;
-            }
-            const data = JSON.parse(evt.data) as {
-                choices: { delta: PromptSection }[];
-            };
-            if (data.choices && data.choices.length > 0) {
-                const delta = data.choices[0].delta?.content ?? "";
-                if (delta) {
-                    yield delta;
+        return {
+            success: true,
+            data: (async function* () {
+                for await (const evt of readServerEventStream(result.data)) {
+                    if (evt.data === "[DONE]") {
+                        break;
+                    }
+                    const data = JSON.parse(evt.data) as {
+                        choices: { delta: PromptSection }[];
+                    };
+                    if (data.choices && data.choices.length > 0) {
+                        const delta = data.choices[0].delta?.content ?? "";
+                        if (delta) {
+                            yield delta;
+                        }
+                    }
                 }
-            }
-        }
+            })(),
+        };
+        // Stream chunks back
     }
 }
 
