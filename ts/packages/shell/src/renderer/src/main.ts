@@ -122,21 +122,14 @@ function addEvents(
     });
     api.onShowDialog((_, key) => {
         if (key == "Settings") {
-            settingsView.shellSettings.hideTabs = false;
-            settingsView.tabsCheckBox.checked = false;
-
-            (window as any).electron.ipcRenderer.send(
-                "settings-changed",
-                settingsView.shellSettings,
-            );
+            settingsView.showTabs();
         }
 
         tabsView.showTab(key);
     });
     api.onSettingsChanged((_, value: ShellSettings) => {
         settingsView.shellSettings = value;
-        settingsView.menuCheckBox.checked = value.hideMenu;
-        settingsView.tabsCheckBox.checked = value.hideTabs;
+        chatView.tts = value.tts;
 
         if (value.hideTabs) {
             tabsView.hide();
@@ -174,7 +167,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const chatView = new ChatView(idGenerator, speechInfo, agents);
     wrapper.appendChild(chatView.getMessageElm());
 
-    const settingsView = new SettingsView(window, tabs);
+    const settingsView = new SettingsView(window, tabs, chatView);
     tabs.getTabContainerByName("Settings").append(settingsView.getContainer());
     tabs.getTabContainerByName("Metrics").append(
         new MetricsView().getContainer(),

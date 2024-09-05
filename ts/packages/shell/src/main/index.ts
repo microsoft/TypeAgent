@@ -487,6 +487,7 @@ app.whenReady().then(async () => {
     ipcMain.on("settings-changed", (_event, settings: ShellSettings) => {
         ShellSettings.getinstance().hideMenu = settings.hideMenu;
         ShellSettings.getinstance().hideTabs = settings.hideTabs;
+        ShellSettings.getinstance().tts = settings.tts;
         mainWindow!.autoHideMenuBar = settings.hideMenu;
 
         // if the menu bar is visible it won't auto hide immediately when this is toggled so we have to help it along
