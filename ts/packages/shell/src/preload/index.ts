@@ -92,6 +92,12 @@ const api: ClientAPI = {
     onSettingsChanged(callback) {
         ipcRenderer.on("settings-changed", callback);
     },
+    onNotificationCommand(callback) {
+        ipcRenderer.on("notification-command", callback);
+    },
+    onNotify(callback) {
+        ipcRenderer.on("notification-arrived", callback);
+    }
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to

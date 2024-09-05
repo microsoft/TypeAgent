@@ -10,6 +10,7 @@ export type ShellSettingsType = {
     microphoneName?: string;
     hideMenu: boolean;
     hideTabs: boolean;
+    notifyFilter: string;
 };
 
 export const defaultSettings: ShellSettingsType = {
@@ -18,4 +19,5 @@ export const defaultSettings: ShellSettingsType = {
     devTools: false,
     hideMenu: true,
     hideTabs: true,
+    notifyFilter: "error;warning;"
 };

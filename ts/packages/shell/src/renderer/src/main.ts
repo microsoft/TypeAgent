@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 //import { ShellSettings } from "../../main/shellSettings";
-import { ClientAPI } from "../../preload/electronTypes";
+import { ClientAPI, NotifyCommands } from "../../preload/electronTypes";
 import { ChatView } from "./chatView";
 import { TabView } from "./tabView";
 import { SpeechInfo, recognizeOnce, selectMicrophone } from "./speech";
@@ -11,6 +11,7 @@ import { SettingsView } from "./settingsView";
 import { HelpView } from "./helpView";
 import { MetricsView } from "./metricsView";
 import { ShellSettings } from "../../main/shellSettings";
+import { AppAgentEvent } from "@typeagent/agent-sdk";
 
 export function getClientAPI(): ClientAPI {
     return globalThis.api;
@@ -143,7 +144,34 @@ function addEvents(
             tabsView.hide();
         }
     });
+    api.onNotificationCommand((_, command: string) => {
+        // show notifications
+        console.log("notification command: " + command);
+
+        // TODO: implement
+        switch (command) {
+            case NotifyCommands.Clear:
+                break;
+            case NotifyCommands.ShowAll:
+                break;
+            case NotifyCommands.ShowSummary:
+                break;
+            case NotifyCommands.ShowUnread:
+                break;
+            default:
+                break;
+        }
+    });
+    api.onNotify((_, event: AppAgentEvent, source: string, data: any) => {
+        if (settingsView.shellSettings.notifyFilter.indexOf(event) > -1) {
+            chatView.addAgentMessage({ message: "Notification!!!", source: source });
+        } else {
+            notifications.push({event, source, data});
+        }
+    });
 }
+
+const notifications = new Array();
 
 export class IdGenerator {
     private count = 0;

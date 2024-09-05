@@ -23,6 +23,13 @@ export type ActionUICommand = "register" | "replace" | "remove";
 
 export type SearchMenuState = "active" | "inactive";
 
+export enum NotifyCommands {
+    ShowSummary = "summarize",
+    Clear = "clear",
+    ShowUnread = "unread",
+    ShowAll = "all"
+}
+
 export type SearchMenuContext = {
     state: SearchMenuState;
     menuId: string;
@@ -146,6 +153,7 @@ export interface RequestIO {
     ): void;
     notify(event: "randomCommandSelected", data: { message: string }): void;
     notify(event: AppAgentEvent, message: string, source?: string): void;
+    notify(event: "showNotifications", filter: NotifyCommands): void;
 }
 
 export function getConsoleRequestIO(
