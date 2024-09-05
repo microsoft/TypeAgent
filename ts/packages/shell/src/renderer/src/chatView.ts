@@ -17,6 +17,7 @@ import {
 } from "../../preload/electronTypes";
 import { ActionCascade } from "./ActionCascade";
 import { DynamicDisplay } from "@typeagent/agent-sdk";
+import { speak } from "./tts";
 
 export interface InputChoice {
     element: HTMLElement;
@@ -223,9 +224,12 @@ export class PlayerShimCursor {
 
 class MessageContainer {
     public readonly div: HTMLDivElement;
+    public get source() {
+        return this._source;
+    }
     constructor(
         className: string,
-        source: string,
+        private _source: string,
         agents: Map<string, string>,
         beforeElem: Element,
     ) {
@@ -244,7 +248,7 @@ class MessageContainer {
         const agentIconDiv = document.createElement("div");
         agentIconDiv.className = "agent-icon";
         agentIconDiv.innerText = agents
-            .get(source as string)
+            .get(_source)
             ?.toString()
             .substring(0, 1) as string;
         div.append(agentIconDiv);
@@ -263,12 +267,20 @@ class MessageContainer {
         this.div = div;
     }
 
+    public getMessage() {
+        const message = this.div.lastChild?.previousSibling as HTMLDivElement;
+        if (message === undefined) {
+            return undefined;
+        }
+        return message.innerText;
+    }
     public setMessage(text: string, source: string, sourceIcon?: string) {
         const message = this.div.lastChild?.previousSibling as HTMLDivElement;
         if (message === undefined) {
             return undefined;
         }
 
+        this._source = source;
         // set source and source icon
         (this.div.firstChild?.firstChild as HTMLDivElement).innerText = source; // name
         const iconDiv: HTMLDivElement = this.div.children[1] as HTMLDivElement;
@@ -302,6 +314,7 @@ class MessageGroup {
 
     private completed = false;
     constructor(
+        private readonly chatView: ChatView,
         request: string,
         container: HTMLDivElement,
         requestPromise: Promise<void>,
@@ -348,6 +361,16 @@ class MessageGroup {
             );
         }
         this.updateStatusMessageDivState();
+        if (this.chatView.tts) {
+            for (const agentMessage of this.agentMessages) {
+                if (agentMessage.source === "chat") {
+                    const message = agentMessage.getMessage();
+                    if (message) {
+                        speak(message);
+                    }
+                }
+            }
+        }
     }
 
     private updateStatusMessageDivState() {
@@ -619,11 +642,11 @@ export class ChatView {
     commandBackStackIndex = -1;
     registeredActions: Map<string, ActionInfo> = new Map<string, ActionInfo>();
     actionCascade: ActionCascade | undefined = undefined;
-
     constructor(
         private idGenerator: IdGenerator,
         public speechInfo: SpeechInfo,
         public agents: Map<string, string>,
+        public tts: boolean = false,
     ) {
         this.topDiv = document.createElement("div");
         this.topDiv.className = "chat-container";
@@ -1071,6 +1094,7 @@ export class ChatView {
         this.idToMessageGroup.set(
             id,
             new MessageGroup(
+                this,
                 request,
                 this.messageDiv,
                 getClientAPI().processShellRequest(request, id),
