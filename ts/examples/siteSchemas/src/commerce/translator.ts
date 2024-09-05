@@ -6,12 +6,13 @@ import {
     createJsonTranslator,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
+    MultimodalPromptContent,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 
 import path from "path";
 import fs from "fs";
-import { ContentSection, HtmlFragments } from "../common/translator.js";
+import { HtmlFragments } from "../common/translator.js";
 import { openai as ai } from "aiclient";
 
 export enum CommercePageType {
@@ -288,10 +289,10 @@ export class ECommerceSiteAgent<T extends object> {
             bootstrapTranslator,
             fragments,
             screenshot,
-        ) as ContentSection[];
+        ) as MultimodalPromptContent[];
 
         const response = await bootstrapTranslator.translate("", [
-            { role: "user", content: JSON.stringify(promptSections) },
+            { role: "user", content: promptSections },
         ]);
         return response;
     }
@@ -318,10 +319,10 @@ export class ECommerceSiteAgent<T extends object> {
             question,
             fragments,
             screenshot,
-        ) as ContentSection[];
+        ) as MultimodalPromptContent[];
 
         const response = await bootstrapTranslator.translate("", [
-            { role: "user", content: JSON.stringify(promptSections) },
+            { role: "user", content: promptSections },
         ]);
         return response;
     }
@@ -349,10 +350,10 @@ export class ECommerceSiteAgent<T extends object> {
             userRequest,
             fragments,
             screenshot,
-        ) as ContentSection[];
+        ) as MultimodalPromptContent[];
 
         const response = await bootstrapTranslator.translate("", [
-            { role: "user", content: JSON.stringify(promptSections) },
+            { role: "user", content: promptSections },
         ]);
         return response;
     }

@@ -203,8 +203,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/typeagent
       typechat:
-        specifier: ^0.1.0
-        version: 0.1.0(typescript@5.4.3)
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.3)
       typescript:
         specifier: ^5.4.2
         version: 5.4.3
@@ -6450,6 +6450,18 @@ packages:
 
   typechat@0.1.0:
     resolution: {integrity: sha512-1QeypvhyoXz/1DssDq8NbIzRHX3V20b+TWfrO7t4wd3o8OygcQO3Zo9MRNSBwK0Pyw+Fw6MmE/hOFi372gpvzA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      typescript: ^5.3.3
+      zod: ^3.22.4
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+      zod:
+        optional: true
+
+  typechat@0.1.1:
+    resolution: {integrity: sha512-Sw96vmkYqbAahqam7vCp8P/MjIGsR26Odz17UHpVGniYN5ir2B37nRRkoDuRpA5djwNQB+W5TB7w2xoF6kwbHQ==}
     engines: {node: '>=18'}
     peerDependencies:
       typescript: ^5.3.3
@@ -13026,6 +13038,10 @@ snapshots:
       mime-types: 2.1.35
 
   typechat@0.1.0(typescript@5.4.3):
+    optionalDependencies:
+      typescript: 5.4.3
+
+  typechat@0.1.1(typescript@5.4.3):
     optionalDependencies:
       typescript: 5.4.3
 
