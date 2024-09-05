@@ -460,6 +460,7 @@ function setIdsOnAllElements(frameId: number) {
         "H4",
         "H5",
         "H6",
+        "HR",
         "HEAD",
         "TITLE",
         "HTML",
@@ -478,7 +479,7 @@ function setIdsOnAllElements(frameId: number) {
         "LABEL",
     ];
     let i = 0;
-    allElements.forEach((element: Element) => {
+    for (let element of allElements) {
         if (
             !element.hasAttribute("id") &&
             !skipIdsFor.includes(element.tagName)
@@ -486,7 +487,7 @@ function setIdsOnAllElements(frameId: number) {
             element.setAttribute("id", idPrefix + i.toString());
             i++;
         }
-    });
+    }
 }
 
 function setupPaleoDbScript() {

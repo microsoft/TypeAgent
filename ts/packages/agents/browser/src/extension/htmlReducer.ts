@@ -43,6 +43,7 @@ export class HTMLReducer {
         "cookieJar",
         "iframe",
         "nocontent",
+        "noscript",
         "template",
     ];
 
@@ -61,6 +62,11 @@ export class HTMLReducer {
         "xlink:href",
         "viewBox",
         "xmlns",
+        "onview-beacon-nucleus",
+        "loading",
+        "clickid",
+        "fetchpriority",
+        "srcset",
     ];
 
     attribsToReplace: Set<string> = new Set(["href", "src"]);
@@ -89,6 +95,8 @@ export class HTMLReducer {
         "background",
         "foreground",
     ]);
+
+    emptyTagsSelector: string[] = ["p", "span", "div"];
 
     removeAllClasses: boolean = true;
     removeLinkTags: boolean = true;
@@ -123,7 +131,10 @@ export class HTMLReducer {
         this.processClassAttributes(doc);
         this.removeMiscAttributes(doc);
         this.replaceLinks(doc);
-        this.removeCommentNodes(doc);
+        // this.removeCommentNodes(doc);
+        this.removeEmptyNodes(doc, this.emptyTagsSelector);
+        this.removeDataAttributes(doc);
+        this.removeDuplicateAltText(doc);
 
         let reduced = doc.documentElement.outerHTML;
         reduced = reduced.replace(/<!DOCTYPE[^>]*>/, "");
@@ -187,7 +198,7 @@ export class HTMLReducer {
         const elements = doc.querySelectorAll("*");
         elements.forEach((element) => {
             this.miscAttribsToRemove.forEach((attr) => {
-                if (element.hasAttribute(attr) || attr.startsWith("data-")) {
+                if (element.hasAttribute(attr)) {
                     element.removeAttribute(attr);
                 }
             });
@@ -197,11 +208,12 @@ export class HTMLReducer {
     private removeDataAttributes(doc: Document): void {
         const elements = doc.querySelectorAll("*");
         elements.forEach((element) => {
-            for (const attr of element.attributes) {
-                if (attr.name.startsWith("data-")) {
-                    element.removeAttribute(attr.name);
-                }
-            }
+            let dataAttributes = Array.from(element.attributes).filter((a) =>
+                a.name.startsWith("data-"),
+            );
+            dataAttributes.forEach((attr) => {
+                element.removeAttribute(attr.name);
+            });
         });
     }
 
@@ -216,6 +228,20 @@ export class HTMLReducer {
         });
     }
 
+    private removeDuplicateAltText(doc: Document): void {
+        const elements = doc.querySelectorAll("*");
+        elements.forEach((element) => {
+            if (element.hasAttribute("alt") && element.hasAttribute("title")) {
+                if (
+                    element.attributes.getNamedItem("alt")?.value ===
+                    element.attributes.getNamedItem("title")?.value
+                ) {
+                    element.removeAttribute("alt");
+                }
+            }
+        });
+    }
+
     private removeCommentNodes(doc: Document): void {
         const walker = doc.createTreeWalker(doc, NodeFilter.SHOW_COMMENT);
         let node = walker.nextNode();
@@ -225,5 +251,26 @@ export class HTMLReducer {
             }
             node = walker.nextNode();
         }
+    }
+
+    private removeEmptyNodes(doc: Document, selectors: string[]): void {
+        const selector = selectors.join(", ");
+        let nodes;
+        let empytNodes;
+
+        do {
+            nodes = Array.from(doc.querySelectorAll(selector));
+            empytNodes = nodes.filter(
+                (n) =>
+                    n.childNodes.length === 0 ||
+                    (n.childNodes.length === 1 &&
+                        n.childNodes[0].nodeType == Node.TEXT_NODE &&
+                        n.textContent?.trim().length == 0),
+            );
+
+            empytNodes.forEach((node) => {
+                node.parentNode?.removeChild(node);
+            });
+        } while (empytNodes && empytNodes.length > 1);
     }
 }
