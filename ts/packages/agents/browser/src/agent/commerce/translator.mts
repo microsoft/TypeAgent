@@ -164,7 +164,8 @@ export class ECommerceSiteAgent<T extends object> {
       {
         type: "text",
         text: `
-        Use the layout information provided and the user request below to generate a SINGLE "${translator.validator.getTypeName()}" response using the typescript schema below:
+        Use the layout information provided and the user request below to generate a SINGLE "${translator.validator.getTypeName()}" response using the typescript schema below.
+        You should stop searching and return current result as soon as you find a result that matches the user's criteria:
         
         '''
         ${translator.validator.getSchemaText()}

@@ -264,13 +264,15 @@ export class HTMLReducer {
                 (n) =>
                     n.childNodes.length === 0 ||
                     (n.childNodes.length === 1 &&
-                        n.childNodes[0].nodeType == Node.TEXT_NODE &&
-                        n.textContent?.trim().length == 0),
+                        n.childNodes[0].nodeType === Node.TEXT_NODE &&
+                        n.textContent?.trim().length === 0),
             );
 
             empytNodes.forEach((node) => {
                 node.parentNode?.removeChild(node);
             });
+
+            doc.normalize();
         } while (empytNodes && empytNodes.length > 1);
     }
 }
