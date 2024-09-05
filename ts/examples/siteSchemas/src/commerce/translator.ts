@@ -6,7 +6,7 @@ import {
     createJsonTranslator,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
-    MultimodalPromptContent
+    MultimodalPromptContent,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 
