@@ -43,11 +43,11 @@ import { makeRequestPromptCreator } from "./common/chatHistoryPrompt.js";
 import { MatchResult } from "../../../cache/dist/constructions/constructions.js";
 import registerDebug from "debug";
 import { getAllActionInfo } from "../translation/actionInfo.js";
-import { ActionContext } from "@typeagent/agent-sdk";
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
 export const DispatcherName = "dispatcher";
+export const SwitcherName = "switcher";
 
 async function confirmTranslation(
     elapsedMs: number,
@@ -300,6 +300,7 @@ async function findAssistantForRequest(
 ): Promise<NextTranslation | undefined> {
     context.requestIO.status(
         `[switcher] Looking for another assistant to handle request '${request}'`,
+        SwitcherName,
     );
     const selectTranslator = loadAssistantSelectionJsonTranslator(
         getActiveTranslatorList(context).filter(

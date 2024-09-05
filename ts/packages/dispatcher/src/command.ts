@@ -24,12 +24,19 @@ import { getConstructionCommandHandlers } from "./handlers/constructionCommandHa
 import { CorrectCommandHandler } from "./handlers/correctCommandHandler.js";
 import { DebugCommandHandler } from "./handlers/debugCommandHandlers.js";
 import { ExplainCommandHandler } from "./handlers/explainCommandHandler.js";
-import { RequestCommandHandler } from "./handlers/requestCommandHandler.js";
+import {
+    DispatcherName,
+    RequestCommandHandler,
+    SwitcherName,
+} from "./handlers/requestCommandHandler.js";
 import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js";
 import { getHistoryCommandHandlers } from "./handlers/historyCommandHandler.js";
 import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
 import { TranslateCommandHandler } from "./handlers/translateCommandHandler.js";
-import { getTranslatorConfig } from "./translation/agentTranslators.js";
+import {
+    getTranslatorConfig,
+    getTranslatorConfigs,
+} from "./translation/agentTranslators.js";
 import { processRequests, unicodeChar } from "./utils/interactive.js";
 /* ==Experimental== */
 import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
@@ -312,17 +319,13 @@ export function getSettingSummary(context: CommandHandlerContext) {
 }
 
 export function getTranslatorNameToEmojiMap(context: CommandHandlerContext) {
-    let tMap = new Map<string, string>();
+    const emojis = getTranslatorConfigs().map(
+        ([name, config]) => [name, config.emojiChar] as const,
+    );
 
-    getActiveTranslatorList(context).forEach((name) => {
-        tMap.set(name, getTranslatorConfig(name).emojiChar);
-    });
-
-    tMap.set("dispatcher", "🤖");
-    tMap.set("undefined", "❔");
-    tMap.set("switcher", "↔️");
-    tMap.set("shell", "🐚");
-
+    const tMap = new Map<string, string>(emojis);
+    tMap.set(DispatcherName, "🤖");
+    tMap.set(SwitcherName, "↔️");
     return tMap;
 }
 
