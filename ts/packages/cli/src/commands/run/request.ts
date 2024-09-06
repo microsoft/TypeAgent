@@ -5,7 +5,7 @@ import { Args, Command, Flags } from "@oclif/core";
 import { RequestCommandHandler } from "agent-dispatcher";
 import { initializeCommandHandlerContext } from "agent-dispatcher";
 import { getCacheFactory } from "agent-dispatcher";
-import { getTranslatorNames } from "agent-dispatcher";
+import { getBuiltinTranslatorNames } from "agent-dispatcher";
 import chalk from "chalk";
 import { readFileSync, existsSync } from "fs";
 
@@ -25,7 +25,7 @@ export default class RequestCommand extends Command {
     static flags = {
         translator: Flags.string({
             description: "Translator name",
-            options: getTranslatorNames(),
+            options: getBuiltinTranslatorNames(),
             multiple: true,
         }),
         explainer: Flags.string({

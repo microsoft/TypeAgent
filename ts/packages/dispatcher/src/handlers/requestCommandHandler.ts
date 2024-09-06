@@ -27,11 +27,7 @@ import {
     validateWildcardMatch,
 } from "../action/actionHandlers.js";
 import { unicodeChar } from "../utils/interactive.js";
-import {
-    getInjectedTranslatorForActionName,
-    getTranslatorConfig,
-    isChangeAssistantAction,
-} from "../translation/agentTranslators.js";
+import { isChangeAssistantAction } from "../translation/agentTranslators.js";
 import { loadAssistantSelectionJsonTranslator } from "../translation/unknownSwitcher.js";
 import {
     MultipleAction,
@@ -83,7 +79,8 @@ async function confirmTranslation(
     const translatorNames = getActiveTranslatorList(context).filter(
         (name) => !name.startsWith("system."),
     );
-    const allActionInfo = getAllActionInfo(translatorNames);
+
+    const allActionInfo = getAllActionInfo(translatorNames, context.agents);
     const templateSequence = actions.toTemplateSequence(
         prefaceSingle,
         prefaceMultiple,
@@ -241,13 +238,15 @@ async function translateRequestWithTranslator(
               // TODO: streaming currently doesn't not support multiple actions
               if (prop === "actionName" && !partial) {
                   const actionTranslatorName =
-                      getInjectedTranslatorForActionName(value) ??
-                      translatorName;
+                      context.agents.getInjectedTranslatorForActionName(
+                          value,
+                      ) ?? translatorName;
                   context.requestIO.status(
                       `[${actionTranslatorName}] Translating '${request}' into action '${value}'`,
                       actionTranslatorName,
                   );
-                  const config = getTranslatorConfig(actionTranslatorName);
+                  const config =
+                      context.agents.getTranslatorConfig(actionTranslatorName);
                   if (config.streamingActions?.includes(value)) {
                       streamFunction = startStreamPartialAction(
                           actionTranslatorName,
@@ -306,6 +305,7 @@ async function findAssistantForRequest(
         getActiveTranslatorList(context).filter(
             (enabledTranslatorName) => translatorName !== enabledTranslatorName,
         ),
+        context.agents,
     );
 
     const result = await selectTranslator.translate(request);
@@ -415,8 +415,9 @@ async function finalizeAction(
 
     return new Action(
         currentAction,
-        getInjectedTranslatorForActionName(currentAction.actionName) ??
-            currentTranslatorName,
+        context.agents.getInjectedTranslatorForActionName(
+            currentAction.actionName,
+        ) ?? currentTranslatorName,
     );
 }
 
@@ -645,7 +646,8 @@ async function requestExplain(
 
         if (
             action.translatorName !== undefined &&
-            getTranslatorConfig(action.translatorName).cached === false
+            context.agents.getTranslatorConfig(action.translatorName).cached ===
+                false
         ) {
             return;
         }

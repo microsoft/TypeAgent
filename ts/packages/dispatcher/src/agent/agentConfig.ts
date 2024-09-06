@@ -11,6 +11,9 @@ import { createRequire } from "module";
 import path from "node:path";
 
 import { createAgentProcessShim } from "./agentProcessShim.js";
+import { AppAgentProvider } from "./agentProvider.js";
+import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
+import { loadInlineAgent } from "./inlineAgentHandlers.js";
 
 export type InlineAppAgentInfo = {
     type?: undefined;
@@ -65,7 +68,7 @@ async function loadDispatcherConfigs() {
 }
 
 let appAgentConfigs: Map<string, TopLevelTranslatorConfig> | undefined;
-export async function getAppAgentConfigs() {
+export async function getBuiltinAppAgentConfigs() {
     if (appAgentConfigs === undefined) {
         appAgentConfigs = await loadDispatcherConfigs();
     }
@@ -93,7 +96,7 @@ async function loadModuleAgent(info: ModuleAppAgentInfo): Promise<AppAgent> {
 
 // Load on demand, doesn't unload for now
 const moduleAgents = new Map<string, AppAgent>();
-export async function getModuleAgent(appAgentName: string) {
+async function getModuleAgent(appAgentName: string) {
     const existing = moduleAgents.get(appAgentName);
     if (existing) return existing;
     const config = getDispatcherConfig().agents[appAgentName];
@@ -103,4 +106,28 @@ export async function getModuleAgent(appAgentName: string) {
     const agent = await loadModuleAgent(config);
     moduleAgents.set(appAgentName, agent);
     return agent;
+}
+
+export function getBuiltinAppAgentProvider(
+    context: CommandHandlerContext,
+): AppAgentProvider {
+    return {
+        getAppAgentNames() {
+            return Object.keys(getDispatcherConfig().agents);
+        },
+        async getAppAgentConfig(appAgentName: string) {
+            const configs = await getBuiltinAppAgentConfigs();
+            const config = configs.get(appAgentName);
+            if (config === undefined) {
+                throw new Error(`Invalid app agent: ${appAgentName}`);
+            }
+            return config;
+        },
+        async loadAppAgent(appAgentName: string) {
+            const type = getDispatcherConfig().agents[appAgentName].type;
+            return type === "module"
+                ? await getModuleAgent(appAgentName)
+                : loadInlineAgent(appAgentName, context);
+        },
+    };
 }

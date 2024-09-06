@@ -6,7 +6,10 @@ dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 
 import { getPackageFilePath } from "../src/utils/getPackageFilePath.js";
 import { readTestData } from "../src/utils/test/testData.js";
-import { loadAgentJsonTranslator } from "../src/translation/agentTranslators.js";
+import {
+    getBuiltinTranslatorConfigProvider,
+    loadAgentJsonTranslator,
+} from "../src/translation/agentTranslators.js";
 import { JSONAction } from "agent-cache";
 
 const dataFiles = [
@@ -31,7 +34,10 @@ describe("translation", () => {
     it.each(testInput)(
         "translate [%s] '%s'",
         async (translatorName, request, action) => {
-            const translator = loadAgentJsonTranslator(translatorName);
+            const translator = loadAgentJsonTranslator(
+                translatorName,
+                getBuiltinTranslatorConfigProvider(),
+            );
             const result = await translator.translate(request);
             expect(result.success).toBe(true);
             if (result.success) {

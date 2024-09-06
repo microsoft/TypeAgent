@@ -4,7 +4,7 @@
 import { Args, Command, Flags } from "@oclif/core";
 import readline from "readline/promises";
 import {
-    getTranslatorNames,
+    getBuiltinTranslatorNames,
     getCacheFactory,
     processCommand,
     processRequests,
@@ -20,7 +20,7 @@ export default class Interactive extends Command {
     static flags = {
         translator: Flags.string({
             description: "Translator names",
-            options: getTranslatorNames(),
+            options: getBuiltinTranslatorNames(),
             multiple: true,
         }),
         explainer: Flags.string({

@@ -8,13 +8,13 @@ import fs from "node:fs";
 import path from "node:path";
 import lockfile from "proper-lockfile";
 import { getBuiltinConstructionConfig } from "../utils/config.js";
-import { getTranslatorConfigs } from "../translation/agentTranslators.js";
 import {
     ensureUserProfileDir,
     getUserProfileDir,
     getUniqueFileName,
     getYMDPrefix,
 } from "../utils/userData.js";
+import { TranslatorConfigProvider } from "../translation/agentTranslators.js";
 
 const debugSession = registerDebug("typeagent:session");
 
@@ -52,6 +52,7 @@ function mergeConfig(
     config: ConfigObject,
     options: ConfigObject,
     strict: boolean = true,
+    flexKeys?: string[],
 ) {
     const changed: ConfigObject = {};
     const keys = strict ? Object.keys(config) : Object.keys(options);
@@ -66,7 +67,11 @@ function mergeConfig(
                     config[key] = {};
                 }
 
-                const changedValue = mergeConfig(config[key], value, strict);
+                const changedValue = mergeConfig(
+                    config[key],
+                    value,
+                    flexKeys ? !flexKeys.includes(key) : strict,
+                );
                 if (Object.keys(changedValue).length !== 0) {
                     changed[key] = changedValue;
                 }
@@ -163,19 +168,9 @@ type DispatcherConfig = {
 
 export type SessionConfig = DispatcherConfig & CacheConfig;
 
-export const defaultSessionConfig: SessionConfig = {
-    translators: Object.fromEntries(
-        getTranslatorConfigs().map(([name, config]) => [
-            name,
-            config.defaultEnabled,
-        ]),
-    ),
-    actions: Object.fromEntries(
-        getTranslatorConfigs().map(([name, config]) => [
-            name,
-            config.actionDefaultEnabled,
-        ]),
-    ),
+const defaultSessionConfig: SessionConfig = {
+    translators: {},
+    actions: {},
     explainerName: getDefaultExplainerName(),
     models: {
         translator: "",
@@ -197,6 +192,18 @@ export const defaultSessionConfig: SessionConfig = {
     matchWildcard: true,
     builtInCache: true,
 };
+
+export function getDefaultSessionConfig(provider?: TranslatorConfigProvider) {
+    const config = cloneConfig(defaultSessionConfig);
+    if (provider) {
+        const translatorConfigs = provider.getTranslatorConfigs();
+        for (const [name, translatorConfig] of translatorConfigs) {
+            config.translators[name] = translatorConfig.defaultEnabled;
+            config.actions[name] = translatorConfig.actionDefaultEnabled;
+        }
+    }
+    return config;
+}
 
 // explainer name as key, cache file path as value
 type SessionCacheData = {
@@ -221,7 +228,7 @@ function ensureSessionData(data: any): SessionData {
 
     const existingData = data.config;
     data.config = cloneConfig(defaultSessionConfig);
-    mergeConfig(data.config, existingData);
+    mergeConfig(data.config, existingData, true, flexKeys);
 
     if (data.cacheData === undefined) {
         data.cacheData = {};
@@ -245,6 +252,7 @@ async function readSessionData(dir: string) {
     return ensureSessionData(data);
 }
 
+const flexKeys = ["translators", "actions"];
 export class Session {
     private config: SessionConfig;
     private cacheData: SessionCacheData;
@@ -322,7 +330,7 @@ export class Session {
     }
 
     public setConfig(options: SessionOptions): SessionOptions {
-        const changed = mergeConfig(this.config, options);
+        const changed = mergeConfig(this.config, options, true, flexKeys);
         if (Object.keys(changed).length > 0) {
             this.save();
         }
