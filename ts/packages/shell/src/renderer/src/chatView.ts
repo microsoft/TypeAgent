@@ -416,7 +416,11 @@ class MessageGroup {
         this.updateStatusMessageDivState();
     }
 
-    public ensureAgentMessage(msg: IAgentMessage, scrollIntoView = true, notification = false) {
+    public ensureAgentMessage(
+        msg: IAgentMessage,
+        scrollIntoView = true,
+        notification = false,
+    ) {
         const index = msg.actionIndex ?? 0;
         const agentMessage = this.agentMessages[index];
         if (agentMessage === undefined) {
@@ -431,7 +435,7 @@ class MessageGroup {
                     );
                     if (notification) {
                         newAgentMessage.div.classList.add("notification");
-                    }                    
+                    }
                     this.agentMessages[i] = newAgentMessage;
                 }
                 beforeElem = this.agentMessages[i];
@@ -463,7 +467,10 @@ function stripAnsi(text: string): string {
 
 const enableText2Html = true;
 export function setContent(elm: HTMLElement, text: string) {
-    if (text.startsWith("<") || (text.indexOf("</") > -1 && text.indexOf("@command") == -1)) {
+    if (
+        text.startsWith("<") ||
+        (text.indexOf("</") > -1 && text.indexOf("@command") == -1)
+    ) {
         elm.innerHTML = text;
     } else if (enableText2Html) {
         elm.innerHTML = textToHtml(text);
@@ -1113,11 +1120,19 @@ export class ChatView {
         }
     }
 
-    addAgentMessage(msg: IAgentMessage, dynamicUpdate = false, notification = false) {
+    addAgentMessage(
+        msg: IAgentMessage,
+        dynamicUpdate = false,
+        notification = false,
+    ) {
         const text: string = msg.message;
         const source: string = msg.source;
 
-        const agentMessage = this.ensureAgentMessage(msg, !dynamicUpdate, notification);
+        const agentMessage = this.ensureAgentMessage(
+            msg,
+            !dynamicUpdate,
+            notification,
+        );
         if (agentMessage === undefined) {
             return;
         }
@@ -1132,7 +1147,7 @@ export class ChatView {
     private ensureAgentMessage(
         msg: IAgentMessage,
         scrollIntoView: boolean = true,
-        notification = false, 
+        notification = false,
     ) {
         return this.getMessageGroup(
             msg.requestId as string,

@@ -19,5 +19,5 @@ export const defaultSettings: ShellSettingsType = {
     devTools: false,
     hideMenu: true,
     hideTabs: true,
-    notifyFilter: "error;warning;"
+    notifyFilter: "error;warning;",
 };

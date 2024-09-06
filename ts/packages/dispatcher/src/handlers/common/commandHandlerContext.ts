@@ -203,7 +203,11 @@ function getLoggerSink(isDbEnabled: () => boolean, requestIO: RequestIO) {
             isDbEnabled,
         );
     } catch (e) {
-        requestIO.notify(AppAgentEvent.Warning, undefined, `DB logging disabled. ${e}`);
+        requestIO.notify(
+            AppAgentEvent.Warning,
+            undefined,
+            `DB logging disabled. ${e}`,
+        );
     }
 
     return new MultiSinkLogger(

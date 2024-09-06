@@ -58,7 +58,11 @@ class RandomOfflineCommandHandler implements CommandHandler {
         context.requestIO.notify("randomCommandSelected", context.requestId, {
             message: randomRequest,
         });
-        context.requestIO.notify(AppAgentEvent.Info, context.requestId, randomRequest);
+        context.requestIO.notify(
+            AppAgentEvent.Info,
+            context.requestId,
+            randomRequest,
+        );
 
         await processCommandNoLock(randomRequest, context, context.requestId);
     }
@@ -117,9 +121,13 @@ class RandomOnlineCommandHandler implements CommandHandler {
                     randomInt(0, response.data.messages.length)
                 ].message;
 
-            context.requestIO.notify("randomCommandSelected", context.requestId, {
-                message: message,
-            });
+            context.requestIO.notify(
+                "randomCommandSelected",
+                context.requestId,
+                {
+                    message: message,
+                },
+            );
 
             await processCommandNoLock(message, context, context.requestId);
         } else {

@@ -150,10 +150,15 @@ function addEvents(
                 notifications.length = 0;
                 break;
             case NotifyCommands.ShowAll:
-                showNotifications(requestId, chatView, notifications, true)
+                showNotifications(requestId, chatView, notifications, true);
                 break;
             case NotifyCommands.ShowSummary:
-                summarizeNotifications(requestId, chatView, agents, notifications);
+                summarizeNotifications(
+                    requestId,
+                    chatView,
+                    agents,
+                    notifications,
+                );
                 break;
             case NotifyCommands.ShowUnread:
                 showNotifications(requestId, chatView, notifications);
@@ -163,22 +168,34 @@ function addEvents(
                 break;
         }
     });
-    api.onNotify((_, event: AppAgentEvent, requestId: string, source: string, data: any) => {
-        //if (settingsView.shellSettings.notifyFilter.indexOf(event) > -1) {
-        //    showNotifications(requestId, chatView, [ { event, source, data, read: false  } ]);
-        //} else {
-            notifications.push({event, source, data, read: false, requestId});
-        //}
-    });
+    api.onNotify(
+        (
+            _,
+            event: AppAgentEvent,
+            requestId: string,
+            source: string,
+            data: any,
+        ) => {
+            //if (settingsView.shellSettings.notifyFilter.indexOf(event) > -1) {
+            //    showNotifications(requestId, chatView, [ { event, source, data, read: false  } ]);
+            //} else {
+            notifications.push({ event, source, data, read: false, requestId });
+            //}
+        },
+    );
 }
 
-function showNotifications(requestId: string, chatView: ChatView, messages: Array<any>, showRead: boolean = false) {
-    const status: string = showRead ? "all (read and unread) " : "new (unread)"
+function showNotifications(
+    requestId: string,
+    chatView: ChatView,
+    messages: Array<any>,
+    showRead: boolean = false,
+) {
+    const status: string = showRead ? "all (read and unread) " : "new (unread)";
     let html: string = `Here are the ${status} notifications <ul>`;
 
-    for(let i = 0; i < messages.length; i++) {
+    for (let i = 0; i < messages.length; i++) {
         if (showRead || !messages[i].read) {
-
             html += `<li class="notification-${messages[i].event}">${messages[i].event} ${messages[i].data.toString()}</li>`;
 
             messages[i].read = true;
@@ -188,26 +205,32 @@ function showNotifications(requestId: string, chatView: ChatView, messages: Arra
     html += "</ul>";
     console.log(requestId + chatView);
 
-    chatView.addAgentMessage({ 
-        message: html, 
-        source: "shell",
-        requestId: requestId,
-    },
-    true);
- }
+    chatView.addAgentMessage(
+        {
+            message: html,
+            source: "shell",
+            requestId: requestId,
+        },
+        true,
+    );
+}
 
-function summarizeNotifications(requestId: string, chatView: ChatView, agents: Map<string, string>, messages: Array<any>) {
-
+function summarizeNotifications(
+    requestId: string,
+    chatView: ChatView,
+    agents: Map<string, string>,
+    messages: Array<any>,
+) {
     const msgMap: Map<AppAgentEvent, number> = new Map<AppAgentEvent, number>();
 
     let read: number = 0;
 
-    for(let i = 0; i < messages.length; i++) {
+    for (let i = 0; i < messages.length; i++) {
         if (!msgMap.has(messages[i].event)) {
             msgMap.set(messages[i].event, 0);
         }
 
-        msgMap.set(messages[i].event, msgMap.get(messages[i].event)! + 1)
+        msgMap.set(messages[i].event, msgMap.get(messages[i].event)! + 1);
 
         if (messages[i].read) {
             read++;
@@ -216,13 +239,16 @@ function summarizeNotifications(requestId: string, chatView: ChatView, agents: M
 
     let summary = `There are <b>${messages.length - read}</b> unread and <b>${read}</b> read messages.<br/><br/>
     <div style="display: flex;justify-content: space-evenly">`;
-    for(const [key, value] of msgMap) {
+    for (const [key, value] of msgMap) {
         summary += `<span class="notification-${key}">${key}:</span> <b>${value}</b>`;
     }
     summary += "</div>";
 
-
-    chatView.addAgentMessage({ message: summary, requestId: requestId, source: agents.get("shell")! });
+    chatView.addAgentMessage({
+        message: summary,
+        requestId: requestId,
+        source: agents.get("shell")!,
+    });
 }
 
 const notifications = new Array();

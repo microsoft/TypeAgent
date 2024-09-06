@@ -94,7 +94,7 @@ export enum NotifyCommands {
     ShowSummary = "summarize",
     Clear = "clear",
     ShowUnread = "unread",
-    ShowAll = "all"
+    ShowAll = "all",
 }
 
 // end duplicate type section
@@ -235,10 +235,20 @@ export interface ClientAPI {
         ) => void,
     );
     onNotificationCommand(
-        callback: (e: Electron.IpcRendererEvent, requestId: string, command: string) => void,
+        callback: (
+            e: Electron.IpcRendererEvent,
+            requestId: string,
+            command: string,
+        ) => void,
     );
     onNotify(
-        callback: (e: Electron.IpcRendererEvent, event: AppAgentEvent, requestId: string, source: string, data: any) => void,
+        callback: (
+            e: Electron.IpcRendererEvent,
+            event: AppAgentEvent,
+            requestId: string,
+            source: string,
+            data: any,
+        ) => void,
     );
 }
 

@@ -27,7 +27,7 @@ export enum NotifyCommands {
     ShowSummary = "summarize",
     Clear = "clear",
     ShowUnread = "unread",
-    ShowAll = "all"
+    ShowAll = "all",
 }
 
 export type SearchMenuContext = {
@@ -152,9 +152,22 @@ export interface RequestIO {
             fromUser: boolean;
         },
     ): void;
-    notify(event: "randomCommandSelected", requestId: RequestId, data: { message: string }): void;
-    notify(event: AppAgentEvent, requestId: RequestId, message: string, source?: string): void;
-    notify(event: "showNotifications", requestId: RequestId, filter: NotifyCommands): void;
+    notify(
+        event: "randomCommandSelected",
+        requestId: RequestId,
+        data: { message: string },
+    ): void;
+    notify(
+        event: AppAgentEvent,
+        requestId: RequestId,
+        message: string,
+        source?: string,
+    ): void;
+    notify(
+        event: "showNotifications",
+        requestId: RequestId,
+        filter: NotifyCommands,
+    ): void;
 }
 
 export function getConsoleRequestIO(
@@ -290,7 +303,12 @@ export function getRequestIO(
             clientIO.askYesNo(message, requestId, defaultValue),
         question: async (message: string) =>
             clientIO.question(message, requestId),
-        notify(event: string, requestId: RequestId, data: any, source: string = DispatcherName) {
+        notify(
+            event: string,
+            requestId: RequestId,
+            data: any,
+            source: string = DispatcherName,
+        ) {
             clientIO.notify(event, requestId, data, source);
         },
     };

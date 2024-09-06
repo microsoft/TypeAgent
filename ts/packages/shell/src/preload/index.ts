@@ -97,7 +97,7 @@ const api: ClientAPI = {
     },
     onNotify(callback) {
         ipcRenderer.on("notification-arrived", callback);
-    }
+    },
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to
