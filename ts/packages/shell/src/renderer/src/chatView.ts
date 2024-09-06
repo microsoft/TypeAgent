@@ -670,7 +670,7 @@ export class ChatView {
                         if (ev.key == "ArrowUp" || ev.key == "ArrowDown") {
                             const messages =
                                 this.messageDiv.querySelectorAll(
-                                    ".chat-message-user",
+                                    ".chat-message-user:not(.chat-message-hidden)",
                                 );
 
                             if (
@@ -1079,6 +1079,7 @@ export class ChatView {
 
         if (hidden) {
             mg.userMessageContainer.classList.add("chat-message-hidden");
+            mg.userMessage.classList.add("chat-message-hidden");
         }
 
         this.idToMessageGroup.set(

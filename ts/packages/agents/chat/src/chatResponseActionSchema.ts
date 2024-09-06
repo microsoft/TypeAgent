@@ -91,8 +91,11 @@ export interface LookupAndGenerateResponseAction {
 }
 
 // Use this action to response to the user greeting you. 
-// Generate a dozen possible greetings and make sure they are varied in tone, length, and don't sound similar.
-// Some should be single word responses
+// Generate a ten possible greetings and make sure they are varied in tone, length, cadence, delivery, and style.
+// Make sure they don't sound similar and are appropriate for the time and day (i.e. Happy Friday, good evening, etc.).
+// Some examples should borrow common greetings from languages other than English.
+// Come up with a spontaneous greeting that conveys one of the following moods: friendly, enthusiastic, excited, polite, cheerful, happy, positive, welcoming, affectionate, warm, jovial, lively, energetic, radiant, or breezy. 
+// The goal is to create a warm and inviting atmosphere for the person you're greeting, so feel free to be creative and use your own style
 // DO NOT use it if the user gave you a question or is seeking information.
 export interface GreetingResponseAction {
     actionName: "generateGreetingResponse";
@@ -104,10 +107,9 @@ export interface GreetingResponseAction {
     };
 }
 
-// A typical greeting between two people including the mood of the delivery and the tet of the greeting.
+// A typical greeting between two people.
+// Occassionally greetings can include some color commentary and or an anecdote like "Wow, you're up late" or "I'm glad it's Friday"
 export interface Greeting {
-    // the mood of the chosen response such as, but not limited to: friendly, enthusiastic, excited, polite, cheerful, happy, positive, welcoming, affectionate, warm, jovial, lively, energetic, radiant, breezy
-    mood: string;
     // The greeting response to the user such as "Top of the morning to ya!" or "Hey, how's it going?" or "What a nice day we're having, what's up!?" or "What are we going to do today?"
     // Be sure to make the greeting relevant to time of day (i.e. don't say good morning in the afternoon).
     // you can also use greetings such as Namaste/Shalom/Bonjour or equivalent.
