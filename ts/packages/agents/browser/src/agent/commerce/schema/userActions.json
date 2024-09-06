@@ -1,0 +1,13 @@
+{
+  "paramSpec": {
+    "searchForProductAction": {
+      "productName": "wildcard"
+    },
+    "addToCartAction": {
+      "productName": "wildcard"
+    },
+    "selectSearchResult": {
+      "position": "number"
+    }
+  }
+}

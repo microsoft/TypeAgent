@@ -53,7 +53,6 @@ export class TabView {
             tabDiv.append(tabTitle);
 
             tabDiv.onclick = () => {
-                console.log(`${tabDiv.innerText} clicked`);
                 if (tabPageDiv.classList.contains("closedTab")) {
                     tabPageDiv.classList.remove("closedTab");
                 } else {
@@ -110,6 +109,8 @@ export class TabView {
     }
 
     showTab(tabName: string) {
+        this.show();
+
         for (let j = 0; j < this.tabPages.length; j++) {
             if (this.tabNames[j] == tabName) {
                 this.tabPages[j].classList.remove("closedTab");
@@ -117,5 +118,12 @@ export class TabView {
                 this.tabPages[j].classList.add("closedTab");
             }
         }
+    }
+
+    show() {
+        this.mainContainer.classList.remove("closedTab");
+    }
+    hide() {
+        this.mainContainer.classList.add("closedTab");
     }
 }

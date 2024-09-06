@@ -67,6 +67,8 @@ export type AzureApiSettings = {
 export enum EnvVars {
     OPENAI_API_KEY = "OPENAI_API_KEY",
     OPENAI_ENDPOINT = "OPENAI_ENDPOINT",
+    OPENAI_ENDPOINT_EMBEDDING = "OPENAI_ENDPOINT_EMBEDDING",
+
     OPENAI_ORGANIZATION = "OPENAI_ORGANIZATION",
     OPENAI_MODEL = "OPENAI_MODEL",
     OPENAI_RESPONSE_FORMAT = "OPENAI_RESPONSE_FORMAT",
@@ -110,6 +112,7 @@ export function apiSettingsFromEnv(
  * @param requireEndpoint If false (default), falls back to using non-endpoint specific settings
  * @returns
  */
+
 export function openAIApiSettingsFromEnv(
     modelType: ModelType,
     env?: Record<string, string | undefined>,
@@ -123,7 +126,9 @@ export function openAIApiSettingsFromEnv(
         apiKey: getEnvSetting(env, EnvVars.OPENAI_API_KEY, endpointName),
         endpoint: getEnvSetting(
             env,
-            EnvVars.OPENAI_ENDPOINT,
+            modelType === ModelType.Chat
+                ? EnvVars.OPENAI_ENDPOINT
+                : EnvVars.OPENAI_ENDPOINT_EMBEDDING,
             endpointName,
             undefined,
             requireEndpoint,
@@ -154,7 +159,6 @@ export function openAIApiSettingsFromEnv(
         ),
     };
 }
-
 const azureTokenProvider = createAzureTokenProvider(
     AzureTokenScopes.CogServices,
 );
@@ -335,7 +339,7 @@ export type CompletionUsageStats = {
 // - Endpoint names without the `azure:` or `openai:` prefix will assume it is prefixed with `azure:` and uses `AZURE_OPENAI_ENDPOINT_<name>`
 
 function parseEndPointName(endpoint?: string) {
-    if (endpoint === undefined) {
+    if (endpoint === undefined || endpoint === "") {
         return {
             provider:
                 EnvVars.OPENAI_ENDPOINT in process.env ? "openai" : "azure",
@@ -346,6 +350,9 @@ function parseEndPointName(endpoint?: string) {
     }
     if (endpoint.startsWith("openai:")) {
         return { provider: "openai", name: endpoint.substring(7) };
+    }
+    if (EnvVars.OPENAI_ENDPOINT in process.env) {
+        return { provider: "openai", name: endpoint };
     }
     return {
         provider: "azure",
@@ -487,9 +494,9 @@ export function createChatModel(
         return success("<multimodal> content");
     }
 
-    async function* completeStream(
+    async function completeStream(
         prompt: string | PromptSection[] | ChatMessage[],
-    ): AsyncIterableIterator<string> {
+    ): Promise<Result<AsyncIterableIterator<string>>> {
         const headerResult = await createApiHeaders(settings);
         if (!headerResult.success) {
             return headerResult;
@@ -520,27 +527,32 @@ export function createChatModel(
         if (!result.success) {
             return result;
         }
-        // Stream chunks back
-        for await (const evt of readServerEventStream(result.data)) {
-            if (evt.data === "[DONE]") {
-                break;
-            }
-            const data = JSON.parse(evt.data) as {
-                choices: { delta: PromptSection }[];
-            };
-            if (data.choices && data.choices.length > 0) {
-                let delta: string = "";
-                if (typeof data.choices[0].delta?.content === "string") {
-                    delta = data.choices[0].delta?.content
-                } else {
-                    delta = "<multimodal content>";
-                }
+        return {
+            success: true,
+            data: (async function* () {
+                for await (const evt of readServerEventStream(result.data)) {
+                    if (evt.data === "[DONE]") {
+                        break;
+                    }
+                    const data = JSON.parse(evt.data) as {
+                        choices: { delta: PromptSection }[];
+                    };
+                    if (data.choices && data.choices.length > 0) {
+                        let delta: string = "";
+                        if (typeof data.choices[0].delta?.content === "string") {
+                            delta = data.choices[0].delta?.content
+                        } else {
+                            delta = "<multimodal content>";
+                        }
 
-                if (delta) {
-                    yield delta;
+                        if (delta) {
+                            yield delta;
+                        }
+                    }
                 }
-            }
-        }
+            })(),
+        };
+        // Stream chunks back
     }
 }
 

@@ -13,7 +13,6 @@ import {
 import { CommandHandler } from "./common/commandHandler.js";
 import {
     CommandHandlerContext,
-    getAppAgent,
     getTranslator,
     getActiveTranslatorList,
     isTranslatorEnabled,
@@ -24,7 +23,7 @@ import {
 import { getColorElapsedString, Profiler } from "common-utils";
 import {
     executeActions,
-    streamPartialAction,
+    startStreamPartialAction,
     validateWildcardMatch,
 } from "../action/actionHandlers.js";
 import { unicodeChar } from "../utils/interactive.js";
@@ -46,6 +45,7 @@ import { getAllActionInfo } from "../translation/actionInfo.js";
 const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
 export const DispatcherName = "dispatcher";
+export const SwitcherName = "switcher";
 
 async function confirmTranslation(
     elapsedMs: number,
@@ -232,8 +232,10 @@ async function translateRequestWithTranslator(
     );
 
     let firstToken = true;
-    let streamActionTranslatorName: string | undefined = undefined;
-    let streamActionName: string | undefined = undefined;
+    let streamFunction:
+        | ((name: string, value: any, partial: boolean) => void)
+        | undefined;
+
     const onProperty = context.session.getConfig().stream
         ? (prop: string, value: any, partial: boolean) => {
               // TODO: streaming currently doesn't not support multiple actions
@@ -247,8 +249,11 @@ async function translateRequestWithTranslator(
                   );
                   const config = getTranslatorConfig(actionTranslatorName);
                   if (config.streamingActions?.includes(value)) {
-                      streamActionTranslatorName = actionTranslatorName;
-                      streamActionName = value;
+                      streamFunction = startStreamPartialAction(
+                          actionTranslatorName,
+                          value,
+                          context,
+                      );
                   }
               }
 
@@ -257,15 +262,8 @@ async function translateRequestWithTranslator(
                   firstToken = false;
               }
 
-              if (streamActionTranslatorName) {
-                  streamPartialAction(
-                      streamActionTranslatorName,
-                      streamActionName!,
-                      prop,
-                      value,
-                      partial,
-                      context,
-                  );
+              if (streamFunction) {
+                  streamFunction(prop, value, partial);
               }
           }
         : undefined;
@@ -302,6 +300,7 @@ async function findAssistantForRequest(
 ): Promise<NextTranslation | undefined> {
     context.requestIO.status(
         `[switcher] Looking for another assistant to handle request '${request}'`,
+        SwitcherName,
     );
     const selectTranslator = loadAssistantSelectionJsonTranslator(
         getActiveTranslatorList(context).filter(
@@ -620,7 +619,7 @@ async function requestExplain(
     // Make sure the current requestIO is captured
     const requestIO = context.requestIO;
     const notifyExplained = () => {
-        requestIO.notify("explained", {
+        requestIO.notify("explained", context.requestId, {
             time: new Date().toLocaleTimeString(),
             fromCache,
             fromUser,

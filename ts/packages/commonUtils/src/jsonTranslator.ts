@@ -95,7 +95,11 @@ export function enableJsonTranslatorStreaming<T extends object>(
             model.complete = async (prompt: string | PromptSection[] | ChatMessage[]) => {
                 debug(prompt);
                 const chunks = [];
-                for await (const chunk of model.completeStream(prompt)) {
+                const result = await model.completeStream(prompt);
+                if (!result.success) {
+                    return result;
+                }
+                for await (const chunk of result.data) {
                     chunks.push(chunk);
                     parser.parse(chunk);
                 }

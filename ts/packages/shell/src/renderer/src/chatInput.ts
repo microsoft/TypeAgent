@@ -10,7 +10,8 @@ import {
     iconImage
 } from "./icon";
 import { getClientAPI } from "./main";
-import { SpeechInfo, recognizeOnce } from "./speech";
+import { recognizeOnce } from "./speech";
+import { getSpeechToken } from "./speechToken";
 
 export interface ExpandableTextareaHandlers {
     onSend: (text: string) => void;
@@ -116,7 +117,6 @@ export class ChatInput {
     input: HTMLInputElement;
 
     constructor(
-        speechInfo: SpeechInfo,
         inputId: string,
         buttonId: string,
         messageHandler: (message: string) => void,
@@ -194,24 +194,12 @@ export class ChatInput {
                     useLocalWhisper,
                 );
             } else {
-                const curSpeechToken = speechInfo.speechToken;
-                if (
-                    curSpeechToken === undefined ||
-                    curSpeechToken.expire <= Date.now()
-                ) {
-                    speechInfo.speechToken =
-                        await getClientAPI().getSpeechToken();
-                }
-                if (speechInfo.speechToken !== undefined) {
-                    recognizeOnce(
-                        speechInfo.speechToken,
-                        inputId,
-                        buttonId,
-                        messageHandler,
-                    );
-                } else {
-                    console.log("no token");
-                }
+                recognizeOnce(
+                    await getSpeechToken(),
+                    inputId,
+                    buttonId,
+                    messageHandler,
+                );
             }
         });
 
@@ -247,30 +235,17 @@ export class ChatInput {
         disabledMic.className = "chat-message-hidden";
         this.micButton.appendChild(disabledMic);
 
-        const curSpeechToken = speechInfo.speechToken;
-        if (
-            curSpeechToken === undefined ||
-            curSpeechToken.expire <= Date.now()
-        ) {
-            getClientAPI()
-                .getSpeechToken()
-                .then((result) => {
-                    speechInfo.speechToken = result;
-
-                    if (result == undefined) {
-                        const button =
-                            document.querySelector<HTMLButtonElement>(
-                                `#${buttonId}`,
-                            )!;
-                        button.disabled = true;
-                        button.children[0].classList.add("chat-message-hidden");
-                        button.children[1].classList.add("chat-message-hidden");
-                        button.children[2].classList.remove(
-                            "chat-message-hidden",
-                        );
-                    }
-                });
-        }
+        getSpeechToken().then((result) => {
+            if (result == undefined) {
+                const button = document.querySelector<HTMLButtonElement>(
+                    `#${buttonId}`,
+                )!;
+                button.disabled = true;
+                button.children[0].classList.add("chat-message-hidden");
+                button.children[1].classList.add("chat-message-hidden");
+                button.children[2].classList.remove("chat-message-hidden");
+            }
+        });
     }
 
     async loadImageFile(file: File) {

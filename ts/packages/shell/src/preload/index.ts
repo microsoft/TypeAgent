@@ -83,14 +83,17 @@ const api: ClientAPI = {
     onRandomMessageRequested(callback) {
         ipcRenderer.on("random-message-requested", callback);
     },
-    onMicrophoneChangeRequested(callback) {
-        ipcRenderer.on("microphone-change-requested", callback);
-    },
     onShowDialog(callback) {
         ipcRenderer.on("show-dialog", callback);
     },
-    onHideMenuChanged(callback) {
-        ipcRenderer.on("hide-menu-changed", callback);
+    onSettingsChanged(callback) {
+        ipcRenderer.on("settings-changed", callback);
+    },
+    onNotificationCommand(callback) {
+        ipcRenderer.on("notification-command", callback);
+    },
+    onNotify(callback) {
+        ipcRenderer.on("notification-arrived", callback);
     },
 };
 

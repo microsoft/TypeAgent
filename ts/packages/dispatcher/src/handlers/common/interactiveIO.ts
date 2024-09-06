@@ -7,6 +7,7 @@ import { SearchMenuItem, ActionTemplateSequence, Profiler } from "common-utils";
 import chalk from "chalk";
 import { DispatcherName } from "../requestCommandHandler.js";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
+import { AppAgentEvent } from "@typeagent/agent-sdk";
 
 export type RequestId = string | undefined;
 
@@ -22,6 +23,13 @@ export type ActionUICommand = "register" | "replace" | "remove";
 
 export type SearchMenuState = "active" | "inactive";
 
+export enum NotifyCommands {
+    ShowSummary = "summarize",
+    Clear = "clear",
+    ShowUnread = "unread",
+    ShowAll = "all",
+}
+
 export type SearchMenuContext = {
     state: SearchMenuState;
     menuId: string;
@@ -34,7 +42,6 @@ export interface IAgentMessage {
     requestId: string | undefined;
     source: string;
     actionIndex?: number | undefined;
-    groupId?: string | undefined;
     metrics?: IMessageMetrics;
 }
 
@@ -66,7 +73,7 @@ export interface ClientIO {
         choices?: SearchMenuItem[],
         visible?: boolean,
     ): void;
-    setActionStatus(message: IAgentMessage): void;
+    setActionDisplay(message: IAgentMessage): void;
     askYesNo(
         message: string,
         requestId: RequestId,
@@ -76,7 +83,12 @@ export interface ClientIO {
         message: string,
         requestId: RequestId,
     ): Promise<string | undefined>;
-    notify(event: string, requestId: RequestId, data: any): void;
+    notify(
+        event: string,
+        requestId: RequestId,
+        data: any,
+        source: string,
+    ): void;
     notify(
         event: "explained",
         requestId: RequestId,
@@ -85,6 +97,7 @@ export interface ClientIO {
             fromCache: boolean;
             fromUser: boolean;
         },
+        source: string,
     ): void;
     setDynamicDisplay(
         source: string,
@@ -106,7 +119,6 @@ function getMessage(input: string | LogFn) {
 export interface RequestIO {
     type: "html" | "text";
     context: CommandHandlerContext | undefined;
-    getRequestId(): RequestId;
     clear(): void;
     info(message: string | LogFn, source?: string): void;
     status(message: string | LogFn, source?: string): void;
@@ -116,7 +128,11 @@ export interface RequestIO {
     result(message: string | LogFn, source?: string): void;
 
     // Action status
-    setActionStatus(message: string, actionIndex: number, source: string): void;
+    setActionDisplay(
+        message: string,
+        actionIndex: number,
+        source: string,
+    ): void;
 
     // Input
     isInputEnabled(): boolean;
@@ -129,13 +145,29 @@ export interface RequestIO {
     ): Promise<string | undefined>;
     notify(
         event: "explained",
+        requestId: RequestId,
         data: {
             time: string;
             fromCache: boolean;
             fromUser: boolean;
         },
     ): void;
-    notify(event: "randomCommandSelected", data: { message: string }): void;
+    notify(
+        event: "randomCommandSelected",
+        requestId: RequestId,
+        data: { message: string },
+    ): void;
+    notify(
+        event: AppAgentEvent,
+        requestId: RequestId,
+        message: string,
+        source?: string,
+    ): void;
+    notify(
+        event: "showNotifications",
+        requestId: RequestId,
+        filter: NotifyCommands,
+    ): void;
 }
 
 export function getConsoleRequestIO(
@@ -144,7 +176,6 @@ export function getConsoleRequestIO(
     return {
         type: "text",
         context: undefined,
-        getRequestId: () => undefined,
         clear: () => console.clear(),
         info: (input: string | LogFn) => console.info(getMessage(input)),
         status: (input: string | LogFn) =>
@@ -157,7 +188,7 @@ export function getConsoleRequestIO(
         error: (input: string | LogFn) =>
             console.error(chalk.red(getMessage(input))),
 
-        setActionStatus: (status: string) => console.log(chalk.grey(status)),
+        setActionDisplay: (status: string) => console.log(chalk.grey(status)),
 
         isInputEnabled: () => stdio !== undefined,
         askYesNo: async (message: string, defaultValue?: boolean) => {
@@ -166,7 +197,7 @@ export function getConsoleRequestIO(
         question: async (message: string) => {
             return await stdio?.question(`${message}: `);
         },
-        notify: (event: string, data: any) => {
+        notify: (event: string, requestId: RequestId, data: any) => {
             // ignored.
         },
     };
@@ -178,14 +209,12 @@ function makeClientIOMessage(
     requestId: RequestId,
     source: string,
     actionIndex?: number,
-    groupId?: string,
 ): IAgentMessage {
     return {
         message,
         requestId,
         source,
         actionIndex,
-        groupId,
         metrics: Profiler.getInstance().getMetrics(requestId),
     };
 }
@@ -198,7 +227,6 @@ export function getRequestIO(
     return {
         type: "html",
         context: context,
-        getRequestId: () => requestId,
         clear: () => clientIO.clear(),
         info: (input: string | LogFn, source: string = DispatcherName) =>
             clientIO.info(
@@ -255,20 +283,18 @@ export function getRequestIO(
                 ),
             ),
 
-        setActionStatus: (
+        setActionDisplay: (
             status: string,
             actionIndex: number,
             source: string,
-            groupId?: string,
         ) =>
-            clientIO.setActionStatus(
+            clientIO.setActionDisplay(
                 makeClientIOMessage(
                     context,
                     status,
                     requestId,
                     source,
                     actionIndex,
-                    groupId,
                 ),
             ),
 
@@ -277,8 +303,13 @@ export function getRequestIO(
             clientIO.askYesNo(message, requestId, defaultValue),
         question: async (message: string) =>
             clientIO.question(message, requestId),
-        notify(event: string, data: any) {
-            clientIO.notify(event, requestId, data);
+        notify(
+            event: string,
+            requestId: RequestId,
+            data: any,
+            source: string = DispatcherName,
+        ) {
+            clientIO.notify(event, requestId, data, source);
         },
     };
 }
@@ -287,7 +318,6 @@ export function getNullRequestIO(): RequestIO {
     return {
         type: "text",
         context: undefined,
-        getRequestId: () => undefined,
         clear: () => {},
         info: () => {},
         status: () => {},
@@ -295,7 +325,7 @@ export function getNullRequestIO(): RequestIO {
         warn: () => {},
         error: () => {},
         result: () => {},
-        setActionStatus: () => {},
+        setActionDisplay: () => {},
         isInputEnabled: () => false,
         askYesNo: async () => false,
         question: async () => undefined,

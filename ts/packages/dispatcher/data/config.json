@@ -3,41 +3,34 @@
     "player": {
       "type": "module",
       "name": "music",
-      "execMode": "separate",
       "imports": ["./test/data/player/**/*.json"]
     },
     "calendar": {
       "type": "module",
       "name": "calendar",
-      "execMode": "separate",
       "imports": [        
         "./test/data/calendar/**/*.json"        
       ]
     },
     "email": {
       "type": "module",
-      "name": "email",
-      "execMode": "separate"
+      "name": "email"
     },
     "list": {
       "type": "module",
-      "name": "list-agent",
-      "execMode": "separate"
+      "name": "list-agent"
     },
     "browser": {
       "type": "module",
-      "name": "browser-automation",
-      "execMode": "dispatcher"
+      "name": "browser-automation"      
     },
     "desktop": {
       "type": "module",
-      "name": "desktop-automation",
-      "execMode": "separate"
+      "name": "desktop-automation"
     },
     "code": {
       "type": "module",
-      "name": "code-agent",
-      "execMode": "separate"
+      "name": "code-agent"
     },
     "chat": {
       "type": "module",

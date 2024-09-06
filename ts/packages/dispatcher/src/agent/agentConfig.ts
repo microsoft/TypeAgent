@@ -7,7 +7,6 @@ import {
     TopLevelTranslatorConfig,
 } from "@typeagent/agent-sdk";
 import { getDispatcherConfig } from "../utils/config.js";
-import { loadInlineAgent } from "./inlineAgentHandlers.js";
 import { createRequire } from "module";
 import path from "node:path";
 
@@ -74,8 +73,7 @@ export async function getAppAgentConfigs() {
 }
 
 function enableExecutionMode() {
-    // TODO: change default
-    return process.env.TYPEAGENT_EXECMODE === "1";
+    return process.env.TYPEAGENT_EXECMODE !== "0";
 }
 
 async function loadModuleAgent(info: ModuleAppAgentInfo): Promise<AppAgent> {
@@ -93,24 +91,16 @@ async function loadModuleAgent(info: ModuleAppAgentInfo): Promise<AppAgent> {
     return module.instantiate();
 }
 
-async function loadAppAgents() {
-    const configs = getDispatcherConfig().agents;
-    const appAgents: Map<string, AppAgent> = new Map();
-    for (const [name, config] of Object.entries(configs)) {
-        appAgents.set(
-            name,
-            await (config.type === "module"
-                ? loadModuleAgent(config)
-                : loadInlineAgent(name)),
-        );
+// Load on demand, doesn't unload for now
+const moduleAgents = new Map<string, AppAgent>();
+export async function getModuleAgent(appAgentName: string) {
+    const existing = moduleAgents.get(appAgentName);
+    if (existing) return existing;
+    const config = getDispatcherConfig().agents[appAgentName];
+    if (config === undefined || config.type !== "module") {
+        throw new Error(`Unable to load app agent name: ${appAgentName}`);
     }
-    return appAgents;
-}
-
-let appAgents: Map<string, AppAgent> | undefined;
-export async function getAppAgents() {
-    if (appAgents === undefined) {
-        appAgents = await loadAppAgents();
-    }
-    return appAgents;
+    const agent = await loadModuleAgent(config);
+    moduleAgents.set(appAgentName, agent);
+    return agent;
 }

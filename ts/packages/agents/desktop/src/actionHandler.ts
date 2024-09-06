@@ -12,7 +12,7 @@ import {
     DesktopActionContext,
     runDesktopActions,
     setupDesktopActionContext,
-} from "../main.js";
+} from "./connector.js";
 export function instantiate() {
     return {
         initializeAgentContext: initializeDesktopContext,

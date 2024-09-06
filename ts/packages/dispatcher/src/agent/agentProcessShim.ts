@@ -7,6 +7,7 @@ import {
     ActionContext,
     SessionContext,
     StorageListOptions,
+    AppAgentEvent,
 } from "@typeagent/agent-sdk";
 import {
     AgentCallFunctions,
@@ -126,10 +127,6 @@ export async function createAgentProcessShim(
     }
 
     const agentContextInvokeHandlers: AgentContextInvokeFunctions = {
-        issueCommand: async (param: any) => {
-            const context = contextMap.get(param.contextId);
-            return context.issueCommand(param.command);
-        },
         toggleTransientAgent: async (param: {
             contextId: number;
             name: string;
@@ -210,20 +207,12 @@ export async function createAgentProcessShim(
     };
 
     const agentContextCallHandlers: AgentContextCallFunctions = {
-        agentIOStatus: (param: { contextId: number; message: string }) => {
-            contextMap.get(param.contextId).agentIO.status(param.message);
-        },
-        agentIOSuccess: (param: { contextId: number; message: string }) => {
-            contextMap.get(param.contextId).agentIO.success(param.message);
-        },
-        setActionStatus(param: {
+        notify: (param: {
             contextId: number;
+            event: AppAgentEvent;
             message: string;
-            actionIndex: number;
-        }) {
-            contextMap
-                .get(param.contextId)
-                .agentIO.setActionStatus(param.message, param.actionIndex);
+        }) => {
+            contextMap.get(param.contextId).notify(param.event, param.message);
         },
         setActionDisplay: (param: {
             actionContextId: number;
@@ -285,9 +274,9 @@ export async function createAgentProcessShim(
             name: string,
             value: string,
             partial: boolean,
-            context: SessionContext,
+            context: ActionContext<ShimContext>,
         ) {
-            return withContext(context, (contextParams) =>
+            return withActionContext(context, (contextParams) =>
                 rpc.send("streamPartialAction", {
                     ...contextParams,
                     actionName,

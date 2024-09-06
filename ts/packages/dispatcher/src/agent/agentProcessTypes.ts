@@ -1,17 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DisplayType, StorageListOptions } from "@typeagent/agent-sdk";
+import {
+    AppAgentEvent,
+    DisplayType,
+    StorageListOptions,
+} from "@typeagent/agent-sdk";
 import { JSONAction } from "agent-cache";
 
 export type AgentContextCallFunctions = {
-    agentIOStatus: (param: { contextId: number; message: string }) => void;
-    agentIOSuccess: (param: { contextId: number; message: string }) => void;
-    setActionStatus: (param: {
+    notify(param: {
         contextId: number;
+        event: AppAgentEvent;
         message: string;
-        actionIndex: number;
-    }) => void;
+    }): void;
     setActionDisplay: (param: {
         actionContextId: number;
         message: string;
@@ -57,7 +59,6 @@ export type AgentContextInvokeFunctions = {
         session: boolean;
         token: string;
     }) => Promise<any>;
-    issueCommand: (param: any) => Promise<any>;
     toggleTransientAgent: (param: {
         contextId: number;
         name: string;

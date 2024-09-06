@@ -5,7 +5,7 @@ export {
     TopLevelTranslatorConfig,
     HierarchicalTranslatorConfig,
     AppAgent,
-    AppAgentIO,
+    AppAgentEvent,
     AppAction,
     AppActionWithParameters,
     SessionContext,

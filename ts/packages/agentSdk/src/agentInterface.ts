@@ -54,7 +54,7 @@ export interface AppAgent {
         name: string,
         value: string,
         partial: boolean,
-        context: SessionContext,
+        context: ActionContext<any>,
     ): void;
     executeAction?(
         action: AppAction,
@@ -73,17 +73,22 @@ export interface AppAgent {
     closeAgentContext?(context: SessionContext): Promise<void>;
 }
 
+export enum AppAgentEvent {
+    Error = "error",
+    Warning = "warning",
+    Info = "info",
+    Debug = "debug",
+}
+
 export interface SessionContext<T = any> {
     readonly agentContext: T;
-
-    // TODO: review if these should be exposed.
-    readonly agentIO: AppAgentIO;
     readonly sessionStorage: Storage | undefined;
     readonly profileStorage: Storage; // storage that are preserved across sessions
 
+    notify(event: AppAgentEvent, message: string): void;
+
     // can only toggle the sub agent of the current agent
     toggleTransientAgent(agentName: string, active: boolean): Promise<void>;
-    issueCommand(command: string): Promise<void>;
 }
 
 // TODO: only utf8 is supported for now.
@@ -106,15 +111,6 @@ export interface Storage {
     delete(storagePath: string): Promise<void>;
 
     getTokenCachePersistence(): Promise<TokenCachePersistence>;
-}
-
-export interface AppAgentIO {
-    readonly type: DisplayType;
-    status(message: string): void;
-    success(message: string): void;
-
-    // Action status
-    setActionStatus(message: string, actionIndex: number): void;
 }
 
 export interface ActionIO {

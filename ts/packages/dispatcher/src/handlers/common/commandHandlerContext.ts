@@ -8,7 +8,6 @@ import {
     Logger,
     LoggerSink,
     MultiSinkLogger,
-    StopWatch,
     TypeChatJsonTranslatorWithStreaming,
     createDebugLoggerSink,
     createLimiter,
@@ -23,11 +22,6 @@ import {
 import { randomUUID } from "crypto";
 import readline from "readline/promises";
 import type { TypeChatJsonTranslator } from "typechat";
-import {
-    closeActionContext,
-    initializeActionContext,
-    updateActionContext,
-} from "../../action/actionHandlers.js";
 import {
     Session,
     SessionOptions,
@@ -54,9 +48,10 @@ import {
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
 import { DispatcherName } from "../requestCommandHandler.js";
-import { AppAgent, SessionContext } from "@typeagent/agent-sdk";
-import { getAppAgents } from "../../agent/agentConfig.js";
+import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { conversation as Conversation } from "knowledge-processor";
+import { getAppAgentConfigs } from "../../agent/agentConfig.js";
+import { AppAgentManager } from "./appAgentManager.js";
 
 export interface CommandResult {
     error?: boolean;
@@ -66,9 +61,8 @@ export interface CommandResult {
 
 // Command Handler Context definition.
 export type CommandHandlerContext = {
-    agents: Map<string, AppAgent>;
+    agents: AppAgentManager;
     session: Session;
-    sessionContext: Map<string, SessionContext>;
 
     conversationManager?: Conversation.ConversationManager;
     // Per activation configs
@@ -83,7 +77,6 @@ export type CommandHandlerContext = {
     lastActionTranslatorName: string;
     translatorCache: Map<string, TypeChatJsonTranslatorWithStreaming<object>>;
     agentCache: AgentCache;
-    action: { [key: string]: any };
     currentScriptDir: string;
     logger?: Logger | undefined;
     serviceHost: ChildProcess | undefined;
@@ -192,6 +185,31 @@ async function getSession(options?: InitializeCommandHandlerContextOptions) {
     return session;
 }
 
+function getLoggerSink(isDbEnabled: () => boolean, requestIO: RequestIO) {
+    const debugLoggerSink = createDebugLoggerSink();
+    let dbLoggerSink: LoggerSink | undefined;
+
+    try {
+        dbLoggerSink = createMongoDBLoggerSink(
+            "telemetrydb",
+            "dispatcherlogs",
+            isDbEnabled,
+        );
+    } catch (e) {
+        requestIO.notify(
+            AppAgentEvent.Warning,
+            undefined,
+            `DB logging disabled. ${e}`,
+        );
+    }
+
+    return new MultiSinkLogger(
+        dbLoggerSink === undefined
+            ? [debugLoggerSink]
+            : [debugLoggerSink, dbLoggerSink],
+    );
+}
+
 export async function initializeCommandHandlerContext(
     hostName: string,
     options?: InitializeCommandHandlerContextOptions,
@@ -207,18 +225,14 @@ export async function initializeCommandHandlerContext(
         path ? path : "/data/testChat",
         false,
     );
-    const dbLoggerSink: LoggerSink | undefined = createMongoDBLoggerSink(
-        "telemetrydb",
-        "dispatcherlogs",
-        () => context.dblogging,
-    );
 
-    const loggerSink = new MultiSinkLogger([createDebugLoggerSink()]);
-
-    if (dbLoggerSink !== undefined) {
-        loggerSink.addSink(dbLoggerSink);
-    }
-
+    const clientIO = options?.clientIO;
+    const requestIO = clientIO
+        ? getRequestIO(undefined, clientIO, undefined)
+        : clientIO === undefined
+          ? getConsoleRequestIO(stdio)
+          : getNullRequestIO();
+    const loggerSink = getLoggerSink(() => context.dblogging, requestIO);
     const logger = new ChildLogger(loggerSink, DispatcherName, {
         hostName,
         userId: getUserId(),
@@ -231,21 +245,16 @@ export async function initializeCommandHandlerContext(
         serviceHost = await createServiceHost();
     }
 
-    const clientIO = options?.clientIO;
-    const agents = await getAppAgents();
+    const configs = await getAppAgentConfigs();
+
     const context: CommandHandlerContext = {
-        agents,
+        agents: new AppAgentManager(configs),
         session,
         conversationManager,
-        sessionContext: new Map<string, SessionContext>(),
         explanationAsynchronousMode,
         dblogging: true,
         clientIO,
-        requestIO: clientIO
-            ? getRequestIO(undefined, clientIO, undefined)
-            : clientIO === undefined
-              ? getConsoleRequestIO(stdio)
-              : getNullRequestIO(),
+        requestIO,
 
         // Runtime context
         commandLock: createLimiter(1), // Make sure we process one command at a time.
@@ -253,7 +262,6 @@ export async function initializeCommandHandlerContext(
         lastActionTranslatorName: getDefaultTranslatorName(), // REVIEW: just default to the first one on initialize?
         translatorCache: new Map<string, TypeChatJsonTranslator<object>>(),
         currentScriptDir: process.cwd(),
-        action: await initializeActionContext(agents),
         chatHistory: createChatHistory(),
         logger,
         serviceHost: serviceHost,
@@ -267,7 +275,7 @@ export async function initializeCommandHandlerContext(
 
     context.requestIO.context = context;
 
-    await updateActionContext(context.session.getConfig().actions, context);
+    await updateAgentRecord(context.session.getConfig().actions, context);
     return context;
 }
 
@@ -275,7 +283,7 @@ export async function closeCommandHandlerContext(
     context: CommandHandlerContext,
 ) {
     context.serviceHost?.kill();
-    closeActionContext(context);
+    await context.agents.close();
 }
 
 export async function setSessionOnCommandHandlerContext(
@@ -283,13 +291,9 @@ export async function setSessionOnCommandHandlerContext(
     session: Session,
 ) {
     context.session = session;
-    for (const [name, sessionContext] of context.sessionContext.entries()) {
-        getAppAgent(name, context).closeAgentContext?.(sessionContext);
-    }
-    context.sessionContext.clear();
-    context.action = await initializeActionContext(context.agents);
+    await context.agents.close();
     context.agentCache = await getAgentCache(context.session, context.logger);
-    await updateActionContext(context.session.getConfig().actions, context);
+    await updateAgentRecord(context.session.getConfig().actions, context);
 }
 
 export async function reloadSessionOnCommandHandlerContext(
@@ -318,7 +322,7 @@ export async function changeContextConfig(
     }
 
     if (changed.actions) {
-        changed.actions = await updateActionContext(changed.actions, context);
+        changed.actions = await updateAgentRecord(changed.actions, context);
     }
     if (changed.explainerName !== undefined) {
         try {
@@ -371,17 +375,6 @@ export async function changeContextConfig(
     return changed;
 }
 
-export function getAppAgent(
-    appAgentName: string,
-    context: CommandHandlerContext,
-) {
-    const appAgent = context.agents.get(appAgentName);
-    if (appAgent === undefined) {
-        throw new Error(`Invalid dispatcher agent name: ${appAgentName}`);
-    }
-    return appAgent;
-}
-
 export function getActiveTranslatorList(context: CommandHandlerContext) {
     return Object.entries(context.session.getConfig().translators)
         .filter(
@@ -418,4 +411,40 @@ export function isActionEnabled(
         context.session.getConfig().actions[translatorName] === true &&
         context.transientAgents[translatorName] !== false
     );
+}
+
+async function updateAgentRecord(
+    changed: { [key: string]: boolean },
+    context: CommandHandlerContext,
+) {
+    const newChanged = { ...changed };
+    const failed: any = {};
+    const entries = Object.entries(changed);
+    // Update all agents in parallel.
+    const updateP = entries.map(
+        ([translatorName, enable]) =>
+            [
+                translatorName,
+                enable,
+                context.agents.update(translatorName, enable, context),
+            ] as const,
+    );
+    for (const [translatorName, enable, p] of updateP) {
+        try {
+            await context.agents.update(translatorName, enable, context);
+        } catch (e: any) {
+            context.requestIO.error(
+                `[${translatorName}]: Failed to ${enable ? "enable" : "disable"} action: ${e.message}`,
+                translatorName,
+            );
+            failed[translatorName] = !enable;
+            delete newChanged[translatorName];
+        }
+    }
+    const failedCount = Object.keys(failed).length;
+    if (failedCount !== 0) {
+        context.session.setConfig({ actions: failed });
+    }
+
+    return entries.length === failedCount ? undefined : newChanged;
 }

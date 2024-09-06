@@ -20,7 +20,6 @@ import { ActionContext, AppAgent } from "@typeagent/agent-sdk";
 import { PromptSection } from "typechat";
 import {
     AppAction,
-    SessionContext,
     TurnImpression,
     createTurnImpressionFromLiteral,
 } from "@typeagent/agent-sdk";
@@ -509,13 +508,13 @@ function streamPartialChatResponseAction(
     name: string,
     value: string,
     partial: boolean,
-    context: SessionContext,
+    context: ActionContext,
 ) {
     if (actionName !== "generateResponse") {
         return;
     }
 
     if (name === "parameters.generatedText") {
-        context.agentIO.setActionStatus(`${value}${partial ? "..." : ""}`, 0);
+        context.actionIO.setActionDisplay(`${value}${partial ? "..." : ""}`);
     }
 }

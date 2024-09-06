@@ -13,8 +13,8 @@
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    "./agent/manifest": "./src/agent/desktopManifest.json",
-    "./agent/handlers": "./dist/agent/desktopActionHandler.js"
+    "./agent/manifest": "./src/manifest.json",
+    "./agent/handlers": "./dist/actionHandler.js"
   },
   "scripts": {
     "build": "npm run tsc",

@@ -41,6 +41,7 @@ import {
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
+import { AppAgentEvent } from "@typeagent/agent-sdk";
 
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
@@ -113,7 +114,9 @@ function createWindow(): void {
     });
 
     mainWindow.on("resized", () => {
-        ShellSettings.getinstance().size = mainWindow?.getSize();
+        if (mainWindow) {
+            ShellSettings.getinstance().size = mainWindow.getSize();
+        }
     });
 
     // HMR for renderer base on electron-vite cli.
@@ -366,13 +369,13 @@ const clientIO: ClientIO = {
     warn: sendStatusMessage,
     error: sendStatusMessage,
     result: showResult,
-    setActionStatus: showResult,
+    setActionDisplay: showResult,
     setDynamicDisplay,
     searchMenuCommand,
     actionCommand,
     askYesNo,
     question,
-    notify(event: string, requestId: RequestId, data: any) {
+    notify(event: string, requestId: RequestId, data: any, source: string) {
         switch (event) {
             case "explained":
                 markRequestExplained(
@@ -384,6 +387,25 @@ const clientIO: ClientIO = {
                 break;
             case "randomCommandSelected":
                 updateRandomCommandSelected(requestId, data.message);
+                break;
+            case "showNotifications":
+                mainWindow?.webContents.send(
+                    "notification-command",
+                    requestId,
+                    data,
+                );
+                break;
+            case AppAgentEvent.Error:
+            case AppAgentEvent.Warning:
+            case AppAgentEvent.Info:
+                console.log(`[${event}] ${source}: ${data}`);
+                mainWindow?.webContents.send(
+                    "notification-arrived",
+                    event,
+                    requestId,
+                    source,
+                    data,
+                );
                 break;
             default:
             // ignore
@@ -510,14 +532,8 @@ app.whenReady().then(async () => {
         );
 
         mainWindow?.webContents.send(
-            "microphone-change-requested",
-            ShellSettings.getinstance().microphoneId,
-            ShellSettings.getinstance().microphoneName,
-        );
-
-        mainWindow?.webContents.send(
-            "hide-menu-changed",
-            ShellSettings.getinstance().hideMenu,
+            "settings-changed",
+            ShellSettings.getinstance(),
         );
     });
 
@@ -526,20 +542,21 @@ app.whenReady().then(async () => {
         return typeof context.localWhisper !== "undefined";
     });
 
-    ipcMain.on(
-        "microphone-change-requested",
-        async (_event, micId: string, micName: string) => {
-            ShellSettings.getinstance().microphoneId = micId;
-            ShellSettings.getinstance().microphoneName = micName;
-        },
-    );
+    ipcMain.on("save-settings", (_event, settings: ShellSettings) => {
+        // Save the shell configurable settings
+        ShellSettings.getinstance().microphoneId = settings.microphoneId;
+        ShellSettings.getinstance().microphoneName = settings.microphoneName;
+        ShellSettings.getinstance().hideMenu = settings.hideMenu;
+        ShellSettings.getinstance().hideTabs = settings.hideTabs;
+        ShellSettings.getinstance().tts = settings.tts;
+        ShellSettings.getinstance().ttsSettings = settings.ttsSettings;
+        ShellSettings.getinstance().save();
 
-    ipcMain.on("hide-menu-changed", (_event, value: boolean) => {
-        ShellSettings.getinstance().hideMenu = value;
-        mainWindow!.autoHideMenuBar = value;
+        // Update based on the new settings
+        mainWindow!.autoHideMenuBar = settings.hideMenu;
 
         // if the menu bar is visible it won't auto hide immediately when this is toggled so we have to help it along
-        mainWindow?.setMenuBarVisibility(!value);
+        mainWindow?.setMenuBarVisibility(!settings.hideMenu);
     });
 
     globalShortcut.register("Alt+Right", () => {

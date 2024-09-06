@@ -46,16 +46,20 @@ export function getSpotifyConfigCommandHandlers(): HandlerTable {
                     request: string,
                     context: CommandHandlerContext,
                 ) => {
-                    if (context.action.player.spotify) {
-                        const historyPath = path.isAbsolute(request)
-                            ? request
-                            : path.join(getUserProfileDir(), request);
-                        await loadHistoryFile(
-                            getStorage("player", getUserProfileDir()),
-                            historyPath,
-                            context.action.player.spotify,
-                        );
-                    } else {
+                    try {
+                        const sessionContext =
+                            context.agents.getSessionContext("player");
+                        if (sessionContext.agentContext.spotify) {
+                            const historyPath = path.isAbsolute(request)
+                                ? request
+                                : path.join(getUserProfileDir(), request);
+                            return loadHistoryFile(
+                                getStorage("player", getUserProfileDir()),
+                                historyPath,
+                                sessionContext.agentContext.spotify,
+                            );
+                        }
+                    } catch (e) {
                         context.requestIO.error(
                             "Spotify integration is not enabled.",
                         );

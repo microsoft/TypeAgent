@@ -5,13 +5,13 @@ import {
     ActionContext,
     AppAgent,
     SessionContext,
-    AppAgentIO,
     Storage,
     StorageEncoding,
     StorageListOptions,
     TokenCachePersistence,
     ActionIO,
     DisplayType,
+    AppAgentEvent,
 } from "@typeagent/agent-sdk";
 
 import { createRpc } from "common-utils";
@@ -114,7 +114,7 @@ const agentInvokeHandler: AgentInvokeFunctions = {
             param.type,
             param.displayId,
             param.partial,
-            getSessionContextShim(param),
+            getActionContextShim(param),
         );
     },
     async closeAgentContext(param: Partial<ContextParams>): Promise<any> {
@@ -214,36 +214,17 @@ function createSessionContextShim(
     hasSessionStorage: boolean,
     context: any,
 ): SessionContext<any> {
-    const agentIO: AppAgentIO = {
-        type: "text", // TODO: get the real value
-        status: (message: string): void => {
-            rpc.send("agentIOStatus", { contextId, message });
-        },
-        success: (message: string): void => {
-            rpc.send("agentIOSuccess", {
-                contextId,
-                message,
-            });
-        },
-        setActionStatus: (message: string, actionIndex: number): void => {
-            rpc.send("setActionStatus", {
-                contextId,
-                message,
-                actionIndex,
-            });
-        },
-    };
     return {
         agentContext: context,
-        agentIO,
         sessionStorage: hasSessionStorage
             ? getStorage(contextId, true)
             : undefined,
         profileStorage: getStorage(contextId, false),
-        issueCommand: async (command: string): Promise<void> => {
-            return rpc.invoke("issueCommand", {
+        notify: (event: AppAgentEvent, message: string): void => {
+            rpc.send("notify", {
                 contextId,
-                command,
+                event,
+                message,
             });
         },
         toggleTransientAgent: async (
@@ -307,8 +288,8 @@ function getActionContextShim(
     }
     const sessionContext = getSessionContextShim(param);
     const actionIO: ActionIO = {
-        get type() {
-            return sessionContext.agentIO.type;
+        get type(): DisplayType {
+            return "text";
         },
         setActionDisplay(content: string): void {
             rpc.send("setActionDisplay", {

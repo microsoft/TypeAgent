@@ -4,9 +4,17 @@
 import { AppAgent, AppAction, ActionContext } from "@typeagent/agent-sdk";
 import { executeSessionAction } from "../action/system/sessionActionHandler.js";
 import { executeConfigAction } from "../action/system/configActionHandler.js";
+import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
 
-export function loadInlineAgent(name: string): AppAgent {
-    return inlineHandlers[name] ?? {};
+export function loadInlineAgent(
+    name: string,
+    context: CommandHandlerContext,
+): AppAgent {
+    const handlers = inlineHandlers[name];
+    if (handlers === undefined) {
+        throw new Error(`Invalid inline agent name: ${name}`);
+    }
+    return { ...handlers, initializeAgentContext: async () => context };
 }
 
 const inlineHandlers: { [key: string]: AppAgent } = {
@@ -15,7 +23,10 @@ const inlineHandlers: { [key: string]: AppAgent } = {
     },
 };
 
-function executeSystemAction(action: AppAction, context: ActionContext) {
+function executeSystemAction(
+    action: AppAction,
+    context: ActionContext<CommandHandlerContext>,
+) {
     switch (action.translatorName) {
         case "system.session":
             return executeSessionAction(action, context);
