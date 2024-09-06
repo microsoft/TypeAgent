@@ -1066,17 +1066,24 @@ export class ChatView {
         this.commandBackStackIndex = -1;
     }
 
-    addUserMessage(request: string) {
+    addUserMessage(request: string, hidden: boolean = false) {
         const id = this.idGenerator.genId();
+
+        const mg: MessageGroup = new MessageGroup(
+            request,
+            this.messageDiv,
+            getClientAPI().processShellRequest(request, id),
+            new Date(),
+            this.agents,
+        );
+
+        if (hidden) {
+            mg.userMessageContainer.classList.add("chat-message-hidden");
+        }
+
         this.idToMessageGroup.set(
             id,
-            new MessageGroup(
-                request,
-                this.messageDiv,
-                getClientAPI().processShellRequest(request, id),
-                new Date(),
-                this.agents,
-            ),
+            mg,  
         );
         this.commandBackStackIndex = -1;
     }

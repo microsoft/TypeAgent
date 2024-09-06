@@ -187,4 +187,6 @@ document.addEventListener("DOMContentLoaded", function () {
     chatView.chatInputFocus();
 
     (window as any).electron.ipcRenderer.send("dom ready");
+
+    chatView.addUserMessage("Hi!", true);
 });

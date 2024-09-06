@@ -11,6 +11,7 @@ export type Entity = {
 };
 
 export type ChatResponseAction =
+    | GreetingResponseAction
     | GenerateResponseAction
     | LookupAndGenerateResponseAction;
 
@@ -87,4 +88,28 @@ export interface LookupAndGenerateResponseAction {
         // it is recommended to include the same entities as in the user request
         internetLookups?: string[];
     };
+}
+
+// Use this action to response to the user greeting you. 
+// Generate a dozen possible greetings and make sure they are varied in tone, length, and don't sound similar.
+// Some should be single word responses
+// DO NOT use it if the user gave you a question or is seeking information.
+export interface GreetingResponseAction {
+    actionName: "generateGreetingResponse";
+    parameters: {
+        // the original request/greeting from the user
+        originalRequest: string;
+        // a set possible greeting responses to the user
+        possibleGreetings: Greeting[];
+    };
+}
+
+// A typical greeting between two people including the mood of the delivery and the tet of the greeting.
+export interface Greeting {
+    // the mood of the chosen response such as, but not limited to: friendly, enthusiastic, excited, polite, cheerful, happy, positive, welcoming, affectionate, warm, jovial, lively, energetic, radiant, breezy
+    mood: string;
+    // The greeting response to the user such as "Top of the morning to ya!" or "Hey, how's it going?" or "What a nice day we're having, what's up!?" or "What are we going to do today?"
+    // Be sure to make the greeting relevant to time of day (i.e. don't say good morning in the afternoon).
+    // you can also use greetings such as Namaste/Shalom/Bonjour or equivalent.
+    generatedGreeting: string;
 }
