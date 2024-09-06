@@ -5,21 +5,8 @@ import { AppAgent, AppAction, ActionContext } from "@typeagent/agent-sdk";
 import { executeSessionAction } from "../action/system/sessionActionHandler.js";
 import { executeConfigAction } from "../action/system/configActionHandler.js";
 import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
-import { getDispatcherConfig } from "../utils/config.js";
 
-export function loadInlineAgents(context: CommandHandlerContext) {
-    const configs = getDispatcherConfig().agents;
-    const inlineAgents: [string, AppAgent][] = [];
-
-    for (const [name, config] of Object.entries(configs)) {
-        if (config.type !== "module") {
-            inlineAgents.push([name, loadInlineAgent(name, context)]);
-        }
-    }
-    return inlineAgents;
-}
-
-function loadInlineAgent(
+export function loadInlineAgent(
     name: string,
     context: CommandHandlerContext,
 ): AppAgent {

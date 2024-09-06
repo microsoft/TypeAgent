@@ -23,11 +23,6 @@ import { randomUUID } from "crypto";
 import readline from "readline/promises";
 import type { TypeChatJsonTranslator } from "typechat";
 import {
-    closeActionContext,
-    initializeActionContext,
-    updateActionContext,
-} from "../../action/actionHandlers.js";
-import {
     Session,
     SessionOptions,
     configAgentCache,
@@ -53,10 +48,10 @@ import {
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
 import { DispatcherName } from "../requestCommandHandler.js";
-import { AppAgent, AppAgentEvent, SessionContext } from "@typeagent/agent-sdk";
-import { getModuleAgents } from "../../agent/agentConfig.js";
+import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { conversation as Conversation } from "knowledge-processor";
-import { loadInlineAgents } from "../../agent/inlineAgentHandlers.js";
+import { getAppAgentConfigs } from "../../agent/agentConfig.js";
+import { AppAgentManager } from "./appAgentManager.js";
 
 export interface CommandResult {
     error?: boolean;
@@ -66,9 +61,8 @@ export interface CommandResult {
 
 // Command Handler Context definition.
 export type CommandHandlerContext = {
-    agents: Map<string, AppAgent>;
+    agents: AppAgentManager;
     session: Session;
-    sessionContext: Map<string, SessionContext>;
 
     conversationManager?: Conversation.ConversationManager;
     // Per activation configs
@@ -83,7 +77,6 @@ export type CommandHandlerContext = {
     lastActionTranslatorName: string;
     translatorCache: Map<string, TypeChatJsonTranslatorWithStreaming<object>>;
     agentCache: AgentCache;
-    action: { [key: string]: any };
     currentScriptDir: string;
     logger?: Logger | undefined;
     serviceHost: ChildProcess | undefined;
@@ -252,12 +245,12 @@ export async function initializeCommandHandlerContext(
         serviceHost = await createServiceHost();
     }
 
-    const agents = new Map(await getModuleAgents());
+    const configs = await getAppAgentConfigs();
+
     const context: CommandHandlerContext = {
-        agents,
+        agents: new AppAgentManager(configs),
         session,
         conversationManager,
-        sessionContext: new Map<string, SessionContext>(),
         explanationAsynchronousMode,
         dblogging: true,
         clientIO,
@@ -269,7 +262,6 @@ export async function initializeCommandHandlerContext(
         lastActionTranslatorName: getDefaultTranslatorName(), // REVIEW: just default to the first one on initialize?
         translatorCache: new Map<string, TypeChatJsonTranslator<object>>(),
         currentScriptDir: process.cwd(),
-        action: {},
         chatHistory: createChatHistory(),
         logger,
         serviceHost: serviceHost,
@@ -281,16 +273,9 @@ export async function initializeCommandHandlerContext(
         ),
     };
 
-    const inlineAgents = loadInlineAgents(context);
-    for (const agent of inlineAgents) {
-        context.agents.set(agent[0], agent[1]);
-    }
-
-    context.action = await initializeActionContext(agents);
-
     context.requestIO.context = context;
 
-    await updateActionContext(context.session.getConfig().actions, context);
+    await updateAgentRecord(context.session.getConfig().actions, context);
     return context;
 }
 
@@ -298,7 +283,7 @@ export async function closeCommandHandlerContext(
     context: CommandHandlerContext,
 ) {
     context.serviceHost?.kill();
-    closeActionContext(context);
+    await context.agents.close();
 }
 
 export async function setSessionOnCommandHandlerContext(
@@ -306,13 +291,9 @@ export async function setSessionOnCommandHandlerContext(
     session: Session,
 ) {
     context.session = session;
-    for (const [name, sessionContext] of context.sessionContext.entries()) {
-        getAppAgent(name, context).closeAgentContext?.(sessionContext);
-    }
-    context.sessionContext.clear();
-    context.action = await initializeActionContext(context.agents);
+    await context.agents.close();
     context.agentCache = await getAgentCache(context.session, context.logger);
-    await updateActionContext(context.session.getConfig().actions, context);
+    await updateAgentRecord(context.session.getConfig().actions, context);
 }
 
 export async function reloadSessionOnCommandHandlerContext(
@@ -341,7 +322,7 @@ export async function changeContextConfig(
     }
 
     if (changed.actions) {
-        changed.actions = await updateActionContext(changed.actions, context);
+        changed.actions = await updateAgentRecord(changed.actions, context);
     }
     if (changed.explainerName !== undefined) {
         try {
@@ -394,17 +375,6 @@ export async function changeContextConfig(
     return changed;
 }
 
-export function getAppAgent(
-    appAgentName: string,
-    context: CommandHandlerContext,
-) {
-    const appAgent = context.agents.get(appAgentName);
-    if (appAgent === undefined) {
-        throw new Error(`Invalid dispatcher agent name: ${appAgentName}`);
-    }
-    return appAgent;
-}
-
 export function getActiveTranslatorList(context: CommandHandlerContext) {
     return Object.entries(context.session.getConfig().translators)
         .filter(
@@ -441,4 +411,40 @@ export function isActionEnabled(
         context.session.getConfig().actions[translatorName] === true &&
         context.transientAgents[translatorName] !== false
     );
+}
+
+export async function updateAgentRecord(
+    changed: { [key: string]: boolean },
+    context: CommandHandlerContext,
+) {
+    const newChanged = { ...changed };
+    const failed: any = {};
+    const entries = Object.entries(changed);
+    // Update all agents in parallel.
+    const updateP = entries.map(
+        ([translatorName, enable]) =>
+            [
+                translatorName,
+                enable,
+                context.agents.update(translatorName, enable, context),
+            ] as const,
+    );
+    for (const [translatorName, enable, p] of updateP) {
+        try {
+            await context.agents.update(translatorName, enable, context);
+        } catch (e: any) {
+            context.requestIO.error(
+                `[${translatorName}]: Failed to ${enable ? "enable" : "disable"} action: ${e.message}`,
+                translatorName,
+            );
+            failed[translatorName] = !enable;
+            delete newChanged[translatorName];
+        }
+    }
+    const failedCount = Object.keys(failed).length;
+    if (failedCount !== 0) {
+        context.session.setConfig({ actions: failed });
+    }
+
+    return entries.length === failedCount ? undefined : newChanged;
 }

@@ -7,24 +7,20 @@ import { WhisperRecognizer } from "./localWhisperClient";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:shell:speech");
-const debugError = registerDebug("typeagent:shell:speech");
+const debugError = registerDebug("typeagent:shell:speech:error");
 
 export async function enumerateMicrophones() {
-    if (
-        !navigator ||
-        !navigator.mediaDevices ||
-        !navigator.mediaDevices.enumerateDevices
-    ) {
+    // Not all environments will be able to enumerate mic labels and ids. All environments will be able
+    // to select a default input, assuming appropriate permissions.
+    const deviceIds = new Set<string>();
+    const result: [string, string][] = [];
+    const devices = await navigator?.mediaDevices?.enumerateDevices?.();
+    if (devices === undefined) {
         debugError(
             `Unable to query for audio input devices. Default will be used.\r\n`,
         );
         return [];
     }
-    // Not all environments will be able to enumerate mic labels and ids. All environments will be able
-    // to select a default input, assuming appropriate permissions.
-    const deviceIds = new Set<string>();
-    const result: [string, string][] = [];
-    const devices = await navigator.mediaDevices.enumerateDevices();
     for (const device of devices) {
         debug(device);
         if (device.kind === "audioinput") {
