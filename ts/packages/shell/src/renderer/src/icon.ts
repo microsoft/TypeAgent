@@ -60,7 +60,7 @@ export function iconChevronRight() {
 }
 
 export function iconMicrophone() {
-    const path = `<svg viewBox="0 0 16 16" width="32" height="32" fill="none" xmlns="http://www.w3.org/2000/svg" class="clickable">
+    const path = `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
     <title>Click for speech recognition (Alt+M).</title>
   <path d="M8.5 10.5C9.16304 10.5 9.79893 10.2366 10.2678 9.76777C10.7366 9.29893 11 8.66304 11 8V3.5C11 2.83696 10.7366 2.20107 10.2678 1.73223C9.79893 1.26339 9.16304 1 8.5 1C7.83696 1 7.20107 1.26339 6.73223 1.73223C6.26339 2.20107 6 2.83696 6 3.5V8C6 8.66304 6.26339 9.29893 6.73223 9.76777C7.20107 10.2366 7.83696 10.5 8.5 10.5ZM7 3.5C7 3.10218 7.15804 2.72064 7.43934 2.43934C7.72064 2.15804 8.10218 2 8.5 2C8.89782 2 9.27936 2.15804 9.56066 2.43934C9.84196 2.72064 10 3.10218 10 3.5V8C10 8.39782 9.84196 8.77936 9.56066 9.06066C9.27936 9.34196 8.89782 9.5 8.5 9.5C8.10218 9.5 7.72064 9.34196 7.43934 9.06066C7.15804 8.77936 7 8.39782 7 8V3.5ZM9 12.472V14H11V15H6V14H8V12.472C6.89998 12.349 5.88387 11.8249 5.14594 10.9999C4.40801 10.1749 4.00003 9.10688 4 8H5C5 8.92826 5.36875 9.8185 6.02513 10.4749C6.6815 11.1313 7.57174 11.5 8.5 11.5C9.42826 11.5 10.3185 11.1313 10.9749 10.4749C11.6313 9.8185 12 8.92826 12 8H13C13 9.10688 12.592 10.1749 11.8541 10.9999C11.1161 11.8249 10.1 12.349 9 12.472V12.472Z" fill="#1F1F1F" />
 </svg>`;
@@ -149,5 +149,60 @@ export function iconHelp() {
               <path d="M13.5 14H1.5L1 13.5V1.5L1.5 1H13.5L14 1.5V13.5L13.5 14ZM2 13H13V2H2V13Z" fill="#FFFFFF" />
             </g>
           </svg>`;
+    return createSVGElement(path);
+}
+
+export function iconImage() {
+    const path = `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path opacity="0.1" d="M14.5 2.5V14.5H1.5V2.5H14.5Z" fill="#1F1F1F" />
+  <path d="M14.5 2H1.5L1 2.5V14.5L1.5 15H14.5L15 14.5V2.5L14.5 2ZM14 14H2V3H14V14Z" fill="#1F1F1F" />
+  <path d="M12 5.5C12 5.79667 11.912 6.08668 11.7472 6.33336C11.5824 6.58003 11.3481 6.77229 11.074 6.88582C10.7999 6.99935 10.4983 7.02906 10.2074 6.97118C9.91639 6.9133 9.64912 6.77044 9.43934 6.56066C9.22956 6.35088 9.0867 6.08361 9.02882 5.79264C8.97094 5.50166 9.00065 5.20006 9.11418 4.92597C9.22771 4.65189 9.41997 4.41762 9.66665 4.2528C9.91332 4.08797 10.2033 4 10.5 4C10.8978 4 11.2794 4.15804 11.5607 4.43934C11.842 4.72064 12 5.10218 12 5.5Z" fill="#B27D00" />
+  <path d="M14 11.09V12.5L11.181 9.68L8.988 11.877H8.281L4.814 8.41L2 11.225V9.811L4.461 7.35H5.168L8.634 10.816L10.827 8.623H11.534L14 11.09Z" fill="#006CBE" />
+</svg>`;
+
+    return createSVGElement(path);
+}
+
+export function iconCamera(fillColor: string = "currentColor") {
+    const path = `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="${fillColor}">
+  <path fill-rule="evenodd" clip-rule="evenodd" d="M10.707 3H14.5l.5.5v9l-.5.5h-13l-.5-.5v-9l.5-.5h3.793l.853-.854L6.5 2h3l.354.146.853.854zM2 12h12V4h-3.5l-.354-.146L9.293 3H6.707l-.853.854L5.5 4H2v8zm1.5-7a.5.5 0 1 0 0 1 .5.5 0 0 0 0-1zM8 6a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm0-1a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />
+</svg>`;
+    return createSVGElement(path);
+}
+
+export function iconOpenFile() {
+    const path = `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g opacity="0.75">
+    <path opacity="0.1" d="M13.5 5.5V14.5H3.5V5.914L3.854 6.268L6.854 3.268V2L7.854 2.5H10.5L13.5 5.5Z" fill="#1F1F1F" />
+    <path d="M14 5.5V14.5L13.5 15H3.5L3 14.5V5.414L3.854 6.268L4 6.122V14H13V6H10V3H6.854V2H10.5L10.854 2.146L13.854 5.146L14 5.5Z" fill="#1F1F1F" />
+  </g>
+  <path d="M5.854 2V2.707L3.854 4.707L3.147 4L4.293 2.854H3C2.46957 2.854 1.96086 3.06471 1.58579 3.43979C1.21071 3.81486 1 4.32357 1 4.854V5.854H0V4.854C0 4.05835 0.31607 3.29529 0.87868 2.73268C1.44129 2.17007 2.20435 1.854 3 1.854H4.293L3.147 0.707L3.854 0L5.854 2Z" fill="#006CBE" />
+</svg>`;
+    return createSVGElement(path);
+}
+
+export function iconRefresh(fillColor: string = "currentColor") {
+    const path = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048" fill="${fillColor}">
+  <title>Try again</title>
+  <path d="M2048 1024q0 142-36 273t-103 244-160 207-207 160-245 103-273 37q-142 0-273-36t-245-103-207-160-159-207-103-245-37-273q0-142 36-273t103-244 160-207 207-160T751 37t273-37q111 0 217 23t204 68 185 109 162 147V64q0-26 19-45t45-19q26 0 45 19t19 45v241q0 120 1 241 0 17-2 33t-9 30-20 22-34 9h-512q-26 0-45-19t-19-45q0-26 19-45t45-19h415q-63-90-144-161t-177-120-200-76-214-27q-124 0-238 32t-214 90-181 140-140 181-91 214-32 239q0 124 32 238t90 214 140 182 181 140 214 90 239 32q121 0 234-30t213-88 183-141 145-187q62-106 91-217t30-233q0-26 19-45t45-19q26 0 45 19t19 45z" />
+</svg>`;
+
+    return createSVGElement(path);
+}
+
+export function iconAccept(fillColor: string = "currentColor") {
+    const path = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048" fill="${fillColor}">
+  <title>Use this picture</title>
+  <path d="M171 1109q0-35 25-60t60-25q35 0 60 25l452 452 964-964q25-25 60-25 18 0 33 6t27 18 19 27 7 34q0 35-26 61L828 1682q-25 25-60 25t-60-25l-512-512q-25-25-25-61z" />
+</svg>`;
+
+    return createSVGElement(path);
+}
+
+export function iconCancel(fillColor: string = "currentColor") {
+    const path = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048" fill="${fillColor}">
+  <path d="M1852 316l-707 708 707 708-120 120-708-707-708 707-120-120 707-708-707-708 120-120 708 707 708-707 120 120z" />
+</svg>`;
+
     return createSVGElement(path);
 }

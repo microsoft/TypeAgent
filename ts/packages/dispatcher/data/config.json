@@ -55,6 +55,10 @@
           }
         }
       }
+    },
+    "photo": {
+      "type": "module",
+      "name": "photos-agent"
     }
   },
   "explainers": {

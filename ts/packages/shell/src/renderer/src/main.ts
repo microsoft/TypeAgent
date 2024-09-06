@@ -13,6 +13,7 @@ import { HelpView } from "./helpView";
 import { MetricsView } from "./metricsView";
 import { ShellSettings } from "../../main/shellSettings";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
+import { CameraView } from "./cameraView";
 
 export function getClientAPI(): ClientAPI {
     return globalThis.api;
@@ -266,7 +267,21 @@ document.addEventListener("DOMContentLoaded", function () {
     };
 
     const chatView = new ChatView(idGenerator, agents);
+    const cameraView = new CameraView((image: HTMLImageElement) => {
+        image.classList.add("chat-inpput-dropImage");
+        chatView.chatInput.textarea.textEntry.append(image);
+    });
+
+    wrapper.appendChild(cameraView.getContainer());
     wrapper.appendChild(chatView.getMessageElm());
+
+    chatView.chatInput.camButton.onclick = () => {
+        cameraView.toggleVisibility();
+    };
+
+    chatView.chatInput.camButton.onclick = () => {
+        cameraView.toggleVisibility();
+    };
 
     const settingsView = new SettingsView(tabs, chatView);
     tabs.getTabContainerByName("Settings").append(settingsView.getContainer());

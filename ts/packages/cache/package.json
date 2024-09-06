@@ -33,7 +33,7 @@
     "chalk": "^5.3.0",
     "common-utils": "workspace:*",
     "debug": "^4.3.4",
-    "typechat": "^0.1.0"
+    "typechat": "^0.1.1"
   },
   "devDependencies": {
     "@types/async": "^3.2.24",
