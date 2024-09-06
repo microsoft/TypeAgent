@@ -144,31 +144,88 @@ function addEvents(
             tabsView.hide();
         }
     });
-    api.onNotificationCommand((_, command: string) => {
+    api.onNotificationCommand((_, requestId: string, data: any) => {
         // show notifications
-        console.log("notification command: " + command);
+        console.log("notification command: " + data);
 
-        // TODO: implement
-        switch (command) {
+        switch (data) {
             case NotifyCommands.Clear:
+                notifications.length = 0;
                 break;
             case NotifyCommands.ShowAll:
+                showNotifications(requestId, chatView, notifications, true)
                 break;
             case NotifyCommands.ShowSummary:
+                summarizeNotifications(requestId, chatView, agents, notifications);
                 break;
             case NotifyCommands.ShowUnread:
+                showNotifications(requestId, chatView, notifications);
                 break;
             default:
+                console.log("unknown notify command");
                 break;
         }
     });
-    api.onNotify((_, event: AppAgentEvent, source: string, data: any) => {
-        if (settingsView.shellSettings.notifyFilter.indexOf(event) > -1) {
-            chatView.addAgentMessage({ message: "Notification!!!", source: source });
-        } else {
-            notifications.push({event, source, data});
-        }
+    api.onNotify((_, event: AppAgentEvent, requestId: string, source: string, data: any) => {
+        //if (settingsView.shellSettings.notifyFilter.indexOf(event) > -1) {
+        //    showNotifications(requestId, chatView, [ { event, source, data, read: false  } ]);
+        //} else {
+            notifications.push({event, source, data, read: false, requestId});
+        //}
     });
+}
+
+function showNotifications(requestId: string, chatView: ChatView, messages: Array<any>, showRead: boolean = false) {
+    const status: string = showRead ? "all (read and unread) " : "new (unread)"
+    let html: string = `Here are the ${status} notifications <ul>`;
+
+    for(let i = 0; i < messages.length; i++) {
+        if (showRead || !messages[i].read) {
+
+            html += `<li class="notification-${messages[i].event}">${messages[i].event} ${messages[i].data.toString()}</li>`;
+
+            messages[i].read = true;
+        }
+    }
+
+    html += "</ul>";
+    console.log(requestId + chatView);
+
+    chatView.addAgentMessage({ 
+        message: html, 
+        source: "shell",
+        requestId: requestId,
+    },
+    true);
+ }
+
+function summarizeNotifications(requestId: string, chatView: ChatView, agents: Map<string, string>, messages: Array<any>) {
+
+    const msgMap: Map<AppAgentEvent, number> = new Map<AppAgentEvent, number>();
+
+    let read: number = 0;
+
+    for(let i = 0; i < messages.length; i++) {
+        if (!msgMap.has(messages[i].event)) {
+            msgMap.set(messages[i].event, 0);
+        }
+
+        msgMap.set(messages[i].event, msgMap.get(messages[i].event)! + 1)
+
+        if (messages[i].read) {
+            read++;
+        }
+    }
+
+    let summary = `There are <b>${messages.length - read}</b> unread and <b>${read}</b> read messages.<br/><br/>
+    <div style="display: flex;justify-content: space-evenly">`;
+    for(const [key, value] of msgMap) {
+        summary += `<span class="notification-${key}">${key}:</span> <b>${value}</b>`;
+    }
+    summary += "</div>";
+
+
+    chatView.addAgentMessage({ message: summary, requestId: requestId, source: agents.get("shell")! });
 }
 
 const notifications = new Array();

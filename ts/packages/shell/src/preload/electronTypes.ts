@@ -235,10 +235,10 @@ export interface ClientAPI {
         ) => void,
     );
     onNotificationCommand(
-        callback: (e: Electron.IpcRendererEvent, command: string) => void,
+        callback: (e: Electron.IpcRendererEvent, requestId: string, command: string) => void,
     );
     onNotify(
-        callback: (e: Electron.IpcRendererEvent, event: AppAgentEvent, soruce: string, data: any) => void,
+        callback: (e: Electron.IpcRendererEvent, event: AppAgentEvent, requestId: string, source: string, data: any) => void,
     );
 }
 

@@ -11,7 +11,7 @@ class NotifyInfoCommandHandler implements CommandHandler {
     description: string = "Shows the number of notifications available";
     help?: string;
     public async run(request: string, context: CommandHandlerContext): Promise<void> {
-        context.requestIO.notify("showNotifications", NotifyCommands.ShowSummary);
+        context.requestIO.notify("showNotifications", context.requestId, NotifyCommands.ShowSummary);
     }
     
 }
@@ -20,7 +20,7 @@ class NotifyClearCommandHandler implements CommandHandler {
     description: string = "Clears notifications";
     help?: string;
     public async run(request: string, context: CommandHandlerContext): Promise<void> {
-        context.requestIO.notify("showNotifications", NotifyCommands.Clear);
+        context.requestIO.notify("showNotifications", context.requestId, NotifyCommands.Clear);
     }
     
 }
@@ -29,7 +29,7 @@ class NotifyShowUnreadCommandHandler implements CommandHandler {
     description: string = "Shows unread notifications";
     help?: string;
     public async run(request: string, context: CommandHandlerContext): Promise<void> {
-        context.requestIO.notify("showNotifications", NotifyCommands.ShowUnread);
+        context.requestIO.notify("showNotifications", context.requestId, NotifyCommands.ShowUnread);
     }
     
 }
@@ -38,7 +38,7 @@ class NotifyShowAllCommandHandler implements CommandHandler {
     description: string = "Shows all notifications";
     help?: string;
     public async run(request: string, context: CommandHandlerContext): Promise<void> {
-        context.requestIO.notify("showNotifications", NotifyCommands.ShowAll);
+        context.requestIO.notify("showNotifications", context.requestId, NotifyCommands.ShowAll);
     }
     
 }

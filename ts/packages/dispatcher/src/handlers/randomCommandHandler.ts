@@ -20,6 +20,7 @@ import {
     promptLib,
 } from "typeagent";
 import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";
+import { AppAgentEvent } from "@typeagent/agent-sdk";
 
 export type UserRequestList = {
     messages: UserRequest[];
@@ -54,9 +55,13 @@ class RandomOfflineCommandHandler implements CommandHandler {
 
         const randomRequest = this.list[randomInt(0, this.list.length)];
 
-        context.requestIO.notify("randomCommandSelected", {
+        context.requestIO.notify("randomCommandSelected", context.requestId, {
             message: randomRequest,
         });
+        context.requestIO.notify(AppAgentEvent.Info, context.requestId, randomRequest);
+        context.requestIO.notify(AppAgentEvent.Error, context.requestId, randomRequest);
+        context.requestIO.notify(AppAgentEvent.Debug, context.requestId, randomRequest);
+        context.requestIO.notify(AppAgentEvent.Warning, context.requestId, randomRequest);
 
         await processCommandNoLock(randomRequest, context, context.requestId);
     }
@@ -115,7 +120,7 @@ class RandomOnlineCommandHandler implements CommandHandler {
                     randomInt(0, response.data.messages.length)
                 ].message;
 
-            context.requestIO.notify("randomCommandSelected", {
+            context.requestIO.notify("randomCommandSelected", context.requestId, {
                 message: message,
             });
 

@@ -145,15 +145,16 @@ export interface RequestIO {
     ): Promise<string | undefined>;
     notify(
         event: "explained",
+        requestId: RequestId,
         data: {
             time: string;
             fromCache: boolean;
             fromUser: boolean;
         },
     ): void;
-    notify(event: "randomCommandSelected", data: { message: string }): void;
-    notify(event: AppAgentEvent, message: string, source?: string): void;
-    notify(event: "showNotifications", filter: NotifyCommands): void;
+    notify(event: "randomCommandSelected", requestId: RequestId, data: { message: string }): void;
+    notify(event: AppAgentEvent, requestId: RequestId, message: string, source?: string): void;
+    notify(event: "showNotifications", requestId: RequestId, filter: NotifyCommands): void;
 }
 
 export function getConsoleRequestIO(
@@ -183,7 +184,7 @@ export function getConsoleRequestIO(
         question: async (message: string) => {
             return await stdio?.question(`${message}: `);
         },
-        notify: (event: string, data: any) => {
+        notify: (event: string, requestId: RequestId, data: any) => {
             // ignored.
         },
     };
@@ -289,7 +290,7 @@ export function getRequestIO(
             clientIO.askYesNo(message, requestId, defaultValue),
         question: async (message: string) =>
             clientIO.question(message, requestId),
-        notify(event: string, data: any, source: string = DispatcherName) {
+        notify(event: string, requestId: RequestId, data: any, source: string = DispatcherName) {
             clientIO.notify(event, requestId, data, source);
         },
     };
