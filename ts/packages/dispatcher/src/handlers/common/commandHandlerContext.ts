@@ -413,7 +413,7 @@ export function isActionEnabled(
     );
 }
 
-export async function updateAgentRecord(
+async function updateAgentRecord(
     changed: { [key: string]: boolean },
     context: CommandHandlerContext,
 ) {
