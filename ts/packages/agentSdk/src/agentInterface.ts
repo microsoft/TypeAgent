@@ -77,6 +77,7 @@ export enum AppAgentEvent {
     Error = "error",
     Warning = "warning",
     Info = "info",
+    Debug = "debug",
 }
 
 export interface SessionContext<T = any> {

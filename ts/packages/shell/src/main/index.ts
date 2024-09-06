@@ -330,10 +330,24 @@ const clientIO: ClientIO = {
             case "randomCommandSelected":
                 updateRandomCommandSelected(requestId, data.message);
                 break;
+            case "showNotifications":
+                mainWindow?.webContents.send(
+                    "notification-command",
+                    requestId,
+                    data,
+                );
+                break;
             case AppAgentEvent.Error:
             case AppAgentEvent.Warning:
             case AppAgentEvent.Info:
                 console.log(`[${event}] ${source}: ${data}`);
+                mainWindow?.webContents.send(
+                    "notification-arrived",
+                    event,
+                    requestId,
+                    source,
+                    data,
+                );
                 break;
             default:
             // ignore

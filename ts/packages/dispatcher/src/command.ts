@@ -41,6 +41,7 @@ import { processRequests, unicodeChar } from "./utils/interactive.js";
 /* ==Experimental== */
 import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
 import { Profiler } from "common-utils";
+import { getNotifyCommandHandlers } from "./handlers/notifyCommandHandler.js";
 /* ==End Experimental== */
 
 class HelpCommandHandler implements CommandHandler {
@@ -151,6 +152,7 @@ const handlers: HandlerTable = {
             },
         },
         random: getRandomCommandHandlers(),
+        notify: getNotifyCommandHandlers(),
     },
 };
 

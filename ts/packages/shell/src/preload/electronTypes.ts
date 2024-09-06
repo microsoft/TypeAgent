@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { ElectronAPI } from "@electron-toolkit/preload";
-import { DynamicDisplay } from "@typeagent/agent-sdk";
+import { AppAgentEvent, DynamicDisplay } from "@typeagent/agent-sdk";
 import { ShellSettings } from "../main/shellSettings.js";
 
 export type SpeechToken = {
@@ -88,6 +88,13 @@ export interface IAgentMessage {
 export interface IMessageMetrics {
     duration: number | undefined;
     marks?: Map<string, number> | undefined;
+}
+
+export enum NotifyCommands {
+    ShowSummary = "summarize",
+    Clear = "clear",
+    ShowUnread = "unread",
+    ShowAll = "all",
 }
 
 // end duplicate type section
@@ -225,6 +232,22 @@ export interface ClientAPI {
         callback: (
             e: Electron.IpcRendererEvent,
             settings: ShellSettings,
+        ) => void,
+    );
+    onNotificationCommand(
+        callback: (
+            e: Electron.IpcRendererEvent,
+            requestId: string,
+            command: string,
+        ) => void,
+    );
+    onNotify(
+        callback: (
+            e: Electron.IpcRendererEvent,
+            event: AppAgentEvent,
+            requestId: string,
+            source: string,
+            data: any,
         ) => void,
     );
 }
