@@ -474,12 +474,6 @@ app.whenReady().then(async () => {
         );
 
         mainWindow?.webContents.send(
-            "microphone-change-requested",
-            ShellSettings.getinstance().microphoneId,
-            ShellSettings.getinstance().microphoneName,
-        );
-
-        mainWindow?.webContents.send(
             "settings-changed",
             ShellSettings.getinstance(),
         );
@@ -490,18 +484,17 @@ app.whenReady().then(async () => {
         return typeof context.localWhisper !== "undefined";
     });
 
-    ipcMain.on(
-        "microphone-change-requested",
-        async (_event, micId: string, micName: string) => {
-            ShellSettings.getinstance().microphoneId = micId;
-            ShellSettings.getinstance().microphoneName = micName;
-        },
-    );
-
-    ipcMain.on("settings-changed", (_event, settings: ShellSettings) => {
+    ipcMain.on("save-settings", (_event, settings: ShellSettings) => {
+        // Save the shell configurable settings
+        ShellSettings.getinstance().microphoneId = settings.microphoneId;
+        ShellSettings.getinstance().microphoneName = settings.microphoneName;
         ShellSettings.getinstance().hideMenu = settings.hideMenu;
         ShellSettings.getinstance().hideTabs = settings.hideTabs;
         ShellSettings.getinstance().tts = settings.tts;
+        ShellSettings.getinstance().ttsSettings = settings.ttsSettings;
+        ShellSettings.getinstance().save();
+
+        // Update based on the new settings
         mainWindow!.autoHideMenuBar = settings.hideMenu;
 
         // if the menu bar is visible it won't auto hide immediately when this is toggled so we have to help it along

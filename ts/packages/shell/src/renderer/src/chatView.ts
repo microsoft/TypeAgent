@@ -3,7 +3,6 @@
 
 import { IdGenerator, getClientAPI } from "./main";
 import { ChatInput, ExpandableTextarea, questionInput } from "./chatInput";
-import { SpeechInfo } from "./speech";
 import { SearchMenu } from "./search";
 import { AnsiUp } from "ansi_up";
 import { iconCheckMarkCircle, iconX, iconRoadrunner } from "./icon";
@@ -17,7 +16,7 @@ import {
 } from "../../preload/electronTypes";
 import { ActionCascade } from "./ActionCascade";
 import { DynamicDisplay } from "@typeagent/agent-sdk";
-import { speak } from "./tts";
+import { TTS } from "./tts";
 
 export interface InputChoice {
     element: HTMLElement;
@@ -361,12 +360,13 @@ class MessageGroup {
             );
         }
         this.updateStatusMessageDivState();
-        if (this.chatView.tts) {
+        const tts = this.chatView.tts;
+        if (tts) {
             for (const agentMessage of this.agentMessages) {
                 if (agentMessage.source === "chat") {
                     const message = agentMessage.getMessage();
                     if (message) {
-                        speak(message);
+                        tts.speak(message);
                     }
                 }
             }
@@ -654,16 +654,14 @@ export class ChatView {
     actionCascade: ActionCascade | undefined = undefined;
     constructor(
         private idGenerator: IdGenerator,
-        public speechInfo: SpeechInfo,
         public agents: Map<string, string>,
-        public tts: boolean = false,
+        public tts?: TTS,
     ) {
         this.topDiv = document.createElement("div");
         this.topDiv.className = "chat-container";
         this.messageDiv = document.createElement("div");
         this.messageDiv.className = "chat scroll_enabled";
         this.chatInput = new ChatInput(
-            this.speechInfo,
             "phraseDiv",
             "reco",
             (message) => {

@@ -218,13 +218,6 @@ export interface ClientAPI {
     onRandomMessageRequested(
         callback: (e: Electron.IpcRendererEvent, key: string) => void,
     ): void;
-    onMicrophoneChangeRequested(
-        callback: (
-            e: Electron.IpcRendererEvent,
-            micId: string,
-            micName: string,
-        ) => void,
-    ): void;
     onShowDialog(
         callback: (e: Electron.IpcRendererEvent, key: string) => void,
     ): void;

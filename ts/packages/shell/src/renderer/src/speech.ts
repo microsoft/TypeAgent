@@ -10,7 +10,6 @@ let savedMicName: string | undefined;
 
 export function enumerateMicrophones(
     microphoneSources: HTMLSelectElement,
-    window: any,
     micId?: string,
     micName?: string,
 ) {
@@ -24,23 +23,6 @@ export function enumerateMicrophones(
         );
         return;
     }
-
-    microphoneSources.oninput = () => {
-        if (microphoneSources.selectedIndex > -1) {
-            window.electron.ipcRenderer.send(
-                "microphone-change-requested",
-                microphoneSources.selectedOptions[0].value,
-                microphoneSources.selectedOptions[0].innerText,
-            );
-        } else {
-            window.electron.ipcRenderer.send(
-                "microphone-change-requested",
-                undefined,
-                undefined,
-            );
-        }
-    };
-
     navigator.mediaDevices.enumerateDevices().then((devices) => {
         microphoneSources.innerHTML = "";
 
@@ -53,9 +35,10 @@ export function enumerateMicrophones(
         microphoneSources.appendChild(defaultOption);
         const deviceIds = new Set<string>();
         for (const device of devices) {
+            console.log(device);
             if (device.kind === "audioinput") {
                 if (!device.deviceId) {
-                    window.console.log(
+                    console.log(
                         `Warning: unable to enumerate a microphone deviceId. This may be due to limitations` +
                             ` with availability in a non-HTTPS context per mediaDevices constraints.`,
                     );
@@ -84,30 +67,6 @@ export function enumerateMicrophones(
 
         microphoneSources.disabled = microphoneSources.options.length == 1;
     });
-}
-
-export function selectMicrophone(
-    microphoneSources: HTMLSelectElement,
-    micId?: string,
-    micName?: string,
-) {
-    savedMicId = micId;
-    savedMicName = micName;
-
-    for (let i = 0; i < microphoneSources.options.length; i++) {
-        if (
-            microphoneSources.options[i].value == micId &&
-            microphoneSources.options[i].innerText == micName
-        ) {
-            microphoneSources.options[i].setAttribute("SELECTED", "SELECTED");
-        } else {
-            microphoneSources.options[i].attributes.removeNamedItem("SELECTED");
-        }
-    }
-}
-
-export class SpeechInfo {
-    public speechToken?: SpeechToken | undefined = undefined;
 }
 
 export function getAudioConfig() {
