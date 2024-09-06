@@ -57,12 +57,11 @@ export async function getBoardSchema(
       }
     }
 
-    /*
-    const filteredFragments = await getFilteredHtmlFragments(
+    /*    
+    const filteredFragments = await browser.getFilteredHtmlFragments(
       candidateFragments,
-      context,
     );
-*/
+  */
 
     if (candidateFragments.length > 0) {
       let cluePromises = [];

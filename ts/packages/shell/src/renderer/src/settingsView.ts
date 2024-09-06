@@ -7,15 +7,38 @@ import {
     ShellSettingsType,
 } from "../../main/shellSettingsType.js";
 import { TabView } from "./tabView.js";
+import { ChatView } from "./chatView.js";
 
 export class SettingsView {
     public microphoneSources: HTMLSelectElement;
     private mainContainer: HTMLDivElement;
-    public menuCheckBox: HTMLInputElement;
-    public tabsCheckBox: HTMLInputElement;
-    public shellSettings: ShellSettingsType = defaultSettings;
+    private menuCheckBox: HTMLInputElement;
+    private tabsCheckBox: HTMLInputElement;
+    private ttsCheckBox: HTMLInputElement;
+    private _shellSettings: ShellSettingsType = defaultSettings;
 
-    constructor(window: any, tabs: TabView) {
+    public get shellSettings(): Readonly<ShellSettingsType> {
+        return this._shellSettings;
+    }
+
+    public set shellSettings(value: ShellSettingsType) {
+        console.log(`update settings: ${JSON.stringify(value)}`);
+        this.menuCheckBox.checked = value.hideMenu;
+        this.tabsCheckBox.checked = value.hideTabs;
+        this.ttsCheckBox.checked = value.tts;
+    }
+
+    public showTabs() {
+        this._shellSettings.hideTabs = false;
+        this.tabsCheckBox.checked = false;
+
+        (window as any).electron.ipcRenderer.send(
+            "settings-changed",
+            this.shellSettings,
+        );
+    }
+
+    constructor(window: any, tabs: TabView, chatView: ChatView) {
         this.mainContainer = document.createElement("div");
 
         // microphone selection
@@ -35,57 +58,51 @@ export class SettingsView {
         this.mainContainer.append(mic);
 
         // auto-hide menu bar
-        let menuContainer: HTMLDivElement = document.createElement("div");
-        menuContainer.className = "settings-container";
-        let label: HTMLLabelElement = document.createElement("label");
-
-        label.innerText = "Hide the main menu";
-
-        this.menuCheckBox = document.createElement("input");
-        this.menuCheckBox.type = "checkbox";
-
-        this.menuCheckBox.onchange = () => {
-            this.shellSettings.hideMenu = this.menuCheckBox.checked;
-
-            window.electron.ipcRenderer.send(
-                "settings-changed",
-                this.shellSettings,
-            );
-        };
-
-        menuContainer.append(this.menuCheckBox);
-        menuContainer.append(label);
-        this.mainContainer.append(menuContainer);
+        this.menuCheckBox = this.addCheckbox("Hide the main menu", () => {
+            this._shellSettings.hideMenu = this.menuCheckBox.checked;
+        });
 
         // auto-hide tabs
-        let tabContainer: HTMLDivElement = document.createElement("div");
-        tabContainer.className = "settings-container";
-        let tabLabel: HTMLLabelElement = document.createElement("label");
-
-        tabLabel.innerText = "Hide the tabs";
-
-        this.tabsCheckBox = document.createElement("input");
-        this.tabsCheckBox.type = "checkbox";
-
-        this.tabsCheckBox.onchange = () => {
-            this.shellSettings.hideTabs = this.tabsCheckBox.checked;
-
-            window.electron.ipcRenderer.send(
-                "settings-changed",
-                this.shellSettings,
-            );
-
+        this.tabsCheckBox = this.addCheckbox("Hide the tabs", () => {
+            this._shellSettings.hideTabs = this.tabsCheckBox.checked;
             if (this.tabsCheckBox.checked) {
                 tabs.hide();
             }
-        };
+        });
 
-        tabContainer.append(this.tabsCheckBox);
-        tabContainer.append(tabLabel);
-        this.mainContainer.append(tabContainer);
+        // tts
+        this.ttsCheckBox = this.addCheckbox("Enable text-to-speech", () => {
+            this._shellSettings.tts = this.ttsCheckBox.checked;
+            chatView.tts = this.ttsCheckBox.checked;
+        });
     }
 
     getContainer() {
         return this.mainContainer;
+    }
+
+    private addCheckbox(labelText: string, onchange: () => void) {
+        const container: HTMLDivElement = document.createElement("div");
+        container.className = "settings-container";
+        const label: HTMLLabelElement = document.createElement("label");
+
+        label.innerText = labelText;
+
+        const checkBox = document.createElement("input");
+        checkBox.type = "checkbox";
+
+        checkBox.onchange = () => {
+            onchange();
+            (window as any).electron.ipcRenderer.send(
+                "settings-changed",
+                this.shellSettings,
+            );
+        };
+
+        container.append(checkBox);
+        container.append(label);
+        this.mainContainer.append(container);
+
+        return checkBox;
     }
 }

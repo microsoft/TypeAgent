@@ -11,6 +11,7 @@ export type ShellSettingsType = {
     hideMenu: boolean;
     hideTabs: boolean;
     notifyFilter: string;
+    tts: boolean;
 };
 
 export const defaultSettings: ShellSettingsType = {
@@ -19,5 +20,6 @@ export const defaultSettings: ShellSettingsType = {
     devTools: false,
     hideMenu: true,
     hideTabs: true,
+    tts: false,
     notifyFilter: "error;warning;",
 };

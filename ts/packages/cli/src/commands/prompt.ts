@@ -60,7 +60,11 @@ export default class Prompt extends Command {
                 let number_chunks = 0;
                 const start = performance.now();
                 let first = start;
-                for await (const chunk of model.completeStream(request)) {
+                const result = await model.completeStream(request);
+                if (!result.success) {
+                    throw new Error(result.message);
+                }
+                for await (const chunk of result.data) {
                     if (first === start) {
                         first = performance.now();
                     }

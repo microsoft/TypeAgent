@@ -21,6 +21,7 @@ export class ShellSettings implements ShellSettingsType {
     public hideMenu: boolean;
     public hideTabs: boolean;
     public notifyFilter: string;
+    public tts: boolean;
 
     public get width(): number | undefined {
         return this.size[0];
@@ -53,6 +54,7 @@ export class ShellSettings implements ShellSettingsType {
         this.hideMenu = settings.hideMenu;
         this.hideTabs = settings.hideTabs;
         this.notifyFilter = settings.notifyFilter;
+        this.tts = settings.tts;
     }
 
     public static get filePath(): string {
