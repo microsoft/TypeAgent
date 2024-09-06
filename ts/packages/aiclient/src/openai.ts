@@ -488,9 +488,9 @@ export function createChatModel(
         }
 
         if (typeof data.choices[0].message?.content === "string") {
-            return success(data.choices[0].message?.content);    
+            return success(data.choices[0].message?.content);
         }
-        
+
         return success("<multimodal> content");
     }
 
@@ -539,8 +539,10 @@ export function createChatModel(
                     };
                     if (data.choices && data.choices.length > 0) {
                         let delta: string = "";
-                        if (typeof data.choices[0].delta?.content === "string") {
-                            delta = data.choices[0].delta?.content
+                        if (
+                            typeof data.choices[0].delta?.content === "string"
+                        ) {
+                            delta = data.choices[0].delta?.content;
                         } else {
                             delta = "<multimodal content>";
                         }

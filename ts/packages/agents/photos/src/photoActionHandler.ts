@@ -44,7 +44,7 @@ async function photoValidateWildcardMatch(
 }
 
 async function initializePhotoContext() {
-    return { };
+    return {};
 }
 
 async function updatePhotoContext(

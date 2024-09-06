@@ -267,21 +267,21 @@ document.addEventListener("DOMContentLoaded", function () {
     };
 
     const chatView = new ChatView(idGenerator, agents);
-    const cameraView = new CameraView((image: HTMLImageElement) => { 
+    const cameraView = new CameraView((image: HTMLImageElement) => {
         image.classList.add("chat-inpput-dropImage");
-        chatView.chatInput.textarea.textEntry.append(image); 
+        chatView.chatInput.textarea.textEntry.append(image);
     });
-    
+
     wrapper.appendChild(cameraView.getContainer());
     wrapper.appendChild(chatView.getMessageElm());
 
     chatView.chatInput.camButton.onclick = () => {
         cameraView.toggleVisibility();
-    }
+    };
 
     chatView.chatInput.camButton.onclick = () => {
         cameraView.toggleVisibility();
-    }
+    };
 
     const settingsView = new SettingsView(tabs, chatView);
     tabs.getTabContainerByName("Settings").append(settingsView.getContainer());

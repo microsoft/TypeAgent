@@ -1108,7 +1108,11 @@ export class ChatView {
                 this,
                 request,
                 this.messageDiv,
-                getClientAPI().processShellRequest(tempDiv.innerText, id, images),
+                getClientAPI().processShellRequest(
+                    tempDiv.innerText,
+                    id,
+                    images,
+                ),
                 new Date(),
                 this.agents,
             ),
@@ -1117,14 +1121,16 @@ export class ChatView {
     }
 
     async extractMultiModalContent(tempDiv: HTMLDivElement): Promise<string[]> {
-        let images = tempDiv.querySelectorAll<HTMLImageElement>(".chat-inpput-dropImage");
+        let images = tempDiv.querySelectorAll<HTMLImageElement>(
+            ".chat-inpput-dropImage",
+        );
         let retVal: string[] = new Array<string>(images.length);
         for (let i = 0; i < images.length; i++) {
             if (images[i].src.startsWith("data:image")) {
                 retVal[i] = images[i].src;
             } else if (images[i].src.startsWith("blob:")) {
                 let response = await fetch(images[i].src);
-                let blob = await response.blob()
+                let blob = await response.blob();
                 let ab = await blob.arrayBuffer();
                 retVal[i] = `data:image/png;base64,` + _arrayBufferToBase64(ab);
             } else {
@@ -1132,7 +1138,7 @@ export class ChatView {
             }
         }
 
-        return retVal
+        return retVal;
     }
 
     markRequestExplained(id: string, timestamp: string, fromCache?: boolean) {
@@ -1312,14 +1318,14 @@ export class ChatView {
     }
 }
 
-export function _arrayBufferToBase64(buffer: ArrayBuffer ) {
-    let binary = '';
-    const bytes = new Uint8Array( buffer );
+export function _arrayBufferToBase64(buffer: ArrayBuffer) {
+    let binary = "";
+    const bytes = new Uint8Array(buffer);
     const len = bytes.byteLength;
     for (var i = 0; i < len; i++) {
-        binary += String.fromCharCode( bytes[ i ] );
+        binary += String.fromCharCode(bytes[i]);
     }
-    return window.btoa( binary );
+    return window.btoa(binary);
 }
 
 export function _base64ToArrayBuffer(base64: string): Uint8Array {
@@ -1331,4 +1337,3 @@ export function _base64ToArrayBuffer(base64: string): Uint8Array {
     }
     return bytes;
 }
-

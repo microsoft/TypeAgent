@@ -262,7 +262,12 @@ export async function processCommand(
 ) {
     // Process one command at at time.
     return context.commandLock(async () => {
-        return processCommandNoLock(originalInput, context, requestId, attachments);
+        return processCommandNoLock(
+            originalInput,
+            context,
+            requestId,
+            attachments,
+        );
     });
 }
 

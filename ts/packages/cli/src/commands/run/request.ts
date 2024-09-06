@@ -19,7 +19,7 @@ export default class RequestCommand extends Command {
         attachment: Args.string({
             description: "A path to a file to attach with the request",
             required: false,
-        })
+        }),
     };
 
     static flags = {
@@ -58,25 +58,21 @@ export default class RequestCommand extends Command {
     }
 
     loadAttachment(fileName: string | undefined): string[] | undefined {
-
         if (fileName === undefined) {
             return undefined;
         }
 
         if (!existsSync(fileName)) {
             console.error(
-                chalk.red(
-                    `ERROR: The file '${fileName}' does not exist.`,
-                ),
+                chalk.red(`ERROR: The file '${fileName}' does not exist.`),
             );
 
             throw Error(`ERROR: The file '${fileName}' does not exist.`);
         }
 
         let retVal: string[] = new Array<string>();
-        retVal.push(Buffer.from(readFileSync(fileName)).toString('base64'));
+        retVal.push(Buffer.from(readFileSync(fileName)).toString("base64"));
 
-        return  retVal;
+        return retVal;
     }
-
 }

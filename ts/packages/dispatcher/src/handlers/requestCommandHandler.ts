@@ -272,7 +272,7 @@ async function translateRequestWithTranslator(
         request,
         history?.promptSections,
         onProperty,
-        attachments
+        attachments,
     );
     translator.createRequestPrompt = orp;
 
@@ -679,7 +679,11 @@ async function requestExplain(
 
 export class RequestCommandHandler implements CommandHandler {
     public readonly description = "Translate and explain a request";
-    public async run(request: string, context: CommandHandlerContext, attachments?: string[]) {
+    public async run(
+        request: string,
+        context: CommandHandlerContext,
+        attachments?: string[],
+    ) {
         // Don't handle the request if it contains the separator
         if (request.includes(RequestAction.Separator)) {
             throw new Error(

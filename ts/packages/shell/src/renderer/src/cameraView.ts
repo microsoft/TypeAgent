@@ -33,29 +33,30 @@ export class CameraView {
         const cameraIcon = iconCamera("white");
         cameraIcon.className = "camera-button-image";
         this.snapButton.append(cameraIcon);
-        this.snapButton.className = "camera-button camera-button-center"
+        this.snapButton.className = "camera-button camera-button-center";
         this.snapButton.onclick = (e: MouseEvent) => {
-              this.takePicture();
-              e.preventDefault();
+            this.takePicture();
+            e.preventDefault();
 
-              this.acceptButton.classList.remove("camera-hidden");
-              this.snapButton.classList.add("camera-hidden");
-              this.retryButon.classList.remove("camera-hidden");
-              this.video.classList.add("camera-hidden");
-              this.pictureDiv.classList.remove("camera-hidden");
+            this.acceptButton.classList.remove("camera-hidden");
+            this.snapButton.classList.add("camera-hidden");
+            this.retryButon.classList.remove("camera-hidden");
+            this.video.classList.add("camera-hidden");
+            this.pictureDiv.classList.remove("camera-hidden");
         };
 
         const acceptIcon = iconAccept("white");
         acceptIcon.className = "camera-button-image";
         this.acceptButton.append(acceptIcon);
-        this.acceptButton.className = "camera-button camera-button-grouped camera-hidden";
+        this.acceptButton.className =
+            "camera-button camera-button-grouped camera-hidden";
         this.acceptButton.onclick = () => {
             this.toggleVisibility();
 
             if (saveImageCallback) {
                 saveImageCallback(this.img);
             }
-        }
+        };
 
         const closeIcon = iconCancel("white");
         closeIcon.className = "camera-button-image";
@@ -63,19 +64,20 @@ export class CameraView {
         this.cancelButton.className = "camera-button camera-button-grouped";
         this.cancelButton.onclick = () => {
             this.toggleVisibility();
-        }
+        };
 
         const retryIcon = iconRefresh("white");
         retryIcon.className = "camera-button-image";
         this.retryButon.append(retryIcon);
-        this.retryButon.className = "camera-button camera-button-grouped camera-hidden";
+        this.retryButon.className =
+            "camera-button camera-button-grouped camera-hidden";
         this.retryButon.onclick = () => {
             this.pictureDiv.classList.add("camera-hidden");
             this.acceptButton.classList.add("camera-hidden");
             this.retryButon.classList.add("camera-hidden");
             this.video.classList.remove("camera-hidden");
             this.snapButton.classList.remove("camera-hidden");
-        }
+        };
 
         buttonDiv.className = "camera-buttons";
         buttonDiv.append(this.snapButton);
@@ -83,22 +85,24 @@ export class CameraView {
         buttonDiv.append(this.cancelButton);
         buttonDiv.append(this.retryButon);
 
-        this.pictureDiv.className = "picture";        
+        this.pictureDiv.className = "picture";
 
         videoContainer.append(this.video);
-        videoContainer.className = "picture"; 
+        videoContainer.className = "picture";
 
         this.video.oncanplay = () => {
             if (!this.streaming) {
-                this.height = this.video.videoHeight / (this.video.videoWidth / this.width);
-            
+                this.height =
+                    this.video.videoHeight /
+                    (this.video.videoWidth / this.width);
+
                 this.video.width = this.width;
                 this.video.height = this.height;
                 this.canvas.width = this.width;
                 this.canvas.height = this.height;
                 this.streaming = true;
-              }            
-        }
+            }
+        };
 
         this.mainContainer = document.createElement("div");
         this.mainContainer.className = "camera-container camera-hidden";
@@ -114,35 +118,39 @@ export class CameraView {
     // drawing that to the screen, we can change its size and/or apply
     // other changes before drawing it.
     takePicture() {
-        const context: CanvasRenderingContext2D = this.canvas.getContext("2d") as CanvasRenderingContext2D;
+        const context: CanvasRenderingContext2D = this.canvas.getContext(
+            "2d",
+        ) as CanvasRenderingContext2D;
         if (this.width && this.height) {
             this.canvas.width = this.width;
             this.canvas.height = this.height;
-          context.drawImage(this.video, 0, 0, this.width, this.height);
-    
-          this.canvas.toBlob((b: Blob | null) => {
-            if (b) {
-                let url: string = URL.createObjectURL(b);
+            context.drawImage(this.video, 0, 0, this.width, this.height);
 
-                if (this.img) {
-                    this.img.remove();
-                  }
-        
-                  this.img = document.createElement("img");
-                  this.img.setAttribute("src", url);
-                  this.pictureDiv.append(this.img);
-            }
-          });
+            this.canvas.toBlob((b: Blob | null) => {
+                if (b) {
+                    let url: string = URL.createObjectURL(b);
+
+                    if (this.img) {
+                        this.img.remove();
+                    }
+
+                    this.img = document.createElement("img");
+                    this.img.setAttribute("src", url);
+                    this.pictureDiv.append(this.img);
+                }
+            });
         } else {
             this.clearPhoto();
         }
     }
 
     clearPhoto() {
-        const context: CanvasRenderingContext2D = this.canvas.getContext("2d") as CanvasRenderingContext2D;
+        const context: CanvasRenderingContext2D = this.canvas.getContext(
+            "2d",
+        ) as CanvasRenderingContext2D;
         context.fillStyle = "#AAA";
         context.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    
+
         const data = this.canvas.toDataURL("image/png");
         this.img.setAttribute("src", data);
         this.img.remove();
@@ -150,16 +158,16 @@ export class CameraView {
 
     public startCamera() {
         navigator.mediaDevices
-        .getUserMedia({ video: true, audio: false })
-        .then((stream) => {
-            this.mediaStream = stream;
-          this.video.srcObject = stream;
-          this.video.play();
-        })
-        .catch((err) => {
-          console.error(`An error occurred: ${err}`);
-        });
-  
+            .getUserMedia({ video: true, audio: false })
+            .then((stream) => {
+                this.mediaStream = stream;
+                this.video.srcObject = stream;
+                this.video.play();
+            })
+            .catch((err) => {
+                console.error(`An error occurred: ${err}`);
+            });
+
         this.clearPhoto();
     }
 
@@ -186,6 +194,6 @@ export class CameraView {
         } else {
             this.getContainer().classList.add("camera-hidden");
             this.stopCamera();
-        }  
+        }
     }
 }

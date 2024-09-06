@@ -1,11 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type PhotoAction =
-    | DescribeAction
-    | UnknownAction;
+export type PhotoAction = DescribeAction | UnknownAction;
 
-// describes an image 
+// describes an image
 export type DescribeAction = {
     actionName: "describeImage";
     parameters: {

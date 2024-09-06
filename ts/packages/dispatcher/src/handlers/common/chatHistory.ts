@@ -15,7 +15,7 @@ export interface ChatHistoryEntry {
     role: PromptRole;
     id: string | undefined;
     attachments?: string[] | undefined;
-    interpreter?: ImpressionInterpreter;    
+    interpreter?: ImpressionInterpreter;
 }
 
 export interface ChatHistory {
@@ -71,7 +71,7 @@ export function createChatHistory(): ChatHistory {
             text: string,
             entities: Entity[],
             role: PromptRole = "user",
-            id?: string,    
+            id?: string,
             interpreter?: ImpressionInterpreter,
             attachments?: string[],
         ): void {

@@ -7,7 +7,7 @@ import {
     iconMicrophoneListening,
     iconMicrophoneDisabled,
     iconCamera,
-    iconImage
+    iconImage,
 } from "./icon";
 import { getClientAPI } from "./main";
 import { recognizeOnce } from "./speech";
@@ -136,7 +136,7 @@ export class ChatInput {
             e.preventDefault();
             console.log(e);
 
-            if (this.dragTemp === undefined) { 
+            if (this.dragTemp === undefined) {
                 this.dragTemp = this.textarea.getTextEntry().innerHTML;
             }
 
@@ -146,7 +146,7 @@ export class ChatInput {
             this.textarea.getTextEntry().classList.add("chat-input-drag");
         };
 
-        this.textarea.getTextEntry().ondragleave = (e: DragEvent) => {            
+        this.textarea.getTextEntry().ondragleave = (e: DragEvent) => {
             this.textarea.getTextEntry().classList.remove("chat-input-drag");
 
             if (this.dragTemp) {
@@ -163,7 +163,7 @@ export class ChatInput {
 
             this.textarea.getTextEntry().classList.remove("chat-input-drag");
             if (this.dragTemp) {
-                this.textarea.getTextEntry().innerHTML = this.dragTemp;                
+                this.textarea.getTextEntry().innerHTML = this.dragTemp;
             } else {
                 this.clear();
             }
@@ -203,7 +203,6 @@ export class ChatInput {
             }
         });
 
-
         this.input = document.createElement("input");
         this.input.type = "file";
         this.input.classList.add("chat-message-hidden");
@@ -214,15 +213,15 @@ export class ChatInput {
             if (this.input.files && this.input.files?.length > 0) {
                 this.loadImageFile(this.input.files[0]);
             }
-        }
+        };
 
         this.picButton = document.createElement("label");
         this.picButton.htmlFor = this.input.id;
         this.picButton.appendChild(iconImage());
         this.picButton.className = "chat-input-button";
-        this.inputContainer.appendChild(this.picButton)
+        this.inputContainer.appendChild(this.picButton);
 
-        this.camButton = document.createElement("button")
+        this.camButton = document.createElement("button");
         this.camButton.appendChild(iconCamera());
         this.camButton.className = "chat-input-button";
         this.inputContainer.appendChild(this.camButton);
@@ -250,15 +249,18 @@ export class ChatInput {
 
     async loadImageFile(file: File) {
         let buffer: ArrayBuffer = await file.arrayBuffer();
-        
+
         let dropImg: HTMLImageElement = document.createElement("img");
-        let mimeType = file.name.toLowerCase().substring(file.name.lastIndexOf(".") + 1, file.name.length);
+        let mimeType = file.name
+            .toLowerCase()
+            .substring(file.name.lastIndexOf(".") + 1, file.name.length);
 
         if (file.name.toLowerCase().endsWith(".jpg")) {
             mimeType = "jpeg";
         }
 
-        dropImg.src = `data:image/${mimeType};base64,` + _arrayBufferToBase64(buffer);
+        dropImg.src =
+            `data:image/${mimeType};base64,` + _arrayBufferToBase64(buffer);
         dropImg.className = "chat-inpput-dropImage";
 
         this.textarea.getTextEntry().append(dropImg);
@@ -273,4 +275,3 @@ export class ChatInput {
         return this.inputContainer;
     }
 }
-

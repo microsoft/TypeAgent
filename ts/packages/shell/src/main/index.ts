@@ -136,53 +136,83 @@ function createWindow(): void {
  * @param mainWindow the main browser window
  */
 function setupDevicePermissinos(mainWindow: BrowserWindow) {
-    let grantedDeviceThroughPermHandler
+    let grantedDeviceThroughPermHandler;
 
-    mainWindow.webContents.session.on('select-usb-device', (event, details, callback) => {
-      // Add events to handle devices being added or removed before the callback on
-      // `select-usb-device` is called.
-      mainWindow.webContents.session.on('usb-device-added', (_event, device) => {
-        console.log('usb-device-added FIRED WITH', device)
-        // Optionally update details.deviceList
-      })
-  
-      mainWindow.webContents.session.on('usb-device-removed', (_event, device) => {
-        console.log('usb-device-removed FIRED WITH', device)
-        // Optionally update details.deviceList
-      })
-  
-      event.preventDefault()
-      if (details.deviceList && details.deviceList.length > 0) {
-        const deviceToReturn = details.deviceList.find((device) => {
-          return !grantedDeviceThroughPermHandler || (device.deviceId !== grantedDeviceThroughPermHandler.deviceId)
-        })
-        if (deviceToReturn) {
-          callback(deviceToReturn.deviceId)
-        } else {
-          callback()
-        }
-      }
-    })
-  
-    mainWindow.webContents.session.setPermissionCheckHandler((_webContents: WebContents | null, permission, _requestingOrigin, details): boolean => {
-      if ((permission === 'usb' && details.securityOrigin === 'file:///') || (permission === 'media' && (details.securityOrigin?.startsWith("http://localhost") || details.securityOrigin?.startsWith("https://localhost")))) {
-        return true
-      }
+    mainWindow.webContents.session.on(
+        "select-usb-device",
+        (event, details, callback) => {
+            // Add events to handle devices being added or removed before the callback on
+            // `select-usb-device` is called.
+            mainWindow.webContents.session.on(
+                "usb-device-added",
+                (_event, device) => {
+                    console.log("usb-device-added FIRED WITH", device);
+                    // Optionally update details.deviceList
+                },
+            );
 
-      return false;
-    })
-  
-    mainWindow.webContents.session.setDevicePermissionHandler((details: DevicePermissionHandlerHandlerDetails): boolean => {
-      if (details.deviceType === 'usb' && details.origin === 'file://') {
-        if (!grantedDeviceThroughPermHandler) {
-          grantedDeviceThroughPermHandler = details.device
-          return true
-        } else {
-          return false
-        }
-      }
-      return false;
-    })
+            mainWindow.webContents.session.on(
+                "usb-device-removed",
+                (_event, device) => {
+                    console.log("usb-device-removed FIRED WITH", device);
+                    // Optionally update details.deviceList
+                },
+            );
+
+            event.preventDefault();
+            if (details.deviceList && details.deviceList.length > 0) {
+                const deviceToReturn = details.deviceList.find((device) => {
+                    return (
+                        !grantedDeviceThroughPermHandler ||
+                        device.deviceId !==
+                            grantedDeviceThroughPermHandler.deviceId
+                    );
+                });
+                if (deviceToReturn) {
+                    callback(deviceToReturn.deviceId);
+                } else {
+                    callback();
+                }
+            }
+        },
+    );
+
+    mainWindow.webContents.session.setPermissionCheckHandler(
+        (
+            _webContents: WebContents | null,
+            permission,
+            _requestingOrigin,
+            details,
+        ): boolean => {
+            if (
+                (permission === "usb" &&
+                    details.securityOrigin === "file:///") ||
+                (permission === "media" &&
+                    (details.securityOrigin?.startsWith("http://localhost") ||
+                        details.securityOrigin?.startsWith(
+                            "https://localhost",
+                        )))
+            ) {
+                return true;
+            }
+
+            return false;
+        },
+    );
+
+    mainWindow.webContents.session.setDevicePermissionHandler(
+        (details: DevicePermissionHandlerHandlerDetails): boolean => {
+            if (details.deviceType === "usb" && details.origin === "file://") {
+                if (!grantedDeviceThroughPermHandler) {
+                    grantedDeviceThroughPermHandler = details.device;
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+            return false;
+        },
+    );
 }
 
 let speechToken:
@@ -492,25 +522,28 @@ app.whenReady().then(async () => {
     }
 
     let settingSummary: string = "";
-    ipcMain.handle("request", async (_event, text: string, id: string, images: string[]) => {
-        if (typeof text !== "string" || typeof id !== "string") {
-            throw new Error("Invalid request");
-        }
-        debugShell(getPrompt(context), text);
+    ipcMain.handle(
+        "request",
+        async (_event, text: string, id: string, images: string[]) => {
+            if (typeof text !== "string" || typeof id !== "string") {
+                throw new Error("Invalid request");
+            }
+            debugShell(getPrompt(context), text);
 
-        await processCommand(text, context, id, images);
-        mainWindow?.webContents.send("send-demo-event", "CommandProcessed");
-        translatorSetPartialInputHandler();
-        const newSettingSummary = getSettingSummary(context);
-        if (newSettingSummary !== settingSummary) {
-            settingSummary = newSettingSummary;
-            mainWindow?.webContents.send(
-                "setting-summary-changed",
-                newSettingSummary,
-                getTranslatorNameToEmojiMap(context),
-            );
-        }
-    });
+            await processCommand(text, context, id, images);
+            mainWindow?.webContents.send("send-demo-event", "CommandProcessed");
+            translatorSetPartialInputHandler();
+            const newSettingSummary = getSettingSummary(context);
+            if (newSettingSummary !== settingSummary) {
+                settingSummary = newSettingSummary;
+                mainWindow?.webContents.send(
+                    "setting-summary-changed",
+                    newSettingSummary,
+                    getTranslatorNameToEmojiMap(context),
+                );
+            }
+        },
+    );
     ipcMain.on("partial-input", async (_event, text: string) => {
         if (typeof text !== "string") {
             return;

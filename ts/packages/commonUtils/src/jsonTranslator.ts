@@ -80,7 +80,6 @@ export function enableJsonTranslatorStreaming<T extends object>(
         cb?: IncrementalJsonValueCallBack,
         attachments?: string[],
     ) => {
-
         attachAttachments(attachments, promptPreamble);
 
         if (cb === undefined) {
@@ -92,7 +91,9 @@ export function enableJsonTranslatorStreaming<T extends object>(
             const parser = createIncrementalJsonParser(cb, {
                 partial: true,
             });
-            model.complete = async (prompt: string | PromptSection[] | ChatMessage[]) => {
+            model.complete = async (
+                prompt: string | PromptSection[] | ChatMessage[],
+            ) => {
                 debug(prompt);
                 const chunks = [];
                 const result = await model.completeStream(prompt);
@@ -115,21 +116,28 @@ export function enableJsonTranslatorStreaming<T extends object>(
     return translatorWithStreaming;
 }
 
-function attachAttachments(attachments: string[] | undefined, promptPreamble?: string | PromptSection[]) {
-    
+function attachAttachments(
+    attachments: string[] | undefined,
+    promptPreamble?: string | PromptSection[],
+) {
     let pp: PromptSection[] = promptPreamble as PromptSection[];
 
     if (attachments && attachments.length > 0 && pp) {
-        for(let i = 0; i < attachments.length; i++) {
-            pp.unshift(
-                {
-                    role: "user",
-                    content: [ {type: "text", text: "\n"}, { type: "image_url", image_url: { url: attachments[i] }, }, {type: "text", text: "\n"}, ]
-                }
-            );
+        for (let i = 0; i < attachments.length; i++) {
+            pp.unshift({
+                role: "user",
+                content: [
+                    { type: "text", text: "\n" },
+                    { type: "image_url", image_url: { url: attachments[i] } },
+                    { type: "text", text: "\n" },
+                ],
+            });
         }
 
-        pp.unshift({ role: "user", content: "Here are some images provided by the user." });
+        pp.unshift({
+            role: "user",
+            content: "Here are some images provided by the user.",
+        });
     }
 }
 
