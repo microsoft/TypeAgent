@@ -191,8 +191,8 @@ function showNotifications(
     messages: Array<any>,
     showRead: boolean = false,
 ) {
-    const status: string = showRead ? "all (read and unread) " : "new (unread)";
-    let html: string = `Here are the ${status} notifications <ul>`;
+    const status: string = showRead ? "all" : "the new";
+    let html: string = `Here are ${status} notifications:<br/> <ul>`;
 
     for (let i = 0; i < messages.length; i++) {
         if (showRead || !messages[i].read) {
@@ -202,7 +202,7 @@ function showNotifications(
         }
     }
 
-    html += "</ul>";
+    html += "</ul><br/>";
     console.log(requestId + chatView);
 
     chatView.addAgentMessage(
@@ -237,12 +237,12 @@ function summarizeNotifications(
         }
     }
 
-    let summary = `There are <b>${messages.length - read}</b> unread and <b>${read}</b> read messages.<br/><br/>
+    let summary = `There are <b>${messages.length - read}</b> unread and <b>${read}</b> notifications in total.<br/><br/>
     <div style="display: flex;justify-content: space-evenly">`;
     for (const [key, value] of msgMap) {
         summary += `<span class="notification-${key}">${key}:</span> <b>${value}</b>`;
     }
-    summary += "</div>";
+    summary += `</div><br/><span style="font-size: 10px">Run @notify show [all | unread] so see notifications.</span>`;
 
     chatView.addAgentMessage({
         message: summary,
