@@ -63,6 +63,7 @@ export class SettingsView {
         this.menuCheckBox.checked = value.hideMenu;
         this.tabsCheckBox.checked = value.hideTabs;
         this.ttsCheckBox.checked = value.tts;
+        this.microphoneSources.value = value.microphoneId ?? "";
         this.updateFromSettings();
     }
 
@@ -72,17 +73,29 @@ export class SettingsView {
     private get ttsVoiceSettingValue() {
         return this._shellSettings.ttsSettings.voice ?? "<default>";
     }
-
+    private get microphoneIdSettingsValue() {
+        return this._shellSettings.microphoneId ?? "<default>";
+    }
     private get ttsProviderSelectedValue() {
         return this.ttsProvider.value === "<default>"
             ? undefined
             : this.ttsProvider.value;
     }
-
     private get ttsVoiceSelectedValue() {
         return this.ttsVoice.value === "<default>"
             ? undefined
             : this.ttsVoice.value;
+    }
+    private get microphoneIdSelectedValue() {
+        return this.microphoneSources.value === "<default>"
+            ? undefined
+            : this.microphoneSources.value;
+    }
+
+    private get microphoneNameSelectedValue() {
+        return this.microphoneSources.value === "<default>"
+            ? undefined
+            : this.microphoneSources.selectedOptions[0].innerText;
     }
 
     public showTabs() {
@@ -101,9 +114,9 @@ export class SettingsView {
             () => {
                 if (this.microphoneSources.selectedIndex > -1) {
                     this._shellSettings.microphoneId =
-                        this.microphoneSources.selectedOptions[0].value;
+                        this.microphoneIdSelectedValue;
                     this._shellSettings.microphoneName =
-                        this.microphoneSources.selectedOptions[0].innerText;
+                        this.microphoneNameSelectedValue;
                 } else {
                     this._shellSettings.microphoneId = undefined;
                     this._shellSettings.microphoneName = undefined;
@@ -111,7 +124,11 @@ export class SettingsView {
             },
         );
 
-        enumerateMicrophones(this.microphoneSources);
+        updateSelectAsync(
+            this.microphoneSources,
+            enumerateMicrophones(),
+            () => this.microphoneIdSettingsValue,
+        );
 
         // auto-hide menu bar
         this.menuCheckBox = this.addCheckbox("Hide the main menu", () => {

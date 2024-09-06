@@ -4,69 +4,44 @@
 import * as speechSDK from "microsoft-cognitiveservices-speech-sdk";
 import { SpeechToken } from "../../preload/electronTypes";
 import { WhisperRecognizer } from "./localWhisperClient";
+import registerDebug from "debug";
 
-let savedMicId: string | undefined;
-let savedMicName: string | undefined;
+const debug = registerDebug("typeagent:shell:speech");
+const debugError = registerDebug("typeagent:shell:speech");
 
-export function enumerateMicrophones(
-    microphoneSources: HTMLSelectElement,
-    micId?: string,
-    micName?: string,
-) {
+export async function enumerateMicrophones() {
     if (
         !navigator ||
         !navigator.mediaDevices ||
         !navigator.mediaDevices.enumerateDevices
     ) {
-        console.log(
+        debugError(
             `Unable to query for audio input devices. Default will be used.\r\n`,
         );
-        return;
+        return [];
     }
-    navigator.mediaDevices.enumerateDevices().then((devices) => {
-        microphoneSources.innerHTML = "";
-
-        // Not all environments will be able to enumerate mic labels and ids. All environments will be able
-        // to select a default input, assuming appropriate permissions.
-        var defaultOption = document.createElement("option");
-        defaultOption.appendChild(
-            document.createTextNode("Default Microphone"),
-        );
-        microphoneSources.appendChild(defaultOption);
-        const deviceIds = new Set<string>();
-        for (const device of devices) {
-            console.log(device);
-            if (device.kind === "audioinput") {
-                if (!device.deviceId) {
-                    console.log(
-                        `Warning: unable to enumerate a microphone deviceId. This may be due to limitations` +
-                            ` with availability in a non-HTTPS context per mediaDevices constraints.`,
-                    );
-                } else {
-                    if (!deviceIds.has(device.deviceId)) {
-                        var opt = document.createElement("option");
-                        opt.value = device.deviceId;
-                        console.log(`Device ID: ${device.label}`);
-                        opt.appendChild(document.createTextNode(device.label));
-
-                        if (
-                            (device.deviceId == micId &&
-                                device.label == micName) ||
-                            device.deviceId == savedMicId ||
-                            device.label == savedMicName
-                        ) {
-                            opt.setAttribute("SELECTED", "SELECTED");
-                        }
-
-                        microphoneSources.appendChild(opt);
-                        deviceIds.add(device.deviceId);
-                    }
+    // Not all environments will be able to enumerate mic labels and ids. All environments will be able
+    // to select a default input, assuming appropriate permissions.
+    const deviceIds = new Set<string>();
+    const result: [string, string][] = [];
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    for (const device of devices) {
+        debug(device);
+        if (device.kind === "audioinput") {
+            if (!device.deviceId) {
+                debugError(
+                    `Warning: unable to enumerate a microphone deviceId. This may be due to limitations` +
+                        ` with availability in a non-HTTPS context per mediaDevices constraints.`,
+                );
+            } else {
+                if (!deviceIds.has(device.deviceId)) {
+                    result.push([device.label, device.deviceId]);
+                    deviceIds.add(device.deviceId);
                 }
             }
         }
-
-        microphoneSources.disabled = microphoneSources.options.length == 1;
-    });
+    }
+    return result;
 }
 
 export function getAudioConfig() {
@@ -75,10 +50,12 @@ export function getAudioConfig() {
     )! as HTMLSelectElement;
 
     if (microphoneSources.value) {
-        console.log(`Using device id: ${microphoneSources.value}`);
-        return speechSDK.AudioConfig.fromMicrophoneInput(
-            microphoneSources.value,
-        );
+        const deviceId =
+            microphoneSources.value === "<default>"
+                ? undefined
+                : microphoneSources.value;
+        debug(`Using device id: ${deviceId}`);
+        return speechSDK.AudioConfig.fromMicrophoneInput(deviceId);
     }
     return speechSDK.AudioConfig.fromDefaultMicrophoneInput();
 }
