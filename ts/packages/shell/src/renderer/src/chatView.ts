@@ -490,7 +490,7 @@ function stripAnsi(text: string): string {
 
 const enableText2Html = true;
 export function setContent(elm: HTMLElement, text: string) {
-    if (text.startsWith("<") && text.indexOf("@command") == -1) {
+    if (text.indexOf("<") > -1 && text.indexOf("@command") == -1) {
         elm.innerHTML = text;
     } else if (enableText2Html) {
         elm.innerHTML = textToHtml(text);

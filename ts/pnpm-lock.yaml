@@ -6479,18 +6479,6 @@ packages:
       zod:
         optional: true
 
-  typechat@0.1.1:
-    resolution: {integrity: sha512-Sw96vmkYqbAahqam7vCp8P/MjIGsR26Odz17UHpVGniYN5ir2B37nRRkoDuRpA5djwNQB+W5TB7w2xoF6kwbHQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      typescript: ^5.3.3
-      zod: ^3.22.4
-    peerDependenciesMeta:
-      typescript:
-        optional: true
-      zod:
-        optional: true
-
   typed-rest-client@1.8.11:
     resolution: {integrity: sha512-5UvfMpd1oelmUPRbbaVnq+rHP7ng2cE4qoQkQeAqxRL6PklkxsM0g32/HL0yfvruK6ojQ5x8EE+HF4YV6DtuCA==}
 
@@ -13055,10 +13043,6 @@ snapshots:
     dependencies:
       media-typer: 0.3.0
       mime-types: 2.1.35
-
-  typechat@0.1.1(typescript@5.4.3):
-    optionalDependencies:
-      typescript: 5.4.3
 
   typechat@0.1.1(typescript@5.4.3):
     optionalDependencies:
