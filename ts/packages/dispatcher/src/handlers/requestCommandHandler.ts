@@ -13,7 +13,6 @@ import {
 import { CommandHandler } from "./common/commandHandler.js";
 import {
     CommandHandlerContext,
-    getAppAgent,
     getTranslator,
     getActiveTranslatorList,
     isTranslatorEnabled,
@@ -29,7 +28,6 @@ import {
 } from "../action/actionHandlers.js";
 import { unicodeChar } from "../utils/interactive.js";
 import {
-    getAppAgentName,
     getInjectedTranslatorForActionName,
     getTranslatorConfig,
     isChangeAssistantAction,

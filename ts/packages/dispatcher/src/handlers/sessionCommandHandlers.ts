@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    changeContextConfig,
     CommandHandlerContext,
     reloadSessionOnCommandHandlerContext,
 } from "./common/commandHandlerContext.js";
@@ -57,8 +58,8 @@ class SessionOpenCommandHandler implements CommandHandler {
 class SessionResetCommandHandler implements CommandHandler {
     public readonly description = "Reset config on session and keep the data";
     public async run(request: string, context: CommandHandlerContext) {
-        context.session.setConfig(defaultSessionConfig);
-        context.requestIO.success(`Session resetted.`);
+        await changeContextConfig(defaultSessionConfig, context);
+        context.requestIO.success(`Session settings revert to default.`);
     }
 }
 
