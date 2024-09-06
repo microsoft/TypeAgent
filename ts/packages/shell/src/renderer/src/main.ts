@@ -145,9 +145,6 @@ function addEvents(
         }
     });
     api.onNotificationCommand((_, requestId: string, data: any) => {
-        // show notifications
-        console.log("notification command: " + data);
-
         switch (data) {
             case NotifyCommands.Clear:
                 notifications.length = 0;
