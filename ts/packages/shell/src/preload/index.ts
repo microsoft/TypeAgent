@@ -83,9 +83,6 @@ const api: ClientAPI = {
     onRandomMessageRequested(callback) {
         ipcRenderer.on("random-message-requested", callback);
     },
-    onMicrophoneChangeRequested(callback) {
-        ipcRenderer.on("microphone-change-requested", callback);
-    },
     onShowDialog(callback) {
         ipcRenderer.on("show-dialog", callback);
     },

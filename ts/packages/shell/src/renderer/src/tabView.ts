@@ -109,7 +109,7 @@ export class TabView {
     }
 
     showTab(tabName: string) {
-        this.mainContainer.classList.remove("closedTab");
+        this.show();
 
         for (let j = 0; j < this.tabPages.length; j++) {
             if (this.tabNames[j] == tabName) {
@@ -120,6 +120,9 @@ export class TabView {
         }
     }
 
+    show() {
+        this.mainContainer.classList.remove("closedTab");
+    }
     hide() {
         this.mainContainer.classList.add("closedTab");
     }

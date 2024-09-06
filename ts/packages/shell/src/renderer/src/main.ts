@@ -5,7 +5,8 @@
 import { ClientAPI, NotifyCommands } from "../../preload/electronTypes";
 import { ChatView } from "./chatView";
 import { TabView } from "./tabView";
-import { SpeechInfo, recognizeOnce, selectMicrophone } from "./speech";
+import { recognizeOnce } from "./speech";
+import { setSpeechToken } from "./speechToken";
 import { iconHelp, iconMetrics, iconSettings } from "./icon";
 import { SettingsView } from "./settingsView";
 import { HelpView } from "./helpView";
@@ -39,7 +40,7 @@ function addEvents(
             );
         } else {
             if (token) {
-                chatView.speechInfo.speechToken = token;
+                setSpeechToken(token);
                 if (name === "Alt+M") {
                     recognizeOnce(
                         token,
@@ -119,9 +120,6 @@ function addEvents(
         console.log(`User asked for a random message via ${key}`);
         chatView.addUserMessage(`@random`);
     });
-    api.onMicrophoneChangeRequested((_, micId, micName) => {
-        selectMicrophone(settingsView.microphoneSources, micId, micName);
-    });
     api.onShowDialog((_, key) => {
         if (key == "Settings") {
             settingsView.showTabs();
@@ -131,11 +129,6 @@ function addEvents(
     });
     api.onSettingsChanged((_, value: ShellSettings) => {
         settingsView.shellSettings = value;
-        chatView.tts = value.tts;
-
-        if (value.hideTabs) {
-            tabsView.hide();
-        }
     });
     api.onNotificationCommand((_, requestId: string, data: any) => {
         switch (data) {
@@ -256,7 +249,6 @@ export class IdGenerator {
 document.addEventListener("DOMContentLoaded", function () {
     const wrapper = document.getElementById("wrapper")!;
     const idGenerator = new IdGenerator();
-    const speechInfo = new SpeechInfo();
     const agents = new Map<string, string>();
 
     const tabs = new TabView(
@@ -273,10 +265,10 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     };
 
-    const chatView = new ChatView(idGenerator, speechInfo, agents);
+    const chatView = new ChatView(idGenerator, agents);
     wrapper.appendChild(chatView.getMessageElm());
 
-    const settingsView = new SettingsView(window, tabs, chatView);
+    const settingsView = new SettingsView(tabs, chatView);
     tabs.getTabContainerByName("Settings").append(settingsView.getContainer());
     tabs.getTabContainerByName("Metrics").append(
         new MetricsView().getContainer(),
