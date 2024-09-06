@@ -59,9 +59,6 @@ class RandomOfflineCommandHandler implements CommandHandler {
             message: randomRequest,
         });
         context.requestIO.notify(AppAgentEvent.Info, context.requestId, randomRequest);
-        context.requestIO.notify(AppAgentEvent.Error, context.requestId, randomRequest);
-        context.requestIO.notify(AppAgentEvent.Debug, context.requestId, randomRequest);
-        context.requestIO.notify(AppAgentEvent.Warning, context.requestId, randomRequest);
 
         await processCommandNoLock(randomRequest, context, context.requestId);
     }
