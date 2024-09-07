@@ -20,6 +20,7 @@ export class ShellSettings implements ShellSettingsType {
     public microphoneName?: string;
     public hideMenu: boolean;
     public hideTabs: boolean;
+    public agentGreeting: boolean;
 
     public get width(): number | undefined {
         return this.size[0];
@@ -51,6 +52,7 @@ export class ShellSettings implements ShellSettingsType {
         this.microphoneName = settings.microphoneName;
         this.hideMenu = settings.hideMenu;
         this.hideTabs = settings.hideTabs;
+        this.agentGreeting = settings.agentGreeting;
     }
 
     public static get filePath(): string {

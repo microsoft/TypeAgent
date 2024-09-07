@@ -188,5 +188,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     (window as any).electron.ipcRenderer.send("dom ready");
 
-    chatView.addUserMessage("Hi!", true);
+    if (settingsView.shellSettings.agentGreeting) {
+        chatView.addUserMessage("Hi!", true);
+    }
 });
