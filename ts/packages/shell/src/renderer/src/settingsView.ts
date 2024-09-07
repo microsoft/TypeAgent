@@ -204,7 +204,12 @@ export class SettingsView {
 
         this.updateFromSettings = async () => {
             updateTabsView();
+            updateChatView();
             await updateTTSSelections();
+        };
+
+        speechSynthesis.onvoiceschanged = () => {
+            updateTTSSelections();
         };
     }
 

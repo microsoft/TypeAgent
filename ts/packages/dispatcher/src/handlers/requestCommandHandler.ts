@@ -52,23 +52,24 @@ async function confirmTranslation(
     requestAction: RequestAction | undefined | null;
     replacedAction?: Actions;
 }> {
-    const messages = [];
-    const requestIO = context.requestIO;
-    if (requestIO.type === "text") {
-        // Provide a one line information for text output
-        messages.push(
-            `${source}: ${chalk.blueBright(
-                ` ${requestAction.toString()}`,
-            )} ${getColorElapsedString(elapsedMs)}`,
-        );
-        messages.push();
-    }
-
     const actions = requestAction.actions;
-    const prettyStr = JSON.stringify(actions, undefined, 2);
-    messages.push(`${chalk.italic(chalk.cyanBright(prettyStr))}`);
+    const requestIO = context.requestIO;
 
     if (!context.developerMode) {
+        const messages = [];
+
+        if (requestIO.type === "text") {
+            // Provide a one line information for text output
+            messages.push(
+                `${source}: ${chalk.blueBright(
+                    ` ${requestAction.toString()}`,
+                )} ${getColorElapsedString(elapsedMs)}`,
+            );
+            messages.push();
+        }
+
+        const prettyStr = JSON.stringify(actions, undefined, 2);
+        messages.push(`${chalk.italic(chalk.cyanBright(prettyStr))}`);
         requestIO.info(messages.join("\n"));
         return { requestAction };
     }

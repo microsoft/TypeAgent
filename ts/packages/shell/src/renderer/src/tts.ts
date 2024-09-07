@@ -19,20 +19,25 @@ export type TTS = {
 };
 
 function getBrowserTTSProvider(voiceName?: string): TTS | undefined {
-    const voices = speechSynthesis.getVoices();
-    if (voices.length === 0) {
-        // No voice available;
-        return undefined;
-    }
-
-    const voice = voiceName ? voices.find((v) => v.name === voiceName) : null;
-    if (voice === undefined) {
-        // specified voice not found
-        return undefined;
-    }
     return {
         speak: async (text: string) => {
+            const voices = speechSynthesis.getVoices();
+            if (voices.length === 0) {
+                // No voice available;
+                debugError("No voice available");
+                return;
+            }
+
+            const voice = voiceName
+                ? voices.find((v) => v.name === voiceName)
+                : null;
+            if (voice === undefined) {
+                // specified voice not found
+                debugError(`${voiceName} not available`);
+                return;
+            }
             return new Promise((resolve, reject) => {
+                debug(`Speaking: ${text}`);
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.voice = voice;
                 utterance.addEventListener("start", () => {
@@ -60,7 +65,15 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
         speak: async (text: string, voiceStyle?: string) => {
             const synthesizer = new speechSDK.SpeechSynthesizer(
                 getSpeechConfig(await getSpeechToken())!,
+                speechSDK.AudioConfig.fromDefaultSpeakerOutput(),
             );
+            synthesizer.synthesisCompleted = () => {
+                debug("Synthesis ended");
+            };
+
+            synthesizer.synthesisStarted = () => {
+                debug("Synthesis started");
+            };
 
             const ssml = `
             <speak
@@ -77,6 +90,7 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
             </speak>`;
 
             return await new Promise<void>((resolve, reject) => {
+                debug(`Speaking: ${text}`);
                 synthesizer.speakSsmlAsync(
                     ssml,
                     () => {
@@ -85,6 +99,7 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
                     },
                     (error) => {
                         synthesizer.close();
+                        debugError(`Speech error ${error}`);
                         reject(error);
                     },
                 );
@@ -93,26 +108,28 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
     };
 }
 
-let azureVoices: [string, string][] | undefined = undefined;
+let azureVoicesP: Promise<[string, string][]> | undefined;
 async function getAzureVoices() {
-    if (azureVoices === undefined) {
-        const synthesizer = new speechSDK.SpeechSynthesizer(
-            getSpeechConfig(await getSpeechToken())!,
-        );
-        debug(`Getting voices for ${navigator.language}`);
-        const result = await synthesizer.getVoicesAsync(navigator.language);
-        synthesizer.close();
-        if (result.reason === speechSDK.ResultReason.VoicesListRetrieved) {
-            debug("Got voices:", result.voices);
-            azureVoices = result.voices.map(
-                (v) => [v.displayName, v.shortName] as [string, string],
+    if (azureVoicesP === undefined) {
+        azureVoicesP = (async () => {
+            const synthesizer = new speechSDK.SpeechSynthesizer(
+                getSpeechConfig(await getSpeechToken())!,
             );
-        } else {
-            debugError(`Failed to get voices: ${result.errorDetails}`);
-            azureVoices = [];
-        }
+            debug(`Getting azure voices for ${navigator.language}`);
+            const result = await synthesizer.getVoicesAsync(navigator.language);
+            synthesizer.close();
+            if (result.reason === speechSDK.ResultReason.VoicesListRetrieved) {
+                debug("Got azure voices:", result.voices);
+                return result.voices.map(
+                    (v) => [v.displayName, v.shortName] as [string, string],
+                );
+            } else {
+                debugError(`Failed to get voices: ${result.errorDetails}`);
+                return [];
+            }
+        })();
     }
-    return azureVoices;
+    return azureVoicesP;
 }
 
 export async function getTTSVoices(
