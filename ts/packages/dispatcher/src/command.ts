@@ -327,7 +327,7 @@ export function getSettingSummary(context: CommandHandlerContext) {
 
 export function getTranslatorNameToEmojiMap(context: CommandHandlerContext) {
     const emojis = context.agents
-        .getAppAgentConfigs()
+        .getTranslatorConfigs()
         .map(([name, config]) => [name, config.emojiChar] as const);
 
     const tMap = new Map<string, string>(emojis);

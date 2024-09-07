@@ -235,10 +235,9 @@ function getInjectedTranslatorConfigs(
         .getTranslatorConfigs()
         .filter(
             ([name, config]) =>
-                (config.injected &&
-                    name !== translatorName && // don't include itself
-                    activeTranslators[name]) ??
-                config.defaultEnabled,
+                config.injected &&
+                name !== translatorName && // don't include itself
+                (activeTranslators[name] ?? config.defaultEnabled),
         )
         .map(([_, config]) => config);
 }
