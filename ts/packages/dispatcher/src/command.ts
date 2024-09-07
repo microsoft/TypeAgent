@@ -33,10 +33,6 @@ import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js"
 import { getHistoryCommandHandlers } from "./handlers/historyCommandHandler.js";
 import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
 import { TranslateCommandHandler } from "./handlers/translateCommandHandler.js";
-import {
-    getTranslatorConfig,
-    getTranslatorConfigs,
-} from "./translation/agentTranslators.js";
 import { processRequests, unicodeChar } from "./utils/interactive.js";
 /* ==Experimental== */
 import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
@@ -212,6 +208,7 @@ export async function processCommandNoLock(
     originalInput: string,
     context: CommandHandlerContext,
     requestId?: RequestId,
+    attachments?: string[],
 ) {
     let input = originalInput.trim();
     if (!input.startsWith("@")) {
@@ -236,7 +233,7 @@ export async function processCommandNoLock(
         }
         if (isCommandHandler(result.resolved)) {
             context.logger?.logEvent("command", { originalInput });
-            await result.resolved.run(result.args, context);
+            await result.resolved.run(result.args, context, attachments);
         } else {
             throw new Error(
                 `Command '${input}' requires a subcommand. Try '@help ${input}' for the list of sub commands.`,
@@ -257,10 +254,16 @@ export async function processCommand(
     originalInput: string,
     context: CommandHandlerContext,
     requestId?: RequestId,
+    attachments?: string[],
 ) {
     // Process one command at at time.
     return context.commandLock(async () => {
-        return processCommandNoLock(originalInput, context, requestId);
+        return processCommandNoLock(
+            originalInput,
+            context,
+            requestId,
+            attachments,
+        );
     });
 }
 
@@ -292,7 +295,9 @@ export function getSettingSummary(context: CommandHandlerContext) {
 
     const translators = Array.from(
         new Set(
-            ordered.map((name) => getTranslatorConfig(name).emojiChar),
+            ordered.map(
+                (name) => context.agents.getTranslatorConfig(name).emojiChar,
+            ),
         ).values(),
     );
     prompt.push("  [", translators.join(""));
@@ -321,9 +326,9 @@ export function getSettingSummary(context: CommandHandlerContext) {
 }
 
 export function getTranslatorNameToEmojiMap(context: CommandHandlerContext) {
-    const emojis = getTranslatorConfigs().map(
-        ([name, config]) => [name, config.emojiChar] as const,
-    );
+    const emojis = context.agents
+        .getTranslatorConfigs()
+        .map(([name, config]) => [name, config.emojiChar] as const);
 
     const tMap = new Map<string, string>(emojis);
     tMap.set(DispatcherName, "🤖");

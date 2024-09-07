@@ -1,11 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    Entity,
-    ImpressionInterpreter,
-    getEntityId,
-} from "@typeagent/agent-sdk";
+import { Entity } from "@typeagent/agent-sdk";
 import { PromptSection } from "typechat";
 type PromptRole = "user" | "assistant" | "system";
 
@@ -14,7 +10,7 @@ export interface ChatHistoryEntry {
     entities: Entity[];
     role: PromptRole;
     id: string | undefined;
-    interpreter?: ImpressionInterpreter;
+    attachments?: string[] | undefined;
 }
 
 export interface ChatHistory {
@@ -27,7 +23,7 @@ export interface ChatHistory {
         entities: Entity[],
         role: PromptRole,
         id?: string,
-        interpreter?: ImpressionInterpreter,
+        attachments?: string[],
     ): void;
     getEntry(id: string): ChatHistoryEntry | undefined;
     getPromptSections(): PromptSection[];
@@ -38,6 +34,7 @@ export function createChatHistory(): ChatHistory {
     const typeMap: Map<string, Entity[]> = new Map();
     const userIdMap: Map<string, number> = new Map();
     const assistantIdMap: Map<string, number> = new Map();
+    const attachmentsMap: Map<string, string[]> = new Map();
     return {
         entries: [],
         getPromptSections(maxChars = 2000) {
@@ -69,9 +66,9 @@ export function createChatHistory(): ChatHistory {
             entities: Entity[],
             role: PromptRole = "user",
             id?: string,
-            interpreter?: ImpressionInterpreter,
+            attachments?: string[],
         ): void {
-            this.entries.push({ text, entities, role, id });
+            this.entries.push({ text, entities, role, id, attachments });
             const index = this.entries.length - 1;
             if (id) {
                 if (role === "user") {
@@ -81,8 +78,6 @@ export function createChatHistory(): ChatHistory {
                 }
             }
             for (const entity of entities) {
-                const ientity = entity as Entity;
-                ientity.interpreter = interpreter;
                 if (!nameMap.has(entity.name)) {
                     nameMap.set(entity.name, []);
                 }
@@ -109,9 +104,10 @@ export function createChatHistory(): ChatHistory {
             for (let i = this.entries.length - 1; i >= 0; i--) {
                 const entry = this.entries[i];
                 for (const entity of entry.entities) {
-                    // Multiple entities may have the same name ('ibuprofen') but different
-                    // entity instances. E.g. {ibuprofen, taken in 2021} {ibuprofen,  taken in 2019}
-                    let entityId = getEntityId(entity);
+                    // Multiple entities may have the same name ('Design meeting') but different
+                    // entity instances. E.g. {Design meeting, on 9/12} vs {Design meeting, on 9/19}
+                    // Use a unique id provided by the agent to distinguish between name
+                    let entityId = entity.uniqueId;
                     if (entityId) {
                         // Scope ids by their type...
                         // An entityId need be unique only for a type, not in the global namespace
@@ -120,7 +116,7 @@ export function createChatHistory(): ChatHistory {
                     if (!entityId) {
                         // If entity has no unique id, make one the entity using it name
                         entityId = entity.name;
-                        if (entity.value) {
+                        if (entity.additionalEntityText) {
                             entityId += `v${valueCount++}`;
                         }
                     }

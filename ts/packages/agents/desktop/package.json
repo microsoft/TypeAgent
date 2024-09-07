@@ -37,7 +37,7 @@
     "find-config": "^1.0.0",
     "open": "^7.0.4",
     "typeagent": "workspace:*",
-    "typechat": "^0.1.0",
+    "typechat": "^0.1.1",
     "ws": "^8.17.1"
   },
   "devDependencies": {

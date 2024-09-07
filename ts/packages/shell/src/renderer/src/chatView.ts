@@ -490,10 +490,7 @@ function stripAnsi(text: string): string {
 
 const enableText2Html = true;
 export function setContent(elm: HTMLElement, text: string) {
-    if (
-        text.startsWith("<") ||
-        (text.indexOf("</") > -1 && text.indexOf("@command") == -1)
-    ) {
+    if (text.indexOf("<") > -1 && text.indexOf("@command") == -1) {
         elm.innerHTML = text;
     } else if (enableText2Html) {
         elm.innerHTML = textToHtml(text);
@@ -1097,20 +1094,51 @@ export class ChatView {
         this.commandBackStackIndex = -1;
     }
 
-    addUserMessage(request: string) {
+    async addUserMessage(request: string) {
         const id = this.idGenerator.genId();
+
+        let tempDiv: HTMLDivElement = document.createElement("div");
+        tempDiv.innerHTML = request;
+
+        let images = await this.extractMultiModalContent(tempDiv);
+
         this.idToMessageGroup.set(
             id,
             new MessageGroup(
                 this,
                 request,
                 this.messageDiv,
-                getClientAPI().processShellRequest(request, id),
+                getClientAPI().processShellRequest(
+                    tempDiv.innerText,
+                    id,
+                    images,
+                ),
                 new Date(),
                 this.agents,
             ),
         );
         this.commandBackStackIndex = -1;
+    }
+
+    async extractMultiModalContent(tempDiv: HTMLDivElement): Promise<string[]> {
+        let images = tempDiv.querySelectorAll<HTMLImageElement>(
+            ".chat-inpput-dropImage",
+        );
+        let retVal: string[] = new Array<string>(images.length);
+        for (let i = 0; i < images.length; i++) {
+            if (images[i].src.startsWith("data:image")) {
+                retVal[i] = images[i].src;
+            } else if (images[i].src.startsWith("blob:")) {
+                let response = await fetch(images[i].src);
+                let blob = await response.blob();
+                let ab = await blob.arrayBuffer();
+                retVal[i] = `data:image/png;base64,` + _arrayBufferToBase64(ab);
+            } else {
+                console.log("Unknown image source type.");
+            }
+        }
+
+        return retVal;
     }
 
     markRequestExplained(id: string, timestamp: string, fromCache?: boolean) {
@@ -1288,4 +1316,24 @@ export class ChatView {
 
         (window as any).electron.ipcRenderer.send("send-input-text-complete");
     }
+}
+
+export function _arrayBufferToBase64(buffer: ArrayBuffer) {
+    let binary = "";
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (var i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+}
+
+export function _base64ToArrayBuffer(base64: string): Uint8Array {
+    const binaryString = window.atob(base64);
+    const len = binaryString.length;
+    const bytes: Uint8Array = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
 }

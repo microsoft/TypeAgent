@@ -11,7 +11,7 @@ import {
 } from "agent-cache";
 import { initializeCommandHandlerContext } from "agent-dispatcher";
 import { getCacheFactory } from "agent-dispatcher";
-import { getTranslatorNames } from "agent-dispatcher";
+import { getBuiltinTranslatorNames } from "agent-dispatcher";
 
 // Default test case, that include multiple phrase action name (out of order) and implicit parameters (context)
 const testRequest = new RequestAction(
@@ -34,7 +34,7 @@ export default class ExplainCommand extends Command {
     static flags = {
         translator: Flags.string({
             description: "Translator names",
-            options: getTranslatorNames(),
+            options: getBuiltinTranslatorNames(),
             multiple: true,
         }),
         explainer: Flags.string({

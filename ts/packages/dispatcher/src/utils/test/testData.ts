@@ -4,7 +4,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import chalk from "chalk";
-import { loadAgentJsonTranslator } from "../../translation/agentTranslators.js";
+import {
+    getBuiltinTranslatorConfigProvider,
+    loadAgentJsonTranslator,
+} from "../../translation/agentTranslators.js";
 import {
     IAction,
     JSONAction,
@@ -254,8 +257,13 @@ function toExceptionMessage(e: any) {
         : undefined;
     return `Exception: ${e.message}${suffix ? `: ${suffix}` : ""}`;
 }
+
 function getSafeTranslateFn(translatorName: string, model?: string) {
-    const translator = loadAgentJsonTranslator(translatorName, model);
+    const translator = loadAgentJsonTranslator(
+        translatorName,
+        getBuiltinTranslatorConfigProvider(),
+        model,
+    );
     return async (request: string): Promise<Result<Object>> => {
         try {
             return await translator.translate(request);

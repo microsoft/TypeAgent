@@ -1,11 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatView, setContent } from "./chatView";
+import { _arrayBufferToBase64, ChatView, setContent } from "./chatView";
 import {
     iconMicrophone,
     iconMicrophoneListening,
     iconMicrophoneDisabled,
+    iconCamera,
+    iconImage,
 } from "./icon";
 import { getClientAPI } from "./main";
 import { recognizeOnce } from "./speech";
@@ -41,7 +43,7 @@ export class ExpandableTextarea {
             }
             if (event.key === "Enter") {
                 event.preventDefault();
-                const text = this.getEditedText();
+                const text = this.getTextEntry().innerHTML;
                 if (text.length > 0) {
                     handlers.onSend(text);
                     this.textEntry.innerText = "";
@@ -108,7 +110,11 @@ export function questionInput(
 export class ChatInput {
     inputContainer: HTMLDivElement;
     textarea: ExpandableTextarea;
-    button: HTMLButtonElement;
+    micButton: HTMLButtonElement;
+    picButton: HTMLLabelElement;
+    camButton: HTMLButtonElement;
+    dragTemp: string | undefined = undefined;
+    input: HTMLInputElement;
 
     constructor(
         inputId: string,
@@ -125,14 +131,58 @@ export class ChatInput {
             onKeydown,
         });
         this.inputContainer.appendChild(this.textarea.getTextEntry());
-        this.button = document.createElement("button");
-        const mic = iconMicrophone();
-        mic.className = "clickable";
-        this.button.appendChild(mic);
-        this.button.id = buttonId;
-        this.button.className = "chat-input-button";
-        this.inputContainer.appendChild(this.button);
-        this.button.addEventListener("click", async () => {
+
+        this.textarea.getTextEntry().ondragenter = (e: DragEvent) => {
+            e.preventDefault();
+            console.log(e);
+
+            if (this.dragTemp === undefined) {
+                this.dragTemp = this.textarea.getTextEntry().innerHTML;
+            }
+
+            console.log("enter " + this.dragTemp);
+
+            this.textarea.getTextEntry().innerText = "Drop image files here...";
+            this.textarea.getTextEntry().classList.add("chat-input-drag");
+        };
+
+        this.textarea.getTextEntry().ondragleave = (e: DragEvent) => {
+            this.textarea.getTextEntry().classList.remove("chat-input-drag");
+
+            if (this.dragTemp) {
+                this.textarea.getTextEntry().innerHTML = this.dragTemp;
+                this.dragTemp = undefined;
+            }
+            e.preventDefault();
+
+            console.log("leave " + this.dragTemp);
+        };
+
+        this.textarea.getTextEntry().ondrop = async (e: DragEvent) => {
+            console.log(e);
+
+            this.textarea.getTextEntry().classList.remove("chat-input-drag");
+            if (this.dragTemp) {
+                this.textarea.getTextEntry().innerHTML = this.dragTemp;
+            } else {
+                this.clear();
+            }
+
+            this.dragTemp = undefined;
+
+            if (e.dataTransfer != null && e.dataTransfer.files.length > 0) {
+                this.loadImageFile(e.dataTransfer.files[0]);
+            }
+
+            e.preventDefault();
+        };
+
+        this.micButton = document.createElement("button");
+        this.micButton.appendChild(iconMicrophone());
+        this.micButton.id = buttonId;
+        this.micButton.className = "chat-input-button";
+        this.inputContainer.appendChild(this.micButton);
+        this.micButton.addEventListener("click", async () => {
             const useLocalWhisper =
                 await getClientAPI().getLocalWhisperStatus();
             if (useLocalWhisper) {
@@ -153,13 +203,36 @@ export class ChatInput {
             }
         });
 
+        this.input = document.createElement("input");
+        this.input.type = "file";
+        this.input.classList.add("chat-message-hidden");
+        this.input.id = "image_upload";
+        this.inputContainer.append(this.input);
+        this.input.accept = "image/*,.jpg,.png,.gif";
+        this.input.onchange = () => {
+            if (this.input.files && this.input.files?.length > 0) {
+                this.loadImageFile(this.input.files[0]);
+            }
+        };
+
+        this.picButton = document.createElement("label");
+        this.picButton.htmlFor = this.input.id;
+        this.picButton.appendChild(iconImage());
+        this.picButton.className = "chat-input-button";
+        this.inputContainer.appendChild(this.picButton);
+
+        this.camButton = document.createElement("button");
+        this.camButton.appendChild(iconCamera());
+        this.camButton.className = "chat-input-button";
+        this.inputContainer.appendChild(this.camButton);
+
         const listeningMic = iconMicrophoneListening();
         listeningMic.className = "chat-message-hidden";
-        this.button.appendChild(listeningMic);
+        this.micButton.appendChild(listeningMic);
 
         const disabledMic = iconMicrophoneDisabled();
         disabledMic.className = "chat-message-hidden";
-        this.button.appendChild(disabledMic);
+        this.micButton.appendChild(disabledMic);
 
         getSpeechToken().then((result) => {
             if (result == undefined) {
@@ -174,8 +247,28 @@ export class ChatInput {
         });
     }
 
+    async loadImageFile(file: File) {
+        let buffer: ArrayBuffer = await file.arrayBuffer();
+
+        let dropImg: HTMLImageElement = document.createElement("img");
+        let mimeType = file.name
+            .toLowerCase()
+            .substring(file.name.lastIndexOf(".") + 1, file.name.length);
+
+        if (file.name.toLowerCase().endsWith(".jpg")) {
+            mimeType = "jpeg";
+        }
+
+        dropImg.src =
+            `data:image/${mimeType};base64,` + _arrayBufferToBase64(buffer);
+        dropImg.className = "chat-inpput-dropImage";
+
+        this.textarea.getTextEntry().append(dropImg);
+    }
+
     clear() {
         this.textarea.getTextEntry().innerText = "";
+        this.dragTemp = undefined;
     }
 
     getInputContainer() {
