@@ -11,25 +11,8 @@ export type Entity = {
 };
 
 export type ChatResponseAction =
-    | GenerateResponseAction
-    | LookupAndGenerateResponseAction;
-
-// do not use this action if the request can be handled by any other action
-// this is the way to handle requests for general chat information like "what is the weather" or "tell me a joke"
-// prefer GenerateResponseAction over switching to a different assistant if the request is for general chat information
-export interface GenerateResponseAction {
-    actionName: "generateResponse";
-    parameters: {
-        // the original request from the user
-        originalRequest: string;
-        // the generated text to show the user; this should be a complete response to the user's request
-        generatedText: string;
-        // ALL the actions and entities present in the text of the user's request
-        userRequestEntities: Entity[];
-        // ALL the actions and entities present in the generated text
-        generatedTextEntities: Entity[];
-    };
-}
+    | LookupAndGenerateResponseAction
+    | GenerateResponseAction;
 
 export type DateVal = {
     day: number;
@@ -71,7 +54,7 @@ export type TermFilter = {
     timeRange?: DateTimeRange | undefined; // in this time range
 };
 
-// DO NOT use this action for a request for information stored in application memory, such as a list, playlist, album, table etc.; instead use the information retrieval actions for the specific application storage
+// for memory objects like lists, tables, and other data structures, use the memory object actions instead of this action
 // this action is used to lookup information from past conversations or the internet and generate a response based on the lookup results
 export interface LookupAndGenerateResponseAction {
     actionName: "lookupAndGenerateResponse";
@@ -86,5 +69,21 @@ export interface LookupAndGenerateResponseAction {
         // the search strings to look up on the user's behalf should be specific enough to return the correct information
         // it is recommended to include the same entities as in the user request
         internetLookups?: string[];
+    };
+}
+
+// this is the way to handle requests for known information that is not stored in application memory or conversation memory, such as facts, definitions, explanations, or other information that can be generated without a lookup
+// this action is never used when the request is for private information from past conversations including private events, plans, projects in progress, and other items from discussions with team members or the assistant, unless the information is present in the chat history
+export interface GenerateResponseAction {
+    actionName: "generateResponse";
+    parameters: {
+        // the original request from the user
+        originalRequest: string;
+        // the generated text to show the user; this should be a complete response to the user's request
+        generatedText: string;
+        // ALL the actions and entities present in the text of the user's request
+        userRequestEntities: Entity[];
+        // ALL the actions and entities present in the generated text
+        generatedTextEntities: Entity[];
     };
 }

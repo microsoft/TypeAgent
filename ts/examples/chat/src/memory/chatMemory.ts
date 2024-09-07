@@ -232,7 +232,10 @@ export async function runChatMemory(): Promise<void> {
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, importChatDef());
         const chatPath = namedArgs.chatPath ?? "/data/testChat/transcript.txt";
-        await loadConversation(context, path.parse(chatPath).name);
+        const addToCurrent = namedArgs.addToCurrent;
+        if (!addToCurrent) {
+            await loadConversation(context, path.parse(chatPath).name);
+        }
         printer.writeLine(`Importing ${chatPath}`);
 
         const chatText = await readAllText(chatPath);
@@ -241,7 +244,9 @@ export async function runChatMemory(): Promise<void> {
         const lengthMs = 1000 * 60 * 60; // 60 minutes
         const baseLineMs = lengthMs / blocks.length; // Average, these many minutes per block
         const chatDate = new Date(2023, 4, 1, 9);
-        await context.conversation.messages.clear();
+        if (!addToCurrent) {
+            await context.conversation.messages.clear();
+        }
         for (let tBlock of timestampBlocks(
             blocks,
             chatDate,
@@ -265,6 +270,11 @@ export async function runChatMemory(): Promise<void> {
                 chatPath: {
                     description: "file path",
                     type: "path",
+                },
+                addToCurrent: {
+                    description: "Add to current conversation",
+                    type: "boolean",
+                    defaultValue: false,
                 },
             },
         };
