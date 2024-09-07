@@ -402,6 +402,27 @@ export function supportsStreaming(
     return "completeStream" in model;
 }
 
+// NOTE: these are not complete
+type ChatCompletion = {
+    id: string;
+    choices: {
+        message?: {
+            content?: string | null;
+            role: "assistant";
+        };
+    }[];
+};
+
+type ChatCompletionChunk = {
+    id: string;
+    choices: {
+        delta: {
+            content?: string | null;
+            role: "assistant";
+        };
+    }[];
+};
+
 /**
  * Create a client for an Open AI chat model
  *  createChatModel()
@@ -478,7 +499,7 @@ export function createChatModel(
             return result;
         }
 
-        const data = result.data as { choices: { message: PromptSection }[] };
+        const data = result.data as ChatCompletion;
         if (!data.choices || data.choices.length === 0) {
             return error("No choices returned");
         }
@@ -487,11 +508,7 @@ export function createChatModel(
             responseCallback(params, data);
         }
 
-        if (typeof data.choices[0].message?.content === "string") {
-            return success(data.choices[0].message?.content);
-        }
-
-        return success("<multimodal> content");
+        return success(data.choices[0].message?.content ?? "");
     }
 
     async function completeStream(
@@ -534,19 +551,9 @@ export function createChatModel(
                     if (evt.data === "[DONE]") {
                         break;
                     }
-                    const data = JSON.parse(evt.data) as {
-                        choices: { delta: PromptSection }[];
-                    };
+                    const data = JSON.parse(evt.data) as ChatCompletionChunk;
                     if (data.choices && data.choices.length > 0) {
-                        let delta: string = "";
-                        if (
-                            typeof data.choices[0].delta?.content === "string"
-                        ) {
-                            delta = data.choices[0].delta?.content;
-                        } else {
-                            delta = "<multimodal content>";
-                        }
-
+                        const delta = data.choices[0].delta?.content ?? "";
                         if (delta) {
                             yield delta;
                         }
