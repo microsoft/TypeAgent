@@ -703,7 +703,6 @@ export class RequestCommandHandler implements CommandHandler {
                 [],
                 "user",
                 context.requestId,
-                undefined,
                 attachments,
             );
         }

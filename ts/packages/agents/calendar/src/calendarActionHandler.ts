@@ -23,9 +23,6 @@ import {
 } from "./calendarQueryHelper.js";
 import {
     SessionContext,
-    Entity,
-    ImpressionInterpreter,
-    defaultImpressionInterpreter,
     createTurnImpressionFromDisplay,
     createTurnImpressionFromError,
     AppAction,
@@ -50,7 +47,6 @@ type CalendarActionContext = {
     calendarClient: CalendarClient | undefined;
     graphEventIds: GraphEventRefIds[] | undefined;
     mapGraphEntity: Map<string, GraphEntity> | undefined;
-    interpreter: ImpressionInterpreter;
 };
 
 async function initializeCalendarContext() {
@@ -58,7 +54,6 @@ async function initializeCalendarContext() {
         calendarClient: undefined,
         graphEventIds: undefined,
         mapGraphEntity: undefined,
-        interpreter: createImpressionInterpreter(),
     };
 }
 
@@ -107,28 +102,6 @@ function getLocalEventId(
         }
     }
     return localEventId;
-}
-
-function createImpressionInterpreter(): ImpressionInterpreter {
-    return {
-        entityToText,
-        getEntityId,
-    };
-
-    function entityToText(entity: Entity): string {
-        const gentity = entity.value as GraphEntity;
-        return (
-            defaultImpressionInterpreter.entityToText(entity) +
-            "\n" +
-            JSON.stringify(gentity.localId, undefined, 2) +
-            "\n"
-        );
-    }
-
-    function getEntityId(entity: Entity): string | undefined {
-        const gentity = entity.value as GraphEntity;
-        return gentity ? gentity.localId : undefined;
-    }
 }
 
 async function updateCalendarContext(
@@ -407,14 +380,10 @@ export async function handleCalendarAction(
                                 {
                                     name: `${actionEvent.description}`,
                                     type: ["event"],
-                                    value: calendarContext.mapGraphEntity?.get(
-                                        localId,
-                                    ) as any,
-                                    interpreter: calendarContext.interpreter,
-                                } as Entity, // Add 'as Entity' to specify the type
+                                    additionalEntityText: localId,
+                                    uniqueId: localId,
+                                },
                             ];
-                            result.impressionInterpreter =
-                                calendarContext.interpreter;
 
                             return result;
                         }
@@ -639,14 +608,10 @@ export async function handleCalendarAction(
                             {
                                 name: `${actionEvent.description}`,
                                 type: ["event"],
-                                value: calendarContext.mapGraphEntity?.get(
-                                    localId,
-                                ) as any,
-                                interpreter: calendarContext.interpreter,
-                            } as Entity,
+                                additionalEntityText: localId,
+                                uniqueId: localId,
+                            },
                         ];
-                        result.impressionInterpreter =
-                            calendarContext.interpreter;
                         return result;
                     }
                 } else {
@@ -732,15 +697,11 @@ export async function handleCalendarAction(
                                         {
                                             name: `${meeting.subject}`,
                                             type: ["event"],
-                                            value: calendarContext.mapGraphEntity?.get(
+                                            additionalEntityText:
                                                 lastLocalEventId,
-                                            ) as any,
-                                            interpreter:
-                                                calendarContext.interpreter,
-                                        } as Entity,
+                                            uniqueId: lastLocalEventId,
+                                        },
                                     ];
-                                    result.impressionInterpreter =
-                                        calendarContext.interpreter;
                                     return result;
                                 } else {
                                     // Could happen because the calendar event was deleted
