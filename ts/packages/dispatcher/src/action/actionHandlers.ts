@@ -220,7 +220,6 @@ async function executeAction(
             result.entities,
             "assistant",
             context.requestId,
-            result.impressionInterpreter,
         );
     }
     return result;
