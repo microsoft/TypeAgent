@@ -9,8 +9,9 @@ import {
     Storage,
     TurnImpression,
     createTurnImpressionFromDisplay,
+    createTurnImpressionFromLiteral,
 } from "@typeagent/agent-sdk";
-import { DescribeAction, PhotoAction } from "./photoSchema.js";
+import { AnswerImageQuestionAction, PhotoAction } from "./photoSchema.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -66,36 +67,11 @@ async function handlePhotoAction(
     photoContext: ActionContext<PhotoActionContext>,
 ) {
     let result: TurnImpression | undefined = undefined;
-    let displayText: string | undefined = undefined;
     switch (action.actionName) {
-        case "describeImage": {
-            const addAction = action as DescribeAction;
-            console.log(
-                `Describing Image`,
-                //`Adding items: ${addAction.parameters.items} to list ${addAction.parameters.listName}`,
-            );
-            // if (listContext.store !== undefined) {
-            //     listContext.store.addItems(
-            //         addAction.parameters.listName,
-            //         addAction.parameters.items,
-            //     );
-            //     await listContext.store.save();
-            //     displayText = `Added items: ${addAction.parameters.items} to list ${addAction.parameters.listName}`;
-            //     result = createTurnImpressionFromDisplay(displayText);
-            //     result.literalText = `Added item: ${addAction.parameters.items} to list ${addAction.parameters.listName}`;
-            //     result.entities = [
-            //         {
-            //             name: addAction.parameters.listName,
-            //             type: ["list"],
-            //         },
-            //     ];
-            //     for (const item of addAction.parameters.items) {
-            //         result.entities.push({
-            //             name: item,
-            //             type: ["item"],
-            //         });
-            //     }
-            // }
+        case "answerImageQuestion": {
+            const answerAction = action as AnswerImageQuestionAction;
+            const literalText = `Can't yet answer question: ${answerAction.parameters.questionText}`;
+            result = createTurnImpressionFromLiteral(literalText);
             break;
         }
         default:
