@@ -6,19 +6,23 @@ import {
     SessionContext,
     TopLevelTranslatorConfig,
 } from "@typeagent/agent-sdk";
-import { getDispatcherConfig } from "../../utils/config.js";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
-import { getAppAgentName } from "../../translation/agentTranslators.js";
-import { getModuleAgent } from "../../agent/agentConfig.js";
-import { loadInlineAgent } from "../../agent/inlineAgentHandlers.js";
+import {
+    convertToTranslatorConfigs,
+    getAppAgentName,
+    TranslatorConfig,
+    TranslatorConfigProvider,
+} from "../../translation/agentTranslators.js";
 import { createSessionContext } from "../../action/actionHandlers.js";
+import { AppAgentProvider } from "../../agent/agentProvider.js";
 import registerDebug from "debug";
+import { getTranslatorActionInfo } from "../../translation/actionInfo.js";
 
 const debug = registerDebug("typeagent:agents");
 
 type AppAgentRecord = {
     name: string;
-    type: "module" | "inline";
+    provider: AppAgentProvider;
     enabled: Set<string>;
     config: TopLevelTranslatorConfig;
     appAgent?: AppAgent | undefined;
@@ -26,19 +30,65 @@ type AppAgentRecord = {
     sessionContextP?: Promise<SessionContext> | undefined;
 };
 
-export class AppAgentManager {
-    private readonly agents: Map<string, AppAgentRecord>;
-    constructor(configs: Map<string, TopLevelTranslatorConfig>) {
-        this.agents = new Map<string, AppAgentRecord>(
-            Array.from(configs.entries()).map(([name, config]) => [
+export class AppAgentManager implements TranslatorConfigProvider {
+    private readonly agents = new Map<string, AppAgentRecord>();
+    private readonly translatorConfigs = new Map<string, TranslatorConfig>();
+    private readonly injectedTranslatorForActionName = new Map<
+        string,
+        string
+    >();
+
+    public isTranslator(translatorName: string) {
+        return this.agents.has(translatorName);
+    }
+
+    public async addProvider(provider: AppAgentProvider) {
+        for (const name of provider.getAppAgentNames()) {
+            // TODO: detect duplicate names
+            const config = await provider.getAppAgentConfig(name);
+            this.agents.set(name, {
                 name,
-                {
-                    name,
-                    type: getDispatcherConfig().agents[name].type ?? "inline",
-                    config,
-                    enabled: new Set(),
-                },
-            ]),
+                provider,
+                enabled: new Set(),
+                config,
+            });
+
+            // TODO: detect duplicate names
+            const translatorConfigs = convertToTranslatorConfigs(name, config);
+            const entries = Object.entries(translatorConfigs);
+            for (const [name, config] of entries) {
+                this.translatorConfigs.set(name, config);
+                if (config.injected) {
+                    for (const info of getTranslatorActionInfo(config, name)) {
+                        this.injectedTranslatorForActionName.set(
+                            info.name,
+                            name,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    public getTranslatorConfig(translatorName: string) {
+        const config = this.translatorConfigs.get(translatorName);
+        if (config === undefined) {
+            throw new Error(`Unknown translator: ${translatorName}`);
+        }
+        return config;
+    }
+
+    public getTranslatorConfigs() {
+        return Array.from(this.translatorConfigs.entries());
+    }
+
+    public getInjectedTranslatorForActionName(actionName: string) {
+        return this.injectedTranslatorForActionName.get(actionName);
+    }
+
+    public getAppAgentConfigs() {
+        return Array.from(this.agents.entries()).map(
+            ([name, record]) => [name, record.config] as const,
         );
     }
 
@@ -64,7 +114,11 @@ export class AppAgentManager {
         context: CommandHandlerContext,
     ) {
         const appAgentName = getAppAgentName(translatorName);
-        const record = this.getRecord(appAgentName);
+        // For update, it's only if the agent does not exist.
+        const record = this.agents.get(appAgentName);
+        if (record === undefined) {
+            return;
+        }
         if (enable) {
             if (record.enabled.has(translatorName)) {
                 return;
@@ -123,7 +177,7 @@ export class AppAgentManager {
         record: AppAgentRecord,
         context: CommandHandlerContext,
     ) {
-        const appAgent = await this.ensureAppAgent(record, context);
+        const appAgent = await this.ensureAppAgent(record);
         const agentContext = await appAgent.initializeAgentContext?.();
         record.sessionContext = createSessionContext(
             record.name,
@@ -146,15 +200,9 @@ export class AppAgentManager {
         }
     }
 
-    private async ensureAppAgent(
-        record: AppAgentRecord,
-        context: CommandHandlerContext,
-    ) {
+    private async ensureAppAgent(record: AppAgentRecord) {
         if (record.appAgent === undefined) {
-            record.appAgent =
-                record.type === "module"
-                    ? await getModuleAgent(record.name)
-                    : loadInlineAgent(record.name, context);
+            record.appAgent = await record.provider.loadAppAgent(record.name);
         }
         return record.appAgent;
     }

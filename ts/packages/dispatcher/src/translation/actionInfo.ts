@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import { ISymbol, SchemaParser, NodeType } from "schema-parser";
-import { getTranslatorConfig, TranslatorConfig } from "./agentTranslators.js";
+import {
+    TranslatorConfig,
+    TranslatorConfigProvider,
+} from "./agentTranslators.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import {
     ActionTemplate,
@@ -95,10 +98,13 @@ export function getTranslatorActionInfo(
     }
 }
 
-export function getAllActionInfo(translatorNames: string[]) {
+export function getAllActionInfo(
+    translatorNames: string[],
+    provider: TranslatorConfigProvider,
+) {
     let allActionInfo = new Map<string, ActionInfo>();
     for (const name of translatorNames) {
-        const translatorConfig = getTranslatorConfig(name);
+        const translatorConfig = provider.getTranslatorConfig(name);
         if (translatorConfig.injected) {
             continue;
         }

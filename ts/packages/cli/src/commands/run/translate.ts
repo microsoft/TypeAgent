@@ -4,7 +4,7 @@
 import { Args, Command, Flags } from "@oclif/core";
 import { TranslateCommandHandler } from "agent-dispatcher";
 import { initializeCommandHandlerContext } from "agent-dispatcher";
-import { getTranslatorNames } from "agent-dispatcher";
+import { getBuiltinTranslatorNames } from "agent-dispatcher";
 
 export default class TranslateCommand extends Command {
     static args = {
@@ -18,7 +18,7 @@ export default class TranslateCommand extends Command {
     static flags = {
         translator: Flags.string({
             description: "Translator name",
-            options: getTranslatorNames(),
+            options: getBuiltinTranslatorNames(),
             multiple: true,
         }),
     };

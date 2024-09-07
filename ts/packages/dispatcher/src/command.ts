@@ -33,10 +33,6 @@ import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js"
 import { getHistoryCommandHandlers } from "./handlers/historyCommandHandler.js";
 import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
 import { TranslateCommandHandler } from "./handlers/translateCommandHandler.js";
-import {
-    getTranslatorConfig,
-    getTranslatorConfigs,
-} from "./translation/agentTranslators.js";
 import { processRequests, unicodeChar } from "./utils/interactive.js";
 /* ==Experimental== */
 import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
@@ -299,7 +295,9 @@ export function getSettingSummary(context: CommandHandlerContext) {
 
     const translators = Array.from(
         new Set(
-            ordered.map((name) => getTranslatorConfig(name).emojiChar),
+            ordered.map(
+                (name) => context.agents.getTranslatorConfig(name).emojiChar,
+            ),
         ).values(),
     );
     prompt.push("  [", translators.join(""));
@@ -328,9 +326,9 @@ export function getSettingSummary(context: CommandHandlerContext) {
 }
 
 export function getTranslatorNameToEmojiMap(context: CommandHandlerContext) {
-    const emojis = getTranslatorConfigs().map(
-        ([name, config]) => [name, config.emojiChar] as const,
-    );
+    const emojis = context.agents
+        .getTranslatorConfigs()
+        .map(([name, config]) => [name, config.emojiChar] as const);
 
     const tMap = new Map<string, string>(emojis);
     tMap.set(DispatcherName, "🤖");

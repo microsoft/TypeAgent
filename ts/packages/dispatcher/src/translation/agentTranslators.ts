@@ -2,15 +2,19 @@
 // Licensed under the MIT License.
 
 import { createJsonTranslatorFromSchemaDef } from "common-utils";
-import { AppAction, HierarchicalTranslatorConfig } from "@typeagent/agent-sdk";
+import {
+    AppAction,
+    HierarchicalTranslatorConfig,
+    TopLevelTranslatorConfig,
+} from "@typeagent/agent-sdk";
 import { TypeChatJsonTranslator } from "typechat";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { getMultipleActionSchemaDef } from "./systemActionsInlineSchema.js";
 import { TranslatorSchemaDef, composeTranslatorSchemas } from "common-utils";
-import { getTranslatorActionInfo } from "./actionInfo.js";
 
 import registerDebug from "debug";
-import { getAppAgentConfigs } from "../agent/agentConfig.js";
+import { getBuiltinAppAgentConfigs } from "../agent/agentConfig.js";
+import { loadTranslatorSchemaConfig } from "../utils/loadSchemaConfig.js";
 
 const debugConfig = registerDebug("typeagent:translator:config");
 
@@ -32,6 +36,11 @@ export type TranslatorConfig = {
     actionDefaultEnabled: boolean;
     transient: boolean;
 };
+
+export interface TranslatorConfigProvider {
+    getTranslatorConfig(translatorName: string): TranslatorConfig;
+    getTranslatorConfigs(): [string, TranslatorConfig][];
+}
 
 function collectTranslatorConfigs(
     translatorConfigs: { [key: string]: TranslatorConfig },
@@ -73,10 +82,28 @@ function collectTranslatorConfigs(
     }
 }
 
+export function convertToTranslatorConfigs(
+    name: string,
+    config: TopLevelTranslatorConfig,
+): Record<string, TranslatorConfig> {
+    const translatorConfigs: Record<string, TranslatorConfig> = {};
+    const emojiChar = config.emojiChar;
+    collectTranslatorConfigs(
+        translatorConfigs,
+        config,
+        name,
+        emojiChar,
+        true, // default to true if not specified
+        true, // default to true if not specified
+        false, // default to false if not specified
+    );
+    return translatorConfigs;
+}
+
 const translatorConfigs: { [key: string]: TranslatorConfig } =
     await (async () => {
         const translatorConfigs = {};
-        const configs = await getAppAgentConfigs();
+        const configs = await getBuiltinAppAgentConfigs();
         for (const [name, config] of configs.entries()) {
             const emojiChar = config.emojiChar;
             collectTranslatorConfigs(
@@ -92,30 +119,39 @@ const translatorConfigs: { [key: string]: TranslatorConfig } =
         return translatorConfigs;
     })();
 
-export function getTranslatorNames() {
+export function getBuiltinTranslatorNames() {
     return Object.keys(translatorConfigs);
 }
 
-export function getDefaultTranslatorName() {
+export function getDefaultBuiltinTranslatorName() {
     // Default to the first translator for now.
-    return getTranslatorNames()[0];
+    return getBuiltinTranslatorNames()[0];
 }
 
-export function getTranslatorConfigs() {
-    return Object.entries(translatorConfigs);
+export function getBuiltinTranslatorConfigProvider(): TranslatorConfigProvider {
+    return {
+        getTranslatorConfig(translatorName: string) {
+            const config = translatorConfigs[translatorName];
+            if (!config) {
+                throw new Error(`Unknown translator: ${translatorName}`);
+            }
+            return config;
+        },
+        getTranslatorConfigs() {
+            return Object.entries(translatorConfigs);
+        },
+    };
+}
+
+export function loadBuiltinTranslatorSchemaConfig(translatorName: string) {
+    return loadTranslatorSchemaConfig(
+        translatorName,
+        getBuiltinTranslatorConfigProvider(),
+    );
 }
 
 export function getAppAgentName(translatorName: string) {
     return translatorName.split(".")[0];
-}
-
-export function getTranslatorConfig(translatorName: string): TranslatorConfig {
-    const config = translatorConfigs[translatorName];
-
-    if (config === undefined) {
-        throw new Error(`Translator '${translatorName}' not found in config`);
-    }
-    return config;
 }
 
 // A list of translator factory methods, keyed by the config.SchemaType name
@@ -129,7 +165,7 @@ export type ChangeAssistantAction = {
     actionName: "changeAssistantAction";
     parameters: {
         assistant: string;
-        request: string; // this is constrainted to active translators in the LLM schema
+        request: string; // this is constrained to active translators in the LLM schema
     };
 };
 
@@ -141,10 +177,11 @@ export function isChangeAssistantAction(
 
 function getChangeAssistantSchemaDef(
     translatorName: string,
+    provider: TranslatorConfigProvider,
     activeTranslators: { [key: string]: boolean },
 ): TranslatorSchemaDef | undefined {
     // Default to no switching if active translator isn't passed in.
-    const translators = getTranslatorConfigs().filter(
+    const translators = provider.getTranslatorConfigs().filter(
         ([name, translatorConfig]) =>
             name !== translatorName && // don't include itself
             !translatorConfig.injected && // don't include injected translators
@@ -186,55 +223,36 @@ function getTranslatorSchemaDef(
     };
 }
 
-let injectedTranslatorConfig: [string, TranslatorConfig][] | undefined;
-const injectedTranslatorForActionName = new Map<string, string>();
-function ensureInjectedTranslatorConfig() {
-    if (injectedTranslatorConfig === undefined) {
-        // Cache some info.
-        injectedTranslatorConfig = getTranslatorConfigs().filter(
-            ([_, config]) => config.injected,
-        );
-
-        for (const [name, config] of injectedTranslatorConfig) {
-            for (const info of getTranslatorActionInfo(config, name)) {
-                injectedTranslatorForActionName.set(info.name, name);
-            }
-        }
-    }
-    return injectedTranslatorConfig;
-}
-
 function getInjectedTranslatorConfigs(
     translatorName: string,
+    provider: TranslatorConfigProvider,
     activeTranslators: { [key: string]: boolean } | undefined,
 ) {
     if (activeTranslators === undefined) {
         return [];
     }
-    return ensureInjectedTranslatorConfig()
+    return provider
+        .getTranslatorConfigs()
         .filter(
             ([name, config]) =>
-                (name !== translatorName && // don't include itself
-                    activeTranslators[name]) ??
-                config.defaultEnabled,
+                config.injected &&
+                name !== translatorName && // don't include itself
+                (activeTranslators[name] ?? config.defaultEnabled),
         )
         .map(([_, config]) => config);
-}
-
-export function getInjectedTranslatorForActionName(actionName: string) {
-    ensureInjectedTranslatorConfig();
-    return injectedTranslatorForActionName.get(actionName);
 }
 
 function getInjectedSchemaDefs(
     type: string,
     translatorName: string,
+    provider: TranslatorConfigProvider,
     activeTranslators: { [key: string]: boolean } | undefined,
     multipleActions: boolean = false,
 ): TranslatorSchemaDef[] {
     // Add all injected schemas
     const injectSchemaConfigs = getInjectedTranslatorConfigs(
         translatorName,
+        provider,
         activeTranslators,
     );
     const injectedSchemaDefs = injectSchemaConfigs.map(getTranslatorSchemaDef);
@@ -244,7 +262,11 @@ function getInjectedSchemaDefs(
 
     // Add change assistant schema if needed
     const changeAssistantSchemaDef = activeTranslators
-        ? getChangeAssistantSchemaDef(translatorName, activeTranslators)
+        ? getChangeAssistantSchemaDef(
+              translatorName,
+              provider,
+              activeTranslators,
+          )
         : undefined;
 
     if (changeAssistantSchemaDef) {
@@ -266,6 +288,7 @@ function getInjectedSchemaDefs(
 function getTranslatorSchemaDefs(
     translatorConfig: TranslatorConfig,
     translatorName: string,
+    provider: TranslatorConfigProvider,
     activeTranslators: { [key: string]: boolean } | undefined,
     multipleActions: boolean = false,
 ): TranslatorSchemaDef[] {
@@ -274,6 +297,7 @@ function getTranslatorSchemaDefs(
         ...getInjectedSchemaDefs(
             translatorConfig.schemaType,
             translatorName,
+            provider,
             activeTranslators,
             multipleActions,
         ),
@@ -289,12 +313,13 @@ function getTranslatorSchemaDefs(
  */
 export function loadAgentJsonTranslator(
     translatorName: string,
+    provider: TranslatorConfigProvider,
     model?: string,
     activeTranslators?: { [key: string]: boolean },
     multipleActions: boolean = false,
 ) {
-    const translatorConfig = getTranslatorConfig(translatorName);
     // See if we have a registered factory method for this translator
+    const translatorConfig = provider.getTranslatorConfig(translatorName);
     const factory = translatorFactories[translatorConfig.schemaType];
     if (factory) {
         return factory(translatorConfig);
@@ -305,6 +330,7 @@ export function loadAgentJsonTranslator(
         getTranslatorSchemaDefs(
             translatorConfig,
             translatorName,
+            provider,
             activeTranslators,
             multipleActions,
         ),
@@ -317,16 +343,18 @@ export function loadAgentJsonTranslator(
 // For CLI, replicate the behavior of loadAgentJsonTranslator to get the schema
 export function getFullSchemaText(
     translatorName: string,
+    provider: TranslatorConfigProvider,
     changeAssistant: boolean,
     multipleActions: boolean,
 ) {
-    const translatorConfig = getTranslatorConfig(translatorName);
+    const translatorConfig = provider.getTranslatorConfig(translatorName);
     if (translatorFactories[translatorConfig.schemaType] !== undefined) {
         throw new Error("Can't get schema for customfactory");
     }
     const schemaDefs = getTranslatorSchemaDefs(
         translatorConfig,
         translatorName,
+        provider,
         changeAssistant ? {} : undefined,
         multipleActions,
     );

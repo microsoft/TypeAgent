@@ -26,16 +26,14 @@ import {
     Session,
     SessionOptions,
     configAgentCache,
-    defaultSessionConfig,
+    getDefaultSessionConfig,
 } from "../../session/session.js";
 import {
-    getDefaultTranslatorName,
-    getTranslatorNames,
+    getDefaultBuiltinTranslatorName,
     loadAgentJsonTranslator,
-    getTranslatorConfigs,
+    TranslatorConfigProvider,
 } from "../../translation/agentTranslators.js";
 import { getCacheFactory } from "../../utils/cacheFactory.js";
-import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
 import { createServiceHost } from "../serviceHost/serviceHostCommandHandler.js";
 import {
     ClientIO,
@@ -50,8 +48,9 @@ import { getUserId } from "../../utils/userData.js";
 import { DispatcherName } from "../requestCommandHandler.js";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { conversation as Conversation } from "knowledge-processor";
-import { getAppAgentConfigs } from "../../agent/agentConfig.js";
 import { AppAgentManager } from "./appAgentManager.js";
+import { getBuiltinAppAgentProvider } from "../../agent/agentConfig.js";
+import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
 
 export interface CommandResult {
     error?: boolean;
@@ -112,6 +111,7 @@ export function getTranslator(
     const config = context.session.getConfig();
     const newTranslator = loadAgentJsonTranslator(
         translatorName,
+        context.agents,
         config.models.translator,
         config.switch.inline ? getActiveTranslators(context) : undefined,
         config.multipleActions,
@@ -121,12 +121,17 @@ export function getTranslator(
     return newTranslator;
 }
 
-async function getAgentCache(session: Session, logger: Logger | undefined) {
+async function getAgentCache(
+    session: Session,
+    provider: TranslatorConfigProvider,
+    logger: Logger | undefined,
+) {
     const cacheFactory = getCacheFactory();
     const explainerName = session.explainerName;
     const agentCache = cacheFactory.create(
         explainerName,
-        loadTranslatorSchemaConfig,
+        (translatorName: string) =>
+            loadTranslatorSchemaConfig(translatorName, provider),
         session.cacheConfig,
         logger,
     );
@@ -148,9 +153,8 @@ export type InitializeCommandHandlerContextOptions = SessionOptions & {
     enableServiceHost?: boolean; // default to false,
 };
 
-async function getSession(options?: InitializeCommandHandlerContextOptions) {
+async function getSession(persistSession: boolean = false) {
     let session: Session | undefined;
-    const persistSession = options?.persistSession ?? false;
     if (persistSession) {
         try {
             session = await Session.restoreLastSession();
@@ -159,28 +163,11 @@ async function getSession(options?: InitializeCommandHandlerContextOptions) {
         }
     }
     if (session === undefined) {
-        session = await Session.create(defaultSessionConfig, persistSession);
-    }
-
-    if (options) {
-        if (options.translators) {
-            // for initialization, missing translators means false
-            for (const name of getTranslatorNames()) {
-                if (options.translators[name] === undefined) {
-                    options.translators[name] = false;
-                }
-            }
-        }
-
-        if (options.actions) {
-            // for initialization, missing translators means false
-            for (const name of getTranslatorNames()) {
-                if (options.actions[name] === undefined) {
-                    options.actions[name] = false;
-                }
-            }
-        }
-        session.setConfig(options);
+        // fill in the translator/action later.
+        session = await Session.create(
+            getDefaultSessionConfig(),
+            persistSession,
+        );
     }
     return session;
 }
@@ -218,7 +205,10 @@ export async function initializeCommandHandlerContext(
         options?.explanationAsynchronousMode ?? false;
     const stdio = options?.stdio;
 
-    const session = await getSession(options);
+    const session = await getSession(options?.persistSession);
+    if (options) {
+        session.setConfig(options);
+    }
     const path = session.getSessionDirPath();
     const conversationManager = await Conversation.createConversationManager(
         "conversation",
@@ -245,10 +235,9 @@ export async function initializeCommandHandlerContext(
         serviceHost = await createServiceHost();
     }
 
-    const configs = await getAppAgentConfigs();
-
+    const agents = new AppAgentManager();
     const context: CommandHandlerContext = {
-        agents: new AppAgentManager(configs),
+        agents,
         session,
         conversationManager,
         explanationAsynchronousMode,
@@ -258,20 +247,42 @@ export async function initializeCommandHandlerContext(
 
         // Runtime context
         commandLock: createLimiter(1), // Make sure we process one command at a time.
-        agentCache: await getAgentCache(session, logger),
-        lastActionTranslatorName: getDefaultTranslatorName(), // REVIEW: just default to the first one on initialize?
+        agentCache: await getAgentCache(session, agents, logger),
+        lastActionTranslatorName: getDefaultBuiltinTranslatorName(), // REVIEW: just default to the first one on initialize?
         translatorCache: new Map<string, TypeChatJsonTranslator<object>>(),
         currentScriptDir: process.cwd(),
         chatHistory: createChatHistory(),
         logger,
         serviceHost: serviceHost,
         localWhisper: undefined,
-        transientAgents: Object.fromEntries(
-            getTranslatorConfigs()
-                .filter(([, config]) => config.transient)
-                .map(([name]) => [name, false]),
-        ),
+        transientAgents: {},
     };
+
+    await agents.addProvider(getBuiltinAppAgentProvider(context));
+
+    const translatorConfigs = agents.getTranslatorConfigs();
+    const changes: SessionOptions = { translators: {}, actions: {} };
+    const current = context.session.getConfig();
+    for (const [name, config] of translatorConfigs) {
+        if (options?.translators !== undefined) {
+            // missing entries means false
+            changes.translators![name] = options.translators[name] ?? false;
+        } else if (current.translators[name] === undefined) {
+            changes.translators![name] = config.defaultEnabled;
+        }
+
+        if (options?.actions !== undefined) {
+            // missing entries means false
+            changes.actions![name] = options.actions[name] ?? false;
+        } else if (current.actions[name] === undefined) {
+            changes.actions![name] = config.actionDefaultEnabled;
+        }
+
+        if (config.transient) {
+            context.transientAgents[name] = false;
+        }
+    }
+    context.session.setConfig(changes);
 
     context.requestIO.context = context;
 
@@ -292,7 +303,11 @@ export async function setSessionOnCommandHandlerContext(
 ) {
     context.session = session;
     await context.agents.close();
-    context.agentCache = await getAgentCache(context.session, context.logger);
+    context.agentCache = await getAgentCache(
+        context.session,
+        context.agents,
+        context.logger,
+    );
     await updateAgentRecord(context.session.getConfig().actions, context);
 }
 
@@ -300,7 +315,7 @@ export async function reloadSessionOnCommandHandlerContext(
     context: CommandHandlerContext,
     persist: boolean,
 ) {
-    const session = await getSession({ persistSession: persist });
+    const session = await getSession(persist);
     await setSessionOnCommandHandlerContext(context, session);
 }
 
@@ -328,6 +343,7 @@ export async function changeContextConfig(
         try {
             context.agentCache = await getAgentCache(
                 context.session,
+                context.agents,
                 context.logger,
             );
         } catch (e: any) {
@@ -378,12 +394,15 @@ export async function changeContextConfig(
 export function getActiveTranslatorList(context: CommandHandlerContext) {
     return Object.entries(context.session.getConfig().translators)
         .filter(
-            ([name, value]) => value && context.transientAgents[name] !== false,
+            ([name, value]) =>
+                context.agents.isTranslator(name) &&
+                value &&
+                context.transientAgents[name] !== false,
         )
         .map(([name]) => name);
 }
 
-export function getActiveTranslators(context: CommandHandlerContext) {
+function getActiveTranslators(context: CommandHandlerContext) {
     const result = { ...context.session.getConfig().translators };
     for (const [name, enabled] of Object.entries(context.transientAgents)) {
         if (enabled === false) {
@@ -431,7 +450,7 @@ async function updateAgentRecord(
     );
     for (const [translatorName, enable, p] of updateP) {
         try {
-            await context.agents.update(translatorName, enable, context);
+            await p;
         } catch (e: any) {
             context.requestIO.error(
                 `[${translatorName}]: Failed to ${enable ? "enable" : "disable"} action: ${e.message}`,
