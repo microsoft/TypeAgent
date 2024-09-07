@@ -522,26 +522,47 @@ app.whenReady().then(async () => {
     }
 
     let settingSummary: string = "";
-    ipcMain.handle(
-        "request",
-        async (_event, text: string, id: string, images: string[]) => {
-            if (typeof text !== "string" || typeof id !== "string") {
-                throw new Error("Invalid request");
-            }
-            debugShell(getPrompt(context), text);
+    async function processShellRequest(
+        text: string,
+        id: string,
+        images: string[],
+    ) {
+        if (typeof text !== "string" || typeof id !== "string") {
+            throw new Error("Invalid request");
+        }
+        debugShell(getPrompt(context), text);
 
-            await processCommand(text, context, id, images);
-            mainWindow?.webContents.send("send-demo-event", "CommandProcessed");
-            translatorSetPartialInputHandler();
-            const newSettingSummary = getSettingSummary(context);
-            if (newSettingSummary !== settingSummary) {
-                settingSummary = newSettingSummary;
-                mainWindow?.webContents.send(
-                    "setting-summary-changed",
-                    newSettingSummary,
-                    getTranslatorNameToEmojiMap(context),
-                );
-            }
+        await processCommand(text, context, id, images);
+        mainWindow?.webContents.send("send-demo-event", "CommandProcessed");
+        translatorSetPartialInputHandler();
+        const newSettingSummary = getSettingSummary(context);
+        if (newSettingSummary !== settingSummary) {
+            settingSummary = newSettingSummary;
+            mainWindow?.webContents.send(
+                "setting-summary-changed",
+                newSettingSummary,
+                getTranslatorNameToEmojiMap(context),
+            );
+        }
+    }
+
+    ipcMain.on(
+        "process-shell-request",
+        (_event, text: string, id: string, images: string[]) => {
+            processShellRequest(text, id, images)
+                .then(() =>
+                    mainWindow?.webContents.send(
+                        "process-shell-request-done",
+                        id,
+                    ),
+                )
+                .catch((error) => {
+                    mainWindow?.webContents.send(
+                        "process-shell-request-error",
+                        id,
+                        error.message,
+                    );
+                });
         },
     );
     ipcMain.on("partial-input", async (_event, text: string) => {
