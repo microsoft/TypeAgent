@@ -1,13 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type PhotoAction = DescribeAction | UnknownAction;
+export type PhotoAction = AnswerImageQuestionAction | UnknownAction;
 
-// describes an image
-export type DescribeAction = {
-    actionName: "describeImage";
+// answers a question about an image that was sent by the user
+export type AnswerImageQuestionAction = {
+    actionName: "answerImageQuestion";
     parameters: {
-        image: Uint8Array;
+        // the question asked by the user about the image
+        questionText: string;
     };
 };
 
