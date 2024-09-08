@@ -4,8 +4,8 @@
 import { SchemaConfig } from "agent-cache";
 import fs from "node:fs";
 import path from "node:path";
-import { getTranslatorConfig } from "../translation/agentTranslators.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
+import { TranslatorConfigProvider } from "../translation/agentTranslators.js";
 
 function loadSchemaConfig(schemaFile: string): SchemaConfig | undefined {
     const parseSchemaFile = path.parse(getPackageFilePath(schemaFile));
@@ -20,12 +20,15 @@ function loadSchemaConfig(schemaFile: string): SchemaConfig | undefined {
 
 const schemaConfigCache = new Map<string, SchemaConfig | undefined>();
 
-export function loadTranslatorSchemaConfig(translatorName: string) {
+export function loadTranslatorSchemaConfig(
+    translatorName: string,
+    provider: TranslatorConfigProvider,
+) {
     if (schemaConfigCache.has(translatorName)) {
         return schemaConfigCache.get(translatorName);
     }
     const schemaConfig = loadSchemaConfig(
-        getTranslatorConfig(translatorName).schemaFile,
+        provider.getTranslatorConfig(translatorName).schemaFile,
     );
     schemaConfigCache.set(translatorName, schemaConfig);
     return schemaConfig;

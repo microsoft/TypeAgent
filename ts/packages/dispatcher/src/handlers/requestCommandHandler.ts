@@ -13,7 +13,6 @@ import {
 import { CommandHandler } from "./common/commandHandler.js";
 import {
     CommandHandlerContext,
-    getAppAgent,
     getTranslator,
     getActiveTranslatorList,
     isTranslatorEnabled,
@@ -28,12 +27,7 @@ import {
     validateWildcardMatch,
 } from "../action/actionHandlers.js";
 import { unicodeChar } from "../utils/interactive.js";
-import {
-    getAppAgentName,
-    getInjectedTranslatorForActionName,
-    getTranslatorConfig,
-    isChangeAssistantAction,
-} from "../translation/agentTranslators.js";
+import { isChangeAssistantAction } from "../translation/agentTranslators.js";
 import { loadAssistantSelectionJsonTranslator } from "../translation/unknownSwitcher.js";
 import {
     MultipleAction,
@@ -58,23 +52,24 @@ async function confirmTranslation(
     requestAction: RequestAction | undefined | null;
     replacedAction?: Actions;
 }> {
-    const messages = [];
-    const requestIO = context.requestIO;
-    if (requestIO.type === "text") {
-        // Provide a one line information for text output
-        messages.push(
-            `${source}: ${chalk.blueBright(
-                ` ${requestAction.toString()}`,
-            )} ${getColorElapsedString(elapsedMs)}`,
-        );
-        messages.push();
-    }
-
     const actions = requestAction.actions;
-    const prettyStr = JSON.stringify(actions, undefined, 2);
-    messages.push(`${chalk.italic(chalk.cyanBright(prettyStr))}`);
+    const requestIO = context.requestIO;
 
     if (!context.developerMode) {
+        const messages = [];
+
+        if (requestIO.type === "text") {
+            // Provide a one line information for text output
+            messages.push(
+                `${source}: ${chalk.blueBright(
+                    ` ${requestAction.toString()}`,
+                )} ${getColorElapsedString(elapsedMs)}`,
+            );
+            messages.push();
+        }
+
+        const prettyStr = JSON.stringify(actions, undefined, 2);
+        messages.push(`${chalk.italic(chalk.cyanBright(prettyStr))}`);
         requestIO.info(messages.join("\n"));
         return { requestAction };
     }
@@ -85,7 +80,8 @@ async function confirmTranslation(
     const translatorNames = getActiveTranslatorList(context).filter(
         (name) => !name.startsWith("system."),
     );
-    const allActionInfo = getAllActionInfo(translatorNames);
+
+    const allActionInfo = getAllActionInfo(translatorNames, context.agents);
     const templateSequence = actions.toTemplateSequence(
         prefaceSingle,
         prefaceMultiple,
@@ -213,6 +209,7 @@ async function translateRequestWithTranslator(
     request: string,
     context: CommandHandlerContext,
     history?: HistoryContext,
+    attachments?: string[],
 ) {
     context.requestIO.status(
         `[${translatorName}] Translating '${request}'`,
@@ -242,13 +239,15 @@ async function translateRequestWithTranslator(
               // TODO: streaming currently doesn't not support multiple actions
               if (prop === "actionName" && !partial) {
                   const actionTranslatorName =
-                      getInjectedTranslatorForActionName(value) ??
-                      translatorName;
+                      context.agents.getInjectedTranslatorForActionName(
+                          value,
+                      ) ?? translatorName;
                   context.requestIO.status(
                       `[${actionTranslatorName}] Translating '${request}' into action '${value}'`,
                       actionTranslatorName,
                   );
-                  const config = getTranslatorConfig(actionTranslatorName);
+                  const config =
+                      context.agents.getTranslatorConfig(actionTranslatorName);
                   if (config.streamingActions?.includes(value)) {
                       streamFunction = startStreamPartialAction(
                           actionTranslatorName,
@@ -273,6 +272,7 @@ async function translateRequestWithTranslator(
         request,
         history?.promptSections,
         onProperty,
+        attachments,
     );
     translator.createRequestPrompt = orp;
 
@@ -306,6 +306,7 @@ async function findAssistantForRequest(
         getActiveTranslatorList(context).filter(
             (enabledTranslatorName) => translatorName !== enabledTranslatorName,
         ),
+        context.agents,
     );
 
     const result = await selectTranslator.translate(request);
@@ -415,8 +416,9 @@ async function finalizeAction(
 
     return new Action(
         currentAction,
-        getInjectedTranslatorForActionName(currentAction.actionName) ??
-            currentTranslatorName,
+        context.agents.getInjectedTranslatorForActionName(
+            currentAction.actionName,
+        ) ?? currentTranslatorName,
     );
 }
 
@@ -464,6 +466,7 @@ export async function translateRequest(
     request: string,
     context: CommandHandlerContext,
     history?: HistoryContext,
+    attachments?: string[],
 ): Promise<TranslationResult | undefined | null> {
     if (!context.session.bot) {
         context.requestIO.error("No translation found (GPT is off).");
@@ -492,6 +495,7 @@ export async function translateRequest(
         request,
         context,
         history,
+        attachments,
     );
     if (action === undefined) {
         return undefined;
@@ -617,7 +621,7 @@ async function requestExplain(
     // Make sure the current requestIO is captured
     const requestIO = context.requestIO;
     const notifyExplained = () => {
-        requestIO.notify("explained", {
+        requestIO.notify("explained", context.requestId, {
             time: new Date().toLocaleTimeString(),
             fromCache,
             fromUser,
@@ -643,7 +647,8 @@ async function requestExplain(
 
         if (
             action.translatorName !== undefined &&
-            getTranslatorConfig(action.translatorName).cached === false
+            context.agents.getTranslatorConfig(action.translatorName).cached ===
+                false
         ) {
             return;
         }
@@ -677,7 +682,11 @@ async function requestExplain(
 
 export class RequestCommandHandler implements CommandHandler {
     public readonly description = "Translate and explain a request";
-    public async run(request: string, context: CommandHandlerContext) {
+    public async run(
+        request: string,
+        context: CommandHandlerContext,
+        attachments?: string[],
+    ) {
         // Don't handle the request if it contains the separator
         if (request.includes(RequestAction.Separator)) {
             throw new Error(
@@ -695,12 +704,13 @@ export class RequestCommandHandler implements CommandHandler {
                 [],
                 "user",
                 context.requestId,
+                attachments,
             );
         }
         const match = await matchRequest(request, context, history);
         const translationResult =
             match === undefined // undefined means not found
-                ? await translateRequest(request, context, history)
+                ? await translateRequest(request, context, history, attachments)
                 : match; // result or null
 
         if (!translationResult) {

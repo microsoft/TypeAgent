@@ -402,6 +402,27 @@ export function supportsStreaming(
     return "completeStream" in model;
 }
 
+// NOTE: these are not complete
+type ChatCompletion = {
+    id: string;
+    choices: {
+        message?: {
+            content?: string | null;
+            role: "assistant";
+        };
+    }[];
+};
+
+type ChatCompletionChunk = {
+    id: string;
+    choices: {
+        delta: {
+            content?: string | null;
+            role: "assistant";
+        };
+    }[];
+};
+
 /**
  * Create a client for an Open AI chat model
  *  createChatModel()
@@ -478,7 +499,7 @@ export function createChatModel(
             return result;
         }
 
-        const data = result.data as { choices: { message: PromptSection }[] };
+        const data = result.data as ChatCompletion;
         if (!data.choices || data.choices.length === 0) {
             return error("No choices returned");
         }
@@ -486,12 +507,13 @@ export function createChatModel(
         if (responseCallback) {
             responseCallback(params, data);
         }
+
         return success(data.choices[0].message?.content ?? "");
     }
 
-    async function* completeStream(
+    async function completeStream(
         prompt: string | PromptSection[] | ChatMessage[],
-    ): AsyncIterableIterator<string> {
+    ): Promise<Result<AsyncIterableIterator<string>>> {
         const headerResult = await createApiHeaders(settings);
         if (!headerResult.success) {
             return headerResult;
@@ -522,21 +544,24 @@ export function createChatModel(
         if (!result.success) {
             return result;
         }
-        // Stream chunks back
-        for await (const evt of readServerEventStream(result.data)) {
-            if (evt.data === "[DONE]") {
-                break;
-            }
-            const data = JSON.parse(evt.data) as {
-                choices: { delta: PromptSection }[];
-            };
-            if (data.choices && data.choices.length > 0) {
-                const delta = data.choices[0].delta?.content ?? "";
-                if (delta) {
-                    yield delta;
+        return {
+            success: true,
+            data: (async function* () {
+                for await (const evt of readServerEventStream(result.data)) {
+                    if (evt.data === "[DONE]") {
+                        break;
+                    }
+                    const data = JSON.parse(evt.data) as ChatCompletionChunk;
+                    if (data.choices && data.choices.length > 0) {
+                        const delta = data.choices[0].delta?.content ?? "";
+                        if (delta) {
+                            yield delta;
+                        }
+                    }
                 }
-            }
-        }
+            })(),
+        };
+        // Stream chunks back
     }
 }
 

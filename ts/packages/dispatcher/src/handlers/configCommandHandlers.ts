@@ -12,8 +12,9 @@ import {
     changeContextConfig,
 } from "./common/commandHandlerContext.js";
 import {
-    getTranslatorConfigs,
-    getTranslatorNames,
+    getBuiltinTranslatorNames,
+    TranslatorConfig,
+    TranslatorConfigProvider,
 } from "../translation/agentTranslators.js";
 import { getSpotifyConfigCommandHandlers } from "./configSpotifyCommandHandlers.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
@@ -26,12 +27,16 @@ import { openai as ai } from "aiclient";
 import { SessionConfig } from "../session/session.js";
 import chalk from "chalk";
 
-function parseToggleTranslatorName(args: string[], action: boolean) {
+function parseToggleTranslatorName(
+    args: string[],
+    action: boolean,
+    provider: TranslatorConfigProvider,
+) {
     const options: any = {};
-    const translatorNames = getTranslatorNames();
+    const translatorNames = getBuiltinTranslatorNames();
     for (const arg of args) {
         if (arg === "@") {
-            for (const [name, config] of getTranslatorConfigs()) {
+            for (const [name, config] of provider.getTranslatorConfigs()) {
                 options[name] = action
                     ? config.actionDefaultEnabled
                     : config.defaultEnabled;
@@ -108,13 +113,13 @@ class AgentToggleCommandHandler implements CommandHandler {
                 log(
                     `Usage: @config ${AgentToggleCommand[this.toggle]} [-]<agent>]`,
                 );
-                const translators = getTranslatorNames().join(", ");
+                const translators = getBuiltinTranslatorNames().join(", ");
                 log(`   <agent>: ${translators}`);
             });
             return;
         }
 
-        const options = parseToggleTranslatorName(args, false);
+        const options = parseToggleTranslatorName(args, false, context.agents);
         const changed = await changeContextConfig(
             getAgentToggleOptions(this.toggle, options),
             context,

@@ -11,7 +11,9 @@ import { createRequire } from "module";
 import path from "node:path";
 
 import { createAgentProcessShim } from "./agentProcessShim.js";
+import { AppAgentProvider } from "./agentProvider.js";
 import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
+import { loadInlineAgent } from "./inlineAgentHandlers.js";
 
 export type InlineAppAgentInfo = {
     type?: undefined;
@@ -66,7 +68,7 @@ async function loadDispatcherConfigs() {
 }
 
 let appAgentConfigs: Map<string, TopLevelTranslatorConfig> | undefined;
-export async function getAppAgentConfigs() {
+export async function getBuiltinAppAgentConfigs() {
     if (appAgentConfigs === undefined) {
         appAgentConfigs = await loadDispatcherConfigs();
     }
@@ -74,8 +76,7 @@ export async function getAppAgentConfigs() {
 }
 
 function enableExecutionMode() {
-    // TODO: change default
-    return process.env.TYPEAGENT_EXECMODE === "1";
+    return process.env.TYPEAGENT_EXECMODE !== "0";
 }
 
 async function loadModuleAgent(info: ModuleAppAgentInfo): Promise<AppAgent> {
@@ -93,22 +94,40 @@ async function loadModuleAgent(info: ModuleAppAgentInfo): Promise<AppAgent> {
     return module.instantiate();
 }
 
-async function loadModuleAgents() {
-    const configs = getDispatcherConfig().agents;
-    const moduleAgents: [string, AppAgent][] = [];
-
-    for (const [name, config] of Object.entries(configs)) {
-        if (config.type === "module") {
-            moduleAgents.push([name, await loadModuleAgent(config)]);
-        }
+// Load on demand, doesn't unload for now
+const moduleAgents = new Map<string, AppAgent>();
+async function getModuleAgent(appAgentName: string) {
+    const existing = moduleAgents.get(appAgentName);
+    if (existing) return existing;
+    const config = getDispatcherConfig().agents[appAgentName];
+    if (config === undefined || config.type !== "module") {
+        throw new Error(`Unable to load app agent name: ${appAgentName}`);
     }
-    return moduleAgents;
+    const agent = await loadModuleAgent(config);
+    moduleAgents.set(appAgentName, agent);
+    return agent;
 }
 
-let moduleAgents: [string, AppAgent][] | undefined;
-export async function getModuleAgents() {
-    if (moduleAgents === undefined) {
-        moduleAgents = await loadModuleAgents();
-    }
-    return moduleAgents;
+export function getBuiltinAppAgentProvider(
+    context: CommandHandlerContext,
+): AppAgentProvider {
+    return {
+        getAppAgentNames() {
+            return Object.keys(getDispatcherConfig().agents);
+        },
+        async getAppAgentConfig(appAgentName: string) {
+            const configs = await getBuiltinAppAgentConfigs();
+            const config = configs.get(appAgentName);
+            if (config === undefined) {
+                throw new Error(`Invalid app agent: ${appAgentName}`);
+            }
+            return config;
+        },
+        async loadAppAgent(appAgentName: string) {
+            const type = getDispatcherConfig().agents[appAgentName].type;
+            return type === "module"
+                ? await getModuleAgent(appAgentName)
+                : loadInlineAgent(appAgentName, context);
+        },
+    };
 }

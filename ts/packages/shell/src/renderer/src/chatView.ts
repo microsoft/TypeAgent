@@ -3,7 +3,6 @@
 
 import { IdGenerator, getClientAPI } from "./main";
 import { ChatInput, ExpandableTextarea, questionInput } from "./chatInput";
-import { SpeechInfo } from "./speech";
 import { SearchMenu } from "./search";
 import { AnsiUp } from "ansi_up";
 import { iconCheckMarkCircle, iconX, iconRoadrunner } from "./icon";
@@ -17,6 +16,7 @@ import {
 } from "../../preload/electronTypes";
 import { ActionCascade } from "./ActionCascade";
 import { DynamicDisplay } from "@typeagent/agent-sdk";
+import { TTS } from "./tts";
 
 export interface InputChoice {
     element: HTMLElement;
@@ -223,9 +223,12 @@ export class PlayerShimCursor {
 
 class MessageContainer {
     public readonly div: HTMLDivElement;
+    public get source() {
+        return this._source;
+    }
     constructor(
         className: string,
-        source: string,
+        private _source: string,
         agents: Map<string, string>,
         beforeElem: Element,
     ) {
@@ -244,7 +247,7 @@ class MessageContainer {
         const agentIconDiv = document.createElement("div");
         agentIconDiv.className = "agent-icon";
         agentIconDiv.innerText = agents
-            .get(source as string)
+            .get(_source)
             ?.toString()
             .substring(0, 1) as string;
         div.append(agentIconDiv);
@@ -263,12 +266,20 @@ class MessageContainer {
         this.div = div;
     }
 
+    public getMessage() {
+        const message = this.div.lastChild?.previousSibling as HTMLDivElement;
+        if (message === undefined) {
+            return undefined;
+        }
+        return message.innerText;
+    }
     public setMessage(text: string, source: string, sourceIcon?: string) {
         const message = this.div.lastChild?.previousSibling as HTMLDivElement;
         if (message === undefined) {
             return undefined;
         }
 
+        this._source = source;
         // set source and source icon
         (this.div.firstChild?.firstChild as HTMLDivElement).innerText = source; // name
         const iconDiv: HTMLDivElement = this.div.children[1] as HTMLDivElement;
@@ -302,6 +313,7 @@ class MessageGroup {
 
     private completed = false;
     constructor(
+        private readonly chatView: ChatView,
         request: string,
         container: HTMLDivElement,
         requestPromise: Promise<void>,
@@ -348,6 +360,17 @@ class MessageGroup {
             );
         }
         this.updateStatusMessageDivState();
+        const tts = this.chatView.tts;
+        if (tts) {
+            for (const agentMessage of this.agentMessages) {
+                if (agentMessage.source === "chat") {
+                    const message = agentMessage.getMessage();
+                    if (message) {
+                        tts.speak(message);
+                    }
+                }
+            }
+        }
     }
 
     private updateStatusMessageDivState() {
@@ -416,7 +439,11 @@ class MessageGroup {
         this.updateStatusMessageDivState();
     }
 
-    public ensureAgentMessage(msg: IAgentMessage, scrollIntoView = true) {
+    public ensureAgentMessage(
+        msg: IAgentMessage,
+        scrollIntoView = true,
+        notification = false,
+    ) {
         const index = msg.actionIndex ?? 0;
         const agentMessage = this.agentMessages[index];
         if (agentMessage === undefined) {
@@ -429,6 +456,9 @@ class MessageGroup {
                         this.agents,
                         beforeElem.div,
                     );
+                    if (notification) {
+                        newAgentMessage.div.classList.add("notification");
+                    }
                     this.agentMessages[i] = newAgentMessage;
                 }
                 beforeElem = this.agentMessages[i];
@@ -460,7 +490,7 @@ function stripAnsi(text: string): string {
 
 const enableText2Html = true;
 export function setContent(elm: HTMLElement, text: string) {
-    if (text.startsWith("<")) {
+    if (text.indexOf("<") > -1 && text.indexOf("@command") == -1) {
         elm.innerHTML = text;
     } else if (enableText2Html) {
         elm.innerHTML = textToHtml(text);
@@ -619,18 +649,16 @@ export class ChatView {
     commandBackStackIndex = -1;
     registeredActions: Map<string, ActionInfo> = new Map<string, ActionInfo>();
     actionCascade: ActionCascade | undefined = undefined;
-
     constructor(
         private idGenerator: IdGenerator,
-        public speechInfo: SpeechInfo,
         public agents: Map<string, string>,
+        public tts?: TTS,
     ) {
         this.topDiv = document.createElement("div");
         this.topDiv.className = "chat-container";
         this.messageDiv = document.createElement("div");
         this.messageDiv.className = "chat scroll_enabled";
         this.chatInput = new ChatInput(
-            this.speechInfo,
             "phraseDiv",
             "reco",
             (message) => {
@@ -1065,13 +1093,23 @@ export class ChatView {
         this.commandBackStackIndex = -1;
     }
 
-    addUserMessage(request: string, hidden: boolean = false) {
+    async addUserMessage(request: string, hidden: boolean = false) {
         const id = this.idGenerator.genId();
 
+        let tempDiv: HTMLDivElement = document.createElement("div");
+        tempDiv.innerHTML = request;
+
+        let images = await this.extractMultiModalContent(tempDiv);
+
         const mg: MessageGroup = new MessageGroup(
+                this,
             request,
             this.messageDiv,
-            getClientAPI().processShellRequest(request, id),
+            getClientAPI().processShellRequest(
+                    tempDiv.innerText,
+                    id,
+                    images,
+                ),
             new Date(),
             this.agents,
         );
@@ -1083,6 +1121,27 @@ export class ChatView {
 
         this.idToMessageGroup.set(id, mg);
         this.commandBackStackIndex = -1;
+    }
+
+    async extractMultiModalContent(tempDiv: HTMLDivElement): Promise<string[]> {
+        let images = tempDiv.querySelectorAll<HTMLImageElement>(
+            ".chat-inpput-dropImage",
+        );
+        let retVal: string[] = new Array<string>(images.length);
+        for (let i = 0; i < images.length; i++) {
+            if (images[i].src.startsWith("data:image")) {
+                retVal[i] = images[i].src;
+            } else if (images[i].src.startsWith("blob:")) {
+                let response = await fetch(images[i].src);
+                let blob = await response.blob();
+                let ab = await blob.arrayBuffer();
+                retVal[i] = `data:image/png;base64,` + _arrayBufferToBase64(ab);
+            } else {
+                console.log("Unknown image source type.");
+            }
+        }
+
+        return retVal;
     }
 
     markRequestExplained(id: string, timestamp: string, fromCache?: boolean) {
@@ -1114,11 +1173,19 @@ export class ChatView {
         }
     }
 
-    addAgentMessage(msg: IAgentMessage, dynamicUpdate = false) {
+    addAgentMessage(
+        msg: IAgentMessage,
+        dynamicUpdate = false,
+        notification = false,
+    ) {
         const text: string = msg.message;
         const source: string = msg.source;
 
-        const agentMessage = this.ensureAgentMessage(msg, !dynamicUpdate);
+        const agentMessage = this.ensureAgentMessage(
+            msg,
+            !dynamicUpdate,
+            notification,
+        );
         if (agentMessage === undefined) {
             return;
         }
@@ -1133,10 +1200,11 @@ export class ChatView {
     private ensureAgentMessage(
         msg: IAgentMessage,
         scrollIntoView: boolean = true,
+        notification = false,
     ) {
         return this.getMessageGroup(
             msg.requestId as string,
-        )?.ensureAgentMessage(msg, scrollIntoView);
+        )?.ensureAgentMessage(msg, scrollIntoView, notification);
     }
 
     chatInputFocus() {
@@ -1251,4 +1319,24 @@ export class ChatView {
 
         (window as any).electron.ipcRenderer.send("send-input-text-complete");
     }
+}
+
+export function _arrayBufferToBase64(buffer: ArrayBuffer) {
+    let binary = "";
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (var i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+}
+
+export function _base64ToArrayBuffer(base64: string): Uint8Array {
+    const binaryString = window.atob(base64);
+    const len = binaryString.length;
+    const bytes: Uint8Array = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
 }

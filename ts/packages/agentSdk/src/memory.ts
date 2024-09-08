@@ -6,9 +6,9 @@ export interface Entity {
     name: string;
     // the types of the entity such as "artist" or "animal"; an entity can have multiple types; entity types should be single words
     type: string[];
-    // a value associated with the entity such as { birthYear: 1685 } for "Bach" or { destination: "Paris" } for "flight"
-    value?: object;
-    interpreter?: ImpressionInterpreter | undefined;
+
+    additionalEntityText?: string;
+    uniqueId?: string;
 }
 
 export type AssociationType = string;
@@ -32,16 +32,6 @@ export interface Relationship {
     from: Entity;
     to: Entity;
     association: Association;
-}
-
-/**
- * Return the entity's id, if one exists
- * @param entity
- */
-export function getEntityId(entity: Entity): string | undefined {
-    return entity.interpreter?.getEntityId
-        ? entity.interpreter.getEntityId(entity)
-        : undefined;
 }
 
 export function entitiesToString(entities: Entity[], indent = ""): string {
@@ -68,15 +58,6 @@ export function turnImpressionToString(turnImpression: TurnImpression): string {
     }
 }
 
-export const defaultImpressionInterpreter: ImpressionInterpreter = {
-    entityToText: (entity) => `${entity.name} (${entity.type.join(", ")})`,
-};
-
-export interface ImpressionInterpreter {
-    entityToText: (entity: Entity) => string;
-    getEntityId?: (entity: Entity) => string | undefined;
-}
-
 export interface TurnImpression {
     literalText?: string | undefined;
     entities: Entity[];
@@ -85,9 +66,6 @@ export interface TurnImpression {
     dynamicDisplayId?: string | undefined;
     dynamicDisplayNextRefreshMs?: number | undefined;
     error?: string | undefined;
-
-    // REVIEW: this is not "remoteable", need to redesign to enable dispatcher agent isolation.
-    impressionInterpreter?: ImpressionInterpreter;
 }
 
 export function createTurnImpressionFromDisplay(

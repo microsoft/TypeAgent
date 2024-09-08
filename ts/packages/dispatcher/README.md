@@ -50,7 +50,7 @@ To list all the translator (and explainer) configured:
 ```bash
 [📅💊📩📝👀🪟⚛️💬🔧]>@config translator
 Usage: @config translator [-]<translator>]
-   <translator>: player, calendar, email, list, browser, browser.paleoBioDb, desktop, code, code.code-debug, code.code-display, code.code-general, phrases, books, chat, correction, system.config, system.session
+   <translator>: player, calendar, email, list, browser, browser.paleoBioDb, desktop, code, code.code-debug, code.code-display, code.code-general, phrases, books, chat, correction, photo, system.config, system.session
 ```
 
 ### Explainer

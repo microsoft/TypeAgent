@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { ElectronAPI } from "@electron-toolkit/preload";
-import { DynamicDisplay } from "@typeagent/agent-sdk";
+import { AppAgentEvent, DynamicDisplay } from "@typeagent/agent-sdk";
 import { ShellSettings } from "../main/shellSettings.js";
 
 export type SpeechToken = {
@@ -90,6 +90,13 @@ export interface IMessageMetrics {
     marks?: Map<string, number> | undefined;
 }
 
+export enum NotifyCommands {
+    ShowSummary = "summarize",
+    Clear = "clear",
+    ShowUnread = "unread",
+    ShowAll = "all",
+}
+
 // end duplicate type section
 
 export interface ClientAPI {
@@ -101,7 +108,11 @@ export interface ClientAPI {
             useLocalWhisper?: boolean,
         ) => void,
     ) => void;
-    processShellRequest: (request: string, id: string) => Promise<void>;
+    processShellRequest: (
+        request: string,
+        id: string,
+        images: string[],
+    ) => Promise<void>;
     sendPartialInput: (text: string) => void;
     getDynamicDisplay: (source: string, id: string) => Promise<DynamicDisplay>;
     onResponse(
@@ -211,13 +222,6 @@ export interface ClientAPI {
     onRandomMessageRequested(
         callback: (e: Electron.IpcRendererEvent, key: string) => void,
     ): void;
-    onMicrophoneChangeRequested(
-        callback: (
-            e: Electron.IpcRendererEvent,
-            micId: string,
-            micName: string,
-        ) => void,
-    ): void;
     onShowDialog(
         callback: (e: Electron.IpcRendererEvent, key: string) => void,
     ): void;
@@ -225,6 +229,22 @@ export interface ClientAPI {
         callback: (
             e: Electron.IpcRendererEvent,
             settings: ShellSettings,
+        ) => void,
+    );
+    onNotificationCommand(
+        callback: (
+            e: Electron.IpcRendererEvent,
+            requestId: string,
+            command: string,
+        ) => void,
+    );
+    onNotify(
+        callback: (
+            e: Electron.IpcRendererEvent,
+            event: AppAgentEvent,
+            requestId: string,
+            source: string,
+            data: any,
         ) => void,
     );
 }

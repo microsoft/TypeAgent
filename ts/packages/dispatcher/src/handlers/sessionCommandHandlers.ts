@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    changeContextConfig,
     CommandHandlerContext,
     reloadSessionOnCommandHandlerContext,
 } from "./common/commandHandlerContext.js";
@@ -12,7 +13,7 @@ import {
     deleteAllSessions,
     deleteSession,
     getSessionNames,
-    defaultSessionConfig,
+    getDefaultSessionConfig,
     getSessionCaches,
 } from "../session/session.js";
 import chalk from "chalk";
@@ -33,7 +34,9 @@ class SessionNewCommandHandler implements CommandHandler {
         await setSessionOnCommandHandlerContext(
             context,
             await Session.create(
-                flags.keep ? context.session.getConfig() : defaultSessionConfig,
+                flags.keep
+                    ? context.session.getConfig()
+                    : getDefaultSessionConfig(context.agents),
                 flags.persist,
             ),
         );
@@ -57,8 +60,11 @@ class SessionOpenCommandHandler implements CommandHandler {
 class SessionResetCommandHandler implements CommandHandler {
     public readonly description = "Reset config on session and keep the data";
     public async run(request: string, context: CommandHandlerContext) {
-        context.session.setConfig(defaultSessionConfig);
-        context.requestIO.success(`Session resetted.`);
+        await changeContextConfig(
+            getDefaultSessionConfig(context.agents),
+            context,
+        );
+        context.requestIO.success(`Session settings revert to default.`);
     }
 }
 

@@ -2,16 +2,12 @@
 // Licensed under the MIT License.
 
 import { Action, Actions } from "agent-cache";
-import {
-    CommandHandlerContext,
-    getAppAgent,
-} from "../handlers/common/commandHandlerContext.js";
+import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
 import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
     ActionIO,
     createTurnImpressionFromLiteral,
-    AppAgent,
     AppAgentEvent,
     SessionContext,
     TurnImpression,
@@ -27,24 +23,13 @@ import { Profiler } from "common-utils";
 const debugAgent = registerDebug("typeagent:agent");
 const debugActions = registerDebug("typeagent:actions");
 
-export async function initializeActionContext(agents: Map<string, AppAgent>) {
-    return Object.fromEntries(
-        await Promise.all(
-            Array.from(agents.entries()).map(async ([name, agent]) => [
-                name,
-                await agent.initializeAgentContext?.(),
-            ]),
-        ),
-    );
-}
-
 function getActionContext(
     name: string,
     context: CommandHandlerContext,
     requestId: string,
     actionIndex: number,
 ) {
-    const sessionContext = getSessionContext(name, context);
+    const sessionContext = context.agents.getSessionContext(name);
     const actionIO: ActionIO = {
         get type() {
             return context.requestIO.type;
@@ -75,19 +60,11 @@ function getActionContext(
     };
 }
 
-function getSessionContext(
+export function createSessionContext<T = any>(
     name: string,
+    agentContext: T,
     context: CommandHandlerContext,
-): SessionContext {
-    return (
-        context.sessionContext.get(name) ?? createSessionContext(name, context)
-    );
-}
-
-function createSessionContext(
-    name: string,
-    context: CommandHandlerContext,
-): SessionContext {
+): SessionContext<T> {
     const sessionDirPath = context.session.getSessionDirPath();
     const storage = sessionDirPath
         ? getStorage(name, sessionDirPath)
@@ -95,7 +72,7 @@ function createSessionContext(
     const profileStorage = getStorage(name, getUserProfileDir());
     const sessionContext: SessionContext = {
         get agentContext() {
-            return context.action[name];
+            return agentContext;
         },
         get sessionStorage() {
             return storage;
@@ -139,59 +116,7 @@ function createSessionContext(
         },
     };
     (sessionContext as any).conversationManager = context.conversationManager;
-    context.sessionContext.set(name, sessionContext);
     return sessionContext;
-}
-
-export async function updateActionContext(
-    changed: { [key: string]: boolean },
-    context: CommandHandlerContext,
-) {
-    const newChanged = { ...changed };
-    const failed: any = {};
-    const entries = Object.entries(changed);
-    for (const [translatorName, enable] of entries) {
-        try {
-            await updateAgentContext(translatorName, enable, context);
-        } catch (e: any) {
-            context.requestIO.error(
-                `[${translatorName}]: Failed to ${enable ? "enable" : "disable"} action: ${e.message}`,
-                translatorName,
-            );
-            failed[translatorName] = !enable;
-            delete newChanged[translatorName];
-        }
-    }
-    const failedCount = Object.keys(failed).length;
-    if (failedCount !== 0) {
-        context.session.setConfig({ actions: failed });
-    }
-
-    return entries.length === failedCount ? undefined : newChanged;
-}
-
-async function updateAgentContext(
-    translatorName: string,
-    enable: boolean,
-    context: CommandHandlerContext,
-) {
-    const appAgentName = getAppAgentName(translatorName);
-    const appAgent = getAppAgent(appAgentName, context);
-    await appAgent.updateAgentContext?.(
-        enable,
-        getSessionContext(appAgentName, context),
-        translatorName,
-    );
-}
-
-export async function closeActionContext(context: CommandHandlerContext) {
-    for (const [name, enabled] of Object.entries(context.action)) {
-        if (enabled) {
-            try {
-                await updateAgentContext(name, false, context);
-            } catch {}
-        }
-    }
 }
 
 export async function partialInput(
@@ -208,11 +133,11 @@ export async function getDynamicDisplay(
     displayId: string,
     context: CommandHandlerContext,
 ): Promise<DynamicDisplay> {
-    const appAgent = getAppAgent(appAgentName, context);
+    const appAgent = context.agents.getAppAgent(appAgentName);
     if (appAgent.getDynamicDisplay === undefined) {
         throw new Error(`Dynamic display not supported by '${appAgentName}'`);
     }
-    const sessionContext = getSessionContext(appAgentName, context);
+    const sessionContext = context.agents.getSessionContext(appAgentName);
     return appAgent.getDynamicDisplay(type, displayId, sessionContext);
 }
 
@@ -227,7 +152,7 @@ async function executeAction(
         throw new Error(`Cannot execute action without translator name.`);
     }
     const appAgentName = getAppAgentName(translatorName);
-    const appAgent = getAppAgent(appAgentName, context);
+    const appAgent = context.agents.getAppAgent(appAgentName);
 
     // Update the last action translator.
     context.lastActionTranslatorName = translatorName;
@@ -295,7 +220,6 @@ async function executeAction(
             result.entities,
             "assistant",
             context.requestId,
-            result.impressionInterpreter,
         );
     }
     return result;
@@ -324,8 +248,8 @@ export async function validateWildcardMatch(
             continue;
         }
         const appAgentName = getAppAgentName(translatorName);
-        const appAgent = getAppAgent(appAgentName, context);
-        const sessionContext = getSessionContext(appAgentName, context);
+        const appAgent = context.agents.getAppAgent(appAgentName);
+        const sessionContext = context.agents.getSessionContext(appAgentName);
         if (
             (await appAgent.validateWildcardMatch?.(action, sessionContext)) ===
             false
@@ -342,7 +266,7 @@ export function startStreamPartialAction(
     context: CommandHandlerContext,
 ) {
     const appAgentName = getAppAgentName(translatorName);
-    const appAgent = getAppAgent(appAgentName, context);
+    const appAgent = context.agents.getAppAgent(appAgentName);
     if (appAgent.streamPartialAction === undefined) {
         // The config declared that there are streaming action, but the agent didn't implement it.
         throw new Error(

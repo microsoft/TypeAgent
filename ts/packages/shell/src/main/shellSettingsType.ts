@@ -1,6 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+export type TTSSettings = {
+    provider?: string;
+    voice?: string;
+};
+
 export type ShellSettingsType = {
     size: number[];
     position?: number[];
@@ -11,6 +16,9 @@ export type ShellSettingsType = {
     hideMenu: boolean;
     hideTabs: boolean;
     agentGreeting: boolean;
+    notifyFilter: string;
+    tts: boolean;
+    ttsSettings: TTSSettings;
 };
 
 export const defaultSettings: ShellSettingsType = {
@@ -20,4 +28,7 @@ export const defaultSettings: ShellSettingsType = {
     hideMenu: true,
     hideTabs: true,
     agentGreeting: true,
+    notifyFilter: "error;warning;",
+    tts: false,
+    ttsSettings: {},
 };

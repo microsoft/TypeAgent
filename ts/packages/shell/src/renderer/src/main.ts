@@ -2,15 +2,18 @@
 // Licensed under the MIT License.
 
 //import { ShellSettings } from "../../main/shellSettings";
-import { ClientAPI } from "../../preload/electronTypes";
+import { ClientAPI, NotifyCommands } from "../../preload/electronTypes";
 import { ChatView } from "./chatView";
 import { TabView } from "./tabView";
-import { SpeechInfo, recognizeOnce, selectMicrophone } from "./speech";
+import { recognizeOnce } from "./speech";
+import { setSpeechToken } from "./speechToken";
 import { iconHelp, iconMetrics, iconSettings } from "./icon";
 import { SettingsView } from "./settingsView";
 import { HelpView } from "./helpView";
 import { MetricsView } from "./metricsView";
 import { ShellSettings } from "../../main/shellSettings";
+import { AppAgentEvent } from "@typeagent/agent-sdk";
+import { CameraView } from "./cameraView";
 
 export function getClientAPI(): ClientAPI {
     return globalThis.api;
@@ -38,7 +41,7 @@ function addEvents(
             );
         } else {
             if (token) {
-                chatView.speechInfo.speechToken = token;
+                setSpeechToken(token);
                 if (name === "Alt+M") {
                     recognizeOnce(
                         token,
@@ -118,24 +121,16 @@ function addEvents(
         console.log(`User asked for a random message via ${key}`);
         chatView.addUserMessage(`@random`);
     });
-    api.onMicrophoneChangeRequested((_, micId, micName) => {
-        selectMicrophone(settingsView.microphoneSources, micId, micName);
-    });
     api.onShowDialog((_, key) => {
         if (key == "Settings") {
-            settingsView.shellSettings.hideTabs = false;
-            settingsView.tabsCheckBox.checked = false;
-
-            (window as any).electron.ipcRenderer.send(
-                "settings-changed",
-                settingsView.shellSettings,
-            );
+            settingsView.showTabs();
         }
 
         tabsView.showTab(key);
     });
     api.onSettingsChanged((_, value: ShellSettings) => {
         settingsView.shellSettings = value;
+
         settingsView.menuCheckBox.checked = value.hideMenu;
         settingsView.tabsCheckBox.checked = value.hideTabs;
 
@@ -145,7 +140,114 @@ function addEvents(
             tabsView.show();
         }
     });
+    api.onNotificationCommand((_, requestId: string, data: any) => {
+        switch (data) {
+            case NotifyCommands.Clear:
+                notifications.length = 0;
+                break;
+            case NotifyCommands.ShowAll:
+                showNotifications(requestId, chatView, notifications, true);
+                break;
+            case NotifyCommands.ShowSummary:
+                summarizeNotifications(
+                    requestId,
+                    chatView,
+                    agents,
+                    notifications,
+                );
+                break;
+            case NotifyCommands.ShowUnread:
+                showNotifications(requestId, chatView, notifications);
+                break;
+            default:
+                console.log("unknown notify command");
+                break;
+        }
+    });
+    api.onNotify(
+        (
+            _,
+            event: AppAgentEvent,
+            requestId: string,
+            source: string,
+            data: any,
+        ) => {
+            //if (settingsView.shellSettings.notifyFilter.indexOf(event) > -1) {
+            //    showNotifications(requestId, chatView, [ { event, source, data, read: false  } ]);
+            //} else {
+            notifications.push({ event, source, data, read: false, requestId });
+            //}
+        },
+    );
 }
+
+function showNotifications(
+    requestId: string,
+    chatView: ChatView,
+    messages: Array<any>,
+    showRead: boolean = false,
+) {
+    const status: string = showRead ? "all" : "the new";
+    let html: string = `Here are ${status} notifications:<br/> <ul>`;
+
+    for (let i = 0; i < messages.length; i++) {
+        if (showRead || !messages[i].read) {
+            html += `<li class="notification-${messages[i].event}">${messages[i].event} ${messages[i].data.toString()}</li>`;
+
+            messages[i].read = true;
+        }
+    }
+
+    html += "</ul><br/>";
+    console.log(requestId + chatView);
+
+    chatView.addAgentMessage(
+        {
+            message: html,
+            source: "shell",
+            requestId: requestId,
+        },
+        true,
+    );
+}
+
+function summarizeNotifications(
+    requestId: string,
+    chatView: ChatView,
+    agents: Map<string, string>,
+    messages: Array<any>,
+) {
+    const msgMap: Map<AppAgentEvent, number> = new Map<AppAgentEvent, number>();
+
+    let read: number = 0;
+
+    for (let i = 0; i < messages.length; i++) {
+        if (!msgMap.has(messages[i].event)) {
+            msgMap.set(messages[i].event, 0);
+        }
+
+        msgMap.set(messages[i].event, msgMap.get(messages[i].event)! + 1);
+
+        if (messages[i].read) {
+            read++;
+        }
+    }
+
+    let summary = `There are <b>${messages.length - read}</b> unread and <b>${read}</b> notifications in total.<br/><br/>
+    <div style="display: flex;justify-content: space-evenly">`;
+    for (const [key, value] of msgMap) {
+        summary += `<span class="notification-${key}">${key}:</span> <b>${value}</b>`;
+    }
+    summary += `</div><br/><span style="font-size: 10px">Run @notify show [all | unread] so see notifications.</span>`;
+
+    chatView.addAgentMessage({
+        message: summary,
+        requestId: requestId,
+        source: agents.get("shell")!,
+    });
+}
+
+const notifications = new Array();
 
 export class IdGenerator {
     private count = 0;
@@ -157,7 +259,6 @@ export class IdGenerator {
 document.addEventListener("DOMContentLoaded", function () {
     const wrapper = document.getElementById("wrapper")!;
     const idGenerator = new IdGenerator();
-    const speechInfo = new SpeechInfo();
     const agents = new Map<string, string>();
 
     const tabs = new TabView(
@@ -174,10 +275,24 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     };
 
-    const chatView = new ChatView(idGenerator, speechInfo, agents);
+    const chatView = new ChatView(idGenerator, agents);
+    const cameraView = new CameraView((image: HTMLImageElement) => {
+        image.classList.add("chat-inpput-dropImage");
+        chatView.chatInput.textarea.textEntry.append(image);
+    });
+
+    wrapper.appendChild(cameraView.getContainer());
     wrapper.appendChild(chatView.getMessageElm());
 
-    const settingsView = new SettingsView(window, tabs);
+    chatView.chatInput.camButton.onclick = () => {
+        cameraView.toggleVisibility();
+    };
+
+    chatView.chatInput.camButton.onclick = () => {
+        cameraView.toggleVisibility();
+    };
+
+    const settingsView = new SettingsView(tabs, chatView);
     tabs.getTabContainerByName("Settings").append(settingsView.getContainer());
     tabs.getTabContainerByName("Metrics").append(
         new MetricsView().getContainer(),

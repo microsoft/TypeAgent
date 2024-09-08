@@ -12,7 +12,7 @@ import {
     getEmptyTestData,
 } from "agent-dispatcher";
 import chalk from "chalk";
-import { getTranslatorNames, getCacheFactory } from "agent-dispatcher";
+import { getBuiltinTranslatorNames, getCacheFactory } from "agent-dispatcher";
 import { getDefaultExplainerName } from "agent-cache";
 import { getChatModelMaxConcurrency, getChatModelNames } from "common-utils";
 
@@ -44,7 +44,7 @@ export default class ExplanationDataAddCommand extends Command {
         }),
         translator: Flags.string({
             description: "Translator name",
-            options: getTranslatorNames(),
+            options: getBuiltinTranslatorNames(),
         }),
         explainer: Flags.string({
             description:

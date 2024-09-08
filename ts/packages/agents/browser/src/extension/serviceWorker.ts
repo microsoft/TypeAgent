@@ -768,7 +768,11 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
         currentCrosswordUrl = targetTab.url;
     }
 
-    if (targetTab.url?.startsWith("https://www.homedepot.com/")) {
+    if (
+        targetTab.url?.startsWith("https://www.homedepot.com/") ||
+        targetTab.url?.startsWith("https://www.target.com/") ||
+        targetTab.url?.startsWith("https://www.walmart.com/")
+    ) {
         // insert ui automation script
         const result = await chrome.tabs.sendMessage(targetTab.id!, {
             type: "setup_ui_events_script",
@@ -1347,6 +1351,7 @@ chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
     await sendActionToTabIndex(removeTabAction);
 });
 
+let embeddingsInitializedWindowId: number;
 chrome.windows.onFocusChanged.addListener(async (windowId) => {
     if (windowId == chrome.windows.WINDOW_ID_NONE) {
         return;
@@ -1361,19 +1366,23 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
     const targetTab = await getActiveTab();
     await toggleSiteTranslator(targetTab);
 
-    const tabs = await chrome.tabs.query({
-        windowId: windowId,
-    });
-    tabs.forEach(async (tab) => {
-        const addTabAction = {
-            actionName: "addTabIdToIndex",
-            parameters: {
-                id: tab.id,
-                title: tab.title,
-            },
-        };
-        await sendActionToTabIndex(addTabAction);
-    });
+    if (embeddingsInitializedWindowId !== windowId) {
+        const tabs = await chrome.tabs.query({
+            windowId: windowId,
+        });
+        tabs.forEach(async (tab) => {
+            const addTabAction = {
+                actionName: "addTabIdToIndex",
+                parameters: {
+                    id: tab.id,
+                    title: tab.title,
+                },
+            };
+            await sendActionToTabIndex(addTabAction);
+        });
+
+        embeddingsInitializedWindowId = windowId;
+    }
 });
 
 chrome.windows.onCreated.addListener(async (windowId) => {

@@ -5,7 +5,11 @@ import { app } from "electron";
 import registerDebug from "debug";
 import { readFileSync, existsSync, writeFileSync } from "fs";
 import path from "path";
-import { defaultSettings, ShellSettingsType } from "./shellSettingsType.js";
+import {
+    defaultSettings,
+    ShellSettingsType,
+    TTSSettings,
+} from "./shellSettingsType.js";
 
 const debugShell = registerDebug("typeagent:shell");
 
@@ -22,6 +26,9 @@ export class ShellSettings implements ShellSettingsType {
     public hideTabs: boolean;
     public agentGreeting: boolean;
     public onSettingsChanged: (() => void) | null;
+    public notifyFilter: string;
+    public tts: boolean;
+    public ttsSettings: TTSSettings;
 
     public get width(): number | undefined {
         return this.size[0];
@@ -54,6 +61,9 @@ export class ShellSettings implements ShellSettingsType {
         this.hideMenu = settings.hideMenu;
         this.hideTabs = settings.hideTabs;
         this.agentGreeting = settings.agentGreeting;
+        this.notifyFilter = settings.notifyFilter;
+        this.tts = settings.tts;
+        this.ttsSettings = settings.ttsSettings;
 
         this.onSettingsChanged = null;
     }

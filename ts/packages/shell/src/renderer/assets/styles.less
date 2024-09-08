@@ -181,6 +181,11 @@ body {
   position: relative;
 }
 
+.chat-input-drag {
+  color: #cccccc;
+  font-style: italic;
+}
+
 .chat-message {
   /* use a common class for all messages */
   padding-left: 10px;
@@ -301,6 +306,11 @@ body {
   align-self: flex-end;
   border: none;
   background-color: transparent;
+  width: 32px;
+  height: 32px;
+  padding: 0px;
+  margin: 0px 5px;
+  cursor: pointer;
 }
 
 .chat-input-micSelector {
@@ -309,6 +319,10 @@ body {
   background-color: white;
   width: 100%;
   max-width: 85%;
+}
+
+.chat-inpput-dropImage {
+  width: 96px;
 }
 
 .chat-timestamp {
@@ -522,4 +536,35 @@ span.ansi-bright-white-fg {
 
 .metric-label {
   margin-right: 5px;
+}
+
+input[type="file"] {
+  display: none;
+}
+
+.custom-file-upload {
+  border: 0px solid #ccc;
+  display: inline-block;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.notification {
+  font-size: 10px;
+}
+
+.notification-error {
+  color: red;
+}
+
+.notification-warning {
+  color: orange;
+}
+
+.notification-info {
+  color: blue;
+}
+
+.notification-debug {
+  color: pink;
 }

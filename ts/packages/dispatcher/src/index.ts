@@ -15,10 +15,7 @@ export {
     closeCommandHandlerContext,
     CommandHandlerContext,
 } from "./handlers/common/commandHandlerContext.js";
-export {
-    getDefaultTranslatorName,
-    getTranslatorNames,
-} from "./translation/agentTranslators.js";
+export { getBuiltinTranslatorNames } from "./translation/agentTranslators.js";
 export { getCacheFactory } from "./utils/cacheFactory.js";
 export { loadTranslatorSchemaConfig } from "./utils/loadSchemaConfig.js";
 export {
@@ -35,10 +32,14 @@ export {
 } from "./utils/test/testData.js";
 export { getBuiltinConstructionConfig } from "./utils/config.js";
 
-// for CLI
+// for CLI/ testing
 export { RequestCommandHandler } from "./handlers/requestCommandHandler.js";
 export { TranslateCommandHandler } from "./handlers/translateCommandHandler.js";
 export { ExplainCommandHandler } from "./handlers/explainCommandHandler.js";
-export { getFullSchemaText } from "./translation/agentTranslators.js";
 export { getAssistantSelectionSchemas } from "./translation/unknownSwitcher.js";
 export { getTestDataFiles } from "./utils/config.js";
+export {
+    loadBuiltinTranslatorSchemaConfig,
+    getBuiltinTranslatorConfigProvider,
+    getFullSchemaText,
+} from "./translation/agentTranslators.js";
