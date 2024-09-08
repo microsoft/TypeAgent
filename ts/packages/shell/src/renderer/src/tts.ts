@@ -57,7 +57,7 @@ function getBrowserTTSProvider(voiceName?: string): TTS | undefined {
     };
 }
 
-const defaultVoiceName = "en-US-LewisMultilingualNeural";
+const defaultVoiceName = "en-US-AndrewMultilingualNeural";
 const defaultVoiceStyle = "chat";
 
 function getAzureTTSProvider(voiceName?: string): TTS | undefined {
@@ -108,6 +108,7 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
     };
 }
 
+// Load once.
 let azureVoicesP: Promise<[string, string][]> | undefined;
 async function getAzureVoices() {
     if (azureVoicesP === undefined) {
@@ -118,15 +119,15 @@ async function getAzureVoices() {
             debug(`Getting azure voices for ${navigator.language}`);
             const result = await synthesizer.getVoicesAsync(navigator.language);
             synthesizer.close();
-            if (result.reason === speechSDK.ResultReason.VoicesListRetrieved) {
-                debug("Got azure voices:", result.voices);
-                return result.voices.map(
-                    (v) => [v.displayName, v.shortName] as [string, string],
-                );
-            } else {
-                debugError(`Failed to get voices: ${result.errorDetails}`);
-                return [];
+            if (result.reason !== speechSDK.ResultReason.VoicesListRetrieved) {
+                // Try to load again next time.
+                azureVoicesP = undefined;
+                const errorMessage = `Failed to get voices: ${result.errorDetails}`;
+                debugError(errorMessage);
+                throw new Error(errorMessage);
             }
+            debug("Got azure voices:", result.voices);
+            return result.voices.map((v) => [v.displayName, v.shortName]);
         })();
     }
     return azureVoicesP;
@@ -145,14 +146,8 @@ export async function getTTSVoices(
     }
 }
 
-export async function getTTSProviders() {
-    const providers = [TTSProvider.Browser, TTSProvider.Azure];
-    const voicesP = providers.map(
-        async (p) => [p, await getTTSVoices(p)] as const,
-    );
-    return (await Promise.all(voicesP))
-        .filter(([, voices]) => voices.length > 0)
-        .map(([p]) => p);
+export function getTTSProviders() {
+    return [TTSProvider.Browser, TTSProvider.Azure];
 }
 
 export function getTTS(provider?: string, voiceName?: string): TTS | undefined {

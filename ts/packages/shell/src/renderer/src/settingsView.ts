@@ -10,9 +10,22 @@ import { TabView } from "./tabView.js";
 import { ChatView } from "./chatView.js";
 import { getTTS, getTTSProviders, getTTSVoices } from "./tts.js";
 
+function addOption(
+    select: HTMLSelectElement,
+    currentValue: string,
+    text: string,
+    value: string = text,
+) {
+    const selected = value === currentValue;
+    const option = new Option(text, value, undefined, selected);
+    select.add(option);
+    return selected;
+}
+
+type SelectOptions = string[] | [string, string][];
 async function updateSelectAsync(
     select: HTMLSelectElement,
-    optionsP: Promise<string[] | [string, string][]>,
+    getOptions: () => Promise<SelectOptions> | SelectOptions,
     value: () => string,
     enable?: () => boolean,
 ) {
@@ -22,24 +35,45 @@ async function updateSelectAsync(
     select.add(loading);
     select.disabled = true;
 
-    const options = await optionsP;
+    let options: SelectOptions = [];
+    let errorMessage: string | undefined;
+    try {
+        options = await getOptions();
+    } catch (e: any) {
+        errorMessage = e.message;
+    }
     if (select.options[0] !== loading) {
         return false;
     }
+
+    // Clear out the Loading option
+    select.options.length = 0;
+
+    const currentValue = value();
+    let foundValue = false;
     if (options.length !== 0) {
-        select.options.length = 0;
-        select.add(new Option("<default>"));
+        foundValue = addOption(select, currentValue, "<default>") || foundValue;
         for (const option of options) {
-            select.options.add(
-                Array.isArray(option)
-                    ? new Option(option[0], option[1])
-                    : new Option(option),
-            );
+            foundValue =
+                (Array.isArray(option)
+                    ? addOption(select, currentValue, option[0], option[1])
+                    : addOption(select, currentValue, option)) || foundValue;
         }
-        select.value = value();
+
         select.disabled = enable?.() === false;
+    }
+
+    if (foundValue) {
+        select.value = currentValue;
     } else {
-        select.options.length = 0;
+        const selectedOption = new Option(
+            `${currentValue} (${errorMessage ?? "Not Available"})`,
+            currentValue,
+            undefined,
+            true,
+        );
+        select.options.add(selectedOption);
+        selectedOption.disabled = true;
     }
     return true;
 }
@@ -126,7 +160,7 @@ export class SettingsView {
 
         updateSelectAsync(
             this.microphoneSources,
-            enumerateMicrophones(),
+            enumerateMicrophones,
             () => this.microphoneIdSettingsValue,
         );
 
@@ -159,10 +193,10 @@ export class SettingsView {
         const updateTTSSelections = async () =>
             updateSelectAsync(
                 this.ttsVoice,
-                (async () => {
+                async () => {
                     const updatedTTSProvider = await updateSelectAsync(
                         this.ttsProvider,
-                        getTTSProviders(),
+                        getTTSProviders,
                         () => this.ttsProviderSettingValue,
                         () => this.shellSettings.tts,
                     );
@@ -173,7 +207,7 @@ export class SettingsView {
                         }
                     }
                     return [];
-                })(),
+                },
                 () => this.ttsVoiceSettingValue,
                 () => this.shellSettings.tts,
             );
