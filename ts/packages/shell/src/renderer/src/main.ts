@@ -198,6 +198,7 @@ function showNotifications(
             source: "shell",
             requestId: requestId,
         },
+        false,
         true,
     );
 }
