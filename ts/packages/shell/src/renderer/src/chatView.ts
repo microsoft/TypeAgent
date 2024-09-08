@@ -358,8 +358,11 @@ class MessageGroup {
                 { message: "Request completed", source: "shell" },
                 true,
             );
+        } else {
+            // completed status changed
+            this.updateStatusMessageDivState();
         }
-        this.updateStatusMessageDivState();
+
         const tts = this.chatView.tts;
         if (tts) {
             for (const agentMessage of this.agentMessages) {
@@ -377,28 +380,16 @@ class MessageGroup {
         if (this.statusMessage === undefined) {
             return;
         }
-        if (
+        const showStatus =
             !this.completed ||
             this.agentMessages.length === 0 ||
-            this.statusMessages.some((m) => !m.temporary)
-        ) {
+            this.statusMessages.some((m) => !m.temporary);
+        if (showStatus) {
             this.statusMessage.show();
-
-            if (
-                this.userMessageContainer.parentElement?.firstChild ==
-                this.statusMessage.div
-            ) {
-                this.statusMessage.scrollIntoView();
-            }
-
-            return;
+        } else {
+            this.statusMessage.hide();
         }
-
-        if (this.agentMessages.length > 0) {
-            this.agentMessages[this.agentMessages.length - 1].scrollIntoView();
-        }
-
-        this.statusMessage.hide();
+        this.chatView.updateScroll();
     }
 
     private requestException(error: any) {
@@ -439,11 +430,7 @@ class MessageGroup {
         this.updateStatusMessageDivState();
     }
 
-    public ensureAgentMessage(
-        msg: IAgentMessage,
-        scrollIntoView = true,
-        notification = false,
-    ) {
+    public ensureAgentMessage(msg: IAgentMessage, notification = false) {
         const index = msg.actionIndex ?? 0;
         const agentMessage = this.agentMessages[index];
         if (agentMessage === undefined) {
@@ -463,8 +450,6 @@ class MessageGroup {
                 }
                 beforeElem = this.agentMessages[i];
             }
-        }
-        if (scrollIntoView) {
             this.updateStatusMessageDivState();
         }
         return this.agentMessages[index];
@@ -635,6 +620,7 @@ export class ChatView {
     private topDiv: HTMLDivElement;
     private messageDiv: HTMLDivElement;
     private inputContainer: HTMLDivElement;
+    private autoScroll = true;
 
     private idToMessageGroup: Map<string, MessageGroup> = new Map();
     chatInput: ChatInput;
@@ -658,6 +644,9 @@ export class ChatView {
         this.topDiv.className = "chat-container";
         this.messageDiv = document.createElement("div");
         this.messageDiv.className = "chat scroll_enabled";
+        this.messageDiv.addEventListener("scroll", () => {
+            this.autoScroll = false;
+        });
         this.chatInput = new ChatInput(
             "phraseDiv",
             "reco",
@@ -962,15 +951,12 @@ export class ChatView {
         nextRefreshMs: number,
     ) {
         const now = Date.now();
-        const agentMessage = this.ensureAgentMessage(
-            {
-                message: "",
-                requestId: id,
-                source: source,
-                actionIndex: actionIndex,
-            },
-            false,
-        );
+        const agentMessage = this.ensureAgentMessage({
+            message: "",
+            requestId: id,
+            source: source,
+            actionIndex: actionIndex,
+        });
         if (agentMessage === undefined) {
             return;
         }
@@ -1086,6 +1072,7 @@ export class ChatView {
             msg,
             temporary,
         );
+        this.updateScroll();
     }
 
     clear() {
@@ -1117,6 +1104,8 @@ export class ChatView {
                 this.agents,
             ),
         );
+        this.autoScroll = true;
+        this.updateScroll();
         this.commandBackStackIndex = -1;
     }
 
@@ -1178,30 +1167,28 @@ export class ChatView {
         const text: string = msg.message;
         const source: string = msg.source;
 
-        const agentMessage = this.ensureAgentMessage(
-            msg,
-            !dynamicUpdate,
-            notification,
-        );
+        const agentMessage = this.ensureAgentMessage(msg, notification);
         if (agentMessage === undefined) {
             return;
         }
         agentMessage.setMessage(text, source, this.agents.get(source));
+        this.updateScroll();
 
         if (!dynamicUpdate) {
             agentMessage.updateMetrics(msg.metrics);
             this.chatInputFocus();
         }
     }
+    updateScroll() {
+        if (this.autoScroll) {
+            this.messageDiv.scrollTop = this.messageDiv.scrollHeight;
+        }
+    }
 
-    private ensureAgentMessage(
-        msg: IAgentMessage,
-        scrollIntoView: boolean = true,
-        notification = false,
-    ) {
+    private ensureAgentMessage(msg: IAgentMessage, notification = false) {
         return this.getMessageGroup(
             msg.requestId as string,
-        )?.ensureAgentMessage(msg, scrollIntoView, notification);
+        )?.ensureAgentMessage(msg, notification);
     }
 
     chatInputFocus() {
@@ -1233,6 +1220,7 @@ export class ChatView {
         const proposeElm = this.proposeAction(message, requestId);
         agentMessage.div.appendChild(proposeElm);
         proposeYesNo(this, askYesNoId, requestId, message, source);
+        this.updateScroll();
     }
 
     answerYesNo(
