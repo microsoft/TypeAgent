@@ -92,33 +92,27 @@ export class ShellSettings implements ShellSettingsType {
         writeFileSync(ShellSettings.filePath, JSON.stringify(this));
     }
 
-    // public set(name: string, value: any) {
+    public set(name: string, value: any) {
 
-    //     const t = typeof ShellSettings.getinstance()[name]; 
+        const t = typeof ShellSettings.getinstance()[name]; 
 
-    //     switch (t) {
-    //         case "string":
-    //             ShellSettings.getinstance()[name] = value;
-    //             break;
-    //         case "number":
-    //             ShellSettings.getinstance()[name] = Number(value);
-    //             break;
-    //         case "boolean":
-    //             if (value.toLowerCase() === "true" || value === "1") {
-    //                 ShellSettings.getinstance()[name] = true;
-    //             } else {
-    //                 ShellSettings.getinstance()[name] = false;
-    //             }
-    //             break;
-    //         case "object":
-    //             ShellSettings.getinstance()[name] = JSON.parse(value);
-    //             break;
-    //     }
+        switch (t) {
+            case "string":
+                ShellSettings.getinstance()[name] = value;
+                break;
+            case "number":
+                ShellSettings.getinstance()[name] = Number(value);
+                break;
+            case "boolean":
+                ShellSettings.getinstance()[name] = (value.toLowerCase() === "true" || value === "1");
+                break;
+            case "object":
+                ShellSettings.getinstance()[name] = JSON.parse(value);
+                break;
+        }
 
-    //     ShellSettings.getinstance()[name] = value;
-
-    //     if (ShellSettings.getinstance().onSettingsChanged) {
-    //         ShellSettings.getinstance().onSettingsChanged!();
-    //     }
-    // }
+        if (ShellSettings.getinstance().onSettingsChanged) {
+            ShellSettings.getinstance().onSettingsChanged!();
+        }
+    }
 }

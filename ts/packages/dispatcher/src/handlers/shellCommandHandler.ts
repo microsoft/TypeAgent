@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { valueToString } from "common-utils";
 import { CommandHandler, HandlerTable } from "./common/commandHandler.js";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 
@@ -28,30 +27,30 @@ export class ShellShowSettingsCommandHandler implements CommandHandler {
     }
 }
 
-// export class ShellSetSettingCommandHandler implements CommandHandler {
-//     public readonly description: string = "Sets a specific setting with the supplied value";
-//     public async run(input: string, context: CommandHandlerContext) {
-//         const name = input.substring(0, input.indexOf(" "));
-//         const newValue = input.substring(input.indexOf(" ") + 1);
+export class ShellSetSettingCommandHandler implements CommandHandler {
+    public readonly description: string = "Sets a specific setting with the supplied value";
+    public async run(input: string, context: CommandHandlerContext) {
+        const name = input.substring(0, input.indexOf(" "));
+        const newValue = input.substring(input.indexOf(" ") + 1);
 
-//         let found: boolean = false;
-//         for (const [key, value] of Object.entries(context.settings)) {
-//             if (key == name) {
+        let found: boolean = false;
+        for (const [key, value] of Object.entries(context.settings)) {
+            if (key == name) {
 
-//                 found = true;
-//                 context.settings.set(name, newValue);
+                found = true;
+                context.settings.set(name, newValue);
 
-//                 break;
-//             }
-//         }
+                break;
+            }
+        }
 
-//         if (!found) {
-//             context.requestIO.result(`The supplied shell setting '${name} could not be found.'`)
-//         } else {
-//             context.requestIO.result(`${name} was set to ${newValue}`);
-//         }
-//     }
-// }
+        if (!found) {
+            context.requestIO.result(`The supplied shell setting '${name} could not be found.'`)
+        } else {
+            context.requestIO.result(`${name} was set to ${newValue}`);
+        }
+    }
+}
 
 export function getShellCommandHandlers(): HandlerTable {
     return {
@@ -59,7 +58,7 @@ export function getShellCommandHandlers(): HandlerTable {
         defaultSubCommand: new ShellShowSettingsCommandHandler(),
         commands: {
             show: new ShellShowSettingsCommandHandler(),
-            //set: new ShellSetSettingCommandHandler(),
+            set: new ShellSetSettingCommandHandler(),
         },
     };
 }
