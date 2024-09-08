@@ -128,7 +128,6 @@ function createWindow(): void {
 
     // Notify renderer process whenever settings are modified
     ShellSettings.getinstance().onSettingsChanged = () => {
-
         const tempFunc = ShellSettings.getinstance().onSettingsChanged;
         ShellSettings.getinstance().onSettingsChanged = null;
 
@@ -138,7 +137,7 @@ function createWindow(): void {
         );
 
         ShellSettings.getinstance().onSettingsChanged = tempFunc;
-    }; 
+    };
 }
 
 let speechToken:
@@ -420,12 +419,16 @@ app.whenReady().then(async () => {
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.electron");
 
-    const context = await initializeCommandHandlerContext("shell", ShellSettings.getinstance(), {
-        explanationAsynchronousMode: true,
-        persistSession: true,
-        enableServiceHost: true,
-        clientIO,
-    });
+    const context = await initializeCommandHandlerContext(
+        "shell",
+        ShellSettings.getinstance(),
+        {
+            explanationAsynchronousMode: true,
+            persistSession: true,
+            enableServiceHost: true,
+            clientIO,
+        },
+    );
     function translatorSetPartialInputHandler() {
         mainWindow?.webContents.send(
             "set-partial-input-handler",

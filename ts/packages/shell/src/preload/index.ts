@@ -20,7 +20,8 @@ const api: ClientAPI = {
     sendPartialInput: (text: string) => {
         ipcRenderer.send("partial-input", text);
     },
-    getDynamicDisplay(source: string, id: string) {"re"
+    getDynamicDisplay(source: string, id: string) {
+        "re";
         return ipcRenderer.invoke("get-dynamic-display", source, id);
     },
     onActionCommand: (callback) => {

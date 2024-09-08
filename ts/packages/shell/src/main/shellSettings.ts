@@ -93,8 +93,7 @@ export class ShellSettings implements ShellSettingsType {
     }
 
     public set(name: string, value: any) {
-
-        const t = typeof ShellSettings.getinstance()[name]; 
+        const t = typeof ShellSettings.getinstance()[name];
 
         switch (t) {
             case "string":
@@ -104,7 +103,8 @@ export class ShellSettings implements ShellSettingsType {
                 ShellSettings.getinstance()[name] = Number(value);
                 break;
             case "boolean":
-                ShellSettings.getinstance()[name] = (value.toLowerCase() === "true" || value === "1");
+                ShellSettings.getinstance()[name] =
+                    value.toLowerCase() === "true" || value === "1";
                 break;
             case "object":
                 ShellSettings.getinstance()[name] = JSON.parse(value);

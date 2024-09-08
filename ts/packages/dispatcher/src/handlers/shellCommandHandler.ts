@@ -23,12 +23,13 @@ export class ShellShowSettingsCommandHandler implements CommandHandler {
                 }
             };
             printConfig(context.settings);
-        });        
+        });
     }
 }
 
 export class ShellSetSettingCommandHandler implements CommandHandler {
-    public readonly description: string = "Sets a specific setting with the supplied value";
+    public readonly description: string =
+        "Sets a specific setting with the supplied value";
     public async run(input: string, context: CommandHandlerContext) {
         const name = input.substring(0, input.indexOf(" "));
         const newValue = input.substring(input.indexOf(" ") + 1);
@@ -36,7 +37,6 @@ export class ShellSetSettingCommandHandler implements CommandHandler {
         let found: boolean = false;
         for (const [key, value] of Object.entries(context.settings)) {
             if (key == name) {
-
                 found = true;
                 context.settings.set(name, newValue);
 
@@ -45,7 +45,9 @@ export class ShellSetSettingCommandHandler implements CommandHandler {
         }
 
         if (!found) {
-            context.requestIO.result(`The supplied shell setting '${name} could not be found.'`)
+            context.requestIO.result(
+                `The supplied shell setting '${name} could not be found.'`,
+            );
         } else {
             context.requestIO.result(`${name} was set to ${newValue}`);
         }

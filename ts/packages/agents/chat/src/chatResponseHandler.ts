@@ -63,11 +63,14 @@ async function handleChatResponse(
         case "generateGreetingResponse": {
             const greetingAction = chatAction as GreetingResponseAction;
             if (greetingAction.parameters.possibleGreetings !== undefined) {
-                const count = greetingAction.parameters.possibleGreetings.length;
+                const count =
+                    greetingAction.parameters.possibleGreetings.length;
                 console.log(`Got ${count} generated greetings`);
 
                 const result = createTurnImpressionFromLiteral(
-                    greetingAction.parameters.possibleGreetings[randomInt(0, count)].generatedGreeting,
+                    greetingAction.parameters.possibleGreetings[
+                        randomInt(0, count)
+                    ].generatedGreeting,
                 );
 
                 return result;
@@ -91,10 +94,14 @@ async function handleChatResponse(
                 );
 
                 let entities =
-                generateResponseAction.parameters.generatedTextEntities || [];
-                if (generateResponseAction.parameters.userRequestEntities !== undefined) {
+                    generateResponseAction.parameters.generatedTextEntities ||
+                    [];
+                if (
+                    generateResponseAction.parameters.userRequestEntities !==
+                    undefined
+                ) {
                     entities =
-                    generateResponseAction.parameters.userRequestEntities.concat(
+                        generateResponseAction.parameters.userRequestEntities.concat(
                             entities,
                         );
                 }
