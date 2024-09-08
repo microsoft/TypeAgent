@@ -130,15 +130,6 @@ function addEvents(
     });
     api.onSettingsChanged((_, value: ShellSettings) => {
         settingsView.shellSettings = value;
-
-        settingsView.menuCheckBox.checked = value.hideMenu;
-        settingsView.tabsCheckBox.checked = value.hideTabs;
-
-        if (value.hideTabs) {
-            tabsView.hide();
-        } else {
-            tabsView.show();
-        }
     });
     api.onNotificationCommand((_, requestId: string, data: any) => {
         switch (data) {

@@ -120,9 +120,6 @@ export class TabView {
         }
     }
 
-    show() {
-        this.mainContainer.classList.remove("closedTab");
-    }
     hide() {
         this.mainContainer.classList.add("closedTab");
     }
