@@ -1102,14 +1102,10 @@ export class ChatView {
         let images = await this.extractMultiModalContent(tempDiv);
 
         const mg: MessageGroup = new MessageGroup(
-                this,
+            this,
             request,
             this.messageDiv,
-            getClientAPI().processShellRequest(
-                    tempDiv.innerText,
-                    id,
-                    images,
-                ),
+            getClientAPI().processShellRequest(tempDiv.innerText, id, images),
             new Date(),
             this.agents,
         );
