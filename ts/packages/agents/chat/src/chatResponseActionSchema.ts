@@ -91,7 +91,7 @@ export interface LookupAndGenerateResponseAction {
 }
 
 // Use this action to response to the user greeting you. 
-// Generate a ten possible greetings and make sure they are varied in tone, length, cadence, delivery, and style.
+// Generate a five possible greetings and make sure they are varied in tone, length, cadence, delivery, and style.
 // Make sure they don't sound similar and are appropriate for the time and day (i.e. Happy Friday, good evening, etc.).
 // Some examples should borrow common greetings from languages other than English.
 // Come up with a spontaneous greeting that conveys one of the following moods: friendly, enthusiastic, excited, polite, cheerful, happy, positive, welcoming, affectionate, warm, jovial, lively, energetic, radiant, or breezy. 

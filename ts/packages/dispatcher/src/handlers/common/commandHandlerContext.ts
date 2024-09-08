@@ -95,6 +95,9 @@ export type CommandHandlerContext = {
     // For @correct
     lastRequestAction?: RequestAction;
     lastExplanation?: object;
+
+    // host (shell) settings
+    settings: any;
 };
 
 export function updateCorrectionContext(
@@ -215,6 +218,7 @@ function getLoggerSink(isDbEnabled: () => boolean, requestIO: RequestIO) {
 
 export async function initializeCommandHandlerContext(
     hostName: string,
+    hostSettings: any,
     options?: InitializeCommandHandlerContextOptions,
 ): Promise<CommandHandlerContext> {
     const explanationAsynchronousMode =
@@ -275,6 +279,7 @@ export async function initializeCommandHandlerContext(
                 .filter(([, config]) => config.transient)
                 .map(([name]) => [name, false]),
         ),
+        settings: hostSettings,
     };
 
     const inlineAgents = loadInlineAgents(context);

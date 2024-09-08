@@ -141,6 +141,8 @@ function addEvents(
 
         if (value.hideTabs) {
             tabsView.hide();
+        } else {
+            tabsView.show();
         }
     });
 }

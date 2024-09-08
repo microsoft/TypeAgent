@@ -125,6 +125,20 @@ function createWindow(): void {
 
     setAppMenu(mainWindow);
     setupZoomHandlers(mainWindow);
+
+    // Notify renderer process whenever settings are modified
+    ShellSettings.getinstance().onSettingsChanged = () => {
+
+        const tempFunc = ShellSettings.getinstance().onSettingsChanged;
+        ShellSettings.getinstance().onSettingsChanged = null;
+
+        mainWindow?.webContents.send(
+            "settings-changed",
+            ShellSettings.getinstance(),
+        );
+
+        ShellSettings.getinstance().onSettingsChanged = tempFunc;
+    }; 
 }
 
 let speechToken:
@@ -406,7 +420,7 @@ app.whenReady().then(async () => {
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.electron");
 
-    const context = await initializeCommandHandlerContext("shell", {
+    const context = await initializeCommandHandlerContext("shell", ShellSettings.getinstance(), {
         explanationAsynchronousMode: true,
         persistSession: true,
         enableServiceHost: true,

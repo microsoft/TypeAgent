@@ -123,4 +123,8 @@ export class TabView {
     hide() {
         this.mainContainer.classList.add("closedTab");
     }
+
+    show() {
+        this.mainContainer.classList.remove("closedTab");
+    }
 }
