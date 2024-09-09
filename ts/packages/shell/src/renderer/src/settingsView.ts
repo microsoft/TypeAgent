@@ -190,6 +190,12 @@ export class SettingsView {
                   )
                 : undefined;
         };
+
+        const updateInputs = () => {
+            // TODO: implement
+            chatView.chatInput.camButton.disabled = !this.shellSettings.multiModalContent;
+        };
+
         const updateTTSSelections = async () =>
             updateSelectAsync(
                 this.ttsVoice,
@@ -240,6 +246,7 @@ export class SettingsView {
             updateTabsView();
             updateChatView();
             await updateTTSSelections();
+            updateInputs();
         };
 
         speechSynthesis.onvoiceschanged = () => {

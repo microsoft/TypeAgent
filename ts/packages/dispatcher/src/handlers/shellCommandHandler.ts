@@ -35,10 +35,10 @@ export class ShellSetSettingCommandHandler implements CommandHandler {
         const newValue = input.substring(input.indexOf(" ") + 1);
 
         let found: boolean = false;
-        for (const [key, value] of Object.entries(context.settings)) {
+        for (const [key, value] of Object.entries(context.clientSettings)) {
             if (key == name) {
                 found = true;
-                context.settings.set(name, newValue);
+                context.clientSettings.set!(name, newValue);
 
                 break;
             }

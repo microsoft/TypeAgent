@@ -51,11 +51,18 @@ import { conversation as Conversation } from "knowledge-processor";
 import { AppAgentManager } from "./appAgentManager.js";
 import { getBuiltinAppAgentProvider } from "../../agent/agentConfig.js";
 import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
+import { isMultiModalContentSupported } from "../../../../commonUtils/dist/modelResource.js";
 
 export interface CommandResult {
     error?: boolean;
     message?: string;
     html?: boolean;
+}
+
+export type EmptyFunction = () => void;
+export type SetSettingFunction = (name: string, value: any) => void;
+export interface ClientSettingsProvider {
+    set: SetSettingFunction | null;
 }
 
 // Command Handler Context definition.
@@ -89,7 +96,7 @@ export type CommandHandlerContext = {
     lastExplanation?: object;
 
     // host (shell) settings
-    settings: any;
+    clientSettings: ClientSettingsProvider;
 };
 
 export function updateCorrectionContext(
@@ -260,7 +267,7 @@ export async function initializeCommandHandlerContext(
         serviceHost: serviceHost,
         localWhisper: undefined,
         transientAgents: {},
-        settings: hostSettings,
+        clientSettings: hostSettings,
     };
 
     await agents.addProvider(getBuiltinAppAgentProvider(context));
@@ -339,6 +346,10 @@ export async function changeContextConfig(
         // The dynamic schema for change assistant is changed.
         // Clear the cache to regenerate them.
         context.translatorCache.clear();
+
+        if (context.clientSettings) {
+            context.clientSettings.set!("multiModalContent", isMultiModalContentSupported(changed.models?.translator))
+        }
     }
 
     if (changed.actions) {

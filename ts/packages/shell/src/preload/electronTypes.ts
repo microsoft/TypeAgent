@@ -97,6 +97,12 @@ export enum NotifyCommands {
     ShowAll = "all",
 }
 
+export type EmptyFunction = () => void;
+export type SetSettingFunction = (name: string, value: any) => void;
+export interface ClientSettingsProvider {
+    set: SetSettingFunction | null;
+}
+
 // end duplicate type section
 
 export interface ClientAPI {

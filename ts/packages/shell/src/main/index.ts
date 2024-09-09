@@ -131,7 +131,7 @@ function createWindow(): void {
     setupZoomHandlers(mainWindow);
 
     // Notify renderer process whenever settings are modified
-    ShellSettings.getinstance().onSettingsChanged = () => {
+    ShellSettings.getinstance().onSettingsChanged = (): void => {
         const tempFunc = ShellSettings.getinstance().onSettingsChanged;
         ShellSettings.getinstance().onSettingsChanged = null;
 
