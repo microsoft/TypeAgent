@@ -43,3 +43,11 @@ export function getChatModelNames() {
     );
     return [...azureNames, ...openaiNames];
 }
+
+export function isMultiModalInputSupported(modelName: string) {
+    if (modelName.toUpperCase() == "GPT_4_0" || modelName.toUpperCase() == "GPT_V") {
+        return true;
+    }
+
+    return false;
+}
