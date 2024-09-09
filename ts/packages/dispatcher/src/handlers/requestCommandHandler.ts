@@ -40,7 +40,7 @@ import { getAllActionInfo } from "../translation/actionInfo.js";
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
-export const DispatcherName = "dispatcher";
+
 export const SwitcherName = "switcher";
 
 async function confirmTranslation(

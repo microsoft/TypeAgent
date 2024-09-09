@@ -124,6 +124,22 @@ const agentInvokeHandler: AgentInvokeFunctions = {
         unregisterAgentContext(param.agentContextId!);
         return result;
     },
+
+    async executeCommand(
+        param: Partial<ActionContextParams> & {
+            command: string[] | undefined;
+            args: string;
+        },
+    ) {
+        if (agent.executeCommand === undefined) {
+            throw new Error("Invalid invocation of executeCommand");
+        }
+        return agent.executeCommand(
+            param.command,
+            param.args,
+            getActionContextShim(param),
+        );
+    },
 };
 
 if (process.send === undefined) {

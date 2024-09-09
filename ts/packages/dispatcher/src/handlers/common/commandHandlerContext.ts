@@ -42,10 +42,10 @@ import {
     getRequestIO,
     RequestId,
     getNullRequestIO,
+    DispatcherName,
 } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
-import { DispatcherName } from "../requestCommandHandler.js";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { conversation as Conversation } from "knowledge-processor";
 import { AppAgentManager } from "./appAgentManager.js";

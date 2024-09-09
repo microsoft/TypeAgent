@@ -17,5 +17,7 @@ export {
     ActionIO,
     DisplayType,
     DynamicDisplay,
+    CommandDescriptor,
+    CommandDescriptorTable,
 } from "./agentInterface.js";
 export * from "./memory.js";

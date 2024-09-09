@@ -17,6 +17,7 @@ import {
     turnImpressionToString,
     DynamicDisplay,
     DisplayType,
+    AppAgent,
 } from "@typeagent/agent-sdk";
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
@@ -301,9 +302,11 @@ export function startStreamPartialAction(
 }
 
 export async function executeCommand(
-    command: string,
+    command: string[] | undefined,
+    args: string,
     appAgentName: string,
     context: CommandHandlerContext,
+    attachments?: string[],
 ) {
     const actionContext = getActionContext(
         appAgentName,
@@ -317,5 +320,5 @@ export async function executeCommand(
             `Agent ${appAgentName} does not support executeCommand.`,
         );
     }
-    return appAgent.executeCommand(command, actionContext);
+    return appAgent.executeCommand(command, args, actionContext, attachments);
 }

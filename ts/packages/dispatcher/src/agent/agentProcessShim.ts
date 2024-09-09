@@ -16,7 +16,7 @@ import {
     AgentInvokeFunctions,
     ContextParams,
 } from "./agentProcessTypes.js";
-import { createRpc, Profiler } from "common-utils";
+import { createRpc } from "common-utils";
 import { fileURLToPath } from "url";
 
 type ShimContext =
@@ -81,15 +81,12 @@ export async function createAgentProcessShim(
         },
     );
     const contextMap = createContextMap<SessionContext<ShimContext>>();
-    function withContext<T>(
-        context: SessionContext<ShimContext>,
-        fn: (contextParams: ContextParams) => T,
-    ) {
-        return fn({
+    function getContextParam(context: SessionContext<ShimContext>) {
+        return {
             contextId: contextMap.getId(context),
             hasSessionStorage: context.sessionStorage !== undefined,
             agentContextId: context.agentContext?.contextId,
-        });
+        };
     }
 
     const actionContextMap = createContextMap<ActionContext<ShimContext>>();
@@ -97,19 +94,27 @@ export async function createAgentProcessShim(
         actionContext: ActionContext<ShimContext>,
         fn: (contextParams: { actionContextId: number }) => T,
     ) {
-        return withContext(
-            actionContext.sessionContext,
-            async (contextParams) => {
-                try {
-                    return await fn({
-                        actionContextId: actionContextMap.getId(actionContext),
-                        ...contextParams,
-                    });
-                } finally {
-                    actionContextMap.close(actionContext);
-                }
-            },
-        );
+        try {
+            return fn({
+                actionContextId: actionContextMap.getId(actionContext),
+                ...getContextParam(actionContext.sessionContext),
+            });
+        } finally {
+            actionContextMap.close(actionContext);
+        }
+    }
+    async function withActionContextAsync<T>(
+        actionContext: ActionContext<ShimContext>,
+        fn: (contextParams: { actionContextId: number }) => Promise<T>,
+    ) {
+        try {
+            return await fn({
+                actionContextId: actionContextMap.getId(actionContext),
+                ...getContextParam(actionContext.sessionContext),
+            });
+        } finally {
+            actionContextMap.close(actionContext);
+        }
     }
     function getStorage(
         param: {
@@ -245,16 +250,14 @@ export async function createAgentProcessShim(
             context: SessionContext<ShimContext>,
             translatorName,
         ) {
-            return withContext(context, (contextParams) =>
-                rpc.invoke("updateAgentContext", {
-                    ...contextParams,
-                    enable,
-                    translatorName,
-                }),
-            );
+            return rpc.invoke("updateAgentContext", {
+                ...getContextParam(context),
+                enable,
+                translatorName,
+            });
         },
         executeAction(action, context: ActionContext<ShimContext>) {
-            return withActionContext(context, (contextParams) =>
+            return withActionContextAsync(context, (contextParams) =>
                 rpc.invoke("executeAction", {
                     ...contextParams,
                     action,
@@ -262,12 +265,10 @@ export async function createAgentProcessShim(
             );
         },
         validateWildcardMatch(action, context: SessionContext) {
-            return withContext(context, (contextParams) =>
-                rpc.invoke("validateWildcardMatch", {
-                    ...contextParams,
-                    action,
-                }),
-            );
+            return rpc.invoke("validateWildcardMatch", {
+                ...getContextParam(context),
+                action,
+            });
         },
         streamPartialAction(
             actionName: string,
@@ -287,18 +288,26 @@ export async function createAgentProcessShim(
             );
         },
         getDynamicDisplay(type, displayId, context) {
-            return withContext(context, (contextParams) =>
-                rpc.invoke("getDynamicDisplay", {
-                    ...contextParams,
-                    type,
-                    displayId,
-                }),
-            );
+            return rpc.invoke("getDynamicDisplay", {
+                ...getContextParam(context),
+                type,
+                displayId,
+            });
         },
         closeAgentContext(context: SessionContext) {
-            return withContext(context, (contextParams) =>
-                rpc.invoke("closeAgentContext", {
+            return rpc.invoke("closeAgentContext", getContextParam(context));
+        },
+
+        executeCommand(
+            commands: string[] | undefined,
+            args: string,
+            context: ActionContext<ShimContext>,
+        ) {
+            return withActionContextAsync(context, (contextParams) =>
+                rpc.invoke("executeCommand", {
                     ...contextParams,
+                    commands,
+                    args,
                 }),
             );
         },

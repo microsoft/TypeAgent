@@ -42,13 +42,28 @@ export type DynamicDisplay = {
     nextRefreshMs: number; // in milliseconds, -1 means no more refresh.
 };
 
+export type CommandDescriptor = {
+    description: string;
+    help?: string;
+};
+
+export type CommandDescriptorTable = {
+    description: string;
+    commands: Record<string, CommandDescriptor | CommandDescriptorTable>;
+    defaultSubCommand?: CommandDescriptor | undefined;
+};
+
 export interface AppAgent {
+    // Setup
     initializeAgentContext?(): Promise<any>;
     updateAgentContext?(
         enable: boolean,
         context: SessionContext,
         translatorName: string, // for sub-translators
     ): Promise<void>;
+    closeAgentContext?(context: SessionContext): Promise<void>;
+
+    // Actions
     streamPartialAction?(
         actionName: string,
         name: string,
@@ -60,21 +75,30 @@ export interface AppAgent {
         action: AppAction,
         context: ActionContext<any>,
     ): Promise<any>; // TODO: define return type.
+
+    // Cache extensions
     validateWildcardMatch?(
         action: AppAction,
         context: SessionContext,
     ): Promise<boolean>;
 
+    // Output
     getDynamicDisplay?(
         type: DisplayType,
         dynamicDisplayId: string,
         context: SessionContext,
     ): Promise<DynamicDisplay>;
-    closeAgentContext?(context: SessionContext): Promise<void>;
+
+    // Commands
+    getCommands?(
+        context: SessionContext,
+    ): Promise<CommandDescriptor | CommandDescriptorTable>;
 
     executeCommand?(
-        command: string,
+        command: string[] | undefined,
+        args: string,
         context: ActionContext<any>,
+        attachments?: string[],
     ): Promise<void>;
 }
 
