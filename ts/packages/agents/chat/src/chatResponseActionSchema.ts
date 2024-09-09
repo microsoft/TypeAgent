@@ -13,7 +13,8 @@ export type Entity = {
 export type ChatResponseAction =
     | GreetingResponseAction
     | LookupAndGenerateResponseAction
-    | GenerateResponseAction;
+    | GenerateResponseAction
+    | ChatImageResponseAction;
 
 export type DateVal = {
     day: number;
@@ -89,7 +90,7 @@ export interface GenerateResponseAction {
     };
 }
 
-// Use this action to response to the user greeting you.
+// Use this action to response to the user greeting you. DO NOT use this response if the user doesn't supply any text.
 // Generate a five possible greetings and make sure they are varied in tone, length, cadence, delivery, and style.
 // Make sure they don't sound similar and are appropriate for the time and day (i.e. Happy Friday, good evening, etc.).
 // Some examples should borrow common greetings from languages other than English.
@@ -113,4 +114,20 @@ export interface Greeting {
     // Be sure to make the greeting relevant to time of day (i.e. don't say good morning in the afternoon).
     // you can also use greetings such as Namaste/Shalom/Bonjour or equivalent.
     generatedGreeting: string;
+}
+
+// Use this response action when discussing any images provided by the user
+// If the user provides the image but nothing else feel free to ask the user if they have any specific things they would like to ask or discuss with regards to the image
+export interface ChatImageResponseAction {
+    actionName: "chatImageResponse";
+    parameters: {
+        // the original request from the user
+        originalRequest: string;
+        // a detailed description of the image and all of the notable objects in the image
+        detailedImageDescription: string;
+        // ALL the actions and entities present in the text of the user's request
+        userRequestEntities: Entity[];
+        // ALL the actions and entities present in the generated text
+        generatedTextEntities: Entity[];
+    }
 }

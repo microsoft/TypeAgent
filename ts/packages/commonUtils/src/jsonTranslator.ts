@@ -128,7 +128,7 @@ function attachAttachments(
                 role: "user",
                 content: [
                     { type: "text", text: "\n" },
-                    { type: "image_url", image_url: { url: attachments[i] } },
+                    { type: "image_url", image_url: { url: attachments[i], detail: "high" } },
                     { type: "text", text: "\n" },
                 ],
             });
