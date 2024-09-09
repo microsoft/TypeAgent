@@ -5,6 +5,8 @@ import fs from "node:fs";
 import { StopWatch } from "common-utils";
 import {
     ChatResponseAction,
+    GenerateResponseAction,
+    GreetingResponseAction,
     LookupAndGenerateResponseAction,
 } from "./chatResponseActionSchema.js";
 import {
@@ -25,6 +27,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { fileURLToPath } from "node:url";
 import { conversation as Conversation } from "knowledge-processor";
+import { randomInt } from "node:crypto";
 
 export function instantiate(): AppAgent {
     return {
@@ -35,6 +38,7 @@ export function instantiate(): AppAgent {
 
 function isChatResponseAction(action: AppAction): action is ChatResponseAction {
     return (
+        action.actionName === "generateGreetingResponse" ||
         action.actionName === "generateResponse" ||
         action.actionName === "lookupAndGenerateResponse"
     );
@@ -56,27 +60,44 @@ async function handleChatResponse(
 ) {
     console.log(JSON.stringify(chatAction, undefined, 2));
     switch (chatAction.actionName) {
+        case "generateGreetingResponse": {
+            const greetingAction = chatAction as GreetingResponseAction;
+            if (greetingAction.parameters.possibleGreetings !== undefined) {
+                const count =
+                    greetingAction.parameters.possibleGreetings.length;
+                console.log(`Got ${count} generated greetings`);
+
+                const result = createTurnImpressionFromLiteral(
+                    greetingAction.parameters.possibleGreetings[
+                        randomInt(0, count)
+                    ].generatedGreeting,
+                );
+
+                return result;
+            }
+        }        
         case "generateResponse": {
-            if (chatAction.parameters.generatedText !== undefined) {
+            const generateResponseAction = chatAction as GenerateResponseAction;
+            if (generateResponseAction.parameters.generatedText !== undefined) {
                 logEntities(
                     "UR Entities:",
-                    chatAction.parameters.userRequestEntities,
+                    generateResponseAction.parameters.userRequestEntities,
                 );
                 logEntities(
                     "GT Entities:",
-                    chatAction.parameters.generatedTextEntities,
+                    generateResponseAction.parameters.generatedTextEntities,
                 );
                 console.log("Got generated text");
 
                 const result = createTurnImpressionFromLiteral(
-                    chatAction.parameters.generatedText,
+                    generateResponseAction.parameters.generatedText,
                 );
 
                 let entities =
-                    chatAction.parameters.generatedTextEntities || [];
-                if (chatAction.parameters.userRequestEntities !== undefined) {
+                generateResponseAction.parameters.generatedTextEntities || [];
+                if (generateResponseAction.parameters.userRequestEntities !== undefined) {
                     entities =
-                        chatAction.parameters.userRequestEntities.concat(
+                    generateResponseAction.parameters.userRequestEntities.concat(
                             entities,
                         );
                 }

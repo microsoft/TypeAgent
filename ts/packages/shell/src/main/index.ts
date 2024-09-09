@@ -89,6 +89,12 @@ function createWindow(): void {
         if (ShellSettings.getinstance().devTools) {
             mainWindow?.webContents.openDevTools();
         }
+
+        // Send settings
+        mainWindow?.webContents.send(
+            "settings-changed",
+            ShellSettings.getinstance(),
+        );
     });
 
     mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -129,6 +135,19 @@ function createWindow(): void {
 
     setAppMenu(mainWindow);
     setupZoomHandlers(mainWindow);
+
+    // Notify renderer process whenever settings are modified
+    ShellSettings.getinstance().onSettingsChanged = () => {
+        const tempFunc = ShellSettings.getinstance().onSettingsChanged;
+        ShellSettings.getinstance().onSettingsChanged = null;
+
+        mainWindow?.webContents.send(
+            "settings-changed",
+            ShellSettings.getinstance(),
+        );
+
+        ShellSettings.getinstance().onSettingsChanged = tempFunc;
+    };
 }
 
 /**
@@ -508,12 +527,15 @@ app.whenReady().then(async () => {
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.electron");
 
-    const context = await initializeCommandHandlerContext("shell", {
-        explanationAsynchronousMode: true,
-        persistSession: true,
-        enableServiceHost: true,
-        clientIO,
-    });
+    const context = await initializeCommandHandlerContext("shell", 
+        ShellSettings.getinstance(),
+        {
+            explanationAsynchronousMode: true,
+            persistSession: true,
+            enableServiceHost: true,
+            clientIO,
+        }
+    );
     function translatorSetPartialInputHandler() {
         mainWindow?.webContents.send(
             "set-partial-input-handler",
@@ -585,10 +607,10 @@ app.whenReady().then(async () => {
             getTranslatorNameToEmojiMap(context),
         );
 
-        mainWindow?.webContents.send(
-            "settings-changed",
-            ShellSettings.getinstance(),
-        );
+        // mainWindow?.webContents.send(
+        //     "settings-changed",
+        //     ShellSettings.getinstance(),
+        // );
     });
 
     await initializeSpeech(context);
@@ -604,6 +626,7 @@ app.whenReady().then(async () => {
         ShellSettings.getinstance().hideTabs = settings.hideTabs;
         ShellSettings.getinstance().tts = settings.tts;
         ShellSettings.getinstance().ttsSettings = settings.ttsSettings;
+        ShellSettings.getinstance().agentGreeting = settings.agentGreeting;
         ShellSettings.getinstance().save();
 
         // Update based on the new settings
@@ -633,7 +656,6 @@ app.whenReady().then(async () => {
     });
 
     createWindow();
-    ``;
 
     app.on("activate", function () {
         // On macOS it's common to re-create a window in the app when the
