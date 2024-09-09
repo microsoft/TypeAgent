@@ -295,8 +295,4 @@ document.addEventListener("DOMContentLoaded", function () {
     chatView.chatInputFocus();
 
     (window as any).electron.ipcRenderer.send("dom ready");
-
-    if (settingsView.shellSettings.agentGreeting) {
-        chatView.addUserMessage("Hi!", true);
-    }
 });

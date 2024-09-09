@@ -24,8 +24,6 @@ export class ShellSettings implements ShellSettingsType {
     public microphoneName?: string;
     public hideMenu: boolean;
     public hideTabs: boolean;
-    public agentGreeting: boolean;
-    public onSettingsChanged: (() => void) | null;
     public notifyFilter: string;
     public tts: boolean;
     public ttsSettings: TTSSettings;
@@ -60,12 +58,9 @@ export class ShellSettings implements ShellSettingsType {
         this.microphoneName = settings.microphoneName;
         this.hideMenu = settings.hideMenu;
         this.hideTabs = settings.hideTabs;
-        this.agentGreeting = settings.agentGreeting;
         this.notifyFilter = settings.notifyFilter;
         this.tts = settings.tts;
         this.ttsSettings = settings.ttsSettings;
-
-        this.onSettingsChanged = null;
     }
 
     public static get filePath(): string {
@@ -100,29 +95,5 @@ export class ShellSettings implements ShellSettingsType {
         );
 
         writeFileSync(ShellSettings.filePath, JSON.stringify(this));
-    }
-
-    public set(name: string, value: any) {
-        const t = typeof ShellSettings.getinstance()[name];
-
-        switch (t) {
-            case "string":
-                ShellSettings.getinstance()[name] = value;
-                break;
-            case "number":
-                ShellSettings.getinstance()[name] = Number(value);
-                break;
-            case "boolean":
-                ShellSettings.getinstance()[name] =
-                    value.toLowerCase() === "true" || value === "1";
-                break;
-            case "object":
-                ShellSettings.getinstance()[name] = JSON.parse(value);
-                break;
-        }
-
-        if (ShellSettings.getinstance().onSettingsChanged) {
-            ShellSettings.getinstance().onSettingsChanged!();
-        }
     }
 }

@@ -11,7 +11,6 @@ export type Entity = {
 };
 
 export type ChatResponseAction =
-    | GreetingResponseAction
     | LookupAndGenerateResponseAction
     | GenerateResponseAction;
 
@@ -71,32 +70,6 @@ export interface LookupAndGenerateResponseAction {
         // it is recommended to include the same entities as in the user request
         internetLookups?: string[];
     };
-}
-
-// Use this action to response to the user greeting you.
-// Generate a five possible greetings and make sure they are varied in tone, length, cadence, delivery, and style.
-// Make sure they don't sound similar and are appropriate for the time and day (i.e. Happy Friday, good evening, etc.).
-// Some examples should borrow common greetings from languages other than English.
-// Come up with a spontaneous greeting that conveys one of the following moods: friendly, enthusiastic, excited, polite, cheerful, happy, positive, welcoming, affectionate, warm, jovial, lively, energetic, radiant, or breezy.
-// The goal is to create a warm and inviting atmosphere for the person you're greeting, so feel free to be creative and use your own style
-// DO NOT use it if the user gave you a question or is seeking information.
-export interface GreetingResponseAction {
-    actionName: "generateGreetingResponse";
-    parameters: {
-        // the original request/greeting from the user
-        originalRequest: string;
-        // a set possible greeting responses to the user
-        possibleGreetings: Greeting[];
-    };
-}
-
-// A typical greeting between two people.
-// Occassionally greetings can include some color commentary and or an anecdote like "Wow, you're up late" or "I'm glad it's Friday"
-export interface Greeting {
-    // The greeting response to the user such as "Top of the morning to ya!" or "Hey, how's it going?" or "What a nice day we're having, what's up!?" or "What are we going to do today?"
-    // Be sure to make the greeting relevant to time of day (i.e. don't say good morning in the afternoon).
-    // you can also use greetings such as Namaste/Shalom/Bonjour or equivalent.
-    generatedGreeting: string;
 }
 
 // this is the way to handle requests for known information that is not stored in application memory or conversation memory, such as facts, definitions, explanations, or other information that can be generated without a lookup

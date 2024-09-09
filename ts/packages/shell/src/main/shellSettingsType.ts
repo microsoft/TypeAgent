@@ -15,7 +15,6 @@ export type ShellSettingsType = {
     microphoneName?: string;
     hideMenu: boolean;
     hideTabs: boolean;
-    agentGreeting: boolean;
     notifyFilter: string;
     tts: boolean;
     ttsSettings: TTSSettings;
@@ -27,7 +26,6 @@ export const defaultSettings: ShellSettingsType = {
     devTools: false,
     hideMenu: true,
     hideTabs: true,
-    agentGreeting: true,
     notifyFilter: "error;warning;",
     tts: false,
     ttsSettings: {},

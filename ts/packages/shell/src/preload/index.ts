@@ -58,7 +58,6 @@ const api: ClientAPI = {
         ipcRenderer.send("partial-input", text);
     },
     getDynamicDisplay(source: string, id: string) {
-        "re";
         return ipcRenderer.invoke("get-dynamic-display", source, id);
     },
     onActionCommand: (callback) => {

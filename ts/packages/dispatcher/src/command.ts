@@ -37,7 +37,6 @@ import { processRequests, unicodeChar } from "./utils/interactive.js";
 /* ==Experimental== */
 import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
 import { Profiler } from "common-utils";
-import { getShellCommandHandlers } from "./handlers/shellCommandHandler.js";
 import { getNotifyCommandHandlers } from "./handlers/notifyCommandHandler.js";
 /* ==End Experimental== */
 
@@ -149,7 +148,6 @@ const handlers: HandlerTable = {
             },
         },
         random: getRandomCommandHandlers(),
-        shell: getShellCommandHandlers(),
         notify: getNotifyCommandHandlers(),
     },
 };

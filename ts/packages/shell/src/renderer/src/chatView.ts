@@ -696,9 +696,10 @@ export class ChatView {
                 } else if (this.chatInput) {
                     if (!ev.altKey && !ev.ctrlKey) {
                         if (ev.key == "ArrowUp" || ev.key == "ArrowDown") {
-                            const messages = this.messageDiv.querySelectorAll(
-                                ".chat-message-user:not(.chat-message-hidden)",
-                            );
+                            const messages =
+                                this.messageDiv.querySelectorAll(
+                                    ".chat-message-user",
+                                );
 
                             if (
                                 ev.key == "ArrowUp" &&
@@ -1093,7 +1094,7 @@ export class ChatView {
         this.commandBackStackIndex = -1;
     }
 
-    async addUserMessage(request: string, hidden: boolean = false) {
+    async addUserMessage(request: string) {
         const id = this.idGenerator.genId();
 
         let tempDiv: HTMLDivElement = document.createElement("div");
@@ -1101,21 +1102,21 @@ export class ChatView {
 
         let images = await this.extractMultiModalContent(tempDiv);
 
-        const mg: MessageGroup = new MessageGroup(
-            this,
-            request,
-            this.messageDiv,
-            getClientAPI().processShellRequest(tempDiv.innerText, id, images),
-            new Date(),
-            this.agents,
+        this.idToMessageGroup.set(
+            id,
+            new MessageGroup(
+                this,
+                request,
+                this.messageDiv,
+                getClientAPI().processShellRequest(
+                    tempDiv.innerText,
+                    id,
+                    images,
+                ),
+                new Date(),
+                this.agents,
+            ),
         );
-
-        if (hidden) {
-            mg.userMessageContainer.classList.add("chat-message-hidden");
-            mg.userMessage.classList.add("chat-message-hidden");
-        }
-
-        this.idToMessageGroup.set(id, mg);
         this.commandBackStackIndex = -1;
     }
 
