@@ -9,7 +9,10 @@ resources:
       name: microsoft/typeagent
       ref: refs/heads/main
 
-trigger: none
+trigger:
+  branches:
+    include:
+      - main
 
 pr:
   branches:
