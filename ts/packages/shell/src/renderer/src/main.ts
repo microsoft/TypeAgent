@@ -298,5 +298,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
     (window as any).electron.ipcRenderer.send("dom ready");
 
-    setTimeout(() => { console.log("Hi!" + settingsView.shellSettings.agentGreeting); if (settingsView.shellSettings.agentGreeting) { chatView.addUserMessage("Hi!", true); } }, 1000);
+    setTimeout(() => {
+        console.log("Hi!" + settingsView.shellSettings.agentGreeting);
+        if (settingsView.shellSettings.agentGreeting) {
+            chatView.addUserMessage("Hi!", true);
+        }
+    }, 1000);
 });

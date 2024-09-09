@@ -124,5 +124,5 @@ export class ShellSettings implements ShellSettingsType {
         if (ShellSettings.getinstance().onSettingsChanged) {
             ShellSettings.getinstance().onSettingsChanged!();
         }
-    }    
+    }
 }

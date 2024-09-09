@@ -521,14 +521,15 @@ app.whenReady().then(async () => {
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.electron");
 
-    const context = await initializeCommandHandlerContext("shell", 
+    const context = await initializeCommandHandlerContext(
+        "shell",
         ShellSettings.getinstance(),
         {
             explanationAsynchronousMode: true,
             persistSession: true,
             enableServiceHost: true,
             clientIO,
-        }
+        },
     );
     function translatorSetPartialInputHandler() {
         mainWindow?.webContents.send(

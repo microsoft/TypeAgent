@@ -685,10 +685,9 @@ export class ChatView {
                 } else if (this.chatInput) {
                     if (!ev.altKey && !ev.ctrlKey) {
                         if (ev.key == "ArrowUp" || ev.key == "ArrowDown") {
-                            const messages =
-                                this.messageDiv.querySelectorAll(
-                                    ".chat-message-user:not(.chat-message-hidden)",
-                                );
+                            const messages = this.messageDiv.querySelectorAll(
+                                ".chat-message-user:not(.chat-message-hidden)",
+                            );
 
                             if (
                                 ev.key == "ArrowUp" &&
@@ -1091,17 +1090,13 @@ export class ChatView {
 
         const mg: MessageGroup = new MessageGroup(
             this,
-        request,
-        this.messageDiv,
-        getClientAPI().processShellRequest(
-                tempDiv.innerText,
-                id,
-                images,
-            ),
-        new Date(),
-        this.agents,
-    );
-      
+            request,
+            this.messageDiv,
+            getClientAPI().processShellRequest(tempDiv.innerText, id, images),
+            new Date(),
+            this.agents,
+        );
+
         if (hidden) {
             mg.userMessageContainer.classList.add("chat-message-hidden");
             mg.userMessage.classList.add("chat-message-hidden");

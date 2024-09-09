@@ -75,7 +75,7 @@ async function handleChatResponse(
 
                 return result;
             }
-        }        
+        }
         case "generateResponse": {
             const generateResponseAction = chatAction as GenerateResponseAction;
             if (generateResponseAction.parameters.generatedText !== undefined) {
@@ -94,10 +94,14 @@ async function handleChatResponse(
                 );
 
                 let entities =
-                generateResponseAction.parameters.generatedTextEntities || [];
-                if (generateResponseAction.parameters.userRequestEntities !== undefined) {
+                    generateResponseAction.parameters.generatedTextEntities ||
+                    [];
+                if (
+                    generateResponseAction.parameters.userRequestEntities !==
+                    undefined
+                ) {
                     entities =
-                    generateResponseAction.parameters.userRequestEntities.concat(
+                        generateResponseAction.parameters.userRequestEntities.concat(
                             entities,
                         );
                 }
