@@ -39,7 +39,7 @@ export class AppAgentManager implements TranslatorConfigProvider {
     >();
 
     public isTranslator(translatorName: string) {
-        return this.agents.has(translatorName);
+        return this.translatorConfigs.has(translatorName);
     }
 
     public async addProvider(provider: AppAgentProvider) {
