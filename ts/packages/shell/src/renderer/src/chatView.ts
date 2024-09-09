@@ -475,7 +475,7 @@ function stripAnsi(text: string): string {
 
 const enableText2Html = true;
 export function setContent(elm: HTMLElement, text: string) {
-    if (text.indexOf("<") > -1 && text.indexOf("@command") == -1) {
+    if (text.indexOf("<") > -1 && text.indexOf("Usage: @") == -1) {
         elm.innerHTML = text;
     } else if (enableText2Html) {
         elm.innerHTML = textToHtml(text);
@@ -685,10 +685,9 @@ export class ChatView {
                 } else if (this.chatInput) {
                     if (!ev.altKey && !ev.ctrlKey) {
                         if (ev.key == "ArrowUp" || ev.key == "ArrowDown") {
-                            const messages =
-                                this.messageDiv.querySelectorAll(
-                                    ".chat-message-user",
-                                );
+                            const messages = this.messageDiv.querySelectorAll(
+                                ".chat-message-user:not(.chat-message-hidden)",
+                            );
 
                             if (
                                 ev.key == "ArrowUp" &&
@@ -1081,7 +1080,7 @@ export class ChatView {
         this.commandBackStackIndex = -1;
     }
 
-    async addUserMessage(request: string) {
+    async addUserMessage(request: string, hidden: boolean = false) {
         const id = this.idGenerator.genId();
 
         let tempDiv: HTMLDivElement = document.createElement("div");
@@ -1089,21 +1088,21 @@ export class ChatView {
 
         let images = await this.extractMultiModalContent(tempDiv);
 
-        this.idToMessageGroup.set(
-            id,
-            new MessageGroup(
-                this,
-                request,
-                this.messageDiv,
-                getClientAPI().processShellRequest(
-                    tempDiv.innerText,
-                    id,
-                    images,
-                ),
-                new Date(),
-                this.agents,
-            ),
+        const mg: MessageGroup = new MessageGroup(
+            this,
+            request,
+            this.messageDiv,
+            getClientAPI().processShellRequest(tempDiv.innerText, id, images),
+            new Date(),
+            this.agents,
         );
+
+        if (hidden) {
+            mg.userMessageContainer.classList.add("chat-message-hidden");
+            mg.userMessage.classList.add("chat-message-hidden");
+        }
+
+        this.idToMessageGroup.set(id, mg);
         this.autoScroll = true;
         this.updateScroll();
         this.commandBackStackIndex = -1;

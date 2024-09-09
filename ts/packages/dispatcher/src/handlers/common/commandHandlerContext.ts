@@ -87,6 +87,9 @@ export type CommandHandlerContext = {
     // For @correct
     lastRequestAction?: RequestAction;
     lastExplanation?: object;
+
+    // host (shell) settings
+    settings: any;
 };
 
 export function updateCorrectionContext(
@@ -199,6 +202,7 @@ function getLoggerSink(isDbEnabled: () => boolean, requestIO: RequestIO) {
 
 export async function initializeCommandHandlerContext(
     hostName: string,
+    hostSettings: any,
     options?: InitializeCommandHandlerContextOptions,
 ): Promise<CommandHandlerContext> {
     const explanationAsynchronousMode =
@@ -256,6 +260,7 @@ export async function initializeCommandHandlerContext(
         serviceHost: serviceHost,
         localWhisper: undefined,
         transientAgents: {},
+        settings: hostSettings,
     };
 
     await agents.addProvider(getBuiltinAppAgentProvider(context));
