@@ -129,6 +129,7 @@ function addEvents(
         tabsView.showTab(key);
     });
     api.onSettingsChanged((_, value: ShellSettings) => {
+        console.log("Settings Updated\n" + value);
         settingsView.shellSettings = value;
     });
     api.onNotificationCommand((_, requestId: string, data: any) => {
@@ -297,5 +298,5 @@ document.addEventListener("DOMContentLoaded", function () {
 
     (window as any).electron.ipcRenderer.send("dom ready");
 
-    chatView.addUserMessage("Hi!", true);
+    setTimeout(() => { console.log("Hi!" + settingsView.shellSettings.agentGreeting); if (settingsView.shellSettings.agentGreeting) { chatView.addUserMessage("Hi!", true); } }, 1000);
 });

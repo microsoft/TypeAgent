@@ -89,12 +89,6 @@ function createWindow(): void {
         if (ShellSettings.getinstance().devTools) {
             mainWindow?.webContents.openDevTools();
         }
-
-        // Send settings
-        mainWindow?.webContents.send(
-            "settings-changed",
-            ShellSettings.getinstance(),
-        );
     });
 
     mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -607,10 +601,8 @@ app.whenReady().then(async () => {
             getTranslatorNameToEmojiMap(context),
         );
 
-        // mainWindow?.webContents.send(
-        //     "settings-changed",
-        //     ShellSettings.getinstance(),
-        // );
+        // Send settings asap
+        ShellSettings.getinstance().onSettingsChanged!();
     });
 
     await initializeSpeech(context);
