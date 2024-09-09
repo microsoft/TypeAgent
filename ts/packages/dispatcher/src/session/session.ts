@@ -410,6 +410,28 @@ export class Session {
             );
         }
     }
+
+    public async addUserSuppliedFile(file: string): Promise<string> {
+        //if (this.dir) {
+            const sessionDir = getSessionDirPath(this.dir as string);
+            const filesDir = path.join(sessionDir, "user_files");
+            await fs.promises.mkdir(filesDir, { recursive: true });
+
+            // get the extension for the  mime type for the supplied file
+            const fileExtension = getExtensionForMimeType(file);
+            const fileName = getUniqueFileName(filesDir, "user-", fileExtension);
+
+            fs.writeFile(
+                fileName,
+                getBytes(file),
+            () => {},);
+            
+            return fileName;
+        //}
+    }
+
+
+
 }
 
 export async function configAgentCache(

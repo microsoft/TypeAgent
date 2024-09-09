@@ -694,6 +694,12 @@ export class RequestCommandHandler implements CommandHandler {
             );
         }
 
+        // store attachements for later reuse
+        attachments?.forEach((value: string, index: number) => {
+            context.session.addUserSuppliedFile(value);
+        });
+        
+
         const history = context.session.getConfig().history
             ? getChatHistoryForTranslation(context)
             : undefined;
