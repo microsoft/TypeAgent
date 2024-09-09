@@ -6,7 +6,7 @@ import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 
 export class ShellShowSettingsCommandHandler implements CommandHandler {
     public readonly description = "Show shell settings";
-    public async run(input: string, context: any) {
+    public async run(input: string, context: CommandHandlerContext) {
         context.requestIO.result((log: (message?: string) => void) => {
             const printConfig = (options: any, prefix: number = 2) => {
                 for (const [key, value] of Object.entries(options)) {
@@ -22,7 +22,7 @@ export class ShellShowSettingsCommandHandler implements CommandHandler {
                     }
                 }
             };
-            printConfig(context.settings);
+            printConfig(context.clientSettings);
         });
     }
 }
