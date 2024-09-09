@@ -71,6 +71,11 @@ export interface AppAgent {
         context: SessionContext,
     ): Promise<DynamicDisplay>;
     closeAgentContext?(context: SessionContext): Promise<void>;
+
+    executeCommand?(
+        command: string,
+        context: ActionContext<any>,
+    ): Promise<void>;
 }
 
 export enum AppAgentEvent {

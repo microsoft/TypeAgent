@@ -39,6 +39,7 @@ import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
 import { Profiler } from "common-utils";
 import { getShellCommandHandlers } from "./handlers/shellCommandHandler.js";
 import { getNotifyCommandHandlers } from "./handlers/notifyCommandHandler.js";
+import { executeCommand } from "./action/actionHandlers.js";
 /* ==End Experimental== */
 
 class HelpCommandHandler implements CommandHandler {
@@ -68,7 +69,7 @@ class HelpCommandHandler implements CommandHandler {
         if (request === "") {
             printHandleTable(handlers, "");
         } else {
-            const result = resolveCommand(request, true);
+            const result = resolveCommand(request, context, true);
             if (result === undefined) {
                 throw new Error(`Unknown command '${request}'`);
             }
@@ -167,11 +168,35 @@ type ResolveCommandResult = {
 };
 function resolveCommand(
     input: string,
+    context: CommandHandlerContext,
     isHelpCommand: boolean = false,
-): ResolveCommandResult | undefined {
+): ResolveCommandResult {
     let command: string = "";
     let currentHandlers = handlers;
     const args = input.split(/\s/).filter((s) => s !== "");
+    if (args.length !== 0) {
+        const appAgentName = args[0];
+        if (appAgentName === "system") {
+            // TODO: integrate into the agent architecture
+            command = appAgentName;
+            args.shift();
+        } else if (context.agents.enableExecuteCommand(appAgentName)) {
+            args.shift();
+            return {
+                resolved: {
+                    description: `App Agent ${appAgentName} Command`,
+                    run: async (
+                        request: string,
+                        context: CommandHandlerContext,
+                    ) => {
+                        executeCommand(request, appAgentName, context);
+                    },
+                },
+                args: args.join(" "),
+                command: appAgentName,
+            };
+        }
+    }
     while (true) {
         const subCommand = args.shift();
         if (subCommand === undefined) {
@@ -229,7 +254,7 @@ export async function processCommandNoLock(
     try {
         Profiler.getInstance().start(context.requestId);
 
-        const result = resolveCommand(input);
+        const result = resolveCommand(input, context);
         if (result === undefined) {
             throw new Error(`Unknown command '${input}'`);
         }

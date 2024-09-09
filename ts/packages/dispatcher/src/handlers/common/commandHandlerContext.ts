@@ -400,7 +400,7 @@ export function getActiveTranslatorList(context: CommandHandlerContext) {
     return Object.entries(context.session.getConfig().translators)
         .filter(
             ([name, value]) =>
-                context.agents.isTranslator(name) &&
+                context.agents.isValidTranslator(name) &&
                 value &&
                 context.transientAgents[name] !== false,
         )

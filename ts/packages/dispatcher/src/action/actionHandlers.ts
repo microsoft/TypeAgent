@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import { Action, Actions } from "agent-cache";
-import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
+import {
+    closeCommandHandlerContext,
+    CommandHandlerContext,
+} from "../handlers/common/commandHandlerContext.js";
 import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
@@ -19,23 +22,28 @@ import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
 import { getUserProfileDir } from "../utils/userData.js";
 import { Profiler } from "common-utils";
+import { CommandHandlerBase } from "../handlers/common/commandHandlerBase.js";
 
 const debugAgent = registerDebug("typeagent:agent");
 const debugActions = registerDebug("typeagent:actions");
 
 function getActionContext(
-    name: string,
+    appAgentName: string,
     context: CommandHandlerContext,
     requestId: string,
     actionIndex: number,
 ) {
-    const sessionContext = context.agents.getSessionContext(name);
+    const sessionContext = context.agents.getSessionContext(appAgentName);
     const actionIO: ActionIO = {
         get type() {
             return context.requestIO.type;
         },
         setActionDisplay(content: string): void {
-            context.requestIO.setActionDisplay(content, actionIndex, name);
+            context.requestIO.setActionDisplay(
+                content,
+                actionIndex,
+                appAgentName,
+            );
         },
     };
     return {
@@ -290,4 +298,24 @@ export function startStreamPartialAction(
             actionContext,
         );
     };
+}
+
+export async function executeCommand(
+    command: string,
+    appAgentName: string,
+    context: CommandHandlerContext,
+) {
+    const actionContext = getActionContext(
+        appAgentName,
+        context,
+        context.requestId!,
+        0,
+    );
+    const appAgent = context.agents.getAppAgent(appAgentName);
+    if (appAgent.executeCommand === undefined) {
+        throw new Error(
+            `Agent ${appAgentName} does not support executeCommand.`,
+        );
+    }
+    return appAgent.executeCommand(command, actionContext);
 }
