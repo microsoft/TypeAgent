@@ -125,6 +125,12 @@ const agentInvokeHandler: AgentInvokeFunctions = {
         return result;
     },
 
+    async getCommands(param: Partial<ContextParams>): Promise<any> {
+        if (agent.getCommands === undefined) {
+            throw new Error("Invalid invocation of getCommands");
+        }
+        return agent.getCommands(getSessionContextShim(param));
+    },
     async executeCommand(
         param: Partial<ActionContextParams> & {
             command: string[] | undefined;

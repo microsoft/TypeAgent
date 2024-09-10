@@ -10,7 +10,7 @@ import {
     Actions,
     HistoryContext,
 } from "agent-cache";
-import { CommandHandler } from "./common/commandHandler.js";
+import { DispatcherCommandHandler } from "./common/commandHandler.js";
 import {
     CommandHandlerContext,
     getTranslator,
@@ -680,7 +680,7 @@ async function requestExplain(
     }
 }
 
-export class RequestCommandHandler implements CommandHandler {
+export class RequestCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Translate and explain a request";
     public async run(
         request: string,

@@ -8,6 +8,8 @@ import {
     SessionContext,
     StorageListOptions,
     AppAgentEvent,
+    CommandDescriptor,
+    CommandDescriptorTable,
 } from "@typeagent/agent-sdk";
 import {
     AgentCallFunctions,
@@ -81,7 +83,9 @@ export async function createAgentProcessShim(
         },
     );
     const contextMap = createContextMap<SessionContext<ShimContext>>();
-    function getContextParam(context: SessionContext<ShimContext>) {
+    function getContextParam(
+        context: SessionContext<ShimContext>,
+    ): ContextParams {
         return {
             contextId: contextMap.getId(context),
             hasSessionStorage: context.sessionStorage !== undefined,
@@ -264,7 +268,7 @@ export async function createAgentProcessShim(
                 }),
             );
         },
-        validateWildcardMatch(action, context: SessionContext) {
+        validateWildcardMatch(action, context: SessionContext<ShimContext>) {
             return rpc.invoke("validateWildcardMatch", {
                 ...getContextParam(context),
                 action,
@@ -287,17 +291,26 @@ export async function createAgentProcessShim(
                 }),
             );
         },
-        getDynamicDisplay(type, displayId, context) {
+        getDynamicDisplay(
+            type,
+            displayId,
+            context: SessionContext<ShimContext>,
+        ) {
             return rpc.invoke("getDynamicDisplay", {
                 ...getContextParam(context),
                 type,
                 displayId,
             });
         },
-        closeAgentContext(context: SessionContext) {
+        closeAgentContext(context: SessionContext<ShimContext>) {
             return rpc.invoke("closeAgentContext", getContextParam(context));
         },
 
+        getCommands(
+            context: SessionContext<ShimContext>,
+        ): Promise<CommandDescriptor | CommandDescriptorTable> {
+            return rpc.invoke("getCommands", getContextParam(context));
+        },
         executeCommand(
             commands: string[] | undefined,
             args: string,
@@ -318,7 +331,7 @@ export async function createAgentProcessShim(
     );
 
     const invokeCloseAgentContext = result.closeAgentContext;
-    result.closeAgentContext = async (context) => {
+    result.closeAgentContext = async (context: SessionContext<ShimContext>) => {
         const result = await invokeCloseAgentContext?.(context);
         contextMap.close(context);
         return result;

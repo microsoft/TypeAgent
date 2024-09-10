@@ -53,7 +53,21 @@ export type CommandDescriptorTable = {
     defaultSubCommand?: CommandDescriptor | undefined;
 };
 
-export interface AppAgent {
+export interface AppAgentCommandInterface {
+    // Commands
+    getCommands(
+        context: SessionContext,
+    ): Promise<CommandDescriptor | CommandDescriptorTable>;
+
+    executeCommand(
+        command: string[] | undefined,
+        args: string,
+        context: ActionContext<unknown>,
+        attachments?: string[],
+    ): Promise<void>;
+}
+
+export interface AppAgent extends Partial<AppAgentCommandInterface> {
     // Setup
     initializeAgentContext?(): Promise<any>;
     updateAgentContext?(
@@ -69,11 +83,11 @@ export interface AppAgent {
         name: string,
         value: string,
         partial: boolean,
-        context: ActionContext<any>,
+        context: ActionContext<unknown>,
     ): void;
     executeAction?(
         action: AppAction,
-        context: ActionContext<any>,
+        context: ActionContext<unknown>,
     ): Promise<any>; // TODO: define return type.
 
     // Cache extensions
@@ -88,18 +102,6 @@ export interface AppAgent {
         dynamicDisplayId: string,
         context: SessionContext,
     ): Promise<DynamicDisplay>;
-
-    // Commands
-    getCommands?(
-        context: SessionContext,
-    ): Promise<CommandDescriptor | CommandDescriptorTable>;
-
-    executeCommand?(
-        command: string[] | undefined,
-        args: string,
-        context: ActionContext<any>,
-        attachments?: string[],
-    ): Promise<void>;
 }
 
 export enum AppAgentEvent {
@@ -109,7 +111,7 @@ export enum AppAgentEvent {
     Debug = "debug",
 }
 
-export interface SessionContext<T = any> {
+export interface SessionContext<T = unknown> {
     readonly agentContext: T;
     readonly sessionStorage: Storage | undefined;
     readonly profileStorage: Storage; // storage that are preserved across sessions

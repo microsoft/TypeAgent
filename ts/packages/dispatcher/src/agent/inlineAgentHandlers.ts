@@ -9,6 +9,7 @@ import {
     ActionContext,
     CommandDescriptorTable,
 } from "@typeagent/agent-sdk";
+import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/commands";
 import { executeSessionAction } from "../action/system/sessionActionHandler.js";
 import { executeConfigAction } from "../action/system/configActionHandler.js";
 import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
@@ -26,17 +27,12 @@ import { getRandomCommandHandlers } from "../handlers/randomCommandHandler.js";
 import { getShellCommandHandlers } from "../handlers/shellCommandHandler.js";
 import { getNotifyCommandHandlers } from "../handlers/notifyCommandHandler.js";
 import {
-    CommandHandler,
-    HandlerTable,
+    DispatcherCommandHandler,
+    DispatcherHandlerTable,
 } from "../handlers/common/commandHandler.js";
 import { processRequests } from "../utils/interactive.js";
 import { getConsoleRequestIO } from "../handlers/common/interactiveIO.js";
-import {
-    getPrompt,
-    isCommandDescriptorTable,
-    processCommandNoLock,
-    resolveCommand,
-} from "../command.js";
+import { getPrompt, processCommandNoLock, resolveCommand } from "../command.js";
 import { RequestCommandHandler } from "../handlers/requestCommandHandler.js";
 /* ==End Experimental== */
 
@@ -73,7 +69,7 @@ function executeSystemAction(
     throw new Error(`Invalid system sub-translator: ${action.translatorName}`);
 }
 
-class HelpCommandHandler implements CommandHandler {
+class HelpCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Show help";
     public async run(request: string, context: CommandHandlerContext) {
         const printHandleTable = (
@@ -114,7 +110,7 @@ class HelpCommandHandler implements CommandHandler {
                     context.requestIO.result(result.descriptor.help);
                 } else {
                     context.requestIO.result(
-                        `${result.command} - ${result.descriptor.description}`,
+                        `${result.command?.join(" ") ?? ""} - ${result.descriptor.description}`,
                     );
                 }
             } else {
@@ -127,7 +123,7 @@ class HelpCommandHandler implements CommandHandler {
     }
 }
 
-class RunCommandScriptHandler implements CommandHandler {
+class RunCommandScriptHandler implements DispatcherCommandHandler {
     public readonly description = "Run a command script file";
     public async run(input: string, context: CommandHandlerContext) {
         const prevScriptDir = context.currentScriptDir;
@@ -157,7 +153,7 @@ class RunCommandScriptHandler implements CommandHandler {
     }
 }
 
-const handlers: HandlerTable = {
+const handlers: DispatcherHandlerTable = {
     description: "Agent Dispatcher System Commands",
     commands: {
         request: new RequestCommandHandler(),
@@ -196,7 +192,7 @@ async function executeSystemCommand(
     context: ActionContext<CommandHandlerContext>,
     attachments?: string[],
 ): Promise<void> {
-    let curr: HandlerTable | CommandHandler = handlers;
+    let curr: DispatcherHandlerTable | DispatcherCommandHandler = handlers;
     const commandPrefix: string[] = [];
     if (command) {
         while (true) {
@@ -208,8 +204,10 @@ async function executeSystemCommand(
             if (!isCommandDescriptorTable(curr)) {
                 break;
             }
-            const next: HandlerTable | CommandHandler | undefined =
-                curr.commands[currCommand];
+            const next:
+                | DispatcherHandlerTable
+                | DispatcherCommandHandler
+                | undefined = curr.commands[currCommand];
             if (next === undefined) {
                 throw new Error(
                     `Unknown command '${currCommand}' in '${commandPrefix.join(" ")}'`,

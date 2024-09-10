@@ -24,14 +24,9 @@ import {
 
 import { Profiler } from "common-utils";
 import { executeCommand } from "./action/actionHandlers.js";
+import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/commands";
 
 const debugInteractive = registerDebug("typeagent:cli:interactive");
-
-export function isCommandDescriptorTable(
-    entry: CommandDescriptor | CommandDescriptorTable,
-): entry is CommandDescriptorTable {
-    return (entry as CommandDescriptorTable).commands !== undefined;
-}
 
 type ResolveCommandResult = {
     command: string[] | undefined;
@@ -66,9 +61,9 @@ export async function resolveCommand(
     }
 
     let currentTable = commands;
-    const command: string[] = [];
     let descriptor: CommandDescriptor | undefined;
     let table: CommandDescriptorTable | undefined;
+    const commandPrefix: string[] = [];
     while (true) {
         const subCommand = args.shift();
         if (subCommand === undefined) {
@@ -79,7 +74,7 @@ export async function resolveCommand(
             break;
         }
 
-        command.push(subCommand);
+        commandPrefix.push(subCommand);
         const c = currentTable.commands[subCommand];
         if (c === undefined) {
             // Unknown command
@@ -94,7 +89,7 @@ export async function resolveCommand(
     }
 
     return {
-        command,
+        command: commandPrefix,
         args: args.join(" "),
         appAgentName,
         descriptor,
@@ -136,7 +131,10 @@ export async function processCommandNoLock(
                 );
             }
             const subCommand = result.command?.pop();
-            const command = result.command?.join(" ");
+            const appAgentName = result.appAgentName;
+            const command = input.startsWith(`@${appAgentName}`)
+                ? `${appAgentName} ${result.command?.join(" ") ?? ""}`
+                : result.command?.join(" ") ?? "";
             if (subCommand !== undefined) {
                 throw new Error(
                     `Unknown command '${subCommand}' ${

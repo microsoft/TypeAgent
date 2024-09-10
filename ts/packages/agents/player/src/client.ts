@@ -138,18 +138,15 @@ export async function loadHistoryFile(
     historyPath: string,
     context: IClientContext,
 ) {
-    console.log(`Loading history file: ${historyPath}`);
-    if (!(await profileStorage.exists(historyPath)) || !context.userData) {
-        return;
+    if (!(await profileStorage.exists(historyPath))) {
+        throw new Error(`History file not found: ${historyPath}`);
     }
-    let data: undefined | SpotifyRecord[] = undefined;
+    if (!context.userData) {
+        throw new Error("User data not enabled");
+    }
     try {
         const rawData = await profileStorage.read(historyPath, "utf8");
-        data = JSON.parse(rawData);
-    } catch (err) {
-        console.error(`Error reading history file: ${err}`);
-    }
-    if (data) {
+        let data: SpotifyRecord[] = JSON.parse(rawData);
         for (const record of data) {
             console.log(`${record.master_metadata_track_name}`);
         }
@@ -166,6 +163,8 @@ export async function loadHistoryFile(
             })),
         );
         await saveUserData(profileStorage, context.userData.data);
+    } catch (e: any) {
+        throw new Error(`Error reading history file: ${e.message}`);
     }
 }
 

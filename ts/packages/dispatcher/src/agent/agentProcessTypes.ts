@@ -99,6 +99,7 @@ export type AgentInvokeFunctions = {
         },
     ) => Promise<any>;
     closeAgentContext: (param: Partial<ContextParams>) => Promise<any>;
+    getCommands: (param: Partial<ContextParams>) => Promise<any>;
     executeCommand(
         param: Partial<ActionContextParams> & {
             command: string[] | undefined;

@@ -69,7 +69,7 @@ function getActionContext(
     };
 }
 
-export function createSessionContext<T = any>(
+export function createSessionContext<T = unknown>(
     name: string,
     agentContext: T,
     context: CommandHandlerContext,
@@ -79,7 +79,7 @@ export function createSessionContext<T = any>(
         ? getStorage(name, sessionDirPath)
         : undefined;
     const profileStorage = getStorage(name, getUserProfileDir());
-    const sessionContext: SessionContext = {
+    const sessionContext: SessionContext<T> = {
         get agentContext() {
             return agentContext;
         },
@@ -312,7 +312,7 @@ export async function executeCommand(
         appAgentName,
         context,
         context.requestId!,
-        0,
+        -1,
     );
     const appAgent = context.agents.getAppAgent(appAgentName);
     if (appAgent.executeCommand === undefined) {

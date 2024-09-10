@@ -2,10 +2,13 @@
 // Licensed under the MIT License.
 
 import { StopWatch } from "common-utils";
-import { CommandHandler, HandlerTable } from "./common/commandHandler.js";
+import {
+    DispatcherCommandHandler,
+    DispatcherHandlerTable,
+} from "./common/commandHandler.js";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 
-export class HistoryListCommandHandler implements CommandHandler {
+export class HistoryListCommandHandler implements DispatcherCommandHandler {
     public readonly description = "List history";
     public async run(input: string, context: CommandHandlerContext) {
         const history = context.chatHistory;
@@ -22,7 +25,7 @@ export class HistoryListCommandHandler implements CommandHandler {
     }
 }
 
-export function getHistoryCommandHandlers(): HandlerTable {
+export function getHistoryCommandHandlers(): DispatcherHandlerTable {
     return {
         description: "History commands",
         defaultSubCommand: new HistoryListCommandHandler(),
