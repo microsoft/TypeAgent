@@ -695,11 +695,12 @@ export class RequestCommandHandler implements CommandHandler {
         }
 
         // store attachements for later reuse
-        attachments?.forEach((value: string, index: number) => {
-            context.session.addUserSuppliedFile(value);
+        let cachedFiles: string[] = new Array<string>()
+        await attachments?.forEach(async (value: string, index: number) => {
+            const attachmentName = await context.session.addUserSuppliedFile(value);
+            cachedFiles.push(attachmentName);
         });
         
-
         const history = context.session.getConfig().history
             ? getChatHistoryForTranslation(context)
             : undefined;

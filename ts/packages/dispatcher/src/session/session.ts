@@ -412,25 +412,31 @@ export class Session {
     }
 
     public async addUserSuppliedFile(file: string): Promise<string> {
-        //if (this.dir) {
-            const sessionDir = getSessionDirPath(this.dir as string);
-            const filesDir = path.join(sessionDir, "user_files");
-            await fs.promises.mkdir(filesDir, { recursive: true });
+        const sessionDir = getSessionDirPath(this.dir as string);
+        const filesDir = path.join(sessionDir, "user_files");
+        await fs.promises.mkdir(filesDir, { recursive: true });
 
-            // get the extension for the  mime type for the supplied file
-            const fileExtension = getExtensionForMimeType(file);
-            const fileName = getUniqueFileName(filesDir, "user-", fileExtension);
+        // get the extension for the  mime type for the supplied file
+        const fileExtension: string = this.getFileExtensionForMimeType(file.substring(5, file.indexOf(";")));
+        const fileName: string = path.join(filesDir, getUniqueFileName(filesDir, "attachment_", fileExtension));
+        const buffer = Buffer.from(file.substring(file.indexOf(";base64,") + ";base64,".length), 'base64');
 
-            fs.writeFile(
-                fileName,
-                getBytes(file),
-            () => {},);
-            
-            return fileName;
-        //}
+        fs.writeFile(
+            fileName,
+            buffer,
+        () => {},);
+        
+        return fileName;
     }
 
-
+    getFileExtensionForMimeType(mime: string): string {
+        switch (mime) {
+            case "image/png": return ".png";
+            case "image/jpeg": return ".jpeg";
+        }
+        
+        throw "Unsupported MIME type"!;
+    }
 
 }
 
