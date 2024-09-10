@@ -1,10 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommandHandler, HandlerTable } from "./common/commandHandler.js";
+import {
+    DispatcherCommandHandler,
+    DispatcherHandlerTable,
+} from "./common/commandHandler.js";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 
-export class ShellShowSettingsCommandHandler implements CommandHandler {
+export class ShellShowSettingsCommandHandler
+    implements DispatcherCommandHandler
+{
     public readonly description = "Show shell settings";
     public async run(input: string, context: CommandHandlerContext) {
         context.requestIO.result((log: (message?: string) => void) => {
@@ -27,7 +32,7 @@ export class ShellShowSettingsCommandHandler implements CommandHandler {
     }
 }
 
-export class ShellSetSettingCommandHandler implements CommandHandler {
+export class ShellSetSettingCommandHandler implements DispatcherCommandHandler {
     public readonly description: string =
         "Sets a specific setting with the supplied value";
     public async run(input: string, context: CommandHandlerContext) {
@@ -54,7 +59,7 @@ export class ShellSetSettingCommandHandler implements CommandHandler {
     }
 }
 
-export function getShellCommandHandlers(): HandlerTable {
+export function getShellCommandHandlers(): DispatcherHandlerTable {
     return {
         description: "Shell settings command",
         defaultSubCommand: new ShellShowSettingsCommandHandler(),

@@ -3,207 +3,98 @@
 
 import chalk from "chalk";
 import registerDebug from "debug";
-import fs from "node:fs";
-import path from "node:path";
 import {
     RequestId,
-    getConsoleRequestIO,
     getRequestIO,
+    DispatcherName,
 } from "./handlers/common/interactiveIO.js";
 import { getDefaultExplainerName } from "agent-cache";
-import {
-    CommandHandler,
-    HandlerTable,
-} from "./handlers/common/commandHandler.js";
 import {
     CommandHandlerContext,
     getActiveTranslatorList,
 } from "./handlers/common/commandHandlerContext.js";
-import { getConfigCommandHandlers } from "./handlers/configCommandHandlers.js";
-import { getConstructionCommandHandlers } from "./handlers/constructionCommandHandlers.js";
-import { CorrectCommandHandler } from "./handlers/correctCommandHandler.js";
-import { DebugCommandHandler } from "./handlers/debugCommandHandlers.js";
-import { ExplainCommandHandler } from "./handlers/explainCommandHandler.js";
+
+import { SwitcherName } from "./handlers/requestCommandHandler.js";
+
+import { unicodeChar } from "./utils/interactive.js";
 import {
-    DispatcherName,
-    RequestCommandHandler,
-    SwitcherName,
-} from "./handlers/requestCommandHandler.js";
-import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js";
-import { getHistoryCommandHandlers } from "./handlers/historyCommandHandler.js";
-import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
-import { TranslateCommandHandler } from "./handlers/translateCommandHandler.js";
-import { processRequests, unicodeChar } from "./utils/interactive.js";
-/* ==Experimental== */
-import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
+    CommandDescriptor,
+    CommandDescriptorTable,
+} from "@typeagent/agent-sdk";
+
 import { Profiler } from "common-utils";
-import { getShellCommandHandlers } from "./handlers/shellCommandHandler.js";
-import { getNotifyCommandHandlers } from "./handlers/notifyCommandHandler.js";
-/* ==End Experimental== */
-
-class HelpCommandHandler implements CommandHandler {
-    public readonly description = "Show help";
-    public async run(request: string, context: CommandHandlerContext) {
-        const printHandleTable = (handlers: HandlerTable, command: string) => {
-            context.requestIO.result((log: (message?: string) => void) => {
-                log(`${handlers.description}`);
-                log();
-                if (command) {
-                    log(`Usage: @${command} <subcommand> ...`);
-                    log("Subcommands:");
-                } else {
-                    log("Usage: @<command> ...");
-                    log("Commands:");
-                }
-
-                for (const name in handlers.commands) {
-                    const handler = handlers.commands[name];
-                    const subcommand = isCommandHandler(handler)
-                        ? name
-                        : `${name} <subcommand>`;
-                    log(`  ${subcommand.padEnd(20)}: ${handler.description}`);
-                }
-            });
-        };
-        if (request === "") {
-            printHandleTable(handlers, "");
-        } else {
-            const result = resolveCommand(request, true);
-            if (result === undefined) {
-                throw new Error(`Unknown command '${request}'`);
-            }
-
-            if (isCommandHandler(result.resolved)) {
-                if (result.resolved.help) {
-                    context.requestIO.result(result.resolved.help);
-                } else {
-                    context.requestIO.result(
-                        `${result.command} - ${result.resolved.description}`,
-                    );
-                }
-            } else {
-                printHandleTable(result.resolved, result.command);
-            }
-        }
-    }
-}
-
-class RunCommandScriptHandler implements CommandHandler {
-    public readonly description = "Run a command script file";
-    public async run(input: string, context: CommandHandlerContext) {
-        const prevScriptDir = context.currentScriptDir;
-        const inputFile = path.resolve(prevScriptDir, input);
-        const content = await fs.promises.readFile(inputFile, "utf8");
-        const inputs = content.split(/\r?\n/);
-        const prevRequestIO = context.requestIO;
-        try {
-            // handle nested @run in files
-            context.currentScriptDir = path.parse(inputFile).dir;
-
-            // Disable confirmation in file mode
-            context.requestIO = getConsoleRequestIO(undefined);
-
-            // Process the commands in the file.
-            await processRequests(
-                getPrompt,
-                inputs,
-                processCommandNoLock,
-                context,
-            );
-        } finally {
-            // Restore state
-            context.requestIO = prevRequestIO;
-            context.currentScriptDir = prevScriptDir;
-        }
-    }
-}
+import { executeCommand } from "./action/actionHandlers.js";
+import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/commands";
 
 const debugInteractive = registerDebug("typeagent:cli:interactive");
 
-const handlers: HandlerTable = {
-    description: "Agent Dispatcher Commands",
-    defaultSubCommand: undefined,
-    commands: {
-        request: new RequestCommandHandler(),
-        translate: new TranslateCommandHandler(),
-        explain: new ExplainCommandHandler(),
-        correct: new CorrectCommandHandler(),
-        session: getSessionCommandHandlers(),
-        history: getHistoryCommandHandlers(),
-        const: getConstructionCommandHandlers(),
-        config: getConfigCommandHandlers(),
-        trace: new TraceCommandHandler(),
-        help: new HelpCommandHandler(),
-        debug: new DebugCommandHandler(),
-        clear: {
-            description: "Clear the console",
-            async run(request: string, context: CommandHandlerContext) {
-                context.requestIO.clear();
-            },
-        },
-        run: new RunCommandScriptHandler(),
-        exit: {
-            description: "Exit the program",
-            async run(request: string, context: CommandHandlerContext) {
-                context.clientIO ? context.clientIO.exit() : process.exit(0);
-            },
-        },
-        random: getRandomCommandHandlers(),
-        shell: getShellCommandHandlers(),
-        notify: getNotifyCommandHandlers(),
-    },
-};
-
-function isCommandHandler(
-    entry: CommandHandler | HandlerTable,
-): entry is CommandHandler {
-    return typeof (entry as CommandHandler).run === "function";
-}
-
 type ResolveCommandResult = {
-    resolved: CommandHandler | HandlerTable;
+    command: string[] | undefined;
     args: string;
-    command: string;
+    appAgentName: string;
+    descriptor: CommandDescriptor | undefined;
+    table: CommandDescriptorTable | undefined;
 };
-function resolveCommand(
+
+export async function resolveCommand(
     input: string,
-    isHelpCommand: boolean = false,
-): ResolveCommandResult | undefined {
-    let command: string = "";
-    let currentHandlers = handlers;
-    const args = input.split(/\s/).filter((s) => s !== "");
+    context: CommandHandlerContext,
+    useDefault: boolean = true,
+): Promise<ResolveCommandResult> {
+    const args = input.match(/"[^"]+"|\S+/g) ?? [];
+    let appAgentName = "system";
+    const arg0 = args[0];
+    if (arg0 !== undefined && context.agents.enableExecuteCommand(arg0)) {
+        appAgentName = args.shift()!;
+    }
+    const appAgent = context.agents.getAppAgent(appAgentName);
+    const sessionContext = context.agents.getSessionContext(appAgentName);
+    const commands = await appAgent.getCommands?.(sessionContext);
+    if (commands === undefined || !isCommandDescriptorTable(commands)) {
+        return {
+            command: undefined,
+            args: args.join(" "),
+            appAgentName,
+            descriptor: commands ?? { description: "No description available" },
+            table: undefined,
+        };
+    }
+
+    let currentTable = commands;
+    let descriptor: CommandDescriptor | undefined;
+    let table: CommandDescriptorTable | undefined;
+    const commandPrefix: string[] = [];
     while (true) {
         const subCommand = args.shift();
         if (subCommand === undefined) {
-            if (
-                currentHandlers.defaultSubCommand != undefined &&
-                !isHelpCommand
-            ) {
-                return {
-                    resolved: currentHandlers.defaultSubCommand,
-                    args: "",
-                    command,
-                };
-            } else {
-                return { resolved: currentHandlers, args: "", command };
-            }
+            descriptor = useDefault
+                ? currentTable.defaultSubCommand
+                : undefined;
+            table = descriptor === undefined ? currentTable : undefined;
+            break;
         }
-        const action = currentHandlers.commands[subCommand];
-        if (action === undefined) {
-            throw new Error(
-                `Unknown command '${subCommand}'. ${
-                    command
-                        ? ` for '@${command}'. Try '@help ${command}' for the list of subcommands.`
-                        : "Try '@help' for a list of commands."
-                }`,
-            );
+
+        commandPrefix.push(subCommand);
+        const c = currentTable.commands[subCommand];
+        if (c === undefined) {
+            // Unknown command
+            break;
         }
-        command = command ? `${command} ${subCommand}` : subCommand;
-        if (isCommandHandler(action)) {
-            return { resolved: action, args: args.join(" "), command };
+
+        if (!isCommandDescriptorTable(c)) {
+            descriptor = c;
+            break;
         }
-        currentHandlers = action;
+        currentTable = c;
     }
+
+    return {
+        command: commandPrefix,
+        args: args.join(" "),
+        appAgentName,
+        descriptor,
+        table,
+    };
 }
 
 export async function processCommandNoLock(
@@ -229,18 +120,42 @@ export async function processCommandNoLock(
     try {
         Profiler.getInstance().start(context.requestId);
 
-        const result = resolveCommand(input);
+        const result = await resolveCommand(input, context);
         if (result === undefined) {
             throw new Error(`Unknown command '${input}'`);
         }
-        if (isCommandHandler(result.resolved)) {
-            context.logger?.logEvent("command", { originalInput });
-            await result.resolved.run(result.args, context, attachments);
-        } else {
-            throw new Error(
-                `Command '${input}' requires a subcommand. Try '@help ${input}' for the list of sub commands.`,
-            );
+        if (result.descriptor === undefined) {
+            if (result.table !== undefined) {
+                throw new Error(
+                    `Command '${input}' requires a subcommand. Try '@help ${input}' for the list of sub commands.`,
+                );
+            }
+            const subCommand = result.command?.pop();
+            const appAgentName = result.appAgentName;
+            const command = input.startsWith(`@${appAgentName}`)
+                ? `${appAgentName} ${result.command?.join(" ") ?? ""}`
+                : result.command?.join(" ") ?? "";
+            if (subCommand !== undefined) {
+                throw new Error(
+                    `Unknown command '${subCommand}' ${
+                        command
+                            ? ` for '@${command}'. Try '@help ${command}' for the list of subcommands.`
+                            : "Try '@help' for a list of commands."
+                    }`,
+                );
+            } else {
+                throw new Error(`Unknown command '${input}'`);
+            }
         }
+
+        context.logger?.logEvent("command", { originalInput });
+        await executeCommand(
+            result.command,
+            result.args,
+            result.appAgentName,
+            context,
+            attachments,
+        );
     } catch (e: any) {
         context.requestIO.error(`ERROR: ${e.message}`);
         debugInteractive(e.stack);

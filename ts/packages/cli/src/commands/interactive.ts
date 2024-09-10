@@ -9,10 +9,10 @@ import {
     processCommand,
     processRequests,
     getPrompt,
-    CommandHandlerContext,
     initializeCommandHandlerContext,
+    CommandHandlerContext,
     closeCommandHandlerContext,
-} from "agent-dispatcher";
+} from "agent-dispatcher/internal";
 import inspector from "node:inspector";
 
 export default class Interactive extends Command {
@@ -66,13 +66,17 @@ export default class Interactive extends Command {
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
         try {
-            context = await initializeCommandHandlerContext("cli interactive", {
-                translators,
-                explainerName: flags.explainer,
-                stdio,
-                persistSession: !flags.memory,
-                enableServiceHost: true,
-            });
+            context = await initializeCommandHandlerContext(
+                "cli interactive",
+                undefined,
+                {
+                    translators,
+                    explainerName: flags.explainer,
+                    stdio,
+                    persistSession: !flags.memory,
+                    enableServiceHost: true,
+                },
+            );
 
             if (args.input) {
                 await processCommand(`@run ${args.input}`, context);

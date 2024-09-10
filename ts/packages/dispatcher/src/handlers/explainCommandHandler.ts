@@ -2,14 +2,14 @@
 // Licensed under the MIT License.
 
 import { log } from "node:console";
-import { CommandHandler } from "./common/commandHandler.js";
+import { DispatcherCommandHandler } from "./common/commandHandler.js";
 import {
     CommandHandlerContext,
     updateCorrectionContext,
 } from "./common/commandHandlerContext.js";
 import { RequestAction, printProcessRequestActionResult } from "agent-cache";
 
-export class ExplainCommandHandler implements CommandHandler {
+export class ExplainCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Explain a translated request with action";
     public async run(input: string, context: CommandHandlerContext) {
         const requestAction = RequestAction.fromString(input);

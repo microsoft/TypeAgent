@@ -6,7 +6,6 @@ import { StopWatch } from "common-utils";
 import {
     ChatResponseAction,
     GenerateResponseAction,
-    GreetingResponseAction,
     LookupAndGenerateResponseAction,
     ChatImageResponseAction
 } from "./chatResponseActionSchema.js";
@@ -28,7 +27,6 @@ import {
 } from "@typeagent/agent-sdk";
 import { fileURLToPath } from "node:url";
 import { conversation as Conversation } from "knowledge-processor";
-import { randomInt } from "node:crypto";
 
 export function instantiate(): AppAgent {
     return {
@@ -62,22 +60,6 @@ async function handleChatResponse(
 ) {
     console.log(JSON.stringify(chatAction, undefined, 2));
     switch (chatAction.actionName) {
-        case "generateGreetingResponse": {
-            const greetingAction = chatAction as GreetingResponseAction;
-            if (greetingAction.parameters.possibleGreetings !== undefined) {
-                const count =
-                    greetingAction.parameters.possibleGreetings.length;
-                console.log(`Got ${count} generated greetings`);
-
-                const result = createTurnImpressionFromLiteral(
-                    greetingAction.parameters.possibleGreetings[
-                        randomInt(0, count)
-                    ].generatedGreeting,
-                );
-
-                return result;
-            }
-        }
         case "generateResponse": {
             const generateResponseAction = chatAction as GenerateResponseAction;
             if (generateResponseAction.parameters.generatedText !== undefined) {

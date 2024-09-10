@@ -659,7 +659,7 @@ export class ChatView {
             (eta: ExpandableTextarea) => {
                 if (this.partialInputEnabled) {
                     this.placeSearchMenu();
-                    getClientAPI().sendPartialInput(eta.getEditedText());
+                    // TODO: NYI
                 } else if (this.searchMenu) {
                     this.placeSearchMenu();
                     this.searchMenu.completePrefix(eta.getEditedText());

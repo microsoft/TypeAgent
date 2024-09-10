@@ -16,7 +16,7 @@ import {
     getEmptyTestData,
     getTestDataFiles,
     loadBuiltinTranslatorSchemaConfig,
-} from "agent-dispatcher";
+} from "agent-dispatcher/internal";
 import {
     Actions,
     getDefaultExplainerName,

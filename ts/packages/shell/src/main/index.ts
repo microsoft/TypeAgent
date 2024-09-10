@@ -21,15 +21,9 @@ import { runDemo } from "./demo.js";
 import registerDebug from "debug";
 import {
     ClientIO,
-    CommandHandlerContext,
+    createDispatcher,
     RequestId,
-    getPrompt,
-    getSettingSummary,
-    getTranslatorNameToEmojiMap,
-    initializeCommandHandlerContext,
-    processCommand,
-    partialInput,
-    getDynamicDisplay,
+    Dispatcher,
 } from "agent-dispatcher";
 
 import { SearchMenuCommand } from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
@@ -246,9 +240,10 @@ async function getSpeechToken() {
     return speechToken;
 }
 
-async function triggerRecognitionOnce(context: CommandHandlerContext) {
+async function triggerRecognitionOnce(dispatcher: Dispatcher) {
     const speechToken = await getSpeechToken();
-    const useLocalWhisper = typeof context.localWhisper !== "undefined";
+    const useLocalWhisper =
+        typeof dispatcher.getContext().localWhisper !== "undefined";
     mainWindow?.webContents.send(
         "listen-event",
         "Alt+M",
@@ -476,7 +471,7 @@ async function setDynamicDisplay(
     );
 }
 
-async function initializeSpeech(context: CommandHandlerContext) {
+async function initializeSpeech(dispatcher: Dispatcher) {
     const key = process.env["SPEECH_SDK_KEY"];
     const region = process.env["SPEECH_SDK_REGION"];
     const endpoint = process.env["SPEECH_SDK_ENDPOINT"] as string;
@@ -500,7 +495,7 @@ async function initializeSpeech(context: CommandHandlerContext) {
     }
 
     const ret = globalShortcut.register("Alt+M", () => {
-        triggerRecognitionOnce(context);
+        triggerRecognitionOnce(dispatcher);
     });
 
     if (ret) {
@@ -521,7 +516,7 @@ app.whenReady().then(async () => {
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.electron");
 
-    const context = await initializeCommandHandlerContext(
+    const dispatcher = await createDispatcher(
         "shell",
         ShellSettings.getinstance(),
         {
@@ -531,12 +526,6 @@ app.whenReady().then(async () => {
             clientIO,
         },
     );
-    function translatorSetPartialInputHandler() {
-        mainWindow?.webContents.send(
-            "set-partial-input-handler",
-            context.lastActionTranslatorName === "player",
-        );
-    }
 
     let settingSummary: string = "";
     async function processShellRequest(
@@ -547,18 +536,17 @@ app.whenReady().then(async () => {
         if (typeof text !== "string" || typeof id !== "string") {
             throw new Error("Invalid request");
         }
-        debugShell(getPrompt(context), text);
+        debugShell(dispatcher.getPrompt(), text);
 
-        await processCommand(text, context, id, images);
+        await dispatcher.processCommand(text, id, images);
         mainWindow?.webContents.send("send-demo-event", "CommandProcessed");
-        translatorSetPartialInputHandler();
-        const newSettingSummary = getSettingSummary(context);
+        const newSettingSummary = dispatcher.getSettingSummary();
         if (newSettingSummary !== settingSummary) {
             settingSummary = newSettingSummary;
             mainWindow?.webContents.send(
                 "setting-summary-changed",
                 newSettingSummary,
-                getTranslatorNameToEmojiMap(context),
+                dispatcher.getTranslatorNameToEmojiMap(),
             );
         }
     }
@@ -582,33 +570,26 @@ app.whenReady().then(async () => {
                 });
         },
     );
-    ipcMain.on("partial-input", async (_event, text: string) => {
-        if (typeof text !== "string") {
-            return;
-        }
-        partialInput(text, context);
-    });
     ipcMain.handle(
         "get-dynamic-display",
         async (_event, appAgentName: string, id: string) =>
-            getDynamicDisplay(appAgentName, "html", id, context),
+            dispatcher.getDynamicDisplay(appAgentName, "html", id),
     );
     ipcMain.on("dom ready", async () => {
-        settingSummary = getSettingSummary(context);
-        translatorSetPartialInputHandler();
+        settingSummary = dispatcher.getSettingSummary();
         mainWindow?.webContents.send(
             "setting-summary-changed",
             settingSummary,
-            getTranslatorNameToEmojiMap(context),
+            dispatcher.getTranslatorNameToEmojiMap(),
         );
 
         // Send settings asap
         ShellSettings.getinstance().onSettingsChanged!();
     });
 
-    await initializeSpeech(context);
+    await initializeSpeech(dispatcher);
     ipcMain.handle("get-localWhisper-status", async () => {
-        return typeof context.localWhisper !== "undefined";
+        return typeof dispatcher.getContext().localWhisper !== "undefined";
     });
 
     ipcMain.on("save-settings", (_event, settings: ShellSettings) => {

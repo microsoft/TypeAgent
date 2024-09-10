@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommandHandler } from "./common/commandHandler.js";
+import { DispatcherCommandHandler } from "./common/commandHandler.js";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import registerDebug from "debug";
 
@@ -21,7 +21,7 @@ function getCurrentTraceSettings() {
     ];
 }
 
-export class TraceCommandHandler implements CommandHandler {
+export class TraceCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Enable or disable trace namespaces";
     public async run(input: string, context: CommandHandlerContext) {
         if (input !== "") {

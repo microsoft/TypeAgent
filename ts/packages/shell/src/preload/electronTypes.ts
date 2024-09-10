@@ -119,7 +119,6 @@ export interface ClientAPI {
         id: string,
         images: string[],
     ) => Promise<void>;
-    sendPartialInput: (text: string) => void;
     getDynamicDisplay: (source: string, id: string) => Promise<DynamicDisplay>;
     onResponse(
         callback: (

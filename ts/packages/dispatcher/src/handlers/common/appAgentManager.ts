@@ -38,8 +38,16 @@ export class AppAgentManager implements TranslatorConfigProvider {
         string
     >();
 
-    public isTranslator(translatorName: string) {
-        return this.agents.has(translatorName);
+    public isValidTranslator(translatorName: string) {
+        return this.translatorConfigs.has(translatorName);
+    }
+
+    public enableExecuteCommand(appAgentName: string) {
+        const appAgent = this.agents.get(appAgentName);
+        return appAgent !== undefined
+            ? appAgent.enabled.size > 0 &&
+                  appAgent.appAgent!.executeCommand !== undefined
+            : false;
     }
 
     public async addProvider(provider: AppAgentProvider) {
@@ -192,10 +200,10 @@ export class AppAgentManager implements TranslatorConfigProvider {
     private async closeSessionContext(record: AppAgentRecord) {
         if (record.sessionContextP !== undefined) {
             const sessionContext = await record.sessionContextP;
-            await record.appAgent!.closeAgentContext?.(sessionContext);
             record.sessionContext = undefined;
             record.sessionContextP = undefined;
-            // TODO: close the unload agent as well?
+            await record.appAgent!.closeAgentContext?.(sessionContext);
+            // TODO: unload agent as well?
             debug(`Session context closed for ${record.name}`);
         }
     }

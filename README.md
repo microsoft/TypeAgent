@@ -67,7 +67,7 @@ The main entry point to explore TypeAgent is the Agent Shell example. Follow the
 
 ## Developers
 
-Microsoft AI Systems Repo is a mono-repo, with components organized with the following root folders based on language used.
+Microsoft TypeAgent Repo is a mono-repo, with components organized with the following root folders based on language used.
 
 - [`ts`](./ts) TypeScript code ([Readme](./ts/README.md))
 - [`python`](./python) Python code ([Readme](./python/README.md))

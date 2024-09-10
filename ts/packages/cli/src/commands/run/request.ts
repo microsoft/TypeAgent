@@ -2,10 +2,12 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { RequestCommandHandler } from "agent-dispatcher";
-import { initializeCommandHandlerContext } from "agent-dispatcher";
-import { getCacheFactory } from "agent-dispatcher";
-import { getBuiltinTranslatorNames } from "agent-dispatcher";
+import {
+    getCacheFactory,
+    initializeCommandHandlerContext,
+    RequestCommandHandler,
+    getBuiltinTranslatorNames,
+} from "agent-dispatcher/internal";
 import chalk from "chalk";
 import { readFileSync, existsSync } from "fs";
 
@@ -48,11 +50,15 @@ export default class RequestCommand extends Command {
         const handler = new RequestCommandHandler();
         await handler.run(
             args.request,
-            await initializeCommandHandlerContext("cli run request", {
-                translators,
-                explainerName: flags.explainer,
-                cache: false,
-            }),
+            await initializeCommandHandlerContext(
+                "cli run request",
+                undefined,
+                {
+                    translators,
+                    explainerName: flags.explainer,
+                    cache: false,
+                },
+            ),
             this.loadAttachment(args.attachment),
         );
     }

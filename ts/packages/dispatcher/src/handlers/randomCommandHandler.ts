@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import { log } from "node:console";
-import { CommandHandler, HandlerTable } from "./common/commandHandler.js";
+import {
+    DispatcherCommandHandler,
+    DispatcherHandlerTable,
+} from "./common/commandHandler.js";
 import {
     CommandHandlerContext,
     updateCorrectionContext,
@@ -40,7 +43,7 @@ export type UserRequest = {
     message: string;
 };`;
 
-class RandomOfflineCommandHandler implements CommandHandler {
+class RandomOfflineCommandHandler implements DispatcherCommandHandler {
     private list: string[] | undefined;
 
     public readonly description =
@@ -80,7 +83,7 @@ class RandomOfflineCommandHandler implements CommandHandler {
     }
 }
 
-class RandomOnlineCommandHandler implements CommandHandler {
+class RandomOnlineCommandHandler implements DispatcherCommandHandler {
     private instructions = `You are an Siri/Alexa/Cortana prompt generator. You create user prompts that are both supported and unsupported.`;
 
     public readonly description = "Uses the LLM to generate random requests.";
@@ -169,7 +172,7 @@ class RandomOnlineCommandHandler implements CommandHandler {
     }
 }
 
-export function getRandomCommandHandlers(): HandlerTable {
+export function getRandomCommandHandlers(): DispatcherHandlerTable {
     return {
         description: "Random request commands",
         defaultSubCommand: new RandomOfflineCommandHandler(),

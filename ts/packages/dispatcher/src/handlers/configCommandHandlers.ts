@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import {
-    CommandHandler,
-    HandlerTable,
+    DispatcherCommandHandler,
+    DispatcherHandlerTable,
     getToggleCommandHandlers,
     getToggleHandlerTable,
 } from "./common/commandHandler.js";
@@ -13,10 +13,8 @@ import {
 } from "./common/commandHandlerContext.js";
 import {
     getBuiltinTranslatorNames,
-    TranslatorConfig,
     TranslatorConfigProvider,
 } from "../translation/agentTranslators.js";
-import { getSpotifyConfigCommandHandlers } from "./configSpotifyCommandHandlers.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
 import { getServiceHostCommandHandlers } from "./serviceHost/serviceHostCommandHandler.js";
 import { getLocalWhisperCommandHandlers } from "./serviceHost/localWhisperCommandHandler.js";
@@ -102,7 +100,7 @@ function getAgentToggleOptions(toggle: AgentToggle, options: any) {
     }
 }
 
-class AgentToggleCommandHandler implements CommandHandler {
+class AgentToggleCommandHandler implements DispatcherCommandHandler {
     public description = `Toggle ${AgentToggleDescription[this.toggle]}`;
     constructor(private toggle: AgentToggle) {}
 
@@ -143,7 +141,7 @@ class AgentToggleCommandHandler implements CommandHandler {
     }
 }
 
-class ExplainerCommandHandler implements CommandHandler {
+class ExplainerCommandHandler implements DispatcherCommandHandler {
     public description = "Set explainer";
     public async run(request: string, context: CommandHandlerContext) {
         const { args } = parseRequestArgs(request);
@@ -176,7 +174,7 @@ function getConfigModel(models: SessionConfig["models"], kind: string) {
     return `Current ${chalk.cyan(kind)} model: ${model ? model : "(default)"}\nURL:${settings.endpoint}`;
 }
 
-class ConfigModelShowCommandHandler implements CommandHandler {
+class ConfigModelShowCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Show current model";
     public async run(request: string, context: CommandHandlerContext) {
         const models = context.session.getConfig().models;
@@ -196,7 +194,7 @@ class ConfigModelShowCommandHandler implements CommandHandler {
     }
 }
 
-class ConfigModelSetCommandHandler implements CommandHandler {
+class ConfigModelSetCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Set model";
     public async run(request: string, context: CommandHandlerContext) {
         const { args } = parseRequestArgs(request);
@@ -250,7 +248,7 @@ class ConfigModelSetCommandHandler implements CommandHandler {
     }
 }
 
-export function getConfigCommandHandlers(): HandlerTable {
+export function getConfigCommandHandlers(): DispatcherHandlerTable {
     return {
         description: "Configuration commands",
         commands: {
@@ -359,7 +357,6 @@ export function getConfigCommandHandlers(): HandlerTable {
                     ),
                 },
             },
-            spotify: getSpotifyConfigCommandHandlers(),
             serviceHost: getServiceHostCommandHandlers(),
             localWhisper: getLocalWhisperCommandHandlers(),
             dev: getToggleHandlerTable(

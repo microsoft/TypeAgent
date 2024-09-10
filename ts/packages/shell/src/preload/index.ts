@@ -54,9 +54,6 @@ const api: ClientAPI = {
     ) => ipcRenderer.on("listen-event", callback),
 
     processShellRequest: getProcessShellRequest(),
-    sendPartialInput: (text: string) => {
-        ipcRenderer.send("partial-input", text);
-    },
     getDynamicDisplay(source: string, id: string) {
         return ipcRenderer.invoke("get-dynamic-display", source, id);
     },

@@ -1,11 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import {
+    CommandDescriptor,
+    CommandDescriptorTable,
+} from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
 
-export interface CommandHandler {
-    description: string;
-    help?: string;
+export interface DispatcherCommandHandler extends CommandDescriptor {
     run(
         request: string,
         context: CommandHandlerContext,
@@ -13,13 +15,11 @@ export interface CommandHandler {
     ): Promise<void>;
 }
 
-export type HandlerTable = {
+export interface DispatcherHandlerTable extends CommandDescriptorTable {
     description: string;
-    commands: {
-        [key: string]: CommandHandler | HandlerTable;
-    };
-    defaultSubCommand?: CommandHandler | undefined;
-};
+    commands: Record<string, DispatcherCommandHandler | DispatcherHandlerTable>;
+    defaultSubCommand?: DispatcherCommandHandler | undefined;
+}
 
 export function getToggleCommandHandlers(
     name: string,
@@ -50,7 +50,7 @@ export function getToggleCommandHandlers(
 export function getToggleHandlerTable(
     name: string,
     toggle: (context: CommandHandlerContext, enable: boolean) => Promise<void>,
-): HandlerTable {
+): DispatcherHandlerTable {
     return {
         description: `Toggle ${name}`,
         defaultSubCommand: undefined,

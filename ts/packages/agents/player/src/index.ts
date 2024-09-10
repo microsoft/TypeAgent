@@ -6,5 +6,4 @@ export {
     IClientContext,
     getClientContext,
     handleCall,
-    loadHistoryFile,
 } from "./client.js";

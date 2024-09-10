@@ -31,6 +31,6 @@ export const defaultSettings: ShellSettingsType = {
     notifyFilter: "error;warning;",
     tts: false,
     ttsSettings: {},
-    agentGreeting: true,
+    agentGreeting: false,
     multiModalContent: false,
 };

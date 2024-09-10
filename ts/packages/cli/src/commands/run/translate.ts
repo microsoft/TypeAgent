@@ -2,9 +2,11 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { TranslateCommandHandler } from "agent-dispatcher";
-import { initializeCommandHandlerContext } from "agent-dispatcher";
-import { getBuiltinTranslatorNames } from "agent-dispatcher";
+import {
+    initializeCommandHandlerContext,
+    TranslateCommandHandler,
+    getBuiltinTranslatorNames,
+} from "agent-dispatcher/internal";
 
 export default class TranslateCommand extends Command {
     static args = {
@@ -36,11 +38,15 @@ export default class TranslateCommand extends Command {
             : undefined;
         await handler.run(
             args.request,
-            await initializeCommandHandlerContext("cli run translate", {
-                translators,
-                actions: {}, // We don't need any actions
-                cache: false,
-            }),
+            await initializeCommandHandlerContext(
+                "cli run translate",
+                undefined,
+                {
+                    translators,
+                    actions: {}, // We don't need any actions
+                    cache: false,
+                },
+            ),
         );
     }
 }
