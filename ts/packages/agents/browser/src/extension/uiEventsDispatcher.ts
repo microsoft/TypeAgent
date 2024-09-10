@@ -86,12 +86,15 @@ async function enterTextOnPage(text: string) {
 async function enterTextInElement(text: string, selector: string) {
     const targetElement = document.querySelector(selector) as HTMLElement;
     if (targetElement) {
-        if (targetElement instanceof HTMLInputElement) {
-            targetElement.value = text;
-        } else {
-            for (var i = 0; i < text.length; i++) {
-                simulateKeyEvent(targetElement, text[i]);
-                await new Promise((r) => setTimeout(r, 20));
+        targetElement.focus();
+        if (!document.execCommand("insertText", false, text)) {
+            if (targetElement instanceof HTMLInputElement) {
+                targetElement.value = text;
+            } else {
+                for (var i = 0; i < text.length; i++) {
+                    simulateKeyEvent(targetElement, text[i]);
+                    await new Promise((r) => setTimeout(r, 20));
+                }
             }
         }
     }

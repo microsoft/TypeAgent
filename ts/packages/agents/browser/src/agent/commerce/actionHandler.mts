@@ -23,7 +23,7 @@ export async function handleCommerceAction(
   const browser: BrowserConnector =
     context.sessionContext.agentContext.browserConnector;
 
-  const agent = await createCommercePageTranslator("GPT_4_O");
+  const agent = await createCommercePageTranslator("GPT_4_O_MINI");
 
   switch (action.actionName) {
     case "searchForProductAction":

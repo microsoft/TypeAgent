@@ -133,8 +133,10 @@ export class HTMLReducer {
         this.replaceLinks(doc);
         // this.removeCommentNodes(doc);
         this.removeEmptyNodes(doc, this.emptyTagsSelector);
+        this.reduceElementNesting(doc, this.emptyTagsSelector);
         this.removeDataAttributes(doc);
         this.removeDuplicateAltText(doc);
+        this.removeSpans(doc);
 
         let reduced = doc.documentElement.outerHTML;
         reduced = reduced.replace(/<!DOCTYPE[^>]*>/, "");
@@ -256,11 +258,11 @@ export class HTMLReducer {
     private removeEmptyNodes(doc: Document, selectors: string[]): void {
         const selector = selectors.join(", ");
         let nodes;
-        let empytNodes;
+        let emptyNodes;
 
         do {
             nodes = Array.from(doc.querySelectorAll(selector));
-            empytNodes = nodes.filter(
+            emptyNodes = nodes.filter(
                 (n) =>
                     n.childNodes.length === 0 ||
                     (n.childNodes.length === 1 &&
@@ -268,11 +270,50 @@ export class HTMLReducer {
                         n.textContent?.trim().length === 0),
             );
 
-            empytNodes.forEach((node) => {
+            emptyNodes.forEach((node) => {
                 node.parentNode?.removeChild(node);
             });
 
             doc.normalize();
-        } while (empytNodes && empytNodes.length > 1);
+        } while (emptyNodes && emptyNodes.length > 1);
+    }
+
+    private reduceElementNesting(doc: Document, selectors: string[]): void {
+        const selector = selectors.join(", ");
+        let nodes;
+        let nestedNodes;
+
+        do {
+            nodes = Array.from(doc.querySelectorAll(selector));
+            nestedNodes = nodes.filter(
+                (n) =>
+                    n.parentNode?.childNodes.length === 1 &&
+                    n.parentNode?.nodeType === n.nodeType,
+            );
+
+            nestedNodes.forEach((node) => {
+                while (node.firstChild) {
+                    node.parentNode?.insertBefore(node.firstChild, node);
+                }
+
+                node.parentNode?.removeChild(node);
+            });
+
+            doc.normalize();
+        } while (nestedNodes && nestedNodes.length > 1);
+    }
+
+    private removeSpans(doc: Document): void {
+        const selector = "span";
+        const nodes = Array.from(doc.querySelectorAll(selector));
+        nodes.forEach((node) => {
+            while (node.firstChild) {
+                node.parentNode?.insertBefore(node.firstChild, node);
+            }
+
+            node.parentNode?.removeChild(node);
+        });
+
+        doc.normalize();
     }
 }
