@@ -297,6 +297,12 @@ export async function initializeCommandHandlerContext(
     }
     context.session.setConfig(changes);
 
+    // // update client settings for multi-modal support
+    // if (context.clientSettings) {
+    //     context.clientSettings.set!("multiModalContent", isMultiModalContentSupported(changed.traslators[].model)
+    // }
+    
+
     context.requestIO.context = context;
 
     await updateAgentRecord(context.session.getConfig().actions, context);
@@ -348,6 +354,7 @@ export async function changeContextConfig(
         // Clear the cache to regenerate them.
         context.translatorCache.clear();
 
+        // update client settings for multi-modal support
         if (context.clientSettings) {
             context.clientSettings.set!("multiModalContent", isMultiModalContentSupported(changed.models?.translator))
         }
