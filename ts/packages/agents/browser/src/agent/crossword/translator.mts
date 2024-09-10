@@ -68,7 +68,7 @@ function getHtmlTextOnlyPromptSection(fragments: HtmlFragments[] | undefined) {
 }
 
 export async function createCrosswordPageTranslator(
-  model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O",
+  model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O" | "GPT_4_O_MINI",
 ) {
   const packageRoot = path.join("..", "..", "..");
   const pageSchema = await fs.promises.readFile(
