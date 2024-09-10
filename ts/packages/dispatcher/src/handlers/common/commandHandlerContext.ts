@@ -51,6 +51,7 @@ import { conversation as Conversation } from "knowledge-processor";
 import { AppAgentManager } from "./appAgentManager.js";
 import { getBuiltinAppAgentProvider } from "../../agent/agentConfig.js";
 import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
+import { AppAgentProvider } from "../../agent/agentProvider.js";
 
 export interface CommandResult {
     error?: boolean;

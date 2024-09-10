@@ -8,7 +8,7 @@ import {
     getCacheFactory,
     getBuiltinTranslatorNames,
     readTestData,
-} from "agent-dispatcher";
+} from "agent-dispatcher/internal";
 import { getTestDataFiles } from "../../../../dispatcher/dist/utils/config.js";
 import path from "node:path";
 

@@ -6,7 +6,7 @@ import {
     readTestData,
     getCacheFactory,
     loadBuiltinTranslatorSchemaConfig,
-} from "agent-dispatcher";
+} from "agent-dispatcher/internal";
 import { printImportConstructionResult } from "agent-cache";
 import fs from "node:fs";
 import chalk from "chalk";
