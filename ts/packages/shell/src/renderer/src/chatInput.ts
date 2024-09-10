@@ -115,6 +115,7 @@ export class ChatInput {
     camButton: HTMLButtonElement;
     dragTemp: string | undefined = undefined;
     input: HTMLInputElement;
+    public dragEnabled: boolean = true;
 
     constructor(
         inputId: string,
@@ -133,6 +134,11 @@ export class ChatInput {
         this.inputContainer.appendChild(this.textarea.getTextEntry());
 
         this.textarea.getTextEntry().ondragenter = (e: DragEvent) => {
+
+            if (!this.dragEnabled) {
+                return;
+            }
+
             e.preventDefault();
             console.log(e);
 
@@ -147,6 +153,11 @@ export class ChatInput {
         };
 
         this.textarea.getTextEntry().ondragleave = (e: DragEvent) => {
+
+            if (!this.dragEnabled) {
+                return;
+            }
+
             this.textarea.getTextEntry().classList.remove("chat-input-drag");
 
             if (this.dragTemp) {
@@ -159,6 +170,11 @@ export class ChatInput {
         };
 
         this.textarea.getTextEntry().ondrop = async (e: DragEvent) => {
+
+            if (!this.dragEnabled) {
+                return;
+            }
+
             console.log(e);
 
             this.textarea.getTextEntry().classList.remove("chat-input-drag");
