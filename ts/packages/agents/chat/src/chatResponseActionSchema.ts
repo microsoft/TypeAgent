@@ -11,7 +11,6 @@ export type Entity = {
 };
 
 export type ChatResponseAction =
-    | GreetingResponseAction
     | LookupAndGenerateResponseAction
     | GenerateResponseAction;
 
