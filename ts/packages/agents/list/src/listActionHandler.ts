@@ -345,12 +345,16 @@ async function handleListAction(
                     .map((item) => `<li>${item}</li>`)
                     .join("")}</ul>`;
                 result = createTurnImpressionFromDisplay(displayText);
-                result.literalText = `I've shown you all the items in list ${getListAction.parameters.listName} `;
+                result.literalText = `List ${getListAction.parameters.listName} has items: ${plainList.join(",")}`;
                 result.entities = [
                     {
                         name: getListAction.parameters.listName,
                         type: ["list"],
                     },
+                    ...plainList.map((item) => ({
+                        name: item,
+                        type: ["item"],
+                    })),
                 ];
             }
             break;
