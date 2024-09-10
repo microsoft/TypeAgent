@@ -128,19 +128,11 @@ export function createSessionContext<T = unknown>(
     return sessionContext;
 }
 
-export async function partialInput(
-    text: string,
-    context: CommandHandlerContext,
-) {
-    // For auto completion
-    throw new Error("NYI");
-}
-
 export async function getDynamicDisplay(
+    context: CommandHandlerContext,
     appAgentName: string,
     type: DisplayType,
     displayId: string,
-    context: CommandHandlerContext,
 ): Promise<DynamicDisplay> {
     const appAgent = context.agents.getAppAgent(appAgentName);
     if (appAgent.getDynamicDisplay === undefined) {

@@ -10,9 +10,10 @@ import {
     generateTestDataFiles,
     printTestDataStats,
     getEmptyTestData,
-} from "agent-dispatcher";
+    getBuiltinTranslatorNames,
+    getCacheFactory,
+} from "agent-dispatcher/internal";
 import chalk from "chalk";
-import { getBuiltinTranslatorNames, getCacheFactory } from "agent-dispatcher";
 import { getDefaultExplainerName } from "agent-cache";
 import { getChatModelMaxConcurrency, getChatModelNames } from "common-utils";
 
