@@ -42,35 +42,66 @@ export type DynamicDisplay = {
     nextRefreshMs: number; // in milliseconds, -1 means no more refresh.
 };
 
-export interface AppAgent {
+export type CommandDescriptor = {
+    description: string;
+    help?: string;
+};
+
+export type CommandDescriptorTable = {
+    description: string;
+    commands: Record<string, CommandDescriptor | CommandDescriptorTable>;
+    defaultSubCommand?: CommandDescriptor | undefined;
+};
+
+export interface AppAgentCommandInterface {
+    // Commands
+    getCommands(
+        context: SessionContext,
+    ): Promise<CommandDescriptor | CommandDescriptorTable>;
+
+    executeCommand(
+        command: string[] | undefined,
+        args: string,
+        context: ActionContext<unknown>,
+        attachments?: string[],
+    ): Promise<void>;
+}
+
+export interface AppAgent extends Partial<AppAgentCommandInterface> {
+    // Setup
     initializeAgentContext?(): Promise<any>;
     updateAgentContext?(
         enable: boolean,
         context: SessionContext,
         translatorName: string, // for sub-translators
     ): Promise<void>;
+    closeAgentContext?(context: SessionContext): Promise<void>;
+
+    // Actions
     streamPartialAction?(
         actionName: string,
         name: string,
         value: string,
         partial: boolean,
-        context: ActionContext<any>,
+        context: ActionContext<unknown>,
     ): void;
     executeAction?(
         action: AppAction,
-        context: ActionContext<any>,
+        context: ActionContext<unknown>,
     ): Promise<any>; // TODO: define return type.
+
+    // Cache extensions
     validateWildcardMatch?(
         action: AppAction,
         context: SessionContext,
     ): Promise<boolean>;
 
+    // Output
     getDynamicDisplay?(
         type: DisplayType,
         dynamicDisplayId: string,
         context: SessionContext,
     ): Promise<DynamicDisplay>;
-    closeAgentContext?(context: SessionContext): Promise<void>;
 }
 
 export enum AppAgentEvent {
@@ -80,7 +111,7 @@ export enum AppAgentEvent {
     Debug = "debug",
 }
 
-export interface SessionContext<T = any> {
+export interface SessionContext<T = unknown> {
     readonly agentContext: T;
     readonly sessionStorage: Storage | undefined;
     readonly profileStorage: Storage; // storage that are preserved across sessions

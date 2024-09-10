@@ -21,6 +21,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { searchAlbum, searchArtists, searchTracks } from "../client.js";
 import { htmlStatus } from "../playback.js";
+import { getPlayerCommandInterface } from "./playerCommands.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -29,10 +30,11 @@ export function instantiate(): AppAgent {
         executeAction: executePlayerAction,
         validateWildcardMatch: validatePlayerWildcardMatch,
         getDynamicDisplay: getPlayerDynamicDisplay,
+        ...getPlayerCommandInterface(),
     };
 }
 
-type PlayerActionContext = {
+export type PlayerActionContext = {
     spotify: IClientContext | undefined;
 };
 
