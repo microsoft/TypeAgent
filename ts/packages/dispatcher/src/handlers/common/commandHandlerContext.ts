@@ -84,11 +84,12 @@ export type CommandHandlerContext = {
     localWhisper: ChildProcess | undefined;
     requestId?: RequestId;
     chatHistory: ChatHistory;
-    transientAgents: { [key: string]: boolean };
 
     // For @correct
     lastRequestAction?: RequestAction;
     lastExplanation?: object;
+
+    transientAgents: Record<string, boolean | undefined>;
 };
 
 export function updateCorrectionContext(
@@ -267,6 +268,12 @@ export async function initializeCommandHandlerContext(
     if (appAgentProviders !== undefined) {
         for (const provider of appAgentProviders) {
             await agents.addProvider(provider, context);
+        }
+    }
+
+    for (const [name, config] of agents.getTranslatorConfigs()) {
+        if (config.transient) {
+            context.transientAgents[name] = false;
         }
     }
     await setAppAgentStates(context, options);
