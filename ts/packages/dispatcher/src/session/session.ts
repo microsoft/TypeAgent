@@ -15,6 +15,7 @@ import {
     getYMDPrefix,
 } from "../utils/userData.js";
 import { TranslatorConfigProvider } from "../translation/agentTranslators.js";
+import ExifReader from 'exifreader';
 
 const debugSession = registerDebug("typeagent:session");
 
@@ -411,7 +412,7 @@ export class Session {
         }
     }
 
-    public async addUserSuppliedFile(file: string): Promise<string> {
+    public async storeUserSuppliedFile(file: string): Promise<[string, ExifReader.Tags]> {
         const sessionDir = getSessionDirPath(this.dir as string);
         const filesDir = path.join(sessionDir, "user_files");
         await fs.promises.mkdir(filesDir, { recursive: true });
@@ -421,12 +422,14 @@ export class Session {
         const fileName: string = path.join(filesDir, getUniqueFileName(filesDir, "attachment_", fileExtension));
         const buffer = Buffer.from(file.substring(file.indexOf(";base64,") + ";base64,".length), 'base64');
 
+        const tags: ExifReader.Tags = ExifReader.load(buffer);
+
         fs.writeFile(
             fileName,
             buffer,
         () => {},);
         
-        return fileName;
+        return [fileName, tags];
     }
 
     getFileExtensionForMimeType(mime: string): string {

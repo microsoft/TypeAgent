@@ -1028,6 +1028,9 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
+      exifreader:
+        specifier: ^4.23.5
+        version: 4.23.5
       find-config:
         specifier: ^1.0.0
         version: 1.0.0
@@ -1113,6 +1116,9 @@ importers:
       email:
         specifier: workspace:*
         version: link:../agents/email
+      exifreader:
+        specifier: 4.23.5
+        version: 4.23.5
       glob:
         specifier: ^10.3.12
         version: 10.3.12
@@ -3894,6 +3900,9 @@ packages:
   execa@5.1.1:
     resolution: {integrity: sha512-8uSpZZocAZRBAPIEINJj3Lo9HyGitllczc27Eh5YYojjMFMn8yHMDMaUHE2Jqfq05D/wucwI4JGURyXt1vchyg==}
     engines: {node: '>=10'}
+
+  exifreader@4.23.5:
+    resolution: {integrity: sha512-Gy9FXSBW+4ivu4aNtthGHAPEfVJ72z4aN9Iusr3YiIOy+ZCh7NWfoswCXZV/CH8MpOJE2Ij4hmmKQPGvo4Vf9g==}
 
   exit@0.1.2:
     resolution: {integrity: sha512-Zk/eNKV2zbjpKzrsQ+n1G6poVbErQxJ0LBOJXaKZ1EViLzH+hrLu9cdXI4zw9dBQJslwBEpbQ2P1oS7nDxs6jQ==}
@@ -10097,6 +10106,10 @@ snapshots:
       onetime: 5.1.2
       signal-exit: 3.0.7
       strip-final-newline: 2.0.0
+
+  exifreader@4.23.5:
+    optionalDependencies:
+      '@xmldom/xmldom': 0.8.10
 
   exit@0.1.2: {}
 

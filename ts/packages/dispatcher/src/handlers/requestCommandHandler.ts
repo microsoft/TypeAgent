@@ -37,6 +37,7 @@ import { makeRequestPromptCreator } from "./common/chatHistoryPrompt.js";
 import { MatchResult } from "../../../cache/dist/constructions/constructions.js";
 import registerDebug from "debug";
 import { getAllActionInfo } from "../translation/actionInfo.js";
+import ExifReader from 'exifreader';
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
@@ -210,6 +211,7 @@ async function translateRequestWithTranslator(
     context: CommandHandlerContext,
     history?: HistoryContext,
     attachments?: string[],
+    exifTags?: ExifReader.Tags[],
 ) {
     context.requestIO.status(
         `[${translatorName}] Translating '${request}'`,
@@ -273,6 +275,7 @@ async function translateRequestWithTranslator(
         history?.promptSections,
         onProperty,
         attachments,
+        exifTags,
     );
     translator.createRequestPrompt = orp;
 
@@ -467,6 +470,7 @@ export async function translateRequest(
     context: CommandHandlerContext,
     history?: HistoryContext,
     attachments?: string[],
+    exifTags?: ExifReader.Tags[],
 ): Promise<TranslationResult | undefined | null> {
     if (!context.session.bot) {
         context.requestIO.error("No translation found (GPT is off).");
@@ -496,6 +500,7 @@ export async function translateRequest(
         context,
         history,
         attachments,
+        exifTags,
     );
     if (action === undefined) {
         return undefined;
@@ -695,11 +700,15 @@ export class RequestCommandHandler implements DispatcherCommandHandler {
         }
 
         // store attachements for later reuse
-        let cachedFiles: string[] = new Array<string>()
-        await attachments?.forEach(async (value: string, index: number) => {
-            const attachmentName = await context.session.addUserSuppliedFile(value);
-            cachedFiles.push(attachmentName);
-        });
+        let cachedFiles: string[] = new Array<string>();
+        let exifTags: ExifReader.Tags[] = new Array<ExifReader.Tags>();        
+        if (attachments) {
+            for (let i = 0; i < attachments?.length; i++) {
+                const [attachmentName, tags]: [string, ExifReader.Tags] = await context.session.storeUserSuppliedFile(attachments![i]);
+                cachedFiles.push(attachmentName);
+                exifTags.push(tags);
+            }
+        }
         
         const history = context.session.getConfig().history
             ? getChatHistoryForTranslation(context)
@@ -717,7 +726,7 @@ export class RequestCommandHandler implements DispatcherCommandHandler {
         const match = await matchRequest(request, context, history);
         const translationResult =
             match === undefined // undefined means not found
-                ? await translateRequest(request, context, history, attachments)
+                ? await translateRequest(request, context, history, attachments, exifTags)
                 : match; // result or null
 
         if (!translationResult) {
