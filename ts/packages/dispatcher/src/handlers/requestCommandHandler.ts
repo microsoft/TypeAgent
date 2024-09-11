@@ -15,9 +15,9 @@ import {
     CommandHandlerContext,
     getTranslator,
     getActiveTranslatorList,
-    isTranslatorEnabled,
+    isTranslatorActive,
     updateCorrectionContext,
-    isActionEnabled,
+    isActionActive,
 } from "./common/commandHandlerContext.js";
 
 import { getColorElapsedString, Profiler } from "common-utils";
@@ -374,7 +374,7 @@ async function finalizeAction(
         }
 
         const { request, nextTranslatorName, searched } = nextTranslation;
-        if (!isTranslatorEnabled(nextTranslatorName, context)) {
+        if (!isTranslatorActive(nextTranslatorName, context)) {
             // this is a bug. May be the translator cache didn't get updated when state change?
             throw new Error(
                 `Internal error: switch to disabled translator ${nextTranslatorName}`,
@@ -474,7 +474,7 @@ export async function translateRequest(
     }
     // Start with the last translator used
     let translatorName = context.lastActionTranslatorName;
-    if (!isTranslatorEnabled(translatorName, context)) {
+    if (!isTranslatorActive(translatorName, context)) {
         debugTranslate(
             `Translating request using default translator: ${translatorName} not active`,
         );
@@ -567,7 +567,7 @@ function canExecute(
         }
         if (
             action.translatorName &&
-            !isActionEnabled(action.translatorName, context)
+            !isActionActive(action.translatorName, context)
         ) {
             disabled.add(action.translatorName);
         }

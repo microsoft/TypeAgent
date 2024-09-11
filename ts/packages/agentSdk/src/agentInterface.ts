@@ -1,31 +1,34 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type TopLevelTranslatorConfig = {
+//==============================================================================
+// Manifest
+//==============================================================================
+export type AppAgentManifest = {
     emojiChar: string;
-} & HierarchicalTranslatorConfig;
+} & TranslatorDefinition;
 
-export type HierarchicalTranslatorConfig = {
+export type SchemaDefinition = {
+    description: string;
+    schemaType: string;
+    schemaFile: string;
+    injected?: boolean; // whether the translator is injected into other domains, default is false
+    cached?: boolean; // whether the translator's action should be cached, default is true
+    streamingActions?: string[];
+};
+
+export type TranslatorDefinition = {
     translationDefaultEnabled?: boolean;
     actionDefaultEnabled?: boolean;
     transient?: boolean; // whether the translator is transient, default is false
-    schema?: {
-        description: string;
-        schemaFile: string;
-        schemaType: string;
-        constructions?: {
-            data: string[];
-            file: string;
-        };
-        translations?: string[];
-        dataFrameColumns?: { [key: string]: string };
-        injected?: boolean; // whether the translator is injected into other domains, default is false
-        cached?: boolean; // whether the translator's action should be cached, default is true
-        streamingActions?: string[];
-    };
-    subTranslators?: { [key: string]: HierarchicalTranslatorConfig };
+
+    schema?: SchemaDefinition;
+    subTranslators?: { [key: string]: TranslatorDefinition };
 };
 
+//==============================================================================
+// App Agent
+//==============================================================================
 export interface AppAction {
     actionName: string;
     translatorName?: string | undefined;
@@ -104,6 +107,9 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
     ): Promise<DynamicDisplay>;
 }
 
+//==============================================================================
+// Context
+//==============================================================================
 export enum AppAgentEvent {
     Error = "error",
     Warning = "warning",

@@ -4,7 +4,7 @@
 import {
     AppAgent,
     SessionContext,
-    TopLevelTranslatorConfig,
+    AppAgentManifest,
 } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
 import {
@@ -28,7 +28,7 @@ type AppAgentRecord = {
     translators: Set<string>;
     actions: Set<string>;
     hasTranslators: boolean;
-    config: TopLevelTranslatorConfig;
+    manifest: AppAgentManifest;
     appAgent?: AppAgent | undefined;
     sessionContext?: SessionContext | undefined;
     sessionContextP?: Promise<SessionContext> | undefined;
@@ -81,10 +81,6 @@ export class AppAgentManager implements TranslatorConfigProvider {
         string
     >();
 
-    public isValidTranslator(translatorName: string) {
-        return this.translatorConfigs.has(translatorName);
-    }
-
     public isTranslatorEnabled(translatorName: string) {
         const appAgentName = getAppAgentName(translatorName);
         const record = this.getRecord(appAgentName);
@@ -97,17 +93,7 @@ export class AppAgentManager implements TranslatorConfigProvider {
         return record.actions.has(translatorName);
     }
 
-    public getEnabledTranslators() {
-        const result: string[] = [];
-        for (const name of this.translatorConfigs.keys()) {
-            if (this.isTranslatorEnabled(name)) {
-                result.push(name);
-            }
-        }
-        return result;
-    }
-
-    public enableExecuteCommand(appAgentName: string) {
+    public isCommandEnabled(appAgentName: string) {
         const record = this.agents.get(appAgentName);
         return record !== undefined
             ? (!record.hasTranslators || record.actions.size > 0) &&
@@ -121,10 +107,13 @@ export class AppAgentManager implements TranslatorConfigProvider {
     ) {
         for (const name of provider.getAppAgentNames()) {
             // TODO: detect duplicate names
-            const config = await provider.getAppAgentConfig(name);
+            const manifest = await provider.getAppAgentManifest(name);
 
             // TODO: detect duplicate names
-            const translatorConfigs = convertToTranslatorConfigs(name, config);
+            const translatorConfigs = convertToTranslatorConfigs(
+                name,
+                manifest,
+            );
             const entries = Object.entries(translatorConfigs);
             for (const [name, config] of entries) {
                 this.translatorConfigs.set(name, config);
@@ -145,7 +134,7 @@ export class AppAgentManager implements TranslatorConfigProvider {
                 actions: new Set(),
                 translators: new Set(),
                 hasTranslators: entries.length > 0,
-                config,
+                manifest,
             };
 
             this.agents.set(name, record);
@@ -176,12 +165,6 @@ export class AppAgentManager implements TranslatorConfigProvider {
 
     public getInjectedTranslatorForActionName(actionName: string) {
         return this.injectedTranslatorForActionName.get(actionName);
-    }
-
-    public getAppAgentConfigs() {
-        return Array.from(this.agents.entries()).map(
-            ([name, record]) => [name, record.config] as const,
-        );
     }
 
     public getAppAgent(appAgentName: string): AppAgent {
@@ -275,6 +258,13 @@ export class AppAgentManager implements TranslatorConfigProvider {
         };
     }
 
+    public async close() {
+        for (const record of this.agents.values()) {
+            record.actions.clear();
+            await this.closeSessionContext(record);
+        }
+    }
+
     private async updateAction(
         translatorName: string,
         enable: boolean,
@@ -328,19 +318,6 @@ export class AppAgentManager implements TranslatorConfigProvider {
         }
     }
 
-    private async checkCloseSessionContext(record: AppAgentRecord) {
-        if (record.actions.size === 0) {
-            await this.closeSessionContext(record);
-        }
-    }
-
-    public async close() {
-        for (const record of this.agents.values()) {
-            record.actions.clear();
-            await this.closeSessionContext(record);
-        }
-    }
-
     private async ensureSessionContext(
         record: AppAgentRecord,
         context: CommandHandlerContext,
@@ -370,6 +347,11 @@ export class AppAgentManager implements TranslatorConfigProvider {
         return record.sessionContext;
     }
 
+    private async checkCloseSessionContext(record: AppAgentRecord) {
+        if (record.actions.size === 0) {
+            await this.closeSessionContext(record);
+        }
+    }
     private async closeSessionContext(record: AppAgentRecord) {
         if (record.sessionContextP !== undefined) {
             const sessionContext = await record.sessionContextP;
