@@ -66,7 +66,6 @@ export default class ExplainCommand extends Command {
             : undefined;
         const context = await initializeCommandHandlerContext(
             "cli run explain",
-            undefined,
             {
                 translators,
                 actions: {}, // We don't need any actions
