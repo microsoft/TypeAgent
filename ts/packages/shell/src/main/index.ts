@@ -655,13 +655,14 @@ app.on("window-all-closed", () => {
 function zoomIn(mainWindow: BrowserWindow) {
     const curr = mainWindow.webContents.zoomLevel;
     mainWindow.webContents.zoomLevel = Math.min(curr + 0.5, 9);
-    ShellSettings.getinstance().zoomLevel = mainWindow.webContents.zoomLevel;
+
+    ShellSettings.getinstance().set("zoomLevel", mainWindow.webContents.zoomLevel);
 }
 
 function zoomOut(mainWindow: BrowserWindow) {
     const curr = mainWindow.webContents.zoomLevel;
     mainWindow.webContents.zoomLevel = Math.max(curr - 0.5, -8);
-    ShellSettings.getinstance().zoomLevel = mainWindow.webContents.zoomLevel;
+    ShellSettings.getinstance().set("zoomLevel", mainWindow.webContents.zoomLevel);
 }
 
 function showDialog(dialogName: string) {

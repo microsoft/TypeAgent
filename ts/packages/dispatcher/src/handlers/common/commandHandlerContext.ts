@@ -299,9 +299,8 @@ export async function initializeCommandHandlerContext(
 
     // update client settings for multi-modal support
     if (context.clientSettings) {
-        context.clientSettings.set!("multiModalContent", isMultiModalContentSupported(current.models.translator)
+        context.clientSettings.set!("multiModalContent", isMultiModalContentSupported(current.models.translator));
     }
-    
 
     context.requestIO.context = context;
 
