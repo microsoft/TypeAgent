@@ -20,7 +20,7 @@ import dotenv from "dotenv";
 
 // const agent = createCommerceAgent("GPT_4o");
 
-const agent = createCommerceAgent("GPT_4_O");
+const agent = createCommerceAgent("GPT_4_O_MINI");
 const browser = await createBrowserConnector(
     "commerce",
     undefined,
@@ -28,7 +28,7 @@ const browser = await createBrowserConnector(
 );
 
 function createCommerceAgent(
-    model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O",
+    model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O" | "GPT_4_O_MINI",
 ) {
     // const vals = getModelVals(model);
     const dotEnvPath = findConfig(".env");

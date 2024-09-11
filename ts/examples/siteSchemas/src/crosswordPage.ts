@@ -18,7 +18,7 @@ import assert from "assert";
 import dotenv from "dotenv";
 
 // initialize commerce state
-const agent = createCrosswordAgent("GPT_4_O");
+const agent = createCrosswordAgent("GPT_4_O_MINI");
 const browser = await createBrowserConnector(
     "crossword",
     handleCrosswordAction,
@@ -30,7 +30,7 @@ const htmlFragments = await browser.getHtmlFragments();
 const boardState = await getBoardSchema(url!, htmlFragments, agent);
 
 function createCrosswordAgent(
-    model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O",
+    model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O" | "GPT_4_O_MINI",
 ) {
     const dotEnvPath = findConfig(".env");
     assert(dotEnvPath, ".env file not found!");

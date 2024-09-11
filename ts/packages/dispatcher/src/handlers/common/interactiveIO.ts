@@ -5,10 +5,10 @@ import { askYesNo } from "../../utils/interactive.js";
 import readline from "readline/promises";
 import { SearchMenuItem, ActionTemplateSequence, Profiler } from "common-utils";
 import chalk from "chalk";
-import { DispatcherName } from "../requestCommandHandler.js";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 
+export const DispatcherName = "dispatcher";
 export type RequestId = string | undefined;
 
 export type SearchMenuCommand =

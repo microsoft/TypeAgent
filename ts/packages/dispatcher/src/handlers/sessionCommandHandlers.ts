@@ -6,7 +6,10 @@ import {
     CommandHandlerContext,
     reloadSessionOnCommandHandlerContext,
 } from "./common/commandHandlerContext.js";
-import { CommandHandler, HandlerTable } from "./common/commandHandler.js";
+import {
+    DispatcherCommandHandler,
+    DispatcherHandlerTable,
+} from "./common/commandHandler.js";
 import { setSessionOnCommandHandlerContext } from "./common/commandHandlerContext.js";
 import {
     Session,
@@ -19,7 +22,7 @@ import {
 import chalk from "chalk";
 import { parseRequestArgs } from "../utils/args.js";
 
-class SessionNewCommandHandler implements CommandHandler {
+class SessionNewCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Create a new empty session";
     public async run(request: string, context: CommandHandlerContext) {
         const { flags } = parseRequestArgs(
@@ -48,7 +51,7 @@ class SessionNewCommandHandler implements CommandHandler {
     }
 }
 
-class SessionOpenCommandHandler implements CommandHandler {
+class SessionOpenCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Open an existing session";
     public async run(request: string, context: CommandHandlerContext) {
         const session = await Session.load(request);
@@ -57,7 +60,7 @@ class SessionOpenCommandHandler implements CommandHandler {
     }
 }
 
-class SessionResetCommandHandler implements CommandHandler {
+class SessionResetCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Reset config on session and keep the data";
     public async run(request: string, context: CommandHandlerContext) {
         await changeContextConfig(
@@ -68,7 +71,7 @@ class SessionResetCommandHandler implements CommandHandler {
     }
 }
 
-class SessionToggleHistoryCommandHandler implements CommandHandler {
+class SessionToggleHistoryCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Update the history on the session config";
     public async run(request: string, context: CommandHandlerContext) {
         context.session.setConfig({ history: request === "on" });
@@ -76,7 +79,7 @@ class SessionToggleHistoryCommandHandler implements CommandHandler {
     }
 }
 
-class SessionClearCommandHandler implements CommandHandler {
+class SessionClearCommandHandler implements DispatcherCommandHandler {
     public readonly description =
         "Delete all data on the current sessions, keeping current settings";
     public async run(request: string, context: CommandHandlerContext) {
@@ -100,7 +103,7 @@ class SessionClearCommandHandler implements CommandHandler {
     }
 }
 
-class SessionDeleteCommandHandler implements CommandHandler {
+class SessionDeleteCommandHandler implements DispatcherCommandHandler {
     public readonly description =
         "Delete a session. If no session is specified, delete the current session and start a new session.\n-a to delete all sessions";
     public async run(request: string, context: CommandHandlerContext) {
@@ -139,7 +142,7 @@ class SessionDeleteCommandHandler implements CommandHandler {
     }
 }
 
-class SessionListCommandHandler implements CommandHandler {
+class SessionListCommandHandler implements DispatcherCommandHandler {
     public readonly description =
         "List all sessions. The current session is marked green.";
     public async run(request: string, context: CommandHandlerContext) {
@@ -152,7 +155,7 @@ class SessionListCommandHandler implements CommandHandler {
     }
 }
 
-class SessionInfoCommandHandler implements CommandHandler {
+class SessionInfoCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Show info about the current session";
     public async run(request: string, context: CommandHandlerContext) {
         const constructionFiles = context.session.dir
@@ -195,7 +198,7 @@ class SessionInfoCommandHandler implements CommandHandler {
     }
 }
 
-export function getSessionCommandHandlers(): HandlerTable {
+export function getSessionCommandHandlers(): DispatcherHandlerTable {
     return {
         description: "Session commands",
         defaultSubCommand: undefined,

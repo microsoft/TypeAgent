@@ -42,15 +42,16 @@ import {
     getRequestIO,
     RequestId,
     getNullRequestIO,
+    DispatcherName,
 } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
-import { DispatcherName } from "../requestCommandHandler.js";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { conversation as Conversation } from "knowledge-processor";
 import { AppAgentManager } from "./appAgentManager.js";
 import { getBuiltinAppAgentProvider } from "../../agent/agentConfig.js";
 import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
+import { AppAgentProvider } from "../../agent/agentProvider.js";
 
 export interface CommandResult {
     error?: boolean;
@@ -400,7 +401,7 @@ export function getActiveTranslatorList(context: CommandHandlerContext) {
     return Object.entries(context.session.getConfig().translators)
         .filter(
             ([name, value]) =>
-                context.agents.isTranslator(name) &&
+                context.agents.isValidTranslator(name) &&
                 value &&
                 context.transientAgents[name] !== false,
         )

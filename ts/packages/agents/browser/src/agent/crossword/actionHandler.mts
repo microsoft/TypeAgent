@@ -23,7 +23,7 @@ export async function getBoardSchema(
     return cachedSchema as Crossword;
   } else {
     const htmlFragments = await browser.getHtmlFragments();
-    const agent = await createCrosswordPageTranslator("GPT_4_O");
+    const agent = await createCrosswordPageTranslator("GPT_4_O_MINI");
 
     let candidateFragments = [];
     let pagePromises = [];

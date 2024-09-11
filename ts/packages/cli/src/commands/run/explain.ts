@@ -9,9 +9,11 @@ import {
     Actions,
     printProcessRequestActionResult,
 } from "agent-cache";
-import { initializeCommandHandlerContext } from "agent-dispatcher";
-import { getCacheFactory } from "agent-dispatcher";
-import { getBuiltinTranslatorNames } from "agent-dispatcher";
+import {
+    getCacheFactory,
+    getBuiltinTranslatorNames,
+    initializeCommandHandlerContext,
+} from "agent-dispatcher/internal";
 
 // Default test case, that include multiple phrase action name (out of order) and implicit parameters (context)
 const testRequest = new RequestAction(
@@ -43,7 +45,7 @@ export default class ExplainCommand extends Command {
             options: getCacheFactory().getExplainerNames(),
         }),
         repeat: Flags.integer({
-            description: "Number of times to repeat the explaination",
+            description: "Number of times to repeat the explanation",
             default: 1,
         }),
         concurrency: Flags.integer({
@@ -64,6 +66,7 @@ export default class ExplainCommand extends Command {
             : undefined;
         const context = await initializeCommandHandlerContext(
             "cli run explain",
+            undefined,
             {
                 translators,
                 actions: {}, // We don't need any actions

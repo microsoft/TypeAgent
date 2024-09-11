@@ -4,7 +4,7 @@
 import { Result } from "typechat";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
 import chalk from "chalk";
-import { CommandHandler } from "./commandHandler.js";
+import { DispatcherCommandHandler } from "./commandHandler.js";
 import { RequestIO } from "./interactiveIO.js";
 import { StopWatch } from "common-utils";
 
@@ -12,7 +12,7 @@ import { StopWatch } from "common-utils";
  * (Optional) Base class fro Command Handlers, with helper methods
  */
 
-export abstract class CommandHandlerBase implements CommandHandler {
+export abstract class CommandHandlerBase implements DispatcherCommandHandler {
     protected readonly _stopWatch: StopWatch;
 
     constructor(description: string, help?: string) {

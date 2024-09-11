@@ -8,7 +8,7 @@ import {
     getFullSchemaText,
     getBuiltinTranslatorNames,
     getBuiltinTranslatorConfigProvider,
-} from "agent-dispatcher";
+} from "agent-dispatcher/internal";
 
 export default class Schema extends Command {
     static description = "Show schema used by translators";

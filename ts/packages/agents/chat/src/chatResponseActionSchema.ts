@@ -54,8 +54,7 @@ export type TermFilter = {
     timeRange?: DateTimeRange | undefined; // in this time range
 };
 
-// for memory objects like lists, tables, and other data structures, use the memory object actions instead of this action
-// this action is used to lookup information from past conversations or the internet and generate a response based on the lookup results
+// this action is used to lookup information from past conversations or the internet and generate a response based on the lookup results, for example "what did we say about the project last week?" or "what is the current price of Microsoft stock?"
 export interface LookupAndGenerateResponseAction {
     actionName: "lookupAndGenerateResponse";
     parameters: {

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { HandlerTable } from "../common/commandHandler.js";
+import { DispatcherHandlerTable } from "../common/commandHandler.js";
 import { CommandHandlerContext } from "../common/commandHandlerContext.js";
 import chalk from "chalk";
 import { ChildProcess, fork } from "child_process";
@@ -24,7 +24,7 @@ export async function createServiceHost() {
     });
 }
 
-export function getServiceHostCommandHandlers(): HandlerTable {
+export function getServiceHostCommandHandlers(): DispatcherHandlerTable {
     return {
         description: "Configure Service Hosting",
         defaultSubCommand: undefined,
