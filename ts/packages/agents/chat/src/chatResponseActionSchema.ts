@@ -12,8 +12,7 @@ export type Entity = {
 
 export type ChatResponseAction =
     | LookupAndGenerateResponseAction
-    | GenerateResponseAction
-    | ChatImageResponseAction;
+    | GenerateResponseAction;
 
 export type DateVal = {
     day: number;
@@ -115,18 +114,3 @@ export interface Greeting {
     generatedGreeting: string;
 }
 
-// Use this response action when discussing any images provided by the user
-// If the user provides the image but nothing else feel free to ask the user if they have any specific things they would like to ask or discuss with regards to the image
-export interface ChatImageResponseAction {
-    actionName: "chatImageResponse";
-    parameters: {
-        // the original request from the user
-        originalRequest: string;
-        // a detailed description of the image and all of the notable objects in the image
-        detailedImageDescription: string;
-        // ALL the actions and entities present in the text of the user's request
-        userRequestEntities: Entity[];
-        // ALL the actions and entities present in the generated text
-        generatedTextEntities: Entity[];
-    }
-}

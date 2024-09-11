@@ -7,7 +7,6 @@ import {
     ChatResponseAction,
     GenerateResponseAction,
     LookupAndGenerateResponseAction,
-    ChatImageResponseAction
 } from "./chatResponseActionSchema.js";
 import {
     ChunkChatResponse,
@@ -141,40 +140,7 @@ async function handleChatResponse(
                     }
                 }
             }
-        }
-        case "chatImageResponse": {
-            const chatImageResponse = chatAction as ChatImageResponseAction;
-            if (chatImageResponse.parameters.detailedImageDescription !== undefined) {
-                logEntities(
-                    "UR Entities:",
-                    chatImageResponse.parameters.userRequestEntities,
-                );
-                logEntities(
-                    "GT Entities:",
-                    chatImageResponse.parameters.generatedTextEntities,
-                );
-                console.log("Got image description.");
-
-                const result = createTurnImpressionFromLiteral(
-                    chatImageResponse.parameters.detailedImageDescription,
-                );
-
-                let entities =
-                chatImageResponse.parameters.generatedTextEntities ||
-                    [];
-                if (
-                    chatImageResponse.parameters.userRequestEntities !==
-                    undefined
-                ) {
-                    entities =
-                    chatImageResponse.parameters.userRequestEntities.concat(
-                            entities,
-                        );
-                }
-                result.entities = entities;
-                return result;
-            }
-        }        
+        }    
     }
     return createTurnImpressionFromLiteral("No information found");
 }
