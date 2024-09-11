@@ -44,10 +44,7 @@ export async function createDispatcher(
     hostName: string,
     options: DispatcherOptions,
 ): Promise<Dispatcher> {
-    const context = await initializeCommandHandlerContext(
-        hostName,
-        options,
-    );
+    const context = await initializeCommandHandlerContext(hostName, options);
     return {
         processCommand(command, requestId, attachments) {
             return processCommand(command, context, requestId, attachments);
