@@ -106,7 +106,6 @@ function addEvents(
         for (let key of registeredAgents.keys()) {
             agents.set(key, registeredAgents.get(key) as string);
         }
-        agents.set("shell", "🐚");
     });
     api.onSendInputText((_, message) => {
         chatView.showInputText(message);

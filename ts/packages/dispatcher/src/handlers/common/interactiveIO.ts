@@ -198,7 +198,19 @@ export function getConsoleRequestIO(
             return await stdio?.question(`${message}: `);
         },
         notify: (event: string, requestId: RequestId, data: any) => {
-            // ignored.
+            switch (event) {
+                case AppAgentEvent.Error:
+                    console.error(chalk.red(data));
+                    break;
+                case AppAgentEvent.Warning:
+                    console.warn(chalk.yellow(data));
+                    break;
+                case AppAgentEvent.Info:
+                    console.info(data);
+                    break;
+                default:
+                // ignored.
+            }
         },
     };
 }

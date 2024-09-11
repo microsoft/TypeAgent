@@ -44,7 +44,7 @@ export async function resolveCommand(
     const args = input.match(/"[^"]+"|\S+/g) ?? [];
     let appAgentName = "system";
     const arg0 = args[0];
-    if (arg0 !== undefined && context.agents.enableExecuteCommand(arg0)) {
+    if (arg0 !== undefined && context.agents.isCommandEnabled(arg0)) {
         appAgentName = args.shift()!;
     }
     const appAgent = context.agents.getAppAgent(appAgentName);
@@ -78,6 +78,7 @@ export async function resolveCommand(
         const c = currentTable.commands[subCommand];
         if (c === undefined) {
             // Unknown command
+            table = currentTable;
             break;
         }
 

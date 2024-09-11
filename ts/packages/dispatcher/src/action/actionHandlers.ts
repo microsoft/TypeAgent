@@ -304,7 +304,7 @@ export async function executeCommand(
         appAgentName,
         context,
         context.requestId!,
-        -1,
+        0,
     );
     const appAgent = context.agents.getAppAgent(appAgentName);
     if (appAgent.executeCommand === undefined) {

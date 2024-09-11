@@ -4,6 +4,7 @@
 import { ChildProcess } from "child_process";
 import {
     ChildLogger,
+    DeepPartialUndefined,
     Limiter,
     Logger,
     LoggerSink,
@@ -48,7 +49,7 @@ import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { conversation as Conversation } from "knowledge-processor";
-import { AppAgentManager } from "./appAgentManager.js";
+import { AppAgentManager, AppAgentState } from "./appAgentManager.js";
 import { getBuiltinAppAgentProvider } from "../../agent/agentConfig.js";
 import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
 import { isMultiModalContentSupported } from "../../../../commonUtils/dist/modelResource.js";
@@ -90,14 +91,12 @@ export type CommandHandlerContext = {
     localWhisper: ChildProcess | undefined;
     requestId?: RequestId;
     chatHistory: ChatHistory;
-    transientAgents: { [key: string]: boolean };
 
     // For @correct
     lastRequestAction?: RequestAction;
     lastExplanation?: object;
 
-    // host (shell) settings
-    clientSettings: ClientSettingsProvider;
+    transientAgents: Record<string, boolean | undefined>;
 };
 
 export function updateCorrectionContext(
@@ -157,6 +156,7 @@ async function getAgentCache(
 }
 
 export type InitializeCommandHandlerContextOptions = SessionOptions & {
+    appAgentProviders?: AppAgentProvider[];
     explanationAsynchronousMode?: boolean; // default to false
     persistSession?: boolean; // default to false,
     stdio?: readline.Interface;
@@ -210,7 +210,6 @@ function getLoggerSink(isDbEnabled: () => boolean, requestIO: RequestIO) {
 
 export async function initializeCommandHandlerContext(
     hostName: string,
-    hostSettings: any,
     options?: InitializeCommandHandlerContextOptions,
 ): Promise<CommandHandlerContext> {
     const explanationAsynchronousMode =
@@ -268,44 +267,93 @@ export async function initializeCommandHandlerContext(
         serviceHost: serviceHost,
         localWhisper: undefined,
         transientAgents: {},
-        clientSettings: hostSettings,
     };
+    context.requestIO.context = context;
 
-    await agents.addProvider(getBuiltinAppAgentProvider(context));
-
-    const translatorConfigs = agents.getTranslatorConfigs();
-    const changes: SessionOptions = { translators: {}, actions: {} };
-    const current = context.session.getConfig();
-    for (const [name, config] of translatorConfigs) {
-        if (options?.translators !== undefined) {
-            // missing entries means false
-            changes.translators![name] = options.translators[name] ?? false;
-        } else if (current.translators[name] === undefined) {
-            changes.translators![name] = config.defaultEnabled;
+    await agents.addProvider(getBuiltinAppAgentProvider(context), context);
+    const appAgentProviders = options?.appAgentProviders;
+    if (appAgentProviders !== undefined) {
+        for (const provider of appAgentProviders) {
+            await agents.addProvider(provider, context);
         }
+    }
 
-        if (options?.actions !== undefined) {
-            // missing entries means false
-            changes.actions![name] = options.actions[name] ?? false;
-        } else if (current.actions[name] === undefined) {
-            changes.actions![name] = config.actionDefaultEnabled;
-        }
-
+    for (const [name, config] of agents.getTranslatorConfigs()) {
         if (config.transient) {
             context.transientAgents[name] = false;
         }
     }
-    context.session.setConfig(changes);
+    await setAppAgentStates(context, options);
+    return context;
+}
 
-    // update client settings for multi-modal support
-    if (context.clientSettings) {
-        context.clientSettings.set!("multiModalContent", isMultiModalContentSupported(current.models.translator));
+async function setAppAgentStates(
+    context: CommandHandlerContext,
+    options?: DeepPartialUndefined<AppAgentState>,
+) {
+    const result = await context.agents.setState(
+        context,
+        context.session.getConfig(),
+        options,
+    );
+
+    processSetAppAgentStateResult(result, (message, source) =>
+        context.requestIO.notify(
+            AppAgentEvent.Error,
+            undefined,
+            message,
+            source,
+        ),
+    );
+}
+
+async function updateAppAgentStates(
+    context: CommandHandlerContext,
+    changed: DeepPartialUndefined<AppAgentState>,
+): Promise<AppAgentState> {
+    const result = await context.agents.setState(
+        context,
+        changed,
+        undefined,
+        false,
+    );
+
+    const rollback = processSetAppAgentStateResult(result, (message, source) =>
+        context.requestIO.error(message, source),
+    );
+
+    if (rollback) {
+        context.session.setConfig(rollback);
+    }
+    const resultState: AppAgentState = {};
+    if (result.changed.translators.length !== 0) {
+        resultState.translators = Object.fromEntries(
+            result.changed.translators,
+        );
+    }
+    if (result.changed.actions.length !== 0) {
+        resultState.actions = Object.fromEntries(result.changed.actions);
+    }
+    return resultState;
+}
+
+function processSetAppAgentStateResult(
+    result: any,
+    cbError: (message: string, source: string) => void,
+) {
+    if (result.failed.actions.length !== 0) {
+        const rollback: AppAgentState = { actions: {} };
+        for (const [translatorName, enable, e] of result.failed.actions) {
+            cbError(
+                `Failed to ${enable ? "enable" : "disable"} ${translatorName} action: ${e.message}`,
+                translatorName,
+            );
+            rollback.actions![translatorName] = !enable;
+        }
+        return rollback;
     }
 
-    context.requestIO.context = context;
-
-    await updateAgentRecord(context.session.getConfig().actions, context);
-    return context;
+    return undefined;
 }
 
 export async function closeCommandHandlerContext(
@@ -326,7 +374,7 @@ export async function setSessionOnCommandHandlerContext(
         context.agents,
         context.logger,
     );
-    await updateAgentRecord(context.session.getConfig().actions, context);
+    await setAppAgentStates(context);
 }
 
 export async function reloadSessionOnCommandHandlerContext(
@@ -343,8 +391,12 @@ export async function changeContextConfig(
 ) {
     const changed = context.session.setConfig(options);
 
+    const translatorChanged = changed.hasOwnProperty("translators");
+    const actionsChanged = changed.hasOwnProperty("actions");
+    const commandsChanged = changed.hasOwnProperty("commands");
+
     if (
-        changed.translators ||
+        translatorChanged ||
         changed.models?.translator !== undefined ||
         changed.switch?.inline ||
         changed.multipleActions
@@ -359,8 +411,8 @@ export async function changeContextConfig(
         }
     }
 
-    if (changed.actions) {
-        changed.actions = await updateAgentRecord(changed.actions, context);
+    if (translatorChanged || actionsChanged || commandsChanged) {
+        Object.assign(changed, await updateAppAgentStates(context, changed));
     }
     if (changed.explainerName !== undefined) {
         try {
@@ -415,78 +467,33 @@ export async function changeContextConfig(
 }
 
 export function getActiveTranslatorList(context: CommandHandlerContext) {
-    return Object.entries(context.session.getConfig().translators)
-        .filter(
-            ([name, value]) =>
-                context.agents.isValidTranslator(name) &&
-                value &&
-                context.transientAgents[name] !== false,
-        )
-        .map(([name]) => name);
+    return context.agents
+        .getTranslatorNames()
+        .filter((name) => isTranslatorActive(name, context));
 }
 
 function getActiveTranslators(context: CommandHandlerContext) {
-    const result = { ...context.session.getConfig().translators };
-    for (const [name, enabled] of Object.entries(context.transientAgents)) {
-        if (enabled === false) {
-            result[name] = false;
-        }
-    }
-    return result;
+    return Object.fromEntries(
+        getActiveTranslatorList(context).map((name) => [name, true]),
+    );
 }
 
-export function isTranslatorEnabled(
+export function isTranslatorActive(
     translatorName: string,
     context: CommandHandlerContext,
 ) {
     return (
-        context.session.getConfig().translators[translatorName] === true &&
+        context.agents.isTranslatorEnabled(translatorName) &&
         context.transientAgents[translatorName] !== false
     );
 }
 
-export function isActionEnabled(
+export function isActionActive(
     translatorName: string,
     context: CommandHandlerContext,
 ) {
     return (
-        context.session.getConfig().actions[translatorName] === true &&
+        context.agents.isActionEnabled(translatorName) &&
         context.transientAgents[translatorName] !== false
     );
-}
-
-async function updateAgentRecord(
-    changed: { [key: string]: boolean },
-    context: CommandHandlerContext,
-) {
-    const newChanged = { ...changed };
-    const failed: any = {};
-    const entries = Object.entries(changed);
-    // Update all agents in parallel.
-    const updateP = entries.map(
-        ([translatorName, enable]) =>
-            [
-                translatorName,
-                enable,
-                context.agents.update(translatorName, enable, context),
-            ] as const,
-    );
-    for (const [translatorName, enable, p] of updateP) {
-        try {
-            await p;
-        } catch (e: any) {
-            context.requestIO.error(
-                `[${translatorName}]: Failed to ${enable ? "enable" : "disable"} action: ${e.message}`,
-                translatorName,
-            );
-            failed[translatorName] = !enable;
-            delete newChanged[translatorName];
-        }
-    }
-    const failedCount = Object.keys(failed).length;
-    if (failedCount !== 0) {
-        context.session.setConfig({ actions: failed });
-    }
-
-    return entries.length === failedCount ? undefined : newChanged;
 }

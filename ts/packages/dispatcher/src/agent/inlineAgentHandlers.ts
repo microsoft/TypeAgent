@@ -24,7 +24,6 @@ import { TraceCommandHandler } from "../handlers/traceCommandHandler.js";
 import { TranslateCommandHandler } from "../handlers/translateCommandHandler.js";
 /* ==Experimental== */
 import { getRandomCommandHandlers } from "../handlers/randomCommandHandler.js";
-import { getShellCommandHandlers } from "../handlers/shellCommandHandler.js";
 import { getNotifyCommandHandlers } from "../handlers/notifyCommandHandler.js";
 import {
     DispatcherCommandHandler,
@@ -181,7 +180,6 @@ const handlers: DispatcherHandlerTable = {
             },
         },
         random: getRandomCommandHandlers(),
-        shell: getShellCommandHandlers(),
         notify: getNotifyCommandHandlers(),
     },
 };

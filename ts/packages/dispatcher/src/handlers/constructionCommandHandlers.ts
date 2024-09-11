@@ -230,9 +230,10 @@ async function getImportTranslationFiles(
     } else {
         const infos = config.agents;
         const enabledAgents = new Set(
-            Object.entries(context.session.getConfig().translators)
-                .filter(([name, enabled]) => enabled)
-                .map(([name]) => getAppAgentName(name)),
+            context.agents
+                .getTranslatorNames()
+                .filter((name) => context.agents.isTranslatorEnabled(name))
+                .map(getAppAgentName),
         );
 
         files = Object.entries(infos).flatMap(([name, info]) =>

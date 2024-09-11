@@ -16,6 +16,7 @@ import {
 } from "../utils/userData.js";
 import { TranslatorConfigProvider } from "../translation/agentTranslators.js";
 import ExifReader from 'exifreader';
+import { AppAgentState } from "../handlers/common/appAgentManager.js";
 
 const debugSession = registerDebug("typeagent:session");
 
@@ -58,25 +59,22 @@ function mergeConfig(
     const changed: ConfigObject = {};
     const keys = strict ? Object.keys(config) : Object.keys(options);
     for (const key of keys) {
-        const value = options[key];
-        if (value !== undefined) {
+        if (options.hasOwnProperty(key)) {
+            const value = options[key];
             if (typeof value === "object") {
+                const strictKey = flexKeys ? !flexKeys.includes(key) : strict;
                 if (config[key] === undefined) {
-                    if (strict) {
+                    if (strictKey) {
                         continue;
                     }
                     config[key] = {};
                 }
 
-                const changedValue = mergeConfig(
-                    config[key],
-                    value,
-                    flexKeys ? !flexKeys.includes(key) : strict,
-                );
+                const changedValue = mergeConfig(config[key], value, strictKey);
                 if (Object.keys(changedValue).length !== 0) {
                     changed[key] = changedValue;
                 }
-            } else if (config[key] !== value) {
+            } else if (!config.hasOwnProperty(key) || config[key] !== value) {
                 config[key] = value;
                 changed[key] = value;
             }
@@ -143,8 +141,6 @@ async function newSessionDir() {
 }
 
 type DispatcherConfig = {
-    translators: ConfigObject;
-    actions: ConfigObject;
     explainerName: string;
     models: {
         translator: string;
@@ -167,11 +163,13 @@ type DispatcherConfig = {
     matchWildcard: boolean;
 };
 
-export type SessionConfig = DispatcherConfig & CacheConfig;
+export type SessionConfig = Required<AppAgentState> &
+    DispatcherConfig &
+    CacheConfig;
 
 const defaultSessionConfig: SessionConfig = {
-    translators: {},
-    actions: {},
+    translators: undefined,
+    actions: undefined,
     explainerName: getDefaultExplainerName(),
     models: {
         translator: "",
@@ -194,16 +192,8 @@ const defaultSessionConfig: SessionConfig = {
     builtInCache: true,
 };
 
-export function getDefaultSessionConfig(provider?: TranslatorConfigProvider) {
-    const config = cloneConfig(defaultSessionConfig);
-    if (provider) {
-        const translatorConfigs = provider.getTranslatorConfigs();
-        for (const [name, translatorConfig] of translatorConfigs) {
-            config.translators[name] = translatorConfig.defaultEnabled;
-            config.actions[name] = translatorConfig.actionDefaultEnabled;
-        }
-    }
-    return config;
+export function getDefaultSessionConfig() {
+    return defaultSessionConfig;
 }
 
 // explainer name as key, cache file path as value
@@ -253,7 +243,7 @@ async function readSessionData(dir: string) {
     return ensureSessionData(data);
 }
 
-const flexKeys = ["translators", "actions"];
+const flexKeys = ["translators", "actions", "commands"];
 export class Session {
     private config: SessionConfig;
     private cacheData: SessionCacheData;
@@ -326,7 +316,7 @@ export class Session {
         };
     }
 
-    public getConfig(): SessionConfig {
+    public getConfig(): Readonly<SessionConfig> {
         return this.config;
     }
 

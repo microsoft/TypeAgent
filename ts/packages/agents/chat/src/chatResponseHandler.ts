@@ -36,7 +36,6 @@ export function instantiate(): AppAgent {
 
 function isChatResponseAction(action: AppAction): action is ChatResponseAction {
     return (
-        action.actionName === "generateGreetingResponse" ||
         action.actionName === "generateResponse" ||
         action.actionName === "lookupAndGenerateResponse" ||
         action.actionName === "chatImageResponse"

@@ -36,6 +36,7 @@ import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
+import { shellAgentProvider } from "./agent.js";
 
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
@@ -516,16 +517,13 @@ app.whenReady().then(async () => {
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.electron");
 
-    const dispatcher = await createDispatcher(
-        "shell",
-        ShellSettings.getinstance(),
-        {
-            explanationAsynchronousMode: true,
-            persistSession: true,
-            enableServiceHost: true,
-            clientIO,
-        },
-    );
+    const dispatcher = await createDispatcher("shell", {
+        appAgentProviders: [shellAgentProvider],
+        explanationAsynchronousMode: true,
+        persistSession: true,
+        enableServiceHost: true,
+        clientIO,
+    });
 
     let settingSummary: string = "";
     async function processShellRequest(
