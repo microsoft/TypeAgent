@@ -52,6 +52,7 @@ async function executePlayerAction(
         return handleCall(
             action as PlayerAction,
             context.sessionContext.agentContext.spotify,
+            context.actionIO,
         );
     }
 
@@ -160,7 +161,9 @@ async function getPlayerDynamicDisplay(
     if (displayId === "status") {
         const status = await htmlStatus(context.agentContext.spotify);
         return {
-            content: type === "html" ? status.displayText : status.literalText!,
+            content:
+                type === "html" ? status.displayContent : status.literalText!,
+
             nextRefreshMs: 1000,
         };
     }

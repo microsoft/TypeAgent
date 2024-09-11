@@ -6,10 +6,8 @@ import {
     AppAction,
     AppAgent,
     SessionContext,
-    Storage,
     TurnImpression,
-    createTurnImpressionFromDisplay,
-    createTurnImpressionFromLiteral,
+    createTurnImpression,
 } from "@typeagent/agent-sdk";
 import { AnswerImageQuestionAction, PhotoAction } from "./photoSchema.js";
 
@@ -71,7 +69,7 @@ async function handlePhotoAction(
         case "answerImageQuestion": {
             const answerAction = action as AnswerImageQuestionAction;
             const literalText = `Can't yet answer question: ${answerAction.parameters.questionText}`;
-            result = createTurnImpressionFromLiteral(literalText);
+            result = createTurnImpression(literalText);
             break;
         }
         default:
