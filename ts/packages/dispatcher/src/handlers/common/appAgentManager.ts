@@ -17,18 +17,61 @@ import { createSessionContext } from "../../action/actionHandlers.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 import registerDebug from "debug";
 import { getTranslatorActionInfo } from "../../translation/actionInfo.js";
+import { DeepPartialUndefined } from "common-utils";
 
 const debug = registerDebug("typeagent:agents");
+const debugError = registerDebug("typeagent:agents:error");
 
 type AppAgentRecord = {
     name: string;
     provider: AppAgentProvider;
-    enabled: Set<string>;
+    translators: Set<string>;
+    actions: Set<string>;
+    hasTranslators: boolean;
     config: TopLevelTranslatorConfig;
     appAgent?: AppAgent | undefined;
     sessionContext?: SessionContext | undefined;
     sessionContextP?: Promise<SessionContext> | undefined;
 };
+
+export type AppAgentState = {
+    translators?: Record<string, boolean> | undefined;
+    actions?: Record<string, boolean> | undefined;
+};
+
+function getEffectiveValue(
+    force: DeepPartialUndefined<AppAgentState> | undefined,
+    overrides: DeepPartialUndefined<AppAgentState> | undefined,
+    kind: "translators" | "actions",
+    name: string,
+    useDefault: boolean,
+    defaultValue: boolean,
+    currentValue: boolean,
+): boolean {
+    const forceState = force?.[kind];
+    if (forceState !== undefined) {
+        // false if the value is missing.
+        return forceState[name] ?? false;
+    }
+    if (overrides !== undefined && overrides.hasOwnProperty(kind)) {
+        const state = overrides[kind];
+        if (state === undefined) {
+            // explicit undefined means to use default;
+            return defaultValue;
+        }
+
+        if (state.hasOwnProperty(name)) {
+            const enabled = state[name];
+            if (enabled === undefined) {
+                // explicit undefined means to use default;
+                return defaultValue;
+            }
+            return enabled;
+        }
+    }
+    // no explicit value
+    return useDefault ? defaultValue : currentValue;
+}
 
 export class AppAgentManager implements TranslatorConfigProvider {
     private readonly agents = new Map<string, AppAgentRecord>();
@@ -42,24 +85,43 @@ export class AppAgentManager implements TranslatorConfigProvider {
         return this.translatorConfigs.has(translatorName);
     }
 
+    public isTranslatorEnabled(translatorName: string) {
+        const appAgentName = getAppAgentName(translatorName);
+        const record = this.getRecord(appAgentName);
+        return record.translators.has(translatorName);
+    }
+
+    public isActionEnabled(translatorName: string) {
+        const appAgentName = getAppAgentName(translatorName);
+        const record = this.getRecord(appAgentName);
+        return record.actions.has(translatorName);
+    }
+
+    public getEnabledTranslators() {
+        const result: string[] = [];
+        for (const name of this.translatorConfigs.keys()) {
+            if (this.isTranslatorEnabled(name)) {
+                result.push(name);
+            }
+        }
+        return result;
+    }
+
     public enableExecuteCommand(appAgentName: string) {
-        const appAgent = this.agents.get(appAgentName);
-        return appAgent !== undefined
-            ? appAgent.enabled.size > 0 &&
-                  appAgent.appAgent!.executeCommand !== undefined
+        const record = this.agents.get(appAgentName);
+        return record !== undefined
+            ? (!record.hasTranslators || record.actions.size > 0) &&
+                  record.appAgent!.executeCommand !== undefined
             : false;
     }
 
-    public async addProvider(provider: AppAgentProvider) {
+    public async addProvider(
+        provider: AppAgentProvider,
+        context: CommandHandlerContext,
+    ) {
         for (const name of provider.getAppAgentNames()) {
             // TODO: detect duplicate names
             const config = await provider.getAppAgentConfig(name);
-            this.agents.set(name, {
-                name,
-                provider,
-                enabled: new Set(),
-                config,
-            });
 
             // TODO: detect duplicate names
             const translatorConfigs = convertToTranslatorConfigs(name, config);
@@ -75,6 +137,25 @@ export class AppAgentManager implements TranslatorConfigProvider {
                     }
                 }
             }
+
+            const hasTranslators = entries.length > 0;
+            const record: AppAgentRecord = {
+                name,
+                provider,
+                actions: new Set(),
+                translators: new Set(),
+                hasTranslators: entries.length > 0,
+                config,
+            };
+
+            this.agents.set(name, record);
+
+            if (!hasTranslators) {
+                // REVIEW: if the app agent doesn't have a translator, it is assume that
+                // it has command interface. We don't have away to control enable/disable
+                // command interface. So just assume that it is always available.
+                await this.ensureSessionContext(record, context);
+            }
         }
     }
 
@@ -86,6 +167,9 @@ export class AppAgentManager implements TranslatorConfigProvider {
         return config;
     }
 
+    public getTranslatorNames() {
+        return Array.from(this.translatorConfigs.keys());
+    }
     public getTranslatorConfigs() {
         return Array.from(this.translatorConfigs.entries());
     }
@@ -116,7 +200,82 @@ export class AppAgentManager implements TranslatorConfigProvider {
         return record.sessionContext;
     }
 
-    public async update(
+    public async setState(
+        context: CommandHandlerContext,
+        overrides?: DeepPartialUndefined<AppAgentState>,
+        force?: DeepPartialUndefined<AppAgentState>,
+        useDefault: boolean = true,
+    ) {
+        const changedTranslators: [string, boolean][] = [];
+        const changedActions: [string, boolean][] = [];
+        const failedActions: [string, boolean, Error][] = [];
+
+        const p: Promise<void>[] = [];
+        for (const [name, config] of this.translatorConfigs) {
+            const record = this.getRecord(getAppAgentName(name));
+
+            const currentTranslatorEnabled = record.translators.has(name);
+            const enableTranslator = getEffectiveValue(
+                force,
+                overrides,
+                "translators",
+                name,
+                useDefault,
+                config.translationDefaultEnabled,
+                currentTranslatorEnabled,
+            );
+
+            if (enableTranslator !== currentTranslatorEnabled) {
+                if (enableTranslator) {
+                    record.translators.add(name);
+                } else {
+                    record.translators.delete(name);
+                }
+                changedTranslators.push([name, enableTranslator]);
+            }
+
+            const currentActionEnabled = record.actions.has(name);
+            const enableAction = getEffectiveValue(
+                force,
+                overrides,
+                "actions",
+                name,
+                useDefault,
+                config.actionDefaultEnabled,
+                currentActionEnabled,
+            );
+
+            if (enableAction !== currentActionEnabled) {
+                p.push(
+                    (async () => {
+                        try {
+                            await this.updateAction(
+                                name,
+                                enableAction,
+                                context,
+                            );
+                            changedActions.push([name, enableAction]);
+                        } catch (e: any) {
+                            failedActions.push([name, enableAction, e]);
+                        }
+                    })(),
+                );
+            }
+        }
+
+        await Promise.all(p);
+        return {
+            changed: {
+                translators: changedTranslators,
+                actions: changedActions,
+            },
+            failed: {
+                actions: failedActions,
+            },
+        };
+    }
+
+    private async updateAction(
         translatorName: string,
         enable: boolean,
         context: CommandHandlerContext,
@@ -128,42 +287,56 @@ export class AppAgentManager implements TranslatorConfigProvider {
             return;
         }
         if (enable) {
-            if (record.enabled.has(translatorName)) {
+            if (record.actions.has(translatorName)) {
                 return;
             }
 
-            record.enabled.add(translatorName);
-            const sessionContext = await this.ensureSessionContext(
-                record,
-                context,
-            );
-            await record.appAgent!.updateAgentContext?.(
-                enable,
-                sessionContext,
-                translatorName,
-            );
+            record.actions.add(translatorName);
+            try {
+                const sessionContext = await this.ensureSessionContext(
+                    record,
+                    context,
+                );
+                await record.appAgent!.updateAgentContext?.(
+                    enable,
+                    sessionContext,
+                    translatorName,
+                );
+            } catch (e) {
+                // Rollback if there is a exception
+                record.actions.delete(translatorName);
+                throw e;
+            }
             debug(`Enabled ${translatorName}`);
         } else {
-            if (!record.enabled.has(translatorName)) {
+            if (!record.actions.has(translatorName)) {
                 return;
             }
-            record.enabled.delete(translatorName);
+            record.actions.delete(translatorName);
             const sessionContext = await record.sessionContextP!;
-            await record.appAgent!.updateAgentContext?.(
-                enable,
-                sessionContext,
-                translatorName,
-            );
-            debug(`Disabled ${translatorName}`);
-            if (record.enabled.size === 0) {
-                await this.closeSessionContext(record);
+            try {
+                await record.appAgent!.updateAgentContext?.(
+                    enable,
+                    sessionContext,
+                    translatorName,
+                );
+            } finally {
+                // Assume that it is disabled even when there is an exception
+                debug(`Disabled ${translatorName}`);
+                await this.checkCloseSessionContext(record);
             }
+        }
+    }
+
+    private async checkCloseSessionContext(record: AppAgentRecord) {
+        if (record.actions.size === 0) {
+            await this.closeSessionContext(record);
         }
     }
 
     public async close() {
         for (const record of this.agents.values()) {
-            record.enabled.clear();
+            record.actions.clear();
             await this.closeSessionContext(record);
         }
     }
@@ -202,9 +375,17 @@ export class AppAgentManager implements TranslatorConfigProvider {
             const sessionContext = await record.sessionContextP;
             record.sessionContext = undefined;
             record.sessionContextP = undefined;
-            await record.appAgent!.closeAgentContext?.(sessionContext);
-            // TODO: unload agent as well?
-            debug(`Session context closed for ${record.name}`);
+            try {
+                await record.appAgent!.closeAgentContext?.(sessionContext);
+                // TODO: unload agent as well?
+                debug(`Session context closed for ${record.name}`);
+            } catch (e) {
+                debugError(
+                    `Failed to close session context for ${record.name}`,
+                    e,
+                );
+                // Ignore error
+            }
         }
     }
 

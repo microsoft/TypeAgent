@@ -32,13 +32,14 @@ export type TranslatorConfig = {
     cached?: boolean; // whether the translator's action should be cached, default is true
     streamingActions?: string[];
 
-    defaultEnabled: boolean;
+    translationDefaultEnabled: boolean;
     actionDefaultEnabled: boolean;
     transient: boolean;
 };
 
 export interface TranslatorConfigProvider {
     getTranslatorConfig(translatorName: string): TranslatorConfig;
+    getTranslatorNames(): string[];
     getTranslatorConfigs(): [string, TranslatorConfig][];
 }
 
@@ -47,22 +48,23 @@ function collectTranslatorConfigs(
     config: HierarchicalTranslatorConfig,
     name: string,
     emojiChar: string,
-    defaultEnabled: boolean,
-    actionDefaultEnabled: boolean,
     transient: boolean,
+    translationDefaultEnabled: boolean,
+    actionDefaultEnabled: boolean,
 ) {
-    defaultEnabled = config.defaultEnabled ?? defaultEnabled;
-    actionDefaultEnabled = config.actionDefaultEnabled ?? actionDefaultEnabled;
     transient = config.transient ?? transient;
+    translationDefaultEnabled =
+        config.translationDefaultEnabled ?? translationDefaultEnabled;
+    actionDefaultEnabled = config.actionDefaultEnabled ?? actionDefaultEnabled;
 
     if (config.schema) {
         debugConfig(`Adding translator '${name}'`);
         translatorConfigs[name] = {
             emojiChar,
             ...config.schema,
-            defaultEnabled,
-            actionDefaultEnabled,
             transient,
+            translationDefaultEnabled,
+            actionDefaultEnabled,
         };
     }
 
@@ -74,9 +76,9 @@ function collectTranslatorConfigs(
                 subConfig,
                 `${name}.${subName}`,
                 emojiChar,
-                defaultEnabled,
-                actionDefaultEnabled,
-                transient,
+                transient, // propagate default transient
+                translationDefaultEnabled, // propagate default translationDefaultEnabled
+                actionDefaultEnabled, // propagate default actionDefaultEnabled
             );
         }
     }
@@ -85,17 +87,17 @@ function collectTranslatorConfigs(
 export function convertToTranslatorConfigs(
     name: string,
     config: TopLevelTranslatorConfig,
+    translatorConfigs: Record<string, TranslatorConfig> = {},
 ): Record<string, TranslatorConfig> {
-    const translatorConfigs: Record<string, TranslatorConfig> = {};
     const emojiChar = config.emojiChar;
     collectTranslatorConfigs(
         translatorConfigs,
         config,
         name,
         emojiChar,
-        true, // default to true if not specified
-        true, // default to true if not specified
-        false, // default to false if not specified
+        false, // transient default to false if not specified
+        true, // translationDefaultEnable default to true if not specified
+        true, // actionDefaultEnabled default to true if not specified
     );
     return translatorConfigs;
 }
@@ -105,16 +107,7 @@ const translatorConfigs: { [key: string]: TranslatorConfig } =
         const translatorConfigs = {};
         const configs = await getBuiltinAppAgentConfigs();
         for (const [name, config] of configs.entries()) {
-            const emojiChar = config.emojiChar;
-            collectTranslatorConfigs(
-                translatorConfigs,
-                config,
-                name,
-                emojiChar,
-                true, // default to true if not specified
-                true, // default to true if not specified
-                false, // default to false if not specified
-            );
+            convertToTranslatorConfigs(name, config, translatorConfigs);
         }
         return translatorConfigs;
     })();
@@ -136,6 +129,9 @@ export function getBuiltinTranslatorConfigProvider(): TranslatorConfigProvider {
                 throw new Error(`Unknown translator: ${translatorName}`);
             }
             return config;
+        },
+        getTranslatorNames() {
+            return Object.keys(translatorConfigs);
         },
         getTranslatorConfigs() {
             return Object.entries(translatorConfigs);
@@ -185,7 +181,7 @@ function getChangeAssistantSchemaDef(
         ([name, translatorConfig]) =>
             name !== translatorName && // don't include itself
             !translatorConfig.injected && // don't include injected translators
-            (activeTranslators[name] ?? translatorConfig.defaultEnabled), // use the config default if key is missing
+            (activeTranslators[name] ?? false),
     );
     if (translators.length === 0) {
         return undefined;
@@ -237,7 +233,7 @@ function getInjectedTranslatorConfigs(
             ([name, config]) =>
                 config.injected &&
                 name !== translatorName && // don't include itself
-                (activeTranslators[name] ?? config.defaultEnabled),
+                (activeTranslators[name] ?? false),
         )
         .map(([_, config]) => config);
 }

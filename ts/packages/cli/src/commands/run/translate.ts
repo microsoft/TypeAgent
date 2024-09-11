@@ -38,15 +38,11 @@ export default class TranslateCommand extends Command {
             : undefined;
         await handler.run(
             args.request,
-            await initializeCommandHandlerContext(
-                "cli run translate",
-                undefined,
-                {
-                    translators,
-                    actions: {}, // We don't need any actions
-                    cache: false,
-                },
-            ),
+            await initializeCommandHandlerContext("cli run translate", {
+                translators,
+                actions: {}, // We don't need any actions
+                cache: false,
+            }),
         );
     }
 }

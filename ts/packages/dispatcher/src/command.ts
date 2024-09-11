@@ -78,6 +78,7 @@ export async function resolveCommand(
         const c = currentTable.commands[subCommand];
         if (c === undefined) {
             // Unknown command
+            table = currentTable;
             break;
         }
 

@@ -42,12 +42,10 @@ export interface Dispatcher {
 export type DispatcherOptions = InitializeCommandHandlerContextOptions;
 export async function createDispatcher(
     hostName: string,
-    hostSettings: any,
     options: DispatcherOptions,
 ): Promise<Dispatcher> {
     const context = await initializeCommandHandlerContext(
         hostName,
-        hostSettings,
         options,
     );
     return {
