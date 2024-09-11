@@ -4,7 +4,7 @@
 import {
     ActionContext,
     AppAgent,
-    TopLevelTranslatorConfig,
+    AppAgentManifest,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
@@ -18,7 +18,7 @@ type ShellContext = {
     settings: ShellSettings;
 };
 
-const config: TopLevelTranslatorConfig = {
+const config: AppAgentManifest = {
     emojiChar: "🐚",
 };
 
@@ -92,7 +92,7 @@ export const shellAgentProvider: AppAgentProvider = {
     getAppAgentNames: () => {
         return ["shell"];
     },
-    getAppAgentConfig: async (appAgentName: string) => {
+    getAppAgentManifest: async (appAgentName: string) => {
         if (appAgentName !== "shell") {
             throw new Error(`Unknown app agent: ${appAgentName}`);
         }

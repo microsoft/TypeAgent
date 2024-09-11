@@ -449,8 +449,8 @@ export async function changeContextConfig(
 
 export function getActiveTranslatorList(context: CommandHandlerContext) {
     return context.agents
-        .getEnabledTranslators()
-        .filter((name) => context.transientAgents[name] !== false);
+        .getTranslatorNames()
+        .filter((name) => isTranslatorActive(name, context));
 }
 
 function getActiveTranslators(context: CommandHandlerContext) {
@@ -459,7 +459,7 @@ function getActiveTranslators(context: CommandHandlerContext) {
     );
 }
 
-export function isTranslatorEnabled(
+export function isTranslatorActive(
     translatorName: string,
     context: CommandHandlerContext,
 ) {
@@ -469,7 +469,7 @@ export function isTranslatorEnabled(
     );
 }
 
-export function isActionEnabled(
+export function isActionActive(
     translatorName: string,
     context: CommandHandlerContext,
 ) {

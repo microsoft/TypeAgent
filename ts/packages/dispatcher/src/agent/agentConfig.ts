@@ -3,8 +3,8 @@
 
 import {
     AppAgent,
-    HierarchicalTranslatorConfig,
-    TopLevelTranslatorConfig,
+    TranslatorDefinition,
+    AppAgentManifest,
 } from "@typeagent/agent-sdk";
 import { getDispatcherConfig } from "../utils/config.js";
 import { createRequire } from "module";
@@ -17,7 +17,7 @@ import { loadInlineAgent } from "./inlineAgentHandlers.js";
 
 export type InlineAppAgentInfo = {
     type?: undefined;
-} & TopLevelTranslatorConfig;
+} & AppAgentManifest;
 
 const enum ExecutionMode {
     SeparateProcess = "separate",
@@ -34,7 +34,7 @@ export type AgentInfo = (InlineAppAgentInfo | ModuleAppAgentInfo) & {
     imports?: string[]; // for @const import
 };
 
-function patchPaths(config: HierarchicalTranslatorConfig, dir: string) {
+function patchPaths(config: TranslatorDefinition, dir: string) {
     if (config.schema) {
         config.schema.schemaFile = path.resolve(dir, config.schema.schemaFile);
     }
@@ -47,17 +47,17 @@ function patchPaths(config: HierarchicalTranslatorConfig, dir: string) {
 
 async function loadModuleConfig(
     info: ModuleAppAgentInfo,
-): Promise<TopLevelTranslatorConfig> {
+): Promise<AppAgentManifest> {
     const require = createRequire(import.meta.url);
     const manifestPath = require.resolve(`${info.name}/agent/manifest`);
-    const config = require(manifestPath) as TopLevelTranslatorConfig;
+    const config = require(manifestPath) as AppAgentManifest;
     patchPaths(config, path.dirname(manifestPath));
     return config;
 }
 
 async function loadDispatcherConfigs() {
     const infos = getDispatcherConfig().agents;
-    const appAgents: Map<string, TopLevelTranslatorConfig> = new Map();
+    const appAgents: Map<string, AppAgentManifest> = new Map();
     for (const [name, info] of Object.entries(infos)) {
         appAgents.set(
             name,
@@ -67,7 +67,7 @@ async function loadDispatcherConfigs() {
     return appAgents;
 }
 
-let appAgentConfigs: Map<string, TopLevelTranslatorConfig> | undefined;
+let appAgentConfigs: Map<string, AppAgentManifest> | undefined;
 export async function getBuiltinAppAgentConfigs() {
     if (appAgentConfigs === undefined) {
         appAgentConfigs = await loadDispatcherConfigs();
@@ -115,7 +115,7 @@ export function getBuiltinAppAgentProvider(
         getAppAgentNames() {
             return Object.keys(getDispatcherConfig().agents);
         },
-        async getAppAgentConfig(appAgentName: string) {
+        async getAppAgentManifest(appAgentName: string) {
             const configs = await getBuiltinAppAgentConfigs();
             const config = configs.get(appAgentName);
             if (config === undefined) {

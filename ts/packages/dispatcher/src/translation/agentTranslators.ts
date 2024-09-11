@@ -4,8 +4,9 @@
 import { createJsonTranslatorFromSchemaDef } from "common-utils";
 import {
     AppAction,
-    HierarchicalTranslatorConfig,
-    TopLevelTranslatorConfig,
+    TranslatorDefinition,
+    SchemaDefinition,
+    AppAgentManifest,
 } from "@typeagent/agent-sdk";
 import { TypeChatJsonTranslator } from "typechat";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
@@ -18,24 +19,14 @@ import { loadTranslatorSchemaConfig } from "../utils/loadSchemaConfig.js";
 
 const debugConfig = registerDebug("typeagent:translator:config");
 
+// A flatten AppAgentManifest
 export type TranslatorConfig = {
     emojiChar: string;
-    description: string;
-    schemaFile: string;
-    schemaType: string;
-    constructions?: {
-        data: string[];
-        file: string;
-    };
-    dataFrameColumns?: { [key: string]: string };
-    injected?: boolean; // whether the translator is injected into other domains, default is false
-    cached?: boolean; // whether the translator's action should be cached, default is true
-    streamingActions?: string[];
 
     translationDefaultEnabled: boolean;
     actionDefaultEnabled: boolean;
     transient: boolean;
-};
+} & SchemaDefinition;
 
 export interface TranslatorConfigProvider {
     getTranslatorConfig(translatorName: string): TranslatorConfig;
@@ -45,7 +36,7 @@ export interface TranslatorConfigProvider {
 
 function collectTranslatorConfigs(
     translatorConfigs: { [key: string]: TranslatorConfig },
-    config: HierarchicalTranslatorConfig,
+    config: TranslatorDefinition,
     name: string,
     emojiChar: string,
     transient: boolean,
@@ -86,7 +77,7 @@ function collectTranslatorConfigs(
 
 export function convertToTranslatorConfigs(
     name: string,
-    config: TopLevelTranslatorConfig,
+    config: AppAgentManifest,
     translatorConfigs: Record<string, TranslatorConfig> = {},
 ): Record<string, TranslatorConfig> {
     const emojiChar = config.emojiChar;
