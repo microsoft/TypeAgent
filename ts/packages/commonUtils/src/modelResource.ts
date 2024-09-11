@@ -50,6 +50,9 @@ export function isMultiModalContentSupported(modelName: string | undefined) {
         return false
     } else if (modelName.toUpperCase() == "GPT_4_O" || modelName.toUpperCase() == "GPT_V") {
         return true;
+    } else if (modelName == '') {
+        // default model is now 4_O
+        return true;
     }
 
     return false;

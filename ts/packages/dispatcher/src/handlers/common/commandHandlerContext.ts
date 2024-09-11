@@ -297,10 +297,10 @@ export async function initializeCommandHandlerContext(
     }
     context.session.setConfig(changes);
 
-    // // update client settings for multi-modal support
-    // if (context.clientSettings) {
-    //     context.clientSettings.set!("multiModalContent", isMultiModalContentSupported(changed.traslators[].model)
-    // }
+    // update client settings for multi-modal support
+    if (context.clientSettings) {
+        context.clientSettings.set!("multiModalContent", isMultiModalContentSupported(current.models.translator)
+    }
     
 
     context.requestIO.context = context;
