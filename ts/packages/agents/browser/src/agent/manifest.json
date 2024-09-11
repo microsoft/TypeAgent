@@ -1,6 +1,6 @@
 {
   "emojiChar": "👀",
-  "defaultEnabled": false,
+  "translationDefaultEnabled": false,
   "actionDefaultEnabled": false,
   "schema": {
     "description": "Browser agent that allows you control an existing browser window and perform actions such as opening a new tab, closing a tab, scrolling, zooming and navigating to a specific URL.",
@@ -9,7 +9,7 @@
   },
   "subTranslators": {
     "paleoBioDb": {
-      "defaultEnabled": false,
+      "translationDefaultEnabled": false,
       "actionDefaultEnabled": false,
       "transient": true,
       "schema": {
@@ -19,7 +19,7 @@
       }
     },
     "crossword": {
-      "defaultEnabled": false,
+      "translationDefaultEnabled": false,
       "actionDefaultEnabled": false,
       "transient": true,
       "schema": {
@@ -29,7 +29,7 @@
       }
     },
     "commerce": {
-      "defaultEnabled": false,
+      "translationDefaultEnabled": false,
       "actionDefaultEnabled": false,
       "transient": true,
       "schema": {

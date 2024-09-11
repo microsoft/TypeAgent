@@ -50,15 +50,11 @@ export default class RequestCommand extends Command {
         const handler = new RequestCommandHandler();
         await handler.run(
             args.request,
-            await initializeCommandHandlerContext(
-                "cli run request",
-                undefined,
-                {
-                    translators,
-                    explainerName: flags.explainer,
-                    cache: false,
-                },
-            ),
+            await initializeCommandHandlerContext("cli run request", {
+                translators,
+                explainerName: flags.explainer,
+                cache: false,
+            }),
             this.loadAttachment(args.attachment),
         );
     }

@@ -39,7 +39,7 @@ class SessionNewCommandHandler implements DispatcherCommandHandler {
             await Session.create(
                 flags.keep
                     ? context.session.getConfig()
-                    : getDefaultSessionConfig(context.agents),
+                    : getDefaultSessionConfig(),
                 flags.persist,
             ),
         );
@@ -63,10 +63,7 @@ class SessionOpenCommandHandler implements DispatcherCommandHandler {
 class SessionResetCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Reset config on session and keep the data";
     public async run(request: string, context: CommandHandlerContext) {
-        await changeContextConfig(
-            getDefaultSessionConfig(context.agents),
-            context,
-        );
+        await changeContextConfig(getDefaultSessionConfig(), context);
         context.requestIO.success(`Session settings revert to default.`);
     }
 }

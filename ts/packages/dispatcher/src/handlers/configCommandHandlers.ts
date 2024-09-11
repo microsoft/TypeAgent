@@ -12,7 +12,7 @@ import {
     changeContextConfig,
 } from "./common/commandHandlerContext.js";
 import {
-    getBuiltinTranslatorNames,
+    getAppAgentName,
     TranslatorConfigProvider,
 } from "../translation/agentTranslators.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
@@ -31,13 +31,13 @@ function parseToggleTranslatorName(
     provider: TranslatorConfigProvider,
 ) {
     const options: any = {};
-    const translatorNames = getBuiltinTranslatorNames();
+    const translatorNames = provider.getTranslatorNames();
     for (const arg of args) {
         if (arg === "@") {
             for (const [name, config] of provider.getTranslatorConfigs()) {
                 options[name] = action
                     ? config.actionDefaultEnabled
-                    : config.defaultEnabled;
+                    : config.translationDefaultEnabled;
             }
         } else {
             let name: string;
@@ -89,7 +89,10 @@ const AgentToggleDescription = [
 
 const AgentToggleCommand = ["translator", "action", "agent"] as const;
 
-function getAgentToggleOptions(toggle: AgentToggle, options: any) {
+function getAgentToggleOptions(
+    toggle: AgentToggle,
+    options: Record<string, boolean>,
+) {
     switch (toggle) {
         case AgentToggle.Translator:
             return { translators: options };
@@ -111,7 +114,9 @@ class AgentToggleCommandHandler implements DispatcherCommandHandler {
                 log(
                     `Usage: @config ${AgentToggleCommand[this.toggle]} [-]<agent>]`,
                 );
-                const translators = getBuiltinTranslatorNames().join(", ");
+                const translators = context.agents
+                    .getTranslatorNames()
+                    .join(", ");
                 log(`   <agent>: ${translators}`);
             });
             return;

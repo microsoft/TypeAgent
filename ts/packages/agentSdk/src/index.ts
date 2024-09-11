@@ -2,8 +2,9 @@
 // Licensed under the MIT License.
 
 export {
-    TopLevelTranslatorConfig,
-    HierarchicalTranslatorConfig,
+    AppAgentManifest,
+    TranslatorDefinition,
+    SchemaDefinition,
     AppAgent,
     AppAgentEvent,
     AppAction,
