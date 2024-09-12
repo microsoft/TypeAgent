@@ -7,9 +7,9 @@ import {
     AppAgent,
     SessionContext,
     Storage,
-    TurnImpression,
-    createTurnImpressionFromTextDisplay,
-    createTurnImpressionFromHtmlDisplay,
+    ActionResult,
+    createActionResultFromTextDisplay,
+    createActionResultFromHtmlDisplay,
 } from "@typeagent/agent-sdk";
 import {
     ListAction,
@@ -243,7 +243,7 @@ async function handleListAction(
     action: ListAction,
     listContext: ListActionContext,
 ) {
-    let result: TurnImpression | undefined = undefined;
+    let result: ActionResult | undefined = undefined;
     let displayText: string | undefined = undefined;
     switch (action.actionName) {
         case "addItems": {
@@ -258,7 +258,7 @@ async function handleListAction(
                 );
                 await listContext.store.save();
                 displayText = `Added items: ${addAction.parameters.items} to list ${addAction.parameters.listName}`;
-                result = createTurnImpressionFromTextDisplay(
+                result = createActionResultFromTextDisplay(
                     displayText,
                     displayText,
                 );
@@ -289,7 +289,7 @@ async function handleListAction(
                 );
                 await listContext.store.save();
                 displayText = `Removed items: ${removeAction.parameters.items} from list ${removeAction.parameters.listName}`;
-                result = createTurnImpressionFromTextDisplay(
+                result = createActionResultFromTextDisplay(
                     displayText,
                     displayText,
                 );
@@ -327,7 +327,7 @@ async function handleListAction(
                     );
                     displayText = `List already exists: ${createListAction.parameters.listName}`;
                 }
-                result = createTurnImpressionFromTextDisplay(
+                result = createActionResultFromTextDisplay(
                     displayText,
                     displayText,
                 );
@@ -351,7 +351,7 @@ async function handleListAction(
                 displayText = `<ul>${plainList
                     .map((item) => `<li>${item}</li>`)
                     .join("")}</ul>`;
-                result = createTurnImpressionFromHtmlDisplay(
+                result = createActionResultFromHtmlDisplay(
                     displayText,
                     `List ${getListAction.parameters.listName} has items: ${plainList.join(",")}`,
                 );
@@ -378,7 +378,7 @@ async function handleListAction(
                     list.itemsSet.clear();
                     await listContext.store.save();
                     displayText = `Cleared list: ${clearListAction.parameters.listName}`;
-                    result = createTurnImpressionFromTextDisplay(
+                    result = createActionResultFromTextDisplay(
                         displayText,
                         displayText,
                     );

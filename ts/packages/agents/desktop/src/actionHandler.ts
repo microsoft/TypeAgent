@@ -4,7 +4,7 @@
 import {
     ActionContext,
     AppActionWithParameters,
-    createTurnImpression,
+    createActionResult,
     SessionContext,
 } from "@typeagent/agent-sdk";
 import {
@@ -50,5 +50,5 @@ async function executeDesktopAction(
         action,
         context.sessionContext.agentContext,
     );
-    return createTurnImpression(message);
+    return createActionResult(message);
 }
