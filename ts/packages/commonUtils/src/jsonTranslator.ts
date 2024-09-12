@@ -134,7 +134,6 @@ function attachAttachments(
                     { type: "text", text: "\n" },
                     { type: "image_url", image_url: { url: attachments[i], detail: "high" } },
                     { type: "text", text: "\n" },
-                    { type: "text", text: `Image Location: ${exifTags![i].GPSLatitude?.description},${exifTags![i].GPSLongitude?.description}`},
                     { type: "text", text: "Here is the EXIF information for the image: " + JSON.stringify(exifTags![i]) },
                 ],
             });

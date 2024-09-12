@@ -230,6 +230,7 @@ async function translateRequestWithTranslator(
     translator.createRequestPrompt = makeRequestPromptCreator(
         translator,
         history,
+        attachments,
     );
 
     let firstToken = true;

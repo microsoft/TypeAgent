@@ -406,11 +406,6 @@ export async function changeContextConfig(
         // The dynamic schema for change assistant is changed.
         // Clear the cache to regenerate them.
         context.translatorCache.clear();
-
-        // update client settings for multi-modal support
-        if (context.clientSettings) {
-            context.clientSettings.set!("multiModalContent", isMultiModalContentSupported(changed.models?.translator))
-        }
     }
 
     if (translatorChanged || actionsChanged || commandsChanged) {
