@@ -19,6 +19,7 @@ import {
     createIncrementalJsonParser,
     IncrementalJsonValueCallBack,
 } from "./incrementalJsonParser.js";
+import ExifReader from "exifreader";
 
 const debug = registerDebug("typeagent:prompt");
 
@@ -61,6 +62,7 @@ export interface TypeChatJsonTranslatorWithStreaming<T extends object>
         promptPreamble?: string | PromptSection[],
         cb?: IncrementalJsonValueCallBack,
         attachments?: string[] | undefined,
+        exifTags?: ExifReader.Tags[] | undefined,
     ) => Promise<Result<T>>;
 }
 
@@ -79,8 +81,9 @@ export function enableJsonTranslatorStreaming<T extends object>(
         promptPreamble?: string | PromptSection[],
         cb?: IncrementalJsonValueCallBack,
         attachments?: string[],
+        exifTags?: ExifReader.Tags[],
     ) => {
-        attachAttachments(attachments, promptPreamble);
+        attachAttachments(attachments, exifTags, promptPreamble);
 
         if (cb === undefined) {
             return innerFn(request, promptPreamble);
@@ -118,6 +121,7 @@ export function enableJsonTranslatorStreaming<T extends object>(
 
 function attachAttachments(
     attachments: string[] | undefined,
+    exifTags: ExifReader.Tags[] | undefined,
     promptPreamble?: string | PromptSection[],
 ) {
     let pp: PromptSection[] = promptPreamble as PromptSection[];
@@ -128,8 +132,17 @@ function attachAttachments(
                 role: "user",
                 content: [
                     { type: "text", text: "\n" },
-                    { type: "image_url", image_url: { url: attachments[i] } },
+                    {
+                        type: "image_url",
+                        image_url: { url: attachments[i], detail: "high" },
+                    },
                     { type: "text", text: "\n" },
+                    {
+                        type: "text",
+                        text:
+                            "Here is the EXIF information for the image: " +
+                            JSON.stringify(exifTags![i]),
+                    },
                 ],
             });
         }

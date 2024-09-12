@@ -52,12 +52,19 @@ import { conversation as Conversation } from "knowledge-processor";
 import { AppAgentManager, AppAgentState } from "./appAgentManager.js";
 import { getBuiltinAppAgentProvider } from "../../agent/agentConfig.js";
 import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
+import { isMultiModalContentSupported } from "../../../../commonUtils/dist/modelResource.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 
 export interface CommandResult {
     error?: boolean;
     message?: string;
     html?: boolean;
+}
+
+export type EmptyFunction = () => void;
+export type SetSettingFunction = (name: string, value: any) => void;
+export interface ClientSettingsProvider {
+    set: SetSettingFunction | null;
 }
 
 // Command Handler Context definition.

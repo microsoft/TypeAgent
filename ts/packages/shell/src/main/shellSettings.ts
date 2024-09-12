@@ -10,10 +10,16 @@ import {
     ShellSettingsType,
     TTSSettings,
 } from "./shellSettingsType.js";
+import {
+    ClientSettingsProvider,
+    EmptyFunction,
+} from "../preload/electronTypes.js";
 
 const debugShell = registerDebug("typeagent:shell");
 
-export class ShellSettings implements ShellSettingsType {
+export class ShellSettings
+    implements ShellSettingsType, ClientSettingsProvider
+{
     private static instance: ShellSettings;
 
     public size: number[];
@@ -28,7 +34,8 @@ export class ShellSettings implements ShellSettingsType {
     public tts: boolean;
     public ttsSettings: TTSSettings;
     public agentGreeting: boolean;
-    public onSettingsChanged: (() => void) | null;
+    public multiModalContent: boolean;
+    public onSettingsChanged: EmptyFunction | null;
 
     public get width(): number | undefined {
         return this.size[0];
@@ -64,6 +71,7 @@ export class ShellSettings implements ShellSettingsType {
         this.tts = settings.tts;
         this.ttsSettings = settings.ttsSettings;
         this.agentGreeting = settings.agentGreeting;
+        this.multiModalContent = settings.multiModalContent;
 
         this.onSettingsChanged = null;
     }
@@ -105,23 +113,29 @@ export class ShellSettings implements ShellSettingsType {
     public set(name: string, value: any) {
         const t = typeof ShellSettings.getinstance()[name];
 
-        switch (t) {
-            case "string":
-                ShellSettings.getinstance()[name] = value;
-                break;
-            case "number":
-                ShellSettings.getinstance()[name] = Number(value);
-                break;
-            case "boolean":
-                ShellSettings.getinstance()[name] =
-                    value.toLowerCase() === "true" || value === "1";
-                break;
-            case "object":
-                ShellSettings.getinstance()[name] = JSON.parse(value);
-                break;
+        if (t === typeof value) {
+            ShellSettings.getinstance()[name] = value;
+        } else {
+            switch (t) {
+                case "string":
+                    ShellSettings.getinstance()[name] = value;
+                    break;
+                case "number":
+                    ShellSettings.getinstance()[name] = Number(value);
+                    break;
+                case "boolean":
+                    if (typeof value === t) {
+                    }
+                    ShellSettings.getinstance()[name] =
+                        value.toLowerCase() === "true" || value === "1";
+                    break;
+                case "object":
+                    ShellSettings.getinstance()[name] = JSON.parse(value);
+                    break;
+            }
         }
 
-        if (ShellSettings.getinstance().onSettingsChanged) {
+        if (ShellSettings.getinstance().onSettingsChanged != null) {
             ShellSettings.getinstance().onSettingsChanged!();
         }
     }

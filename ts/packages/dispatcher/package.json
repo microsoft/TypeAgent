@@ -40,6 +40,7 @@
     "debug": "^4.3.4",
     "desktop-automation": "workspace:*",
     "email": "workspace:*",
+    "exifreader": "4.23.5",
     "glob": "^10.3.12",
     "knowledge-processor": "workspace:*",
     "list-agent": "workspace:*",

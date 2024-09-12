@@ -100,6 +100,7 @@ function addEvents(
     });
     api.onSettingSummaryChanged((_, summary, registeredAgents) => {
         document.title = summary;
+        document.title += ` Zoom: ${settingsView.shellSettings.zoomLevel * 100}%`;
 
         agents.clear();
         for (let key of registeredAgents.keys()) {
@@ -128,7 +129,13 @@ function addEvents(
         tabsView.showTab(key);
     });
     api.onSettingsChanged((_, value: ShellSettings) => {
-        console.log("Settings Updated\n" + value);
+        let newTitle = document.title.substring(
+            0,
+            document.title.indexOf("Zoom: "),
+        );
+
+        document.title = `${newTitle} Zoom: ${value.zoomLevel * 100}%`;
+
         settingsView.shellSettings = value;
     });
     api.onNotificationCommand((_, requestId: string, data: any) => {
