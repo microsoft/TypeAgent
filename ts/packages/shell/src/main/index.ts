@@ -139,6 +139,13 @@ function createWindow(): void {
 
         ShellSettings.getinstance().onSettingsChanged = tempFunc;
     };
+
+    ShellSettings.getinstance().onShowSettingsDialog = (dialogName: string): void => {
+        mainWindow?.webContents.send(
+            "show-dialog",
+            dialogName,
+        );
+    }
 }
 
 /**

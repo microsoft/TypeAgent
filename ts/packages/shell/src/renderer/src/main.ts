@@ -122,8 +122,8 @@ function addEvents(
         chatView.addUserMessage(`@random`);
     });
     api.onShowDialog((_, key) => {
-        if (key == "Settings") {
-            settingsView.showTabs();
+        if (key.toLocaleLowerCase() == "settings") {
+            tabsView.showTab(key);
         }
 
         tabsView.showTab(key);

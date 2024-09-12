@@ -36,6 +36,7 @@ export class ShellSettings
     public agentGreeting: boolean;
     public multiModalContent: boolean;
     public onSettingsChanged: EmptyFunction | null;
+    public onShowSettingsDialog: ((dialogName: string) => void) | null;
 
     public get width(): number | undefined {
         return this.size[0];
@@ -74,6 +75,7 @@ export class ShellSettings
         this.multiModalContent = settings.multiModalContent;
 
         this.onSettingsChanged = null;
+        this.onShowSettingsDialog = null;
     }
 
     public static get filePath(): string {
@@ -137,6 +139,12 @@ export class ShellSettings
 
         if (ShellSettings.getinstance().onSettingsChanged != null) {
             ShellSettings.getinstance().onSettingsChanged!();
+        }
+    }
+
+    public show(dialogName: string = "settings") {
+        if (ShellSettings.getinstance().onShowSettingsDialog != null) {
+            ShellSettings.getinstance().onShowSettingsDialog!(dialogName);
         }
     }
 }

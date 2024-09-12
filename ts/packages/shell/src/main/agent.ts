@@ -26,6 +26,34 @@ class ShellShowSettingsCommandHandler implements CommandHandler {
     public readonly description = "Show shell settings";
     public async run(_input: string, context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
+        agentContext.settings.show("settings");
+        context.actionIO.setDisplay("Showing settings.");
+    }
+}
+
+class ShellShowHelpCommandHandler implements CommandHandler {
+    public readonly description = "Show shell help";
+    public async run(_input: string, context: ActionContext<ShellContext>) {
+        const agentContext = context.sessionContext.agentContext;
+        agentContext.settings.show("help");
+        context.actionIO.setDisplay("Showing help.");
+    }
+}
+
+class ShellShowMetricsCommandHandler implements CommandHandler {
+    public readonly description = "Show shell metrics";
+    public async run(_input: string, context: ActionContext<ShellContext>) {
+        const agentContext = context.sessionContext.agentContext;
+        agentContext.settings.show("Metrics");
+        context.actionIO.setDisplay("Showing metrics.");
+    }
+}
+
+
+class ShellShowRawSettingsCommandHandler implements CommandHandler {
+    public readonly description = "Shows raw JSON shell settings";
+    public async run(_input: string, context: ActionContext<ShellContext>) {
+        const agentContext = context.sessionContext.agentContext;
         const message: string[] = [];
         const printConfig = (options: any, prefix: number = 2) => {
             for (const [key, value] of Object.entries(options)) {
@@ -74,7 +102,16 @@ const handlers: CommandHandlerTable = {
     description: "Shell settings command",
     defaultSubCommand: new ShellShowSettingsCommandHandler(),
     commands: {
-        show: new ShellShowSettingsCommandHandler(),
+        show: {
+            description: "Show shell settings",
+            defaultSubCommand: new ShellShowSettingsCommandHandler(),
+            commands: {
+                settings: new ShellShowSettingsCommandHandler(),
+                help: new ShellShowHelpCommandHandler(),
+                metrics: new ShellShowMetricsCommandHandler(),
+                raw: new ShellShowRawSettingsCommandHandler(),
+            }
+        },
         set: new ShellSetSettingCommandHandler(),
     },
 };

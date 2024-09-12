@@ -112,7 +112,7 @@ export class TabView {
         this.show();
 
         for (let j = 0; j < this.tabPages.length; j++) {
-            if (this.tabNames[j] == tabName) {
+            if (this.tabNames[j].toLowerCase() == tabName.toLowerCase()) {
                 this.tabPages[j].classList.remove("closedTab");
             } else {
                 this.tabPages[j].classList.add("closedTab");
