@@ -718,9 +718,6 @@ export class ChatView {
         this.topDiv.className = "chat-container";
         this.messageDiv = document.createElement("div");
         this.messageDiv.className = "chat scroll_enabled";
-        this.messageDiv.addEventListener("scroll", () => {
-            this.autoScroll = false;
-        });
         this.chatInput = new ChatInput(
             "phraseDiv",
             "reco",
@@ -1279,7 +1276,10 @@ export class ChatView {
     }
     updateScroll() {
         if (this.autoScroll) {
-            this.messageDiv.scrollTop = this.messageDiv.scrollHeight;
+            if (this.messageDiv.firstElementChild) {
+                this.messageDiv.firstElementChild.scrollIntoView(false);
+            }
+            //this.messageDiv.scrollTop = this.messageDiv.scrollHeight;
         }
     }
 
