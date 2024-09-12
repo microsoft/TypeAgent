@@ -206,7 +206,7 @@ async function htmlTrackNames(
         content: "",
     };
 
-    const turnImpression: ActionResult = {
+    const actionResult: ActionResult = {
         displayContent,
         literalText: "",
         entities: [],
@@ -218,19 +218,19 @@ async function htmlTrackNames(
         for (const track of selectedTracks) {
             if (entCount < 1) {
                 // make an entity for the track
-                turnImpression.entities.push({
+                actionResult.entities.push({
                     name: track.name,
                     type: ["track", "song"],
                 });
                 // make an entity for each artist
                 for (const artist of track.artists) {
-                    turnImpression.entities.push({
+                    actionResult.entities.push({
                         name: artist.name,
                         type: ["artist"],
                     });
                 }
                 // make an entity for the album
-                turnImpression.entities.push({
+                actionResult.entities.push({
                     name: track.album.name,
                     type: ["album"],
                 });
@@ -261,7 +261,7 @@ async function htmlTrackNames(
             }
         }
         displayContent.content += "</ol></div>";
-        turnImpression.literalText =
+        actionResult.literalText =
             "Updated the current track list with the numbered list of tracks on the screen";
     } else if (selectedTracks.length === 1) {
         const track = selectedTracks[0];
@@ -270,19 +270,19 @@ async function htmlTrackNames(
         const artists =
             artistsPrefix +
             track.artists.map((artist) => artist.name).join(", ");
-        turnImpression.entities.push({
+        actionResult.entities.push({
             name: track.name,
             type: ["track", "song"],
         });
         // make an entity for each artist
         for (const artist of track.artists) {
-            turnImpression.entities.push({
+            actionResult.entities.push({
                 name: artist.name,
                 type: ["artist"],
             });
         }
         // make an entity for the album
-        turnImpression.entities.push({
+        actionResult.entities.push({
             name: track.album.name,
             type: ["album"],
         });
@@ -291,7 +291,7 @@ async function htmlTrackNames(
         const litArtists =
             litArtistsPrefix +
             track.artists.map((artist) => artist.name).join(", ");
-        turnImpression.literalText = `Now playing: ${track.name} from album ${track.album.name} with ${litArtists}`;
+        actionResult.literalText = `Now playing: ${track.name} from album ${track.album.name} with ${litArtists}`;
         if (track.album.images.length > 0 && track.album.images[0].url) {
             displayContent.content = "<div class='track-list scroll_enabled'>";
             displayContent.content +=
@@ -314,7 +314,7 @@ async function htmlTrackNames(
     } else {
         return createNotFoundActionResult("tracks");
     }
-    return turnImpression;
+    return actionResult;
 }
 
 async function updateTrackListAndPrint(
@@ -466,7 +466,7 @@ async function playTracks(
             endIndex,
             clientContext,
         );
-        const turnImpression = await htmlTrackNames(
+        const actionResult = await htmlTrackNames(
             trackCollection,
             startIndex,
             endIndex,
@@ -480,7 +480,7 @@ async function playTracks(
             trackCollection.getContext(),
             startIndex,
         );
-        return turnImpression;
+        return actionResult;
     } else {
         const message = "No active device found";
         return createActionResultFromTextDisplay(chalk.red(message), message);

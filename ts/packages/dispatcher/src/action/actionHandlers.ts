@@ -11,7 +11,7 @@ import {
     AppAgentEvent,
     SessionContext,
     ActionResult,
-    turnImpressionToString,
+    actionResultToString,
     DynamicDisplay,
     DisplayType,
     DisplayContent,
@@ -187,7 +187,7 @@ async function executeAction(
         result = returnedResult;
     }
     if (debugActions.enabled) {
-        debugActions(turnImpressionToString(result));
+        debugActions(actionResultToString(result));
     }
     if (result.error !== undefined) {
         context.requestIO.error(result.error, translatorName);

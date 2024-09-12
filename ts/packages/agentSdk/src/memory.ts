@@ -43,12 +43,12 @@ export function entitiesToString(entities: Entity[], indent = ""): string {
         .join("\n");
 }
 
-export function turnImpressionToString(turnImpression: ActionResult): string {
-    if (turnImpression.error) {
-        return `Error: ${turnImpression.error}`;
+export function actionResultToString(actionResult: ActionResult): string {
+    if (actionResult.error) {
+        return `Error: ${actionResult.error}`;
     } else {
         // add to result all non-empty fields of the turn impression, using entitiesToString for the entities
-        const fields = Object.entries(turnImpression)
+        const fields = Object.entries(actionResult)
             .filter(([key, value]) => Array.isArray(value) && value.length > 0)
             .map(([key, value]) => {
                 if (key === "entities") {

@@ -52,7 +52,7 @@ export function chalkStatus(status: SpotifyApi.CurrentPlaybackResponse) {
 
 function htmlPlaybackStatus(
     status: SpotifyApi.CurrentPlaybackResponse,
-    turnImpression: ActionResultSuccess,
+    actionResult: ActionResultSuccess,
 ) {
     let displayHTML = "";
     if (status.item) {
@@ -73,14 +73,14 @@ function htmlPlaybackStatus(
             }
             const pp = status.is_playing ? "" : "(paused)";
             const album = status.item.album.name;
-            turnImpression.literalText += `Now playing${pp}: ${status.item.name} from album ${album} with ${artists}`;
-            turnImpression.entities.push({
+            actionResult.literalText += `Now playing${pp}: ${status.item.name} from album ${album} with ${artists}`;
+            actionResult.entities.push({
                 name: status.item.name,
                 type: ["track"],
             });
             // make an entity for each artist
             for (const artist of status.item.artists) {
-                turnImpression.entities.push({
+                actionResult.entities.push({
                     name: artist.name,
                     type: ["artist"],
                 });
@@ -88,7 +88,7 @@ function htmlPlaybackStatus(
             const plainArtists = "    A" + artists.substring(1);
             displayHTML += `<div>${plainArtists}</div>\n`;
             displayHTML += `<div>   Album: ${album}</div>\n`;
-            turnImpression.entities.push({
+            actionResult.entities.push({
                 name: album,
                 type: ["album"],
             });
@@ -103,26 +103,26 @@ export async function htmlStatus(context: IClientContext) {
         type: "html",
         content: "<div data-group='status'>Status...",
     };
-    const turnImpression: ActionResultSuccess = {
+    const actionResult: ActionResultSuccess = {
         literalText: "",
         entities: [],
         displayContent,
     };
     if (status) {
-        displayContent.content += htmlPlaybackStatus(status, turnImpression);
+        displayContent.content += htmlPlaybackStatus(status, actionResult);
         const activeDevice = status.device;
         const aux = `Volume is ${activeDevice.volume_percent}%. ${status.shuffle_state ? "Shuffle on" : ""}`;
         displayContent.content += `<div>Active device: ${activeDevice.name} of type ${activeDevice.type}</div>`;
         displayContent.content += `<div>${aux}</div>`;
-        turnImpression.literalText += `\nActive device: ${activeDevice.name} of type ${activeDevice.type}\n${aux}`;
+        actionResult.literalText += `\nActive device: ${activeDevice.name} of type ${activeDevice.type}\n${aux}`;
     } else {
         displayContent.content += "<div>Nothing playing.</div>";
-        turnImpression.literalText = "Nothing playing.";
+        actionResult.literalText = "Nothing playing.";
     }
     displayContent.content += "</div>";
-    turnImpression.dynamicDisplayId = "status";
-    turnImpression.dynamicDisplayNextRefreshMs = 1000;
-    return turnImpression;
+    actionResult.dynamicDisplayId = "status";
+    actionResult.dynamicDisplayNextRefreshMs = 1000;
+    return actionResult;
 }
 
 export async function printStatus(context: IClientContext) {
