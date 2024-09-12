@@ -45,12 +45,14 @@ export function getChatModelNames() {
 }
 
 export function isMultiModalContentSupported(modelName: string | undefined) {
-
     if (modelName === undefined) {
-        return false
-    } else if (modelName.toUpperCase() == "GPT_4_O" || modelName.toUpperCase() == "GPT_V") {
+        return false;
+    } else if (
+        modelName.toUpperCase() == "GPT_4_O" ||
+        modelName.toUpperCase() == "GPT_V"
+    ) {
         return true;
-    } else if (modelName == '') {
+    } else if (modelName == "") {
         // default model is now 4_O
         return true;
     }

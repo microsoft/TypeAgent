@@ -1,7 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { iconAccept, iconCamera, iconCameraSwap, iconCancel, iconRefresh } from "./icon";
+import {
+    iconAccept,
+    iconCamera,
+    iconCameraSwap,
+    iconCancel,
+    iconRefresh,
+} from "./icon";
 
 export class CameraView {
     private mainContainer: HTMLDivElement;
@@ -22,7 +28,6 @@ export class CameraView {
 
     private cameras: MediaDeviceInfo[] = new Array<MediaDeviceInfo>();
     private cameraIndex: number = 0;
-
 
     constructor(saveImageCallback: (image: HTMLImageElement) => void) {
         const videoContainer: HTMLDivElement = document.createElement("div");
@@ -129,9 +134,9 @@ export class CameraView {
             }
         };
 
-        this.video.onplay= () => {
+        this.video.onplay = () => {
             this.video.classList.remove("camera-hidden");
-        }
+        };
         this.video.classList.add("camera-hidden");
 
         this.cameraStatus.innerText = "Starting camera...";
@@ -151,7 +156,9 @@ export class CameraView {
             .then((devices) => {
                 devices.forEach((device) => {
                     if (device.kind === "videoinput") {
-                        console.log(`${device.kind}: ${device.label} id = ${device.deviceId}`);
+                        console.log(
+                            `${device.kind}: ${device.label} id = ${device.deviceId}`,
+                        );
                         this.cameras.push(device);
                     }
                 });
@@ -162,8 +169,7 @@ export class CameraView {
             })
             .catch((err) => {
                 console.error(`${err.name}: ${err.message}`);
-        });
-)
+            });
     }
 
     // Capture a photo by fetching the current contents of the video
@@ -212,7 +218,10 @@ export class CameraView {
 
     public startCamera() {
         navigator.mediaDevices
-            .getUserMedia({ video: { deviceId: this.cameras[this.cameraIndex].deviceId }, audio: false })
+            .getUserMedia({
+                video: { deviceId: this.cameras[this.cameraIndex].deviceId },
+                audio: false,
+            })
             .then((stream) => {
                 this.snapButton.classList.remove("camera-hidden");
                 this.swapCameras.classList.remove("camera-hidden");
@@ -226,7 +235,7 @@ export class CameraView {
                 this.cameraStatus.innerText = "Error starting camera...";
                 this.cameraStatus.classList.remove("camera-hidden");
                 this.video.classList.add("camera-hidden");
-                this.snapButton.classList.add("camera-hidden");                
+                this.snapButton.classList.add("camera-hidden");
             });
 
         this.clearPhoto();
@@ -244,11 +253,11 @@ export class CameraView {
 
     public toggleVisibility() {
         if (this.getContainer().classList.contains("camera-hidden")) {
-            this.getContainer().classList.remove("camera-hidden");        
+            this.getContainer().classList.remove("camera-hidden");
             this.cameraStatus.innerText = "Starting camera...";
-            this.cameraStatus.classList.remove("camera-hidden");                        
+            this.cameraStatus.classList.remove("camera-hidden");
             this.pictureDiv.classList.add("camera-hidden");
-            this.acceptButton.classList.add("camera-hidden");            
+            this.acceptButton.classList.add("camera-hidden");
             this.retryButon.classList.add("camera-hidden");
             this.canvas.classList.add("camera-hidden");
 

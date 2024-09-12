@@ -133,7 +133,7 @@ async function handleChatResponse(
                     }
                 }
             }
-        }    
+        }
     }
     return createTurnImpression("No information found");
 }

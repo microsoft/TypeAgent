@@ -3,9 +3,11 @@
 
 export function getFileExtensionForMimeType(mime: string): string {
     switch (mime) {
-        case "image/png": return ".png";
-        case "image/jpeg": return ".jpeg";
+        case "image/png":
+            return ".png";
+        case "image/jpeg":
+            return ".jpeg";
     }
-    
+
     throw "Unsupported MIME type"!;
 }

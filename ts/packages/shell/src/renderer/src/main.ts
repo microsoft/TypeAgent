@@ -129,11 +129,13 @@ function addEvents(
         tabsView.showTab(key);
     });
     api.onSettingsChanged((_, value: ShellSettings) => {
-        
-        let newTitle = document.title.substring(0, document.title.indexOf("Zoom: "));
+        let newTitle = document.title.substring(
+            0,
+            document.title.indexOf("Zoom: "),
+        );
 
         document.title = `${newTitle} Zoom: ${value.zoomLevel * 100}%`;
-        
+
         settingsView.shellSettings = value;
     });
     api.onNotificationCommand((_, requestId: string, data: any) => {

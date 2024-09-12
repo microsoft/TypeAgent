@@ -38,7 +38,7 @@ import { MatchResult } from "../../../cache/dist/constructions/constructions.js"
 import registerDebug from "debug";
 import { getAllActionInfo } from "../translation/actionInfo.js";
 import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
-import ExifReader from 'exifreader';
+import ExifReader from "exifreader";
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
@@ -707,15 +707,18 @@ export class RequestCommandHandler implements DispatcherCommandHandler {
 
         // store attachements for later reuse
         let cachedFiles: string[] = new Array<string>();
-        let exifTags: ExifReader.Tags[] = new Array<ExifReader.Tags>();        
+        let exifTags: ExifReader.Tags[] = new Array<ExifReader.Tags>();
         if (attachments) {
             for (let i = 0; i < attachments?.length; i++) {
-                const [attachmentName, tags]: [string, ExifReader.Tags] = await context.session.storeUserSuppliedFile(attachments![i]);
+                const [attachmentName, tags]: [string, ExifReader.Tags] =
+                    await context.session.storeUserSuppliedFile(
+                        attachments![i],
+                    );
                 cachedFiles.push(attachmentName);
                 exifTags.push(tags);
             }
         }
-        
+
         const history = context.session.getConfig().history
             ? getChatHistoryForTranslation(context)
             : undefined;
@@ -736,7 +739,13 @@ export class RequestCommandHandler implements DispatcherCommandHandler {
         const match = await matchRequest(request, context, history);
         const translationResult =
             match === undefined // undefined means not found
-                ? await translateRequest(request, context, history, attachments, exifTags)
+                ? await translateRequest(
+                      request,
+                      context,
+                      history,
+                      attachments,
+                      exifTags,
+                  )
                 : match; // result or null
 
         if (!translationResult) {

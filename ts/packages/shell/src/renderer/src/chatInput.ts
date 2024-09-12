@@ -135,7 +135,6 @@ export class ChatInput {
         this.inputContainer.appendChild(this.textarea.getTextEntry());
 
         this.textarea.getTextEntry().ondragenter = (e: DragEvent) => {
-
             if (!this.dragEnabled) {
                 return;
             }
@@ -154,7 +153,6 @@ export class ChatInput {
         };
 
         this.textarea.getTextEntry().ondragleave = (e: DragEvent) => {
-
             if (!this.dragEnabled) {
                 return;
             }
@@ -171,7 +169,6 @@ export class ChatInput {
         };
 
         this.textarea.getTextEntry().ondrop = async (e: DragEvent) => {
-
             if (!this.dragEnabled) {
                 return;
             }

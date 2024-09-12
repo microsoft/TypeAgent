@@ -13,7 +13,7 @@ function entityToText(entity: Entity) {
 export function makeRequestPromptCreator(
     translator: TypeChatJsonTranslator<object>,
     history: HistoryContext | undefined,
-    attachments: string[] | undefined, 
+    attachments: string[] | undefined,
 ) {
     let promptSections: any[] = [];
     let entities = [];
@@ -42,15 +42,16 @@ export function makeRequestPromptCreator(
     }
 
     return (request: string) => {
-
         // image adjustments
         let imageSuffix = "";
-        
-        if (attachments !== undefined && attachments?.length > 0 ) {
-            imageSuffix = "including any images (and related EXIF infomration), ";
+
+        if (attachments !== undefined && attachments?.length > 0) {
+            imageSuffix =
+                "including any images (and related EXIF infomration), ";
 
             if (request.length == 0) {
-                request = "Caption this image in detail and include relevant EXIF information like date/time & location.";
+                request =
+                    "Caption this image in detail and include relevant EXIF information like date/time & location.";
             }
         }
 

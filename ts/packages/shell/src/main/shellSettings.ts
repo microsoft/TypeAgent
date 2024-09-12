@@ -10,11 +10,16 @@ import {
     ShellSettingsType,
     TTSSettings,
 } from "./shellSettingsType.js";
-import { ClientSettingsProvider, EmptyFunction } from "../preload/electronTypes.js";
+import {
+    ClientSettingsProvider,
+    EmptyFunction,
+} from "../preload/electronTypes.js";
 
 const debugShell = registerDebug("typeagent:shell");
 
-export class ShellSettings implements ShellSettingsType, ClientSettingsProvider {
+export class ShellSettings
+    implements ShellSettingsType, ClientSettingsProvider
+{
     private static instance: ShellSettings;
 
     public size: number[];
