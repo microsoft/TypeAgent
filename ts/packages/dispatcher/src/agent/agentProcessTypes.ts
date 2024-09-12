@@ -3,6 +3,7 @@
 
 import {
     AppAgentEvent,
+    DisplayContent,
     DisplayType,
     StorageListOptions,
 } from "@typeagent/agent-sdk";
@@ -14,9 +15,13 @@ export type AgentContextCallFunctions = {
         event: AppAgentEvent;
         message: string;
     }): void;
-    setActionDisplay: (param: {
+    setDisplay: (param: {
         actionContextId: number;
-        message: string;
+        message: DisplayContent;
+    }) => void;
+    appendDisplay: (param: {
+        actionContextId: number;
+        message: DisplayContent;
     }) => void;
     performanceMark: (param: { actionContextId: number; name: string }) => void;
 };
@@ -67,7 +72,14 @@ export type AgentContextInvokeFunctions = {
 };
 
 export type AgentCallFunctions = {
-    streamPartialAction: (param: any) => void;
+    streamPartialAction: (
+        param: Partial<ContextParams> & {
+            actionName: string;
+            name: string;
+            value: string;
+            delta: string | undefined;
+        },
+    ) => void;
 };
 
 export type AgentInvokeFunctions = {
@@ -88,14 +100,6 @@ export type AgentInvokeFunctions = {
         param: Partial<ContextParams> & {
             type: DisplayType;
             displayId: string;
-        },
-    ) => Promise<any>;
-    streamPartialAction: (
-        param: Partial<ContextParams> & {
-            actionName: string;
-            type: string;
-            displayId: string;
-            partial: boolean;
         },
     ) => Promise<any>;
     closeAgentContext: (param: Partial<ContextParams>) => Promise<any>;

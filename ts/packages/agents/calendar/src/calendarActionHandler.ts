@@ -23,7 +23,8 @@ import {
 } from "./calendarQueryHelper.js";
 import {
     SessionContext,
-    createTurnImpressionFromDisplay,
+    createTurnImpressionFromTextDisplay,
+    createTurnImpressionFromHtmlDisplay,
     createTurnImpressionFromError,
     AppAction,
     AppAgent,
@@ -266,7 +267,7 @@ export async function handleCalendarAction(
         !calendarContext.calendarClient ||
         !calendarContext.calendarClient?.isGraphClientInitialized()
     ) {
-        return createTurnImpressionFromDisplay(
+        return createTurnImpressionFromTextDisplay(
             "Not handling calendar actions ...",
         );
     }
@@ -373,7 +374,7 @@ export async function handleCalendarAction(
                         console.log(displayText);
 
                         let result =
-                            createTurnImpressionFromDisplay(displayText);
+                            createTurnImpressionFromHtmlDisplay(displayText);
 
                         if (result && localId) {
                             result.entities = [
@@ -602,7 +603,8 @@ export async function handleCalendarAction(
                     );
                     console.log(displayText);
 
-                    let result = createTurnImpressionFromDisplay(displayText);
+                    let result =
+                        createTurnImpressionFromHtmlDisplay(displayText);
                     if (result && localId) {
                         result.entities = [
                             {
@@ -689,7 +691,7 @@ export async function handleCalendarAction(
                                     console.log(displayText);
 
                                     let result =
-                                        createTurnImpressionFromDisplay(
+                                        createTurnImpressionFromHtmlDisplay(
                                             displayText,
                                         );
 
@@ -744,16 +746,16 @@ async function populateMeetingDetailsFromEvent(
     if (events instanceof Array) {
         if (events && events.length > 0) {
             const displayText = findEventsDisplayHtml(events);
-            let result = createTurnImpressionFromDisplay(displayText);
+            let result = createTurnImpressionFromHtmlDisplay(displayText);
             return result;
         } else {
             const displayText = `You have a meeting free day 😊`;
-            let result = createTurnImpressionFromDisplay(displayText);
+            let result = createTurnImpressionFromTextDisplay(displayText);
             return result;
         }
     } else {
         const displayText = findEventsDisplayHtml(events);
-        let result = createTurnImpressionFromDisplay(displayText);
+        let result = createTurnImpressionFromHtmlDisplay(displayText);
         return result;
     }
 }

@@ -40,7 +40,7 @@ class ShellShowSettingsCommandHandler implements CommandHandler {
             }
         };
         printConfig(agentContext.settings);
-        context.actionIO.setActionDisplay(message.join("\n"));
+        context.actionIO.setDisplay(message.join("\n"));
     }
 }
 
@@ -66,7 +66,7 @@ class ShellSetSettingCommandHandler implements CommandHandler {
                 `The supplied shell setting '${name}' could not be found.'`,
             );
         }
-        context.actionIO.setActionDisplay(`${name} was set to ${newValue}`);
+        context.actionIO.setDisplay(`${name} was set to ${newValue}`);
     }
 }
 
