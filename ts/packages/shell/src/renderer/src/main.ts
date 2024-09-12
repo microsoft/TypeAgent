@@ -201,7 +201,7 @@ function showNotifications(
 
     chatView.addAgentMessage(
         {
-            message: html,
+            message: { type: "html", content: html },
             source: "shell",
             requestId: requestId,
         },
@@ -239,7 +239,10 @@ function summarizeNotifications(
     summary += `</div><br/><span style="font-size: 10px">Run @notify show [all | unread] so see notifications.</span>`;
 
     chatView.addAgentMessage({
-        message: summary,
+        message: {
+            type: "html",
+            content: summary,
+        },
         requestId: requestId,
         source: agents.get("shell")!,
     });

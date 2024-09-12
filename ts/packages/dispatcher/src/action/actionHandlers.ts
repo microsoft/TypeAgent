@@ -78,8 +78,8 @@ export function createSessionContext<T = unknown>(
         get profileStorage() {
             return profileStorage;
         },
-        notify(event: AppAgentEvent, data: any) {
-            context.requestIO.notify(event, data, name);
+        notify(event: AppAgentEvent, message: string) {
+            context.requestIO.notify(event, undefined, message, name);
         },
         async toggleTransientAgent(subAgentName: string, enable: boolean) {
             if (!subAgentName.startsWith(`${name}.`)) {

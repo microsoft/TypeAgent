@@ -629,10 +629,10 @@ async function requestExplain(
     fromCache: boolean,
     fromUser: boolean,
 ) {
-    // Make sure the current requestIO is captured
-    const requestIO = context.requestIO;
+    // Make sure the current requestId is captured
+    const requestId = context.requestId;
     const notifyExplained = () => {
-        requestIO.notify("explained", context.requestId, {
+        context.requestIO.notify("explained", requestId, {
             time: new Date().toLocaleTimeString(),
             fromCache,
             fromUser,
