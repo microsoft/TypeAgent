@@ -2,7 +2,7 @@
 
 ## Overview
 
-**TypeAgent** is **sample code** that explores architectures for building _interactive agents_ with _natural language interfaces_ using [TypeChat](https://github.com/microsoft/typechat).
+**TypeAgent** is **sample code** that explores an architecture for building a _personal agent_ with a _natural language interfaces_ using [TypeChat](https://github.com/microsoft/typechat). The personal agent can work with _application agents_.
 
 This directory contains Typescript implemented packages and main entry point for **TypeAgent**. For more details about the project, please review the TypeAgent [ReadMe](./../README.md).
 
@@ -50,31 +50,31 @@ If you want to use a local whisper service for voice input in the [TypeAgent She
 ### Service Keys
 
 Multiple services are required to run the scenarios. Put the necessary keys in the `.env` file at this directory (TypeAgent repo's `./ts` directory).
-The follow set of functionality will need the services keys. Please read the links for details about the variables needed.
+The follow set of functionality will need the services keys. Please read the links for details about the variables needed. It is possible to use "keyless" configuration for some APIs. See [Keyless API Access](#keyless-api-access) below.
 
 **Minimum requirements** to try out the experience with the [List](./packages/agents/list/README.md) TypeAgent:
 
-| Requirements              | Functionality       | Variables                                                                     | Instructions                                                                                                                        |
-| ------------------------- | ------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| LLM (GPT-4 or equivalent) | Request translation | AZURE_OPENAI_API_KEY<br>AZURE_OPENAI_ENDPOINT<br>AZURE_OPENAI_RESPONSE_FORMAT | [TypeChat instruction](https://github.com/microsoft/TypeChat/tree/main/typescript/examples#step-3-configure-environment-variables). |
+| Requirements              | Functionality       | Variables                                                                     | Instructions                                                                                                                        | Keyless Access Supported |
+| ------------------------- | ------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| LLM (GPT-4 or equivalent) | Request translation | AZURE_OPENAI_API_KEY<br>AZURE_OPENAI_ENDPOINT<br>AZURE_OPENAI_RESPONSE_FORMAT | [TypeChat instruction](https://github.com/microsoft/TypeChat/tree/main/typescript/examples#step-3-configure-environment-variables). | Yes                      |
 
 **Optional requirements**
 
-| Requirements                                                                                                      | Functionality            | Variables                                                  | Instructions                                                                                |
-| ----------------------------------------------------------------------------------------------------------------- | ------------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| [Speech to Text service](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/index-speech-to-text) | Voice input (shell only) | SPEECH_SDK_ENDPOINT<br>SPEECH_SDK_KEY<br>SPEECH_SDK_REGION | [Shell setup instruction](./packages/shell/README.md#azure-speech-to-text-service-optional) |
+| Requirements                                                                                                      | Functionality            | Variables                                                  | Instructions                                                                                | Keyless Access Supported |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------ |
+| [Speech to Text service](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/index-speech-to-text) | Voice input (shell only) | SPEECH_SDK_ENDPOINT<br>SPEECH_SDK_KEY<br>SPEECH_SDK_REGION | [Shell setup instruction](./packages/shell/README.md#azure-speech-to-text-service-optional) | Yes                      |
 
 **Additional keys required per TypeAgent** (Optional if not using these TypeAgent)
 
-| Requirements                                                                                                                 | Functionality                                                               | Variables                                                                | Instructions                                                              |
-| ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| Bing Search API                                                                                                              | Chat Lookup                                                                 | BING_API_KEY                                                             |                                                                           |
-| GPT-3.5 Turbo                                                                                                                | Fast Chat Response<br>[Email](./packages/agents/email) content generation   | AZURE_OPENAI_API_KEY_GPT_35_TURBO<br>AZURE_OPENAI_ENDPOINT_GPT_35_TURBO  |
-| [Spotify Web API](https://developer.spotify.com/documentation/web-api)                                                       | [Music player](./packages/agents/player/)                                   | SPOTIFY_APP_CLI<br>SPOTIFY_APP_CLISEC<br>SPOTIFY_APP_PORT                | [Music player setup](./packages/agents/player/README.md#application-keys) |
-| [Graph Application](https://developer.microsoft.com/en-us/graph)                                                             | [Calendar](./packages/agents/calendar/)/[Email](./packages/agents/email)    | MSGRAPH_APP_CLIENTID<br>MSGRAPH_APP_CLIENTSECRET<br>MSGRAPH_APP_TENANTID |                                                                           |
-| Embeddings                                                                                                                   | [Desktop](./packages/agents/desktop/) App name Fuzzy match                  | AZURE_OPENAI_API_KEY_EMBEDDING<br>AZURE_OPENAI_ENDPOINT_EMBEDDING        |                                                                           |
-| GPT-4o                                                                                                                       | [Browser](./packages/agents/browser/) - Crossword Page                      | AZURE_OPENAI_API_KEY_GPT_4_O<br>AZURE_OPENAI_ENDPOINT_GPT_4_O            |                                                                           |
-| [Bing Maps Location Rest API](https://learn.microsoft.com/en-us/bingmaps/rest-services/locations/find-a-location-by-address) | [Browser](./packages/agents/browser/) - PaleoBioDB set Lat/Longitude action | BING_MAPS_API_KEY                                                        |                                                                           |
+| Requirements                                                                                                                 | Functionality                                                               | Variables                                                                | Instructions                                                              | Keyless Access Supported |
+| ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------- | ------------------------ |
+| Bing Search API                                                                                                              | Chat Lookup                                                                 | BING_API_KEY                                                             |                                                                           | No                       |
+| GPT-3.5 Turbo                                                                                                                | Fast Chat Response<br>[Email](./packages/agents/email) content generation   | AZURE_OPENAI_API_KEY_GPT_35_TURBO<br>AZURE_OPENAI_ENDPOINT_GPT_35_TURBO  |                                                                           | Yes                      |
+| [Spotify Web API](https://developer.spotify.com/documentation/web-api)                                                       | [Music player](./packages/agents/player/)                                   | SPOTIFY_APP_CLI<br>SPOTIFY_APP_CLISEC<br>SPOTIFY_APP_PORT                | [Music player setup](./packages/agents/player/README.md#application-keys) | No                       |
+| [Graph Application](https://developer.microsoft.com/en-us/graph)                                                             | [Calendar](./packages/agents/calendar/)/[Email](./packages/agents/email)    | MSGRAPH_APP_CLIENTID<br>MSGRAPH_APP_CLIENTSECRET<br>MSGRAPH_APP_TENANTID |                                                                           | No                       |
+| Embeddings                                                                                                                   | [Desktop](./packages/agents/desktop/) App name Fuzzy match                  | AZURE_OPENAI_API_KEY_EMBEDDING<br>AZURE_OPENAI_ENDPOINT_EMBEDDING        |                                                                           | Yes                      |
+| GPT-4o                                                                                                                       | [Browser](./packages/agents/browser/) - Crossword Page                      | AZURE_OPENAI_API_KEY_GPT_4_O<br>AZURE_OPENAI_ENDPOINT_GPT_4_O            |                                                                           | Yes                      |
+| [Bing Maps Location Rest API](https://learn.microsoft.com/en-us/bingmaps/rest-services/locations/find-a-location-by-address) | [Browser](./packages/agents/browser/) - PaleoBioDB set Lat/Longitude action | BING_MAPS_API_KEY                                                        |                                                                           | No                       |
 
 Other examples in the [example directory](./examples/) may have additional service keys requirements. See the README in those examples for more detail.
 
@@ -103,6 +103,18 @@ To get the required config and keys saved to the `.env` file under the `ts` fold
 - Run `npm run getKeys [--vault <name>]` at the root to pull secret from the key vault with `<name>`. (If the `--vault` option is omitted, the default from vault name in `tools/scripts/getKeys.config.json` is used.)
 
 Note: Shared keys doesn't include Spotify integration, which can be created using the the [Spotify API keys instructions](./packages/agents/player/README.md)
+
+### Keyless API Access
+
+For additional security, it is possible to run a subset of the TypeAgent endpoints in a keyless environment. Instead of using keys the examples provided can use Azure Entra user identities to authenticate against endpoints. To use this approach, modify the .env file and specify `identity` as the key value.
+You must also configure your services to use [RBAC](https://learn.microsoft.com/en-us/azure/role-based-access-control/overview) and assign users access to the correct roles for each endpoint. Please see the tables above to determine keyless endpoint support.
+
+### Just-in-time Access
+
+TypeAgent also supports least privileged security approach using [Azure Entra Prividged Identity Management](https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/pim-configure). [Elevate.js](./tools/scripts/elevate.js) is a script used to automate elevation. Default configuration
+options for elevation (duration, justification message, etc.) are stored in `tools/scripts/elevate.config.json`. A typical developer workflow is to run `npm run elevate` once at the beginning of each workday.
+
+To learn more about JIT access: [start here](https://techcommunity.microsoft.com/t5/microsoft-entra-blog/just-in-time-access-to-groups-and-conditional-access-integration/ba-p/2466926).
 
 ### WSL
 

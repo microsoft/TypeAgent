@@ -24,11 +24,12 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
     "aiclient": "workspace:*",
     "common-utils": "workspace:*",
-    "dispatcher-agent": "workspace:*",
+    "knowledge-processor": "workspace:*",
     "typeagent": "workspace:*",
-    "typechat": "^0.1.0"
+    "typechat": "^0.1.1"
   },
   "devDependencies": {
     "copyfiles": "^2.4.1",

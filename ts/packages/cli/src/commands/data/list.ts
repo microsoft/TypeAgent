@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Args, Command } from "@oclif/core";
-import { readTestData } from "agent-dispatcher";
+import { readTestData } from "agent-dispatcher/internal";
 
 export default class ExplanationDataListCommand extends Command {
     static args = {

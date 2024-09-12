@@ -19,6 +19,7 @@
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "test": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
     "tsc": "tsc -b"
   },
   "dependencies": {
@@ -29,7 +30,7 @@
     "find-config": "^1.0.0",
     "isomorphic-ws": "^5.0.0",
     "mongodb": "^6.3.0",
-    "typechat": "^0.1.0",
+    "typechat": "^0.1.1",
     "ws": "^8.17.1"
   },
   "devDependencies": {

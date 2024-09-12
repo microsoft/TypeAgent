@@ -76,7 +76,8 @@ namespace autoShell
             }
         }
 
-        static SortedList<string, string> GetAllInstalledAppsIds() {
+        static SortedList<string, string> GetAllInstalledAppsIds()
+        {
             // GUID taken from https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
             var FOLDERID_AppsFolder = new Guid("{1e87508d-89c2-42f0-8a7e-645a0f50ca58}");
             ShellObject appsFolder = (ShellObject)KnownFolderHelper.FromKnownFolderId(FOLDERID_AppsFolder);
@@ -319,7 +320,8 @@ namespace autoShell
                     }
                     catch { }
                 }
-                else {
+                else
+                {
                     string appModelUserID = (string)s_friendlyNameToId[friendlyName.ToLowerInvariant()];
                     if (appModelUserID != null)
                     {
@@ -416,7 +418,6 @@ namespace autoShell
                         var installedApps = GetAllInstalledAppsIds();
                         Console.WriteLine(JsonConvert.SerializeObject(installedApps.Keys));
                         break;
-                        
                     default:
                         Debug.WriteLine("Unknown command: " + key);
                         break;

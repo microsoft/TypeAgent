@@ -14,13 +14,13 @@ export class CalendarClient {
     private readonly logger = registerDebug(
         "typeagent:graphUtils:calendarclient",
     );
-    constructor(private readonly graphClient: GraphClient) {
+    constructor(private readonly graphClient: GraphClient | undefined) {
         this.indexCalendarEvents();
         this.startSyncThread();
     }
 
     public isGraphClientInitialized(): boolean {
-        return this.graphClient.getClient() ? true : false;
+        return this.graphClient && this.graphClient.getClient() ? true : false;
     }
 
     private async generateEmbedding(events: any, fSync: boolean = false) {
@@ -48,6 +48,8 @@ export class CalendarClient {
     }
 
     async indexCalendarEvents() {
+        if (this.graphClient === undefined) return;
+
         await this.graphClient.ensureTokenIsValid();
         if (this.isGraphClientInitialized()) {
             let allEvents: any[] = [];
@@ -103,7 +105,7 @@ export class CalendarClient {
 
     startSyncThread() {
         if (this.isGraphClientInitialized()) {
-            const syncInterval = 30 * 60 * 1000; // sync every minute
+            const syncInterval = 30 * 60 * 1000;
             const syncCalendarEvents = async () => {
                 await this.indexCalendarEvents();
             };
@@ -127,6 +129,8 @@ export class CalendarClient {
         timeZone: string,
         attendees: string[] | undefined,
     ): Promise<string | undefined> {
+        if (this.graphClient === undefined) return undefined;
+
         await this.graphClient.ensureTokenIsValid();
         try {
             const newEvent: DynamicObject = {
@@ -179,6 +183,8 @@ export class CalendarClient {
     }
 
     public async deleteCalendarEvent(eventId: string): Promise<boolean> {
+        if (this.graphClient === undefined) return false;
+
         await this.graphClient.ensureTokenIsValid();
         try {
             await this.graphClient
@@ -198,6 +204,8 @@ export class CalendarClient {
         endTime: string,
         durationInMinutes: number,
     ): Promise<any[]> {
+        if (this.graphClient === undefined) return [];
+
         await this.graphClient.ensureTokenIsValid();
         const requestBody = {
             startTime: {
@@ -329,6 +337,8 @@ export class CalendarClient {
         participantsInMeeting: string[],
         participants: string[] | undefined,
     ): Promise<string | undefined | ErrorResponse> {
+        if (this.graphClient === undefined) return undefined;
+
         await this.graphClient.ensureTokenIsValid();
 
         if (participants && participants.length > 0) {
@@ -444,6 +454,8 @@ export class CalendarClient {
         attendees: any,
         participants: string[],
     ): Promise<string | ErrorResponse | undefined> {
+        if (this.graphClient === undefined) return undefined;
+
         await this.graphClient.ensureTokenIsValid();
         try {
             const payload: DynamicObject = {
@@ -504,6 +516,8 @@ export class CalendarClient {
         timeZone: string,
         attendees: string[],
     ): Promise<string | undefined> {
+        if (this.graphClient === undefined) return undefined;
+
         await this.graphClient.ensureTokenIsValid();
         try {
             const meetingPayload: DynamicObject = {
@@ -552,6 +566,8 @@ export class CalendarClient {
     }
 
     public async findCalendarEvents(criteria: any): Promise<any[]> {
+        if (this.graphClient === undefined) return [];
+
         await this.graphClient.ensureTokenIsValid();
         try {
             const response = await this.graphClient
@@ -571,6 +587,8 @@ export class CalendarClient {
         if (!subject) {
             return [];
         }
+
+        if (this.graphClient === undefined) return [];
 
         await this.graphClient.ensureTokenIsValid();
         let allEvents: any[] = [];
@@ -606,6 +624,8 @@ export class CalendarClient {
     }
 
     public async findCalendarEventsByDateRange(query: any): Promise<any[]> {
+        if (this.graphClient === undefined) return [];
+
         await this.graphClient.ensureTokenIsValid();
         let allEvents: any[] = [];
         let nextLink: string | undefined =
@@ -628,6 +648,8 @@ export class CalendarClient {
     }
 
     public async findCalendarView(query: string): Promise<any[]> {
+        if (this.graphClient === undefined) return [];
+
         await this.graphClient.ensureTokenIsValid();
         try {
             const uri = `/me/calendarView?${query}`;
@@ -643,6 +665,7 @@ export class CalendarClient {
     public async getEmailAddressesOfUsernamesLocal(
         usernames: string[],
     ): Promise<string[]> {
+        if (this.graphClient === undefined) return [];
         return this.graphClient.getEmailAddressesOfUsernamesLocal(usernames);
     }
 }

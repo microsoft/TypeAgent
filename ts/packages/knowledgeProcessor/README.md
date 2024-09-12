@@ -1,9 +1,13 @@
 # knowledge-processor
 
-Sample code that explores how to use TypeChat to:
+**Sample code** that explores how to:
 
-- Extract knowledge from conversations
-- Build local storage model and index for conversations
+- Use TypeChat to extract **_structured knowledge_** from conversations, transcripts and documents.
+- Implement a **Structured RAG**. The exploration includes ideas on how to:
+  - Index the extracted knowledge and source text for retrieval.
+  - Use TypeChat to generate **structured queries** for structured knowledge.\*\*
+  - Use structured objects to **_answer_** questions.
+  - Use structured indices to improve precision.
 
 ## Trademarks
 

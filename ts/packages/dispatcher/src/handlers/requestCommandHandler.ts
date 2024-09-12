@@ -10,24 +10,24 @@ import {
     Actions,
     HistoryContext,
 } from "agent-cache";
-import { CommandHandler } from "./common/commandHandler.js";
+import { DispatcherCommandHandler } from "./common/commandHandler.js";
 import {
     CommandHandlerContext,
     getTranslator,
+    getActiveTranslatorList,
+    isTranslatorActive,
     updateCorrectionContext,
+    isActionActive,
 } from "./common/commandHandlerContext.js";
 
-import { getColorElapsedString } from "common-utils";
+import { getColorElapsedString, Profiler } from "common-utils";
 import {
     executeActions,
+    startStreamPartialAction,
     validateWildcardMatch,
 } from "../action/actionHandlers.js";
 import { unicodeChar } from "../utils/interactive.js";
-import {
-    getInjectedTranslatorForActionName,
-    getTranslatorConfig,
-    isChangeAssistantAction,
-} from "../translation/agentTranslators.js";
+import { isChangeAssistantAction } from "../translation/agentTranslators.js";
 import { loadAssistantSelectionJsonTranslator } from "../translation/unknownSwitcher.js";
 import {
     MultipleAction,
@@ -38,7 +38,10 @@ import { MatchResult } from "../../../cache/dist/constructions/constructions.js"
 import registerDebug from "debug";
 import { getAllActionInfo } from "../translation/actionInfo.js";
 
+const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
+
+export const SwitcherName = "switcher";
 
 async function confirmTranslation(
     elapsedMs: number,
@@ -49,23 +52,24 @@ async function confirmTranslation(
     requestAction: RequestAction | undefined | null;
     replacedAction?: Actions;
 }> {
-    const messages = [];
-    const requestIO = context.requestIO;
-    if (requestIO.type === "text") {
-        // Provide a one line information for text output
-        messages.push(
-            `${source}: ${chalk.blueBright(
-                ` ${requestAction.toString()}`,
-            )} ${getColorElapsedString(elapsedMs)}`,
-        );
-        messages.push();
-    }
-
     const actions = requestAction.actions;
-    const prettyStr = JSON.stringify(actions, undefined, 2);
-    messages.push(`${chalk.italic(chalk.cyanBright(prettyStr))}`);
+    const requestIO = context.requestIO;
 
     if (!context.developerMode) {
+        const messages = [];
+
+        if (requestIO.type === "text") {
+            // Provide a one line information for text output
+            messages.push(
+                `${source}: ${chalk.blueBright(
+                    ` ${requestAction.toString()}`,
+                )} ${getColorElapsedString(elapsedMs)}`,
+            );
+            messages.push();
+        }
+
+        const prettyStr = JSON.stringify(actions, undefined, 2);
+        messages.push(`${chalk.italic(chalk.cyanBright(prettyStr))}`);
         requestIO.info(messages.join("\n"));
         return { requestAction };
     }
@@ -73,17 +77,29 @@ async function confirmTranslation(
         "Use the buttons to run or cancel the following action. You can also type Enter to run it or Del to cancel it.";
     const prefaceMultiple =
         "Use the buttons to run or cancel the following sequence of actions. You can also type Enter to run it or Del to cancel it.";
-    const translatorNames = context.session.useTranslators.filter(
+    const translatorNames = getActiveTranslatorList(context).filter(
         (name) => !name.startsWith("system."),
     );
-    const allActionInfo = getAllActionInfo(translatorNames);
-    let displayMessages = actions.toHTML(prefaceSingle, prefaceMultiple);
-    const accept = await requestIO.askYesNo(displayMessages, true);
+
+    const allActionInfo = getAllActionInfo(translatorNames, context.agents);
+    const templateSequence = actions.toTemplateSequence(
+        prefaceSingle,
+        prefaceMultiple,
+        allActionInfo,
+    );
+    context.clientIO?.actionCommand(
+        templateSequence,
+        "register",
+        context.requestId!,
+    );
+    const accept = await requestIO.askYesNo("reserved", true);
     if (accept) {
         return { requestAction };
     }
 
-    const searchMenuItems = allActionInfo.map((info) => info.item);
+    const searchMenuItems = Array.from(allActionInfo.values()).map(
+        (info) => info.item,
+    );
     context.clientIO?.searchMenuCommand(
         "actions",
         "register",
@@ -95,9 +111,7 @@ async function confirmTranslation(
     context.clientIO?.searchMenuCommand("actions", "legend", actionLegend);
     const answer = await requestIO.question(actionLegend);
     if (answer !== undefined) {
-        const actionInfo = allActionInfo.find(
-            (info) => info.item.matchText === answer,
-        );
+        const actionInfo = allActionInfo.get(answer);
         if (actionInfo && actionInfo.template) {
             console.log(
                 `Selected action: ${actionInfo.template.agent}.${actionInfo.item.matchText}`,
@@ -141,9 +155,10 @@ async function matchRequest(
     if (constructionStore.isEnabled()) {
         const startTime = performance.now();
         const config = context.session.getConfig();
+        const useTranslators = getActiveTranslatorList(context);
         const matches = constructionStore.match(request, {
             wildcard: config.matchWildcard,
-            useTranslators: context.session.useTranslators,
+            useTranslators,
             history,
         });
 
@@ -166,7 +181,7 @@ async function matchRequest(
                         actions: requestAction.actions,
                         replacedAction,
                         developerMode: context.developerMode,
-                        translators: context.session.useTranslators,
+                        translators: useTranslators,
                         explainerName: context.agentCache.explainerName,
                         matchWildcard: config.matchWildcard,
                         allMatches: matches.map((m) => {
@@ -194,13 +209,17 @@ async function translateRequestWithTranslator(
     request: string,
     context: CommandHandlerContext,
     history?: HistoryContext,
+    attachments?: string[],
 ) {
-    context.requestIO.status(`[${translatorName}] Translating '${request}'`);
+    context.requestIO.status(
+        `[${translatorName}] Translating '${request}'`,
+        translatorName,
+    );
     const translator = getTranslator(context, translatorName);
 
     const orp = translator.createRequestPrompt;
     if (history) {
-        context.requestIO.info(
+        debugTranslate(
             `Using history for translation. Entities: ${JSON.stringify(history.entities)}`,
         );
     }
@@ -210,11 +229,56 @@ async function translateRequestWithTranslator(
         history,
     );
 
+    let firstToken = true;
+    let streamFunction:
+        | ((name: string, value: any, partial: boolean) => void)
+        | undefined;
+
+    const onProperty = context.session.getConfig().stream
+        ? (prop: string, value: any, partial: boolean) => {
+              // TODO: streaming currently doesn't not support multiple actions
+              if (prop === "actionName" && !partial) {
+                  const actionTranslatorName =
+                      context.agents.getInjectedTranslatorForActionName(
+                          value,
+                      ) ?? translatorName;
+                  context.requestIO.status(
+                      `[${actionTranslatorName}] Translating '${request}' into action '${value}'`,
+                      actionTranslatorName,
+                  );
+                  const config =
+                      context.agents.getTranslatorConfig(actionTranslatorName);
+                  if (config.streamingActions?.includes(value)) {
+                      streamFunction = startStreamPartialAction(
+                          actionTranslatorName,
+                          value,
+                          context,
+                      );
+                  }
+              }
+
+              if (firstToken) {
+                  Profiler.getInstance().mark(context.requestId, "First Token");
+                  firstToken = false;
+              }
+
+              if (streamFunction) {
+                  streamFunction(prop, value, partial);
+              }
+          }
+        : undefined;
+
     const response = await translator.translate(
         request,
         history?.promptSections,
+        onProperty,
+        attachments,
     );
     translator.createRequestPrompt = orp;
+
+    // TODO: figure out if we want to keep track of this
+    //Profiler.getInstance().incrementLLMCallCount(context.requestId);
+
     if (!response.success) {
         context.requestIO.error(response.message);
         return undefined;
@@ -236,11 +300,13 @@ async function findAssistantForRequest(
 ): Promise<NextTranslation | undefined> {
     context.requestIO.status(
         `[switcher] Looking for another assistant to handle request '${request}'`,
+        SwitcherName,
     );
     const selectTranslator = loadAssistantSelectionJsonTranslator(
-        context.session.useTranslators.filter(
+        getActiveTranslatorList(context).filter(
             (enabledTranslatorName) => translatorName !== enabledTranslatorName,
         ),
+        context.agents,
     );
 
     const result = await selectTranslator.translate(request);
@@ -308,6 +374,13 @@ async function finalizeAction(
         }
 
         const { request, nextTranslatorName, searched } = nextTranslation;
+        if (!isTranslatorActive(nextTranslatorName, context)) {
+            // this is a bug. May be the translator cache didn't get updated when state change?
+            throw new Error(
+                `Internal error: switch to disabled translator ${nextTranslatorName}`,
+            );
+        }
+
         currentAction = await translateRequestWithTranslator(
             nextTranslatorName,
             request,
@@ -343,8 +416,9 @@ async function finalizeAction(
 
     return new Action(
         currentAction,
-        getInjectedTranslatorForActionName(currentAction.actionName) ??
-            currentTranslatorName,
+        context.agents.getInjectedTranslatorForActionName(
+            currentAction.actionName,
+        ) ?? currentTranslatorName,
     );
 }
 
@@ -392,18 +466,27 @@ export async function translateRequest(
     request: string,
     context: CommandHandlerContext,
     history?: HistoryContext,
+    attachments?: string[],
 ): Promise<TranslationResult | undefined | null> {
     if (!context.session.bot) {
         context.requestIO.error("No translation found (GPT is off).");
         return;
     }
-    let translatorName = context.currentTranslatorName;
-    if (context.session.getConfig().translators[translatorName] !== true) {
+    // Start with the last translator used
+    let translatorName = context.lastActionTranslatorName;
+    if (!isTranslatorActive(translatorName, context)) {
+        debugTranslate(
+            `Translating request using default translator: ${translatorName} not active`,
+        );
         // REVIEW: Just pick the first one.
-        translatorName = context.session.useTranslators[0];
+        translatorName = getActiveTranslatorList(context)[0];
         if (translatorName === undefined) {
             throw new Error("No active translator available");
         }
+    } else {
+        debugTranslate(
+            `Translating request using current translator: ${translatorName}`,
+        );
     }
     const startTime = performance.now();
 
@@ -412,6 +495,7 @@ export async function translateRequest(
         request,
         context,
         history,
+        attachments,
     );
     if (action === undefined) {
         return undefined;
@@ -473,7 +557,6 @@ function canExecute(
 ): boolean {
     const requestIO = context.requestIO;
 
-    const enabledActions = context.session.getConfig().actions;
     const actions = requestAction.actions;
 
     const unknown: Action[] = [];
@@ -484,7 +567,7 @@ function canExecute(
         }
         if (
             action.translatorName &&
-            enabledActions[action.translatorName] !== true
+            !isActionActive(action.translatorName, context)
         ) {
             disabled.add(action.translatorName);
         }
@@ -521,9 +604,11 @@ async function requestExecute(
     if (action === undefined) {
         requestIO.status(`Executing multiple actions...`);
     } else {
-        requestIO.status(`Executing action ${action.fullActionName}`);
+        requestIO.status(
+            `Executing action ${action.fullActionName}`,
+            action.translatorName,
+        );
     }
-
     await executeActions(requestAction.actions, context);
 }
 
@@ -536,7 +621,7 @@ async function requestExplain(
     // Make sure the current requestIO is captured
     const requestIO = context.requestIO;
     const notifyExplained = () => {
-        requestIO.notify("explained", {
+        requestIO.notify("explained", context.requestId, {
             time: new Date().toLocaleTimeString(),
             fromCache,
             fromUser,
@@ -562,7 +647,8 @@ async function requestExplain(
 
         if (
             action.translatorName !== undefined &&
-            getTranslatorConfig(action.translatorName).cached === false
+            context.agents.getTranslatorConfig(action.translatorName).cached ===
+                false
         ) {
             return;
         }
@@ -594,9 +680,13 @@ async function requestExplain(
     }
 }
 
-export class RequestCommandHandler implements CommandHandler {
+export class RequestCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Translate and explain a request";
-    public async run(request: string, context: CommandHandlerContext) {
+    public async run(
+        request: string,
+        context: CommandHandlerContext,
+        attachments?: string[],
+    ) {
         // Don't handle the request if it contains the separator
         if (request.includes(RequestAction.Separator)) {
             throw new Error(
@@ -608,19 +698,19 @@ export class RequestCommandHandler implements CommandHandler {
             ? getChatHistoryForTranslation(context)
             : undefined;
         if (history) {
-            let entities = [];
             // prefetch entities here
             context.chatHistory.addEntry(
                 request,
                 [],
                 "user",
-                context.requestIO.getRequestId(),
+                context.requestId,
+                attachments,
             );
         }
         const match = await matchRequest(request, context, history);
         const translationResult =
             match === undefined // undefined means not found
-                ? await translateRequest(request, context, history)
+                ? await translateRequest(request, context, history, attachments)
                 : match; // result or null
 
         if (!translationResult) {
@@ -630,7 +720,13 @@ export class RequestCommandHandler implements CommandHandler {
         }
 
         const { requestAction, fromUser, fromCache } = translationResult;
-
+        if (
+            requestAction !== null &&
+            requestAction !== undefined &&
+            context.conversationManager
+        ) {
+            context.conversationManager.addMessage(request, [], new Date());
+        }
         await requestExecute(requestAction, context);
         await requestExplain(requestAction, context, fromCache, fromUser);
     }

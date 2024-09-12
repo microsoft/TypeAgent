@@ -11,6 +11,8 @@ import {
     Menu,
     MenuItem,
     dialog,
+    DevicePermissionHandlerHandlerDetails,
+    WebContents,
 } from "electron";
 import { join } from "node:path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
@@ -19,17 +21,22 @@ import { runDemo } from "./demo.js";
 import registerDebug from "debug";
 import {
     ClientIO,
-    CommandHandlerContext,
+    createDispatcher,
     RequestId,
-    getPrompt,
-    getSettingSummary,
-    initializeCommandHandlerContext,
-    processCommand,
-    partialInput,
+    Dispatcher,
 } from "agent-dispatcher";
 
 import { SearchMenuCommand } from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
-import { ActionTemplate, SearchMenuItem } from "../preload/electronTypes.js";
+import {
+    ActionTemplateSequence,
+    IAgentMessage,
+    SearchMenuItem,
+} from "../preload/electronTypes.js";
+import { ShellSettings } from "./shellSettings.js";
+import { unlinkSync } from "fs";
+import { existsSync } from "node:fs";
+import { AppAgentEvent } from "@typeagent/agent-sdk";
+import { shellAgentProvider } from "./agent.js";
 
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
@@ -40,31 +47,71 @@ dotenv.config({ path: envPath });
 // Make sure we have chalk colors
 process.env.FORCE_COLOR = "true";
 
+// do we need to reset shell settings?
+process.argv.forEach((arg) => {
+    if (arg.toLowerCase() == "--setup" && existsSync(ShellSettings.filePath)) {
+        unlinkSync(ShellSettings.filePath);
+    }
+});
+
 let mainWindow: BrowserWindow | null = null;
 
 const time = performance.now();
 debugShell("Starting...");
 function createWindow(): void {
     debugShell("Creating window", performance.now() - time);
+
     // Create the browser window.
     mainWindow = new BrowserWindow({
-        width: 900,
-        height: 1200,
+        width: ShellSettings.getinstance().width,
+        height: ShellSettings.getinstance().height,
         show: false,
-        autoHideMenuBar: true,
+        autoHideMenuBar: ShellSettings.getinstance().hideMenu,
         webPreferences: {
             preload: join(__dirname, "../preload/index.mjs"),
             sandbox: false,
+            zoomFactor: ShellSettings.getinstance().zoomLevel,
         },
+        x: ShellSettings.getinstance().x,
+        y: ShellSettings.getinstance().y,
     });
+
+    setupDevicePermissinos(mainWindow);
 
     mainWindow.on("ready-to-show", () => {
         mainWindow!.show();
+
+        if (ShellSettings.getinstance().devTools) {
+            mainWindow?.webContents.openDevTools();
+        }
     });
 
     mainWindow.webContents.setWindowOpenHandler((details) => {
         shell.openExternal(details.url);
         return { action: "deny" };
+    });
+
+    mainWindow.on("close", () => {
+        if (mainWindow) {
+            ShellSettings.getinstance().zoomLevel =
+                mainWindow.webContents.zoomLevel;
+            ShellSettings.getinstance().devTools =
+                mainWindow.webContents.isDevToolsOpened();
+        }
+    });
+
+    mainWindow.on("closed", () => {
+        ShellSettings.getinstance().save();
+    });
+
+    mainWindow.on("moved", () => {
+        ShellSettings.getinstance().position = mainWindow?.getPosition();
+    });
+
+    mainWindow.on("resized", () => {
+        if (mainWindow) {
+            ShellSettings.getinstance().size = mainWindow.getSize();
+        }
     });
 
     // HMR for renderer base on electron-vite cli.
@@ -77,9 +124,108 @@ function createWindow(): void {
 
     setAppMenu(mainWindow);
     setupZoomHandlers(mainWindow);
+
+    // Notify renderer process whenever settings are modified
+    ShellSettings.getinstance().onSettingsChanged = () => {
+        const tempFunc = ShellSettings.getinstance().onSettingsChanged;
+        ShellSettings.getinstance().onSettingsChanged = null;
+
+        mainWindow?.webContents.send(
+            "settings-changed",
+            ShellSettings.getinstance(),
+        );
+
+        ShellSettings.getinstance().onSettingsChanged = tempFunc;
+    };
 }
 
-let speechToken: { token: string; expire: number } | undefined;
+/**
+ * Allows the application to gain access to camea devices
+ * @param mainWindow the main browser window
+ */
+function setupDevicePermissinos(mainWindow: BrowserWindow) {
+    let grantedDeviceThroughPermHandler;
+
+    mainWindow.webContents.session.on(
+        "select-usb-device",
+        (event, details, callback) => {
+            // Add events to handle devices being added or removed before the callback on
+            // `select-usb-device` is called.
+            mainWindow.webContents.session.on(
+                "usb-device-added",
+                (_event, device) => {
+                    console.log("usb-device-added FIRED WITH", device);
+                    // Optionally update details.deviceList
+                },
+            );
+
+            mainWindow.webContents.session.on(
+                "usb-device-removed",
+                (_event, device) => {
+                    console.log("usb-device-removed FIRED WITH", device);
+                    // Optionally update details.deviceList
+                },
+            );
+
+            event.preventDefault();
+            if (details.deviceList && details.deviceList.length > 0) {
+                const deviceToReturn = details.deviceList.find((device) => {
+                    return (
+                        !grantedDeviceThroughPermHandler ||
+                        device.deviceId !==
+                            grantedDeviceThroughPermHandler.deviceId
+                    );
+                });
+                if (deviceToReturn) {
+                    callback(deviceToReturn.deviceId);
+                } else {
+                    callback();
+                }
+            }
+        },
+    );
+
+    mainWindow.webContents.session.setPermissionCheckHandler(
+        (
+            _webContents: WebContents | null,
+            permission,
+            _requestingOrigin,
+            details,
+        ): boolean => {
+            if (
+                (permission === "usb" &&
+                    details.securityOrigin === "file:///") ||
+                (permission === "media" &&
+                    (details.securityOrigin?.startsWith("http://localhost") ||
+                        details.securityOrigin?.startsWith(
+                            "https://localhost",
+                        )))
+            ) {
+                return true;
+            }
+
+            return false;
+        },
+    );
+
+    mainWindow.webContents.session.setDevicePermissionHandler(
+        (details: DevicePermissionHandlerHandlerDetails): boolean => {
+            if (details.deviceType === "usb" && details.origin === "file://") {
+                if (!grantedDeviceThroughPermHandler) {
+                    grantedDeviceThroughPermHandler = details.device;
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+            return false;
+        },
+    );
+}
+
+let speechToken:
+    | { token: string; expire: number; region: string; endpoint: string }
+    | undefined;
 
 async function getSpeechToken() {
     if (speechToken === undefined || speechToken.expire <= Date.now()) {
@@ -88,14 +234,17 @@ async function getSpeechToken() {
         speechToken = {
             token: tokenResponse.token,
             expire: Date.now() + 9 * 60 * 1000, // 9 minutes (token expires in 10 minutes)
+            region: tokenResponse.region,
+            endpoint: tokenResponse.endpoint,
         };
     }
     return speechToken;
 }
 
-async function triggerRecognitionOnce(context: CommandHandlerContext) {
+async function triggerRecognitionOnce(dispatcher: Dispatcher) {
     const speechToken = await getSpeechToken();
-    const useLocalWhisper = typeof context.localWhisper !== "undefined";
+    const useLocalWhisper =
+        typeof dispatcher.getContext().localWhisper !== "undefined";
     mainWindow?.webContents.send(
         "listen-event",
         "Alt+M",
@@ -104,42 +253,24 @@ async function triggerRecognitionOnce(context: CommandHandlerContext) {
     );
 }
 
-function showResult(
-    message: string,
-    requestId: RequestId,
-    actionIndex?: number,
-    groupId?: string,
-) {
+function showResult(message: IAgentMessage) {
     // Ignore message without requestId
-    if (requestId === undefined) {
+    if (message.requestId === undefined) {
         console.warn("showResult: requestId is undefined");
         return;
     }
-    mainWindow?.webContents.send(
-        "response",
-        message,
-        requestId,
-        actionIndex,
-        groupId,
-    );
+    mainWindow?.webContents.send("response", message);
 }
 
-function sendStatusMessage(
-    message: string,
-    requestId: RequestId,
-    temporary: boolean = false,
-) {
+function sendStatusMessage(message: IAgentMessage, temporary: boolean = false) {
     // Ignore message without requestId
-    if (requestId === undefined) {
-        console.warn(`sendStatusMessage: requestId is undefined. ${message}`);
+    if (message.requestId === undefined) {
+        console.warn(
+            `sendStatusMessage: requestId is undefined. ${message.message}`,
+        );
         return;
     }
-    mainWindow?.webContents.send(
-        "status-message",
-        message,
-        requestId,
-        temporary,
-    );
+    mainWindow?.webContents.send("status-message", message, temporary);
 }
 
 function markRequestExplained(
@@ -162,8 +293,14 @@ function markRequestExplained(
     );
 }
 
-function updateResult(message: string, group_id: string) {
-    mainWindow?.webContents.send("update", message, group_id);
+function updateRandomCommandSelected(requestId: RequestId, message: string) {
+    // Ignore message without requestId
+    if (requestId === undefined) {
+        console.warn("updateRandomCommandSelected: requestId is undefined");
+        return;
+    }
+
+    mainWindow?.webContents.send("update-random-command", requestId, message);
 }
 
 let maxAskYesNoId = 0;
@@ -248,7 +385,7 @@ function searchMenuCommand(
 }
 
 function actionCommand(
-    actionTemplates: ActionTemplate[],
+    actionTemplates: ActionTemplateSequence,
     command: string,
     requestId: RequestId,
 ) {
@@ -267,17 +404,17 @@ const clientIO: ClientIO = {
         /* ignore */
     },
     success: sendStatusMessage,
-    status: (message, requestId) => sendStatusMessage(message, requestId, true),
+    status: (message) => sendStatusMessage(message, true),
     warn: sendStatusMessage,
     error: sendStatusMessage,
     result: showResult,
-    setActionStatus: showResult,
-    updateActionStatus: updateResult,
+    setActionDisplay: showResult,
+    setDynamicDisplay,
     searchMenuCommand,
     actionCommand,
     askYesNo,
     question,
-    notify(event: string, requestId: RequestId, data: any) {
+    notify(event: string, requestId: RequestId, data: any, source: string) {
         switch (event) {
             case "explained":
                 markRequestExplained(
@@ -285,6 +422,28 @@ const clientIO: ClientIO = {
                     data.time,
                     data.fromCache,
                     data.fromUser,
+                );
+                break;
+            case "randomCommandSelected":
+                updateRandomCommandSelected(requestId, data.message);
+                break;
+            case "showNotifications":
+                mainWindow?.webContents.send(
+                    "notification-command",
+                    requestId,
+                    data,
+                );
+                break;
+            case AppAgentEvent.Error:
+            case AppAgentEvent.Warning:
+            case AppAgentEvent.Info:
+                console.log(`[${event}] ${source}: ${data}`);
+                mainWindow?.webContents.send(
+                    "notification-arrived",
+                    event,
+                    requestId,
+                    source,
+                    data,
                 );
                 break;
             default:
@@ -296,13 +455,32 @@ const clientIO: ClientIO = {
     },
 };
 
-async function initializeSpeech(context: CommandHandlerContext) {
+async function setDynamicDisplay(
+    source: string,
+    requestId: RequestId,
+    actionIndex: number,
+    displayId: string,
+    nextRefreshMs: number,
+) {
+    mainWindow?.webContents.send(
+        "set-dynamic-action-display",
+        source,
+        requestId,
+        actionIndex,
+        displayId,
+        nextRefreshMs,
+    );
+}
+
+async function initializeSpeech(dispatcher: Dispatcher) {
     const key = process.env["SPEECH_SDK_KEY"];
     const region = process.env["SPEECH_SDK_REGION"];
+    const endpoint = process.env["SPEECH_SDK_ENDPOINT"] as string;
     if (key && region) {
         await AzureSpeech.initializeAsync({
             azureSpeechSubscriptionKey: key,
             azureSpeechRegion: region,
+            azureSpeechEndpoint: endpoint,
         });
         ipcMain.handle("get-speech-token", async () => {
             return getSpeechToken();
@@ -318,7 +496,7 @@ async function initializeSpeech(context: CommandHandlerContext) {
     }
 
     const ret = globalShortcut.register("Alt+M", () => {
-        triggerRecognitionOnce(context);
+        triggerRecognitionOnce(dispatcher);
     });
 
     if (ret) {
@@ -339,53 +517,95 @@ app.whenReady().then(async () => {
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.electron");
 
-    const context = await initializeCommandHandlerContext("shell", {
+    const dispatcher = await createDispatcher("shell", {
+        appAgentProviders: [shellAgentProvider],
         explanationAsynchronousMode: true,
         persistSession: true,
         enableServiceHost: true,
         clientIO,
     });
-    function translatorSetPartialInputHandler() {
-        mainWindow?.webContents.send(
-            "set-partial-input-handler",
-            context.currentTranslatorName === "player",
-        );
-    }
 
     let settingSummary: string = "";
-    ipcMain.handle("request", async (_event, text: string, id: string) => {
+    async function processShellRequest(
+        text: string,
+        id: string,
+        images: string[],
+    ) {
         if (typeof text !== "string" || typeof id !== "string") {
             throw new Error("Invalid request");
         }
-        debugShell(getPrompt(context), text);
+        debugShell(dispatcher.getPrompt(), text);
 
-        await processCommand(text, context, id);
+        await dispatcher.processCommand(text, id, images);
         mainWindow?.webContents.send("send-demo-event", "CommandProcessed");
-        translatorSetPartialInputHandler();
-        const newSettingSummary = getSettingSummary(context);
+        const newSettingSummary = dispatcher.getSettingSummary();
         if (newSettingSummary !== settingSummary) {
             settingSummary = newSettingSummary;
             mainWindow?.webContents.send(
                 "setting-summary-changed",
                 newSettingSummary,
+                dispatcher.getTranslatorNameToEmojiMap(),
             );
         }
-    });
-    ipcMain.on("partial-input", async (_event, text: string) => {
-        if (typeof text !== "string") {
-            return;
-        }
-        partialInput(text, context);
-    });
+    }
+
+    ipcMain.on(
+        "process-shell-request",
+        (_event, text: string, id: string, images: string[]) => {
+            processShellRequest(text, id, images)
+                .then(() =>
+                    mainWindow?.webContents.send(
+                        "process-shell-request-done",
+                        id,
+                    ),
+                )
+                .catch((error) => {
+                    mainWindow?.webContents.send(
+                        "process-shell-request-error",
+                        id,
+                        error.message,
+                    );
+                });
+        },
+    );
+    ipcMain.handle(
+        "get-dynamic-display",
+        async (_event, appAgentName: string, id: string) =>
+            dispatcher.getDynamicDisplay(appAgentName, "html", id),
+    );
     ipcMain.on("dom ready", async () => {
-        settingSummary = getSettingSummary(context);
-        translatorSetPartialInputHandler();
-        mainWindow?.webContents.send("setting-summary-changed", settingSummary);
+        settingSummary = dispatcher.getSettingSummary();
+        mainWindow?.webContents.send(
+            "setting-summary-changed",
+            settingSummary,
+            dispatcher.getTranslatorNameToEmojiMap(),
+        );
+
+        // Send settings asap
+        ShellSettings.getinstance().onSettingsChanged!();
     });
 
-    await initializeSpeech(context);
+    await initializeSpeech(dispatcher);
     ipcMain.handle("get-localWhisper-status", async () => {
-        return typeof context.localWhisper !== "undefined";
+        return typeof dispatcher.getContext().localWhisper !== "undefined";
+    });
+
+    ipcMain.on("save-settings", (_event, settings: ShellSettings) => {
+        // Save the shell configurable settings
+        ShellSettings.getinstance().microphoneId = settings.microphoneId;
+        ShellSettings.getinstance().microphoneName = settings.microphoneName;
+        ShellSettings.getinstance().hideMenu = settings.hideMenu;
+        ShellSettings.getinstance().hideTabs = settings.hideTabs;
+        ShellSettings.getinstance().tts = settings.tts;
+        ShellSettings.getinstance().ttsSettings = settings.ttsSettings;
+        ShellSettings.getinstance().agentGreeting = settings.agentGreeting;
+        ShellSettings.getinstance().save();
+
+        // Update based on the new settings
+        mainWindow!.autoHideMenuBar = settings.hideMenu;
+
+        // if the menu bar is visible it won't auto hide immediately when this is toggled so we have to help it along
+        mainWindow?.setMenuBarVisibility(!settings.hideMenu);
     });
 
     globalShortcut.register("Alt+Right", () => {
@@ -394,6 +614,10 @@ app.whenReady().then(async () => {
 
     globalShortcut.register("F1", () => {
         mainWindow?.webContents.send("help-requested", "F1");
+    });
+
+    globalShortcut.register("F2", () => {
+        mainWindow?.webContents.send("random-message-requested", "F2");
     });
 
     // Default open or close DevTools by F12 in development
@@ -429,11 +653,17 @@ app.on("window-all-closed", () => {
 function zoomIn(mainWindow: BrowserWindow) {
     const curr = mainWindow.webContents.zoomLevel;
     mainWindow.webContents.zoomLevel = Math.min(curr + 0.5, 9);
+    ShellSettings.getinstance().zoomLevel = mainWindow.webContents.zoomLevel;
 }
 
 function zoomOut(mainWindow: BrowserWindow) {
     const curr = mainWindow.webContents.zoomLevel;
     mainWindow.webContents.zoomLevel = Math.max(curr - 0.5, -8);
+    ShellSettings.getinstance().zoomLevel = mainWindow.webContents.zoomLevel;
+}
+
+function showDialog(dialogName: string) {
+    mainWindow?.webContents.send("show-dialog", dialogName);
 }
 
 const isMac = process.platform === "darwin";
@@ -502,6 +732,22 @@ function setAppMenu(mainWindow: BrowserWindow) {
             submenu: [],
         },
         {
+            id: "settingsMenu",
+            label: "Settings",
+            click: () => showDialog("Settings"),
+        },
+        {
+            id: "infoMenu",
+            label: "Info",
+            submenu: [
+                {
+                    id: "metricsMenu",
+                    label: "Show Metrics",
+                    click: () => showDialog("Metrics"),
+                },
+            ],
+        },
+        {
             id: "windowMenu",
             role: "windowMenu",
         },
@@ -510,6 +756,7 @@ function setAppMenu(mainWindow: BrowserWindow) {
             submenu: [
                 {
                     label: "Learn More",
+                    click: () => showDialog("Help"),
                 },
             ],
         },

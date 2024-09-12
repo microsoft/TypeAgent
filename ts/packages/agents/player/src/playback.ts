@@ -4,7 +4,7 @@
 import { getDevices, getPlaybackState, transferPlayback } from "./endpoints.js";
 import { IClientContext } from "./client.js";
 import chalk from "chalk";
-import { TurnImpression } from "dispatcher-agent";
+import { TurnImpression } from "@typeagent/agent-sdk";
 
 // convert milliseconds to elapsed minutes and seconds as a string
 function msToElapsedMinSec(ms: number) {
@@ -50,7 +50,7 @@ export function chalkStatus(status: SpotifyApi.CurrentPlaybackResponse) {
     return result;
 }
 
-export function htmlPlaybackStatus(
+function htmlPlaybackStatus(
     status: SpotifyApi.CurrentPlaybackResponse,
     turnImpression: TurnImpression,
 ) {
@@ -117,16 +117,8 @@ export async function htmlStatus(context: IClientContext) {
         turnImpression.literalText = "Nothing playing.";
     }
     turnImpression.displayText += "</div>";
-    const updateActionStatus = context.updateActionStatus;
-    if (status && updateActionStatus) {
-        let prevMessage = turnImpression.displayText;
-        setTimeout(async () => {
-            const updatedResult = await htmlStatus(context);
-            if (updatedResult.displayText != prevMessage) {
-                updateActionStatus(updatedResult.displayText, "status");
-            }
-        }, 1000);
-    }
+    turnImpression.dynamicDisplayId = "status";
+    turnImpression.dynamicDisplayNextRefreshMs = 1000;
     return turnImpression;
 }
 

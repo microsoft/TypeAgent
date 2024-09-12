@@ -20,17 +20,6 @@ export type GetClueAction = {
     };
 };
 
-export type GetEntryValue = {
-    actionName: "getEntryValue";
-    parameters: {
-        // The proposed value to use for this clue
-        value: string;
-        clueNumber: number;
-        clueDirection: "across" | "down";
-        frameId: string;
-    };
-};
-
 export type UnknownAction = {
     actionName: "unknown";
     parameters: {
@@ -43,8 +32,4 @@ export type BoardActions = {
     actions: Action[];
 };
 
-export type Action =
-    | EnterTextAction
-    | GetClueAction
-    | GetEntryValue
-    | UnknownAction;
+export type Action = EnterTextAction | GetClueAction | UnknownAction;

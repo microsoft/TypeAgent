@@ -184,9 +184,15 @@ export async function createObjectFolder<T>(
             const filePath = fullPath(name);
             if (settings?.deserializer) {
                 const buffer = await fileSystem.readBuffer(filePath);
+                if (buffer.length == 0) {
+                    return undefined;
+                }
                 return <T>settings.deserializer(buffer);
             } else {
                 const json = await fileSystem.read(filePath);
+                if (json.length === 0) {
+                    return undefined;
+                }
                 return JSON.parse(<string>json);
             }
         } catch (err: any) {

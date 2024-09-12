@@ -11,7 +11,7 @@ import {
 } from "./endpoints.js";
 import { SpotifyService } from "./service.js";
 import registerDebug from "debug";
-import { Storage } from "dispatcher-agent";
+import { Storage } from "@typeagent/agent-sdk";
 
 const debugSpotify = registerDebug("typeagent:spotify");
 
@@ -45,7 +45,7 @@ function getUserDataFilePath() {
 
 async function loadUserData(profileStorage: Storage): Promise<SpotifyUserData> {
     const userDataPath = getUserDataFilePath();
-    if (profileStorage.exists(userDataPath)) {
+    if (await profileStorage.exists(userDataPath)) {
         const content = await profileStorage.read(userDataPath, "utf8");
         const json: SpotifyUserDataJSON = JSON.parse(content);
         return {

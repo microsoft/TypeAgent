@@ -194,21 +194,26 @@ async function runPlayground(): Promise<void> {
         let responseText = "";
         stopWatch.start();
         let i = 0;
-        for await (const responseChunk of chatModel.completeStream(context)) {
-            if (i === 0) {
-                stopWatch.stop(io);
-                i++;
+        const result = await chatModel.completeStream(context);
+        if (result.success) {
+            for await (const responseChunk of result.data) {
+                if (i === 0) {
+                    stopWatch.stop(io);
+                    i++;
+                }
+                io.writer.write(responseChunk);
+                responseText += responseChunk;
             }
-            io.writer.write(responseChunk);
-            responseText += responseChunk;
-        }
-        io.writer.writeLine();
-        if (responseText) {
-            chatHistory.push(userMessage);
-            chatHistory.push({
-                role: MessageSourceRole.assistant,
-                content: responseText,
-            });
+            io.writer.writeLine();
+            if (responseText) {
+                chatHistory.push(userMessage);
+                chatHistory.push({
+                    role: MessageSourceRole.assistant,
+                    content: responseText,
+                });
+            }
+        } else {
+            io.writer.writeLine(result.message);
         }
         stopWatch.stop(io);
         io.writer.writeLine();
@@ -319,14 +324,16 @@ async function runPlayground(): Promise<void> {
 
     function printWelcome(io: InteractiveIo): void {
         let modelName = apiSettings.modelName ?? apiSettings.endpoint;
-        io.writer.writeLine(
-            `💬 🛝\nWelcome to Interactive Chat Playground.\nYou are speaking with ${modelName}.\n`,
-        );
+        io.writer.writeLine(`💬 🛝\nWelcome to Interactive Chat Playground.\n`);
+        io.writer.writeLine(`Model: ${modelName}`);
         io.writer.writeLine(
             `Max Context Length:${maxContextLength}\nMax Window Length: ${maxWindowLength}`,
         );
         io.writer.writeLine("@help for a list of available commands.");
         io.writer.writeLine();
+        io.writer.writeLine(
+            "To start, type something like 'hello and hit return.",
+        );
     }
 }
 

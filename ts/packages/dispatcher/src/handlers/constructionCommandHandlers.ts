@@ -6,8 +6,8 @@ import path from "node:path";
 
 import chalk from "chalk";
 import {
-    CommandHandler,
-    HandlerTable,
+    DispatcherCommandHandler,
+    DispatcherHandlerTable,
     getToggleHandlerTable,
 } from "./common/commandHandler.js";
 import {
@@ -18,7 +18,7 @@ import { readTestData } from "../utils/test/testData.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { ConstructionStore, printImportConstructionResult } from "agent-cache";
 import { getSessionCacheDirPath } from "../explorer.js";
-import { getDispatcherAgentName } from "../translation/agentTranslators.js";
+import { getAppAgentName } from "../translation/agentTranslators.js";
 import { RequestIO } from "./common/interactiveIO.js";
 import { parseRequestArgs } from "../utils/args.js";
 import { glob } from "glob";
@@ -77,7 +77,7 @@ function resolvePathWithSession(
     return path.resolve(request);
 }
 
-class ConstructionNewCommandHandler implements CommandHandler {
+class ConstructionNewCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Create a new construction store";
     public async run(request: string, context: CommandHandlerContext) {
         const constructionStore = context.agentCache.constructionStore;
@@ -101,7 +101,7 @@ class ConstructionNewCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionLoadCommandHandler implements CommandHandler {
+class ConstructionLoadCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Load a construction store from disk";
     public async run(request: string, context: CommandHandlerContext) {
         const constructionStore = context.agentCache.constructionStore;
@@ -127,7 +127,7 @@ class ConstructionLoadCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionSaveCommandHandler implements CommandHandler {
+class ConstructionSaveCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Save construction store to disk";
     public async run(request: string, context: CommandHandlerContext) {
         const constructionStore = context.agentCache.constructionStore;
@@ -148,7 +148,7 @@ class ConstructionSaveCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionInfoCommandHandler implements CommandHandler {
+class ConstructionInfoCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Show current construction store info";
     public async run(request: string, context: CommandHandlerContext) {
         const constructionStore = context.agentCache.constructionStore;
@@ -178,7 +178,7 @@ class ConstructionInfoCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionAutoCommandHandler implements CommandHandler {
+class ConstructionAutoCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Toggle construction auto save";
     public async run(request: string, context: CommandHandlerContext) {
         const state = request === "" || request === "on";
@@ -189,7 +189,7 @@ class ConstructionAutoCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionOffCommandHandler implements CommandHandler {
+class ConstructionOffCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Disable construction store";
     public async run(request: string, context: CommandHandlerContext) {
         const constructionStore = context.agentCache.constructionStore;
@@ -199,7 +199,7 @@ class ConstructionOffCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionListCommandHandler implements CommandHandler {
+class ConstructionListCommandHandler implements DispatcherCommandHandler {
     public readonly description = "List constructions";
     public async run(request: string, context: CommandHandlerContext) {
         const constructionStore = context.agentCache.constructionStore;
@@ -230,9 +230,10 @@ async function getImportTranslationFiles(
     } else {
         const infos = config.agents;
         const enabledAgents = new Set(
-            Object.entries(context.session.getConfig().translators)
-                .filter(([name, enabled]) => enabled)
-                .map(([name]) => getDispatcherAgentName(name)),
+            context.agents
+                .getTranslatorNames()
+                .filter((name) => context.agents.isTranslatorEnabled(name))
+                .map(getAppAgentName),
         );
 
         files = Object.entries(infos).flatMap(([name, info]) =>
@@ -252,7 +253,7 @@ async function expandPaths(paths: string[]) {
     );
 }
 
-class ConstructionImportCommandHandler implements CommandHandler {
+class ConstructionImportCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Import constructions from test data";
     public async run(request: string, context: CommandHandlerContext) {
         const { args, flags } = parseRequestArgs(request, {
@@ -301,7 +302,7 @@ class ConstructionImportCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionDeleteCommandHandler implements CommandHandler {
+class ConstructionDeleteCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Delete a construction by id";
 
     public async run(request: string, context: CommandHandlerContext) {
@@ -321,9 +322,10 @@ class ConstructionDeleteCommandHandler implements CommandHandler {
     }
 }
 
-export function getConstructionCommandHandlers(): HandlerTable {
+export function getConstructionCommandHandlers(): DispatcherHandlerTable {
     return {
         description: "Command to manage the construction store",
+        defaultSubCommand: undefined,
         commands: {
             new: new ConstructionNewCommandHandler(),
             load: new ConstructionLoadCommandHandler(),

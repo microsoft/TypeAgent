@@ -26,7 +26,7 @@ export interface ChatModel extends TypeChatLanguageModel {
 export interface ChatModelWithStreaming extends ChatModel {
     completeStream(
         prompt: string | PromptSection[] | ChatMessage[],
-    ): AsyncIterableIterator<string>;
+    ): Promise<Result<AsyncIterableIterator<string>>>;
 }
 
 /**

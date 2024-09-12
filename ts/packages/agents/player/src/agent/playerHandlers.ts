@@ -10,66 +10,49 @@ import {
 } from "music";
 import chalk from "chalk";
 import {
-    DispatcherAgent,
-    DispatcherAgentContext,
-    DispatcherAction,
-    SearchMenuContext,
+    AppAgent,
+    SessionContext,
+    AppAction,
     createTurnImpressionFromError,
-} from "dispatcher-agent";
+    ActionContext,
+    DisplayType,
+    AppAgentEvent,
+    DynamicDisplay,
+} from "@typeagent/agent-sdk";
 import { searchAlbum, searchArtists, searchTracks } from "../client.js";
-import { getUserDataStrings } from "../client.js";
+import { htmlStatus } from "../playback.js";
+import { getPlayerCommandInterface } from "./playerCommands.js";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializePlayerContext,
         updateAgentContext: updatePlayerContext,
         executeAction: executePlayerAction,
-        partialInput: playerPartialInput,
         validateWildcardMatch: validatePlayerWildcardMatch,
+        getDynamicDisplay: getPlayerDynamicDisplay,
+        ...getPlayerCommandInterface(),
     };
 }
 
-type PlayerActionContext = {
+export type PlayerActionContext = {
     spotify: IClientContext | undefined;
-    spotifyBackend: boolean;
-    searchContext?: SearchMenuContext;
 };
 
-function initializePlayerContext() {
+async function initializePlayerContext() {
     return {
         spotify: undefined,
-        spotifyBackend: false,
     };
 }
 
 async function executePlayerAction(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<PlayerActionContext>,
+    action: AppAction,
+    context: ActionContext<PlayerActionContext>,
 ) {
-    if (context.context.spotify) {
-        return handleCall(action as PlayerAction, context.context.spotify);
-    }
-
-    if (context.context.spotifyBackend) {
-        try {
-            const response = await fetch("http://localhost:3027", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(action),
-            });
-            if (response.ok) {
-                const json = await response.json();
-                console.log(json);
-            } else {
-                console.log(response.statusText);
-            }
-        } catch (e) {
-            console.log("Unable to contact music backend. Turning off.");
-            context.context.spotifyBackend = false;
-        }
-        return;
+    if (context.sessionContext.agentContext.spotify) {
+        return handleCall(
+            action as PlayerAction,
+            context.sessionContext.agentContext.spotify,
+        );
     }
 
     return createTurnImpressionFromError(
@@ -77,81 +60,38 @@ async function executePlayerAction(
     );
 }
 
-function playerPartialInput(
-    partialInputText: string,
-    context: DispatcherAgentContext<PlayerActionContext>,
-) {
-    if (partialInputText.startsWith("play ")) {
-        const prefix = partialInputText.substring(5).toLocaleLowerCase();
-        if (context.context.spotify) {
-            if (!context.context.searchContext) {
-                context.context.searchContext = {
-                    state: "active",
-                    menuId: "player",
-                    lastPrefix: prefix,
-                };
-                const choices = getUserDataStrings(context.context.spotify);
-                const searchMenuItems = choices.map((choice) => ({
-                    matchText: choice,
-                    emojiChar: "🎵",
-                    groupName: "player",
-                }));
-                context.context.searchContext.choices = choices;
-                context.searchMenuCommand(
-                    "player",
-                    "register",
-                    prefix,
-                    searchMenuItems,
-                    true,
-                );
-            } else {
-                context.context.searchContext.lastPrefix = prefix;
-                if (context.context.searchContext.state === "inactive") {
-                    context.context.searchContext.state = "active";
-                    context.searchMenuCommand("player", "show", prefix);
-                } else {
-                    context.searchMenuCommand("player", "complete", prefix);
-                }
-            }
-        }
-    }
-}
-
 async function updatePlayerContext(
     enable: boolean,
-    context: DispatcherAgentContext<PlayerActionContext>,
+    context: SessionContext<PlayerActionContext>,
 ) {
     if (enable) {
         const user = await enableSpotify(context);
-        context.requestIO.result(
+        context.notify(
+            AppAgentEvent.Info,
             chalk.blue(`Spotify integration enabled. Logged in as ${user}.`),
         );
     } else {
-        const timeoutId = context.context.spotify?.userData?.timeoutId;
+        const timeoutId = context.agentContext.spotify?.userData?.timeoutId;
         if (timeoutId !== undefined) {
             clearTimeout(timeoutId);
         }
-        context.context.spotify = undefined;
-        context.context.spotifyBackend = false;
+        context.agentContext.spotify = undefined;
     }
 }
 
-async function enableSpotify(
-    context: DispatcherAgentContext<PlayerActionContext>,
-) {
+async function enableSpotify(context: SessionContext<PlayerActionContext>) {
     const clientContext = await getClientContext(context.profileStorage);
-    clientContext.updateActionStatus = context.getUpdateActionStatus();
-    context.context.spotify = clientContext;
+    context.agentContext.spotify = clientContext;
 
     return clientContext.service.retrieveUser().username;
 }
 
 async function validatePlayerWildcardMatch(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<PlayerActionContext>,
+    action: AppAction,
+    context: SessionContext<PlayerActionContext>,
 ) {
     if (action.actionName === "play") {
-        const clientContext = context.context.spotify;
+        const clientContext = context.agentContext.spotify;
         if (clientContext === undefined) {
             // Can't validate without context, assume true
             return true;
@@ -180,9 +120,9 @@ async function validateTrack(trackName: string, context: IClientContext) {
     const tracks = await searchTracks(trackName, context);
     if (tracks && tracks.tracks && tracks.tracks.length > 0) {
         // For validation for wildcard match, only allow substring match.
-        const lowerCaseTrackeName = trackName.toLowerCase();
+        const lowerCaseTrackName = trackName.toLowerCase();
         return tracks.tracks.some((track) =>
-            track.name.toLowerCase().includes(lowerCaseTrackeName),
+            track.name.toLowerCase().includes(lowerCaseTrackName),
         );
     }
     return false;
@@ -204,4 +144,25 @@ async function validateArtist(artistName: string, context: IClientContext) {
         );
     }
     return false;
+}
+
+async function getPlayerDynamicDisplay(
+    type: DisplayType,
+    displayId: string,
+    context: SessionContext<PlayerActionContext>,
+): Promise<DynamicDisplay> {
+    if (context.agentContext.spotify === undefined) {
+        return {
+            content: "Spotify integration is not enabled.",
+            nextRefreshMs: -1,
+        };
+    }
+    if (displayId === "status") {
+        const status = await htmlStatus(context.agentContext.spotify);
+        return {
+            content: type === "html" ? status.displayText : status.literalText!,
+            nextRefreshMs: 1000,
+        };
+    }
+    throw new Error(`Invalid displayId ${displayId}`);
 }

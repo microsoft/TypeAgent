@@ -2,7 +2,7 @@
 
 Calendar agent is **sample code** that explores how to build a typed calendar agent with **TypeChat**. This package contains the schema defintion and implementation for building a Calendar Agent that interacts the Outlook mail client using Microsoft Graph API. This [article](https://learn.microsoft.com/en-us/graph/tutorials/typescript-app-only?tabs=aad) explores how to work with typescript and Microsoft Graph APIs. Please visit the [link](https://learn.microsoft.com/en-us/graph/api/resources/calendar?view=graph-rest-1.0) to learn about calendar specific Microsoft Graph APIs.
 
-This agent depends on the utility library [graph-utils](../graphUtils/src/calendarClient.ts) to implement different calendar actions.
+This agent depends on the utility library [graph-utils](../agentUtils/graphUtils/src/calendarClient.ts) to implement different calendar actions.
 
 To build the calendar agent, it needs to provide a manifest and an instantiation entry point.  
 These are declared in the `package.json` as export paths:

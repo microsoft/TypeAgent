@@ -3,7 +3,16 @@
 
 import path from "node:path";
 import fs from "node:fs";
-import { Storage, StorageListOptions, StorageEncoding } from "dispatcher-agent";
+import {
+    Storage,
+    StorageListOptions,
+    StorageEncoding,
+} from "@typeagent/agent-sdk";
+
+import {
+    DataProtectionScope,
+    PersistenceCreator,
+} from "@azure/msal-node-extensions";
 
 export function getStorage(name: string, baseDir: string): Storage {
     const getFullPath = (storagePath: string) => {
@@ -22,7 +31,7 @@ export function getStorage(name: string, baseDir: string): Storage {
                 )
                 .map((item) => item.name);
         },
-        exists: (storagePath: string) => {
+        exists: async (storagePath: string) => {
             const fullPath = getFullPath(storagePath);
             return fs.existsSync(fullPath);
         },
@@ -41,6 +50,25 @@ export function getStorage(name: string, baseDir: string): Storage {
         delete: async (storagePath: string) => {
             const fullPath = getFullPath(storagePath);
             return fs.promises.unlink(fullPath);
+        },
+        getTokenCachePersistence: async () => {
+            try {
+                return await PersistenceCreator.createPersistence({
+                    cachePath: getFullPath("token"),
+                    dataProtectionScope: DataProtectionScope.CurrentUser,
+                    serviceName: `TypeAgent.${name}`,
+                    accountName: `TokenCache`,
+                    usePlaintextFileOnLinux: false,
+                });
+            } catch (e: any) {
+                console.error(
+                    `Failed to create token cache persistence for ${name}: ${e.message}`,
+                );
+                return {
+                    load: async () => null,
+                    save: async () => {},
+                };
+            }
         },
     };
 }

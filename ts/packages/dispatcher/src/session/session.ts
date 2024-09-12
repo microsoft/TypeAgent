@@ -8,13 +8,14 @@ import fs from "node:fs";
 import path from "node:path";
 import lockfile from "proper-lockfile";
 import { getBuiltinConstructionConfig } from "../utils/config.js";
-import { getTranslatorConfigs } from "../translation/agentTranslators.js";
 import {
     ensureUserProfileDir,
     getUserProfileDir,
     getUniqueFileName,
     getYMDPrefix,
 } from "../utils/userData.js";
+import { TranslatorConfigProvider } from "../translation/agentTranslators.js";
+import { AppAgentState } from "../handlers/common/appAgentManager.js";
 
 const debugSession = registerDebug("typeagent:session");
 
@@ -52,25 +53,27 @@ function mergeConfig(
     config: ConfigObject,
     options: ConfigObject,
     strict: boolean = true,
+    flexKeys?: string[],
 ) {
     const changed: ConfigObject = {};
     const keys = strict ? Object.keys(config) : Object.keys(options);
     for (const key of keys) {
-        const value = options[key];
-        if (value !== undefined) {
+        if (options.hasOwnProperty(key)) {
+            const value = options[key];
             if (typeof value === "object") {
+                const strictKey = flexKeys ? !flexKeys.includes(key) : strict;
                 if (config[key] === undefined) {
-                    if (strict) {
+                    if (strictKey) {
                         continue;
                     }
                     config[key] = {};
                 }
 
-                const changedValue = mergeConfig(config[key], value, strict);
+                const changedValue = mergeConfig(config[key], value, strictKey);
                 if (Object.keys(changedValue).length !== 0) {
                     changed[key] = changedValue;
                 }
-            } else if (config[key] !== value) {
+            } else if (!config.hasOwnProperty(key) || config[key] !== value) {
                 config[key] = value;
                 changed[key] = value;
             }
@@ -137,10 +140,13 @@ async function newSessionDir() {
 }
 
 type DispatcherConfig = {
-    translators: ConfigObject;
-    actions: ConfigObject;
     explainerName: string;
+    models: {
+        translator: string;
+        explainer: string;
+    };
     bot: boolean;
+    stream: boolean;
     explanation: boolean;
     switch: {
         inline: boolean;
@@ -156,23 +162,20 @@ type DispatcherConfig = {
     matchWildcard: boolean;
 };
 
-export type SessionConfig = DispatcherConfig & CacheConfig;
+export type SessionConfig = Required<AppAgentState> &
+    DispatcherConfig &
+    CacheConfig;
 
-export const defaultSessionConfig: SessionConfig = {
-    translators: Object.fromEntries(
-        getTranslatorConfigs().map(([name, config]) => [
-            name,
-            config.defaultEnabled,
-        ]),
-    ),
-    actions: Object.fromEntries(
-        getTranslatorConfigs().map(([name, config]) => [
-            name,
-            config.actionDefaultEnabled,
-        ]),
-    ),
+const defaultSessionConfig: SessionConfig = {
+    translators: undefined,
+    actions: undefined,
     explainerName: getDefaultExplainerName(),
+    models: {
+        translator: "",
+        explainer: "",
+    },
     bot: true,
+    stream: true,
     explanation: true,
     switch: {
         inline: true,
@@ -187,6 +190,10 @@ export const defaultSessionConfig: SessionConfig = {
     matchWildcard: true,
     builtInCache: true,
 };
+
+export function getDefaultSessionConfig() {
+    return defaultSessionConfig;
+}
 
 // explainer name as key, cache file path as value
 type SessionCacheData = {
@@ -211,7 +218,7 @@ function ensureSessionData(data: any): SessionData {
 
     const existingData = data.config;
     data.config = cloneConfig(defaultSessionConfig);
-    mergeConfig(data.config, existingData);
+    mergeConfig(data.config, existingData, true, flexKeys);
 
     if (data.cacheData === undefined) {
         data.cacheData = {};
@@ -235,6 +242,7 @@ async function readSessionData(dir: string) {
     return ensureSessionData(data);
 }
 
+const flexKeys = ["translators", "actions", "commands"];
 export class Session {
     private config: SessionConfig;
     private cacheData: SessionCacheData;
@@ -276,11 +284,6 @@ export class Session {
         this.cacheData = sessionData.cacheData;
     }
 
-    public get useTranslators() {
-        return Object.entries(this.config.translators)
-            .filter(([, value]) => value)
-            .map(([name]) => name);
-    }
     public get explainerName() {
         return this.config.explainerName;
     }
@@ -312,12 +315,12 @@ export class Session {
         };
     }
 
-    public getConfig(): SessionConfig {
+    public getConfig(): Readonly<SessionConfig> {
         return this.config;
     }
 
     public setConfig(options: SessionOptions): SessionOptions {
-        const changed = mergeConfig(this.config, options);
+        const changed = mergeConfig(this.config, options, true, flexKeys);
         if (Object.keys(changed).length > 0) {
             this.save();
         }
@@ -403,6 +406,7 @@ export async function configAgentCache(
     session: Session,
     agentCache: AgentCache,
 ) {
+    agentCache.model = session.getConfig().models.explainer;
     agentCache.constructionStore.clear();
     if (session.cache) {
         const cacheData = session.getCacheDataFilePath();

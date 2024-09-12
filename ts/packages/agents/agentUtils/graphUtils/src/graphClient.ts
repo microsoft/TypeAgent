@@ -24,6 +24,7 @@ import path from "path";
 import registerDebug from "debug";
 import chalk from "chalk";
 import os from "os";
+import { Limiter, createLimiter } from "common-utils";
 
 try {
     useIdentityPlugin(cachePersistencePlugin);
@@ -71,23 +72,32 @@ export class GraphClient {
         string
     >();
 
-    private static instance: GraphClient;
+    private graphLock: Limiter;
+    private static instance: GraphClient | undefined = undefined;
 
-    private constructor() {}
+    private constructor() {
+        this.graphLock = createLimiter(1);
+    }
 
-    public static async getInstance(): Promise<GraphClient> {
+    public static async getInstance(): Promise<GraphClient | undefined> {
         if (!GraphClient.instance) {
             const instance = new GraphClient();
 
-            let loadSettings: boolean = instance.loadMSGraphSettings();
-            if (loadSettings) {
-                let fInitialized =
-                    await instance.initializeGraphFromDeviceCode();
-                if (fInitialized && instance._userClient) {
-                    await instance.loadUserEmailAddresses();
+            await instance.graphLock(async () => {
+                if (!GraphClient.instance) {
+                    let loadSettings: boolean = instance.loadMSGraphSettings();
+
+                    if (loadSettings) {
+                        let fInitialized =
+                            await instance.initializeGraphFromDeviceCode();
+
+                        if (fInitialized && instance._userClient) {
+                            GraphClient.instance = instance;
+                            await instance.loadUserEmailAddresses();
+                        }
+                    }
                 }
-            }
-            GraphClient.instance = instance;
+            });
         }
         return GraphClient.instance;
     }

@@ -1,46 +1,70 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SearchOptions } from "typeagent";
+import { SearchOptions, lookupAnswersOnWeb } from "typeagent";
 import {
     Conversation,
     ConversationSearchOptions,
     SearchActionResponse,
     SearchResponse,
+    SearchTermsActionResponse,
+    createSearchResponse,
 } from "./conversation.js";
 import {
     Filter,
     GetAnswerAction,
     SearchAction,
-} from "./knowledgeSearchSchema.js";
+    WebLookupAction,
+    ResponseStyle,
+} from "./knowledgeSearchWebSchema.js";
 import { SetOp } from "../setOperations.js";
 import {
+    KnowledgeSearchMode,
     KnowledgeActionTranslator,
     createKnowledgeActionTranslator,
 } from "./knowledgeActions.js";
 import { AnswerGenerator, createAnswerGenerator } from "./answerGenerator.js";
 import { PromptSection } from "typechat";
 import { ChatModel } from "aiclient";
+import {
+    GetAnswerWithTermsAction,
+    SearchTermsAction,
+    TermFilter,
+} from "./knowledgeTermSearchSchema.js";
 
 export type SearchProcessingOptions = {
     maxMatches: number;
     minScore: number;
     maxMessages: number;
     fallbackSearch?: SearchOptions | undefined;
-    includeTimeRange: boolean;
     combinationSetOp?: SetOp;
     includeActions?: boolean;
-    actionPreprocess?: (action: SearchAction) => void;
+    skipAnswerGeneration?: boolean;
+    progress?: ((action: any) => void) | undefined;
 };
 
 export interface ConversationSearchProcessor {
+    searchMode: KnowledgeSearchMode;
     actions: KnowledgeActionTranslator;
     answers: AnswerGenerator;
     search(
         query: string,
         options: SearchProcessingOptions,
     ): Promise<SearchActionResponse | undefined>;
-
+    searchTerms(
+        query: string,
+        filters: TermFilter[] | undefined,
+        options: SearchProcessingOptions,
+    ): Promise<SearchTermsActionResponse | undefined>;
+    /**
+     * Generate an answer using a prior search response
+     * @param searchResponse
+     */
+    generateAnswer(
+        query: string,
+        actionResponse: SearchTermsActionResponse,
+        options: SearchProcessingOptions,
+    ): Promise<SearchTermsActionResponse>;
     buildContext(
         options: SearchProcessingOptions,
     ): Promise<PromptSection[] | undefined>;
@@ -50,35 +74,42 @@ export function createSearchProcessor(
     conversation: Conversation,
     actionModel: ChatModel,
     answerModel: ChatModel,
-    includeActions: boolean = true,
+    searchMode: KnowledgeSearchMode = KnowledgeSearchMode.Default,
 ): ConversationSearchProcessor {
-    const actions = createKnowledgeActionTranslator(
+    const searchTranslator = createKnowledgeActionTranslator(
         actionModel,
-        includeActions,
+        searchMode,
+    );
+    const searchTranslator_NoActions = createKnowledgeActionTranslator(
+        actionModel,
+        KnowledgeSearchMode.Default,
     );
     const answers = createAnswerGenerator(answerModel);
 
     return {
-        actions,
+        searchMode,
+        actions: searchTranslator,
         answers,
         search,
+        searchTerms,
         buildContext,
+        generateAnswer,
     };
 
     async function search(
         query: string,
         options: SearchProcessingOptions,
     ): Promise<SearchActionResponse | undefined> {
-        const actionResult = await actions.translateSearch(
-            query,
-            await buildContext(options),
-        );
+        const context = await buildContext();
+        const actionResult = options.includeActions
+            ? await searchTranslator.translateSearch(query, context)
+            : await searchTranslator_NoActions.translateSearch(query, context);
         if (!actionResult.success) {
             return undefined;
         }
         let action = actionResult.data;
-        if (options.actionPreprocess) {
-            options.actionPreprocess(action);
+        if (options.progress) {
+            options.progress(action);
         }
         const rr: SearchActionResponse = {
             action,
@@ -89,17 +120,58 @@ export function createSearchProcessor(
             case "getAnswer":
                 rr.response = await handleGetAnswers(query, rr.action, options);
                 break;
+            case "webLookup":
+                rr.response = await handleLookup(query, rr.action, options);
+                break;
         }
 
         return rr;
     }
 
-    async function buildContext(
+    async function searchTerms(
+        query: string,
+        filters: TermFilter[] | undefined,
         options: SearchProcessingOptions,
-    ): Promise<PromptSection[] | undefined> {
-        const timeRange = options.includeTimeRange
-            ? await conversation.messages.getTimeRange()
-            : undefined;
+    ): Promise<SearchTermsActionResponse | undefined> {
+        const context = await buildContext();
+        let action: SearchTermsAction | undefined;
+        if (filters && filters.length > 0) {
+            // Filters already provided
+            action = {
+                actionName: "getAnswer",
+                parameters: {
+                    filters,
+                },
+            };
+        } else {
+            const actionResult = await searchTranslator.translateSearchTerms(
+                query,
+                context,
+            );
+            if (!actionResult.success) {
+                return undefined;
+            }
+            action = actionResult.data;
+        }
+
+        if (options.progress) {
+            options.progress(action);
+        }
+        const rr: SearchTermsActionResponse = {
+            action,
+        };
+        if (rr.action.actionName !== "unknown") {
+            rr.response = await handleGetAnswersTerms(
+                query,
+                rr.action,
+                options,
+            );
+        }
+        return rr;
+    }
+
+    async function buildContext(): Promise<PromptSection[] | undefined> {
+        const timeRange = await conversation.messages.getTimeRange();
         return timeRange
             ? [
                   {
@@ -124,17 +196,18 @@ export function createSearchProcessor(
                 minScore: options.minScore,
                 matchNameToType: true,
                 combinationSetOp: options.combinationSetOp,
-                loadEntities: true, //responseType != "Answer",
+                loadEntities: true,
             },
             topic: {
                 maxMatches: topLevelTopicSummary
                     ? Number.MAX_SAFE_INTEGER
                     : options.maxMatches,
                 minScore: options.minScore,
-                loadTopics: true, //responseType === "Topics",
+                loadTopics:
+                    responseType === "Answer" || responseType === "Topics",
             },
             topicLevel,
-            loadMessages: responseType === "Answer", //topicLevel === 1,
+            loadMessages: responseType === "Answer" || hasActionFilter(action),
         };
         if (options.includeActions) {
             searchOptions.action = {
@@ -144,6 +217,7 @@ export function createSearchProcessor(
                     maxMatches: 1,
                     minScore: options.minScore,
                 },
+                loadActions: false,
             };
         }
 
@@ -153,32 +227,127 @@ export function createSearchProcessor(
             action.parameters.filters,
             searchOptions,
         );
-        await adjustResponse(query, action, response, options);
+        await adjustResponse(query, action, response, searchOptions, options);
         response.answer = await answers.generateAnswer(
             query,
-            action,
+            action.parameters.responseStyle,
             response,
             false,
         );
         if (response.answer?.type === "NoAnswer" && options.fallbackSearch) {
-            //response.entities = [];
-            //response.topics = [];
-            // Try an approximate match
-            const sResult = await conversation.searchMessages(
+            await fallbackSearch(
                 query,
+                action.parameters.responseStyle,
+                response,
                 options.fallbackSearch,
             );
-            if (sResult) {
-                response.messageIds = sResult.messageIds;
-                response.messages = sResult.messages;
-                response.answer = await answers.generateAnswer(
-                    query,
-                    action,
-                    response,
-                    true,
-                );
-            }
         }
+        return response;
+    }
+
+    async function handleGetAnswersTerms(
+        query: string,
+        action: GetAnswerWithTermsAction,
+        options: SearchProcessingOptions,
+    ): Promise<SearchResponse> {
+        const topLevelTopicSummary = isSummaryRequest(action);
+        const topicLevel = topLevelTopicSummary ? 2 : 1;
+        const searchOptions: ConversationSearchOptions = {
+            entity: {
+                maxMatches: options.maxMatches,
+                minScore: options.minScore,
+                matchNameToType: true,
+                loadEntities: true,
+            },
+            topic: {
+                maxMatches: topLevelTopicSummary
+                    ? Number.MAX_SAFE_INTEGER
+                    : options.maxMatches,
+                minScore: options.minScore,
+                loadTopics: true,
+            },
+            topicLevel,
+            loadMessages: !topLevelTopicSummary,
+        };
+        if (options.includeActions) {
+            searchOptions.action = {
+                maxMatches: options.maxMatches,
+                minScore: options.minScore,
+                verbSearchOptions: {
+                    maxMatches: 1,
+                    minScore: options.minScore,
+                },
+                loadActions: false,
+            };
+        }
+        const response = await conversation.searchTerms(
+            action.parameters.filters,
+            searchOptions,
+        );
+        await adjustMessages(query, response, searchOptions, options);
+        if (!options.skipAnswerGeneration) {
+            await generateAnswerForSearchTerms(query, response, options);
+        }
+        return response;
+    }
+
+    async function generateAnswer(
+        query: string,
+        actionResponse: SearchTermsActionResponse,
+        options: SearchProcessingOptions,
+    ): Promise<SearchTermsActionResponse> {
+        if (actionResponse.response) {
+            await generateAnswerForSearchTerms(
+                query,
+                actionResponse.response,
+                options,
+            );
+        }
+        return actionResponse;
+    }
+
+    async function generateAnswerForSearchTerms(
+        query: string,
+        response: SearchResponse,
+        options: SearchProcessingOptions,
+    ) {
+        let style: ResponseStyle | undefined; //"Paragraph";
+        response.answer = await answers.generateAnswer(
+            query,
+            undefined,
+            response,
+            false,
+        );
+        if (response.answer?.type === "NoAnswer" && options.fallbackSearch) {
+            await fallbackSearch(
+                query,
+                style,
+                response,
+                options.fallbackSearch,
+            );
+        }
+    }
+
+    async function handleLookup(
+        query: string,
+        lookup: WebLookupAction,
+        options: SearchProcessingOptions,
+    ): Promise<SearchResponse> {
+        const answer = await lookupAnswersOnWeb(
+            answerModel,
+            query,
+            options.maxMatches,
+            {
+                maxCharsPerChunk: 4096,
+                maxTextLengthToSearch: 4096 * 16,
+                rewriteForReadability: false,
+            },
+        );
+        const response = createSearchResponse(1);
+        response.answer = {
+            type: answer.answer.type === "NoAnswer" ? "NoAnswer" : "Answered",
+            answer: answer.answer.answer,
+        };
         return response;
     }
 
@@ -188,6 +357,21 @@ export function createSearchProcessor(
             params.responseType === "Topics" &&
             !params.filters.some((f) => f.filterType !== "Topic")
         );
+    }
+
+    function isSummaryRequest(action: GetAnswerWithTermsAction): boolean {
+        const filters = action.parameters.filters;
+        for (const filter of filters) {
+            if (filter.terms && filter.terms.length > 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function hasActionFilter(action: GetAnswerAction): boolean {
+        const params = action.parameters;
+        return !params.filters.some((f) => f.filterType !== "Action");
     }
 
     function ensureTopicFilter(query: string, filters: Filter[]): void {
@@ -240,7 +424,8 @@ export function createSearchProcessor(
         query: string,
         action: GetAnswerAction,
         response: SearchResponse,
-        options: SearchProcessingOptions,
+        options: ConversationSearchOptions,
+        processingOptions: SearchProcessingOptions,
     ): Promise<void> {
         if (
             action.parameters.responseType == "Topics" &&
@@ -248,28 +433,38 @@ export function createSearchProcessor(
         ) {
             await ensureEntitiesLoaded(response);
         }
+        await adjustMessages(query, response, options, processingOptions);
+    }
+
+    async function adjustMessages(
+        query: string,
+        response: SearchResponse,
+        options: ConversationSearchOptions,
+        processingOptions: SearchProcessingOptions,
+    ): Promise<void> {
         if (
-            response.messages &&
-            response.messages.length > options.maxMessages
+            (!response.messages &&
+                options.loadMessages &&
+                processingOptions.fallbackSearch) ||
+            (response.messages &&
+                response.messages.length > processingOptions.maxMessages)
         ) {
             const result = await conversation.searchMessages(
                 query,
-                {
-                    maxMatches: options.maxMessages,
-                },
+                processingOptions,
                 response.messageIds,
             );
             if (result) {
                 response.messageIds = result.messageIds;
                 response.messages = result.messages;
-            } else {
+            } else if (response.messages) {
                 response.messageIds = response.messageIds!.slice(
                     0,
-                    options.maxMessages,
+                    processingOptions.maxMessages,
                 );
                 response.messages = response.messages.slice(
                     0,
-                    options.maxMessages,
+                    processingOptions.maxMessages,
                 );
             }
         }
@@ -293,5 +488,24 @@ export function createSearchProcessor(
             return true;
         }
         return false;
+    }
+
+    async function fallbackSearch(
+        query: string,
+        style: ResponseStyle | undefined,
+        response: SearchResponse,
+        options: SearchOptions,
+    ) {
+        const sResult = await conversation.searchMessages(query, options);
+        if (sResult) {
+            response.messageIds = sResult.messageIds;
+            response.messages = sResult.messages;
+            response.answer = await answers.generateAnswer(
+                query,
+                style,
+                response,
+                true,
+            );
+        }
     }
 }

@@ -8,33 +8,39 @@ import {
     createJsonTranslator,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import { SearchAction } from "./knowledgeSearchSchema.js";
+import { SearchAction } from "./knowledgeSearchWebSchema.js";
 import { dateTime, loadSchema } from "typeagent";
 import { DateTime, DateTimeRange } from "./dateTimeSchema.js";
+import { SearchTermsAction } from "./knowledgeTermSearchSchema.js";
 
 export interface KnowledgeActionTranslator {
     translateSearch(
         userRequest: string,
         context?: PromptSection[],
     ): Promise<Result<SearchAction>>;
+    translateSearchTerms(
+        userRequest: string,
+        context?: PromptSection[],
+    ): Promise<Result<SearchTermsAction>>;
+}
+
+export enum KnowledgeSearchMode {
+    Default,
+    WithActions,
+    WithActionsAndWeb,
 }
 
 export function createKnowledgeActionTranslator(
     model: TypeChatLanguageModel,
-    includeActions: boolean = true,
+    mode: KnowledgeSearchMode,
 ): KnowledgeActionTranslator {
     const typeName = "SearchAction";
-    const schema = loadSchema(
-        [
-            "dateTimeSchema.ts",
-            includeActions
-                ? "knowledgeSearchSchema.ts"
-                : "knowledgeSearchNoActionsSchema.ts",
-        ],
+    const searchActionSchema = loadSchema(
+        ["dateTimeSchema.ts", getSchemaName(mode)],
         import.meta.url,
     );
     const validator = createTypeScriptJsonValidator<SearchAction>(
-        schema,
+        searchActionSchema,
         typeName,
     );
     const knowledgeActionTranslator = createJsonTranslator<SearchAction>(
@@ -42,8 +48,21 @@ export function createKnowledgeActionTranslator(
         validator,
     );
     knowledgeActionTranslator.createRequestPrompt = createRequestPrompt;
+
+    const searchTermsTranslator = createJsonTranslator<SearchTermsAction>(
+        model,
+        createTypeScriptJsonValidator<SearchTermsAction>(
+            loadSchema(
+                ["dateTimeSchema.ts", "knowledgeTermSearchSchema.ts"],
+                import.meta.url,
+            ),
+            "SearchTermsAction",
+        ),
+    );
+
     return {
         translateSearch,
+        translateSearchTerms,
     };
 
     async function translateSearch(
@@ -53,14 +72,32 @@ export function createKnowledgeActionTranslator(
         return knowledgeActionTranslator.translate(userRequest, context);
     }
 
+    async function translateSearchTerms(
+        userRequest: string,
+        context?: PromptSection[],
+    ): Promise<Result<SearchTermsAction>> {
+        return searchTermsTranslator.translate(userRequest, context);
+    }
+
     function createRequestPrompt(request: string) {
         return (
+            `You are a service who translates user requests into a JSON object of type "${typeName}" according to the following TypeScript definitions:\n` +
+            `\`\`\`\n${searchActionSchema}\`\`\`\n` +
             `The following is a user request about a conversation between one or more users and assistants:\n` +
             `"""\n${request}\n"""\n\n` +
-            `You are a service who translates user requests into a JSON object of type "${typeName}" according to the following TypeScript definitions:\n` +
-            `\`\`\`\n${schema}\`\`\`\n` +
             `The following is a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
         );
+    }
+
+    function getSchemaName(mode: KnowledgeSearchMode): string {
+        switch (mode) {
+            case KnowledgeSearchMode.Default:
+                return "knowledgeSearchNoActionsSchema.ts";
+            case KnowledgeSearchMode.WithActions:
+                return "knowledgeSearchSchema.ts";
+            case KnowledgeSearchMode.WithActionsAndWeb:
+                return "knowledgeSearchWebSchema.ts";
+        }
     }
 }
 

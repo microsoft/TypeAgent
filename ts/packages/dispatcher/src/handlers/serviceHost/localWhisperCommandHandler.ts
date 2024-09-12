@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { HandlerTable } from "../common/commandHandler.js";
+import { DispatcherHandlerTable } from "../common/commandHandler.js";
 import { CommandHandlerContext } from "../common/commandHandlerContext.js";
 import chalk from "chalk";
 import { ChildProcess, spawn } from "child_process";
@@ -69,9 +69,10 @@ export async function createLocalWhisperHost() {
     );
 }
 
-export function getLocalWhisperCommandHandlers(): HandlerTable {
+export function getLocalWhisperCommandHandlers(): DispatcherHandlerTable {
     return {
         description: "Configure Local Whisper",
+        defaultSubCommand: undefined,
         commands: {
             off: {
                 description: "Turn off Local Whisper integration",

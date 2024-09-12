@@ -15,7 +15,7 @@
           "type": "node"
         },
         {
-            "name": "Debug Main Process",
+            "name": "Shell (Main process)",
             "type": "node",
             "request": "launch",
             "cwd": "${workspaceRoot}/packages/shell",
@@ -108,7 +108,7 @@
             //"args": [ "batch", "/data/variations/play.bat" ],
         },
         {
-            "name": "Launch Chat Examples",
+            "name": "Launch Chat Tests",
             "type": "node",
             "request": "launch",
             "skipFiles": [

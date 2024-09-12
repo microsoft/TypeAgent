@@ -46,10 +46,10 @@ import {
     intersect,
     intersectMultiple,
     removeUndefined,
-    unique,
     uniqueFrom,
 } from "../setOperations.js";
 import { createRecentItemsWindow } from "./conversation.js";
+import { TermFilter } from "./knowledgeTermSearchSchema.js";
 
 export interface TopicExtractor {
     nextTopic(
@@ -309,6 +309,10 @@ export interface TopicIndex<TTopicId = any, TSourceId = any> {
         filter: TopicFilter,
         options: TopicSearchOptions,
     ): Promise<TopicSearchResult<TTopicId>>;
+    searchTerms(
+        filter: TermFilter,
+        options: TopicSearchOptions,
+    ): Promise<TopicSearchResult<TTopicId>>;
     loadSourceIds(
         sourceIdLog: TemporalLog<TSourceId>,
         results: TopicSearchResult<TTopicId>[],
@@ -354,6 +358,7 @@ export async function createTopicIndex<TSourceId = string>(
         putNext,
         putMultiple,
         search,
+        searchTerms,
         loadSourceIds,
     };
 
@@ -484,6 +489,23 @@ export async function createTopicIndex<TSourceId = string>(
             }
         }
         return results;
+    }
+
+    async function searchTerms(
+        filter: TermFilter,
+        options: TopicSearchOptions,
+    ): Promise<TopicSearchResult<TopicId>> {
+        // We will just use the standard topic stuff for now, since that does the same thing
+        const topics =
+            filter.terms && filter.terms.length > 0
+                ? filter.terms.join(" ")
+                : "*";
+        const topicFilter: TopicFilter = {
+            filterType: "Topic",
+            topics,
+            timeRange: filter.timeRange,
+        };
+        return search(topicFilter, options);
     }
 
     async function loadSourceIds(

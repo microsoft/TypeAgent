@@ -4,13 +4,16 @@
 import { ChildProcess } from "child_process";
 import {
     ChildLogger,
+    DeepPartialUndefined,
     Limiter,
     Logger,
     LoggerSink,
     MultiSinkLogger,
+    TypeChatJsonTranslatorWithStreaming,
     createDebugLoggerSink,
     createLimiter,
     createMongoDBLoggerSink,
+    enableJsonTranslatorStreaming,
 } from "common-utils";
 import {
     AgentCache,
@@ -21,23 +24,17 @@ import { randomUUID } from "crypto";
 import readline from "readline/promises";
 import type { TypeChatJsonTranslator } from "typechat";
 import {
-    closeActionContext,
-    initializeActionContext,
-    updateActionContext,
-} from "../../action/actionHandlers.js";
-import {
     Session,
     SessionOptions,
     configAgentCache,
-    defaultSessionConfig,
+    getDefaultSessionConfig,
 } from "../../session/session.js";
 import {
-    getDefaultTranslatorName,
-    getTranslatorNames,
+    getDefaultBuiltinTranslatorName,
     loadAgentJsonTranslator,
+    TranslatorConfigProvider,
 } from "../../translation/agentTranslators.js";
 import { getCacheFactory } from "../../utils/cacheFactory.js";
-import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
 import { createServiceHost } from "../serviceHost/serviceHostCommandHandler.js";
 import {
     ClientIO,
@@ -46,9 +43,16 @@ import {
     getRequestIO,
     RequestId,
     getNullRequestIO,
+    DispatcherName,
 } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
+import { AppAgentEvent } from "@typeagent/agent-sdk";
+import { conversation as Conversation } from "knowledge-processor";
+import { AppAgentManager, AppAgentState } from "./appAgentManager.js";
+import { getBuiltinAppAgentProvider } from "../../agent/agentConfig.js";
+import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
+import { AppAgentProvider } from "../../agent/agentProvider.js";
 
 export interface CommandResult {
     error?: boolean;
@@ -58,8 +62,10 @@ export interface CommandResult {
 
 // Command Handler Context definition.
 export type CommandHandlerContext = {
+    agents: AppAgentManager;
     session: Session;
 
+    conversationManager?: Conversation.ConversationManager;
     // Per activation configs
     developerMode?: boolean;
     explanationAsynchronousMode: boolean;
@@ -69,19 +75,21 @@ export type CommandHandlerContext = {
 
     // Runtime context
     commandLock: Limiter; // Make sure we process one command at a time.
-    currentTranslatorName: string;
-    translatorCache: Map<string, TypeChatJsonTranslator<object>>;
+    lastActionTranslatorName: string;
+    translatorCache: Map<string, TypeChatJsonTranslatorWithStreaming<object>>;
     agentCache: AgentCache;
-    action: { [key: string]: any };
     currentScriptDir: string;
     logger?: Logger | undefined;
     serviceHost: ChildProcess | undefined;
     localWhisper: ChildProcess | undefined;
     requestId?: RequestId;
     chatHistory: ChatHistory;
+
     // For @correct
     lastRequestAction?: RequestAction;
     lastExplanation?: object;
+
+    transientAgents: Record<string, boolean | undefined>;
 };
 
 export function updateCorrectionContext(
@@ -106,20 +114,27 @@ export function getTranslator(
     const config = context.session.getConfig();
     const newTranslator = loadAgentJsonTranslator(
         translatorName,
-        undefined,
-        config.switch.inline ? config.translators : undefined,
+        context.agents,
+        config.models.translator,
+        config.switch.inline ? getActiveTranslators(context) : undefined,
         config.multipleActions,
     );
-    context.translatorCache.set(translatorName, newTranslator);
+    const streamingTranslator = enableJsonTranslatorStreaming(newTranslator);
+    context.translatorCache.set(translatorName, streamingTranslator);
     return newTranslator;
 }
 
-async function getAgentCache(session: Session, logger: Logger | undefined) {
+async function getAgentCache(
+    session: Session,
+    provider: TranslatorConfigProvider,
+    logger: Logger | undefined,
+) {
     const cacheFactory = getCacheFactory();
     const explainerName = session.explainerName;
     const agentCache = cacheFactory.create(
         explainerName,
-        loadTranslatorSchemaConfig,
+        (translatorName: string) =>
+            loadTranslatorSchemaConfig(translatorName, provider),
         session.cacheConfig,
         logger,
     );
@@ -134,6 +149,7 @@ async function getAgentCache(session: Session, logger: Logger | undefined) {
 }
 
 export type InitializeCommandHandlerContextOptions = SessionOptions & {
+    appAgentProviders?: AppAgentProvider[];
     explanationAsynchronousMode?: boolean; // default to false
     persistSession?: boolean; // default to false,
     stdio?: readline.Interface;
@@ -141,9 +157,8 @@ export type InitializeCommandHandlerContextOptions = SessionOptions & {
     enableServiceHost?: boolean; // default to false,
 };
 
-async function getSession(options?: InitializeCommandHandlerContextOptions) {
+async function getSession(persistSession: boolean = false) {
     let session: Session | undefined;
-    const persistSession = options?.persistSession ?? false;
     if (persistSession) {
         try {
             session = await Session.restoreLastSession();
@@ -152,30 +167,38 @@ async function getSession(options?: InitializeCommandHandlerContextOptions) {
         }
     }
     if (session === undefined) {
-        session = await Session.create(defaultSessionConfig, persistSession);
-    }
-
-    if (options) {
-        if (options.translators) {
-            // for initialization, missing translators means false
-            for (const name of getTranslatorNames()) {
-                if (options.translators[name] === undefined) {
-                    options.translators[name] = false;
-                }
-            }
-        }
-
-        if (options.actions) {
-            // for initialization, missing translators means false
-            for (const name of getTranslatorNames()) {
-                if (options.actions[name] === undefined) {
-                    options.actions[name] = false;
-                }
-            }
-        }
-        session.setConfig(options);
+        // fill in the translator/action later.
+        session = await Session.create(
+            getDefaultSessionConfig(),
+            persistSession,
+        );
     }
     return session;
+}
+
+function getLoggerSink(isDbEnabled: () => boolean, requestIO: RequestIO) {
+    const debugLoggerSink = createDebugLoggerSink();
+    let dbLoggerSink: LoggerSink | undefined;
+
+    try {
+        dbLoggerSink = createMongoDBLoggerSink(
+            "telemetrydb",
+            "dispatcherlogs",
+            isDbEnabled,
+        );
+    } catch (e) {
+        requestIO.notify(
+            AppAgentEvent.Warning,
+            undefined,
+            `DB logging disabled. ${e}`,
+        );
+    }
+
+    return new MultiSinkLogger(
+        dbLoggerSink === undefined
+            ? [debugLoggerSink]
+            : [debugLoggerSink, dbLoggerSink],
+    );
 }
 
 export async function initializeCommandHandlerContext(
@@ -186,20 +209,25 @@ export async function initializeCommandHandlerContext(
         options?.explanationAsynchronousMode ?? false;
     const stdio = options?.stdio;
 
-    const session = await getSession(options);
-    const dbLoggerSink: LoggerSink | undefined = createMongoDBLoggerSink(
-        "telemetrydb",
-        "dispatcherlogs",
-        () => context.dblogging,
+    const session = await getSession(options?.persistSession);
+    if (options) {
+        session.setConfig(options);
+    }
+    const path = session.getSessionDirPath();
+    const conversationManager = await Conversation.createConversationManager(
+        "conversation",
+        path ? path : "/data/testChat",
+        false,
     );
 
-    const loggerSink = new MultiSinkLogger([createDebugLoggerSink()]);
-
-    if (dbLoggerSink !== undefined) {
-        loggerSink.addSink(dbLoggerSink);
-    }
-
-    const logger = new ChildLogger(loggerSink, "dispatcher", {
+    const clientIO = options?.clientIO;
+    const requestIO = clientIO
+        ? getRequestIO(undefined, clientIO, undefined)
+        : clientIO === undefined
+          ? getConsoleRequestIO(stdio)
+          : getNullRequestIO();
+    const loggerSink = getLoggerSink(() => context.dblogging, requestIO);
+    const logger = new ChildLogger(loggerSink, DispatcherName, {
         hostName,
         userId: getUserId(),
         sessionId: () => context.session.dir,
@@ -211,40 +239,121 @@ export async function initializeCommandHandlerContext(
         serviceHost = await createServiceHost();
     }
 
-    const clientIO = options?.clientIO;
+    const agents = new AppAgentManager();
     const context: CommandHandlerContext = {
+        agents,
         session,
+        conversationManager,
         explanationAsynchronousMode,
         dblogging: true,
         clientIO,
-        requestIO: clientIO
-            ? getRequestIO(clientIO, undefined)
-            : clientIO === undefined
-              ? getConsoleRequestIO(stdio)
-              : getNullRequestIO(),
+        requestIO,
 
         // Runtime context
         commandLock: createLimiter(1), // Make sure we process one command at a time.
-        agentCache: await getAgentCache(session, logger),
-        currentTranslatorName: getDefaultTranslatorName(), // REVIEW: just default to the first one on initialize?
+        agentCache: await getAgentCache(session, agents, logger),
+        lastActionTranslatorName: getDefaultBuiltinTranslatorName(), // REVIEW: just default to the first one on initialize?
         translatorCache: new Map<string, TypeChatJsonTranslator<object>>(),
         currentScriptDir: process.cwd(),
-        action: await initializeActionContext(),
         chatHistory: createChatHistory(),
         logger,
         serviceHost: serviceHost,
         localWhisper: undefined,
+        transientAgents: {},
     };
+    context.requestIO.context = context;
 
-    await updateActionContext(context.session.getConfig().actions, context);
+    await agents.addProvider(getBuiltinAppAgentProvider(context), context);
+    const appAgentProviders = options?.appAgentProviders;
+    if (appAgentProviders !== undefined) {
+        for (const provider of appAgentProviders) {
+            await agents.addProvider(provider, context);
+        }
+    }
+
+    for (const [name, config] of agents.getTranslatorConfigs()) {
+        if (config.transient) {
+            context.transientAgents[name] = false;
+        }
+    }
+    await setAppAgentStates(context, options);
     return context;
+}
+
+async function setAppAgentStates(
+    context: CommandHandlerContext,
+    options?: DeepPartialUndefined<AppAgentState>,
+) {
+    const result = await context.agents.setState(
+        context,
+        context.session.getConfig(),
+        options,
+    );
+
+    processSetAppAgentStateResult(result, (message, source) =>
+        context.requestIO.notify(
+            AppAgentEvent.Error,
+            undefined,
+            message,
+            source,
+        ),
+    );
+}
+
+async function updateAppAgentStates(
+    context: CommandHandlerContext,
+    changed: DeepPartialUndefined<AppAgentState>,
+): Promise<AppAgentState> {
+    const result = await context.agents.setState(
+        context,
+        changed,
+        undefined,
+        false,
+    );
+
+    const rollback = processSetAppAgentStateResult(result, (message, source) =>
+        context.requestIO.error(message, source),
+    );
+
+    if (rollback) {
+        context.session.setConfig(rollback);
+    }
+    const resultState: AppAgentState = {};
+    if (result.changed.translators.length !== 0) {
+        resultState.translators = Object.fromEntries(
+            result.changed.translators,
+        );
+    }
+    if (result.changed.actions.length !== 0) {
+        resultState.actions = Object.fromEntries(result.changed.actions);
+    }
+    return resultState;
+}
+
+function processSetAppAgentStateResult(
+    result: any,
+    cbError: (message: string, source: string) => void,
+) {
+    if (result.failed.actions.length !== 0) {
+        const rollback: AppAgentState = { actions: {} };
+        for (const [translatorName, enable, e] of result.failed.actions) {
+            cbError(
+                `Failed to ${enable ? "enable" : "disable"} ${translatorName} action: ${e.message}`,
+                translatorName,
+            );
+            rollback.actions![translatorName] = !enable;
+        }
+        return rollback;
+    }
+
+    return undefined;
 }
 
 export async function closeCommandHandlerContext(
     context: CommandHandlerContext,
 ) {
     context.serviceHost?.kill();
-    closeActionContext(context);
+    await context.agents.close();
 }
 
 export async function setSessionOnCommandHandlerContext(
@@ -252,15 +361,20 @@ export async function setSessionOnCommandHandlerContext(
     session: Session,
 ) {
     context.session = session;
-    context.agentCache = await getAgentCache(context.session, context.logger);
-    await updateActionContext(context.session.getConfig().actions, context);
+    await context.agents.close();
+    context.agentCache = await getAgentCache(
+        context.session,
+        context.agents,
+        context.logger,
+    );
+    await setAppAgentStates(context);
 }
 
 export async function reloadSessionOnCommandHandlerContext(
     context: CommandHandlerContext,
     persist: boolean,
 ) {
-    const session = await getSession({ persistSession: persist });
+    const session = await getSession(persist);
     await setSessionOnCommandHandlerContext(context, session);
 }
 
@@ -270,8 +384,13 @@ export async function changeContextConfig(
 ) {
     const changed = context.session.setConfig(options);
 
+    const translatorChanged = changed.hasOwnProperty("translators");
+    const actionsChanged = changed.hasOwnProperty("actions");
+    const commandsChanged = changed.hasOwnProperty("commands");
+
     if (
-        changed.translators ||
+        translatorChanged ||
+        changed.models?.translator !== undefined ||
         changed.switch?.inline ||
         changed.multipleActions
     ) {
@@ -280,13 +399,14 @@ export async function changeContextConfig(
         context.translatorCache.clear();
     }
 
-    if (changed.actions) {
-        changed.actions = await updateActionContext(changed.actions, context);
+    if (translatorChanged || actionsChanged || commandsChanged) {
+        Object.assign(changed, await updateAppAgentStates(context, changed));
     }
     if (changed.explainerName !== undefined) {
         try {
             context.agentCache = await getAgentCache(
                 context.session,
+                context.agents,
                 context.logger,
             );
         } catch (e: any) {
@@ -307,23 +427,61 @@ export async function changeContextConfig(
 
     // cache and auto save are handled separately
     if (changed.cache !== undefined) {
-        // the cache state is changed.  Auto save is configured in configAgentCache as well.
+        // the cache state is changed.
+        // Auto save and model is configured in configAgentCache as well.
         await configAgentCache(context.session, context.agentCache);
-    } else if (changed.autoSave !== undefined) {
-        // Make sure the cache has a file for a persisted session
-        if (changed.autoSave) {
-            if (context.session.cache) {
-                const cacheDataFilePath =
-                    await context.session.ensureCacheDataFilePath();
-                await context.agentCache.constructionStore.save(
-                    cacheDataFilePath,
-                );
+    } else {
+        if (changed.autoSave !== undefined) {
+            // Make sure the cache has a file for a persisted session
+            if (changed.autoSave) {
+                if (context.session.cache) {
+                    const cacheDataFilePath =
+                        await context.session.ensureCacheDataFilePath();
+                    await context.agentCache.constructionStore.save(
+                        cacheDataFilePath,
+                    );
+                }
             }
+            await context.agentCache.constructionStore.setAutoSave(
+                changed.autoSave,
+            );
         }
-        await context.agentCache.constructionStore.setAutoSave(
-            changed.autoSave,
-        );
+        if (changed.models?.explainer !== undefined) {
+            context.agentCache.model = changed.models.explainer;
+        }
     }
 
     return changed;
+}
+
+export function getActiveTranslatorList(context: CommandHandlerContext) {
+    return context.agents
+        .getTranslatorNames()
+        .filter((name) => isTranslatorActive(name, context));
+}
+
+function getActiveTranslators(context: CommandHandlerContext) {
+    return Object.fromEntries(
+        getActiveTranslatorList(context).map((name) => [name, true]),
+    );
+}
+
+export function isTranslatorActive(
+    translatorName: string,
+    context: CommandHandlerContext,
+) {
+    return (
+        context.agents.isTranslatorEnabled(translatorName) &&
+        context.transientAgents[translatorName] !== false
+    );
+}
+
+export function isActionActive(
+    translatorName: string,
+    context: CommandHandlerContext,
+) {
+    return (
+        context.agents.isActionEnabled(translatorName) &&
+        context.transientAgents[translatorName] !== false
+    );
 }

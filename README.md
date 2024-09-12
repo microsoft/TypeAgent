@@ -1,14 +1,14 @@
 # TypeAgent
 
-**TypeAgent** is **sample code** that explores architectures for building _interactive agents_ with _natural language interfaces_ using [TypeChat](https://github.com/microsoft/typechat).
+**TypeAgent** is **sample code** that explores an architecture for using [TypeChat](https://github.com/microsoft/typechat) to build a _personal agent_ with a _natural language interface_.
 
-**TypeAgent** uses TypeChat to build a set of example agents that **take actions**. Agents define actions using TypeChat schemas.
+**TypeAgent** uses TypeChat to build a set of application agents that **take actions**. Agents define actions using TypeChat schemas.
 
-The TypeAgent repo contains example agents and applications, along with internal packages used to build them.
+The TypeAgent repo contains the personal agent and example application agents, along with internal packages used to build them.
 
 ## Examples
 
-- Agents with natural language interfaces:
+- Application agents with natural language interfaces:
 
   - [Music Player](./ts/packages/agents/player/)
   - [Chat](./ts/packages/agents/chat/)
@@ -21,7 +21,7 @@ The TypeAgent repo contains example agents and applications, along with internal
 
 - [Agent Dispatcher](./ts/packages/dispatcher/)
 
-  Explores applying TypeChat to route user requests to agents whose typed contract best matches user intent.
+  Explores applying TypeChat to route user requests to agents whose typed contract best matches user intent.  Main component of the personal agent.
 
 - [Agent Cache](./ts/packages/cache/)
 
@@ -67,7 +67,7 @@ The main entry point to explore TypeAgent is the Agent Shell example. Follow the
 
 ## Developers
 
-Microsoft AI Systems Repo is a mono-repo, with components organized with the following root folders based on language used.
+Microsoft TypeAgent Repo is a mono-repo, with components organized with the following root folders based on language used.
 
 - [`ts`](./ts) TypeScript code ([Readme](./ts/README.md))
 - [`python`](./python) Python code ([Readme](./python/README.md))

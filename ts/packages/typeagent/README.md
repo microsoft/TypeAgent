@@ -1,6 +1,8 @@
 # typeagent
 
-TypeAgent is **sample library code** used to explore how to build agents with TypeChat. Components include:
+The TypeAgent package is **sample library code** used by and intended only for the example agents and apps in the TypeAgent project.
+
+Components include:
 
 - Async processing
 - Vectors and embeddings

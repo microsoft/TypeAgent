@@ -1,7 +1,16 @@
 {
     "editor.defaultFormatter": "esbenp.prettier-vscode",
     "cSpell.words": [
+        "aiclient",
         "lightgray",
-        "openai"
-    ]
+        "oclif",
+        "openai",
+        "regen",
+        "tsbuildinfo",
+        "typeagent",
+        "typechat"
+    ],
+    "[html]": {
+        "editor.defaultFormatter": "vscode.html-language-features"
+    }
 }

@@ -243,6 +243,21 @@ export function unionSets<T = any>(x?: Set<T>, y?: Set<T>): Set<T> | undefined {
     return y;
 }
 
+export function intersectUnionSets<T = any>(
+    x?: Set<T>,
+    y?: Set<T>,
+): Set<T> | undefined {
+    // We can to do this more optimally...
+    let combined = createFrequencyTable<T>();
+    if (x) {
+        combined.addMultiple(x.values());
+    }
+    if (y) {
+        combined.addMultiple(y.values());
+    }
+    return new Set<T>(combined.getTop());
+}
+
 export function flatten<T>(
     src: Iterable<T>,
     callback?: (value: T) => any | undefined,
@@ -266,7 +281,7 @@ export function flatten<T>(
     return sort ? flat.sort() : flat;
 }
 
-export function removeUndefined<T>(src: Array<T | undefined>): T[] {
+export function removeUndefined<T = any>(src: Array<T | undefined>): T[] {
     return src.filter((item) => item !== undefined) as T[];
 }
 
@@ -279,10 +294,11 @@ export interface FrequencyTable<T> {
     get(value: T): WithFrequency<T> | undefined;
     getFrequency(value: T): number;
     add(value: T): number;
-    addMultiple(values: Iterator<T> | Array<T>): void;
+    addMultiple(values: Iterator<T> | IterableIterator<T> | Array<T>): void;
     keys(): IterableIterator<T>;
     byFrequency(): WithFrequency<T>[];
     getTop(): T[];
+    getTopK(k: number): T[];
 }
 
 export function createFrequencyTable<T>(
@@ -297,6 +313,7 @@ export function createFrequencyTable<T>(
         keys: () => map.keys(),
         byFrequency,
         getTop,
+        getTopK,
     };
 
     function get(value: T): WithFrequency<T> | undefined {
@@ -322,7 +339,9 @@ export function createFrequencyTable<T>(
         return freq.count;
     }
 
-    function addMultiple(values: Iterator<T> | Array<T>): void {
+    function addMultiple(
+        values: Iterator<T> | IterableIterator<T> | Array<T>,
+    ): void {
         const x: Iterator<T> = Array.isArray(values) ? values.values() : values;
         let xValue = x.next();
         while (!xValue.done) {
@@ -352,6 +371,30 @@ export function createFrequencyTable<T>(
             }
         }
         return top;
+    }
+
+    // TODO: Optimize.
+    function getTopK(k: number): T[] {
+        const byFreq = byFrequency();
+        const topK: T[] = [];
+        if (k < 1 || byFreq.length === 0) {
+            return topK;
+        }
+        // Find the k'th lowest hit count
+        let i = 0;
+        let prevFreq = byFreq[0].count;
+        let kCount = 1;
+        for (let i = 0; i < byFreq.length; ++i) {
+            if (byFreq[i].count < prevFreq) {
+                kCount++;
+                if (kCount > k) {
+                    break;
+                }
+                prevFreq = byFreq[i].count;
+            }
+            topK.push(byFreq[i].value);
+        }
+        return topK;
     }
 
     function getKey(value: T): any {

@@ -1,62 +1,87 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Actions } from "agent-cache";
+import { Action, Actions } from "agent-cache";
 import {
+    closeCommandHandlerContext,
     CommandHandlerContext,
-    changeContextConfig,
 } from "../handlers/common/commandHandlerContext.js";
 import registerDebug from "debug";
+import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
-    getDispatcherAgentName,
-    getTranslatorConfig,
-} from "../translation/agentTranslators.js";
-import {
-    DispatcherAction,
-    DispatcherAgentContext,
+    ActionIO,
+    createTurnImpressionFromLiteral,
+    AppAgentEvent,
+    SessionContext,
     TurnImpression,
     turnImpressionToString,
-} from "dispatcher-agent";
-import {
-    getDispatcherAgent,
-    getDispatcherAgents,
-} from "../agent/agentConfig.js";
-import { processCommandNoLock } from "../command.js";
+    DynamicDisplay,
+    DisplayType,
+    AppAgent,
+} from "@typeagent/agent-sdk";
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
 import { getUserProfileDir } from "../utils/userData.js";
+import { Profiler } from "common-utils";
+import { CommandHandlerBase } from "../handlers/common/commandHandlerBase.js";
 
+const debugAgent = registerDebug("typeagent:agent");
 const debugActions = registerDebug("typeagent:actions");
 
-export async function initializeActionContext() {
-    return Object.fromEntries(
-        Array.from((await getDispatcherAgents()).entries()).map(
-            ([name, agent]) => [name, agent.initializeAgentContext?.()],
-        ),
-    );
+function getActionContext(
+    appAgentName: string,
+    context: CommandHandlerContext,
+    requestId: string,
+    actionIndex: number,
+) {
+    const sessionContext = context.agents.getSessionContext(appAgentName);
+    const actionIO: ActionIO = {
+        get type() {
+            return context.requestIO.type;
+        },
+        setActionDisplay(content: string): void {
+            context.requestIO.setActionDisplay(
+                content,
+                actionIndex,
+                appAgentName,
+            );
+        },
+    };
+    return {
+        get agentContext() {
+            return sessionContext.agentContext;
+        },
+        get sessionStorage() {
+            return sessionContext.sessionStorage;
+        },
+        get profileStorage() {
+            return sessionContext.profileStorage;
+        },
+        get sessionContext() {
+            return sessionContext;
+        },
+        get actionIO() {
+            return actionIO;
+        },
+        performanceMark(markName: string) {
+            Profiler.getInstance().mark(requestId, markName);
+        },
+    };
 }
 
-function getDispatcherAgentContext(
+export function createSessionContext<T = unknown>(
     name: string,
+    agentContext: T,
     context: CommandHandlerContext,
-): DispatcherAgentContext {
+): SessionContext<T> {
     const sessionDirPath = context.session.getSessionDirPath();
     const storage = sessionDirPath
         ? getStorage(name, sessionDirPath)
         : undefined;
     const profileStorage = getStorage(name, getUserProfileDir());
-    const agentContext: DispatcherAgentContext = {
-        get context() {
-            return context.action[name];
-        },
-        get requestIO() {
-            return context.requestIO;
-        },
-        get requestId() {
-            return context.requestId;
-        },
-        get currentTranslatorName() {
-            return context.currentTranslatorName;
+    const sessionContext: SessionContext<T> = {
+        get agentContext() {
+            return agentContext;
         },
         get sessionStorage() {
             return storage;
@@ -64,95 +89,61 @@ function getDispatcherAgentContext(
         get profileStorage() {
             return profileStorage;
         },
-        set currentTranslatorName(value: string) {
-            context.currentTranslatorName = value;
+        notify(event: AppAgentEvent, data: any) {
+            context.requestIO.notify(event, data, name);
         },
-        issueCommand(command: string) {
-            return processCommandNoLock(command, context);
-        },
-        getAlternativeAgentContext(name: string) {
-            return context.action[name];
-        },
-        getSessionDirPath() {
-            return context.session.getSessionDirPath();
-        },
-        getUpdateActionStatus() {
-            return context.clientIO?.updateActionStatus.bind(context.clientIO);
-        },
-        searchMenuCommand(menuId, command, prefix?, choices?, visible?): void {
-            return context.clientIO?.searchMenuCommand(
-                menuId,
-                command,
-                prefix,
-                choices,
-                visible,
-            );
-        },
-        async toggleAgent(name: string, enable: boolean) {
-            await changeContextConfig(
-                {
-                    translators: { [name]: enable },
-                    actions: { [name]: enable },
-                },
-                context,
-            );
+        async toggleTransientAgent(subAgentName: string, enable: boolean) {
+            if (!subAgentName.startsWith(`${name}.`)) {
+                throw new Error(`Invalid sub agent name: ${subAgentName}`);
+            }
+            if (context.transientAgents[subAgentName] === undefined) {
+                throw new Error(
+                    `Transient sub agent not found: ${subAgentName}`,
+                );
+            }
+
+            if (context.transientAgents[subAgentName] === enable) {
+                return;
+            }
+
+            // acquire the lock to prevent change the state while we are processing a command.
+            // WARNING: deadlock if this is call because we are processing a request
+            return context.commandLock(async () => {
+                debugAgent(
+                    `Toggle transient agent: ${subAgentName} to ${enable}`,
+                );
+                context.transientAgents[subAgentName] = enable;
+                // Because of the embedded switcher, we need to clear the cache.
+                context.translatorCache.clear();
+                if (enable) {
+                    // REVIEW: is switch current translator the right behavior?
+                    context.lastActionTranslatorName = subAgentName;
+                } else if (context.lastActionTranslatorName === subAgentName) {
+                    context.lastActionTranslatorName = name;
+                }
+            });
         },
     };
-    return agentContext;
+    (sessionContext as any).conversationManager = context.conversationManager;
+    return sessionContext;
 }
 
-export async function updateActionContext(
-    changed: { [key: string]: boolean },
+export async function getDynamicDisplay(
     context: CommandHandlerContext,
-) {
-    const newChanged = { ...changed };
-    const failed: any = {};
-    const entries = Object.entries(changed);
-    for (const [translatorName, enable] of entries) {
-        try {
-            await updateAgentContext(translatorName, enable, context);
-        } catch (e: any) {
-            context.requestIO.error(
-                `[${translatorName}]: Failed to ${enable ? "enable" : "disable"} action: ${e.message}`,
-            );
-            failed[translatorName] = !enable;
-            delete newChanged[translatorName];
-        }
+    appAgentName: string,
+    type: DisplayType,
+    displayId: string,
+): Promise<DynamicDisplay> {
+    const appAgent = context.agents.getAppAgent(appAgentName);
+    if (appAgent.getDynamicDisplay === undefined) {
+        throw new Error(`Dynamic display not supported by '${appAgentName}'`);
     }
-    const failedCount = Object.keys(failed).length;
-    if (failedCount !== 0) {
-        context.session.setConfig({ actions: failed });
-    }
-
-    return entries.length === failedCount ? undefined : newChanged;
-}
-
-async function updateAgentContext(
-    translatorName: string,
-    enable: boolean,
-    context: CommandHandlerContext,
-) {
-    const dispatcherAgentName = getDispatcherAgentName(translatorName);
-    const dispatcherAgent = await getDispatcherAgent(dispatcherAgentName);
-    await dispatcherAgent.updateAgentContext?.(
-        enable,
-        getDispatcherAgentContext(dispatcherAgentName, context),
-        translatorName,
-    );
-}
-
-export async function closeActionContext(context: CommandHandlerContext) {
-    for (const [name, enabled] of Object.entries(context.action)) {
-        if (enabled) {
-            try {
-                await updateAgentContext(name, false, context);
-            } catch {}
-        }
-    }
+    const sessionContext = context.agents.getSessionContext(appAgentName);
+    return appAgent.getDynamicDisplay(type, displayId, sessionContext);
 }
 
 async function executeAction(
-    action: DispatcherAction,
+    action: Action,
     context: CommandHandlerContext,
     actionIndex: number,
 ): Promise<TurnImpression | undefined> {
@@ -161,38 +152,78 @@ async function executeAction(
     if (translatorName === undefined) {
         throw new Error(`Cannot execute action without translator name.`);
     }
-    const dispatcherAgentName = getDispatcherAgentName(translatorName);
-    const dispatcherAgent = await getDispatcherAgent(dispatcherAgentName);
+    const appAgentName = getAppAgentName(translatorName);
+    const appAgent = context.agents.getAppAgent(appAgentName);
 
-    // Update the current translator.
-    if (!getTranslatorConfig(translatorName).injected) {
-        context.currentTranslatorName = translatorName;
-    }
+    // Update the last action translator.
+    context.lastActionTranslatorName = translatorName;
 
-    if (dispatcherAgent.executeAction === undefined) {
+    if (appAgent.executeAction === undefined) {
         throw new Error(
-            `Agent ${dispatcherAgentName} does not support executeAction.`,
+            `Agent ${appAgentName} does not support executeAction.`,
         );
     }
-    return dispatcherAgent.executeAction(
-        action,
-        getDispatcherAgentContext(dispatcherAgentName, context),
+    const actionContext = getActionContext(
+        appAgentName,
+        context,
+        context.requestId!,
         actionIndex,
     );
-}
+    const returnedResult: TurnImpression | undefined =
+        await appAgent.executeAction(action, actionContext);
 
-export async function partialInput(
-    text: string,
-    context: CommandHandlerContext,
-) {
-    const dispatcherAgentName = getDispatcherAgentName(
-        context.currentTranslatorName,
-    );
-    const dispatcherAgent = await getDispatcherAgent(dispatcherAgentName);
-    return dispatcherAgent.partialInput?.(
-        text,
-        getDispatcherAgentContext(dispatcherAgentName, context),
-    );
+    let result: TurnImpression;
+    if (returnedResult === undefined) {
+        result = createTurnImpressionFromLiteral(
+            `Action ${action.fullActionName} completed.`,
+        );
+    } else {
+        if (
+            returnedResult.error === undefined &&
+            returnedResult.literalText &&
+            context.conversationManager
+        ) {
+            // TODO: convert entity values to facets
+            context.conversationManager.addMessage(
+                returnedResult.literalText,
+                returnedResult.entities,
+                new Date(),
+            );
+        }
+        result = returnedResult;
+    }
+    if (debugActions.enabled) {
+        debugActions(turnImpressionToString(result));
+    }
+    if (result.error !== undefined) {
+        context.requestIO.error(result.error, translatorName);
+        context.chatHistory.addEntry(
+            `Action ${action.fullActionName} failed: ${result.error}`,
+            [],
+            "assistant",
+            context.requestId,
+        );
+    } else {
+        actionContext.actionIO.setActionDisplay(result.displayText);
+        if (result.dynamicDisplayId !== undefined) {
+            context.clientIO?.setDynamicDisplay(
+                translatorName,
+                context.requestId,
+                actionIndex,
+                result.dynamicDisplayId,
+                result.dynamicDisplayNextRefreshMs!,
+            );
+        }
+        context.chatHistory.addEntry(
+            result.literalText
+                ? result.literalText
+                : `Action ${action.fullActionName} completed.`,
+            result.entities,
+            "assistant",
+            context.requestId,
+        );
+    }
+    return result;
 }
 
 export async function executeActions(
@@ -200,34 +231,9 @@ export async function executeActions(
     context: CommandHandlerContext,
 ) {
     debugActions(`Executing actions: ${JSON.stringify(actions, undefined, 2)}`);
-    let result: TurnImpression | undefined;
-    const requestIO = context.requestIO;
     let actionIndex = 0;
     for (const action of actions) {
-        // TODO: deal with results.
-        result = await executeAction(action, context, actionIndex);
-        if (result !== undefined) {
-            if (debugActions.enabled) {
-                debugActions(turnImpressionToString(result));
-            }
-            if (result.error !== undefined) {
-                requestIO.error(result.error);
-            } else {
-                requestIO.setActionStatus(result.displayText, actionIndex);
-                context.chatHistory.addEntry(
-                    result.literalText,
-                    result.entities,
-                    "assistant",
-                    requestIO.getRequestId(),
-                    result.impressionInterpreter,
-                );
-            }
-        } else {
-            requestIO.setActionStatus(
-                `Action ${action.fullActionName} completed.`,
-                actionIndex,
-            );
-        }
+        await executeAction(action, context, actionIndex);
         actionIndex++;
     }
 }
@@ -242,20 +248,69 @@ export async function validateWildcardMatch(
         if (translatorName === undefined) {
             continue;
         }
-        const dispatcherAgentName = getDispatcherAgentName(translatorName);
-        const dispatcherAgent = await getDispatcherAgent(dispatcherAgentName);
-        const dispatcherContext = getDispatcherAgentContext(
-            dispatcherAgentName,
-            context,
-        );
+        const appAgentName = getAppAgentName(translatorName);
+        const appAgent = context.agents.getAppAgent(appAgentName);
+        const sessionContext = context.agents.getSessionContext(appAgentName);
         if (
-            (await dispatcherAgent.validateWildcardMatch?.(
-                action,
-                dispatcherContext,
-            )) === false
+            (await appAgent.validateWildcardMatch?.(action, sessionContext)) ===
+            false
         ) {
             return false;
         }
     }
     return true;
+}
+
+export function startStreamPartialAction(
+    translatorName: string,
+    actionName: string,
+    context: CommandHandlerContext,
+) {
+    const appAgentName = getAppAgentName(translatorName);
+    const appAgent = context.agents.getAppAgent(appAgentName);
+    if (appAgent.streamPartialAction === undefined) {
+        // The config declared that there are streaming action, but the agent didn't implement it.
+        throw new Error(
+            `Agent ${appAgentName} does not support streamPartialAction.`,
+        );
+    }
+
+    const actionContext = getActionContext(
+        appAgentName,
+        context,
+        context.requestId!,
+        0,
+    );
+
+    return (name: string, value: string, partial: boolean) => {
+        appAgent.streamPartialAction!(
+            actionName,
+            name,
+            value,
+            partial,
+            actionContext,
+        );
+    };
+}
+
+export async function executeCommand(
+    command: string[] | undefined,
+    args: string,
+    appAgentName: string,
+    context: CommandHandlerContext,
+    attachments?: string[],
+) {
+    const actionContext = getActionContext(
+        appAgentName,
+        context,
+        context.requestId!,
+        0,
+    );
+    const appAgent = context.agents.getAppAgent(appAgentName);
+    if (appAgent.executeCommand === undefined) {
+        throw new Error(
+            `Agent ${appAgentName} does not support executeCommand.`,
+        );
+    }
+    return appAgent.executeCommand(command, args, actionContext, attachments);
 }

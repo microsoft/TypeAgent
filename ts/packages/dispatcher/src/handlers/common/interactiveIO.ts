@@ -3,9 +3,12 @@
 
 import { askYesNo } from "../../utils/interactive.js";
 import readline from "readline/promises";
-import { SearchMenuItem, ActionTemplate } from "common-utils";
+import { SearchMenuItem, ActionTemplateSequence, Profiler } from "common-utils";
 import chalk from "chalk";
+import { CommandHandlerContext } from "./commandHandlerContext.js";
+import { AppAgentEvent } from "@typeagent/agent-sdk";
 
+export const DispatcherName = "dispatcher";
 export type RequestId = string | undefined;
 
 export type SearchMenuCommand =
@@ -20,6 +23,13 @@ export type ActionUICommand = "register" | "replace" | "remove";
 
 export type SearchMenuState = "active" | "inactive";
 
+export enum NotifyCommands {
+    ShowSummary = "summarize",
+    Clear = "clear",
+    ShowUnread = "unread",
+    ShowAll = "all",
+}
+
 export type SearchMenuContext = {
     state: SearchMenuState;
     menuId: string;
@@ -27,17 +37,32 @@ export type SearchMenuContext = {
     choices?: string[];
 };
 
+export interface IAgentMessage {
+    message: string;
+    requestId: string | undefined;
+    source: string;
+    actionIndex?: number | undefined;
+    metrics?: IMessageMetrics;
+}
+
+export interface IMessageMetrics {
+    duration: number | undefined;
+    llmCallCount?: number | undefined;
+    entityCount?: number | undefined;
+    marks?: Map<string, number> | undefined;
+}
+
 // Client provided IO
 export interface ClientIO {
     clear(): void;
-    info(message: string, requestId: RequestId): void;
-    status(message: string, requestId: RequestId): void;
-    success(message: string, requestId: RequestId): void;
-    result(message: string, requestId: RequestId): void;
-    warn(message: string, requestId: RequestId): void;
-    error(message: string, requestId: RequestId): void;
+    info(message: IAgentMessage): void;
+    status(message: IAgentMessage): void;
+    success(message: IAgentMessage): void;
+    result(message: IAgentMessage): void;
+    warn(message: IAgentMessage): void;
+    error(message: IAgentMessage): void;
     actionCommand(
-        actionTemplates: ActionTemplate[],
+        actionTemplates: ActionTemplateSequence,
         command: ActionUICommand,
         requestId: RequestId,
     ): void;
@@ -48,13 +73,7 @@ export interface ClientIO {
         choices?: SearchMenuItem[],
         visible?: boolean,
     ): void;
-    setActionStatus(
-        message: string,
-        requestId: RequestId,
-        actionIndex: number,
-        groupId?: string,
-    ): void;
-    updateActionStatus(message: string, groupId: string): void;
+    setActionDisplay(message: IAgentMessage): void;
     askYesNo(
         message: string,
         requestId: RequestId,
@@ -64,7 +83,12 @@ export interface ClientIO {
         message: string,
         requestId: RequestId,
     ): Promise<string | undefined>;
-    notify(event: string, requestId: RequestId, data: any): void;
+    notify(
+        event: string,
+        requestId: RequestId,
+        data: any,
+        source: string,
+    ): void;
     notify(
         event: "explained",
         requestId: RequestId,
@@ -73,8 +97,15 @@ export interface ClientIO {
             fromCache: boolean;
             fromUser: boolean;
         },
+        source: string,
     ): void;
-
+    setDynamicDisplay(
+        source: string,
+        requestId: RequestId,
+        actionIndex: number,
+        displayId: string,
+        nextRefreshMs: number,
+    ): void;
     exit(): void;
 }
 
@@ -87,20 +118,20 @@ function getMessage(input: string | LogFn) {
 
 export interface RequestIO {
     type: "html" | "text";
-    getRequestId(): RequestId;
+    context: CommandHandlerContext | undefined;
     clear(): void;
-    info(message: string | LogFn): void;
-    status(message: string | LogFn): void;
-    success(message: string | LogFn): void;
-    warn(message: string | LogFn): void;
-    error(message: string | LogFn): void;
-    result(message: string | LogFn): void;
+    info(message: string | LogFn, source?: string): void;
+    status(message: string | LogFn, source?: string): void;
+    success(message: string | LogFn, source?: string): void;
+    warn(message: string | LogFn, source?: string): void;
+    error(message: string | LogFn, source?: string): void;
+    result(message: string | LogFn, source?: string): void;
 
     // Action status
-    setActionStatus(
+    setActionDisplay(
         message: string,
         actionIndex: number,
-        groupId?: string,
+        source: string,
     ): void;
 
     // Input
@@ -114,11 +145,28 @@ export interface RequestIO {
     ): Promise<string | undefined>;
     notify(
         event: "explained",
+        requestId: RequestId,
         data: {
             time: string;
             fromCache: boolean;
             fromUser: boolean;
         },
+    ): void;
+    notify(
+        event: "randomCommandSelected",
+        requestId: RequestId,
+        data: { message: string },
+    ): void;
+    notify(
+        event: AppAgentEvent,
+        requestId: RequestId,
+        message: string,
+        source?: string,
+    ): void;
+    notify(
+        event: "showNotifications",
+        requestId: RequestId,
+        filter: NotifyCommands,
     ): void;
 }
 
@@ -127,7 +175,7 @@ export function getConsoleRequestIO(
 ): RequestIO {
     return {
         type: "text",
-        getRequestId: () => undefined,
+        context: undefined,
         clear: () => console.clear(),
         info: (input: string | LogFn) => console.info(getMessage(input)),
         status: (input: string | LogFn) =>
@@ -140,7 +188,7 @@ export function getConsoleRequestIO(
         error: (input: string | LogFn) =>
             console.error(chalk.red(getMessage(input))),
 
-        setActionStatus: (status: string) => console.log(chalk.grey(status)),
+        setActionDisplay: (status: string) => console.log(chalk.grey(status)),
 
         isInputEnabled: () => stdio !== undefined,
         askYesNo: async (message: string, defaultValue?: boolean) => {
@@ -149,46 +197,131 @@ export function getConsoleRequestIO(
         question: async (message: string) => {
             return await stdio?.question(`${message}: `);
         },
-        notify: (event: string, data: any) => {
-            // ignored.
+        notify: (event: string, requestId: RequestId, data: any) => {
+            switch (event) {
+                case AppAgentEvent.Error:
+                    console.error(chalk.red(data));
+                    break;
+                case AppAgentEvent.Warning:
+                    console.warn(chalk.yellow(data));
+                    break;
+                case AppAgentEvent.Info:
+                    console.info(data);
+                    break;
+                default:
+                // ignored.
+            }
         },
     };
 }
 
+function makeClientIOMessage(
+    context: CommandHandlerContext | undefined,
+    message: string,
+    requestId: RequestId,
+    source: string,
+    actionIndex?: number,
+): IAgentMessage {
+    return {
+        message,
+        requestId,
+        source,
+        actionIndex,
+        metrics: Profiler.getInstance().getMetrics(requestId),
+    };
+}
+
 export function getRequestIO(
+    context: CommandHandlerContext | undefined,
     clientIO: ClientIO,
     requestId: RequestId,
 ): RequestIO {
     return {
         type: "html",
-        getRequestId: () => requestId,
+        context: context,
         clear: () => clientIO.clear(),
-        info: (input: string | LogFn) =>
-            clientIO.info(getMessage(input), requestId),
-        status: (input: string | LogFn) =>
-            clientIO.status(chalk.grey(getMessage(input)), requestId),
-        success: (input: string | LogFn) =>
-            clientIO.success(chalk.green(getMessage(input)), requestId),
-        warn: (input: string | LogFn) =>
-            clientIO.warn(chalk.yellow(getMessage(input)), requestId),
-        error: (input: string | LogFn) =>
-            clientIO.error(chalk.red(getMessage(input)), requestId),
-        result: (input: string | LogFn) =>
-            clientIO.result(getMessage(input), requestId),
+        info: (input: string | LogFn, source: string = DispatcherName) =>
+            clientIO.info(
+                makeClientIOMessage(
+                    context,
+                    getMessage(input),
+                    requestId,
+                    source,
+                ),
+            ),
+        status: (input: string | LogFn, source: string = DispatcherName) =>
+            clientIO.status(
+                makeClientIOMessage(
+                    context,
+                    chalk.grey(getMessage(input)),
+                    requestId,
+                    source,
+                ),
+            ),
+        success: (input: string | LogFn, source: string = DispatcherName) =>
+            clientIO.success(
+                makeClientIOMessage(
+                    context,
+                    chalk.green(getMessage(input)),
+                    requestId,
+                    source,
+                ),
+            ),
+        warn: (input: string | LogFn, source: string = DispatcherName) =>
+            clientIO.warn(
+                makeClientIOMessage(
+                    context,
+                    chalk.yellow(getMessage(input)),
+                    requestId,
+                    source,
+                ),
+            ),
+        error: (input: string | LogFn, source: string = DispatcherName) =>
+            clientIO.error(
+                makeClientIOMessage(
+                    context,
+                    chalk.red(getMessage(input)),
+                    requestId,
+                    source,
+                ),
+            ),
+        result: (input: string | LogFn, source: string = DispatcherName) =>
+            clientIO.result(
+                makeClientIOMessage(
+                    context,
+                    getMessage(input),
+                    requestId,
+                    source,
+                ),
+            ),
 
-        setActionStatus: (
+        setActionDisplay: (
             status: string,
             actionIndex: number,
-            groupId?: string,
-        ) => clientIO.setActionStatus(status, requestId, actionIndex, groupId),
+            source: string,
+        ) =>
+            clientIO.setActionDisplay(
+                makeClientIOMessage(
+                    context,
+                    status,
+                    requestId,
+                    source,
+                    actionIndex,
+                ),
+            ),
 
         isInputEnabled: () => true,
         askYesNo: async (message: string, defaultValue?: boolean) =>
             clientIO.askYesNo(message, requestId, defaultValue),
         question: async (message: string) =>
             clientIO.question(message, requestId),
-        notify(event: string, data: any) {
-            clientIO.notify(event, requestId, data);
+        notify(
+            event: string,
+            requestId: RequestId,
+            data: any,
+            source: string = DispatcherName,
+        ) {
+            clientIO.notify(event, requestId, data, source);
         },
     };
 }
@@ -196,7 +329,7 @@ export function getRequestIO(
 export function getNullRequestIO(): RequestIO {
     return {
         type: "text",
-        getRequestId: () => undefined,
+        context: undefined,
         clear: () => {},
         info: () => {},
         status: () => {},
@@ -204,7 +337,7 @@ export function getNullRequestIO(): RequestIO {
         warn: () => {},
         error: () => {},
         result: () => {},
-        setActionStatus: () => {},
+        setActionDisplay: () => {},
         isInputEnabled: () => false,
         askYesNo: async () => false,
         question: async () => undefined,

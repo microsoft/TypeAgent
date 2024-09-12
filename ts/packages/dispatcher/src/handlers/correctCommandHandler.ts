@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 import { printProcessExplanationResult } from "agent-cache";
-import { CommandHandler } from "./common/commandHandler.js";
+import { DispatcherCommandHandler } from "./common/commandHandler.js";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 
-export class CorrectCommandHandler implements CommandHandler {
+export class CorrectCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Correct the last explanation";
     public async run(input: string, context: CommandHandlerContext) {
         if (context.lastRequestAction === undefined) {
@@ -14,7 +14,7 @@ export class CorrectCommandHandler implements CommandHandler {
         if (context.lastExplanation === undefined) {
             throw new Error("No last explanation to correct");
         }
-        const result = await context.agentCache.correctExplaination(
+        const result = await context.agentCache.correctExplanation(
             context.lastRequestAction,
             context.lastExplanation,
             input,

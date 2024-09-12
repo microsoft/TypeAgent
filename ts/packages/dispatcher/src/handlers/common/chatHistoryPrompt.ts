@@ -1,9 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { defaultImpressionInterpreter } from "dispatcher-agent";
+import { Entity } from "@typeagent/agent-sdk";
 import { HistoryContext } from "agent-cache";
 import { TypeChatJsonTranslator } from "typechat";
+
+function entityToText(entity: Entity) {
+    return `${entity.name} (${entity.type})${entity.additionalEntityText ? `: ${entity.additionalEntityText}` : ""}`;
+}
 
 export function makeRequestPromptCreator(
     translator: TypeChatJsonTranslator<object>,
@@ -24,9 +28,8 @@ export function makeRequestPromptCreator(
         latestEntity = "";
         for (let i = 0; i < entities.length; ++i) {
             const entity = entities[i];
-            let interpreter =
-                entity.interpreter || defaultImpressionInterpreter;
-            let curEntityStr = interpreter.entityToText(entity) + "\n";
+
+            let curEntityStr = entityToText(entity) + "\n";
             if (i > 0) {
                 entityStr += curEntityStr;
             } else {

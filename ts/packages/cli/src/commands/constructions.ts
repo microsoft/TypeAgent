@@ -5,8 +5,8 @@ import { Args, Command, Flags } from "@oclif/core";
 import {
     readTestData,
     getCacheFactory,
-    loadTranslatorSchemaConfig,
-} from "agent-dispatcher";
+    loadBuiltinTranslatorSchemaConfig,
+} from "agent-dispatcher/internal";
 import { printImportConstructionResult } from "agent-cache";
 import fs from "node:fs";
 import chalk from "chalk";
@@ -36,7 +36,7 @@ export default class ConstructionsCommand extends Command {
 
         const agentCache = getCacheFactory().create(
             testDataFile.explainerName,
-            loadTranslatorSchemaConfig,
+            loadBuiltinTranslatorSchemaConfig,
         );
         if (!flags.overwrite && args.output && fs.existsSync(args.output)) {
             await agentCache.constructionStore.load(args.output);

@@ -17,30 +17,27 @@
     "./agent/manifest": "./src/agent/playerManifest.json",
     "./agent/handlers": "./dist/agent/playerHandlers.js"
   },
-  "bin": "dist/main.js",
   "scripts": {
     "build": "npm run tsc",
-    "postbuild": "copyfiles -u \"src/**/*.txt\" \"src/**/*.html\" dist",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "tsc": "tsc -p src"
   },
   "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
     "axios": "^1.6.1",
     "chalk": "^5.3.0",
     "common-utils": "workspace:*",
     "debug": "^4.3.4",
-    "dispatcher-agent": "workspace:*",
     "dotenv": "^16.3.1",
     "express": "^4.19.2",
     "open": "^7.0.4",
-    "typechat": "^0.1.0"
+    "typechat": "^0.1.1"
   },
   "devDependencies": {
     "@types/debug": "^4.1.10",
     "@types/express": "^4.17.17",
     "@types/node": "^20.3.1",
     "@types/spotify-api": "^0.0.22",
-    "copyfiles": "^2.4.1",
     "rimraf": "^5.0.5",
     "typescript": "^5.4.2"
   }

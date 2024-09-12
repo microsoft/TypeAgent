@@ -1,23 +1,22 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getTranslatorConfig } from "./agentTranslators.js";
 import {
     InlineTranslatorSchemaDef,
     createJsonTranslatorFromSchemaDef,
-    ActionTemplate,
 } from "common-utils";
 import { getTranslatorActionInfo } from "./actionInfo.js";
 import { Result, success } from "typechat";
 import registerDebug from "debug";
+import { TranslatorConfigProvider } from "./agentTranslators.js";
 
 const debugSwitchSearch = registerDebug("typeagent:switch:search");
 
 function createSelectionSchema(
     translatorName: string,
+    provider: TranslatorConfigProvider,
 ): InlineTranslatorSchemaDef | undefined {
-    const translatorConfig = getTranslatorConfig(translatorName);
-
+    const translatorConfig = provider.getTranslatorConfig(translatorName);
     if (translatorConfig.injected) {
         // No need to select for injected schemas
         selectSchemaCache.set(translatorName, undefined);
@@ -61,12 +60,13 @@ const selectSchemaCache = new Map<
 >();
 function getSelectionSchema(
     translatorName: string,
+    provider: TranslatorConfigProvider,
 ): InlineTranslatorSchemaDef | undefined {
     if (selectSchemaCache.has(translatorName)) {
         return selectSchemaCache.get(translatorName);
     }
 
-    const result = createSelectionSchema(translatorName);
+    const result = createSelectionSchema(translatorName, provider);
     selectSchemaCache.set(translatorName, result);
     return result;
 }
@@ -85,10 +85,13 @@ type AssistantSelectionSchemaEntry = {
     name: string;
     schema: InlineTranslatorSchemaDef;
 };
-export function getAssistantSelectionSchemas(translatorNames: string[]) {
+export function getAssistantSelectionSchemas(
+    translatorNames: string[],
+    provider: TranslatorConfigProvider,
+) {
     return translatorNames
         .map((name) => {
-            return { name, schema: getSelectionSchema(name) };
+            return { name, schema: getSelectionSchema(name, provider) };
         })
         .filter(
             (entry) => entry.schema !== undefined,
@@ -105,8 +108,9 @@ const assistantSelectionLimit = 8192 * 3;
 
 export function loadAssistantSelectionJsonTranslator(
     translatorNames: string[],
+    provider: TranslatorConfigProvider,
 ) {
-    const schemas = getAssistantSelectionSchemas(translatorNames);
+    const schemas = getAssistantSelectionSchemas(translatorNames, provider);
 
     let currentLength = 0;
     let current: AssistantSelectionSchemaEntry[] = [];

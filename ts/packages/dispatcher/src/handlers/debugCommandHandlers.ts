@@ -1,11 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommandHandler } from "./common/commandHandler.js";
+import { DispatcherCommandHandler } from "./common/commandHandler.js";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import inspector from "node:inspector";
 
-export class DebugCommandHandler implements CommandHandler {
+export class DebugCommandHandler implements DispatcherCommandHandler {
     public readonly description = "Start node inspector";
     private debugging = false;
     public async run(input: string, context: CommandHandlerContext) {

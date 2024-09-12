@@ -3,7 +3,11 @@
 
 import { Args, Command, Flags } from "@oclif/core";
 import chalk from "chalk";
-import { TestData, getEmptyTestData, readTestData } from "agent-dispatcher";
+import {
+    TestData,
+    getEmptyTestData,
+    readTestData,
+} from "agent-dispatcher/internal";
 import fs from "node:fs";
 import path from "node:path";
 export default class ExplanationDataSplitCommmand extends Command {

@@ -1,23 +1,22 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type ClueTextAndSelector = {
+export type CrosswordClue = {
     number: number;
     text: string;
     // The CSS Selector for the HTML element that holds the clue
+    // Construct the selector based on the element's Id attribute if the id is present.
     cssSelector: string;
 };
 
 // VERY IMPORTANT: you MUST include ALL the clues.
-export type CluesTextAndSelectorsList = {
-    // the frameIf of the HTML fragment these values are read from
-    frameId: string;
-    across: ClueTextAndSelector[];
-    down: ClueTextAndSelector[];
+export type Crossword = {
+    across: CrosswordClue[];
+    down: CrosswordClue[];
 };
 
-// IMPORTANT: The CrosswordPresence type only has two fields - crossWordPresent and  cluesRootCSSSelector. You must ONLY return these fields when
-// returning a CrosswordPresence response.
+// IMPORTANT: The CrosswordPresence type only has three fields - crossWordPresent, cluesRoootAcrossCSSSelector,
+// and  cluesRoootDownCSSSelector. You must ONLY return these fields when returning a CrosswordPresence response.
 export type CrosswordPresence = {
     // This indicats that a crossword is present on the page. A crossword has a grid
     // of squares and a list of clues (for down and across). Only set this value to true
