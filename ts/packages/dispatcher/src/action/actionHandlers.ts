@@ -7,10 +7,10 @@ import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
     ActionIO,
-    createTurnImpression,
+    createActionResult,
     AppAgentEvent,
     SessionContext,
-    TurnImpression,
+    ActionResult,
     turnImpressionToString,
     DynamicDisplay,
     DisplayType,
@@ -135,7 +135,7 @@ async function executeAction(
     action: Action,
     context: CommandHandlerContext,
     actionIndex: number,
-): Promise<TurnImpression | undefined> {
+): Promise<ActionResult | undefined> {
     const translatorName = action.translatorName;
 
     if (translatorName === undefined) {
@@ -163,12 +163,12 @@ async function executeAction(
                   context.requestId!,
                   actionIndex,
               );
-    const returnedResult: TurnImpression | undefined =
+    const returnedResult: ActionResult | undefined =
         await appAgent.executeAction(action, actionContext);
 
-    let result: TurnImpression;
+    let result: ActionResult;
     if (returnedResult === undefined) {
-        result = createTurnImpression(
+        result = createActionResult(
             `Action ${action.fullActionName} completed.`,
         );
     } else {

@@ -43,7 +43,7 @@ export function entitiesToString(entities: Entity[], indent = ""): string {
         .join("\n");
 }
 
-export function turnImpressionToString(turnImpression: TurnImpression): string {
+export function turnImpressionToString(turnImpression: ActionResult): string {
     if (turnImpression.error) {
         return `Error: ${turnImpression.error}`;
     } else {
@@ -60,11 +60,11 @@ export function turnImpressionToString(turnImpression: TurnImpression): string {
     }
 }
 
-export type TurnImpressionError = {
+export type ActionResultError = {
     error: string;
 };
 
-export type TurnImpressionSuccessNoDisplay = {
+export type ActionResultSuccessNoDisplay = {
     literalText?: string | undefined;
     displayContent?: undefined;
     entities: Entity[];
@@ -74,7 +74,7 @@ export type TurnImpressionSuccessNoDisplay = {
     error?: undefined;
 };
 
-export type TurnImpressionSuccess = {
+export type ActionResultSuccess = {
     literalText?: string | undefined;
     displayContent: DisplayContent;
     entities: Entity[];
@@ -84,23 +84,21 @@ export type TurnImpressionSuccess = {
     error?: undefined;
 };
 
-export type TurnImpression =
-    | TurnImpressionSuccessNoDisplay
-    | TurnImpressionSuccess
-    | TurnImpressionError;
+export type ActionResult =
+    | ActionResultSuccessNoDisplay
+    | ActionResultSuccess
+    | ActionResultError;
 
-export function createTurnImpressionNoDisplay(
+export function createActionResultNoDisplay(
     literalText: string,
-): TurnImpressionSuccessNoDisplay {
+): ActionResultSuccessNoDisplay {
     return {
         literalText,
         entities: [],
     };
 }
 
-export function createTurnImpression(
-    literalText: string,
-): TurnImpressionSuccess {
+export function createActionResult(literalText: string): ActionResultSuccess {
     return {
         literalText,
         entities: [],
@@ -108,10 +106,10 @@ export function createTurnImpression(
     };
 }
 
-export function createTurnImpressionFromTextDisplay(
+export function createActionResultFromTextDisplay(
     displayText: string,
     literalText?: string,
-): TurnImpressionSuccess {
+): ActionResultSuccess {
     return {
         literalText,
         entities: [],
@@ -119,10 +117,10 @@ export function createTurnImpressionFromTextDisplay(
     };
 }
 
-export function createTurnImpressionFromHtmlDisplay(
+export function createActionResultFromHtmlDisplay(
     displayText: string,
     literalText?: string,
-): TurnImpressionSuccess {
+): ActionResultSuccess {
     return {
         literalText,
         entities: [],
@@ -133,9 +131,7 @@ export function createTurnImpressionFromHtmlDisplay(
     };
 }
 
-export function createTurnImpressionFromError(
-    error: string,
-): TurnImpressionError {
+export function createActionResultFromError(error: string): ActionResultError {
     return {
         error,
     };

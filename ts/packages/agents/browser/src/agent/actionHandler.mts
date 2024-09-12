@@ -8,7 +8,7 @@ import {
   AppActionWithParameters,
   AppAgent,
   SessionContext,
-  createTurnImpression,
+  createActionResult,
 } from "@typeagent/agent-sdk";
 import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import {
@@ -141,10 +141,10 @@ async function executeBrowserAction(
         messageType = "browserActionRequest.paleoBioDb";
       } else if (action.translatorName === "browser.crossword") {
         const crosswordResult = await handleCrosswordAction(action, context);
-        return createTurnImpression(crosswordResult);
+        return createActionResult(crosswordResult);
       } else if (action.translatorName === "browser.commerce") {
         const commerceResult = await handleCommerceAction(action, context);
-        return createTurnImpression(commerceResult);
+        return createActionResult(commerceResult);
       }
 
       webSocketEndpoint.send(

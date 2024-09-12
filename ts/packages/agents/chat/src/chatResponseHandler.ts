@@ -20,14 +20,14 @@ import { ChatModel, bing, openai } from "aiclient";
 import {
     ActionContext,
     AppAgent,
-    createTurnImpressionNoDisplay,
-    TurnImpressionSuccess,
+    createActionResultNoDisplay,
+    ActionResultSuccess,
 } from "@typeagent/agent-sdk";
 import { PromptSection } from "typechat";
 import {
     AppAction,
-    TurnImpression,
-    createTurnImpression,
+    ActionResult,
+    createActionResult,
 } from "@typeagent/agent-sdk";
 import { fileURLToPath } from "node:url";
 import { conversation as Conversation } from "knowledge-processor";
@@ -74,8 +74,8 @@ async function handleChatResponse(
 
                 const needDisplay = context.streamingContext !== generatedText;
                 const result = needDisplay
-                    ? createTurnImpression(generatedText)
-                    : createTurnImpressionNoDisplay(generatedText);
+                    ? createActionResult(generatedText)
+                    : createActionResultNoDisplay(generatedText);
 
                 let entities = parameters.generatedTextEntities || [];
                 if (parameters.userRequestEntities !== undefined) {
@@ -124,7 +124,7 @@ async function handleChatResponse(
                             matches.response &&
                             matches.response.answer
                         ) {
-                            return createTurnImpression(
+                            return createActionResult(
                                 matches.response.answer.answer!,
                             );
                         } else {
@@ -135,7 +135,7 @@ async function handleChatResponse(
             }
         }
     }
-    return createTurnImpression("No information found");
+    return createActionResult("No information found");
 }
 
 function logEntities(label: string, entities?: Entity[]): void {
@@ -268,8 +268,8 @@ async function handleLookup(
     chatAction: LookupAndGenerateResponseAction,
     context: ActionContext,
     settings: LookupSettings,
-): Promise<TurnImpression> {
-    let literalResponse = createTurnImpression("No information found");
+): Promise<ActionResult> {
+    let literalResponse = createActionResult("No information found");
 
     let lookups = chatAction.parameters.internetLookups;
     if (!lookups || lookups.length === 0) {
@@ -303,7 +303,7 @@ async function handleLookup(
         ),
     );
     // Capture answers in the turn impression to return
-    literalResponse = updateTurnImpression(lookupContext, literalResponse);
+    literalResponse = updateActionResult(lookupContext, literalResponse);
     context.actionIO.setDisplay(literalResponse.displayContent);
     // Generate entities if needed
     if (settings.entityGenModel) {
@@ -361,10 +361,10 @@ function getLookupInstructions(): PromptSection[] {
     return [promptLib.dateTimePromptSection()];
 }
 
-function updateTurnImpression(
+function updateActionResult(
     context: LookupContext,
-    literalResponse: TurnImpressionSuccess,
-): TurnImpressionSuccess {
+    literalResponse: ActionResultSuccess,
+): ActionResultSuccess {
     if (context.answers.size > 0) {
         literalResponse.literalText = "";
         literalResponse.displayContent = {

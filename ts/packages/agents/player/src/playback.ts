@@ -4,7 +4,7 @@
 import { getDevices, getPlaybackState, transferPlayback } from "./endpoints.js";
 import { IClientContext } from "./client.js";
 import chalk from "chalk";
-import { DisplayContent, TurnImpressionSuccess } from "@typeagent/agent-sdk";
+import { DisplayContent, ActionResultSuccess } from "@typeagent/agent-sdk";
 
 // convert milliseconds to elapsed minutes and seconds as a string
 function msToElapsedMinSec(ms: number) {
@@ -52,7 +52,7 @@ export function chalkStatus(status: SpotifyApi.CurrentPlaybackResponse) {
 
 function htmlPlaybackStatus(
     status: SpotifyApi.CurrentPlaybackResponse,
-    turnImpression: TurnImpressionSuccess,
+    turnImpression: ActionResultSuccess,
 ) {
     let displayHTML = "";
     if (status.item) {
@@ -103,7 +103,7 @@ export async function htmlStatus(context: IClientContext) {
         type: "html",
         content: "<div data-group='status'>Status...",
     };
-    const turnImpression: TurnImpressionSuccess = {
+    const turnImpression: ActionResultSuccess = {
         literalText: "",
         entities: [],
         displayContent,
