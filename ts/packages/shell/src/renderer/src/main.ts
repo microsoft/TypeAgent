@@ -290,7 +290,7 @@ document.addEventListener("DOMContentLoaded", function () {
         cameraView.toggleVisibility();
     };
 
-    const settingsView = new SettingsView(tabs, chatView);
+    const settingsView = new SettingsView(chatView);
     tabs.getTabContainerByName("Settings").append(settingsView.getContainer());
     tabs.getTabContainerByName("Metrics").append(
         new MetricsView().getContainer(),

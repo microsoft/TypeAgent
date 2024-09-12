@@ -8,8 +8,6 @@ import {
     shell,
     BrowserWindow,
     globalShortcut,
-    Menu,
-    MenuItem,
     dialog,
     DevicePermissionHandlerHandlerDetails,
     WebContents,
@@ -68,7 +66,7 @@ function createWindow(): void {
         width: ShellSettings.getinstance().width,
         height: ShellSettings.getinstance().height,
         show: false,
-        autoHideMenuBar: ShellSettings.getinstance().hideMenu,
+        
         webPreferences: {
             preload: join(__dirname, "../preload/index.mjs"),
             sandbox: false,
@@ -124,20 +122,16 @@ function createWindow(): void {
         mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
     }
 
-    setAppMenu(mainWindow);
+    mainWindow.setMenu(null);
+
     setupZoomHandlers(mainWindow);
 
     // Notify renderer process whenever settings are modified
     ShellSettings.getinstance().onSettingsChanged = (): void => {
-        const tempFunc = ShellSettings.getinstance().onSettingsChanged;
-        ShellSettings.getinstance().onSettingsChanged = null;
-
         mainWindow?.webContents.send(
             "settings-changed",
-            ShellSettings.getinstance(),
+            ShellSettings.getinstance().getSerializable(),
         );
-
-        ShellSettings.getinstance().onSettingsChanged = tempFunc;
     };
 
     ShellSettings.getinstance().onShowSettingsDialog = (dialogName: string): void => {
@@ -145,6 +139,14 @@ function createWindow(): void {
             "show-dialog",
             dialogName,
         );
+    }
+
+    ShellSettings.getinstance().onRunDemo = (interactive: boolean): void => {
+        runDemo(mainWindow!, interactive);
+    }
+
+    ShellSettings.getinstance().toggleToopMost = () => {
+        mainWindow?.setAlwaysOnTop(!mainWindow?.isAlwaysOnTop())
     }
 }
 
@@ -604,18 +606,10 @@ app.whenReady().then(async () => {
         // Save the shell configurable settings
         ShellSettings.getinstance().microphoneId = settings.microphoneId;
         ShellSettings.getinstance().microphoneName = settings.microphoneName;
-        ShellSettings.getinstance().hideMenu = settings.hideMenu;
-        ShellSettings.getinstance().hideTabs = settings.hideTabs;
         ShellSettings.getinstance().tts = settings.tts;
         ShellSettings.getinstance().ttsSettings = settings.ttsSettings;
         ShellSettings.getinstance().agentGreeting = settings.agentGreeting;
         ShellSettings.getinstance().save();
-
-        // Update based on the new settings
-        mainWindow!.autoHideMenuBar = settings.hideMenu;
-
-        // if the menu bar is visible it won't auto hide immediately when this is toggled so we have to help it along
-        mainWindow?.setMenuBarVisibility(!settings.hideMenu);
     });
 
     globalShortcut.register("Alt+Right", () => {
@@ -679,10 +673,6 @@ function zoomOut(mainWindow: BrowserWindow) {
     );
 }
 
-function showDialog(dialogName: string) {
-    mainWindow?.webContents.send("show-dialog", dialogName);
-}
-
 const isMac = process.platform === "darwin";
 
 function setupZoomHandlers(mainWindow: BrowserWindow) {
@@ -690,9 +680,9 @@ function setupZoomHandlers(mainWindow: BrowserWindow) {
     mainWindow.webContents.on("before-input-event", (_event, input) => {
         if ((isMac ? input.meta : input.control) && input.type === "keyDown") {
             // In addition to CmdOrCtrl+= accelerator
-            if (input.code == "NumpadAdd") {
+            if (input.key == "NumpadAdd" || input.key == "+" || input.key == "=") {
                 zoomIn(mainWindow);
-            } else if (input.key === "-") {
+            } else if (input.key === "-" || input.key == "NumpadMinus") {
                 // REVIEW: accelerator doesn't work for CmdOrCtrl+-. Handle manually.
                 // Handle both regular and numpad minus
                 zoomOut(mainWindow);
@@ -708,106 +698,4 @@ function setupZoomHandlers(mainWindow: BrowserWindow) {
             zoomOut(mainWindow);
         }
     });
-}
-
-// In this file you can include the rest of your app"s specific main process
-// code. You can also put them in separate files and require them here.
-function setAppMenu(mainWindow: BrowserWindow) {
-    const template: Electron.MenuItemConstructorOptions[] = [
-        {
-            label: "File",
-            role: "fileMenu",
-        },
-        {
-            id: "viewMenu",
-            label: "View",
-            submenu: [
-                { role: "reload" },
-                { role: "forceReload" },
-                { role: "toggleDevTools" },
-                { type: "separator" },
-                { role: "resetZoom" },
-                {
-                    id: "zoomIn",
-                    label: "Zoom In",
-                    accelerator: "CmdOrCtrl+=",
-                    click: () => zoomIn(mainWindow),
-                },
-                {
-                    id: "zoomOut",
-                    label: "Zoom Out",
-                    accelerator: "CmdOrCtrl+-", // doesn't work for some reason. Handle manually. See setupZoomHandlers
-                    click: () => zoomOut(mainWindow),
-                },
-                { type: "separator" },
-                { role: "togglefullscreen" },
-            ],
-        },
-        {
-            id: "demoMenu",
-            label: "Demo",
-            submenu: [],
-        },
-        {
-            id: "settingsMenu",
-            label: "Settings",
-            click: () => showDialog("Settings"),
-        },
-        {
-            id: "infoMenu",
-            label: "Info",
-            submenu: [
-                {
-                    id: "metricsMenu",
-                    label: "Show Metrics",
-                    click: () => showDialog("Metrics"),
-                },
-            ],
-        },
-        {
-            id: "windowMenu",
-            role: "windowMenu",
-        },
-        {
-            role: "help",
-            submenu: [
-                {
-                    label: "Learn More",
-                    click: () => showDialog("Help"),
-                },
-            ],
-        },
-    ];
-
-    const menu = Menu.buildFromTemplate(template);
-    Menu.setApplicationMenu(menu);
-
-    const demoItem = menu.getMenuItemById("demoMenu");
-    demoItem?.submenu?.append(
-        new MenuItem({
-            label: "Run Demo",
-            click() {
-                runDemo(mainWindow!, false);
-            },
-        }),
-    );
-
-    demoItem?.submenu?.append(
-        new MenuItem({
-            label: "Run Demo Interactive",
-            click() {
-                runDemo(mainWindow!, true);
-            },
-        }),
-    );
-
-    const windowItem = menu.getMenuItemById("windowMenu");
-    windowItem?.submenu?.append(
-        new MenuItem({
-            label: "Always on Top",
-            click() {
-                mainWindow?.setAlwaysOnTop(true, "floating");
-            },
-        }),
-    );
 }

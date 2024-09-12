@@ -27,7 +27,6 @@ class ShellShowSettingsCommandHandler implements CommandHandler {
     public async run(_input: string, context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
         agentContext.settings.show("settings");
-        context.actionIO.setDisplay("Showing settings.");
     }
 }
 
@@ -36,7 +35,6 @@ class ShellShowHelpCommandHandler implements CommandHandler {
     public async run(_input: string, context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
         agentContext.settings.show("help");
-        context.actionIO.setDisplay("Showing help.");
     }
 }
 
@@ -45,10 +43,8 @@ class ShellShowMetricsCommandHandler implements CommandHandler {
     public async run(_input: string, context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
         agentContext.settings.show("Metrics");
-        context.actionIO.setDisplay("Showing metrics.");
     }
 }
-
 
 class ShellShowRawSettingsCommandHandler implements CommandHandler {
     public readonly description = "Shows raw JSON shell settings";
@@ -98,9 +94,29 @@ class ShellSetSettingCommandHandler implements CommandHandler {
     }
 }
 
+class ShellRunDemoCommandHandler implements CommandHandler {
+    public readonly description = "Run Demo";
+    public async run(_input: string, context: ActionContext<ShellContext>) {        
+        context.sessionContext.agentContext.settings.runDemo();
+    }
+}
+
+class ShellRunDemoInteractiveCommandHandler implements CommandHandler {
+    public readonly description = "Run Demo Interactive";
+    public async run(_input: string, context: ActionContext<ShellContext>) {        
+        context.sessionContext.agentContext.settings.runDemo(true);
+    }
+}
+
+class ShellSetTopMostCommandHandler implements CommandHandler {
+    public readonly description = "Always keep the shell window on top of other windows";
+    public async run(_input: string, context: ActionContext<ShellContext>) {        
+        context.sessionContext.agentContext.settings.toggleTopMost();
+    }
+}
+
 const handlers: CommandHandlerTable = {
     description: "Shell settings command",
-    defaultSubCommand: new ShellShowSettingsCommandHandler(),
     commands: {
         show: {
             description: "Show shell settings",
@@ -113,6 +129,14 @@ const handlers: CommandHandlerTable = {
             }
         },
         set: new ShellSetSettingCommandHandler(),
+        run: {
+            description: "Run Demo",
+            defaultSubCommand: new ShellRunDemoCommandHandler(),
+            commands: {
+                interactive: new ShellRunDemoInteractiveCommandHandler(),
+            }
+        },
+        topmost: new ShellSetTopMostCommandHandler(),
     },
 };
 
