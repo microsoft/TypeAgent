@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { iconAccept, iconCamera, iconCancel, iconRefresh } from "./icon";
+import { iconAccept, iconCamera, iconCameraSwap, iconCancel, iconRefresh } from "./icon";
 
 export class CameraView {
     private mainContainer: HTMLDivElement;
@@ -17,6 +17,12 @@ export class CameraView {
     private acceptButton: HTMLButtonElement = document.createElement("button");
     private cancelButton: HTMLButtonElement = document.createElement("button");
     private retryButon: HTMLButtonElement = document.createElement("button");
+    private swapCameras: HTMLButtonElement = document.createElement("button");
+    private cameraStatus: HTMLDivElement;
+
+    private cameras: MediaDeviceInfo[] = new Array<MediaDeviceInfo>();
+    private cameraIndex: number = 0;
+
 
     constructor(saveImageCallback: (image: HTMLImageElement) => void) {
         const videoContainer: HTMLDivElement = document.createElement("div");
@@ -25,6 +31,7 @@ export class CameraView {
         this.canvas = document.createElement("canvas");
         this.video = document.createElement("video");
         this.img = document.createElement("img");
+        this.cameraStatus = document.createElement("div");
 
         this.video.id = "video";
         this.snapButton.id = "snapButton";
@@ -33,13 +40,14 @@ export class CameraView {
         const cameraIcon = iconCamera("white");
         cameraIcon.className = "camera-button-image";
         this.snapButton.append(cameraIcon);
-        this.snapButton.className = "camera-button camera-button-center";
+        this.snapButton.className = "camera-button camera-button-grouped";
         this.snapButton.onclick = (e: MouseEvent) => {
             this.takePicture();
             e.preventDefault();
 
             this.acceptButton.classList.remove("camera-hidden");
             this.snapButton.classList.add("camera-hidden");
+            this.swapCameras.classList.add("camera-hidden");
             this.retryButon.classList.remove("camera-hidden");
             this.video.classList.add("camera-hidden");
             this.pictureDiv.classList.remove("camera-hidden");
@@ -77,10 +85,27 @@ export class CameraView {
             this.retryButon.classList.add("camera-hidden");
             this.video.classList.remove("camera-hidden");
             this.snapButton.classList.remove("camera-hidden");
+            this.swapCameras.classList.remove("camera-hidden");
+        };
+
+        const swapCameraIcon = iconCameraSwap("white");
+        swapCameraIcon.className = "camera-button-image";
+        this.swapCameras.append(swapCameraIcon);
+        this.swapCameras.className = "camera-button camera-button-grouped";
+        this.swapCameras.onclick = () => {
+            this.stopCamera();
+            this.cameraIndex++;
+
+            if (this.cameraIndex >= this.cameras.length) {
+                this.cameraIndex = 0;
+            }
+
+            this.startCamera();
         };
 
         buttonDiv.className = "camera-buttons";
         buttonDiv.append(this.snapButton);
+        buttonDiv.append(this.swapCameras);
         buttonDiv.append(this.acceptButton);
         buttonDiv.append(this.cancelButton);
         buttonDiv.append(this.retryButon);
@@ -104,12 +129,41 @@ export class CameraView {
             }
         };
 
+        this.video.onplay= () => {
+            this.video.classList.remove("camera-hidden");
+        }
+        this.video.classList.add("camera-hidden");
+
+        this.cameraStatus.innerText = "Starting camera...";
+        this.cameraStatus.classList.add("camera-status");
+
         this.mainContainer = document.createElement("div");
         this.mainContainer.className = "camera-container camera-hidden";
         this.mainContainer.append(videoContainer);
         this.mainContainer.append(this.pictureDiv);
         this.mainContainer.append(this.canvas);
+        this.mainContainer.append(this.cameraStatus);
         this.mainContainer.append(buttonDiv);
+
+        // List cameras and microphones.
+        navigator.mediaDevices
+            .enumerateDevices()
+            .then((devices) => {
+                devices.forEach((device) => {
+                    if (device.kind === "videoinput") {
+                        console.log(`${device.kind}: ${device.label} id = ${device.deviceId}`);
+                        this.cameras.push(device);
+                    }
+                });
+
+                if (devices.length < 2) {
+                    this.swapCameras.classList.add("single-camera");
+                }
+            })
+            .catch((err) => {
+                console.error(`${err.name}: ${err.message}`);
+        });
+)
     }
 
     // Capture a photo by fetching the current contents of the video
@@ -158,14 +212,21 @@ export class CameraView {
 
     public startCamera() {
         navigator.mediaDevices
-            .getUserMedia({ video: true, audio: false })
+            .getUserMedia({ video: { deviceId: this.cameras[this.cameraIndex].deviceId }, audio: false })
             .then((stream) => {
+                this.snapButton.classList.remove("camera-hidden");
+                this.swapCameras.classList.remove("camera-hidden");
+                this.cameraStatus.classList.add("camera-hidden");
                 this.mediaStream = stream;
                 this.video.srcObject = stream;
                 this.video.play();
             })
             .catch((err) => {
                 console.error(`An error occurred: ${err}`);
+                this.cameraStatus.innerText = "Error starting camera...";
+                this.cameraStatus.classList.remove("camera-hidden");
+                this.video.classList.add("camera-hidden");
+                this.snapButton.classList.add("camera-hidden");                
             });
 
         this.clearPhoto();
@@ -183,17 +244,19 @@ export class CameraView {
 
     public toggleVisibility() {
         if (this.getContainer().classList.contains("camera-hidden")) {
-            this.getContainer().classList.remove("camera-hidden");
-            this.video.classList.remove("camera-hidden");
+            this.getContainer().classList.remove("camera-hidden");        
+            this.cameraStatus.innerText = "Starting camera...";
+            this.cameraStatus.classList.remove("camera-hidden");                        
             this.pictureDiv.classList.add("camera-hidden");
-            this.acceptButton.classList.add("camera-hidden");
-            this.snapButton.classList.remove("camera-hidden");
+            this.acceptButton.classList.add("camera-hidden");            
             this.retryButon.classList.add("camera-hidden");
+            this.canvas.classList.add("camera-hidden");
 
             this.startCamera();
         } else {
             this.getContainer().classList.add("camera-hidden");
             this.stopCamera();
+            this.video.classList.add("camera-hidden");
         }
     }
 }
