@@ -726,7 +726,7 @@ let currentCrosswordUrl = "";
 async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
     let messageType = "enableSiteTranslator";
     let messageBody = "";
-    if (targetTab.url?.startsWith("https://paleobiodb.org/")) {
+    if (targetTab.url?.startsWith("https://paleobiodb.org")) {
         // insert site-specific script
         const result = await chrome.tabs.sendMessage(targetTab.id!, {
             type: "setup_paleoBioDb",
@@ -743,15 +743,15 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
     }
 
     if (
-        targetTab.url?.startsWith("https://embed.universaluclick.com/") ||
+        targetTab.url?.startsWith("https://embed.universaluclick.com") ||
         targetTab.url?.startsWith("https://data.puzzlexperts.com/puzzleapp") ||
         targetTab.url?.startsWith("https://nytsyn.pzzl.com/cwd_seattle") ||
         targetTab.url?.startsWith("https://www.wsj.com/puzzles/crossword") ||
         targetTab.url?.startsWith(
-            "https://www.seattletimes.com/games-nytimes-crossword/",
+            "https://www.seattletimes.com/games-nytimes-crossword",
         ) ||
         targetTab.url?.startsWith(
-            "https://www.denverpost.com/games/daily-crossword/",
+            "https://www.denverpost.com/games/daily-crossword",
         ) ||
         targetTab.url?.startsWith(
             "https://www.bestcrosswords.com/bestcrosswords/guestconstructor",
@@ -769,9 +769,9 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
     }
 
     if (
-        targetTab.url?.startsWith("https://www.homedepot.com/") ||
-        targetTab.url?.startsWith("https://www.target.com/") ||
-        targetTab.url?.startsWith("https://www.walmart.com/")
+        targetTab.url?.startsWith("https://www.homedepot.com") ||
+        targetTab.url?.startsWith("https://www.target.com") ||
+        targetTab.url?.startsWith("https://www.walmart.com")
     ) {
         // insert ui automation script
         const result = await chrome.tabs.sendMessage(targetTab.id!, {
