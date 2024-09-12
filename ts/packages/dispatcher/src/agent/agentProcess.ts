@@ -36,7 +36,7 @@ if (typeof module.instantiate !== "function") {
 
 const agent: AppAgent = module.instantiate();
 
-const agentInvokeHandler: AgentInvokeFunctions = {
+const agentInvokeHandlers: AgentInvokeFunctions = {
     async initializeAgentContext(): Promise<any> {
         if (agent.initializeAgentContext === undefined) {
             throw new Error("Invalid invocation of initializeAgentContext");
@@ -98,25 +98,6 @@ const agentInvokeHandler: AgentInvokeFunctions = {
             getSessionContextShim(param),
         );
     },
-    async streamPartialAction(
-        param: Partial<ContextParams> & {
-            actionName: string;
-            type: string;
-            displayId: string;
-            partial: boolean;
-        },
-    ): Promise<any> {
-        if (agent.streamPartialAction === undefined) {
-            throw new Error("Invalid invocation of streamPartialAction");
-        }
-        return agent.streamPartialAction(
-            param.actionName,
-            param.type,
-            param.displayId,
-            param.partial,
-            getActionContextShim(param),
-        );
-    },
     async closeAgentContext(param: Partial<ContextParams>): Promise<any> {
         const result = await agent.closeAgentContext?.(
             getSessionContextShim(param),
@@ -148,6 +129,28 @@ const agentInvokeHandler: AgentInvokeFunctions = {
     },
 };
 
+const agentCallHandlers: AgentCallFunctions = {
+    async streamPartialAction(
+        param: Partial<ContextParams> & {
+            actionName: string;
+            name: string;
+            value: string;
+            delta: string | undefined;
+        },
+    ): Promise<any> {
+        if (agent.streamPartialAction === undefined) {
+            throw new Error("Invalid invocation of streamPartialAction");
+        }
+        return agent.streamPartialAction(
+            param.actionName,
+            param.name,
+            param.value,
+            param.delta,
+            getActionContextShim(param),
+        );
+    },
+};
+
 if (process.send === undefined) {
     throw new Error("No IPC channel to parent process");
 }
@@ -161,7 +164,7 @@ const rpc = createRpc<
     AgentContextCallFunctions,
     AgentInvokeFunctions,
     AgentCallFunctions
->(checkedProcess, agentInvokeHandler);
+>(checkedProcess, agentInvokeHandlers, agentCallHandlers);
 
 function getStorage(contextId: number, session: boolean): Storage {
     const tokenCachePersistence: TokenCachePersistence = {
@@ -313,14 +316,22 @@ function getActionContextShim(
         get type(): DisplayType {
             return "text";
         },
-        setActionDisplay(content: string): void {
-            rpc.send("setActionDisplay", {
+        setDisplay(content: string): void {
+            rpc.send("setDisplay", {
+                actionContextId,
+                content,
+            });
+        },
+        appendDisplay(content: string): void {
+            rpc.send("appendDisplay", {
                 actionContextId,
                 content,
             });
         },
     };
     return {
+        // streamingContext is only used by the agent, so it is not mirrored back to the dispatcher.
+        streamingContext: undefined,
         get sessionContext() {
             return sessionContext;
         },
@@ -336,9 +347,13 @@ function getActionContextShim(
     };
 }
 
+const allAgentInterface = Object.keys(agentInvokeHandlers).concat(
+    Object.keys(agentCallHandlers),
+);
+
 process.send!({
     type: "initialized",
-    agentInterface: Object.keys(agentInvokeHandler).filter(
+    agentInterface: allAgentInterface.filter(
         (a: string) =>
             (agent as any)[a] !== undefined ||
             (a === "closeAgentContext" &&

@@ -47,7 +47,7 @@ import {
 } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
-import { AppAgentEvent } from "@typeagent/agent-sdk";
+import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";
 import { conversation as Conversation } from "knowledge-processor";
 import { AppAgentManager, AppAgentState } from "./appAgentManager.js";
 import { getBuiltinAppAgentProvider } from "../../agent/agentConfig.js";
@@ -97,6 +97,8 @@ export type CommandHandlerContext = {
     lastExplanation?: object;
 
     transientAgents: Record<string, boolean | undefined>;
+
+    streamingActionContext?: ActionContext<unknown> | undefined;
 };
 
 export function updateCorrectionContext(

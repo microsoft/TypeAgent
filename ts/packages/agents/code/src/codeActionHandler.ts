@@ -79,9 +79,7 @@ async function updateCodeContext(
                                     data.body.callId,
                                 );
                                 const { resolve, context } = pendingCall;
-                                context.actionIO.setActionDisplay(
-                                    data.body.message,
-                                );
+                                context.actionIO.setDisplay(data.body.message);
                                 resolve();
                             }
 

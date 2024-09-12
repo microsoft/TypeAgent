@@ -4,6 +4,8 @@ Email agent is **sample code** that explores how to build a typed email agent wi
 
 This agent depends on the utility library [graph-utils](../graphUtils/src/mailClient.ts) to implement different email actions.
 
+The email agent uses the Microsoft Graph API to interact with the user's email. The agent uses `@microsoft/microsoft-graph-client` library to interact with the Microsoft Graph API. The agent enables operations to compose, reply, and get email messages.
+
 To build the email agent, it needs to provide a manifest and an instantiation entry point.  
 These are declared in the `package.json` as export paths:
 
@@ -25,6 +27,15 @@ Note: You have to just do this once to create a `Graph Client` application.
 ### Manifest
 
 When loading email agent in a NPM package, the dispatcher first loads the [emailManifest.json](./src/emailManifest.json).
+
+### Fix issues with identity cache
+
+The email agent uses the `@azure/identity-cache-persistence` package to persist the user's identity information using device code flow, if you are facing issues with the identity cache, you can clear the cache by running the following commands:
+
+```
+cd %localappdata%/.IdentityService
+del typeagent-tokencache*
+```
 
 ### Sample User Requests
 

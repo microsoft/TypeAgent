@@ -58,8 +58,8 @@ function addEvents(
             }
         }
     });
-    api.onResponse((_, agentMessage) => {
-        chatView.addAgentMessage(agentMessage);
+    api.onResponse((_, agentMessage, append) => {
+        chatView.addAgentMessage(agentMessage, { append });
     });
     api.onSetDynamicActionDisplay(
         (_, source, id, actionIndex, displayId, nextRefreshMs) =>
@@ -203,8 +203,7 @@ function showNotifications(
             source: "shell",
             requestId: requestId,
         },
-        false,
-        true,
+        { notification: true },
     );
 }
 

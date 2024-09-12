@@ -93,8 +93,9 @@ export function questionInput(
         "replacementDiv",
         "replacement-textarea",
         {
-            onSend: (text) => {
-                chatView.answer(questionId, text, id);
+            onSend: (html) => {
+                // REVIEW: text is from innerHTML, is that ok?
+                chatView.answer(questionId, html, id);
             },
         },
     );

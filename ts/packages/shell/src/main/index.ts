@@ -26,10 +26,12 @@ import {
     Dispatcher,
 } from "agent-dispatcher";
 
-import { SearchMenuCommand } from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
+import {
+    IAgentMessage,
+    SearchMenuCommand,
+} from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
 import {
     ActionTemplateSequence,
-    IAgentMessage,
     SearchMenuItem,
 } from "../preload/electronTypes.js";
 import { ShellSettings } from "./shellSettings.js";
@@ -253,13 +255,13 @@ async function triggerRecognitionOnce(dispatcher: Dispatcher) {
     );
 }
 
-function showResult(message: IAgentMessage) {
+function showResult(message: IAgentMessage, append: boolean = false) {
     // Ignore message without requestId
     if (message.requestId === undefined) {
         console.warn("showResult: requestId is undefined");
         return;
     }
-    mainWindow?.webContents.send("response", message);
+    mainWindow?.webContents.send("response", message, append);
 }
 
 function sendStatusMessage(message: IAgentMessage, temporary: boolean = false) {
@@ -408,7 +410,8 @@ const clientIO: ClientIO = {
     warn: sendStatusMessage,
     error: sendStatusMessage,
     result: showResult,
-    setActionDisplay: showResult,
+    setDisplay: showResult,
+    appendDisplay: (message) => showResult(message, true),
     setDynamicDisplay,
     searchMenuCommand,
     actionCommand,
