@@ -550,7 +550,7 @@ export function setContent(
     // Process content according to type
     const contentHtml =
         type === "html"
-            ? DOMPurify.sanitize(text)
+            ? DOMPurify.sanitize(text, { ADD_ATTR: ["target"] })
             : enableText2Html
               ? textToHtml(text)
               : stripAnsi(text);
