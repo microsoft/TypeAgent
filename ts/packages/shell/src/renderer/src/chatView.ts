@@ -1168,9 +1168,9 @@ export class ChatView {
         } else if (request.type === "html") {
             let tempDiv: HTMLDivElement = document.createElement("div");
             tempDiv.innerHTML = request.content;
-
             images = await this.extractMultiModalContent(tempDiv);
             requestText = tempDiv.innerText;
+            request.content = tempDiv.innerHTML;
         } else {
             requestText = request.content;
         }
@@ -1197,10 +1197,14 @@ export class ChatView {
 
     async extractMultiModalContent(tempDiv: HTMLDivElement): Promise<string[]> {
         let images = tempDiv.querySelectorAll<HTMLImageElement>(
-            ".chat-inpput-dropImage",
+            ".chat-input-dropImage",
         );
         let retVal: string[] = new Array<string>(images.length);
         for (let i = 0; i < images.length; i++) {
+
+            images[i].classList.remove("chat-input-dropImage");
+            images[i].classList.add("chat-input-image");
+
             if (images[i].src.startsWith("data:image")) {
                 retVal[i] = images[i].src;
             } else if (images[i].src.startsWith("blob:")) {

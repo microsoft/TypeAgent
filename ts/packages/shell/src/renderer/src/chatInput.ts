@@ -275,7 +275,8 @@ export class ChatInput {
 
         dropImg.src =
             `data:image/${mimeType};base64,` + _arrayBufferToBase64(buffer);
-        dropImg.className = "chat-inpput-dropImage";
+
+        dropImg.className = "chat-input-dropImage";
 
         this.textarea.getTextEntry().append(dropImg);
     }
