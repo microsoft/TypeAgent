@@ -55,7 +55,6 @@ export class ShellSettings
     }
 
     private constructor(settings: ShellSettingsType | null = null) {
-
         if (settings === null) {
             settings = {
                 ...defaultSettings,

@@ -69,7 +69,7 @@ function createWindow(): void {
         height: ShellSettings.getinstance().height,
         show: false,
         autoHideMenuBar: true,
-        
+
         webPreferences: {
             preload: join(__dirname, "../preload/index.mjs"),
             sandbox: false,
@@ -137,20 +137,19 @@ function createWindow(): void {
         );
     };
 
-    ShellSettings.getinstance().onShowSettingsDialog = (dialogName: string): void => {
-        mainWindow?.webContents.send(
-            "show-dialog",
-            dialogName,
-        );
-    }
+    ShellSettings.getinstance().onShowSettingsDialog = (
+        dialogName: string,
+    ): void => {
+        mainWindow?.webContents.send("show-dialog", dialogName);
+    };
 
     ShellSettings.getinstance().onRunDemo = (interactive: boolean): void => {
         runDemo(mainWindow!, interactive);
-    }
+    };
 
     ShellSettings.getinstance().toggleToopMost = () => {
-        mainWindow?.setAlwaysOnTop(!mainWindow?.isAlwaysOnTop())
-    }
+        mainWindow?.setAlwaysOnTop(!mainWindow?.isAlwaysOnTop());
+    };
 }
 
 /**
@@ -687,7 +686,11 @@ function setupZoomHandlers(mainWindow: BrowserWindow) {
     mainWindow.webContents.on("before-input-event", (_event, input) => {
         if ((isMac ? input.meta : input.control) && input.type === "keyDown") {
             // In addition to CmdOrCtrl+= accelerator
-            if (input.key == "NumpadAdd" || input.key == "+" || input.key == "=") {
+            if (
+                input.key == "NumpadAdd" ||
+                input.key == "+" ||
+                input.key == "="
+            ) {
                 zoomIn(mainWindow);
             } else if (input.key == "-" || input.key == "NumpadMinus") {
                 // REVIEW: accelerator doesn't work for CmdOrCtrl+-. Handle manually.

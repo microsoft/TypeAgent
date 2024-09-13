@@ -96,21 +96,22 @@ class ShellSetSettingCommandHandler implements CommandHandler {
 
 class ShellRunDemoCommandHandler implements CommandHandler {
     public readonly description = "Run Demo";
-    public async run(_input: string, context: ActionContext<ShellContext>) {        
+    public async run(_input: string, context: ActionContext<ShellContext>) {
         context.sessionContext.agentContext.settings.runDemo();
     }
 }
 
 class ShellRunDemoInteractiveCommandHandler implements CommandHandler {
     public readonly description = "Run Demo Interactive";
-    public async run(_input: string, context: ActionContext<ShellContext>) {        
+    public async run(_input: string, context: ActionContext<ShellContext>) {
         context.sessionContext.agentContext.settings.runDemo(true);
     }
 }
 
 class ShellSetTopMostCommandHandler implements CommandHandler {
-    public readonly description = "Always keep the shell window on top of other windows";
-    public async run(_input: string, context: ActionContext<ShellContext>) {        
+    public readonly description =
+        "Always keep the shell window on top of other windows";
+    public async run(_input: string, context: ActionContext<ShellContext>) {
         context.sessionContext.agentContext.settings.toggleTopMost();
     }
 }
@@ -126,7 +127,7 @@ const handlers: CommandHandlerTable = {
                 help: new ShellShowHelpCommandHandler(),
                 metrics: new ShellShowMetricsCommandHandler(),
                 raw: new ShellShowRawSettingsCommandHandler(),
-            }
+            },
         },
         set: new ShellSetSettingCommandHandler(),
         run: {
@@ -134,7 +135,7 @@ const handlers: CommandHandlerTable = {
             defaultSubCommand: new ShellRunDemoCommandHandler(),
             commands: {
                 interactive: new ShellRunDemoInteractiveCommandHandler(),
-            }
+            },
         },
         topmost: new ShellSetTopMostCommandHandler(),
     },
