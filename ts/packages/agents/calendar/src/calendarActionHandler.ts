@@ -30,12 +30,40 @@ import {
     AppAgent,
     ActionContext,
 } from "@typeagent/agent-sdk";
+import {
+    CommandHandler,
+    CommandHandlerTable,
+    getCommandInterface,
+} from "@typeagent/agent-sdk/helpers/commands";
+
+export class CalendarClientLoginCommandHandler implements CommandHandler {
+    public readonly description = "Log into the MS Graph to access calendar";
+    public async run(
+        _input: string,
+        context: ActionContext<CalendarActionContext>,
+    ) {
+        const calendarClient: CalendarClient | undefined =
+            context.sessionContext.agentContext.calendarClient;
+        if (!calendarClient?.isGraphClientInitialized()) {
+            await calendarClient?.initGraphClient();
+        }
+    }
+}
+
+const handlers: CommandHandlerTable = {
+    description: "Calendar login commmand",
+    defaultSubCommand: new CalendarClientLoginCommandHandler(),
+    commands: {
+        login: new CalendarClientLoginCommandHandler(),
+    },
+};
 
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeCalendarContext,
         updateAgentContext: updateCalendarContext,
         executeAction: executeCalendarAction,
+        ...getCommandInterface(handlers),
     };
 }
 
@@ -44,7 +72,7 @@ interface GraphEventRefIds {
     localEventId: string;
 }
 
-type CalendarActionContext = {
+export type CalendarActionContext = {
     calendarClient: CalendarClient | undefined;
     graphEventIds: GraphEventRefIds[] | undefined;
     mapGraphEntity: Map<string, GraphEntity> | undefined;
@@ -268,7 +296,7 @@ export async function handleCalendarAction(
         !calendarContext.calendarClient?.isGraphClientInitialized()
     ) {
         return createActionResultFromTextDisplay(
-            "Not handling calendar actions ...",
+            "Use @calendar login to log into MS Graph.",
         );
     }
 

@@ -14,9 +14,17 @@ export class CalendarClient {
     private readonly logger = registerDebug(
         "typeagent:graphUtils:calendarclient",
     );
-    constructor(private readonly graphClient: GraphClient | undefined) {
-        this.indexCalendarEvents();
-        this.startSyncThread();
+
+    private graphClient: GraphClient | undefined = undefined;
+    constructor() {}
+
+    public async initGraphClient(): Promise<void> {
+        if (this.graphClient === undefined) {
+            this.graphClient = await GraphClient.getInstance();
+            this.indexCalendarEvents();
+            this.startSyncThread();
+        }
+        return;
     }
 
     public isGraphClientInitialized(): boolean {
@@ -50,7 +58,7 @@ export class CalendarClient {
     async indexCalendarEvents() {
         if (this.graphClient === undefined) return;
 
-        await this.graphClient.ensureTokenIsValid();
+        // await this.graphClient.ensureTokenIsValid();
         if (this.isGraphClientInitialized()) {
             let allEvents: any[] = [];
             let nextPageLink = null;
@@ -671,5 +679,6 @@ export class CalendarClient {
 }
 
 export async function createCalendarGraphClient(): Promise<CalendarClient> {
-    return new CalendarClient(await GraphClient.getInstance());
+    //return new CalendarClient(await GraphClient.getInstance());
+    return new CalendarClient();
 }

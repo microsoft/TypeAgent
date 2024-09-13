@@ -92,8 +92,8 @@ export class GraphClient {
                             await instance.initializeGraphFromDeviceCode();
 
                         if (fInitialized && instance._userClient) {
-                            GraphClient.instance = instance;
                             await instance.loadUserEmailAddresses();
+                            GraphClient.instance = instance;
                         }
                     }
                 }
@@ -190,7 +190,6 @@ export class GraphClient {
         }
 
         if (this._deviceCodeCredential) {
-            await this.refreshTokenFromDeviceCodeCred();
             this.createClient(this._deviceCodeCredential);
         }
 
@@ -198,7 +197,7 @@ export class GraphClient {
     }
 
     public async initializeGraphFromUserCred() {
-        let isValidSettings: boolean = await this.loadMSGraphSettings();
+        let isValidSettings: boolean = this.loadMSGraphSettings();
 
         if (!isValidSettings || !this._settings) {
             this.logger(chalk.red("Unable to load settings"));
@@ -437,7 +436,7 @@ export class GraphClient {
     }
 
     public async loadUserEmailAddresses(): Promise<void> {
-        this.ensureTokenIsValid();
+        await this.ensureTokenIsValid();
         try {
             const response = await this._userClient
                 ?.api("/users")
