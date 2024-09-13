@@ -20,7 +20,7 @@ import {
     isActionActive,
 } from "./common/commandHandlerContext.js";
 
-import { getColorElapsedString, Profiler } from "common-utils";
+import { getColorElapsedString } from "common-utils";
 import {
     executeActions,
     startStreamPartialAction,
@@ -39,6 +39,8 @@ import registerDebug from "debug";
 import { getAllActionInfo } from "../translation/actionInfo.js";
 import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
 import ExifReader from "exifreader";
+import { Result } from "typechat";
+import { ProfileNames } from "../utils/profileNames.js";
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
@@ -233,57 +235,61 @@ async function translateRequestWithTranslator(
         attachments,
     );
 
-    let firstToken = true;
-    let streamFunction: IncrementalJsonValueCallBack | undefined;
-    context.streamingActionContext = undefined;
-    const onProperty: IncrementalJsonValueCallBack | undefined =
-        context.session.getConfig().stream
-            ? (prop: string, value: any, delta: string | undefined) => {
-                  // TODO: streaming currently doesn't not support multiple actions
-                  if (prop === "actionName" && delta === undefined) {
-                      const actionTranslatorName =
-                          context.agents.getInjectedTranslatorForActionName(
-                              value,
-                          ) ?? translatorName;
-                      context.requestIO.status(
-                          `[${actionTranslatorName}] Translating '${request}' into action '${value}'`,
-                          actionTranslatorName,
-                      );
-                      const config =
-                          context.agents.getTranslatorConfig(
+    const profiler = context.commandProfiler?.measure(ProfileNames.translate);
+
+    let response: Result<object>;
+    try {
+        let firstToken = true;
+        let streamFunction: IncrementalJsonValueCallBack | undefined;
+        context.streamingActionContext = undefined;
+        const onProperty: IncrementalJsonValueCallBack | undefined =
+            context.session.getConfig().stream
+                ? (prop: string, value: any, delta: string | undefined) => {
+                      // TODO: streaming currently doesn't not support multiple actions
+                      if (prop === "actionName" && delta === undefined) {
+                          const actionTranslatorName =
+                              context.agents.getInjectedTranslatorForActionName(
+                                  value,
+                              ) ?? translatorName;
+                          context.requestIO.status(
+                              `[${actionTranslatorName}] Translating '${request}' into action '${value}'`,
                               actionTranslatorName,
                           );
-                      if (config.streamingActions?.includes(value)) {
-                          streamFunction = startStreamPartialAction(
-                              actionTranslatorName,
-                              value,
-                              context,
-                          );
+                          const config =
+                              context.agents.getTranslatorConfig(
+                                  actionTranslatorName,
+                              );
+                          if (config.streamingActions?.includes(value)) {
+                              streamFunction = startStreamPartialAction(
+                                  actionTranslatorName,
+                                  value,
+                                  context,
+                              );
+                          }
+                      }
+
+                      if (firstToken) {
+                          profiler?.mark(ProfileNames.firstToken);
+                          firstToken = false;
+                      }
+
+                      if (streamFunction) {
+                          streamFunction(prop, value, delta);
                       }
                   }
+                : undefined;
 
-                  if (firstToken) {
-                      Profiler.getInstance().mark(
-                          context.requestId,
-                          "First Token",
-                      );
-                      firstToken = false;
-                  }
-
-                  if (streamFunction) {
-                      streamFunction(prop, value, delta);
-                  }
-              }
-            : undefined;
-
-    const response = await translator.translate(
-        request,
-        history?.promptSections,
-        onProperty,
-        attachments,
-        exifTags,
-    );
-    translator.createRequestPrompt = orp;
+        response = await translator.translate(
+            request,
+            history?.promptSections,
+            onProperty,
+            attachments,
+            exifTags,
+        );
+    } finally {
+        translator.createRequestPrompt = orp;
+        profiler?.stop();
+    }
 
     // TODO: figure out if we want to keep track of this
     //Profiler.getInstance().incrementLLMCallCount(context.requestId);
@@ -609,17 +615,6 @@ async function requestExecute(
         return;
     }
 
-    const requestIO = context.requestIO;
-    const actions = requestAction.actions;
-    const action = actions.action;
-    if (action === undefined) {
-        requestIO.status(`Executing multiple actions...`);
-    } else {
-        requestIO.status(
-            `Executing action ${action.fullActionName}`,
-            action.translatorName,
-        );
-    }
     await executeActions(requestAction.actions, context);
 }
 
@@ -698,71 +693,76 @@ export class RequestCommandHandler implements DispatcherCommandHandler {
         context: CommandHandlerContext,
         attachments?: string[],
     ) {
-        // Don't handle the request if it contains the separator
-        if (request.includes(RequestAction.Separator)) {
-            throw new Error(
-                `Invalid translation request with translation separator '${RequestAction.Separator}'.  Use @explain if you want to explain a translation.`,
-            );
-        }
-
-        // store attachements for later reuse
-        let cachedFiles: string[] = new Array<string>();
-        let exifTags: ExifReader.Tags[] = new Array<ExifReader.Tags>();
-        if (attachments) {
-            for (let i = 0; i < attachments?.length; i++) {
-                const [attachmentName, tags]: [string, ExifReader.Tags] =
-                    await context.session.storeUserSuppliedFile(
-                        attachments![i],
-                    );
-                cachedFiles.push(attachmentName);
-                exifTags.push(tags);
+        const profiler = context.commandProfiler?.measure(ProfileNames.request);
+        try {
+            // Don't handle the request if it contains the separator
+            if (request.includes(RequestAction.Separator)) {
+                throw new Error(
+                    `Invalid translation request with translation separator '${RequestAction.Separator}'.  Use @explain if you want to explain a translation.`,
+                );
             }
+
+            // store attachements for later reuse
+            let cachedFiles: string[] = new Array<string>();
+            let exifTags: ExifReader.Tags[] = new Array<ExifReader.Tags>();
+            if (attachments) {
+                for (let i = 0; i < attachments?.length; i++) {
+                    const [attachmentName, tags]: [string, ExifReader.Tags] =
+                        await context.session.storeUserSuppliedFile(
+                            attachments![i],
+                        );
+                    cachedFiles.push(attachmentName);
+                    exifTags.push(tags);
+                }
+            }
+
+            const history = context.session.getConfig().history
+                ? getChatHistoryForTranslation(context)
+                : undefined;
+            if (history) {
+                // prefetch entities here
+                context.chatHistory.addEntry(
+                    request,
+                    [],
+                    "user",
+                    context.requestId,
+                    attachments,
+                );
+            }
+
+            // Make sure we clear any left over streaming context
+            context.streamingActionContext = undefined;
+
+            const match = await matchRequest(request, context, history);
+            const translationResult =
+                match === undefined // undefined means not found
+                    ? await translateRequest(
+                          request,
+                          context,
+                          history,
+                          attachments,
+                          exifTags,
+                      )
+                    : match; // result or null
+
+            if (!translationResult) {
+                // undefined means not found or not translated
+                // null means cancelled because of replacement parse error.
+                return;
+            }
+
+            const { requestAction, fromUser, fromCache } = translationResult;
+            if (
+                requestAction !== null &&
+                requestAction !== undefined &&
+                context.conversationManager
+            ) {
+                context.conversationManager.addMessage(request, [], new Date());
+            }
+            await requestExecute(requestAction, context);
+            await requestExplain(requestAction, context, fromCache, fromUser);
+        } finally {
+            profiler?.stop();
         }
-
-        const history = context.session.getConfig().history
-            ? getChatHistoryForTranslation(context)
-            : undefined;
-        if (history) {
-            // prefetch entities here
-            context.chatHistory.addEntry(
-                request,
-                [],
-                "user",
-                context.requestId,
-                attachments,
-            );
-        }
-
-        // Make sure we clear any left over streaming context
-        context.streamingActionContext = undefined;
-
-        const match = await matchRequest(request, context, history);
-        const translationResult =
-            match === undefined // undefined means not found
-                ? await translateRequest(
-                      request,
-                      context,
-                      history,
-                      attachments,
-                      exifTags,
-                  )
-                : match; // result or null
-
-        if (!translationResult) {
-            // undefined means not found or not translated
-            // null means cancelled because of replacement parse error.
-            return;
-        }
-
-        const { requestAction, fromUser, fromCache } = translationResult;
-        if (
-            requestAction !== null &&
-            requestAction !== undefined &&
-            context.conversationManager
-        ) {
-            context.conversationManager.addMessage(request, [], new Date());
-        }
-        await requestExecute(requestAction, context);
-        await requestExplain(requestAction, context, fromCache, fromUser);
     }
 }

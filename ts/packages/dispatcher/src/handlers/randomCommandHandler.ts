@@ -6,22 +6,12 @@ import {
     DispatcherCommandHandler,
     DispatcherHandlerTable,
 } from "./common/commandHandler.js";
-import {
-    CommandHandlerContext,
-    updateCorrectionContext,
-} from "./common/commandHandlerContext.js";
-import { RequestAction, printProcessRequestActionResult } from "agent-cache";
+import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import fs from "node:fs";
 import { randomInt } from "crypto";
-import { request } from "node:http";
 import { processCommandNoLock } from "../command.js";
 import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
-import {
-    MessageSourceRole,
-    createTypeChat,
-    getContextFromHistory,
-    promptLib,
-} from "typeagent";
+import { createTypeChat, promptLib } from "typeagent";
 import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 
@@ -67,7 +57,7 @@ class RandomOfflineCommandHandler implements DispatcherCommandHandler {
             randomRequest,
         );
 
-        await processCommandNoLock(randomRequest, context, context.requestId);
+        await processCommandNoLock(randomRequest, context);
     }
 
     public async getRequests(): Promise<string[]> {
@@ -132,7 +122,7 @@ class RandomOnlineCommandHandler implements DispatcherCommandHandler {
                 },
             );
 
-            await processCommandNoLock(message, context, context.requestId);
+            await processCommandNoLock(message, context);
         } else {
             context.requestIO.error(response.message);
         }

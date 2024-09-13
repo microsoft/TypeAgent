@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { Profiler } from "./profiler.js";
+
 //==============================================================================
 // Manifest
 //==============================================================================
@@ -164,8 +166,8 @@ export interface ActionIO {
 }
 
 export interface ActionContext<T = void> {
+    profiler?: Profiler | undefined;
     streamingContext: unknown;
     readonly actionIO: ActionIO;
     readonly sessionContext: SessionContext<T>;
-    performanceMark(markName: string): void;
 }

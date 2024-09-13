@@ -4,22 +4,29 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { ClientAPI, SpeechToken } from "./electronTypes.js"; // Custom APIs for renderer
+import { RequestMetrics } from "agent-dispatcher";
 
 function getProcessShellRequest() {
     const pendingRequests = new Map<
         string,
-        { resolve: () => void; reject: (reason?: any) => void }
+        {
+            resolve: (metrics?: RequestMetrics) => void;
+            reject: (reason?: any) => void;
+        }
     >();
 
-    ipcRenderer.on("process-shell-request-done", (_, id: string) => {
-        const pendingRequest = pendingRequests.get(id);
-        if (pendingRequest !== undefined) {
-            pendingRequest.resolve();
-            pendingRequests.delete(id);
-        } else {
-            console.warn(`Pending request ${id} not found`);
-        }
-    });
+    ipcRenderer.on(
+        "process-shell-request-done",
+        (_, id: string, metrics?: RequestMetrics) => {
+            const pendingRequest = pendingRequests.get(id);
+            if (pendingRequest !== undefined) {
+                pendingRequest.resolve(metrics);
+                pendingRequests.delete(id);
+            } else {
+                console.warn(`Pending request ${id} not found`);
+            }
+        },
+    );
     ipcRenderer.on(
         "process-shell-request-error",
         (_, id: string, message: string) => {
@@ -36,7 +43,7 @@ function getProcessShellRequest() {
     );
 
     return (request: string, id: string, images: string[]) => {
-        return new Promise<void>((resolve, reject) => {
+        return new Promise<RequestMetrics | undefined>((resolve, reject) => {
             pendingRequests.set(id, { resolve, reject });
             ipcRenderer.send("process-shell-request", request, id, images);
         });
@@ -128,6 +135,9 @@ const api: ClientAPI = {
     },
     onNotify(callback) {
         ipcRenderer.on("notification-arrived", callback);
+    },
+    onRequestMetrics(callback) {
+        ipcRenderer.on("request-metrics", callback);
     },
 };
 

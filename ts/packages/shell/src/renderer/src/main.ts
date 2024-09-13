@@ -61,6 +61,9 @@ function addEvents(
     api.onResponse((_, agentMessage, append) => {
         chatView.addAgentMessage(agentMessage, { append });
     });
+    api.onRequestMetrics((_, requestId, requestMetrics) => {
+        chatView.updateMetrics(requestId, requestMetrics);
+    });
     api.onSetDynamicActionDisplay(
         (_, source, id, actionIndex, displayId, nextRefreshMs) =>
             chatView.setDynamicDisplay(

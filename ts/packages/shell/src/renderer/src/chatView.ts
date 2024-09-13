@@ -10,7 +10,6 @@ import {
     ActionInfo,
     ActionTemplateSequence,
     ActionUICommand,
-    IMessageMetrics,
     SearchMenuItem,
 } from "../../preload/electronTypes";
 import { ActionCascade } from "./ActionCascade";
@@ -22,6 +21,7 @@ import {
 import { TTS } from "./tts";
 import { IAgentMessage } from "agent-dispatcher";
 import DOMPurify from "dompurify";
+import { PhaseTiming, RequestMetrics } from "agent-dispatcher";
 
 export interface InputChoice {
     element: HTMLElement;
@@ -228,6 +228,11 @@ export class PlayerShimCursor {
 
 class MessageContainer {
     public readonly div: HTMLDivElement;
+    private readonly messageBodyDiv: HTMLDivElement;
+    private readonly messageDiv: HTMLDivElement;
+    private metricDiv?: HTMLDivElement;
+    private readonly timestampDiv: HTMLDivElement;
+    private readonly iconDiv: HTMLDivElement;
     public get source() {
         return this._source;
     }
@@ -238,16 +243,14 @@ class MessageContainer {
         beforeElem: Element,
     ) {
         const div = document.createElement("div");
-        const classes = `chat-message ${className}`;
-        const messageClass = "chat-message-agent";
-
-        div.className = classes;
+        div.className = className;
 
         const timestampDiv = createTimestampDiv(
             new Date(),
             "chat-timestamp-left",
         );
         div.append(timestampDiv);
+        this.timestampDiv = timestampDiv;
 
         const agentIconDiv = document.createElement("div");
         agentIconDiv.className = "agent-icon";
@@ -256,14 +259,17 @@ class MessageContainer {
             ?.toString()
             .substring(0, 1) as string;
         div.append(agentIconDiv);
+        this.iconDiv = agentIconDiv;
+
+        const messageBodyDiv = document.createElement("div");
+        messageBodyDiv.className = "chat-message-agent";
+        div.append(messageBodyDiv);
+        this.messageBodyDiv = messageBodyDiv;
 
         const message = document.createElement("div");
-        message.className = messageClass;
-        div.append(message);
-
-        const metricsDiv = document.createElement("div");
-        metricsDiv.className = "chat-message-metrics";
-        div.append(metricsDiv);
+        message.className = "chat-message-content";
+        messageBodyDiv.append(message);
+        this.messageDiv = message;
 
         // The chat message list has the style flex-direction: column-reverse;
         beforeElem.before(div);
@@ -272,11 +278,7 @@ class MessageContainer {
     }
 
     public getMessage() {
-        const message = this.div.lastChild?.previousSibling as HTMLDivElement;
-        if (message === undefined) {
-            return undefined;
-        }
-        return message.innerText;
+        return this.messageDiv.innerText;
     }
     public setMessage(
         content: DisplayContent,
@@ -284,22 +286,22 @@ class MessageContainer {
         sourceIcon?: string,
         append: boolean = false,
     ) {
-        const message = this.div.lastChild?.previousSibling as HTMLDivElement;
-        if (message === undefined) {
-            return undefined;
-        }
-
         this._source = source;
         // set source and source icon
-        (this.div.firstChild?.firstChild as HTMLDivElement).innerText = source; // name
-        const iconDiv: HTMLDivElement = this.div.children[1] as HTMLDivElement;
-        iconDiv.innerText = sourceIcon ?? "❔"; // icon
+        (this.timestampDiv.firstChild as HTMLDivElement).innerText = source; // name
+        this.iconDiv.innerText = sourceIcon ?? "❔"; // icon
 
-        setContent(message, content, append);
+        setContent(this.messageDiv, content, append);
     }
 
-    public updateMetrics(metrics?: IMessageMetrics) {
-        updateMetrics(this.div.lastChild as HTMLDivElement, metrics);
+    public updateMetrics(metrics: PhaseTiming, total?: number) {
+        if (this.metricDiv === undefined) {
+            const metricsDiv = document.createElement("div");
+            metricsDiv.className = "chat-message-metrics-left";
+            this.messageBodyDiv.append(metricsDiv);
+            this.metricDiv = metricsDiv;
+        }
+        updateMetrics(this.metricDiv, metrics, total);
     }
 
     public show() {
@@ -315,7 +317,9 @@ class MessageContainer {
 
 class MessageGroup {
     public readonly userMessageContainer: HTMLDivElement;
+    public readonly userMessageBody: HTMLDivElement;
     public readonly userMessage: HTMLDivElement;
+    public userMetricsDiv?: HTMLDivElement;
     private statusMessage: MessageContainer | undefined;
     private readonly statusMessages: {
         message: DisplayContent;
@@ -328,7 +332,7 @@ class MessageGroup {
         private readonly chatView: ChatView,
         request: DisplayContent,
         container: HTMLDivElement,
-        requestPromise: Promise<void>,
+        requestPromise: Promise<RequestMetrics | undefined>,
         timeStamp: Date,
         public agents: Map<string, string>,
     ) {
@@ -341,9 +345,13 @@ class MessageGroup {
         );
         userMessageContainer.appendChild(timeStampDiv);
 
+        const userMessageBody = document.createElement("div");
+        userMessageBody.className = "chat-message-user";
+        userMessageContainer.appendChild(userMessageBody);
+
         const userMessage = document.createElement("div");
-        userMessage.className = "chat-message-user";
-        userMessageContainer.appendChild(userMessage);
+        userMessage.className = "chat-message-content";
+        userMessageBody.appendChild(userMessage);
 
         setContent(userMessage, request);
 
@@ -356,15 +364,17 @@ class MessageGroup {
         }
 
         this.userMessageContainer = userMessageContainer;
+        this.userMessageBody = userMessageBody;
         this.userMessage = userMessage;
 
         requestPromise
-            .then(() => this.requestCompleted())
+            .then((metrics) => this.requestCompleted(metrics))
             .catch((error) => this.requestException(error));
     }
 
-    private requestCompleted() {
+    private requestCompleted(metrics: RequestMetrics | undefined) {
         this.completed = true;
+        this.updateMetrics(metrics);
         if (this.statusMessages.length === 0) {
             this.addStatusMessage(
                 { message: "Request completed", source: "shell" },
@@ -451,8 +461,36 @@ class MessageGroup {
             append = true;
         }
         this.statusMessages.push({ message, temporary });
-        statusMessage.updateMetrics(msg.metrics);
+
+        this.updateMetrics(msg.metrics);
         this.updateStatusMessageDivState();
+    }
+
+    public updateMetrics(metrics?: RequestMetrics) {
+        if (metrics) {
+            if (metrics.parse !== undefined) {
+                if (this.userMetricsDiv === undefined) {
+                    this.userMetricsDiv = document.createElement("div");
+                    this.userMetricsDiv.className =
+                        "chat-message-metrics-right";
+                    this.userMessageBody.append(this.userMetricsDiv);
+                }
+                updateMetrics(this.userMetricsDiv, metrics.parse);
+            }
+
+            for (let i = 0; i < this.agentMessages.length; i++) {
+                const agentMessage = this.agentMessages[i];
+                const info = metrics.actions[i];
+                if (info !== undefined) {
+                    agentMessage.updateMetrics(
+                        info,
+                        i === this.agentMessages.length - 1
+                            ? metrics.duration
+                            : undefined,
+                    );
+                }
+            }
+        }
     }
 
     public ensureAgentMessage(msg: IAgentMessage, notification = false) {
@@ -477,6 +515,8 @@ class MessageGroup {
             }
             this.updateStatusMessageDivState();
         }
+
+        this.updateMetrics(msg.metrics);
         return this.agentMessages[index];
     }
 
@@ -578,37 +618,35 @@ export function createTimestampDiv(timestamp: Date, className: string) {
     return timeStampDiv;
 }
 
-export function updateMetrics(div: HTMLDivElement, metrics?: IMessageMetrics) {
-    if (metrics) {
-        // clear out previous perf data
-        div.innerHTML = "";
+function updateMetrics(
+    div: HTMLDivElement,
+    metrics: PhaseTiming,
+    total?: number,
+) {
+    // clear out previous perf data
+    div.innerHTML = "";
 
+    let marksDiv = document.createElement("div");
+    let marksSubContainer = document.createElement("div");
+    marksDiv.className = "metrics-details";
+
+    marksDiv.append(marksSubContainer);
+
+    div.append(marksDiv);
+
+    if (metrics.marks) {
+        for (const [key, value] of Object.entries(metrics.marks)) {
+            const { duration, count } = value;
+            const avg = duration / count;
+            let mDiv = document.createElement("div");
+            mDiv.innerHTML = `${key}: <b>${formatTimeReaderFriendly(avg)}${count > 1 ? ` (avg of ${count})` : ""}</b>`;
+            marksSubContainer.append(mDiv);
+        }
+    }
+    if (metrics.duration) {
         let timeDiv = document.createElement("div");
-        let marksDiv = document.createElement("div");
-        let marksSubContainer = document.createElement("div");
-        marksDiv.className = "metrics-details";
-
-        marksDiv.append(marksSubContainer);
-
-        div.append(marksDiv);
-
-        if (metrics.duration) {
-            timeDiv.innerHTML = `Time Taken: <b>${formatTimeReaderFriendly(metrics.duration)}</b>`;
-        } else {
-            timeDiv.innerText = "no performance data available";
-        }
-
-        if (metrics.marks) {
-            metrics.marks.forEach((value: number, key: string) => {
-                let mDiv = document.createElement("div");
-                mDiv.innerHTML = `${key}: <b>${formatTimeReaderFriendly(value)}</b>`;
-                marksSubContainer.append(mDiv);
-            });
-        }
-
+        timeDiv.innerHTML = `Time Taken: <b>${formatTimeReaderFriendly(metrics.duration)}</b>${total !== undefined ? `<br>Total Time: <b>${formatTimeReaderFriendly(total)}</b>` : ""}`;
         marksDiv.append(timeDiv);
-    } else {
-        div.innerText = "no performance data available";
     }
 }
 
@@ -761,7 +799,7 @@ export class ChatView {
                     if (!ev.altKey && !ev.ctrlKey) {
                         if (ev.key == "ArrowUp" || ev.key == "ArrowDown") {
                             const messages = this.messageDiv.querySelectorAll(
-                                ".chat-message-user:not(.chat-message-hidden)",
+                                ".chat-message-user:not(.chat-message-hidden) .chat-message-content",
                             );
 
                             if (
@@ -1268,7 +1306,6 @@ export class ChatView {
         );
 
         if (!dynamicUpdate) {
-            agentMessage.updateMetrics(msg.metrics);
             this.updateScroll();
             this.chatInputFocus();
         }
@@ -1397,6 +1434,10 @@ export class ChatView {
         input.dispatchEvent(keyboardEvent);
 
         (window as any).electron.ipcRenderer.send("send-input-text-complete");
+    }
+
+    updateMetrics(requestId: string, metrics: RequestMetrics) {
+        this.getMessageGroup(requestId)?.updateMetrics(metrics);
     }
 }
 

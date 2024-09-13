@@ -5,6 +5,7 @@ import { ElectronAPI } from "@electron-toolkit/preload";
 import { AppAgentEvent, DynamicDisplay } from "@typeagent/agent-sdk";
 import { ShellSettings } from "../main/shellSettings.js";
 import { IAgentMessage } from "agent-dispatcher";
+import { RequestMetrics } from "agent-dispatcher";
 
 export type SpeechToken = {
     token: string;
@@ -78,11 +79,6 @@ export type ActionTemplateSequence = {
     prefaceMultiple?: string;
 };
 
-export interface IMessageMetrics {
-    duration: number | undefined;
-    marks?: Map<string, number> | undefined;
-}
-
 export enum NotifyCommands {
     ShowSummary = "summarize",
     Clear = "clear",
@@ -111,7 +107,7 @@ export interface ClientAPI {
         request: string,
         id: string,
         images: string[],
-    ) => Promise<void>;
+    ) => Promise<RequestMetrics | undefined>;
     getDynamicDisplay: (source: string, id: string) => Promise<DynamicDisplay>;
     onResponse(
         callback: (
@@ -244,6 +240,13 @@ export interface ClientAPI {
             requestId: string,
             source: string,
             data: any,
+        ) => void,
+    );
+    onRequestMetrics(
+        callback: (
+            e: Electron.IpcRendererEvent,
+            requestId: string,
+            metrics: RequestMetrics,
         ) => void,
     );
 }

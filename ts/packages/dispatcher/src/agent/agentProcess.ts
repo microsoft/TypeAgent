@@ -338,12 +338,6 @@ function getActionContextShim(
         get actionIO() {
             return actionIO;
         },
-        performanceMark: (name: string): void => {
-            rpc.send("performanceMark", {
-                actionContextId,
-                name,
-            });
-        },
     };
 }
 

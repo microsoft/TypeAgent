@@ -409,13 +409,22 @@ function actionCommand(
         requestId,
     );
 }
+
+function sendRequestMetrics(message: IAgentMessage) {
+    if (message.metrics !== undefined && message.requestId !== undefined) {
+        mainWindow?.webContents.send(
+            "request-metrics",
+            message.requestId,
+            message.metrics,
+        );
+    }
+}
+
 const clientIO: ClientIO = {
     clear: () => {
         mainWindow?.webContents.send("clear");
     },
-    info: () => {
-        /* ignore */
-    },
+    info: sendRequestMetrics,
     success: sendStatusMessage,
     status: (message) => sendStatusMessage(message, true),
     warn: sendStatusMessage,
@@ -536,6 +545,7 @@ app.whenReady().then(async () => {
         explanationAsynchronousMode: true,
         persistSession: true,
         enableServiceHost: true,
+        metrics: true,
         clientIO,
     });
 
@@ -550,7 +560,7 @@ app.whenReady().then(async () => {
         }
         debugShell(dispatcher.getPrompt(), text);
 
-        await dispatcher.processCommand(text, id, images);
+        const metrics = await dispatcher.processCommand(text, id, images);
         mainWindow?.webContents.send("send-demo-event", "CommandProcessed");
         const newSettingSummary = dispatcher.getSettingSummary();
         if (newSettingSummary !== settingSummary) {
@@ -561,16 +571,19 @@ app.whenReady().then(async () => {
                 dispatcher.getTranslatorNameToEmojiMap(),
             );
         }
+
+        return metrics;
     }
 
     ipcMain.on(
         "process-shell-request",
         (_event, text: string, id: string, images: string[]) => {
             processShellRequest(text, id, images)
-                .then(() =>
+                .then((metrics) =>
                     mainWindow?.webContents.send(
                         "process-shell-request-done",
                         id,
+                        metrics,
                     ),
                 )
                 .catch((error) => {

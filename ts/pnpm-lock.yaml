@@ -1016,6 +1016,9 @@ importers:
 
   packages/commonUtils:
     dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../agentSdk
       aiclient:
         specifier: workspace:*
         version: link:../aiclient

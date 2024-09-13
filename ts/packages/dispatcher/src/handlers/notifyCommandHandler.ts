@@ -7,7 +7,6 @@ import {
     DispatcherHandlerTable,
 } from "./common/commandHandler.js";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
-import { processCommandNoLock } from "../command.js";
 import { NotifyCommands } from "./common/interactiveIO.js";
 
 class NotifyInfoCommandHandler implements DispatcherCommandHandler {

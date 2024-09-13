@@ -47,13 +47,13 @@ import {
 } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
-import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";
+import { ActionContext, AppAgentEvent, Profiler } from "@typeagent/agent-sdk";
 import { conversation as Conversation } from "knowledge-processor";
 import { AppAgentManager, AppAgentState } from "./appAgentManager.js";
 import { getBuiltinAppAgentProvider } from "../../agent/agentConfig.js";
 import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
-import { isMultiModalContentSupported } from "../../../../commonUtils/dist/modelResource.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
+import { RequestMetricsManager } from "../../utils/metrics.js";
 
 export interface CommandResult {
     error?: boolean;
@@ -99,6 +99,9 @@ export type CommandHandlerContext = {
     transientAgents: Record<string, boolean | undefined>;
 
     streamingActionContext?: ActionContext<unknown> | undefined;
+
+    metricsManager?: RequestMetricsManager | undefined;
+    commandProfiler?: Profiler | undefined;
 };
 
 export function updateCorrectionContext(
@@ -164,6 +167,7 @@ export type InitializeCommandHandlerContextOptions = SessionOptions & {
     stdio?: readline.Interface;
     clientIO?: ClientIO | undefined | null; // default to console IO, null to disable
     enableServiceHost?: boolean; // default to false,
+    metrics?: boolean; // default to false
 };
 
 async function getSession(persistSession: boolean = false) {
@@ -214,6 +218,7 @@ export async function initializeCommandHandlerContext(
     hostName: string,
     options?: InitializeCommandHandlerContextOptions,
 ): Promise<CommandHandlerContext> {
+    const metrics = options?.metrics ?? false;
     const explanationAsynchronousMode =
         options?.explanationAsynchronousMode ?? false;
     const stdio = options?.stdio;
@@ -231,7 +236,7 @@ export async function initializeCommandHandlerContext(
 
     const clientIO = options?.clientIO;
     const requestIO = clientIO
-        ? getRequestIO(undefined, clientIO, undefined)
+        ? getRequestIO(undefined, clientIO)
         : clientIO === undefined
           ? getConsoleRequestIO(stdio)
           : getNullRequestIO();
@@ -269,6 +274,7 @@ export async function initializeCommandHandlerContext(
         serviceHost: serviceHost,
         localWhisper: undefined,
         transientAgents: {},
+        metricsManager: metrics ? new RequestMetricsManager() : undefined,
     };
     context.requestIO.context = context;
 
