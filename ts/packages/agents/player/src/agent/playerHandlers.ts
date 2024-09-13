@@ -13,7 +13,7 @@ import {
     AppAgent,
     SessionContext,
     AppAction,
-    createTurnImpressionFromError,
+    createActionResultFromError,
     ActionContext,
     DisplayType,
     AppAgentEvent,
@@ -56,7 +56,7 @@ async function executePlayerAction(
         );
     }
 
-    return createTurnImpressionFromError(
+    return createActionResultFromError(
         "Action translated but not performed. Spotify integration is not enabled.",
     );
 }
@@ -118,7 +118,7 @@ async function validatePlayerWildcardMatch(
 }
 
 async function validateTrack(trackName: string, context: IClientContext) {
-    const tracks = await searchTracks(trackName, context);
+    const tracks = await searchTracks(`track:"${trackName}"`, context);
     if (tracks && tracks.tracks && tracks.tracks.length > 0) {
         // For validation for wildcard match, only allow substring match.
         const lowerCaseTrackName = trackName.toLowerCase();

@@ -68,31 +68,31 @@ import {
 import registerDebug from "debug";
 import {
     ActionIO,
-    createTurnImpressionFromHtmlDisplay,
-    createTurnImpressionFromTextDisplay,
+    createActionResultFromHtmlDisplay,
+    createActionResultFromTextDisplay,
     DisplayContent,
     Storage,
-    TurnImpression,
+    ActionResult,
 } from "@typeagent/agent-sdk";
 
 const debugSpotify = registerDebug("typeagent:spotify");
 const debugSpotifyError = registerDebug("typeagent:spotify:error");
 
-function createWarningTurnImpression(message: string) {
+function createWarningActionResult(message: string) {
     debugSpotifyError(message);
-    return createTurnImpressionFromTextDisplay(chalk.yellow(message), message);
+    return createActionResultFromTextDisplay(chalk.yellow(message), message);
 }
 
-function createErrorTurnImpression(message: string) {
+function createErrorActionResult(message: string) {
     debugSpotifyError(message);
-    return createTurnImpressionFromTextDisplay(chalk.red(message), message);
+    return createActionResultFromTextDisplay(chalk.red(message), message);
 }
 
-function createNotFoundTurnImpression(kind: string, queryString?: string) {
+function createNotFoundActionResult(kind: string, queryString?: string) {
     if (queryString)
         debugSpotifyError(`No ${kind} found for query: ${queryString}`);
     const message = `No ${kind} found`;
-    return createErrorTurnImpression(message);
+    return createErrorActionResult(message);
 }
 
 let languageModel: TypeChatLanguageModel | undefined;
@@ -206,7 +206,7 @@ async function htmlTrackNames(
         content: "",
     };
 
-    const turnImpression: TurnImpression = {
+    const actionResult: ActionResult = {
         displayContent,
         literalText: "",
         entities: [],
@@ -218,19 +218,19 @@ async function htmlTrackNames(
         for (const track of selectedTracks) {
             if (entCount < 1) {
                 // make an entity for the track
-                turnImpression.entities.push({
+                actionResult.entities.push({
                     name: track.name,
                     type: ["track", "song"],
                 });
                 // make an entity for each artist
                 for (const artist of track.artists) {
-                    turnImpression.entities.push({
+                    actionResult.entities.push({
                         name: artist.name,
                         type: ["artist"],
                     });
                 }
                 // make an entity for the album
-                turnImpression.entities.push({
+                actionResult.entities.push({
                     name: track.album.name,
                     type: ["album"],
                 });
@@ -261,7 +261,7 @@ async function htmlTrackNames(
             }
         }
         displayContent.content += "</ol></div>";
-        turnImpression.literalText =
+        actionResult.literalText =
             "Updated the current track list with the numbered list of tracks on the screen";
     } else if (selectedTracks.length === 1) {
         const track = selectedTracks[0];
@@ -270,19 +270,19 @@ async function htmlTrackNames(
         const artists =
             artistsPrefix +
             track.artists.map((artist) => artist.name).join(", ");
-        turnImpression.entities.push({
+        actionResult.entities.push({
             name: track.name,
             type: ["track", "song"],
         });
         // make an entity for each artist
         for (const artist of track.artists) {
-            turnImpression.entities.push({
+            actionResult.entities.push({
                 name: artist.name,
                 type: ["artist"],
             });
         }
         // make an entity for the album
-        turnImpression.entities.push({
+        actionResult.entities.push({
             name: track.album.name,
             type: ["album"],
         });
@@ -291,7 +291,7 @@ async function htmlTrackNames(
         const litArtists =
             litArtistsPrefix +
             track.artists.map((artist) => artist.name).join(", ");
-        turnImpression.literalText = `Now playing: ${track.name} from album ${track.album.name} with ${litArtists}`;
+        actionResult.literalText = `Now playing: ${track.name} from album ${track.album.name} with ${litArtists}`;
         if (track.album.images.length > 0 && track.album.images[0].url) {
             displayContent.content = "<div class='track-list scroll_enabled'>";
             displayContent.content +=
@@ -312,9 +312,9 @@ async function htmlTrackNames(
             displayContent.content += "</div>";
         }
     } else {
-        return createNotFoundTurnImpression("tracks");
+        return createNotFoundActionResult("tracks");
     }
-    return turnImpression;
+    return actionResult;
 }
 
 async function updateTrackListAndPrint(
@@ -385,7 +385,7 @@ export async function searchTracks(
     context: IClientContext,
 ) {
     const query: SpotifyApi.SearchForItemParameterObject = {
-        q: `track:"${queryString}"`,
+        q: queryString,
         type: "track",
         limit: 50,
         offset: 0,
@@ -466,7 +466,7 @@ async function playTracks(
             endIndex,
             clientContext,
         );
-        const turnImpression = await htmlTrackNames(
+        const actionResult = await htmlTrackNames(
             trackCollection,
             startIndex,
             endIndex,
@@ -480,10 +480,10 @@ async function playTracks(
             trackCollection.getContext(),
             startIndex,
         );
-        return turnImpression;
+        return actionResult;
     } else {
         const message = "No active device found";
-        return createTurnImpressionFromTextDisplay(chalk.red(message), message);
+        return createActionResultFromTextDisplay(chalk.red(message), message);
     }
 }
 
@@ -491,7 +491,7 @@ async function playAlbums(
     albums: SpotifyApi.AlbumObjectSimplified[],
     quantity: number,
     clientContext: IClientContext,
-): Promise<TurnImpression> {
+): Promise<ActionResult> {
     // Play the albums found with the quantity specified
     const albumsToPlay =
         quantity === -1 ? albums : albums.slice(0, quantity > 0 ? quantity : 1);
@@ -523,7 +523,7 @@ async function playAlbums(
         return playTracks(collection, 0, albumTracks.length, clientContext);
     }
     const message = `Unable to get track`;
-    return createTurnImpressionFromTextDisplay(chalk.red(message), message);
+    return createActionResultFromTextDisplay(chalk.red(message), message);
 }
 
 type SpotifyQuery = {
@@ -555,7 +555,7 @@ async function playAlbumsWithQuery(
     query: SpotifyQuery,
     quantity: number,
     clientContext: IClientContext,
-): Promise<TurnImpression> {
+): Promise<ActionResult> {
     let albums: SpotifyApi.AlbumObjectSimplified[];
     const queryString = toQueryString(query);
     if (query.track.length !== 0) {
@@ -568,7 +568,7 @@ async function playAlbumsWithQuery(
         };
         const result = await search(param, clientContext.service);
         if (result?.tracks === undefined) {
-            return createNotFoundTurnImpression("tracks", queryString);
+            return createNotFoundActionResult("tracks", queryString);
         }
         const albumsSet = new Set(
             result.tracks.items.map((track) => track.album),
@@ -584,12 +584,12 @@ async function playAlbumsWithQuery(
         };
         const result = await search(query, clientContext.service);
         if (result?.albums === undefined) {
-            return createNotFoundTurnImpression("albums", queryString);
+            return createNotFoundActionResult("albums", queryString);
         }
         albums = result.albums.items;
     }
     if (albums.length === 0) {
-        return createNotFoundTurnImpression("albums", queryString);
+        return createNotFoundActionResult("albums", queryString);
     }
 
     return playAlbums(albums, quantity, clientContext);
@@ -599,7 +599,7 @@ async function playTracksWithQuery(
     query: SpotifyQuery,
     quantity: number,
     clientContext: IClientContext,
-): Promise<TurnImpression> {
+): Promise<ActionResult> {
     // play track
     // search for tracks and collect the albums
     const queryString = toQueryString(query);
@@ -612,7 +612,7 @@ async function playTracksWithQuery(
     const result = await search(param, clientContext.service);
     const trackResult = result?.tracks;
     if (trackResult === undefined) {
-        return createNotFoundTurnImpression("tracks", queryString);
+        return createNotFoundActionResult("tracks", queryString);
     }
 
     // TODO: if there is not exact match for artist, might want to consider popularity of
@@ -665,13 +665,13 @@ async function playTracksWithQuery(
             clientContext,
         );
     }
-    return createNotFoundTurnImpression("tracks", queryString);
+    return createNotFoundActionResult("tracks", queryString);
 }
 
 async function playActionCall(
     clientContext: IClientContext,
     playAction: PlayAction,
-): Promise<TurnImpression> {
+): Promise<ActionResult> {
     let startIndex = playAction.parameters.trackNumber;
     let endIndex: undefined | number = undefined;
     if (startIndex === undefined) {
@@ -742,11 +742,11 @@ async function playActionCall(
             // no parameters specified, just resume playback
             await resumeActionCall(clientContext);
             const message = "Resuming playback";
-            return createTurnImpressionFromTextDisplay(message, message);
+            return createActionResultFromTextDisplay(message, message);
         }
     }
     const message = "No tracks to play";
-    return createTurnImpressionFromTextDisplay(chalk.red(message), message);
+    return createActionResultFromTextDisplay(chalk.red(message), message);
 }
 function ensureClientId(state: SpotifyApi.CurrentPlaybackResponse) {
     if (state.device.id !== null) {
@@ -763,11 +763,11 @@ function ensureClientId(state: SpotifyApi.CurrentPlaybackResponse) {
 async function resumeActionCall(clientContext: IClientContext) {
     const state = await getPlaybackState(clientContext.service);
     if (!state) {
-        return createWarningTurnImpression("No active playback to resume");
+        return createWarningActionResult("No active playback to resume");
     }
     const deviceId = ensureClientId(state);
     if (deviceId === undefined) {
-        return createWarningTurnImpression("No device active");
+        return createWarningActionResult("No device active");
     }
 
     if (state.is_playing) {
@@ -782,14 +782,14 @@ async function resumeActionCall(clientContext: IClientContext) {
 
 async function pauseActionCall(
     clientContext: IClientContext,
-): Promise<TurnImpression> {
+): Promise<ActionResult> {
     const state = await getPlaybackState(clientContext.service);
     if (!state) {
-        return createWarningTurnImpression("No active playback to resume");
+        return createWarningActionResult("No active playback to resume");
     }
     const deviceId = ensureClientId(state);
     if (deviceId === undefined) {
-        return createWarningTurnImpression("No device active");
+        return createWarningActionResult("No device active");
     }
     if (!state.is_playing) {
         console.log(chalk.yellow("Music already stopped."));
@@ -804,11 +804,11 @@ async function pauseActionCall(
 async function nextActionCall(clientContext: IClientContext) {
     const state = await getPlaybackState(clientContext.service);
     if (!state) {
-        return createWarningTurnImpression("No active playback to resume");
+        return createWarningActionResult("No active playback to resume");
     }
     const deviceId = ensureClientId(state);
     if (deviceId === undefined) {
-        return createWarningTurnImpression("No device active");
+        return createWarningActionResult("No device active");
     }
 
     await next(clientContext.service, deviceId);
@@ -820,11 +820,11 @@ async function nextActionCall(clientContext: IClientContext) {
 async function previousActionCall(clientContext: IClientContext) {
     const state = await getPlaybackState(clientContext.service);
     if (!state) {
-        return createWarningTurnImpression("No active playback to resume");
+        return createWarningActionResult("No active playback to resume");
     }
     const deviceId = ensureClientId(state);
     if (deviceId === undefined) {
-        return createWarningTurnImpression("No device active");
+        return createWarningActionResult("No device active");
     }
 
     await previous(clientContext.service, deviceId);
@@ -836,11 +836,11 @@ async function previousActionCall(clientContext: IClientContext) {
 async function shuffleActionCall(clientContext: IClientContext, on: boolean) {
     const state = await getPlaybackState(clientContext.service);
     if (!state) {
-        return createWarningTurnImpression("No active playback to resume");
+        return createWarningActionResult("No active playback to resume");
     }
     const deviceId = ensureClientId(state);
     if (deviceId === undefined) {
-        return createWarningTurnImpression("No device active");
+        return createWarningActionResult("No device active");
     }
 
     await shuffle(clientContext.service, deviceId, on);
@@ -859,7 +859,7 @@ export async function handleCall(
     action: PlayerAction,
     clientContext: IClientContext,
     actionIO: ActionIO,
-): Promise<TurnImpression> {
+): Promise<ActionResult> {
     switch (action.actionName) {
         case "play": {
             return playActionCall(clientContext, action);
@@ -903,7 +903,7 @@ export async function handleCall(
                     "Queue",
                 );
             }
-            return createNotFoundTurnImpression("tracks in the queue");
+            return createNotFoundActionResult("tracks in the queue");
         }
         case "pause": {
             return pauseActionCall(clientContext);
@@ -927,8 +927,8 @@ export async function handleCall(
         case "listDevices": {
             const html = await listAvailableDevices(clientContext);
             return html
-                ? createTurnImpressionFromTextDisplay(html)
-                : createErrorTurnImpression("No devices found");
+                ? createActionResultFromTextDisplay(html)
+                : createErrorActionResult("No devices found");
         }
         case "selectDevice": {
             const selectDeviceAction = action as SelectDeviceAction;
@@ -936,8 +936,8 @@ export async function handleCall(
             const html = await selectDevice(keyword, clientContext);
 
             return html
-                ? createTurnImpressionFromTextDisplay(html)
-                : createErrorTurnImpression("No devices found");
+                ? createActionResultFromTextDisplay(html)
+                : createErrorActionResult("No devices found");
         }
         case "setVolume": {
             const setVolumeAction = action as SetVolumeAction;
@@ -970,7 +970,7 @@ export async function handleCall(
                 await setVolume(clientContext.service, nv);
                 return htmlStatus(clientContext);
             }
-            return createErrorTurnImpression("No active device found");
+            return createErrorActionResult("No active device found");
         }
         case "searchTracks": {
             const searchTracksAction = action as SearchTracksAction;
@@ -987,7 +987,7 @@ export async function handleCall(
                     "Search Results",
                 );
             }
-            return createNotFoundTurnImpression("tracks", queryString);
+            return createNotFoundActionResult("tracks", queryString);
         }
         case "listPlaylists": {
             const playlists = await getPlaylists(clientContext.service);
@@ -997,9 +997,9 @@ export async function handleCall(
                     console.log(chalk.magentaBright(`${playlist.name}`));
                     html += `<div>${playlist.name}</div>`;
                 }
-                return createTurnImpressionFromTextDisplay(html);
+                return createActionResultFromTextDisplay(html);
             }
-            return createErrorTurnImpression("No playlists found");
+            return createErrorActionResult("No playlists found");
         }
         case "getPlaylist": {
             const getPlaylistAction = action as GetPlaylistAction;
@@ -1031,7 +1031,7 @@ export async function handleCall(
                     );
                 }
             }
-            return createNotFoundTurnImpression(`playlist ${playlistName}`);
+            return createNotFoundActionResult(`playlist ${playlistName}`);
         }
         case "getAlbum": {
             const getAlbumAction = action as unknown as GetPlaylistAction;
@@ -1090,11 +1090,9 @@ export async function handleCall(
                         clientContext,
                     );
                 }
-                return createNotFoundTurnImpression(
-                    `tracks from album ${name}`,
-                );
+                return createNotFoundActionResult(`tracks from album ${name}`);
             }
-            return createNotFoundTurnImpression("album");
+            return createNotFoundActionResult("album");
         }
         case "getFavorites": {
             const getFavoritesAction = action as GetFavoritesAction;
@@ -1116,7 +1114,7 @@ export async function handleCall(
                     clientContext,
                 );
             }
-            return createErrorTurnImpression("No favorites found");
+            return createErrorActionResult("No favorites found");
         }
         case "filterTracks": {
             const filterTracksAction = action as FilterTracksAction;
@@ -1164,7 +1162,7 @@ export async function handleCall(
                     console.log(parseResult.diagnostics);
                 }
             }
-            return createErrorTurnImpression("no current track list to filter");
+            return createErrorActionResult("no current track list to filter");
         }
         case "createPlaylist": {
             const createPlaylistAction = action as CreatePlaylistAction;
@@ -1182,7 +1180,7 @@ export async function handleCall(
                 );
                 console.log(`playlist ${name} created with tracks:`);
                 printTrackNames(input, 0, input.getTrackCount(), clientContext);
-                return createTurnImpressionFromHtmlDisplay(
+                return createActionResultFromHtmlDisplay(
                     `<div>playlist ${name} created with tracks...</div>${await htmlTrackNames(
                         input,
                         0,
@@ -1191,7 +1189,7 @@ export async function handleCall(
                     )}`,
                 );
             }
-            return createErrorTurnImpression(
+            return createErrorActionResult(
                 "no input tracks for createPlaylist",
             );
         }
@@ -1206,16 +1204,16 @@ export async function handleCall(
             });
             if (playlist !== undefined) {
                 await deletePlaylist(clientContext.service, playlist.id);
-                return createTurnImpressionFromTextDisplay(
+                return createActionResultFromTextDisplay(
                     chalk.magentaBright(`playlist ${playlist.name} deleted`),
                 );
             }
-            return createErrorTurnImpression(
+            return createErrorActionResult(
                 `playlist ${playlistName} not found`,
             );
         }
         default:
-            return createErrorTurnImpression(
+            return createErrorActionResult(
                 `Action not supported: ${action.actionName}`,
             );
     }

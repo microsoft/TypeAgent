@@ -550,7 +550,7 @@ export function setContent(
     // Process content according to type
     const contentHtml =
         type === "html"
-            ? DOMPurify.sanitize(text)
+            ? DOMPurify.sanitize(text, { ADD_ATTR: ["target"] })
             : enableText2Html
               ? textToHtml(text)
               : stripAnsi(text);
@@ -694,7 +694,6 @@ export class ChatView {
     private topDiv: HTMLDivElement;
     private messageDiv: HTMLDivElement;
     private inputContainer: HTMLDivElement;
-    private autoScroll = true;
 
     private idToMessageGroup: Map<string, MessageGroup> = new Map();
     chatInput: ChatInput;
@@ -718,9 +717,7 @@ export class ChatView {
         this.topDiv.className = "chat-container";
         this.messageDiv = document.createElement("div");
         this.messageDiv.className = "chat scroll_enabled";
-        this.messageDiv.addEventListener("scroll", () => {
-            this.autoScroll = false;
-        });
+
         this.chatInput = new ChatInput(
             "phraseDiv",
             "reco",
@@ -1190,7 +1187,6 @@ export class ChatView {
         }
 
         this.idToMessageGroup.set(id, mg);
-        this.autoScroll = true;
         this.updateScroll();
         this.commandBackStackIndex = -1;
     }
@@ -1270,16 +1266,16 @@ export class ChatView {
             this.agents.get(source),
             append,
         );
-        this.updateScroll();
 
         if (!dynamicUpdate) {
             agentMessage.updateMetrics(msg.metrics);
+            this.updateScroll();
             this.chatInputFocus();
         }
     }
     updateScroll() {
-        if (this.autoScroll) {
-            this.messageDiv.scrollTop = this.messageDiv.scrollHeight;
+        if (this.messageDiv.firstElementChild) {
+            this.messageDiv.firstElementChild.scrollIntoView(false);
         }
     }
 
