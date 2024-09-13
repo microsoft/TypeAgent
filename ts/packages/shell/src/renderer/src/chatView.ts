@@ -10,7 +10,6 @@ import {
     ActionInfo,
     ActionTemplateSequence,
     ActionUICommand,
-    IMessageMetrics,
     SearchMenuItem,
 } from "../../preload/electronTypes";
 import { ActionCascade } from "./ActionCascade";
@@ -22,11 +21,7 @@ import {
 import { TTS } from "./tts";
 import { IAgentMessage } from "agent-dispatcher";
 import DOMPurify from "dompurify";
-import {
-    ProfileNames,
-    ProfileReader,
-    UnreadProfileEntries,
-} from "agent-dispatcher/profiler";
+import { PhaseTiming, RequestMetrics } from "agent-dispatcher/profiler";
 
 export interface InputChoice {
     element: HTMLElement;
@@ -299,14 +294,14 @@ class MessageContainer {
         setContent(this.messageDiv, content, append);
     }
 
-    public updateMetrics(metrics?: IMessageMetrics) {
+    public updateMetrics(metrics: PhaseTiming, total?: number) {
         if (this.metricDiv === undefined) {
             const metricsDiv = document.createElement("div");
             metricsDiv.className = "chat-message-metrics-left";
             this.messageBodyDiv.append(metricsDiv);
             this.metricDiv = metricsDiv;
         }
-        updateMetrics(this.metricDiv, metrics);
+        updateMetrics(this.metricDiv, metrics, total);
     }
 
     public show() {
@@ -331,14 +326,13 @@ class MessageGroup {
         temporary: boolean;
     }[] = [];
     private readonly agentMessages: MessageContainer[] = [];
-    private readonly profileReader: ProfileReader = new ProfileReader();
 
     private completed = false;
     constructor(
         private readonly chatView: ChatView,
         request: DisplayContent,
         container: HTMLDivElement,
-        requestPromise: Promise<UnreadProfileEntries | undefined>,
+        requestPromise: Promise<RequestMetrics | undefined>,
         timeStamp: Date,
         public agents: Map<string, string>,
     ) {
@@ -378,9 +372,9 @@ class MessageGroup {
             .catch((error) => this.requestException(error));
     }
 
-    private requestCompleted(profileEntries: UnreadProfileEntries | undefined) {
+    private requestCompleted(metrics: RequestMetrics | undefined) {
         this.completed = true;
-        this.updateMetrics(profileEntries);
+        this.updateMetrics(metrics);
         if (this.statusMessages.length === 0) {
             this.addStatusMessage(
                 { message: "Request completed", source: "shell" },
@@ -468,64 +462,33 @@ class MessageGroup {
         }
         this.statusMessages.push({ message, temporary });
 
-        this.updateMetrics(msg.profileEntries);
+        this.updateMetrics(msg.metrics);
         this.updateStatusMessageDivState();
     }
 
-    private getMetrics(actionIndex?: number): IMessageMetrics | undefined {
-        const measures =
-            actionIndex === undefined
-                ? this.profileReader.getMeasures(ProfileNames.translate)
-                : this.profileReader.getMeasures(
-                      ProfileNames.action,
-                      (data) => data === actionIndex,
-                  );
-
-        let marks: Map<string, [number, number]> | undefined = undefined;
-        if (measures !== undefined) {
-            const measure = measures[0];
-            const start = measure.start;
-
-            if (measure.marks.length !== 0) {
-                let firstTokenTotal = 0;
-                let count = 0;
-                for (const mark of measure.marks) {
-                    if (mark.name === ProfileNames.firstToken) {
-                        firstTokenTotal += mark.timestamp - start;
-                        count++;
-                    }
-                }
-                if (count !== 0) {
-                    marks = new Map();
-                    marks.set("First Token", [firstTokenTotal / count, count]);
-                }
-            }
-        }
-        const request = this.profileReader.getMeasures(ProfileNames.request);
-        console.log(actionIndex, request, marks);
-        return {
-            duration: request?.[0].duration,
-            marks,
-        };
-    }
-    public updateMetrics(metrics?: UnreadProfileEntries) {
+    public updateMetrics(metrics?: RequestMetrics) {
         if (metrics) {
-            console.log(metrics);
-            this.profileReader.addEntries(metrics);
-
-            const requestMetrics = this.getMetrics();
-            if (requestMetrics !== undefined) {
+            if (metrics.parse !== undefined) {
                 if (this.userMetricsDiv === undefined) {
                     this.userMetricsDiv = document.createElement("div");
                     this.userMetricsDiv.className =
                         "chat-message-metrics-right";
                     this.userMessageBody.append(this.userMetricsDiv);
                 }
-                updateMetrics(this.userMetricsDiv, requestMetrics);
+                updateMetrics(this.userMetricsDiv, metrics.parse);
             }
-            let index = 0;
-            for (const agentMessage of this.agentMessages) {
-                agentMessage.updateMetrics(this.getMetrics(index++));
+
+            for (let i = 0; i < this.agentMessages.length; i++) {
+                const agentMessage = this.agentMessages[i];
+                const info = metrics.actions[i];
+                if (info !== undefined) {
+                    agentMessage.updateMetrics(
+                        info,
+                        i === this.agentMessages.length - 1
+                            ? metrics.duration
+                            : undefined,
+                    );
+                }
             }
         }
     }
@@ -553,7 +516,7 @@ class MessageGroup {
             this.updateStatusMessageDivState();
         }
 
-        this.updateMetrics(msg.profileEntries);
+        this.updateMetrics(msg.metrics);
         return this.agentMessages[index];
     }
 
@@ -655,39 +618,35 @@ export function createTimestampDiv(timestamp: Date, className: string) {
     return timeStampDiv;
 }
 
-function updateMetrics(div: HTMLDivElement, metrics?: IMessageMetrics) {
-    if (metrics) {
-        // clear out previous perf data
-        div.innerHTML = "";
+function updateMetrics(
+    div: HTMLDivElement,
+    metrics: PhaseTiming,
+    total?: number,
+) {
+    // clear out previous perf data
+    div.innerHTML = "";
 
+    let marksDiv = document.createElement("div");
+    let marksSubContainer = document.createElement("div");
+    marksDiv.className = "metrics-details";
+
+    marksDiv.append(marksSubContainer);
+
+    div.append(marksDiv);
+
+    if (metrics.marks) {
+        for (const [key, value] of Object.entries(metrics.marks)) {
+            const { duration, count } = value;
+            const avg = duration / count;
+            let mDiv = document.createElement("div");
+            mDiv.innerHTML = `${key}: <b>${formatTimeReaderFriendly(avg)}${count > 1 ? ` (avg of ${count})` : ""}</b>`;
+            marksSubContainer.append(mDiv);
+        }
+    }
+    if (metrics.duration) {
         let timeDiv = document.createElement("div");
-        let marksDiv = document.createElement("div");
-        let marksSubContainer = document.createElement("div");
-        marksDiv.className = "metrics-details";
-
-        marksDiv.append(marksSubContainer);
-
-        div.append(marksDiv);
-
-        if (metrics.duration) {
-            timeDiv.innerHTML = `Time Taken: <b>${formatTimeReaderFriendly(metrics.duration)}</b>`;
-        } else {
-            timeDiv.innerText = "no performance data available";
-        }
-
-        if (metrics.marks) {
-            metrics.marks.forEach(
-                ([value, count]: [number, number], key: string) => {
-                    let mDiv = document.createElement("div");
-                    mDiv.innerHTML = `${key}: <b>${formatTimeReaderFriendly(value)}${count > 1 ? ` (${count})` : ""}</b>`;
-                    marksSubContainer.append(mDiv);
-                },
-            );
-        }
-
+        timeDiv.innerHTML = `Time Taken: <b>${formatTimeReaderFriendly(metrics.duration)}</b>${total !== undefined ? `<br>Total Time: <b>${formatTimeReaderFriendly(total)}</b>` : ""}`;
         marksDiv.append(timeDiv);
-    } else {
-        div.innerText = "no performance data available";
     }
 }
 
@@ -1481,7 +1440,7 @@ export class ChatView {
         (window as any).electron.ipcRenderer.send("send-input-text-complete");
     }
 
-    updateMetrics(requestId: string, metrics: UnreadProfileEntries) {
+    updateMetrics(requestId: string, metrics: RequestMetrics) {
         this.getMessageGroup(requestId)?.updateMetrics(metrics);
     }
 }

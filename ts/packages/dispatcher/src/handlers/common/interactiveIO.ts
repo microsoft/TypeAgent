@@ -4,10 +4,10 @@
 import { askYesNo } from "../../utils/interactive.js";
 import readline from "readline/promises";
 import { SearchMenuItem, ActionTemplateSequence } from "common-utils";
-import { UnreadProfileEntries } from "../../utils/profileReader.js";
 import chalk from "chalk";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
 import { AppAgentEvent, DisplayContent } from "@typeagent/agent-sdk";
+import { RequestMetrics } from "../../profiler.js";
 
 export const DispatcherName = "dispatcher";
 export type RequestId = string | undefined;
@@ -43,7 +43,7 @@ export interface IAgentMessage {
     requestId?: string | undefined;
     source: string;
     actionIndex?: number | undefined;
-    profileEntries?: UnreadProfileEntries | undefined;
+    metrics?: RequestMetrics | undefined;
 }
 
 // Client provided IO
@@ -235,9 +235,9 @@ function makeClientIOMessage(
         requestId,
         source,
         actionIndex,
-        profileEntries:
+        metrics:
             requestId !== undefined
-                ? context?.profileLogger?.getUnreadEntries()
+                ? context?.metricsManager?.getMetrics(requestId)
                 : undefined,
     };
 }

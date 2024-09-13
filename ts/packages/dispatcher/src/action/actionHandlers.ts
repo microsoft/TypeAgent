@@ -161,13 +161,17 @@ async function executeAction(
                   actionIndex,
               );
 
-    actionContext.profiler = context.requestProfiler?.measure(
-        ProfileNames.action,
+    actionContext.profiler = context.commandProfiler?.measure(
+        ProfileNames.executeAction,
         true,
         actionIndex,
     );
     let returnedResult: ActionResult | undefined;
     try {
+        context.requestIO.status(
+            `Executing action ${action.fullActionName}`,
+            action.translatorName,
+        );
         returnedResult = await appAgent.executeAction(action, actionContext);
     } finally {
         actionContext.profiler?.stop();
@@ -312,12 +316,19 @@ export async function executeCommand(
         context.requestId!,
         0,
     );
+
     const appAgent = context.agents.getAppAgent(appAgentName);
     if (appAgent.executeCommand === undefined) {
         throw new Error(
             `Agent ${appAgentName} does not support executeCommand.`,
         );
     }
+
+    actionContext.profiler = context.commandProfiler?.measure(
+        ProfileNames.executeCommand,
+        true,
+    );
+
     try {
         return await appAgent.executeCommand(
             command,

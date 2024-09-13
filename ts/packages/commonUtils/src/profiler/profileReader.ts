@@ -4,6 +4,7 @@
 import registerDebug from "debug";
 const debugError = registerDebug("typeagent:profiler:reader:error");
 
+// Entries create by ProfileLogger
 type ProfileCommonEntry = {
     type: "mark" | "start" | "stop";
     measureId: number;
@@ -36,7 +37,7 @@ export type UnreadProfileEntries = {
     entries: ProfileEntry[];
 };
 
-type ProfileMeasure = {
+export type ProfileMeasure = {
     name: string;
     start: number;
     startData: unknown;
@@ -46,7 +47,7 @@ type ProfileMeasure = {
     measures: ProfileMeasure[];
 };
 
-type ProfileMark = {
+export type ProfileMark = {
     name: string;
     data: unknown;
     timestamp: number;
@@ -76,10 +77,17 @@ export class ProfileReader {
         }
     }
 
-    public getMeasures(name: string, filter?: (data: unknown) => boolean) {
+    public getMeasures(
+        name: string,
+        filter?: unknown | ((data: unknown) => boolean),
+    ) {
         const measures = this.measuresByName.get(name);
-        if (filter !== undefined && measures !== undefined) {
-            return measures.filter((m) => filter(m.startData));
+        if (measures !== undefined && filter !== undefined) {
+            return measures.filter(
+                typeof filter === "function"
+                    ? (m) => filter(m.startData)
+                    : (m) => m.startData === filter,
+            );
         }
         return measures;
     }

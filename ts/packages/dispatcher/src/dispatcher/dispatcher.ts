@@ -16,15 +16,14 @@ import {
 } from "../handlers/common/commandHandlerContext.js";
 import { getDynamicDisplay } from "../action/actionHandlers.js";
 import { RequestId } from "../handlers/common/interactiveIO.js";
-import { UnreadProfileEntries } from "../profiler.js";
+import { RequestMetrics } from "../profiler.js";
 
 export interface Dispatcher {
     processCommand(
         command: string,
         requestId?: RequestId,
         attachments?: string[],
-        profile?: boolean,
-    ): Promise<UnreadProfileEntries | undefined>;
+    ): Promise<RequestMetrics | undefined>;
     getDynamicDisplay(
         appAgentName: string,
         type: DisplayType,
@@ -48,14 +47,8 @@ export async function createDispatcher(
 ): Promise<Dispatcher> {
     const context = await initializeCommandHandlerContext(hostName, options);
     return {
-        processCommand(command, requestId, attachments, profile) {
-            return processCommand(
-                command,
-                context,
-                requestId,
-                attachments,
-                profile,
-            );
+        processCommand(command, requestId, attachments) {
+            return processCommand(command, context, requestId, attachments);
         },
         getDynamicDisplay(appAgentName, type, id) {
             return getDynamicDisplay(context, appAgentName, type, id);

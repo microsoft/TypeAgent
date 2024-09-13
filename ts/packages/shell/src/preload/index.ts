@@ -4,23 +4,23 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { ClientAPI, SpeechToken } from "./electronTypes.js"; // Custom APIs for renderer
-import { UnreadProfileEntries } from "agent-dispatcher/profiler";
+import { RequestMetrics } from "agent-dispatcher/profiler";
 
 function getProcessShellRequest() {
     const pendingRequests = new Map<
         string,
         {
-            resolve: (profileEntries?: UnreadProfileEntries) => void;
+            resolve: (metrics?: RequestMetrics) => void;
             reject: (reason?: any) => void;
         }
     >();
 
     ipcRenderer.on(
         "process-shell-request-done",
-        (_, id: string, profileEntries?: UnreadProfileEntries) => {
+        (_, id: string, metrics?: RequestMetrics) => {
             const pendingRequest = pendingRequests.get(id);
             if (pendingRequest !== undefined) {
-                pendingRequest.resolve(profileEntries);
+                pendingRequest.resolve(metrics);
                 pendingRequests.delete(id);
             } else {
                 console.warn(`Pending request ${id} not found`);
@@ -43,12 +43,10 @@ function getProcessShellRequest() {
     );
 
     return (request: string, id: string, images: string[]) => {
-        return new Promise<UnreadProfileEntries | undefined>(
-            (resolve, reject) => {
-                pendingRequests.set(id, { resolve, reject });
-                ipcRenderer.send("process-shell-request", request, id, images);
-            },
-        );
+        return new Promise<RequestMetrics | undefined>((resolve, reject) => {
+            pendingRequests.set(id, { resolve, reject });
+            ipcRenderer.send("process-shell-request", request, id, images);
+        });
     };
 }
 
@@ -138,9 +136,9 @@ const api: ClientAPI = {
     onNotify(callback) {
         ipcRenderer.on("notification-arrived", callback);
     },
-    onProfileEntries(callback) {
-        ipcRenderer.on("profile-entries", callback);
-    }
+    onRequestMetrics(callback) {
+        ipcRenderer.on("request-metrics", callback);
+    },
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to

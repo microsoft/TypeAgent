@@ -400,13 +400,11 @@ function actionCommand(
 }
 
 function sendProfileEntries(message: IAgentMessage) {
-    if (
-        (message.profileEntries !== undefined, message.requestId !== undefined)
-    ) {
+    if (message.metrics !== undefined && message.requestId !== undefined) {
         mainWindow?.webContents.send(
             "profile-entries",
             message.requestId,
-            message.profileEntries,
+            message.metrics,
         );
     }
 }
@@ -536,6 +534,7 @@ app.whenReady().then(async () => {
         explanationAsynchronousMode: true,
         persistSession: true,
         enableServiceHost: true,
+        metrics: true,
         clientIO,
     });
 
@@ -554,7 +553,6 @@ app.whenReady().then(async () => {
             text,
             id,
             images,
-            true,
         );
         mainWindow?.webContents.send("send-demo-event", "CommandProcessed");
         const newSettingSummary = dispatcher.getSettingSummary();

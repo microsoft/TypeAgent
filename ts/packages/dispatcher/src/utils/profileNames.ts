@@ -3,10 +3,12 @@
 
 export enum ProfileNames {
     // Measures
+    command = "command",
+    executeCommand = "executeCommand",
     request = "request",
-    translate = "translate",
-    action = "action",
+    executeAction = "executeAction",
+    translate = "translate", // request translations
 
     // Marks
-    firstToken = "firstToken",
+    firstToken = "firstToken", // within translate measure
 }

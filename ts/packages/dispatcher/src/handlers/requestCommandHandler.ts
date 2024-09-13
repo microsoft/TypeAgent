@@ -235,7 +235,7 @@ async function translateRequestWithTranslator(
         attachments,
     );
 
-    const profiler = context.requestProfiler?.measure(ProfileNames.translate);
+    const profiler = context.commandProfiler?.measure(ProfileNames.translate);
 
     let response: Result<object>;
     try {
@@ -615,17 +615,6 @@ async function requestExecute(
         return;
     }
 
-    const requestIO = context.requestIO;
-    const actions = requestAction.actions;
-    const action = actions.action;
-    if (action === undefined) {
-        requestIO.status(`Executing multiple actions...`);
-    } else {
-        requestIO.status(
-            `Executing action ${action.fullActionName}`,
-            action.translatorName,
-        );
-    }
     await executeActions(requestAction.actions, context);
 }
 
@@ -704,71 +693,76 @@ export class RequestCommandHandler implements DispatcherCommandHandler {
         context: CommandHandlerContext,
         attachments?: string[],
     ) {
-        // Don't handle the request if it contains the separator
-        if (request.includes(RequestAction.Separator)) {
-            throw new Error(
-                `Invalid translation request with translation separator '${RequestAction.Separator}'.  Use @explain if you want to explain a translation.`,
-            );
-        }
-
-        // store attachements for later reuse
-        let cachedFiles: string[] = new Array<string>();
-        let exifTags: ExifReader.Tags[] = new Array<ExifReader.Tags>();
-        if (attachments) {
-            for (let i = 0; i < attachments?.length; i++) {
-                const [attachmentName, tags]: [string, ExifReader.Tags] =
-                    await context.session.storeUserSuppliedFile(
-                        attachments![i],
-                    );
-                cachedFiles.push(attachmentName);
-                exifTags.push(tags);
+        const profiler = context.commandProfiler?.measure(ProfileNames.request);
+        try {
+            // Don't handle the request if it contains the separator
+            if (request.includes(RequestAction.Separator)) {
+                throw new Error(
+                    `Invalid translation request with translation separator '${RequestAction.Separator}'.  Use @explain if you want to explain a translation.`,
+                );
             }
+
+            // store attachements for later reuse
+            let cachedFiles: string[] = new Array<string>();
+            let exifTags: ExifReader.Tags[] = new Array<ExifReader.Tags>();
+            if (attachments) {
+                for (let i = 0; i < attachments?.length; i++) {
+                    const [attachmentName, tags]: [string, ExifReader.Tags] =
+                        await context.session.storeUserSuppliedFile(
+                            attachments![i],
+                        );
+                    cachedFiles.push(attachmentName);
+                    exifTags.push(tags);
+                }
+            }
+
+            const history = context.session.getConfig().history
+                ? getChatHistoryForTranslation(context)
+                : undefined;
+            if (history) {
+                // prefetch entities here
+                context.chatHistory.addEntry(
+                    request,
+                    [],
+                    "user",
+                    context.requestId,
+                    attachments,
+                );
+            }
+
+            // Make sure we clear any left over streaming context
+            context.streamingActionContext = undefined;
+
+            const match = await matchRequest(request, context, history);
+            const translationResult =
+                match === undefined // undefined means not found
+                    ? await translateRequest(
+                          request,
+                          context,
+                          history,
+                          attachments,
+                          exifTags,
+                      )
+                    : match; // result or null
+
+            if (!translationResult) {
+                // undefined means not found or not translated
+                // null means cancelled because of replacement parse error.
+                return;
+            }
+
+            const { requestAction, fromUser, fromCache } = translationResult;
+            if (
+                requestAction !== null &&
+                requestAction !== undefined &&
+                context.conversationManager
+            ) {
+                context.conversationManager.addMessage(request, [], new Date());
+            }
+            await requestExecute(requestAction, context);
+            await requestExplain(requestAction, context, fromCache, fromUser);
+        } finally {
+            profiler?.stop();
         }
-
-        const history = context.session.getConfig().history
-            ? getChatHistoryForTranslation(context)
-            : undefined;
-        if (history) {
-            // prefetch entities here
-            context.chatHistory.addEntry(
-                request,
-                [],
-                "user",
-                context.requestId,
-                attachments,
-            );
-        }
-
-        // Make sure we clear any left over streaming context
-        context.streamingActionContext = undefined;
-
-        const match = await matchRequest(request, context, history);
-        const translationResult =
-            match === undefined // undefined means not found
-                ? await translateRequest(
-                      request,
-                      context,
-                      history,
-                      attachments,
-                      exifTags,
-                  )
-                : match; // result or null
-
-        if (!translationResult) {
-            // undefined means not found or not translated
-            // null means cancelled because of replacement parse error.
-            return;
-        }
-
-        const { requestAction, fromUser, fromCache } = translationResult;
-        if (
-            requestAction !== null &&
-            requestAction !== undefined &&
-            context.conversationManager
-        ) {
-            context.conversationManager.addMessage(request, [], new Date());
-        }
-        await requestExecute(requestAction, context);
-        await requestExplain(requestAction, context, fromCache, fromUser);
     }
 }

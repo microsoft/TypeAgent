@@ -12,7 +12,7 @@ export type ProfileLogger = {
     getUnreadEntries(): UnreadProfileEntries | undefined;
 };
 
-export function createProfilerLogger(): ProfileLogger {
+export function createProfileLogger(): ProfileLogger {
     return new ProfilerImpl();
 }
 
@@ -67,6 +67,7 @@ class ProfilerImpl {
                     data,
                     name,
                 });
+                return true;
             },
             stop: (data?: unknown) => {
                 if (!started || stopped) {

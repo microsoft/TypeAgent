@@ -6,7 +6,7 @@
     "outDir": "../dist",
     "noUnusedLocals": false,
   },
-  "include": ["./**/*"],
+  "include": ["./**/*", "../../commonUtils/src/profileReader.ts", "../../commonUtils/src/profileLogger.ts"],
   "ts-node": {
     "esm": true
   }

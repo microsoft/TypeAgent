@@ -24,8 +24,8 @@ import {
 
 import { executeCommand } from "./action/actionHandlers.js";
 import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/commands";
+import { RequestMetrics } from "./profiler.js";
 import { ProfileNames } from "./utils/profileNames.js";
-import { createProfilerLogger, UnreadProfileEntries } from "./profiler.js";
 
 const debugInteractive = registerDebug("typeagent:cli:interactive");
 
@@ -99,10 +99,9 @@ export async function resolveCommand(
     };
 }
 
-export async function processCommandNoLock(
+async function parseCommand(
     originalInput: string,
     context: CommandHandlerContext,
-    attachments?: string[],
 ) {
     let input = originalInput.trim();
     if (!input.startsWith("@")) {
@@ -111,37 +110,45 @@ export async function processCommandNoLock(
     } else {
         input = input.substring(1);
     }
-
-    try {
-        const result = await resolveCommand(input, context);
-        if (result === undefined) {
+    const result = await resolveCommand(input, context);
+    if (result === undefined) {
+        throw new Error(`Unknown command '${input}'`);
+    }
+    if (result.descriptor === undefined) {
+        if (result.table !== undefined) {
+            throw new Error(
+                `Command '${input}' requires a subcommand. Try '@help ${input}' for the list of sub commands.`,
+            );
+        }
+        const subCommand = result.command?.pop();
+        const appAgentName = result.appAgentName;
+        const command = input.startsWith(`@${appAgentName}`)
+            ? `${appAgentName} ${result.command?.join(" ") ?? ""}`
+            : result.command?.join(" ") ?? "";
+        if (subCommand !== undefined) {
+            throw new Error(
+                `Unknown command '${subCommand}' ${
+                    command
+                        ? ` for '@${command}'. Try '@help ${command}' for the list of subcommands.`
+                        : "Try '@help' for a list of commands."
+                }`,
+            );
+        } else {
             throw new Error(`Unknown command '${input}'`);
         }
-        if (result.descriptor === undefined) {
-            if (result.table !== undefined) {
-                throw new Error(
-                    `Command '${input}' requires a subcommand. Try '@help ${input}' for the list of sub commands.`,
-                );
-            }
-            const subCommand = result.command?.pop();
-            const appAgentName = result.appAgentName;
-            const command = input.startsWith(`@${appAgentName}`)
-                ? `${appAgentName} ${result.command?.join(" ") ?? ""}`
-                : result.command?.join(" ") ?? "";
-            if (subCommand !== undefined) {
-                throw new Error(
-                    `Unknown command '${subCommand}' ${
-                        command
-                            ? ` for '@${command}'. Try '@help ${command}' for the list of subcommands.`
-                            : "Try '@help' for a list of commands."
-                    }`,
-                );
-            } else {
-                throw new Error(`Unknown command '${input}'`);
-            }
-        }
+    }
 
-        context.logger?.logEvent("command", { originalInput });
+    context.logger?.logEvent("command", { originalInput });
+    return result;
+}
+
+export async function processCommandNoLock(
+    originalInput: string,
+    context: CommandHandlerContext,
+    attachments?: string[],
+) {
+    try {
+        const result = await parseCommand(originalInput, context);
         await executeCommand(
             result.command,
             result.args,
@@ -152,8 +159,6 @@ export async function processCommandNoLock(
     } catch (e: any) {
         context.requestIO.error(`ERROR: ${e.message}`);
         debugInteractive(e.stack);
-    } finally {
-        context.requestProfiler?.stop();
     }
 }
 
@@ -162,35 +167,34 @@ export async function processCommand(
     context: CommandHandlerContext,
     requestId?: RequestId,
     attachments?: string[],
-    profile: boolean = false,
-): Promise<UnreadProfileEntries | undefined> {
+): Promise<RequestMetrics | undefined> {
     // Process one command at at time.
     return context.commandLock(async () => {
         context.requestId = requestId;
-        if (profile) {
-            context.profileLogger = createProfilerLogger();
-            context.requestProfiler = context.profileLogger.measure(
-                ProfileNames.request,
-                true,
-                requestId,
-            );
+        if (requestId) {
+            context.commandProfiler =
+                context.metricsManager?.beginCommand(requestId);
         }
-
         const oldRequestIO = context.requestIO;
+        try {
+            if (context.clientIO) {
+                context.requestIO = getRequestIO(context, context.clientIO);
+            }
 
-        if (context.clientIO) {
-            context.requestIO = getRequestIO(context, context.clientIO);
+            await processCommandNoLock(originalInput, context, attachments);
+        } finally {
+            context.commandProfiler?.stop();
+            context.commandProfiler = undefined;
+
+            const metrics = requestId
+                ? context.metricsManager?.endCommand(requestId)
+                : undefined;
+
+            context.requestId = undefined;
+            context.requestIO = oldRequestIO;
+
+            return metrics;
         }
-
-        await processCommandNoLock(originalInput, context, attachments);
-
-        const entries = context.profileLogger?.getUnreadEntries();
-        context.requestProfiler = undefined;
-        context.profileLogger = undefined;
-        context.requestId = undefined;
-        context.requestIO = oldRequestIO;
-
-        return entries;
     });
 }
 
