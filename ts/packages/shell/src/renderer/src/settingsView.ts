@@ -196,14 +196,14 @@ export class SettingsView {
                 chatView.chatInput.camButton.classList.remove(
                     "chat-message-hidden",
                 );
-                chatView.chatInput.picButton.classList.remove(
+                chatView.chatInput.attachButton.classList.remove(
                     "chat-message-hidden",
                 );
             } else {
                 chatView.chatInput.camButton.classList.add(
                     "chat-message-hidden",
                 );
-                chatView.chatInput.picButton.classList.add(
+                chatView.chatInput.attachButton.classList.add(
                     "chat-message-hidden",
                 );
             }

@@ -47,7 +47,7 @@ export function makeRequestPromptCreator(
 
         if (attachments !== undefined && attachments?.length > 0) {
             imageSuffix =
-                "including any images (and related EXIF infomration), ";
+                "including any images provided (and related EXIF infomration), ";
 
             if (request.length == 0) {
                 request =

@@ -165,6 +165,7 @@ export function iconImage() {
 
 export function iconCamera(fillColor: string = "currentColor") {
     const path = `<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="${fillColor}">
+    <title>Click to take a picture with your camera.</title>
   <path fill-rule="evenodd" clip-rule="evenodd" d="M10.707 3H14.5l.5.5v9l-.5.5h-13l-.5-.5v-9l.5-.5h3.793l.853-.854L6.5 2h3l.354.146.853.854zM2 12h12V4h-3.5l-.354-.146L9.293 3H6.707l-.853.854L5.5 4H2v8zm1.5-7a.5.5 0 1 0 0 1 .5.5 0 0 0 0-1zM8 6a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm0-1a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />
 </svg>`;
     return createSVGElement(path);
@@ -212,4 +213,21 @@ export function iconCancel(fillColor: string = "currentColor") {
 </svg>`;
 
     return createSVGElement(path);
+}
+
+export function iconAttach(fillColor: string = "#1F1F1F") {
+  const path = `<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Attach a file</title>
+  <path d="M7.75 15H7.25C6.35568 14.9646 5.51177 14.5765 4.90275 13.9207C4.29374 13.2648 3.96917 12.3945 4 11.5V3.682C3.97784 2.99536 4.22834 2.32785 4.69677 1.82531C5.1652 1.32278 5.81349 1.02607 6.5 1C7.18651 1.02607 7.8348 1.32278 8.30323 1.82531C8.77166 2.32785 9.02216 2.99536 9 3.682V10.849C9.01105 11.2586 8.85945 11.6559 8.57836 11.9541C8.29727 12.2522 7.90955 12.4269 7.5 12.44C7.09434 12.4275 6.70983 12.2561 6.42927 11.9628C6.14872 11.6695 5.99456 11.2778 6 10.872V7H7V10.849C6.98916 10.9934 7.0355 11.1363 7.12904 11.2468C7.22257 11.3574 7.3558 11.4268 7.5 11.44C7.6442 11.4268 7.77743 11.3574 7.87096 11.2468C7.9645 11.1363 8.01084 10.9934 8 10.849V3.682C8.02242 3.26046 7.87735 2.84714 7.59639 2.53209C7.31543 2.21704 6.92135 2.02579 6.5 2C6.07865 2.02579 5.68457 2.21704 5.40361 2.53209C5.12265 2.84714 4.97758 3.26046 5 3.682V11.5C4.96944 12.1292 5.18877 12.7451 5.6102 13.2133C6.03164 13.6816 6.62103 13.9643 7.25 14H7.75C8.37897 13.9643 8.96836 13.6816 9.3898 13.2133C9.81123 12.7451 10.0306 12.1292 10 11.5V5H11V11.5C11.0308 12.3945 10.7063 13.2648 10.0972 13.9207C9.48823 14.5765 8.64432 14.9646 7.75 15V15Z" fill="${fillColor}" />
+</svg>`;
+
+return createSVGElement(path);
+}
+
+export function iconSend(fillColor: string = "#1F1F1F") {
+  const path = `<svg xmlns="http://www.w3.org/2000/svg" fill="${fillColor}" viewBox="0 0 2048 2048">
+  <path d="M2048 960q0 19-10 34t-27 24L91 1914q-12 6-27 6-28 0-46-18t-18-47v-9q0-4 2-8l251-878L2 82q-2-4-2-8t0-9q0-28 18-46T64 0q15 0 27 6l1920 896q37 17 37 58zM164 1739l1669-779L164 181l205 715h847q26 0 45 19t19 45q0 26-19 45t-45 19H369l-205 715z" />
+</svg>`;
+
+return createSVGElement(path);
 }
