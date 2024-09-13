@@ -368,7 +368,7 @@ class MessageGroup {
         this.userMessage = userMessage;
 
         requestPromise
-            .then((profileEntries) => this.requestCompleted(profileEntries))
+            .then((metrics) => this.requestCompleted(metrics))
             .catch((error) => this.requestException(error));
     }
 

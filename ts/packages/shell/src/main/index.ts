@@ -410,10 +410,10 @@ function actionCommand(
     );
 }
 
-function sendProfileEntries(message: IAgentMessage) {
+function sendRequestMetrics(message: IAgentMessage) {
     if (message.metrics !== undefined && message.requestId !== undefined) {
         mainWindow?.webContents.send(
-            "profile-entries",
+            "request-metrics",
             message.requestId,
             message.metrics,
         );
@@ -424,7 +424,7 @@ const clientIO: ClientIO = {
     clear: () => {
         mainWindow?.webContents.send("clear");
     },
-    info: sendProfileEntries,
+    info: sendRequestMetrics,
     success: sendStatusMessage,
     status: (message) => sendStatusMessage(message, true),
     warn: sendStatusMessage,
@@ -560,11 +560,7 @@ app.whenReady().then(async () => {
         }
         debugShell(dispatcher.getPrompt(), text);
 
-        const profileEntries = await dispatcher.processCommand(
-            text,
-            id,
-            images,
-        );
+        const metrics = await dispatcher.processCommand(text, id, images);
         mainWindow?.webContents.send("send-demo-event", "CommandProcessed");
         const newSettingSummary = dispatcher.getSettingSummary();
         if (newSettingSummary !== settingSummary) {
@@ -576,18 +572,18 @@ app.whenReady().then(async () => {
             );
         }
 
-        return profileEntries;
+        return metrics;
     }
 
     ipcMain.on(
         "process-shell-request",
         (_event, text: string, id: string, images: string[]) => {
             processShellRequest(text, id, images)
-                .then((profileEntries) =>
+                .then((metrics) =>
                     mainWindow?.webContents.send(
                         "process-shell-request-done",
                         id,
-                        profileEntries,
+                        metrics,
                     ),
                 )
                 .catch((error) => {
