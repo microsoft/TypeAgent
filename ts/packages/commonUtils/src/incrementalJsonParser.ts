@@ -42,8 +42,9 @@ const skipSpace = [
 export type IncrementalJsonValueCallBack = (
     prop: string,
     value: any,
-    partial: boolean,
+    delta?: string,
 ) => void;
+
 export function createIncrementalJsonParser(
     cb: IncrementalJsonValueCallBack,
     options?: {
@@ -53,6 +54,7 @@ export function createIncrementalJsonParser(
 ) {
     // Literal value
     let currentLiteral: string = "";
+    let literalDelta: string = "";
     let currentUnicodeEscape: string = "";
     let expectedKeyword: string = "";
     let expectedKeywordValue: boolean | null = null;
@@ -83,15 +85,17 @@ export function createIncrementalJsonParser(
         // Invalid number
         return State.Error;
     }
-    function finishElementValue(value: any) {
+    function finishElementValue(value?: any) {
         if (value === undefined) {
+            // finishing structures (object/array)
             if (options?.full) {
                 value = currentNested;
-                cb(props.join("."), value, false);
+                cb(props.join("."), value);
                 currentNested = nested.pop();
             }
         } else {
-            cb(props.join("."), value, false);
+            reportStringDelta();
+            cb(props.join("."), value);
         }
 
         const lastProp = props.pop();
@@ -124,7 +128,7 @@ export function createIncrementalJsonParser(
     }
     function finishArray() {
         props.pop(); // pop the index
-        return finishElementValue(undefined);
+        return finishElementValue();
     }
     function startLiteral(c: string, newState: State): State {
         currentLiteral = c;
@@ -169,6 +173,10 @@ export function createIncrementalJsonParser(
     function isPendingPropertyName() {
         return props.length !== 0 && props[props.length - 1] === "";
     }
+    function appendStringLiteral(c: string) {
+        literalDelta += c;
+        currentLiteral += c;
+    }
     function parseLiteralString(c: string): State {
         switch (c) {
             case '"':
@@ -190,7 +198,7 @@ export function createIncrementalJsonParser(
                     // Invalid control character in string literal
                     return State.Error;
                 }
-                currentLiteral += c;
+                appendStringLiteral(c);
                 return State.LiteralString;
         }
     }
@@ -199,22 +207,22 @@ export function createIncrementalJsonParser(
             case '"':
             case "\\":
             case "/":
-                currentLiteral += c;
+                appendStringLiteral(c);
                 break;
             case "b":
-                currentLiteral += "\b";
+                appendStringLiteral("\b");
                 break;
             case "f":
-                currentLiteral += "\f";
+                appendStringLiteral("\f");
                 break;
             case "n":
-                currentLiteral += "\n";
+                appendStringLiteral("\n");
                 break;
             case "r":
-                currentLiteral += "\r";
+                appendStringLiteral("\r");
                 break;
             case "t":
-                currentLiteral += "\t";
+                appendStringLiteral("\t");
                 break;
             case "u":
                 currentUnicodeEscape = "";
@@ -232,8 +240,8 @@ export function createIncrementalJsonParser(
         }
         currentUnicodeEscape += c;
         if (currentUnicodeEscape.length === 4) {
-            currentLiteral += String.fromCharCode(
-                parseInt(currentUnicodeEscape, 16),
+            appendStringLiteral(
+                String.fromCharCode(parseInt(currentUnicodeEscape, 16)),
             );
             return State.LiteralString;
         }
@@ -338,7 +346,7 @@ export function createIncrementalJsonParser(
     function parseObjectPropEnd(c: string): State {
         switch (c) {
             case "}":
-                return finishElementValue(undefined);
+                return finishElementValue();
             case ",":
                 return State.ObjectPropStart;
             default:
@@ -370,7 +378,7 @@ export function createIncrementalJsonParser(
         switch (state) {
             case State.ObjectStart:
                 if (c === "}") {
-                    return finishElementValue(undefined);
+                    return finishElementValue();
                 }
             // fall thru
             case State.ObjectPropStart:
@@ -408,6 +416,20 @@ export function createIncrementalJsonParser(
         return State.Error;
     }
 
+    function reportStringDelta() {
+        if (options?.partial) {
+            // States that expect a value and the value is a literal string
+            if (
+                (currentState === State.LiteralString ||
+                    currentState === State.LiteralStringEscape ||
+                    currentState === State.LiteralStringUnicodeEscape) &&
+                !isPendingPropertyName()
+            ) {
+                cb(props.join("."), currentLiteral, literalDelta);
+            }
+        }
+        literalDelta = "";
+    }
     let currentState: State = State.Element;
     return {
         parse: (chunk: string) => {
@@ -423,18 +445,7 @@ export function createIncrementalJsonParser(
                 }
             }
 
-            if (options?.partial) {
-                // States that expect a value and the value is a literal string
-                if (
-                    (currentState === State.LiteralString ||
-                        currentState === State.LiteralStringEscape ||
-                        currentState === State.LiteralStringUnicodeEscape) &&
-                    !isPendingPropertyName()
-                ) {
-                    // REVIEW: might want to detect if the literal has changed since the last callback
-                    cb(props.join("."), currentLiteral, true);
-                }
-            }
+            reportStringDelta();
             return true;
         },
         complete: () => {

@@ -2,28 +2,26 @@
 // Licensed under the MIT License.
 
 import { Action, Actions } from "agent-cache";
-import {
-    closeCommandHandlerContext,
-    CommandHandlerContext,
-} from "../handlers/common/commandHandlerContext.js";
+import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
 import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
     ActionIO,
-    createTurnImpressionFromLiteral,
+    createActionResult,
     AppAgentEvent,
     SessionContext,
-    TurnImpression,
-    turnImpressionToString,
+    ActionResult,
+    actionResultToString,
     DynamicDisplay,
     DisplayType,
-    AppAgent,
+    DisplayContent,
+    ActionContext,
 } from "@typeagent/agent-sdk";
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
 import { getUserProfileDir } from "../utils/userData.js";
 import { Profiler } from "common-utils";
-import { CommandHandlerBase } from "../handlers/common/commandHandlerBase.js";
+import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
 
 const debugAgent = registerDebug("typeagent:agent");
 const debugActions = registerDebug("typeagent:actions");
@@ -33,30 +31,21 @@ function getActionContext(
     context: CommandHandlerContext,
     requestId: string,
     actionIndex: number,
-) {
+): ActionContext<unknown> {
     const sessionContext = context.agents.getSessionContext(appAgentName);
     const actionIO: ActionIO = {
         get type() {
             return context.requestIO.type;
         },
-        setActionDisplay(content: string): void {
-            context.requestIO.setActionDisplay(
-                content,
-                actionIndex,
-                appAgentName,
-            );
+        setDisplay(content: DisplayContent): void {
+            context.requestIO.setDisplay(content, actionIndex, appAgentName);
+        },
+        appendDisplay(content: DisplayContent): void {
+            context.requestIO.appendDisplay(content, actionIndex, appAgentName);
         },
     };
     return {
-        get agentContext() {
-            return sessionContext.agentContext;
-        },
-        get sessionStorage() {
-            return sessionContext.sessionStorage;
-        },
-        get profileStorage() {
-            return sessionContext.profileStorage;
-        },
+        streamingContext: undefined,
         get sessionContext() {
             return sessionContext;
         },
@@ -89,8 +78,8 @@ export function createSessionContext<T = unknown>(
         get profileStorage() {
             return profileStorage;
         },
-        notify(event: AppAgentEvent, data: any) {
-            context.requestIO.notify(event, data, name);
+        notify(event: AppAgentEvent, message: string) {
+            context.requestIO.notify(event, undefined, message, name);
         },
         async toggleTransientAgent(subAgentName: string, enable: boolean) {
             if (!subAgentName.startsWith(`${name}.`)) {
@@ -146,7 +135,7 @@ async function executeAction(
     action: Action,
     context: CommandHandlerContext,
     actionIndex: number,
-): Promise<TurnImpression | undefined> {
+): Promise<ActionResult | undefined> {
     const translatorName = action.translatorName;
 
     if (translatorName === undefined) {
@@ -163,18 +152,23 @@ async function executeAction(
             `Agent ${appAgentName} does not support executeAction.`,
         );
     }
-    const actionContext = getActionContext(
-        appAgentName,
-        context,
-        context.requestId!,
-        actionIndex,
-    );
-    const returnedResult: TurnImpression | undefined =
+
+    // Reuse the same streaming action context if one is available.
+    const actionContext =
+        actionIndex === 0 && context.streamingActionContext
+            ? context.streamingActionContext
+            : getActionContext(
+                  appAgentName,
+                  context,
+                  context.requestId!,
+                  actionIndex,
+              );
+    const returnedResult: ActionResult | undefined =
         await appAgent.executeAction(action, actionContext);
 
-    let result: TurnImpression;
+    let result: ActionResult;
     if (returnedResult === undefined) {
-        result = createTurnImpressionFromLiteral(
+        result = createActionResult(
             `Action ${action.fullActionName} completed.`,
         );
     } else {
@@ -193,7 +187,7 @@ async function executeAction(
         result = returnedResult;
     }
     if (debugActions.enabled) {
-        debugActions(turnImpressionToString(result));
+        debugActions(actionResultToString(result));
     }
     if (result.error !== undefined) {
         context.requestIO.error(result.error, translatorName);
@@ -204,7 +198,9 @@ async function executeAction(
             context.requestId,
         );
     } else {
-        actionContext.actionIO.setActionDisplay(result.displayText);
+        if (result.displayContent !== undefined) {
+            actionContext.actionIO.setDisplay(result.displayContent);
+        }
         if (result.dynamicDisplayId !== undefined) {
             context.clientIO?.setDynamicDisplay(
                 translatorName,
@@ -265,7 +261,7 @@ export function startStreamPartialAction(
     translatorName: string,
     actionName: string,
     context: CommandHandlerContext,
-) {
+): IncrementalJsonValueCallBack {
     const appAgentName = getAppAgentName(translatorName);
     const appAgent = context.agents.getAppAgent(appAgentName);
     if (appAgent.streamPartialAction === undefined) {
@@ -282,12 +278,14 @@ export function startStreamPartialAction(
         0,
     );
 
-    return (name: string, value: string, partial: boolean) => {
+    context.streamingActionContext = actionContext;
+
+    return (name: string, value: any, delta?: string) => {
         appAgent.streamPartialAction!(
             actionName,
             name,
             value,
-            partial,
+            delta,
             actionContext,
         );
     };

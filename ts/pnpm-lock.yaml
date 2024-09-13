@@ -1028,6 +1028,9 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
+      exifreader:
+        specifier: ^4.23.5
+        version: 4.23.5
       find-config:
         specifier: ^1.0.0
         version: 1.0.0
@@ -1113,6 +1116,9 @@ importers:
       email:
         specifier: workspace:*
         version: link:../agents/email
+      exifreader:
+        specifier: 4.23.5
+        version: 4.23.5
       glob:
         specifier: ^10.3.12
         version: 10.3.12
@@ -1291,6 +1297,9 @@ importers:
       debug:
         specifier: 4.3.4
         version: 4.3.4(supports-color@8.1.1)
+      dompurify:
+        specifier: ^3.1.6
+        version: 3.1.6
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
@@ -1313,6 +1322,9 @@ importers:
       '@types/debug':
         specifier: ^4.1.10
         version: 4.1.10
+      '@types/dompurify':
+        specifier: ^3.0.5
+        version: 3.0.5
       '@types/node':
         specifier: ^18.17.5
         version: 18.18.7
@@ -2466,6 +2478,9 @@ packages:
   '@types/debug@4.1.10':
     resolution: {integrity: sha512-tOSCru6s732pofZ+sMv9o4o3Zc+Sa8l3bxd/tweTQudFn06vAzb13ZX46Zi6m6EJ+RUbRTHvgQJ1gBtSgkaUYA==}
 
+  '@types/dompurify@3.0.5':
+    resolution: {integrity: sha512-1Wg0g3BtQF7sSb27fJQAKck1HECM6zV1EB66j8JH9i3LCjYabJa0FSdiSgsD5K/RbrsR0SiraKacLB+T8ZVYAg==}
+
   '@types/eslint-scope@3.7.7':
     resolution: {integrity: sha512-MzMFlSLBqNF2gcHWO0G1vP/YQyfvrxZ0bF+u7mzUdZ1/xK4A4sru+nraZz5i3iEIk1l1uyicaDVTB4QbbEkAYg==}
 
@@ -2612,6 +2627,9 @@ packages:
 
   '@types/stack-utils@2.0.2':
     resolution: {integrity: sha512-g7CK9nHdwjK2n0ymT2CW698FuWJRIx+RP6embAzZ2Qi8/ilIrA1Imt2LVSeHUzKvpoi7BhmmQcXz95eS0f2JXw==}
+
+  '@types/trusted-types@2.0.7':
+    resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
 
   '@types/verror@1.10.9':
     resolution: {integrity: sha512-MLx9Z+9lGzwEuW16ubGeNkpBDE84RpB/NyGgg6z2BTpWzKkGU451cAY3UkUzZEp72RHF585oJ3V8JVNqIplcAQ==}
@@ -3667,6 +3685,9 @@ packages:
     resolution: {integrity: sha512-cgwlv/1iFQiFnU96XXgROh8xTeetsnJiDsTc7TYCLFd9+/WNkIqPTxiM/8pSd8VIrhXGTf1Ny1q1hquVqDJB5w==}
     engines: {node: '>= 4'}
 
+  dompurify@3.1.6:
+    resolution: {integrity: sha512-cTOAhc36AalkjtBpfG6O8JimdTMWNXjiePT2xQH/ppBGi/4uIpmj8eKyIkMJErXWARyINV/sB38yf8JCLF5pbQ==}
+
   domutils@2.8.0:
     resolution: {integrity: sha512-w96Cjofp72M5IIhpjgobBimYEfoPjx1Vx0BSX9P30WBdZW2WIKU0T1Bd0kz2eNZ9ikjKgHbEyKx8BB6H1L3h3A==}
 
@@ -3894,6 +3915,9 @@ packages:
   execa@5.1.1:
     resolution: {integrity: sha512-8uSpZZocAZRBAPIEINJj3Lo9HyGitllczc27Eh5YYojjMFMn8yHMDMaUHE2Jqfq05D/wucwI4JGURyXt1vchyg==}
     engines: {node: '>=10'}
+
+  exifreader@4.23.5:
+    resolution: {integrity: sha512-Gy9FXSBW+4ivu4aNtthGHAPEfVJ72z4aN9Iusr3YiIOy+ZCh7NWfoswCXZV/CH8MpOJE2Ij4hmmKQPGvo4Vf9g==}
 
   exit@0.1.2:
     resolution: {integrity: sha512-Zk/eNKV2zbjpKzrsQ+n1G6poVbErQxJ0LBOJXaKZ1EViLzH+hrLu9cdXI4zw9dBQJslwBEpbQ2P1oS7nDxs6jQ==}
@@ -8301,6 +8325,10 @@ snapshots:
     dependencies:
       '@types/ms': 0.7.33
 
+  '@types/dompurify@3.0.5':
+    dependencies:
+      '@types/trusted-types': 2.0.7
+
   '@types/eslint-scope@3.7.7':
     dependencies:
       '@types/eslint': 8.56.2
@@ -8466,6 +8494,8 @@ snapshots:
   '@types/spotify-api@0.0.22': {}
 
   '@types/stack-utils@2.0.2': {}
+
+  '@types/trusted-types@2.0.7': {}
 
   '@types/verror@1.10.9':
     optional: true
@@ -9805,6 +9835,8 @@ snapshots:
     dependencies:
       domelementtype: 2.3.0
 
+  dompurify@3.1.6: {}
+
   domutils@2.8.0:
     dependencies:
       dom-serializer: 1.4.1
@@ -10097,6 +10129,10 @@ snapshots:
       onetime: 5.1.2
       signal-exit: 3.0.7
       strip-final-newline: 2.0.0
+
+  exifreader@4.23.5:
+    optionalDependencies:
+      '@xmldom/xmldom': 0.8.10
 
   exit@0.1.2: {}
 

@@ -4,6 +4,7 @@
 import { ElectronAPI } from "@electron-toolkit/preload";
 import { AppAgentEvent, DynamicDisplay } from "@typeagent/agent-sdk";
 import { ShellSettings } from "../main/shellSettings.js";
+import { IAgentMessage } from "agent-dispatcher";
 
 export type SpeechToken = {
     token: string;
@@ -77,14 +78,6 @@ export type ActionTemplateSequence = {
     prefaceMultiple?: string;
 };
 
-export interface IAgentMessage {
-    message: string;
-    requestId?: string | undefined;
-    source: string;
-    actionIndex?: number | undefined;
-    metrics?: IMessageMetrics;
-}
-
 export interface IMessageMetrics {
     duration: number | undefined;
     marks?: Map<string, number> | undefined;
@@ -95,6 +88,12 @@ export enum NotifyCommands {
     Clear = "clear",
     ShowUnread = "unread",
     ShowAll = "all",
+}
+
+export type EmptyFunction = () => void;
+export type SetSettingFunction = (name: string, value: any) => void;
+export interface ClientSettingsProvider {
+    set: SetSettingFunction | null;
 }
 
 // end duplicate type section
@@ -118,6 +117,7 @@ export interface ClientAPI {
         callback: (
             e: Electron.IpcRendererEvent,
             message: IAgentMessage,
+            append: boolean,
         ) => void,
     ): void;
     onSetDynamicActionDisplay(

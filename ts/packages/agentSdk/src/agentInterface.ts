@@ -41,7 +41,7 @@ export interface AppActionWithParameters extends AppAction {
 export type DisplayType = "html" | "text";
 
 export type DynamicDisplay = {
-    content: string;
+    content: DisplayContent;
     nextRefreshMs: number; // in milliseconds, -1 means no more refresh.
 };
 
@@ -85,7 +85,7 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
         actionName: string,
         name: string,
         value: string,
-        partial: boolean,
+        delta: string | undefined,
         context: ActionContext<unknown>,
     ): void;
     executeAction?(
@@ -150,12 +150,21 @@ export interface Storage {
     getTokenCachePersistence(): Promise<TokenCachePersistence>;
 }
 
+export type DisplayContent =
+    | string
+    | {
+          type: DisplayType;
+          content: string;
+      };
+
 export interface ActionIO {
     readonly type: DisplayType;
-    setActionDisplay(content: string): void;
+    setDisplay(content: DisplayContent): void;
+    appendDisplay(content: DisplayContent): void;
 }
 
 export interface ActionContext<T = void> {
+    streamingContext: unknown;
     readonly actionIO: ActionIO;
     readonly sessionContext: SessionContext<T>;
     performanceMark(markName: string): void;

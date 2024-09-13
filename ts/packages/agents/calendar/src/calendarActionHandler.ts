@@ -23,8 +23,9 @@ import {
 } from "./calendarQueryHelper.js";
 import {
     SessionContext,
-    createTurnImpressionFromDisplay,
-    createTurnImpressionFromError,
+    createActionResultFromTextDisplay,
+    createActionResultFromHtmlDisplay,
+    createActionResultFromError,
     AppAction,
     AppAgent,
     ActionContext,
@@ -266,7 +267,7 @@ export async function handleCalendarAction(
         !calendarContext.calendarClient ||
         !calendarContext.calendarClient?.isGraphClientInitialized()
     ) {
-        return createTurnImpressionFromDisplay(
+        return createActionResultFromTextDisplay(
             "Not handling calendar actions ...",
         );
     }
@@ -373,7 +374,7 @@ export async function handleCalendarAction(
                         console.log(displayText);
 
                         let result =
-                            createTurnImpressionFromDisplay(displayText);
+                            createActionResultFromHtmlDisplay(displayText);
 
                         if (result && localId) {
                             result.entities = [
@@ -393,7 +394,7 @@ export async function handleCalendarAction(
                                 "Failed to add the event, please try again!",
                             ),
                         );
-                        return createTurnImpressionFromError(
+                        return createActionResultFromError(
                             "Failed to add the event, please try again!",
                         );
                     }
@@ -405,7 +406,7 @@ export async function handleCalendarAction(
                                 : err,
                         ),
                     );
-                    return createTurnImpressionFromError(err);
+                    return createActionResultFromError(err);
                 }
             } else {
                 console.log(
@@ -415,7 +416,7 @@ export async function handleCalendarAction(
                             : err,
                     ),
                 );
-                return createTurnImpressionFromError(err);
+                return createActionResultFromError(err);
             }
             break;
 
@@ -468,7 +469,7 @@ export async function handleCalendarAction(
                     const err =
                         "Please provide a valid date and time range to search for events.";
                     console.log(chalk.bgYellowBright(err));
-                    return createTurnImpressionFromError(err);
+                    return createActionResultFromError(err);
                 }
             } else if (actionEvent && actionEvent.description) {
                 let findResults =
@@ -534,13 +535,13 @@ export async function handleCalendarAction(
                     const err =
                         "Please provide a valid date and time range to search for events.";
                     console.log(chalk.bgYellowBright(err));
-                    return createTurnImpressionFromError(err);
+                    return createActionResultFromError(err);
                 }
             } else {
                 const err =
                     "Please provide participant and  valid date and time range to search for events.";
                 console.log(chalk.bgYellowBright(err));
-                return createTurnImpressionFromError(err);
+                return createActionResultFromError(err);
             }
             break;
 
@@ -602,7 +603,7 @@ export async function handleCalendarAction(
                     );
                     console.log(displayText);
 
-                    let result = createTurnImpressionFromDisplay(displayText);
+                    let result = createActionResultFromHtmlDisplay(displayText);
                     if (result && localId) {
                         result.entities = [
                             {
@@ -620,7 +621,7 @@ export async function handleCalendarAction(
                             "Failed to add the event, please try again!",
                         ),
                     );
-                    return createTurnImpressionFromError(
+                    return createActionResultFromError(
                         "Failed to add the event, please try again!",
                     );
                 }
@@ -689,7 +690,7 @@ export async function handleCalendarAction(
                                     console.log(displayText);
 
                                     let result =
-                                        createTurnImpressionFromDisplay(
+                                        createActionResultFromHtmlDisplay(
                                             displayText,
                                         );
 
@@ -714,11 +715,11 @@ export async function handleCalendarAction(
                                             calendarContext,
                                         );
 
-                                        return createTurnImpressionFromError(
+                                        return createActionResultFromError(
                                             "Looks like the event was deleted, please try again!",
                                         );
                                     } else {
-                                        return createTurnImpressionFromError(
+                                        return createActionResultFromError(
                                             "Failed to add the participants to the event, please try again!",
                                         );
                                     }
@@ -734,7 +735,7 @@ export async function handleCalendarAction(
             console.log(chalk.gray("UNKNOWN action type:"));
             break;
     }
-    return createTurnImpressionFromError("Failed to execute the action!");
+    return createActionResultFromError("Failed to execute the action!");
 }
 
 async function populateMeetingDetailsFromEvent(
@@ -744,16 +745,16 @@ async function populateMeetingDetailsFromEvent(
     if (events instanceof Array) {
         if (events && events.length > 0) {
             const displayText = findEventsDisplayHtml(events);
-            let result = createTurnImpressionFromDisplay(displayText);
+            let result = createActionResultFromHtmlDisplay(displayText);
             return result;
         } else {
             const displayText = `You have a meeting free day 😊`;
-            let result = createTurnImpressionFromDisplay(displayText);
+            let result = createActionResultFromTextDisplay(displayText);
             return result;
         }
     } else {
         const displayText = findEventsDisplayHtml(events);
-        let result = createTurnImpressionFromDisplay(displayText);
+        let result = createActionResultFromHtmlDisplay(displayText);
         return result;
     }
 }

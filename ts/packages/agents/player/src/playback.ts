@@ -4,7 +4,7 @@
 import { getDevices, getPlaybackState, transferPlayback } from "./endpoints.js";
 import { IClientContext } from "./client.js";
 import chalk from "chalk";
-import { TurnImpression } from "@typeagent/agent-sdk";
+import { DisplayContent, ActionResultSuccess } from "@typeagent/agent-sdk";
 
 // convert milliseconds to elapsed minutes and seconds as a string
 function msToElapsedMinSec(ms: number) {
@@ -52,7 +52,7 @@ export function chalkStatus(status: SpotifyApi.CurrentPlaybackResponse) {
 
 function htmlPlaybackStatus(
     status: SpotifyApi.CurrentPlaybackResponse,
-    turnImpression: TurnImpression,
+    actionResult: ActionResultSuccess,
 ) {
     let displayHTML = "";
     if (status.item) {
@@ -73,14 +73,14 @@ function htmlPlaybackStatus(
             }
             const pp = status.is_playing ? "" : "(paused)";
             const album = status.item.album.name;
-            turnImpression.literalText += `Now playing${pp}: ${status.item.name} from album ${album} with ${artists}`;
-            turnImpression.entities.push({
+            actionResult.literalText += `Now playing${pp}: ${status.item.name} from album ${album} with ${artists}`;
+            actionResult.entities.push({
                 name: status.item.name,
                 type: ["track"],
             });
             // make an entity for each artist
             for (const artist of status.item.artists) {
-                turnImpression.entities.push({
+                actionResult.entities.push({
                     name: artist.name,
                     type: ["artist"],
                 });
@@ -88,38 +88,41 @@ function htmlPlaybackStatus(
             const plainArtists = "    A" + artists.substring(1);
             displayHTML += `<div>${plainArtists}</div>\n`;
             displayHTML += `<div>   Album: ${album}</div>\n`;
-            turnImpression.entities.push({
+            actionResult.entities.push({
                 name: album,
                 type: ["album"],
             });
         }
     }
-    turnImpression.displayText += displayHTML;
+    return displayHTML;
 }
 
 export async function htmlStatus(context: IClientContext) {
     const status = await getPlaybackState(context.service);
-    let turnImpression = {
+    const displayContent: DisplayContent = {
+        type: "html",
+        content: "<div data-group='status'>Status...",
+    };
+    const actionResult: ActionResultSuccess = {
         literalText: "",
         entities: [],
-        displayText: "<div data-group='status'>Status...",
-    } as TurnImpression;
+        displayContent,
+    };
     if (status) {
-        htmlPlaybackStatus(status, turnImpression);
+        displayContent.content += htmlPlaybackStatus(status, actionResult);
         const activeDevice = status.device;
         const aux = `Volume is ${activeDevice.volume_percent}%. ${status.shuffle_state ? "Shuffle on" : ""}`;
-        turnImpression.displayText += `<div>Active device: ${activeDevice.name} of type ${activeDevice.type}</div>`;
-        turnImpression.displayText += `<div>${aux}</div>`;
-        turnImpression.literalText += `\nActive device: ${activeDevice.name} of type ${activeDevice.type}\n${aux}`;
+        displayContent.content += `<div>Active device: ${activeDevice.name} of type ${activeDevice.type}</div>`;
+        displayContent.content += `<div>${aux}</div>`;
+        actionResult.literalText += `\nActive device: ${activeDevice.name} of type ${activeDevice.type}\n${aux}`;
     } else {
-        console.log("Nothing playing according to Spotify.");
-        turnImpression.displayText += "<div>Nothing playing.</div>";
-        turnImpression.literalText = "Nothing playing.";
+        displayContent.content += "<div>Nothing playing.</div>";
+        actionResult.literalText = "Nothing playing.";
     }
-    turnImpression.displayText += "</div>";
-    turnImpression.dynamicDisplayId = "status";
-    turnImpression.dynamicDisplayNextRefreshMs = 1000;
-    return turnImpression;
+    displayContent.content += "</div>";
+    actionResult.dynamicDisplayId = "status";
+    actionResult.dynamicDisplayNextRefreshMs = 1000;
+    return actionResult;
 }
 
 export async function printStatus(context: IClientContext) {
@@ -153,13 +156,14 @@ export async function printStatus(context: IClientContext) {
 
 export async function selectDevice(keyword: string, context: IClientContext) {
     const devices = await getDevices(context.service);
-    let result = "";
+
     if (devices && devices.devices.length > 0) {
         for (const device of devices.devices) {
             if (
                 device.name.toLowerCase().includes(keyword.toLowerCase()) ||
                 device.type.toLowerCase().includes(keyword.toLowerCase())
             ) {
+                let result = "";
                 const status = await getPlaybackState(context.service);
                 if (status) {
                     if (status.device.id === device.id) {
@@ -184,13 +188,10 @@ export async function selectDevice(keyword: string, context: IClientContext) {
                         `Selected device ${device.name} of type ${device.type}`,
                     ),
                 );
+                return result;
             }
         }
-    } else {
-        console.log(chalk.red("No devices matched keyword"));
-        result += "<div>No devices matched keyword</div>\n";
     }
-    return result;
 }
 
 export async function listAvailableDevices(context: IClientContext) {

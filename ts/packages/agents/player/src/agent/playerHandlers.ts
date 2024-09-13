@@ -13,7 +13,7 @@ import {
     AppAgent,
     SessionContext,
     AppAction,
-    createTurnImpressionFromError,
+    createActionResultFromError,
     ActionContext,
     DisplayType,
     AppAgentEvent,
@@ -52,10 +52,11 @@ async function executePlayerAction(
         return handleCall(
             action as PlayerAction,
             context.sessionContext.agentContext.spotify,
+            context.actionIO,
         );
     }
 
-    return createTurnImpressionFromError(
+    return createActionResultFromError(
         "Action translated but not performed. Spotify integration is not enabled.",
     );
 }
@@ -117,7 +118,7 @@ async function validatePlayerWildcardMatch(
 }
 
 async function validateTrack(trackName: string, context: IClientContext) {
-    const tracks = await searchTracks(trackName, context);
+    const tracks = await searchTracks(`track:"${trackName}"`, context);
     if (tracks && tracks.tracks && tracks.tracks.length > 0) {
         // For validation for wildcard match, only allow substring match.
         const lowerCaseTrackName = trackName.toLowerCase();
@@ -160,7 +161,9 @@ async function getPlayerDynamicDisplay(
     if (displayId === "status") {
         const status = await htmlStatus(context.agentContext.spotify);
         return {
-            content: type === "html" ? status.displayText : status.literalText!,
+            content:
+                type === "html" ? status.displayContent : status.literalText!,
+
             nextRefreshMs: 1000,
         };
     }

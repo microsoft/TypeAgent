@@ -15,7 +15,7 @@ import {
     AppAction,
     AppAgent,
     SessionContext,
-    createTurnImpressionFromDisplay,
+    createActionResultFromHtmlDisplay,
 } from "@typeagent/agent-sdk";
 
 export function instantiate(): AppAgent {
@@ -53,7 +53,7 @@ async function executeEmailAction(
 ) {
     let result = await handleEmailAction(action as EmailAction, context);
     if (result) {
-        return createTurnImpressionFromDisplay(result);
+        return createActionResultFromHtmlDisplay(result);
     }
 }
 

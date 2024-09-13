@@ -8,7 +8,7 @@ import {
   AppActionWithParameters,
   AppAgent,
   SessionContext,
-  createTurnImpressionFromLiteral,
+  createActionResult,
 } from "@typeagent/agent-sdk";
 import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import {
@@ -133,7 +133,7 @@ async function executeBrowserAction(
   if (webSocketEndpoint) {
     try {
       const callId = new Date().getTime().toString();
-      context.actionIO.setActionDisplay("Running remote action.");
+      context.actionIO.setDisplay("Running remote action.");
 
       let messageType = "browserActionRequest";
       let target = "browser";
@@ -141,10 +141,10 @@ async function executeBrowserAction(
         messageType = "browserActionRequest.paleoBioDb";
       } else if (action.translatorName === "browser.crossword") {
         const crosswordResult = await handleCrosswordAction(action, context);
-        return createTurnImpressionFromLiteral(crosswordResult);
+        return createActionResult(crosswordResult);
       } else if (action.translatorName === "browser.commerce") {
         const commerceResult = await handleCommerceAction(action, context);
-        return createTurnImpressionFromLiteral(commerceResult);
+        return createActionResult(commerceResult);
       }
 
       webSocketEndpoint.send(

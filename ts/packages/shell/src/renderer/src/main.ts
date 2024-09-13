@@ -58,8 +58,8 @@ function addEvents(
             }
         }
     });
-    api.onResponse((_, agentMessage) => {
-        chatView.addAgentMessage(agentMessage);
+    api.onResponse((_, agentMessage, append) => {
+        chatView.addAgentMessage(agentMessage, { append });
     });
     api.onSetDynamicActionDisplay(
         (_, source, id, actionIndex, displayId, nextRefreshMs) =>
@@ -100,6 +100,7 @@ function addEvents(
     });
     api.onSettingSummaryChanged((_, summary, registeredAgents) => {
         document.title = summary;
+        document.title += ` Zoom: ${settingsView.shellSettings.zoomLevel * 100}%`;
 
         agents.clear();
         for (let key of registeredAgents.keys()) {
@@ -121,14 +122,20 @@ function addEvents(
         chatView.addUserMessage(`@random`);
     });
     api.onShowDialog((_, key) => {
-        if (key == "Settings") {
-            settingsView.showTabs();
+        if (key.toLocaleLowerCase() == "settings") {
+            tabsView.showTab(key);
         }
 
         tabsView.showTab(key);
     });
     api.onSettingsChanged((_, value: ShellSettings) => {
-        console.log("Settings Updated\n" + value);
+        let newTitle = document.title.substring(
+            0,
+            document.title.indexOf("Zoom: "),
+        );
+
+        document.title = `${newTitle} Zoom: ${value.zoomLevel * 100}%`;
+
         settingsView.shellSettings = value;
     });
     api.onNotificationCommand((_, requestId: string, data: any) => {
@@ -194,12 +201,11 @@ function showNotifications(
 
     chatView.addAgentMessage(
         {
-            message: html,
+            message: { type: "html", content: html },
             source: "shell",
             requestId: requestId,
         },
-        false,
-        true,
+        { notification: true },
     );
 }
 
@@ -233,7 +239,10 @@ function summarizeNotifications(
     summary += `</div><br/><span style="font-size: 10px">Run @notify show [all | unread] so see notifications.</span>`;
 
     chatView.addAgentMessage({
-        message: summary,
+        message: {
+            type: "html",
+            content: summary,
+        },
         requestId: requestId,
         source: agents.get("shell")!,
     });
@@ -284,7 +293,7 @@ document.addEventListener("DOMContentLoaded", function () {
         cameraView.toggleVisibility();
     };
 
-    const settingsView = new SettingsView(tabs, chatView);
+    const settingsView = new SettingsView(chatView);
     tabs.getTabContainerByName("Settings").append(settingsView.getContainer());
     tabs.getTabContainerByName("Metrics").append(
         new MetricsView().getContainer(),
@@ -296,11 +305,4 @@ document.addEventListener("DOMContentLoaded", function () {
     chatView.chatInputFocus();
 
     (window as any).electron.ipcRenderer.send("dom ready");
-
-    setTimeout(() => {
-        console.log("Hi!" + settingsView.shellSettings.agentGreeting);
-        if (settingsView.shellSettings.agentGreeting) {
-            chatView.addUserMessage("Hi!", true);
-        }
-    }, 1000);
 });

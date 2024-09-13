@@ -15,6 +15,7 @@ import {
     getYMDPrefix,
 } from "../utils/userData.js";
 import { TranslatorConfigProvider } from "../translation/agentTranslators.js";
+import ExifReader from "exifreader";
 import { AppAgentState } from "../handlers/common/appAgentManager.js";
 
 const debugSession = registerDebug("typeagent:session");
@@ -399,6 +400,44 @@ export class Session {
                 JSON.stringify(data, undefined, 2),
             );
         }
+    }
+
+    public async storeUserSuppliedFile(
+        file: string,
+    ): Promise<[string, ExifReader.Tags]> {
+        const sessionDir = getSessionDirPath(this.dir as string);
+        const filesDir = path.join(sessionDir, "user_files");
+        await fs.promises.mkdir(filesDir, { recursive: true });
+
+        // get the extension for the  mime type for the supplied file
+        const fileExtension: string = this.getFileExtensionForMimeType(
+            file.substring(5, file.indexOf(";")),
+        );
+        const fileName: string = path.join(
+            filesDir,
+            getUniqueFileName(filesDir, "attachment_", fileExtension),
+        );
+        const buffer = Buffer.from(
+            file.substring(file.indexOf(";base64,") + ";base64,".length),
+            "base64",
+        );
+
+        const tags: ExifReader.Tags = ExifReader.load(buffer);
+
+        fs.writeFile(fileName, buffer, () => {});
+
+        return [fileName, tags];
+    }
+
+    getFileExtensionForMimeType(mime: string): string {
+        switch (mime) {
+            case "image/png":
+                return ".png";
+            case "image/jpeg":
+                return ".jpeg";
+        }
+
+        throw "Unsupported MIME type"!;
     }
 }
 

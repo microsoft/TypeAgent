@@ -8,11 +8,11 @@ import {
     shell,
     BrowserWindow,
     globalShortcut,
-    Menu,
-    MenuItem,
     dialog,
     DevicePermissionHandlerHandlerDetails,
     WebContents,
+    MenuItem,
+    Menu,
 } from "electron";
 import { join } from "node:path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
@@ -26,10 +26,12 @@ import {
     Dispatcher,
 } from "agent-dispatcher";
 
-import { SearchMenuCommand } from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
+import {
+    IAgentMessage,
+    SearchMenuCommand,
+} from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
 import {
     ActionTemplateSequence,
-    IAgentMessage,
     SearchMenuItem,
 } from "../preload/electronTypes.js";
 import { ShellSettings } from "./shellSettings.js";
@@ -66,7 +68,8 @@ function createWindow(): void {
         width: ShellSettings.getinstance().width,
         height: ShellSettings.getinstance().height,
         show: false,
-        autoHideMenuBar: ShellSettings.getinstance().hideMenu,
+        autoHideMenuBar: true,
+
         webPreferences: {
             preload: join(__dirname, "../preload/index.mjs"),
             sandbox: false,
@@ -123,19 +126,29 @@ function createWindow(): void {
     }
 
     setAppMenu(mainWindow);
+
     setupZoomHandlers(mainWindow);
 
     // Notify renderer process whenever settings are modified
-    ShellSettings.getinstance().onSettingsChanged = () => {
-        const tempFunc = ShellSettings.getinstance().onSettingsChanged;
-        ShellSettings.getinstance().onSettingsChanged = null;
-
+    ShellSettings.getinstance().onSettingsChanged = (): void => {
         mainWindow?.webContents.send(
             "settings-changed",
-            ShellSettings.getinstance(),
+            ShellSettings.getinstance().getSerializable(),
         );
+    };
 
-        ShellSettings.getinstance().onSettingsChanged = tempFunc;
+    ShellSettings.getinstance().onShowSettingsDialog = (
+        dialogName: string,
+    ): void => {
+        mainWindow?.webContents.send("show-dialog", dialogName);
+    };
+
+    ShellSettings.getinstance().onRunDemo = (interactive: boolean): void => {
+        runDemo(mainWindow!, interactive);
+    };
+
+    ShellSettings.getinstance().toggleToopMost = () => {
+        mainWindow?.setAlwaysOnTop(!mainWindow?.isAlwaysOnTop());
     };
 }
 
@@ -253,13 +266,13 @@ async function triggerRecognitionOnce(dispatcher: Dispatcher) {
     );
 }
 
-function showResult(message: IAgentMessage) {
+function showResult(message: IAgentMessage, append: boolean = false) {
     // Ignore message without requestId
     if (message.requestId === undefined) {
         console.warn("showResult: requestId is undefined");
         return;
     }
-    mainWindow?.webContents.send("response", message);
+    mainWindow?.webContents.send("response", message, append);
 }
 
 function sendStatusMessage(message: IAgentMessage, temporary: boolean = false) {
@@ -408,7 +421,8 @@ const clientIO: ClientIO = {
     warn: sendStatusMessage,
     error: sendStatusMessage,
     result: showResult,
-    setActionDisplay: showResult,
+    setDisplay: showResult,
+    appendDisplay: (message) => showResult(message, true),
     setDynamicDisplay,
     searchMenuCommand,
     actionCommand,
@@ -594,18 +608,10 @@ app.whenReady().then(async () => {
         // Save the shell configurable settings
         ShellSettings.getinstance().microphoneId = settings.microphoneId;
         ShellSettings.getinstance().microphoneName = settings.microphoneName;
-        ShellSettings.getinstance().hideMenu = settings.hideMenu;
-        ShellSettings.getinstance().hideTabs = settings.hideTabs;
         ShellSettings.getinstance().tts = settings.tts;
         ShellSettings.getinstance().ttsSettings = settings.ttsSettings;
         ShellSettings.getinstance().agentGreeting = settings.agentGreeting;
         ShellSettings.getinstance().save();
-
-        // Update based on the new settings
-        mainWindow!.autoHideMenuBar = settings.hideMenu;
-
-        // if the menu bar is visible it won't auto hide immediately when this is toggled so we have to help it along
-        mainWindow?.setMenuBarVisibility(!settings.hideMenu);
     });
 
     globalShortcut.register("Alt+Right", () => {
@@ -653,13 +659,20 @@ app.on("window-all-closed", () => {
 function zoomIn(mainWindow: BrowserWindow) {
     const curr = mainWindow.webContents.zoomLevel;
     mainWindow.webContents.zoomLevel = Math.min(curr + 0.5, 9);
-    ShellSettings.getinstance().zoomLevel = mainWindow.webContents.zoomLevel;
+
+    ShellSettings.getinstance().set(
+        "zoomLevel",
+        mainWindow.webContents.zoomLevel,
+    );
 }
 
 function zoomOut(mainWindow: BrowserWindow) {
     const curr = mainWindow.webContents.zoomLevel;
     mainWindow.webContents.zoomLevel = Math.max(curr - 0.5, -8);
-    ShellSettings.getinstance().zoomLevel = mainWindow.webContents.zoomLevel;
+    ShellSettings.getinstance().set(
+        "zoomLevel",
+        mainWindow.webContents.zoomLevel,
+    );
 }
 
 function showDialog(dialogName: string) {
@@ -673,9 +686,13 @@ function setupZoomHandlers(mainWindow: BrowserWindow) {
     mainWindow.webContents.on("before-input-event", (_event, input) => {
         if ((isMac ? input.meta : input.control) && input.type === "keyDown") {
             // In addition to CmdOrCtrl+= accelerator
-            if (input.code == "NumpadAdd") {
+            if (
+                input.key == "NumpadAdd" ||
+                input.key == "+" ||
+                input.key == "="
+            ) {
                 zoomIn(mainWindow);
-            } else if (input.key === "-") {
+            } else if (input.key == "-" || input.key == "NumpadMinus") {
                 // REVIEW: accelerator doesn't work for CmdOrCtrl+-. Handle manually.
                 // Handle both regular and numpad minus
                 zoomOut(mainWindow);

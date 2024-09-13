@@ -15,7 +15,6 @@ import {
     SelectDeviceAction,
     SetVolumeAction,
     ShuffleAction,
-    UnknownAction,
 } from "./agent/playerSchema.js";
 import { createTokenProvider } from "./defaultTokenProvider.js";
 import chalk from "chalk";
@@ -67,9 +66,34 @@ import {
     UserData,
 } from "./userData.js";
 import registerDebug from "debug";
-import { Storage, TurnImpression } from "@typeagent/agent-sdk";
+import {
+    ActionIO,
+    createActionResultFromHtmlDisplay,
+    createActionResultFromTextDisplay,
+    DisplayContent,
+    Storage,
+    ActionResult,
+} from "@typeagent/agent-sdk";
 
 const debugSpotify = registerDebug("typeagent:spotify");
+const debugSpotifyError = registerDebug("typeagent:spotify:error");
+
+function createWarningActionResult(message: string) {
+    debugSpotifyError(message);
+    return createActionResultFromTextDisplay(chalk.yellow(message), message);
+}
+
+function createErrorActionResult(message: string) {
+    debugSpotifyError(message);
+    return createActionResultFromTextDisplay(chalk.red(message), message);
+}
+
+function createNotFoundActionResult(kind: string, queryString?: string) {
+    if (queryString)
+        debugSpotifyError(`No ${kind} found for query: ${queryString}`);
+    const message = `No ${kind} found`;
+    return createErrorActionResult(message);
+}
 
 let languageModel: TypeChatLanguageModel | undefined;
 function getTypeChatLanguageModel() {
@@ -177,31 +201,36 @@ async function htmlTrackNames(
 ) {
     const fetchedTracks = await trackCollection.getTracks(context.service);
     const selectedTracks = fetchedTracks.slice(startIndex, endIndex);
-    const turnImpression: TurnImpression = {
-        displayText: "",
+    const displayContent: DisplayContent = {
+        type: "html",
+        content: "",
+    };
+
+    const actionResult: ActionResult = {
+        displayContent,
         literalText: "",
         entities: [],
     };
     let prevUrl = "";
     if (selectedTracks.length > 1) {
-        turnImpression.displayText = `<div class='track-list scroll_enabled'><div>${headText}...</div><ol>\n`;
+        displayContent.content = `<div class='track-list scroll_enabled'><div>${headText}...</div><ol>\n`;
         let entCount = 0;
         for (const track of selectedTracks) {
             if (entCount < 1) {
                 // make an entity for the track
-                turnImpression.entities.push({
+                actionResult.entities.push({
                     name: track.name,
                     type: ["track", "song"],
                 });
                 // make an entity for each artist
                 for (const artist of track.artists) {
-                    turnImpression.entities.push({
+                    actionResult.entities.push({
                         name: artist.name,
                         type: ["artist"],
                     });
                 }
                 // make an entity for the album
-                turnImpression.entities.push({
+                actionResult.entities.push({
                     name: track.album.name,
                     type: ["album"],
                 });
@@ -218,21 +247,21 @@ async function htmlTrackNames(
                 track.album.images[0].url != prevUrl
             ) {
                 // make a list item that is a flex box with an image and a div
-                turnImpression.displayText += `  <li><div class='track-album-cover-container'>\n <div class='track-info'> <div class='track-title'>${track.name}</div>\n`;
-                turnImpression.displayText += `    <div class='track-artist'>${artists}</div>`;
-                turnImpression.displayText += `    <div>Album: ${track.album.name}</div></div>\n`;
-                turnImpression.displayText += `  <img src='${track.album.images[0].url}' alt='album cover' class='track-album-cover' />\n`;
+                displayContent.content += `  <li><div class='track-album-cover-container'>\n <div class='track-info'> <div class='track-title'>${track.name}</div>\n`;
+                displayContent.content += `    <div class='track-artist'>${artists}</div>`;
+                displayContent.content += `    <div>Album: ${track.album.name}</div></div>\n`;
+                displayContent.content += `  <img src='${track.album.images[0].url}' alt='album cover' class='track-album-cover' />\n`;
                 prevUrl = track.album.images[0].url;
-                turnImpression.displayText += `  </div></li>\n`;
+                displayContent.content += `  </div></li>\n`;
             } else {
-                turnImpression.displayText += `  <li><span class='track-title'>${track.name}</span>`;
-                turnImpression.displayText += `    <div class='track-artist'>${artists}</div>`;
-                turnImpression.displayText += `    <div>Album: ${track.album.name}</div>\n`;
-                turnImpression.displayText += `  </li>\n`;
+                displayContent.content += `  <li><span class='track-title'>${track.name}</span>`;
+                displayContent.content += `    <div class='track-artist'>${artists}</div>`;
+                displayContent.content += `    <div>Album: ${track.album.name}</div>\n`;
+                displayContent.content += `  </li>\n`;
             }
         }
-        turnImpression.displayText += "</ol></div>";
-        turnImpression.literalText =
+        displayContent.content += "</ol></div>";
+        actionResult.literalText =
             "Updated the current track list with the numbered list of tracks on the screen";
     } else if (selectedTracks.length === 1) {
         const track = selectedTracks[0];
@@ -241,19 +270,19 @@ async function htmlTrackNames(
         const artists =
             artistsPrefix +
             track.artists.map((artist) => artist.name).join(", ");
-        turnImpression.entities.push({
+        actionResult.entities.push({
             name: track.name,
             type: ["track", "song"],
         });
         // make an entity for each artist
         for (const artist of track.artists) {
-            turnImpression.entities.push({
+            actionResult.entities.push({
                 name: artist.name,
                 type: ["artist"],
             });
         }
         // make an entity for the album
-        turnImpression.entities.push({
+        actionResult.entities.push({
             name: track.album.name,
             type: ["album"],
         });
@@ -262,33 +291,30 @@ async function htmlTrackNames(
         const litArtists =
             litArtistsPrefix +
             track.artists.map((artist) => artist.name).join(", ");
-        turnImpression.literalText = `Now playing: ${track.name} from album ${track.album.name} with ${litArtists}`;
+        actionResult.literalText = `Now playing: ${track.name} from album ${track.album.name} with ${litArtists}`;
         if (track.album.images.length > 0 && track.album.images[0].url) {
-            turnImpression.displayText =
-                "<div class='track-list scroll_enabled'>";
-            turnImpression.displayText +=
+            displayContent.content = "<div class='track-list scroll_enabled'>";
+            displayContent.content +=
                 "<div class='track-album-cover-container'>";
-            turnImpression.displayText += `  <div class='track-info'>`;
-            turnImpression.displayText += `    <div class='track-title'>${track.name}</div>`;
-            turnImpression.displayText += `    <div>${artists}</div>`;
-            turnImpression.displayText += `    <div>Album: ${track.album.name}</div>`;
-            turnImpression.displayText += "</div>";
-            turnImpression.displayText += `  <img src='${track.album.images[0].url}' alt='album cover' class='track-album-cover' />\n`;
-            turnImpression.displayText += "</div>";
-            turnImpression.displayText += "</div>";
+            displayContent.content += `  <div class='track-info'>`;
+            displayContent.content += `    <div class='track-title'>${track.name}</div>`;
+            displayContent.content += `    <div>${artists}</div>`;
+            displayContent.content += `    <div>Album: ${track.album.name}</div>`;
+            displayContent.content += "</div>";
+            displayContent.content += `  <img src='${track.album.images[0].url}' alt='album cover' class='track-album-cover' />\n`;
+            displayContent.content += "</div>";
+            displayContent.content += "</div>";
         } else {
-            turnImpression.displayText =
-                "<div class='track-list scroll_enabled'>";
-            turnImpression.displayText += `    <div class='track-title'>${track.name}</div>`;
-            turnImpression.displayText += `    <div>${artists}</div>`;
-            turnImpression.displayText += `    <div>Album: ${track.album.name}</div>`;
-            turnImpression.displayText += "</div>";
+            displayContent.content = "<div class='track-list scroll_enabled'>";
+            displayContent.content += `    <div class='track-title'>${track.name}</div>`;
+            displayContent.content += `    <div>${artists}</div>`;
+            displayContent.content += `    <div>Album: ${track.album.name}</div>`;
+            displayContent.content += "</div>";
         }
     } else {
-        turnImpression.displayText = "<div>No tracks found</div>";
-        turnImpression.literalText = "No tracks found";
+        return createNotFoundActionResult("tracks");
     }
-    return turnImpression;
+    return actionResult;
 }
 
 async function updateTrackListAndPrint(
@@ -359,7 +385,7 @@ export async function searchTracks(
     context: IClientContext,
 ) {
     const query: SpotifyApi.SearchForItemParameterObject = {
-        q: `track:"${queryString}"`,
+        q: queryString,
         type: "track",
         limit: 50,
         offset: 0,
@@ -427,11 +453,6 @@ async function playTracks(
     endIndex: number,
     clientContext: IClientContext,
 ) {
-    let turnImpression = {
-        displayText: "",
-        literalText: "",
-        entities: [],
-    } as TurnImpression;
     if (clientContext.deviceId) {
         const fetchedTracks = await trackCollection.getTracks(
             clientContext.service,
@@ -445,7 +466,7 @@ async function playTracks(
             endIndex,
             clientContext,
         );
-        turnImpression = await htmlTrackNames(
+        const actionResult = await htmlTrackNames(
             trackCollection,
             startIndex,
             endIndex,
@@ -459,19 +480,18 @@ async function playTracks(
             trackCollection.getContext(),
             startIndex,
         );
+        return actionResult;
     } else {
-        console.log(chalk.red("No active device found"));
-        turnImpression.displayText = "No active device found";
-        turnImpression.literalText = "No active device found";
+        const message = "No active device found";
+        return createActionResultFromTextDisplay(chalk.red(message), message);
     }
-    return turnImpression;
 }
 
 async function playAlbums(
     albums: SpotifyApi.AlbumObjectSimplified[],
     quantity: number,
     clientContext: IClientContext,
-) {
+): Promise<ActionResult> {
     // Play the albums found with the quantity specified
     const albumsToPlay =
         quantity === -1 ? albums : albums.slice(0, quantity > 0 ? quantity : 1);
@@ -502,7 +522,8 @@ async function playAlbums(
         const collection = new TrackCollection(albumTracks, albumTracks.length);
         return playTracks(collection, 0, albumTracks.length, clientContext);
     }
-    console.log(chalk.red(`Unable to get track`));
+    const message = `Unable to get track`;
+    return createActionResultFromTextDisplay(chalk.red(message), message);
 }
 
 type SpotifyQuery = {
@@ -534,7 +555,7 @@ async function playAlbumsWithQuery(
     query: SpotifyQuery,
     quantity: number,
     clientContext: IClientContext,
-) {
+): Promise<ActionResult> {
     let albums: SpotifyApi.AlbumObjectSimplified[];
     const queryString = toQueryString(query);
     if (query.track.length !== 0) {
@@ -547,8 +568,7 @@ async function playAlbumsWithQuery(
         };
         const result = await search(param, clientContext.service);
         if (result?.tracks === undefined) {
-            console.log(chalk.red(`No tracks found for query: ${queryString}`));
-            return;
+            return createNotFoundActionResult("tracks", queryString);
         }
         const albumsSet = new Set(
             result.tracks.items.map((track) => track.album),
@@ -564,14 +584,12 @@ async function playAlbumsWithQuery(
         };
         const result = await search(query, clientContext.service);
         if (result?.albums === undefined) {
-            console.log(chalk.red(`No albums found for query: ${queryString}`));
-            return;
+            return createNotFoundActionResult("albums", queryString);
         }
         albums = result.albums.items;
     }
     if (albums.length === 0) {
-        console.log(chalk.red(`No albums found for query: ${queryString}`));
-        return;
+        return createNotFoundActionResult("albums", queryString);
     }
 
     return playAlbums(albums, quantity, clientContext);
@@ -581,7 +599,7 @@ async function playTracksWithQuery(
     query: SpotifyQuery,
     quantity: number,
     clientContext: IClientContext,
-) {
+): Promise<ActionResult> {
     // play track
     // search for tracks and collect the albums
     const queryString = toQueryString(query);
@@ -594,12 +612,7 @@ async function playTracksWithQuery(
     const result = await search(param, clientContext.service);
     const trackResult = result?.tracks;
     if (trackResult === undefined) {
-        console.log(chalk.red(`No tracks found for query: ${queryString}`));
-        return {
-            displayText: "No track found",
-            literalText: "No track found",
-            entities: [],
-        };
+        return createNotFoundActionResult("tracks", queryString);
     }
 
     // TODO: if there is not exact match for artist, might want to consider popularity of
@@ -652,18 +665,13 @@ async function playTracksWithQuery(
             clientContext,
         );
     }
-    console.log(chalk.red(`No track found for query: ${queryString}`));
-    return {
-        displayText: "No track found",
-        literalText: "No track found",
-        entities: [],
-    };
+    return createNotFoundActionResult("tracks", queryString);
 }
 
 async function playActionCall(
     clientContext: IClientContext,
     playAction: PlayAction,
-) {
+): Promise<ActionResult> {
     let startIndex = playAction.parameters.trackNumber;
     let endIndex: undefined | number = undefined;
     if (startIndex === undefined) {
@@ -724,28 +732,21 @@ async function playActionCall(
             if (itemType === "album") {
                 await playAlbumsWithQuery(query, quantity, clientContext);
             } else {
-                let result = await playTracksWithQuery(
+                return await playTracksWithQuery(
                     query,
                     quantity,
                     clientContext,
                 );
-                return result;
             }
         } else {
             // no parameters specified, just resume playback
             await resumeActionCall(clientContext);
-            return {
-                displayText: "Resuming playback",
-                literalText: "Resuming playback",
-                entities: [],
-            };
+            const message = "Resuming playback";
+            return createActionResultFromTextDisplay(message, message);
         }
     }
-    return {
-        displayText: "No tracks to play",
-        literalText: "No tracks to play",
-        entities: [],
-    };
+    const message = "No tracks to play";
+    return createActionResultFromTextDisplay(chalk.red(message), message);
 }
 function ensureClientId(state: SpotifyApi.CurrentPlaybackResponse) {
     if (state.device.id !== null) {
@@ -761,17 +762,15 @@ function ensureClientId(state: SpotifyApi.CurrentPlaybackResponse) {
 
 async function resumeActionCall(clientContext: IClientContext) {
     const state = await getPlaybackState(clientContext.service);
-    let result = "";
     if (!state) {
-        result += "<div>No active playback to resume</div>";
-        console.log(chalk.yellow("No active playback to resume"));
-        return result;
+        return createWarningActionResult("No active playback to resume");
     }
     const deviceId = ensureClientId(state);
-    if (deviceId === undefined) return result;
+    if (deviceId === undefined) {
+        return createWarningActionResult("No device active");
+    }
 
     if (state.is_playing) {
-        result += "<div>Music already playing</div>";
         console.log(chalk.yellow("Music already playing"));
     } else {
         await play(clientContext.service, deviceId);
@@ -781,23 +780,16 @@ async function resumeActionCall(clientContext: IClientContext) {
     return status;
 }
 
-async function pauseActionCall(clientContext: IClientContext) {
+async function pauseActionCall(
+    clientContext: IClientContext,
+): Promise<ActionResult> {
     const state = await getPlaybackState(clientContext.service);
     if (!state) {
-        console.log(chalk.yellow("No active playback to resume"));
-        return {
-            displayText: "No active playback to resume",
-            literalText: "No active playback to resume",
-            entities: [],
-        };
+        return createWarningActionResult("No active playback to resume");
     }
     const deviceId = ensureClientId(state);
     if (deviceId === undefined) {
-        return {
-            displayText: "No device active",
-            literalText: "No device active",
-            entities: [],
-        };
+        return createWarningActionResult("No device active");
     }
     if (!state.is_playing) {
         console.log(chalk.yellow("Music already stopped."));
@@ -812,20 +804,11 @@ async function pauseActionCall(clientContext: IClientContext) {
 async function nextActionCall(clientContext: IClientContext) {
     const state = await getPlaybackState(clientContext.service);
     if (!state) {
-        console.log(chalk.yellow("No active playback to resume"));
-        return {
-            displayText: "No active playback to resume",
-            literalText: "No active playback to resume",
-            entities: [],
-        };
+        return createWarningActionResult("No active playback to resume");
     }
     const deviceId = ensureClientId(state);
     if (deviceId === undefined) {
-        return {
-            displayText: "No device active",
-            literalText: "No device active",
-            entities: [],
-        };
+        return createWarningActionResult("No device active");
     }
 
     await next(clientContext.service, deviceId);
@@ -837,20 +820,11 @@ async function nextActionCall(clientContext: IClientContext) {
 async function previousActionCall(clientContext: IClientContext) {
     const state = await getPlaybackState(clientContext.service);
     if (!state) {
-        console.log(chalk.yellow("No active playback to resume"));
-        return {
-            displayText: "No active playback to resume",
-            literalText: "No active playback to resume",
-            entities: [],
-        };
+        return createWarningActionResult("No active playback to resume");
     }
     const deviceId = ensureClientId(state);
     if (deviceId === undefined) {
-        return {
-            displayText: "No device active",
-            literalText: "No device active",
-            entities: [],
-        };
+        return createWarningActionResult("No device active");
     }
 
     await previous(clientContext.service, deviceId);
@@ -862,11 +836,12 @@ async function previousActionCall(clientContext: IClientContext) {
 async function shuffleActionCall(clientContext: IClientContext, on: boolean) {
     const state = await getPlaybackState(clientContext.service);
     if (!state) {
-        console.log(chalk.yellow("No active playback to resume"));
-        return;
+        return createWarningActionResult("No active playback to resume");
     }
     const deviceId = ensureClientId(state);
-    if (deviceId === undefined) return;
+    if (deviceId === undefined) {
+        return createWarningActionResult("No device active");
+    }
 
     await shuffle(clientContext.service, deviceId, on);
     await printStatus(clientContext);
@@ -883,21 +858,15 @@ export function getUserDataStrings(clientContext: IClientContext) {
 export async function handleCall(
     action: PlayerAction,
     clientContext: IClientContext,
-): Promise<TurnImpression | undefined> {
-    let turnResult: TurnImpression = {
-        displayText: "",
-        literalText: "",
-        entities: [],
-    };
+    actionIO: ActionIO,
+): Promise<ActionResult> {
     switch (action.actionName) {
         case "play": {
-            turnResult = await playActionCall(clientContext, action);
-            break;
+            return playActionCall(clientContext, action);
         }
         case "status": {
             await printStatus(clientContext);
-            turnResult = await htmlStatus(clientContext);
-            break;
+            return htmlStatus(clientContext);
         }
         case "getQueue": {
             const currentQueue = await getQueue(clientContext.service);
@@ -926,7 +895,7 @@ export async function handleCall(
                         `--------------------------------------------`,
                     ),
                 );
-                turnResult = await htmlTrackNames(
+                return htmlTrackNames(
                     collection,
                     0,
                     filtered.length,
@@ -934,39 +903,41 @@ export async function handleCall(
                     "Queue",
                 );
             }
-            break;
+            return createNotFoundActionResult("tracks in the queue");
         }
         case "pause": {
-            turnResult = await pauseActionCall(clientContext);
-            break;
+            return pauseActionCall(clientContext);
         }
         case "next": {
-            turnResult = await nextActionCall(clientContext);
-            break;
+            return nextActionCall(clientContext);
         }
         case "previous": {
-            turnResult = await previousActionCall(clientContext);
-            break;
+            return previousActionCall(clientContext);
         }
         case "shuffle": {
             const shuffleAction = action as ShuffleAction;
-            await shuffleActionCall(clientContext, shuffleAction.parameters.on);
-            break;
+            return shuffleActionCall(
+                clientContext,
+                shuffleAction.parameters.on,
+            );
         }
         case "resume": {
-            await resumeActionCall(clientContext);
-            break;
+            return resumeActionCall(clientContext);
         }
         case "listDevices": {
-            turnResult.displayText =
-                (await listAvailableDevices(clientContext)) || "";
-            break;
+            const html = await listAvailableDevices(clientContext);
+            return html
+                ? createActionResultFromTextDisplay(html)
+                : createErrorActionResult("No devices found");
         }
         case "selectDevice": {
             const selectDeviceAction = action as SelectDeviceAction;
             const keyword = selectDeviceAction.parameters.keyword;
-            turnResult.displayText = await selectDevice(keyword, clientContext);
-            break;
+            const html = await selectDevice(keyword, clientContext);
+
+            return html
+                ? createActionResultFromTextDisplay(html)
+                : createErrorActionResult("No devices found");
         }
         case "setVolume": {
             const setVolumeAction = action as SetVolumeAction;
@@ -974,13 +945,11 @@ export async function handleCall(
             if (newVolumeLevel > 50) {
                 newVolumeLevel = 50;
             }
-            console.log(
+            actionIO.setDisplay(
                 chalk.yellowBright(`setting volume to ${newVolumeLevel} ...`),
             );
-            turnResult.displayText = `setting volume to ${newVolumeLevel} ...`;
             await setVolume(clientContext.service, newVolumeLevel);
-            turnResult = await htmlStatus(clientContext);
-            break;
+            return htmlStatus(clientContext);
         }
         case "changeVolume": {
             const changeVolumeAction = action as ChangeVolumeAction;
@@ -995,11 +964,13 @@ export async function handleCall(
                 if (nv > 50) {
                     nv = 50;
                 }
-                console.log(chalk.yellowBright(`setting volume to ${nv} ...`));
-                turnResult.displayText = `setting volume to ${nv} ...`;
+                actionIO.setDisplay(
+                    chalk.yellowBright(`setting volume to ${nv} ...`),
+                );
                 await setVolume(clientContext.service, nv);
+                return htmlStatus(clientContext);
             }
-            break;
+            return createErrorActionResult("No active device found");
         }
         case "searchTracks": {
             const searchTracksAction = action as SearchTracksAction;
@@ -1008,7 +979,7 @@ export async function handleCall(
             if (searchResult) {
                 console.log(chalk.magentaBright("Search Results:"));
                 updateTrackListAndPrint(searchResult, clientContext);
-                turnResult = await htmlTrackNames(
+                return htmlTrackNames(
                     searchResult,
                     0,
                     searchResult.getTrackCount(),
@@ -1016,18 +987,19 @@ export async function handleCall(
                     "Search Results",
                 );
             }
-            break;
+            return createNotFoundActionResult("tracks", queryString);
         }
         case "listPlaylists": {
             const playlists = await getPlaylists(clientContext.service);
             if (playlists) {
-                turnResult.displayText = "<div>Playlists...</div>";
+                let html = "<div>Playlists...</div>";
                 for (const playlist of playlists.items) {
                     console.log(chalk.magentaBright(`${playlist.name}`));
-                    turnResult.displayText += `<div>${playlist.name}</div>`;
+                    html += `<div>${playlist.name}</div>`;
                 }
+                return createActionResultFromTextDisplay(html);
             }
-            break;
+            return createErrorActionResult("No playlists found");
         }
         case "getPlaylist": {
             const getPlaylistAction = action as GetPlaylistAction;
@@ -1050,7 +1022,7 @@ export async function handleCall(
                     );
                     console.log(chalk.magentaBright("Playlist:"));
                     await updateTrackListAndPrint(collection, clientContext);
-                    turnResult = await htmlTrackNames(
+                    return htmlTrackNames(
                         collection,
                         0,
                         collection.getTrackCount(),
@@ -1059,7 +1031,7 @@ export async function handleCall(
                     );
                 }
             }
-            break;
+            return createNotFoundActionResult(`playlist ${playlistName}`);
         }
         case "getAlbum": {
             const getAlbumAction = action as unknown as GetPlaylistAction;
@@ -1068,7 +1040,7 @@ export async function handleCall(
             let status: SpotifyApi.CurrentPlaybackResponse | undefined =
                 undefined;
             if (name.length > 0) {
-                console.log(
+                actionIO.setDisplay(
                     chalk.magentaBright(`searching for album: ${name}`),
                 );
                 album = await searchAlbum(name, clientContext);
@@ -1105,21 +1077,22 @@ export async function handleCall(
                         album,
                         getTracksResponse.items,
                     );
-                    console.log(
+                    actionIO.setDisplay(
                         chalk.magentaBright(
                             `${getAlbumAction.parameters.name}:`,
                         ),
                     );
                     await updateTrackListAndPrint(collection, clientContext);
-                    turnResult = await htmlTrackNames(
+                    return htmlTrackNames(
                         collection,
                         0,
                         collection.getTrackCount(),
                         clientContext,
                     );
                 }
+                return createNotFoundActionResult(`tracks from album ${name}`);
             }
-            break;
+            return createNotFoundActionResult("album");
         }
         case "getFavorites": {
             const getFavoritesAction = action as GetFavoritesAction;
@@ -1134,14 +1107,14 @@ export async function handleCall(
                 const collection = new TrackCollection(tracks, tracks.length);
                 console.log(chalk.magentaBright("Favorites:"));
                 await updateTrackListAndPrint(collection, clientContext);
-                turnResult = await htmlTrackNames(
+                return htmlTrackNames(
                     collection,
                     0,
                     tracks.length,
                     clientContext,
                 );
             }
-            break;
+            return createErrorActionResult("No favorites found");
         }
         case "filterTracks": {
             const filterTracksAction = action as FilterTracksAction;
@@ -1178,7 +1151,7 @@ export async function handleCall(
                             collection,
                             clientContext,
                         );
-                        turnResult = await htmlTrackNames(
+                        return await htmlTrackNames(
                             collection,
                             0,
                             tracks.length,
@@ -1188,11 +1161,8 @@ export async function handleCall(
                 } else {
                     console.log(parseResult.diagnostics);
                 }
-            } else {
-                console.log(chalk.red("no current track list to filter"));
-                turnResult.displayText = `<div>no current track list to filter</div>`;
             }
-            break;
+            return createErrorActionResult("no current track list to filter");
         }
         case "createPlaylist": {
             const createPlaylistAction = action as CreatePlaylistAction;
@@ -1210,18 +1180,18 @@ export async function handleCall(
                 );
                 console.log(`playlist ${name} created with tracks:`);
                 printTrackNames(input, 0, input.getTrackCount(), clientContext);
-                turnResult.displayText = `<div>playlist ${name} created with tracks...</div>`;
-                turnResult.displayText += await htmlTrackNames(
-                    input,
-                    0,
-                    input.getTrackCount(),
-                    clientContext,
+                return createActionResultFromHtmlDisplay(
+                    `<div>playlist ${name} created with tracks...</div>${await htmlTrackNames(
+                        input,
+                        0,
+                        input.getTrackCount(),
+                        clientContext,
+                    )}`,
                 );
-            } else {
-                console.log(chalk.red("no input tracks for createPlaylist"));
-                turnResult.displayText = `<div>no input tracks for createPlaylist</div>`;
             }
-            break;
+            return createErrorActionResult(
+                "no input tracks for createPlaylist",
+            );
         }
         case "deletePlaylist": {
             const deletePlaylistAction = action as DeletePlaylistAction;
@@ -1232,28 +1202,19 @@ export async function handleCall(
                     .toLowerCase()
                     .includes(playlistName.toLowerCase());
             });
-            if (playlist) {
+            if (playlist !== undefined) {
                 await deletePlaylist(clientContext.service, playlist.id);
-                console.log(
+                return createActionResultFromTextDisplay(
                     chalk.magentaBright(`playlist ${playlist.name} deleted`),
                 );
-                turnResult.displayText = `<div>playlist ${playlist.name} deleted</div>`;
-                break;
             }
-
-            break;
+            return createErrorActionResult(
+                `playlist ${playlistName} not found`,
+            );
         }
-        case "unknown": {
-            const unknownAction = action as UnknownAction;
-            const text = unknownAction.parameters.text;
-            console.log(`Text not understood in this context: ${text}`);
-            turnResult.displayText = `<div>Text not understood in this context: ${text}</div>`;
-            break;
-        }
-    }
-    if (turnResult.displayText !== "") {
-        return turnResult;
-    } else {
-        return undefined;
+        default:
+            return createErrorActionResult(
+                `Action not supported: ${action.actionName}`,
+            );
     }
 }

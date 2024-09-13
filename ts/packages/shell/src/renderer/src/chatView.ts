@@ -10,13 +10,18 @@ import {
     ActionInfo,
     ActionTemplateSequence,
     ActionUICommand,
-    IAgentMessage,
     IMessageMetrics,
     SearchMenuItem,
 } from "../../preload/electronTypes";
 import { ActionCascade } from "./ActionCascade";
-import { DynamicDisplay } from "@typeagent/agent-sdk";
+import {
+    DisplayContent,
+    DisplayType,
+    DynamicDisplay,
+} from "@typeagent/agent-sdk";
 import { TTS } from "./tts";
+import { IAgentMessage } from "agent-dispatcher";
+import DOMPurify from "dompurify";
 
 export interface InputChoice {
     element: HTMLElement;
@@ -273,7 +278,12 @@ class MessageContainer {
         }
         return message.innerText;
     }
-    public setMessage(text: string, source: string, sourceIcon?: string) {
+    public setMessage(
+        content: DisplayContent,
+        source: string,
+        sourceIcon?: string,
+        append: boolean = false,
+    ) {
         const message = this.div.lastChild?.previousSibling as HTMLDivElement;
         if (message === undefined) {
             return undefined;
@@ -285,7 +295,7 @@ class MessageContainer {
         const iconDiv: HTMLDivElement = this.div.children[1] as HTMLDivElement;
         iconDiv.innerText = sourceIcon ?? "❔"; // icon
 
-        setContent(message, text);
+        setContent(message, content, append);
     }
 
     public updateMetrics(metrics?: IMessageMetrics) {
@@ -307,14 +317,16 @@ class MessageGroup {
     public readonly userMessageContainer: HTMLDivElement;
     public readonly userMessage: HTMLDivElement;
     private statusMessage: MessageContainer | undefined;
-    private readonly statusMessages: { message: string; temporary: boolean }[] =
-        [];
+    private readonly statusMessages: {
+        message: DisplayContent;
+        temporary: boolean;
+    }[] = [];
     private readonly agentMessages: MessageContainer[] = [];
 
     private completed = false;
     constructor(
         private readonly chatView: ChatView,
-        request: string,
+        request: DisplayContent,
         container: HTMLDivElement,
         requestPromise: Promise<void>,
         timeStamp: Date,
@@ -420,11 +432,24 @@ class MessageGroup {
             .filter((m) => !m.temporary)
             .map((m) => m.message);
         messages.push(message);
-        statusMessage.setMessage(
-            messages.join("<br />"),
-            msg.source,
-            this.agents.get(msg.source),
-        );
+        let append = false;
+        for (const message of messages) {
+            if (append) {
+                statusMessage.setMessage(
+                    "\n",
+                    msg.source,
+                    this.agents.get(msg.source),
+                    append,
+                );
+            }
+            statusMessage.setMessage(
+                message,
+                msg.source,
+                this.agents.get(msg.source),
+                append,
+            );
+            append = true;
+        }
         this.statusMessages.push({ message, temporary });
         statusMessage.updateMetrics(msg.metrics);
         this.updateStatusMessageDivState();
@@ -465,23 +490,72 @@ ansi_up.use_classes = true;
 
 function textToHtml(text: string): string {
     const value = ansi_up.ansi_to_html(text);
-    const line = value.replace(/\n/gm, "<br>").replace(/  /g, " &nbsp;");
+    const line = value.replace(/\n/gm, "<br>");
     return line;
 }
 
 function stripAnsi(text: string): string {
-    return text.replace(/\x1b\[[0-9;]*m/g, "");
+    return text
+        .replace(/&/gm, "&amp;")
+        .replace(/</gm, "&lt;")
+        .replace(/>/gm, "&gt;")
+        .replace(/\x1b\[[0-9;]*m/g, "");
 }
 
 const enableText2Html = true;
-export function setContent(elm: HTMLElement, text: string) {
-    if (text.indexOf("<") > -1 && text.indexOf("Usage: @") == -1) {
-        elm.innerHTML = text;
-    } else if (enableText2Html) {
-        elm.innerHTML = textToHtml(text);
-    } else {
-        elm.innerText = stripAnsi(text);
+export function setContent(
+    elm: HTMLElement,
+    content: DisplayContent,
+    append: boolean = false,
+) {
+    // Remove existing content if we are not appending.
+    if (!append) {
+        while (elm.firstChild) {
+            elm.removeChild(elm.firstChild);
+        }
     }
+
+    let type: DisplayType;
+    let text: string;
+    if (typeof content === "string") {
+        type = "text";
+        text = content;
+    } else {
+        type = content.type;
+        text = content.content;
+    }
+
+    let contentDiv: HTMLDivElement | undefined;
+    if (elm.lastChild) {
+        const prevContentDiv = elm.lastChild as HTMLDivElement;
+        const isPrevText = prevContentDiv.classList.contains(
+            "chat-message-agent-text",
+        );
+
+        if ((type === "text") === isPrevText) {
+            // Reuse the previous div they are of the same type.
+            contentDiv = prevContentDiv;
+        }
+    }
+
+    if (contentDiv === undefined) {
+        contentDiv = document.createElement("div");
+        if (type === "text") {
+            // create a text diff so we can set "whitespace: break-spaces" css style of text content.
+            contentDiv.className = "chat-message-agent-text";
+        }
+        elm.appendChild(contentDiv);
+    }
+
+    // Process content according to type
+    const contentHtml =
+        type === "html"
+            ? DOMPurify.sanitize(text, { ADD_ATTR: ["target"] })
+            : enableText2Html
+              ? textToHtml(text)
+              : stripAnsi(text);
+
+    contentDiv.innerHTML += contentHtml;
 }
 
 export function createTimestampDiv(timestamp: Date, className: string) {
@@ -620,7 +694,6 @@ export class ChatView {
     private topDiv: HTMLDivElement;
     private messageDiv: HTMLDivElement;
     private inputContainer: HTMLDivElement;
-    private autoScroll = true;
 
     private idToMessageGroup: Map<string, MessageGroup> = new Map();
     chatInput: ChatInput;
@@ -644,14 +717,16 @@ export class ChatView {
         this.topDiv.className = "chat-container";
         this.messageDiv = document.createElement("div");
         this.messageDiv.className = "chat scroll_enabled";
-        this.messageDiv.addEventListener("scroll", () => {
-            this.autoScroll = false;
-        });
+
         this.chatInput = new ChatInput(
             "phraseDiv",
             "reco",
-            (message) => {
-                this.addUserMessage(message);
+            (messageHtml) => {
+                // message from chat input are from innerHTML
+                this.addUserMessage({
+                    type: "html",
+                    content: messageHtml,
+                });
                 if (this.searchMenu) {
                     this.cancelSearchMenu();
                 }
@@ -1022,7 +1097,7 @@ export class ChatView {
                         source: source,
                         actionIndex: actionIndex,
                     },
-                    true,
+                    { dynamicUpdate: true },
                 );
                 if (result.nextRefreshMs !== -1) {
                     this.dynamicDisplays.push({
@@ -1049,7 +1124,7 @@ export class ChatView {
                         source: source,
                         actionIndex: actionIndex,
                     },
-                    true,
+                    { dynamicUpdate: true },
                 );
             }
 
@@ -1080,19 +1155,28 @@ export class ChatView {
         this.commandBackStackIndex = -1;
     }
 
-    async addUserMessage(request: string, hidden: boolean = false) {
+    async addUserMessage(request: DisplayContent, hidden: boolean = false) {
         const id = this.idGenerator.genId();
 
-        let tempDiv: HTMLDivElement = document.createElement("div");
-        tempDiv.innerHTML = request;
+        let images: string[] = [];
+        let requestText: string;
+        if (typeof request === "string") {
+            requestText = request;
+        } else if (request.type === "html") {
+            let tempDiv: HTMLDivElement = document.createElement("div");
+            tempDiv.innerHTML = request.content;
 
-        let images = await this.extractMultiModalContent(tempDiv);
+            images = await this.extractMultiModalContent(tempDiv);
+            requestText = tempDiv.innerText;
+        } else {
+            requestText = request.content;
+        }
 
         const mg: MessageGroup = new MessageGroup(
             this,
             request,
             this.messageDiv,
-            getClientAPI().processShellRequest(tempDiv.innerText, id, images),
+            getClientAPI().processShellRequest(requestText, id, images),
             new Date(),
             this.agents,
         );
@@ -1103,7 +1187,6 @@ export class ChatView {
         }
 
         this.idToMessageGroup.set(id, mg);
-        this.autoScroll = true;
         this.updateScroll();
         this.commandBackStackIndex = -1;
     }
@@ -1160,27 +1243,39 @@ export class ChatView {
 
     addAgentMessage(
         msg: IAgentMessage,
-        dynamicUpdate = false,
-        notification = false,
+        options?: {
+            append?: boolean;
+            dynamicUpdate?: boolean;
+            notification?: boolean;
+        },
     ) {
-        const text: string = msg.message;
+        const append = options?.append ?? false;
+        const dynamicUpdate = options?.dynamicUpdate ?? false;
+        const notification = options?.notification ?? false;
+
+        const content: DisplayContent = msg.message;
         const source: string = msg.source;
 
         const agentMessage = this.ensureAgentMessage(msg, notification);
         if (agentMessage === undefined) {
             return;
         }
-        agentMessage.setMessage(text, source, this.agents.get(source));
-        this.updateScroll();
+        agentMessage.setMessage(
+            content,
+            source,
+            this.agents.get(source),
+            append,
+        );
 
         if (!dynamicUpdate) {
             agentMessage.updateMetrics(msg.metrics);
+            this.updateScroll();
             this.chatInputFocus();
         }
     }
     updateScroll() {
-        if (this.autoScroll) {
-            this.messageDiv.scrollTop = this.messageDiv.scrollHeight;
+        if (this.messageDiv.firstElementChild) {
+            this.messageDiv.firstElementChild.scrollIntoView(false);
         }
     }
 

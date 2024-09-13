@@ -17,12 +17,17 @@ import {
     Entity,
 } from "typeagent";
 import { ChatModel, bing, openai } from "aiclient";
-import { ActionContext, AppAgent } from "@typeagent/agent-sdk";
+import {
+    ActionContext,
+    AppAgent,
+    createActionResultNoDisplay,
+    ActionResultSuccess,
+} from "@typeagent/agent-sdk";
 import { PromptSection } from "typechat";
 import {
     AppAction,
-    TurnImpression,
-    createTurnImpressionFromLiteral,
+    ActionResult,
+    createActionResult,
 } from "@typeagent/agent-sdk";
 import { fileURLToPath } from "node:url";
 import { conversation as Conversation } from "knowledge-processor";
@@ -37,7 +42,8 @@ export function instantiate(): AppAgent {
 function isChatResponseAction(action: AppAction): action is ChatResponseAction {
     return (
         action.actionName === "generateResponse" ||
-        action.actionName === "lookupAndGenerateResponse"
+        action.actionName === "lookupAndGenerateResponse" ||
+        action.actionName === "chatImageResponse"
     );
 }
 
@@ -59,32 +65,21 @@ async function handleChatResponse(
     switch (chatAction.actionName) {
         case "generateResponse": {
             const generateResponseAction = chatAction as GenerateResponseAction;
-            if (generateResponseAction.parameters.generatedText !== undefined) {
-                logEntities(
-                    "UR Entities:",
-                    generateResponseAction.parameters.userRequestEntities,
-                );
-                logEntities(
-                    "GT Entities:",
-                    generateResponseAction.parameters.generatedTextEntities,
-                );
+            const parameters = generateResponseAction.parameters;
+            const generatedText = parameters.generatedText;
+            if (generatedText !== undefined) {
+                logEntities("UR Entities:", parameters.userRequestEntities);
+                logEntities("GT Entities:", parameters.generatedTextEntities);
                 console.log("Got generated text");
 
-                const result = createTurnImpressionFromLiteral(
-                    generateResponseAction.parameters.generatedText,
-                );
+                const needDisplay = context.streamingContext !== generatedText;
+                const result = needDisplay
+                    ? createActionResult(generatedText)
+                    : createActionResultNoDisplay(generatedText);
 
-                let entities =
-                    generateResponseAction.parameters.generatedTextEntities ||
-                    [];
-                if (
-                    generateResponseAction.parameters.userRequestEntities !==
-                    undefined
-                ) {
-                    entities =
-                        generateResponseAction.parameters.userRequestEntities.concat(
-                            entities,
-                        );
+                let entities = parameters.generatedTextEntities || [];
+                if (parameters.userRequestEntities !== undefined) {
+                    entities = parameters.userRequestEntities.concat(entities);
                 }
                 result.entities = entities;
                 return result;
@@ -129,7 +124,7 @@ async function handleChatResponse(
                             matches.response &&
                             matches.response.answer
                         ) {
-                            return createTurnImpressionFromLiteral(
+                            return createActionResult(
                                 matches.response.answer.answer!,
                             );
                         } else {
@@ -140,7 +135,7 @@ async function handleChatResponse(
             }
         }
     }
-    return createTurnImpressionFromLiteral("No information found");
+    return createActionResult("No information found");
 }
 
 function logEntities(label: string, entities?: Entity[]): void {
@@ -182,7 +177,7 @@ function answerToHtml(answer: ChunkChatResponse, lookup?: string) {
     return html;
 }
 
-function answersToHtml(context: LookupContext) {
+function answersToHtml(context: LookupContext): string {
     let html = "";
     for (const [lookup, chatResponse] of context.answers) {
         html += answerToHtml(chatResponse, lookup);
@@ -273,10 +268,8 @@ async function handleLookup(
     chatAction: LookupAndGenerateResponseAction,
     context: ActionContext,
     settings: LookupSettings,
-): Promise<TurnImpression> {
-    let literalResponse = createTurnImpressionFromLiteral(
-        "No information found",
-    );
+): Promise<ActionResult> {
+    let literalResponse = createActionResult("No information found");
 
     let lookups = chatAction.parameters.internetLookups;
     if (!lookups || lookups.length === 0) {
@@ -294,7 +287,10 @@ async function handleLookup(
     if (lookups.length === 1 && lookUpConfig?.documentConcurrency) {
         documentConcurrency = lookUpConfig.documentConcurrency;
     }
-    context.actionIO.setActionDisplay(lookupToHtml(lookups));
+    context.actionIO.setDisplay({
+        type: "html",
+        content: lookupToHtml(lookups),
+    });
     const lookupContext: LookupContext = {
         lookups,
         answers: new Map<string, ChunkChatResponse>(),
@@ -307,8 +303,8 @@ async function handleLookup(
         ),
     );
     // Capture answers in the turn impression to return
-    literalResponse = updateTurnImpression(lookupContext, literalResponse);
-    context.actionIO.setActionDisplay(literalResponse.displayText);
+    literalResponse = updateActionResult(lookupContext, literalResponse);
+    context.actionIO.setDisplay(literalResponse.displayContent);
     // Generate entities if needed
     if (settings.entityGenModel) {
         const entities = await runEntityExtraction(lookupContext, settings);
@@ -365,13 +361,16 @@ function getLookupInstructions(): PromptSection[] {
     return [promptLib.dateTimePromptSection()];
 }
 
-function updateTurnImpression(
+function updateActionResult(
     context: LookupContext,
-    literalResponse: TurnImpression,
-): TurnImpression {
+    literalResponse: ActionResultSuccess,
+): ActionResultSuccess {
     if (context.answers.size > 0) {
         literalResponse.literalText = "";
-        literalResponse.displayText = answersToHtml(context);
+        literalResponse.displayContent = {
+            type: "html",
+            content: answersToHtml(context),
+        };
         for (const [_lookup, chatResponse] of context.answers) {
             literalResponse.literalText += chatResponse.generatedText! + "\n";
             if (chatResponse.entities && chatResponse.entities.length > 0) {
@@ -431,9 +430,10 @@ async function runLookup(
     return answer;
 
     function updateStatus() {
-        actionContext.actionIO.setActionDisplay(
-            lookupProgressAsHtml(lookupContext),
-        );
+        actionContext.actionIO.setDisplay({
+            type: "html",
+            content: lookupProgressAsHtml(lookupContext),
+        });
     }
 }
 
@@ -513,14 +513,18 @@ function streamPartialChatResponseAction(
     actionName: string,
     name: string,
     value: string,
-    partial: boolean,
+    delta: string | undefined,
     context: ActionContext,
 ) {
     if (actionName !== "generateResponse") {
         return;
     }
 
-    if (name === "parameters.generatedText") {
-        context.actionIO.setActionDisplay(`${value}${partial ? "..." : ""}`);
+    if (name === "parameters.generatedText" && delta !== undefined) {
+        if (context.streamingContext === undefined) {
+            context.streamingContext = "";
+        }
+        context.streamingContext += delta;
+        context.actionIO.appendDisplay(delta);
     }
 }

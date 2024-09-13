@@ -33,7 +33,7 @@ const handlers: CommandHandlerTable = {
                                 "Spotify integration is not enabled.",
                             );
                         }
-                        context.actionIO.setActionDisplay(
+                        context.actionIO.setDisplay(
                             "Loading Spotify user data...",
                         );
 
@@ -43,7 +43,7 @@ const handlers: CommandHandlerTable = {
                             agentContext.spotify,
                         );
 
-                        context.actionIO.setActionDisplay(
+                        context.actionIO.setDisplay(
                             "Spotify user data loaded.",
                         );
                     },

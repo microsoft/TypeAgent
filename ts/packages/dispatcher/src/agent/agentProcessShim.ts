@@ -10,6 +10,7 @@ import {
     AppAgentEvent,
     CommandDescriptor,
     CommandDescriptorTable,
+    DisplayContent,
 } from "@typeagent/agent-sdk";
 import {
     AgentCallFunctions,
@@ -223,13 +224,21 @@ export async function createAgentProcessShim(
         }) => {
             contextMap.get(param.contextId).notify(param.event, param.message);
         },
-        setActionDisplay: (param: {
+        setDisplay: (param: {
             actionContextId: number;
-            message: string;
+            message: DisplayContent;
         }) => {
             actionContextMap
                 .get(param.actionContextId)
-                .actionIO.setActionDisplay(param.message);
+                .actionIO.setDisplay(param.message);
+        },
+        appendDisplay: (param: {
+            actionContextId: number;
+            message: DisplayContent;
+        }) => {
+            actionContextMap
+                .get(param.actionContextId)
+                .actionIO.appendDisplay(param.message);
         },
         performanceMark: (param: { actionContextId: number; name: string }) => {
             actionContextMap
@@ -278,7 +287,7 @@ export async function createAgentProcessShim(
             actionName: string,
             name: string,
             value: string,
-            partial: boolean,
+            delta: string | undefined,
             context: ActionContext<ShimContext>,
         ) {
             return withActionContext(context, (contextParams) =>
@@ -287,7 +296,7 @@ export async function createAgentProcessShim(
                     actionName,
                     name,
                     value,
-                    partial,
+                    delta,
                 }),
             );
         },

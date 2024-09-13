@@ -7,8 +7,9 @@ import {
     AppAgent,
     SessionContext,
     Storage,
-    TurnImpression,
-    createTurnImpressionFromDisplay,
+    ActionResult,
+    createActionResultFromTextDisplay,
+    createActionResultFromHtmlDisplay,
 } from "@typeagent/agent-sdk";
 import {
     ListAction,
@@ -242,7 +243,7 @@ async function handleListAction(
     action: ListAction,
     listContext: ListActionContext,
 ) {
-    let result: TurnImpression | undefined = undefined;
+    let result: ActionResult | undefined = undefined;
     let displayText: string | undefined = undefined;
     switch (action.actionName) {
         case "addItems": {
@@ -257,8 +258,10 @@ async function handleListAction(
                 );
                 await listContext.store.save();
                 displayText = `Added items: ${addAction.parameters.items} to list ${addAction.parameters.listName}`;
-                result = createTurnImpressionFromDisplay(displayText);
-                result.literalText = `Added item: ${addAction.parameters.items} to list ${addAction.parameters.listName}`;
+                result = createActionResultFromTextDisplay(
+                    displayText,
+                    displayText,
+                );
                 result.entities = [
                     {
                         name: addAction.parameters.listName,
@@ -286,8 +289,10 @@ async function handleListAction(
                 );
                 await listContext.store.save();
                 displayText = `Removed items: ${removeAction.parameters.items} from list ${removeAction.parameters.listName}`;
-                result = createTurnImpressionFromDisplay(displayText);
-                result.literalText = `Removed items: ${removeAction.parameters.items} from list ${removeAction.parameters.listName}`;
+                result = createActionResultFromTextDisplay(
+                    displayText,
+                    displayText,
+                );
                 result.entities = [
                     {
                         name: removeAction.parameters.listName,
@@ -322,8 +327,10 @@ async function handleListAction(
                     );
                     displayText = `List already exists: ${createListAction.parameters.listName}`;
                 }
-                result = createTurnImpressionFromDisplay(displayText);
-                result.literalText = `Created list: ${createListAction.parameters.listName}`;
+                result = createActionResultFromTextDisplay(
+                    displayText,
+                    displayText,
+                );
                 result.entities = [
                     {
                         name: createListAction.parameters.listName,
@@ -344,8 +351,10 @@ async function handleListAction(
                 displayText = `<ul>${plainList
                     .map((item) => `<li>${item}</li>`)
                     .join("")}</ul>`;
-                result = createTurnImpressionFromDisplay(displayText);
-                result.literalText = `List ${getListAction.parameters.listName} has items: ${plainList.join(",")}`;
+                result = createActionResultFromHtmlDisplay(
+                    displayText,
+                    `List ${getListAction.parameters.listName} has items: ${plainList.join(",")}`,
+                );
                 result.entities = [
                     {
                         name: getListAction.parameters.listName,
@@ -369,8 +378,10 @@ async function handleListAction(
                     list.itemsSet.clear();
                     await listContext.store.save();
                     displayText = `Cleared list: ${clearListAction.parameters.listName}`;
-                    result = createTurnImpressionFromDisplay(displayText);
-                    result.literalText = `Cleared list: ${clearListAction.parameters.listName}`;
+                    result = createActionResultFromTextDisplay(
+                        displayText,
+                        displayText,
+                    );
                     result.entities = [
                         {
                             name: clearListAction.parameters.listName,
