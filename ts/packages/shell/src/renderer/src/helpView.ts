@@ -19,6 +19,7 @@ export class HelpView {
                             <b>F2</b> - issue random request (<b>@random</b>).<br/>
                             <b>F11</b> - Toggle full screen</br>
                             <b>F12</b> - Toggle devTools</br>
+                            <b>Alt</b> - Show menu</br>
                             <b>Alt+M</b> - Start speech recognition.<br/>
                             <b>CmdOrCTRL+-</b> - Zoom in or out (alternatively use CmdOrCTRL and mouse wheel).</br>                            
                             
