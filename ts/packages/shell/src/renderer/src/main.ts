@@ -125,8 +125,8 @@ function addEvents(
         chatView.addUserMessage(`@random`);
     });
     api.onShowDialog((_, key) => {
-        if (key == "Settings") {
-            settingsView.showTabs();
+        if (key.toLocaleLowerCase() == "settings") {
+            tabsView.showTab(key);
         }
 
         tabsView.showTab(key);
@@ -296,7 +296,7 @@ document.addEventListener("DOMContentLoaded", function () {
         cameraView.toggleVisibility();
     };
 
-    const settingsView = new SettingsView(tabs, chatView);
+    const settingsView = new SettingsView(chatView);
     tabs.getTabContainerByName("Settings").append(settingsView.getContainer());
     tabs.getTabContainerByName("Metrics").append(
         new MetricsView().getContainer(),

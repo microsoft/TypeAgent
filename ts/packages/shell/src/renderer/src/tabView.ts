@@ -25,7 +25,7 @@ export class TabView {
     ) {
         this.mainContainer = document.createElement("div");
         this.tabContainer = document.createElement("div");
-        this.tabContainer.className = "shadeContainer";
+        this.tabContainer.className = "shadeContainer ";
         this.mainContainer.append(this.tabContainer);
 
         this.tabs = new Array(tabNames.length);
@@ -39,7 +39,7 @@ export class TabView {
             this.tabPages[i] = tabPageDiv;
             this.tabNames[i] = tabNames[i];
 
-            tabDiv.className = `shade shade${i}`;
+            tabDiv.className = `shade shade${i} closedTab`;
 
             let tabPageContents = document.createElement("div");
             tabPageContents.className = "tabPageContents";
@@ -109,10 +109,8 @@ export class TabView {
     }
 
     showTab(tabName: string) {
-        this.show();
-
         for (let j = 0; j < this.tabPages.length; j++) {
-            if (this.tabNames[j] == tabName) {
+            if (this.tabNames[j].toLowerCase() == tabName.toLowerCase()) {
                 this.tabPages[j].classList.remove("closedTab");
             } else {
                 this.tabPages[j].classList.add("closedTab");
