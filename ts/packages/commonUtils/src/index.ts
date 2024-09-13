@@ -37,8 +37,6 @@ export * from "./webSockets.js";
 
 export * from "./stopWatch.js";
 
-export * from "./profiler.js";
-
 export { simpleStarRegex } from "./simpleStartRegex.js";
 
 export { createRpc } from "./rpc.js";

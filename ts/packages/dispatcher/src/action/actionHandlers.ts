@@ -20,8 +20,8 @@ import {
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
 import { getUserProfileDir } from "../utils/userData.js";
-import { Profiler } from "common-utils";
 import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
+import { ProfileNames } from "../utils/profileNames.js";
 
 const debugAgent = registerDebug("typeagent:agent");
 const debugActions = registerDebug("typeagent:actions");
@@ -51,9 +51,6 @@ function getActionContext(
         },
         get actionIO() {
             return actionIO;
-        },
-        performanceMark(markName: string) {
-            Profiler.getInstance().mark(requestId, markName);
         },
     };
 }
@@ -163,8 +160,19 @@ async function executeAction(
                   context.requestId!,
                   actionIndex,
               );
-    const returnedResult: ActionResult | undefined =
-        await appAgent.executeAction(action, actionContext);
+
+    actionContext.profiler = context.requestProfiler?.measure(
+        ProfileNames.action,
+        true,
+        actionIndex,
+    );
+    let returnedResult: ActionResult | undefined;
+    try {
+        returnedResult = await appAgent.executeAction(action, actionContext);
+    } finally {
+        actionContext.profiler?.stop();
+        actionContext.profiler = undefined;
+    }
 
     let result: ActionResult;
     if (returnedResult === undefined) {
@@ -310,5 +318,15 @@ export async function executeCommand(
             `Agent ${appAgentName} does not support executeCommand.`,
         );
     }
-    return appAgent.executeCommand(command, args, actionContext, attachments);
+    try {
+        return await appAgent.executeCommand(
+            command,
+            args,
+            actionContext,
+            attachments,
+        );
+    } finally {
+        actionContext.profiler?.stop();
+        actionContext.profiler = undefined;
+    }
 }

@@ -23,3 +23,5 @@ export {
     CommandDescriptorTable,
 } from "./agentInterface.js";
 export * from "./memory.js";
+
+export { Profiler } from "./profiler.js";

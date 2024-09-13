@@ -23,7 +23,6 @@ export type AgentContextCallFunctions = {
         actionContextId: number;
         message: DisplayContent;
     }) => void;
-    performanceMark: (param: { actionContextId: number; name: string }) => void;
 };
 
 export type AgentContextInvokeFunctions = {

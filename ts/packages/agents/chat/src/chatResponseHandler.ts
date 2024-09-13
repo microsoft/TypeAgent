@@ -413,7 +413,7 @@ async function runLookup(
         getLookupInstructions(),
         (url, answerSoFar) => {
             if (firstToken) {
-                actionContext.performanceMark("First Token");
+                actionContext.profiler?.mark("firstToken");
                 firstToken = false;
             }
 

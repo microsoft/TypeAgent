@@ -15,6 +15,7 @@ import {
     createMongoDBLoggerSink,
     enableJsonTranslatorStreaming,
 } from "common-utils";
+import { ProfileLogger } from "../../utils/profileLogger.js";
 import {
     AgentCache,
     GenericExplanationResult,
@@ -47,12 +48,11 @@ import {
 } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
-import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";
+import { ActionContext, AppAgentEvent, Profiler } from "@typeagent/agent-sdk";
 import { conversation as Conversation } from "knowledge-processor";
 import { AppAgentManager, AppAgentState } from "./appAgentManager.js";
 import { getBuiltinAppAgentProvider } from "../../agent/agentConfig.js";
 import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
-import { isMultiModalContentSupported } from "../../../../commonUtils/dist/modelResource.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 
 export interface CommandResult {
@@ -99,6 +99,9 @@ export type CommandHandlerContext = {
     transientAgents: Record<string, boolean | undefined>;
 
     streamingActionContext?: ActionContext<unknown> | undefined;
+
+    profileLogger?: ProfileLogger | undefined;
+    requestProfiler?: Profiler | undefined;
 };
 
 export function updateCorrectionContext(
@@ -231,7 +234,7 @@ export async function initializeCommandHandlerContext(
 
     const clientIO = options?.clientIO;
     const requestIO = clientIO
-        ? getRequestIO(undefined, clientIO, undefined)
+        ? getRequestIO(undefined, clientIO)
         : clientIO === undefined
           ? getConsoleRequestIO(stdio)
           : getNullRequestIO();

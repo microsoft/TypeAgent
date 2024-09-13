@@ -186,27 +186,25 @@ body {
   font-style: italic;
 }
 
-.chat-message {
-  /* use a common class for all messages */
+/* Container */
+.chat-message-container {
   padding-left: 10px;
   padding-right: 10px;
-  padding-bottom: 5px;
   margin-bottom: 8px;
   margin-top: 8px;
-  border-radius: 8px;
+  width: 55%;
   transform-origin: 0 100%;
   transform: scale(0);
-  word-wrap: normal;
   animation: message 0.15s ease-out 0s forwards;
 }
 
 .chat-message-left {
-  width: 55%;
+  .chat-message-container;
   margin-left: 10px;
 }
 
 .chat-message-right {
-  width: 55%;
+  .chat-message-container;
   margin-right: 10px;
   align-self: flex-end;
 }
@@ -215,26 +213,29 @@ body {
   .chat-message-left;
   font-style: italic;
   color: #002b3d;
-  padding: 6px 15px 8px 15px;
 }
 
-.chat-message-hidden {
-  display: none;
-  visibility: hidden;
+/* Body */
+.chat-message-body {
+  border-radius: 8px;
+  margin-top: 8px;
+  margin-bottom: 8px;
 }
 
 .chat-message-user {
-  .chat-message;
+  .chat-message-body;
   background-color: lavender;
-  padding: 6px 15px 8px 15px;
 }
 
 .chat-message-agent {
-  .chat-message;
-  margin-bottom: 0px;
+  .chat-message-body;
   margin-left: 30px;
   background-color: #d6f3ff;
-  padding: 6px 15px 12px 15px;
+}
+
+/* Content */
+.chat-message-content {
+  padding: 6px 15px 6px 15px;
   word-wrap: break-word;
 }
 
@@ -243,19 +244,30 @@ body {
 }
 
 .chat-message-metrics {
-  background-color: #c2edff;
-  margin-top: -5px;
-  margin-bottom: 8px;
+  margin: 0px;
+  padding: 5px;
   border-radius: 0px 0px 8px 8px;
   font-size: 8px;
   font-style: normal;
-  margin-left: 30px;
-  padding: 5px;
   z-index: 100;
   position: relative;
   text-align: right;
 }
 
+.chat-message-metrics-left {
+  .chat-message-metrics;
+  background-color: #c2edff;
+}
+
+.chat-message-metrics-right {
+  .chat-message-metrics;
+  background-color: rgb(150, 150, 202);
+}
+
+.chat-message-hidden {
+  display: none;
+  visibility: hidden;
+}
 .agent-icon {
   width: 30px;
   height: 30px;

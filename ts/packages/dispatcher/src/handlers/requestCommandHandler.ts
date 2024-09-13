@@ -20,7 +20,7 @@ import {
     isActionActive,
 } from "./common/commandHandlerContext.js";
 
-import { getColorElapsedString, Profiler } from "common-utils";
+import { getColorElapsedString } from "common-utils";
 import {
     executeActions,
     startStreamPartialAction,
@@ -39,6 +39,8 @@ import registerDebug from "debug";
 import { getAllActionInfo } from "../translation/actionInfo.js";
 import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
 import ExifReader from "exifreader";
+import { Result } from "typechat";
+import { ProfileNames } from "../utils/profileNames.js";
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
@@ -233,57 +235,61 @@ async function translateRequestWithTranslator(
         attachments,
     );
 
-    let firstToken = true;
-    let streamFunction: IncrementalJsonValueCallBack | undefined;
-    context.streamingActionContext = undefined;
-    const onProperty: IncrementalJsonValueCallBack | undefined =
-        context.session.getConfig().stream
-            ? (prop: string, value: any, delta: string | undefined) => {
-                  // TODO: streaming currently doesn't not support multiple actions
-                  if (prop === "actionName" && delta === undefined) {
-                      const actionTranslatorName =
-                          context.agents.getInjectedTranslatorForActionName(
-                              value,
-                          ) ?? translatorName;
-                      context.requestIO.status(
-                          `[${actionTranslatorName}] Translating '${request}' into action '${value}'`,
-                          actionTranslatorName,
-                      );
-                      const config =
-                          context.agents.getTranslatorConfig(
+    const profiler = context.requestProfiler?.measure(ProfileNames.translate);
+
+    let response: Result<object>;
+    try {
+        let firstToken = true;
+        let streamFunction: IncrementalJsonValueCallBack | undefined;
+        context.streamingActionContext = undefined;
+        const onProperty: IncrementalJsonValueCallBack | undefined =
+            context.session.getConfig().stream
+                ? (prop: string, value: any, delta: string | undefined) => {
+                      // TODO: streaming currently doesn't not support multiple actions
+                      if (prop === "actionName" && delta === undefined) {
+                          const actionTranslatorName =
+                              context.agents.getInjectedTranslatorForActionName(
+                                  value,
+                              ) ?? translatorName;
+                          context.requestIO.status(
+                              `[${actionTranslatorName}] Translating '${request}' into action '${value}'`,
                               actionTranslatorName,
                           );
-                      if (config.streamingActions?.includes(value)) {
-                          streamFunction = startStreamPartialAction(
-                              actionTranslatorName,
-                              value,
-                              context,
-                          );
+                          const config =
+                              context.agents.getTranslatorConfig(
+                                  actionTranslatorName,
+                              );
+                          if (config.streamingActions?.includes(value)) {
+                              streamFunction = startStreamPartialAction(
+                                  actionTranslatorName,
+                                  value,
+                                  context,
+                              );
+                          }
+                      }
+
+                      if (firstToken) {
+                          profiler?.mark(ProfileNames.firstToken);
+                          firstToken = false;
+                      }
+
+                      if (streamFunction) {
+                          streamFunction(prop, value, delta);
                       }
                   }
+                : undefined;
 
-                  if (firstToken) {
-                      Profiler.getInstance().mark(
-                          context.requestId,
-                          "First Token",
-                      );
-                      firstToken = false;
-                  }
-
-                  if (streamFunction) {
-                      streamFunction(prop, value, delta);
-                  }
-              }
-            : undefined;
-
-    const response = await translator.translate(
-        request,
-        history?.promptSections,
-        onProperty,
-        attachments,
-        exifTags,
-    );
-    translator.createRequestPrompt = orp;
+        response = await translator.translate(
+            request,
+            history?.promptSections,
+            onProperty,
+            attachments,
+            exifTags,
+        );
+    } finally {
+        translator.createRequestPrompt = orp;
+        profiler?.stop();
+    }
 
     // TODO: figure out if we want to keep track of this
     //Profiler.getInstance().incrementLLMCallCount(context.requestId);

@@ -240,11 +240,6 @@ export async function createAgentProcessShim(
                 .get(param.actionContextId)
                 .actionIO.appendDisplay(param.message);
         },
-        performanceMark: (param: { actionContextId: number; name: string }) => {
-            actionContextMap
-                .get(param.actionContextId)
-                .performanceMark(param.name);
-        },
     };
 
     const rpc = createRpc<

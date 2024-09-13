@@ -398,13 +398,24 @@ function actionCommand(
         requestId,
     );
 }
+
+function sendProfileEntries(message: IAgentMessage) {
+    if (
+        (message.profileEntries !== undefined, message.requestId !== undefined)
+    ) {
+        mainWindow?.webContents.send(
+            "profile-entries",
+            message.requestId,
+            message.profileEntries,
+        );
+    }
+}
+
 const clientIO: ClientIO = {
     clear: () => {
         mainWindow?.webContents.send("clear");
     },
-    info: () => {
-        /* ignore */
-    },
+    info: sendProfileEntries,
     success: sendStatusMessage,
     status: (message) => sendStatusMessage(message, true),
     warn: sendStatusMessage,
@@ -539,7 +550,12 @@ app.whenReady().then(async () => {
         }
         debugShell(dispatcher.getPrompt(), text);
 
-        await dispatcher.processCommand(text, id, images);
+        const profileEntries = await dispatcher.processCommand(
+            text,
+            id,
+            images,
+            true,
+        );
         mainWindow?.webContents.send("send-demo-event", "CommandProcessed");
         const newSettingSummary = dispatcher.getSettingSummary();
         if (newSettingSummary !== settingSummary) {
@@ -550,16 +566,19 @@ app.whenReady().then(async () => {
                 dispatcher.getTranslatorNameToEmojiMap(),
             );
         }
+
+        return profileEntries;
     }
 
     ipcMain.on(
         "process-shell-request",
         (_event, text: string, id: string, images: string[]) => {
             processShellRequest(text, id, images)
-                .then(() =>
+                .then((profileEntries) =>
                     mainWindow?.webContents.send(
                         "process-shell-request-done",
                         id,
+                        profileEntries,
                     ),
                 )
                 .catch((error) => {

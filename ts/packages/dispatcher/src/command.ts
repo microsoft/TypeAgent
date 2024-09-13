@@ -22,9 +22,10 @@ import {
     CommandDescriptorTable,
 } from "@typeagent/agent-sdk";
 
-import { Profiler } from "common-utils";
 import { executeCommand } from "./action/actionHandlers.js";
 import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/commands";
+import { ProfileNames } from "./utils/profileNames.js";
+import { createProfilerLogger, UnreadProfileEntries } from "./profiler.js";
 
 const debugInteractive = registerDebug("typeagent:cli:interactive");
 
@@ -101,7 +102,6 @@ export async function resolveCommand(
 export async function processCommandNoLock(
     originalInput: string,
     context: CommandHandlerContext,
-    requestId?: RequestId,
     attachments?: string[],
 ) {
     let input = originalInput.trim();
@@ -112,15 +112,7 @@ export async function processCommandNoLock(
         input = input.substring(1);
     }
 
-    const oldRequestIO = context.requestIO;
-    context.requestId = requestId;
-    if (context.clientIO) {
-        context.requestIO = getRequestIO(context, context.clientIO, requestId);
-    }
-
     try {
-        Profiler.getInstance().start(context.requestId);
-
         const result = await resolveCommand(input, context);
         if (result === undefined) {
             throw new Error(`Unknown command '${input}'`);
@@ -161,11 +153,8 @@ export async function processCommandNoLock(
         context.requestIO.error(`ERROR: ${e.message}`);
         debugInteractive(e.stack);
     } finally {
-        Profiler.getInstance().stop(context.requestId);
+        context.requestProfiler?.stop();
     }
-
-    context.requestId = undefined;
-    context.requestIO = oldRequestIO;
 }
 
 export async function processCommand(
@@ -173,15 +162,35 @@ export async function processCommand(
     context: CommandHandlerContext,
     requestId?: RequestId,
     attachments?: string[],
-) {
+    profile: boolean = false,
+): Promise<UnreadProfileEntries | undefined> {
     // Process one command at at time.
     return context.commandLock(async () => {
-        return processCommandNoLock(
-            originalInput,
-            context,
-            requestId,
-            attachments,
-        );
+        context.requestId = requestId;
+        if (profile) {
+            context.profileLogger = createProfilerLogger();
+            context.requestProfiler = context.profileLogger.measure(
+                ProfileNames.request,
+                true,
+                requestId,
+            );
+        }
+
+        const oldRequestIO = context.requestIO;
+
+        if (context.clientIO) {
+            context.requestIO = getRequestIO(context, context.clientIO);
+        }
+
+        await processCommandNoLock(originalInput, context, attachments);
+
+        const entries = context.profileLogger?.getUnreadEntries();
+        context.requestProfiler = undefined;
+        context.profileLogger = undefined;
+        context.requestId = undefined;
+        context.requestIO = oldRequestIO;
+
+        return entries;
     });
 }
 

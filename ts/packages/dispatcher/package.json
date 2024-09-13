@@ -14,7 +14,8 @@
   "exports": {
     ".": "./dist/index.js",
     "./internal": "./dist/internal.js",
-    "./explorer": "./dist/explorer.js"
+    "./explorer": "./dist/explorer.js",
+    "./profiler": "./dist/profiler.js"
   },
   "scripts": {
     "build": "npm run tsc",
