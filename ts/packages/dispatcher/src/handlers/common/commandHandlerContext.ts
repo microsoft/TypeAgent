@@ -53,7 +53,7 @@ import { AppAgentManager, AppAgentState } from "./appAgentManager.js";
 import { getBuiltinAppAgentProvider } from "../../agent/agentConfig.js";
 import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
-import { RequestMetricsManager } from "../../profiler.js";
+import { RequestMetricsManager } from "../../utils/metrics.js";
 
 export interface CommandResult {
     error?: boolean;

@@ -7,7 +7,7 @@ import { SearchMenuItem, ActionTemplateSequence } from "common-utils";
 import chalk from "chalk";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
 import { AppAgentEvent, DisplayContent } from "@typeagent/agent-sdk";
-import { RequestMetrics } from "../../profiler.js";
+import { RequestMetrics } from "../../utils/metrics.js";
 
 export const DispatcherName = "dispatcher";
 export type RequestId = string | undefined;

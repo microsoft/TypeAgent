@@ -5,7 +5,7 @@ import { ElectronAPI } from "@electron-toolkit/preload";
 import { AppAgentEvent, DynamicDisplay } from "@typeagent/agent-sdk";
 import { ShellSettings } from "../main/shellSettings.js";
 import { IAgentMessage } from "agent-dispatcher";
-import { RequestMetrics } from "agent-dispatcher/profiler";
+import { RequestMetrics } from "agent-dispatcher";
 
 export type SpeechToken = {
     token: string;

@@ -16,7 +16,7 @@ import {
 } from "../handlers/common/commandHandlerContext.js";
 import { getDynamicDisplay } from "../action/actionHandlers.js";
 import { RequestId } from "../handlers/common/interactiveIO.js";
-import { RequestMetrics } from "../profiler.js";
+import { RequestMetrics } from "../utils/metrics.js";
 
 export interface Dispatcher {
     processCommand(

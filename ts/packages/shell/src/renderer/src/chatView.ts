@@ -21,7 +21,7 @@ import {
 import { TTS } from "./tts";
 import { IAgentMessage } from "agent-dispatcher";
 import DOMPurify from "dompurify";
-import { PhaseTiming, RequestMetrics } from "agent-dispatcher/profiler";
+import { PhaseTiming, RequestMetrics } from "agent-dispatcher";
 
 export interface InputChoice {
     element: HTMLElement;

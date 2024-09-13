@@ -4,7 +4,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { ClientAPI, SpeechToken } from "./electronTypes.js"; // Custom APIs for renderer
-import { RequestMetrics } from "agent-dispatcher/profiler";
+import { RequestMetrics } from "agent-dispatcher";
 
 function getProcessShellRequest() {
     const pendingRequests = new Map<

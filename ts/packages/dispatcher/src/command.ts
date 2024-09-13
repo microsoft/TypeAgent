@@ -24,8 +24,7 @@ import {
 
 import { executeCommand } from "./action/actionHandlers.js";
 import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/commands";
-import { RequestMetrics } from "./profiler.js";
-import { ProfileNames } from "./utils/profileNames.js";
+import { RequestMetrics } from "./utils/metrics.js";
 
 const debugInteractive = registerDebug("typeagent:cli:interactive");
 
