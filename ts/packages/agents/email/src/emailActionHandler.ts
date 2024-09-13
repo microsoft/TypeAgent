@@ -16,7 +16,7 @@ import {
     AppAgent,
     SessionContext,
     createActionResultFromHtmlDisplay,
-    createActionResultFromTextDisplay,
+    createActionResultFromError,
 } from "@typeagent/agent-sdk";
 
 import {
@@ -35,7 +35,7 @@ export class MailClientLoginCommandHandler implements CommandHandler {
         const mailClient: MailClient | undefined =
             context.sessionContext.agentContext.mailClient;
         if (!mailClient?.isGraphClientInitialized()) {
-            await mailClient?.initGraphClient();
+            await mailClient?.initGraphClient(true);
         }
     }
 }
@@ -84,8 +84,8 @@ async function executeEmailAction(
 ) {
     const { mailClient } = context.sessionContext.agentContext;
     if (!mailClient || !mailClient?.isGraphClientInitialized()) {
-        return createActionResultFromTextDisplay(
-            "Use @calendar login to log into MS Graph.",
+        return createActionResultFromError(
+            "Use @email login to log into MS Graph.",
         );
     }
 

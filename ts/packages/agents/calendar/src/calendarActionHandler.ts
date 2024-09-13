@@ -45,7 +45,7 @@ export class CalendarClientLoginCommandHandler implements CommandHandler {
         const calendarClient: CalendarClient | undefined =
             context.sessionContext.agentContext.calendarClient;
         if (!calendarClient?.isGraphClientInitialized()) {
-            await calendarClient?.initGraphClient();
+            await calendarClient?.initGraphClient(true);
         }
     }
 }
@@ -295,8 +295,8 @@ export async function handleCalendarAction(
         !calendarContext.calendarClient ||
         !calendarContext.calendarClient?.isGraphClientInitialized()
     ) {
-        return createActionResultFromTextDisplay(
-            "Use @calendar login to log into MS Graph.",
+        return createActionResultFromError(
+            "Use @calendar login to log into MS Graph and then try your requesy again.",
         );
     }
 

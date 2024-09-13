@@ -16,17 +16,20 @@ enum AddressToType {
 export class MailClient {
     private readonly logger = registerDebug("typeagent:graphUtils:mailClient");
     private graphClient: GraphClient | undefined = undefined;
-
-    //public constructor(private readonly graphClient: GraphClient | undefined) {}
     public constructor() {}
 
     public isGraphClientInitialized(): boolean {
         return this.graphClient && this.graphClient.getClient() ? true : false;
     }
 
-    public async initGraphClient(): Promise<void> {
+    public async initGraphClient(fLogin: boolean): Promise<void> {
         if (this.graphClient === undefined) {
             this.graphClient = await GraphClient.getInstance();
+            this.graphClient?.authenticateUser();
+        }
+        else if (fLogin) {
+            await this.graphClient.ensureTokenIsValid();
+            this.graphClient.loadUserEmailAddresses();
         }
         return;
     }

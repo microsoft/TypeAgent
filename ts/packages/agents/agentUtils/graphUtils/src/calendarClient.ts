@@ -7,6 +7,9 @@ import chalk from "chalk";
 import { createCalendarDataIndex } from "./calendarDataIndex.js";
 
 export class CalendarClient {
+    private _syncIntervalId: NodeJS.Timeout | null = null;
+    private _syncInterval = 30 * 60 * 1000;
+
     private readonly useEmbeddings: Boolean = true;
     private readonly calendatDataIndex = createCalendarDataIndex();
     private readonly calendarDataMap = new Map<string, any>();
@@ -16,13 +19,27 @@ export class CalendarClient {
     );
 
     private graphClient: GraphClient | undefined = undefined;
-    constructor() {}
+    constructor() {
+        this.initGraphClient(true);
+    }
 
-    public async initGraphClient(): Promise<void> {
+    public async initGraphClient(fLogin: boolean): Promise<void> {
         if (this.graphClient === undefined) {
             this.graphClient = await GraphClient.getInstance();
+            if(fLogin &&  this.graphClient)
+            {
+                await this.graphClient.authenticateUser();
+                this.graphClient.loadUserEmailAddresses();
+            }
             this.indexCalendarEvents();
             this.startSyncThread();
+        }
+        else{
+            if(fLogin) {
+                this.stopSyncThread();
+                await this.graphClient.ensureTokenIsValid();
+                this.startSyncThread();
+            }
         }
         return;
     }
@@ -58,7 +75,6 @@ export class CalendarClient {
     async indexCalendarEvents() {
         if (this.graphClient === undefined) return;
 
-        // await this.graphClient.ensureTokenIsValid();
         if (this.isGraphClientInitialized()) {
             let allEvents: any[] = [];
             let nextPageLink = null;
@@ -113,7 +129,6 @@ export class CalendarClient {
 
     startSyncThread() {
         if (this.isGraphClientInitialized()) {
-            const syncInterval = 30 * 60 * 1000;
             const syncCalendarEvents = async () => {
                 await this.indexCalendarEvents();
             };
@@ -125,7 +140,17 @@ export class CalendarClient {
                         error,
                     ),
                 );
-            }, syncInterval);
+            }, this._syncInterval);
+        }
+    }
+
+    stopSyncThread() {
+        if (this._syncIntervalId !== null) {
+            clearInterval(this._syncIntervalId);
+            this._syncIntervalId = null;
+            console.log("Sync thread stopped.");
+        } else {
+            console.log("No sync thread is currently running.");
         }
     }
 
@@ -679,6 +704,5 @@ export class CalendarClient {
 }
 
 export async function createCalendarGraphClient(): Promise<CalendarClient> {
-    //return new CalendarClient(await GraphClient.getInstance());
     return new CalendarClient();
 }
