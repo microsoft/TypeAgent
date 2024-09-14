@@ -35,7 +35,7 @@ import {
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
-import { AppAgentEvent } from "@typeagent/agent-sdk";
+import { AppAgentEvent, DisplayAppendMode } from "@typeagent/agent-sdk";
 import { shellAgentProvider } from "./agent.js";
 
 const debugShell = registerDebug("typeagent:shell");
@@ -264,13 +264,13 @@ async function triggerRecognitionOnce(dispatcher: Dispatcher) {
     );
 }
 
-function showResult(message: IAgentMessage, append: boolean = false) {
+function showResult(message: IAgentMessage, mode?: DisplayAppendMode) {
     // Ignore message without requestId
     if (message.requestId === undefined) {
         console.warn("showResult: requestId is undefined");
         return;
     }
-    mainWindow?.webContents.send("response", message, append);
+    mainWindow?.webContents.send("response", message, mode);
 }
 
 function sendStatusMessage(message: IAgentMessage, temporary: boolean = false) {
@@ -407,20 +407,27 @@ function actionCommand(
         requestId,
     );
 }
+
+function sendRequestMetrics(message: IAgentMessage) {
+    if (message.metrics !== undefined && message.requestId !== undefined) {
+        mainWindow?.webContents.send(
+            "request-metrics",
+            message.requestId,
+            message.metrics,
+        );
+    }
+}
+
 const clientIO: ClientIO = {
     clear: () => {
         mainWindow?.webContents.send("clear");
     },
-    info: () => {
-        /* ignore */
-    },
-    success: sendStatusMessage,
+    info: sendRequestMetrics,
     status: (message) => sendStatusMessage(message, true),
     warn: sendStatusMessage,
     error: sendStatusMessage,
-    result: showResult,
     setDisplay: showResult,
-    appendDisplay: (message) => showResult(message, true),
+    appendDisplay: (message, mode) => showResult(message, mode ?? "inline"),
     setDynamicDisplay,
     searchMenuCommand,
     actionCommand,
@@ -534,6 +541,7 @@ app.whenReady().then(async () => {
         explanationAsynchronousMode: true,
         persistSession: true,
         enableServiceHost: true,
+        metrics: true,
         clientIO,
     });
 
@@ -548,7 +556,7 @@ app.whenReady().then(async () => {
         }
         debugShell(dispatcher.getPrompt(), text);
 
-        await dispatcher.processCommand(text, id, images);
+        const metrics = await dispatcher.processCommand(text, id, images);
         mainWindow?.webContents.send("send-demo-event", "CommandProcessed");
         const newSettingSummary = dispatcher.getSettingSummary();
         if (newSettingSummary !== settingSummary) {
@@ -559,16 +567,19 @@ app.whenReady().then(async () => {
                 dispatcher.getTranslatorNameToEmojiMap(),
             );
         }
+
+        return metrics;
     }
 
     ipcMain.on(
         "process-shell-request",
         (_event, text: string, id: string, images: string[]) => {
             processShellRequest(text, id, images)
-                .then(() =>
+                .then((metrics) =>
                     mainWindow?.webContents.send(
                         "process-shell-request-done",
                         id,
+                        metrics,
                     ),
                 )
                 .catch((error) => {

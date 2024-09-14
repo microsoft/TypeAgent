@@ -31,9 +31,6 @@ export {
 
 export { getBuiltinConstructionConfig } from "./utils/config.js";
 export { getBuiltinTranslatorNames } from "./translation/agentTranslators.js";
-export { RequestCommandHandler } from "./handlers/requestCommandHandler.js";
-export { TranslateCommandHandler } from "./handlers/translateCommandHandler.js";
-export { ExplainCommandHandler } from "./handlers/explainCommandHandler.js";
 export { getAssistantSelectionSchemas } from "./translation/unknownSwitcher.js";
 export { getTestDataFiles } from "./utils/config.js";
 export {

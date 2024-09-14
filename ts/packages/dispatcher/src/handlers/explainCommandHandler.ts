@@ -1,32 +1,34 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-
-import { log } from "node:console";
-import { DispatcherCommandHandler } from "./common/commandHandler.js";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/commands";
 import {
     CommandHandlerContext,
     updateCorrectionContext,
 } from "./common/commandHandlerContext.js";
 import { RequestAction, printProcessRequestActionResult } from "agent-cache";
+import { ActionContext } from "@typeagent/agent-sdk";
+import { displayResult, displayStatus } from "./common/interactiveIO.js";
 
-export class ExplainCommandHandler implements DispatcherCommandHandler {
+export class ExplainCommandHandler implements CommandHandler {
     public readonly description = "Explain a translated request with action";
-    public async run(input: string, context: CommandHandlerContext) {
+    public async run(
+        input: string,
+        context: ActionContext<CommandHandlerContext>,
+    ) {
         const requestAction = RequestAction.fromString(input);
-        context.requestIO.status(
-            `Generating explanation for '${requestAction}'`,
-        );
-        const result = await context.agentCache.processRequestAction(
+        displayStatus(`Generating explanation for '${requestAction}'`, context);
+        const systemContext = context.sessionContext.agentContext;
+        const result = await systemContext.agentCache.processRequestAction(
             requestAction,
             false,
         );
         updateCorrectionContext(
-            context,
+            systemContext,
             requestAction,
             result.explanationResult.explanation,
         );
-        context.requestIO.result((log) => {
+        displayResult((log) => {
             printProcessRequestActionResult(result, log);
-        });
+        }, context);
     }
 }

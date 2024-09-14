@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DisplayContent } from "./agentInterface.js";
+import { DisplayContent } from "./display.js";
 
 export interface Entity {
     // the name of the entity such as "Bach" or "frog"
