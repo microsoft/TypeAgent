@@ -178,7 +178,7 @@ export interface RequestIO {
 
 function displayContentToString(content: DisplayContent): string {
     // TODO: should reject html content
-    return typeof content === "string" ? content : content.content;
+    return typeof content === "string" ? content : content?.content;
 }
 
 export function getConsoleRequestIO(

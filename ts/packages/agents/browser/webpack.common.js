@@ -5,17 +5,29 @@ const path = require("path");
 const CopyPlugin = require("copy-webpack-plugin");
 const NodePolyfillPlugin = require("node-polyfill-webpack-plugin");
 const srcDir = path.join(__dirname, "src", "extension");
+const electronSrcDir = path.join(__dirname, "src", "electron");
 
 module.exports = {
     mode: "production",
     entry: {
         "extension/contentScript": path.join(srcDir, "contentScript.ts"),
+        "electron/contentScript": path.join(srcDir, "contentScript.ts"),
         "extension/serviceWorker": path.join(srcDir, "serviceWorker.ts"),
+        "electron/serviceWorker": path.join(electronSrcDir, "serviceWorker.ts"),
         "extension/uiEventsDispatcher": path.join(
             srcDir,
             "uiEventsDispatcher.ts",
         ),
+        "electron/uiEventsDispatcher": path.join(
+            srcDir,
+            "uiEventsDispatcher.ts",
+        ),
         "extension/sites/paleobiodb": path.join(
+            srcDir,
+            "sites",
+            "paleobiodb.ts",
+        ),
+        "electron/sites/paleobiodb": path.join(
             srcDir,
             "sites",
             "paleobiodb.ts",
@@ -74,8 +86,16 @@ module.exports = {
             patterns: [
                 { from: path.join(srcDir, "manifest.json"), to: "./extension" },
                 {
+                    from: path.join(electronSrcDir, "manifest.json"),
+                    to: "./electron",
+                },
+                {
                     from: path.join(srcDir, "patchListeners.js"),
                     to: "./extension",
+                },
+                {
+                    from: path.join(srcDir, "patchListeners.js"),
+                    to: "./electron",
                 },
                 {
                     from: ".",
@@ -85,6 +105,11 @@ module.exports = {
                 {
                     from: "../../../.env",
                     to: "./extension",
+                    noErrorOnMissing: true,
+                },
+                {
+                    from: "../../../.env",
+                    to: "./electron",
                     noErrorOnMissing: true,
                 },
             ],
