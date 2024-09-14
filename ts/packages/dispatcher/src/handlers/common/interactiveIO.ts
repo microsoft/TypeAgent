@@ -199,7 +199,7 @@ export function getConsoleRequestIO(
         setDisplay: (content: DisplayContent) =>
             console.log(chalk.grey(displayContentToString(content))),
         appendDisplay: (content: DisplayContent) =>
-            // TODO: ignore newBlock
+            // TODO: ignore mode
             console.log(chalk.grey(displayContentToString(content))),
 
         isInputEnabled: () => stdio !== undefined,
