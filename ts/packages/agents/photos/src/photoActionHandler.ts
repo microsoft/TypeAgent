@@ -9,7 +9,7 @@ import {
     ActionResult,
     createActionResult,
 } from "@typeagent/agent-sdk";
-import { AnswerImageQuestionAction, PhotoAction } from "./photoSchema.js";
+import { PhotoAction, TakePhotoAction, UploadImageAction } from "./photoSchema.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -66,10 +66,17 @@ async function handlePhotoAction(
 ) {
     let result: ActionResult | undefined = undefined;
     switch (action.actionName) {
-        case "answerImageQuestion": {
-            const answerAction = action as AnswerImageQuestionAction;
-            const literalText = `Can't yet answer question: ${answerAction.parameters.questionText}`;
+        case "takePhoto": {
+            const takePhotoAction = action as TakePhotoAction;
+            const literalText = `I can't access your camera yet: ${takePhotoAction.parameters.originalRequest}`;
             result = createActionResult(literalText);
+            break;
+        }
+        case "uploadImage": {
+            const uploadImageAction = action as UploadImageAction;
+            const literalText = `I can't do that yet.: ${uploadImageAction.parameters.originalRequest}`;
+            result = createActionResult(literalText);
+
             break;
         }
         default:
