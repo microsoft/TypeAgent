@@ -57,7 +57,7 @@ export async function handleCommerceAction(
 
     if (!response.success) {
       console.error("Attempt to get product tilefailed");
-      console.error(response.message)
+      console.error(response.message);
       return;
     }
 

@@ -11,8 +11,6 @@ import {
     dialog,
     DevicePermissionHandlerHandlerDetails,
     WebContents,
-    MenuItem,
-    Menu,
 } from "electron";
 import { join } from "node:path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
@@ -125,7 +123,7 @@ function createWindow(): void {
         mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
     }
 
-    setAppMenu(mainWindow);
+    mainWindow.removeMenu();
 
     setupZoomHandlers(mainWindow);
 
@@ -675,10 +673,6 @@ function zoomOut(mainWindow: BrowserWindow) {
     );
 }
 
-function showDialog(dialogName: string) {
-    mainWindow?.webContents.send("show-dialog", dialogName);
-}
-
 const isMac = process.platform === "darwin";
 
 function setupZoomHandlers(mainWindow: BrowserWindow) {
@@ -712,102 +706,3 @@ function setupZoomHandlers(mainWindow: BrowserWindow) {
 
 // In this file you can include the rest of your app"s specific main process
 // code. You can also put them in separate files and require them here.
-function setAppMenu(mainWindow: BrowserWindow) {
-    const template: Electron.MenuItemConstructorOptions[] = [
-        {
-            label: "File",
-            role: "fileMenu",
-        },
-        {
-            id: "viewMenu",
-            label: "View",
-            submenu: [
-                { role: "reload" },
-                { role: "forceReload" },
-                { role: "toggleDevTools" },
-                { type: "separator" },
-                { role: "resetZoom" },
-                {
-                    id: "zoomIn",
-                    label: "Zoom In",
-                    accelerator: "CmdOrCtrl+=",
-                    click: () => zoomIn(mainWindow),
-                },
-                {
-                    id: "zoomOut",
-                    label: "Zoom Out",
-                    accelerator: "CmdOrCtrl+-", // doesn't work for some reason. Handle manually. See setupZoomHandlers
-                    click: () => zoomOut(mainWindow),
-                },
-                { type: "separator" },
-                { role: "togglefullscreen" },
-            ],
-        },
-        {
-            id: "demoMenu",
-            label: "Demo",
-            submenu: [],
-        },
-        {
-            id: "settingsMenu",
-            label: "Settings",
-            click: () => showDialog("Settings"),
-        },
-        {
-            id: "infoMenu",
-            label: "Info",
-            submenu: [
-                {
-                    id: "metricsMenu",
-                    label: "Show Metrics",
-                    click: () => showDialog("Metrics"),
-                },
-            ],
-        },
-        {
-            id: "windowMenu",
-            role: "windowMenu",
-        },
-        {
-            role: "help",
-            submenu: [
-                {
-                    label: "Learn More",
-                    click: () => showDialog("Help"),
-                },
-            ],
-        },
-    ];
-
-    const menu = Menu.buildFromTemplate(template);
-    Menu.setApplicationMenu(menu);
-
-    const demoItem = menu.getMenuItemById("demoMenu");
-    demoItem?.submenu?.append(
-        new MenuItem({
-            label: "Run Demo",
-            click() {
-                runDemo(mainWindow!, false);
-            },
-        }),
-    );
-
-    demoItem?.submenu?.append(
-        new MenuItem({
-            label: "Run Demo Interactive",
-            click() {
-                runDemo(mainWindow!, true);
-            },
-        }),
-    );
-
-    const windowItem = menu.getMenuItemById("windowMenu");
-    windowItem?.submenu?.append(
-        new MenuItem({
-            label: "Always on Top",
-            click() {
-                mainWindow?.setAlwaysOnTop(true, "floating");
-            },
-        }),
-    );
-}
