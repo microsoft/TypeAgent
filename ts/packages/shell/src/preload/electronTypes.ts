@@ -2,7 +2,11 @@
 // Licensed under the MIT License.
 
 import { ElectronAPI } from "@electron-toolkit/preload";
-import { AppAgentEvent, DynamicDisplay } from "@typeagent/agent-sdk";
+import {
+    AppAgentEvent,
+    DisplayAppendMode,
+    DynamicDisplay,
+} from "@typeagent/agent-sdk";
 import { ShellSettings } from "../main/shellSettings.js";
 import { IAgentMessage } from "agent-dispatcher";
 import { RequestMetrics } from "agent-dispatcher";
@@ -113,7 +117,7 @@ export interface ClientAPI {
         callback: (
             e: Electron.IpcRendererEvent,
             message: IAgentMessage,
-            append: boolean,
+            mode?: DisplayAppendMode,
         ) => void,
     ): void;
     onSetDynamicActionDisplay(

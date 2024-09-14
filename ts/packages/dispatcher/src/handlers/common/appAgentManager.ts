@@ -170,7 +170,7 @@ export class AppAgentManager implements TranslatorConfigProvider {
     public getAppAgent(appAgentName: string): AppAgent {
         const record = this.getRecord(appAgentName);
         if (record.appAgent === undefined) {
-            throw new Error("App agent is not initialized");
+            throw new Error(`App agent ${appAgentName} is not initialized`);
         }
         return record.appAgent;
     }
@@ -178,7 +178,9 @@ export class AppAgentManager implements TranslatorConfigProvider {
     public getSessionContext(appAgentName: string): SessionContext {
         const record = this.getRecord(appAgentName);
         if (record.sessionContext === undefined) {
-            throw new Error("Session context is not initialized");
+            throw new Error(
+                `Session context for ${appAgentName} is not initialized`,
+            );
         }
         return record.sessionContext;
     }

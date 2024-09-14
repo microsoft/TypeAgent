@@ -16,6 +16,7 @@ import {
     DisplayType,
     DisplayContent,
     ActionContext,
+    DisplayAppendMode,
 } from "@typeagent/agent-sdk";
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
@@ -40,8 +41,16 @@ function getActionContext(
         setDisplay(content: DisplayContent): void {
             context.requestIO.setDisplay(content, actionIndex, appAgentName);
         },
-        appendDisplay(content: DisplayContent): void {
-            context.requestIO.appendDisplay(content, actionIndex, appAgentName);
+        appendDisplay(
+            content: DisplayContent,
+            mode: DisplayAppendMode = "inline",
+        ): void {
+            context.requestIO.appendDisplay(
+                content,
+                actionIndex,
+                appAgentName,
+                mode,
+            );
         },
     };
     return {

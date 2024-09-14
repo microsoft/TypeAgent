@@ -4,15 +4,16 @@
 import { Result } from "typechat";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
 import chalk from "chalk";
-import { DispatcherCommandHandler } from "./commandHandler.js";
 import { RequestIO } from "./interactiveIO.js";
 import { StopWatch } from "common-utils";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/commands";
+import { ActionContext } from "@typeagent/agent-sdk";
 
 /**
  * (Optional) Base class fro Command Handlers, with helper methods
  */
 
-export abstract class CommandHandlerBase implements DispatcherCommandHandler {
+export abstract class CommandHandlerBase implements CommandHandler {
     protected readonly _stopWatch: StopWatch;
 
     constructor(description: string, help?: string) {
@@ -26,7 +27,7 @@ export abstract class CommandHandlerBase implements DispatcherCommandHandler {
     public readonly description: string;
     public readonly help?: string;
 
-    run(request: string, context: CommandHandlerContext): Promise<void> {
+    run(request: string, context: ActionContext<unknown>): Promise<void> {
         throw new Error("Method not implemented.");
     }
 

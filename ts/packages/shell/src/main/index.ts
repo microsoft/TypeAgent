@@ -37,7 +37,7 @@ import {
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
-import { AppAgentEvent } from "@typeagent/agent-sdk";
+import { AppAgentEvent, DisplayAppendMode } from "@typeagent/agent-sdk";
 import { shellAgentProvider } from "./agent.js";
 
 const debugShell = registerDebug("typeagent:shell");
@@ -266,13 +266,13 @@ async function triggerRecognitionOnce(dispatcher: Dispatcher) {
     );
 }
 
-function showResult(message: IAgentMessage, append: boolean = false) {
+function showResult(message: IAgentMessage, mode?: DisplayAppendMode) {
     // Ignore message without requestId
     if (message.requestId === undefined) {
         console.warn("showResult: requestId is undefined");
         return;
     }
-    mainWindow?.webContents.send("response", message, append);
+    mainWindow?.webContents.send("response", message, mode);
 }
 
 function sendStatusMessage(message: IAgentMessage, temporary: boolean = false) {
@@ -425,13 +425,11 @@ const clientIO: ClientIO = {
         mainWindow?.webContents.send("clear");
     },
     info: sendRequestMetrics,
-    success: sendStatusMessage,
     status: (message) => sendStatusMessage(message, true),
     warn: sendStatusMessage,
     error: sendStatusMessage,
-    result: showResult,
     setDisplay: showResult,
-    appendDisplay: (message) => showResult(message, true),
+    appendDisplay: (message, mode) => showResult(message, mode ?? "inline"),
     setDynamicDisplay,
     searchMenuCommand,
     actionCommand,

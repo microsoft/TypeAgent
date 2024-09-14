@@ -72,7 +72,7 @@ export type CommandHandlerContext = {
     agents: AppAgentManager;
     session: Session;
 
-    conversationManager?: Conversation.ConversationManager;
+    conversationManager?: Conversation.ConversationManager | undefined;
     // Per activation configs
     developerMode?: boolean;
     explanationAsynchronousMode: boolean;
@@ -227,12 +227,14 @@ export async function initializeCommandHandlerContext(
     if (options) {
         session.setConfig(options);
     }
-    const path = session.getSessionDirPath();
-    const conversationManager = await Conversation.createConversationManager(
-        "conversation",
-        path ? path : "/data/testChat",
-        false,
-    );
+    const sessionDirPath = session.getSessionDirPath();
+    const conversationManager = sessionDirPath
+        ? await Conversation.createConversationManager(
+              "conversation",
+              sessionDirPath,
+              false,
+          )
+        : undefined;
 
     const clientIO = options?.clientIO;
     const requestIO = clientIO

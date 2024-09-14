@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { ActionIO, DisplayType, DynamicDisplay } from "./display.js";
 import { Profiler } from "./profiler.js";
 
 //==============================================================================
@@ -39,13 +40,6 @@ export interface AppAction {
 export interface AppActionWithParameters extends AppAction {
     parameters: { [key: string]: any };
 }
-
-export type DisplayType = "html" | "text";
-
-export type DynamicDisplay = {
-    content: DisplayContent;
-    nextRefreshMs: number; // in milliseconds, -1 means no more refresh.
-};
 
 export type CommandDescriptor = {
     description: string;
@@ -150,19 +144,6 @@ export interface Storage {
     delete(storagePath: string): Promise<void>;
 
     getTokenCachePersistence(): Promise<TokenCachePersistence>;
-}
-
-export type DisplayContent =
-    | string
-    | {
-          type: DisplayType;
-          content: string;
-      };
-
-export interface ActionIO {
-    readonly type: DisplayType;
-    setDisplay(content: DisplayContent): void;
-    appendDisplay(content: DisplayContent): void;
 }
 
 export interface ActionContext<T = void> {

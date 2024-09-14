@@ -14,6 +14,7 @@ import {
 } from "../../preload/electronTypes";
 import { ActionCascade } from "./ActionCascade";
 import {
+    DisplayAppendMode,
     DisplayContent,
     DisplayType,
     DynamicDisplay,
@@ -234,6 +235,7 @@ class MessageContainer {
     private readonly iconDiv: HTMLDivElement;
     private metricsDetailDiv?: HTMLDivElement;
     private ttsMetricsDiv?: HTMLDivElement;
+    private lastAppendMode?: DisplayAppendMode;
     public get source() {
         return this._source;
     }
@@ -285,14 +287,21 @@ class MessageContainer {
         content: DisplayContent,
         source: string,
         sourceIcon?: string,
-        append: boolean = false,
+        appendMode?: DisplayAppendMode,
     ) {
         this._source = source;
         // set source and source icon
         (this.timestampDiv.firstChild as HTMLDivElement).innerText = source; // name
         this.iconDiv.innerText = sourceIcon ?? "❔"; // icon
 
-        setContent(this.messageDiv, content, append);
+        setContent(
+            this.messageDiv,
+            content,
+            appendMode === "inline" && this.lastAppendMode !== "inline"
+                ? "block"
+                : appendMode,
+        );
+        this.lastAppendMode = appendMode;
     }
 
     private ensureMetricsDiv() {
@@ -467,23 +476,15 @@ class MessageGroup {
             .filter((m) => !m.temporary)
             .map((m) => m.message);
         messages.push(message);
-        let append = false;
+        let first = true;
         for (const message of messages) {
-            if (append) {
-                statusMessage.setMessage(
-                    "\n",
-                    msg.source,
-                    this.agents.get(msg.source),
-                    append,
-                );
-            }
             statusMessage.setMessage(
                 message,
                 msg.source,
                 this.agents.get(msg.source),
-                append,
+                first ? undefined : "block",
             );
-            append = true;
+            first = false;
         }
         this.statusMessages.push({ message, temporary });
 
@@ -578,10 +579,10 @@ const enableText2Html = true;
 export function setContent(
     elm: HTMLElement,
     content: DisplayContent,
-    append: boolean = false,
+    appendMode?: DisplayAppendMode,
 ) {
     // Remove existing content if we are not appending.
-    if (!append) {
+    if (appendMode === undefined) {
         while (elm.firstChild) {
             elm.removeChild(elm.firstChild);
         }
@@ -598,25 +599,31 @@ export function setContent(
     }
 
     let contentDiv: HTMLDivElement | undefined;
-    if (elm.lastChild) {
-        const prevContentDiv = elm.lastChild as HTMLDivElement;
-        const isPrevText = prevContentDiv.classList.contains(
-            "chat-message-agent-text",
-        );
-
-        if ((type === "text") === isPrevText) {
-            // Reuse the previous div they are of the same type.
-            contentDiv = prevContentDiv;
+    if (elm.lastChild && appendMode === "inline") {
+        // If we are inline then reuse the last div
+        contentDiv = elm.lastChild as HTMLDivElement;
+    } else {
+        // Create a new div
+        contentDiv = document.createElement("div");
+        elm.appendChild(contentDiv);
+        if (appendMode === "inline") {
+            elm.style.display = "flex";
         }
     }
 
-    if (contentDiv === undefined) {
-        contentDiv = document.createElement("div");
-        if (type === "text") {
-            // create a text diff so we can set "whitespace: break-spaces" css style of text content.
-            contentDiv.className = "chat-message-agent-text";
+    let contentElm: HTMLElement = contentDiv;
+    if (type === "text") {
+        const prevElm = contentDiv.lastChild as HTMLElement | null;
+        if (prevElm?.classList.contains("chat-message-agent-text")) {
+            // If there is an existing text element then append to it.
+            contentElm = prevElm;
+        } else {
+            const span = document.createElement("span");
+            // create a text span so we can set "whitespace: break-spaces" css style of text content.
+            span.className = "chat-message-agent-text";
+            contentDiv.appendChild(span);
+            contentElm = span;
         }
-        elm.appendChild(contentDiv);
     }
 
     // Process content according to type
@@ -627,7 +634,7 @@ export function setContent(
               ? textToHtml(text)
               : stripAnsi(text);
 
-    contentDiv.innerHTML += contentHtml;
+    contentElm.innerHTML += contentHtml;
 }
 
 export function createTimestampDiv(timestamp: Date, className: string) {
@@ -1309,15 +1316,13 @@ export class ChatView {
     addAgentMessage(
         msg: IAgentMessage,
         options?: {
-            append?: boolean;
+            appendMode?: DisplayAppendMode;
             dynamicUpdate?: boolean;
             notification?: boolean;
         },
     ) {
-        const append = options?.append ?? false;
         const dynamicUpdate = options?.dynamicUpdate ?? false;
         const notification = options?.notification ?? false;
-
         const content: DisplayContent = msg.message;
         const source: string = msg.source;
 
@@ -1329,7 +1334,7 @@ export class ChatView {
             content,
             source,
             this.agents.get(source),
-            append,
+            options?.appendMode,
         );
 
         if (!dynamicUpdate) {
