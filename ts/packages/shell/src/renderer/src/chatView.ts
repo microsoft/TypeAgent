@@ -230,9 +230,10 @@ class MessageContainer {
     public readonly div: HTMLDivElement;
     private readonly messageBodyDiv: HTMLDivElement;
     private readonly messageDiv: HTMLDivElement;
-    private metricDiv?: HTMLDivElement;
     private readonly timestampDiv: HTMLDivElement;
     private readonly iconDiv: HTMLDivElement;
+    private metricsDetailDiv?: HTMLDivElement;
+    private ttsMetricsDiv?: HTMLDivElement;
     public get source() {
         return this._source;
     }
@@ -294,16 +295,36 @@ class MessageContainer {
         setContent(this.messageDiv, content, append);
     }
 
-    public updateMetrics(metrics: PhaseTiming, total?: number) {
-        if (this.metricDiv === undefined) {
-            const metricsDiv = document.createElement("div");
-            metricsDiv.className = "chat-message-metrics-left";
-            this.messageBodyDiv.append(metricsDiv);
-            this.metricDiv = metricsDiv;
+    private ensureMetricsDiv() {
+        if (this.metricsDetailDiv === undefined) {
+            const metricsContainer = document.createElement("div");
+            metricsContainer.className = "chat-message-metrics-left";
+            this.messageBodyDiv.append(metricsContainer);
+
+            const metricsDetails = document.createElement("div");
+            metricsDetails.className = "metrics-details";
+            metricsContainer.append(metricsDetails);
+            this.metricsDetailDiv = metricsDetails;
         }
-        updateMetrics(this.metricDiv, metrics, total);
+        return this.metricsDetailDiv;
+    }
+    public updateMetrics(metrics: PhaseTiming, total?: number) {
+        const metricsDiv = this.ensureMetricsDiv();
+        updateMetrics(metricsDiv, "Action", metrics, total);
+        if (this.ttsMetricsDiv) {
+            metricsDiv.prepend(this.ttsMetricsDiv);
+        }
     }
 
+    public addTTSTiming(timing: PhaseTiming) {
+        if (this.ttsMetricsDiv === undefined) {
+            const ttsMetricsDiv = document.createElement("div");
+            this.ensureMetricsDiv().prepend(ttsMetricsDiv);
+            ttsMetricsDiv.className = "metrics-tts";
+            this.ttsMetricsDiv = ttsMetricsDiv;
+        }
+        this.ttsMetricsDiv!.innerHTML = `TTS Synthesis: <b>${formatTimeReaderFriendly(timing.duration!)}</b><br>TTS First Chunk: <b>${formatTimeReaderFriendly(timing.marks!["First Chunk"].duration)}</b>`;
+    }
     public show() {
         this.div.classList.remove("chat-message-hidden");
     }
@@ -391,7 +412,11 @@ class MessageGroup {
                 if (agentMessage.source === "chat") {
                     const message = agentMessage.getMessage();
                     if (message) {
-                        tts.speak(message);
+                        tts.speak(message).then((timings) => {
+                            if (timings) {
+                                agentMessage.addTTSTiming(timings);
+                            }
+                        });
                     }
                 }
             }
@@ -470,12 +495,19 @@ class MessageGroup {
         if (metrics) {
             if (metrics.parse !== undefined) {
                 if (this.userMetricsDiv === undefined) {
+                    const metricsContainer = document.createElement("div");
+                    metricsContainer.className = "chat-message-metrics-right";
+                    this.userMessageBody.append(metricsContainer);
+
                     this.userMetricsDiv = document.createElement("div");
-                    this.userMetricsDiv.className =
-                        "chat-message-metrics-right";
-                    this.userMessageBody.append(this.userMetricsDiv);
+                    metricsContainer.append(this.userMetricsDiv);
+                    this.userMetricsDiv.className = "metrics-details";
                 }
-                updateMetrics(this.userMetricsDiv, metrics.parse);
+                updateMetrics(
+                    this.userMetricsDiv,
+                    "Translation",
+                    metrics.parse,
+                );
             }
 
             for (let i = 0; i < this.agentMessages.length; i++) {
@@ -620,18 +652,13 @@ export function createTimestampDiv(timestamp: Date, className: string) {
 
 function updateMetrics(
     div: HTMLDivElement,
+    name: string,
     metrics: PhaseTiming,
     total?: number,
 ) {
     // clear out previous perf data
     div.innerHTML = "";
-
-    let marksDiv = document.createElement("div");
-    let marksSubContainer = document.createElement("div");
-    marksDiv.className = "metrics-details";
-
-    marksDiv.append(marksSubContainer);
-
+    const marksDiv = document.createElement("div");
     div.append(marksDiv);
 
     if (metrics.marks) {
@@ -640,13 +667,13 @@ function updateMetrics(
             const avg = duration / count;
             let mDiv = document.createElement("div");
             mDiv.innerHTML = `${key}: <b>${formatTimeReaderFriendly(avg)}${count > 1 ? ` (avg of ${count})` : ""}</b>`;
-            marksSubContainer.append(mDiv);
+            marksDiv.append(mDiv);
         }
     }
     if (metrics.duration) {
         let timeDiv = document.createElement("div");
-        timeDiv.innerHTML = `Time Taken: <b>${formatTimeReaderFriendly(metrics.duration)}</b>${total !== undefined ? `<br>Total Time: <b>${formatTimeReaderFriendly(total)}</b>` : ""}`;
-        marksDiv.append(timeDiv);
+        timeDiv.innerHTML = `${name} Elapse Time: <b>${formatTimeReaderFriendly(metrics.duration)}</b>${total !== undefined ? `<br>Total Elapsed Time: <b>${formatTimeReaderFriendly(total)}</b>` : ""}`;
+        div.append(timeDiv);
     }
 }
 

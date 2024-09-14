@@ -5,6 +5,7 @@ import registerDebug from "debug";
 import * as speechSDK from "microsoft-cognitiveservices-speech-sdk";
 import { getSpeechConfig } from "./speech";
 import { getSpeechToken } from "./speechToken";
+import { PhaseTiming } from "agent-dispatcher";
 
 const debug = registerDebug("typeagent:shell:tts");
 const debugError = registerDebug("typeagent:shell:tts:error");
@@ -15,7 +16,7 @@ export const enum TTSProvider {
 }
 
 export type TTS = {
-    speak(text: string): Promise<void>;
+    speak(text: string): Promise<PhaseTiming | undefined>;
 };
 
 function getBrowserTTSProvider(voiceName?: string): TTS | undefined {
@@ -36,7 +37,7 @@ function getBrowserTTSProvider(voiceName?: string): TTS | undefined {
                 debugError(`${voiceName} not available`);
                 return;
             }
-            return new Promise((resolve, reject) => {
+            return new Promise<undefined>((resolve, reject) => {
                 debug(`Speaking: ${text}`);
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.voice = voice;
@@ -49,7 +50,7 @@ function getBrowserTTSProvider(voiceName?: string): TTS | undefined {
                 });
                 utterance.addEventListener("end", () => {
                     debug("Speech ended");
-                    resolve();
+                    resolve(undefined);
                 });
                 speechSynthesis.speak(utterance);
             });
@@ -62,17 +63,29 @@ const defaultVoiceStyle = "chat";
 
 function getAzureTTSProvider(voiceName?: string): TTS | undefined {
     return {
-        speak: async (text: string, voiceStyle?: string) => {
+        speak: async (
+            text: string,
+            voiceStyle?: string,
+        ): Promise<PhaseTiming> => {
+            debug("Speech started");
+            const start = performance.now();
+            let firstChunkTime: number | undefined = undefined;
             const synthesizer = new speechSDK.SpeechSynthesizer(
                 getSpeechConfig(await getSpeechToken())!,
                 speechSDK.AudioConfig.fromDefaultSpeakerOutput(),
             );
             synthesizer.synthesisCompleted = () => {
-                debug("Synthesis ended");
+                debug("Synthesis ended", performance.now() - start);
             };
 
+            synthesizer.synthesizing = () => {
+                if (firstChunkTime === undefined) {
+                    firstChunkTime = performance.now() - start;
+                    debug("First chunk", firstChunkTime);
+                }
+            };
             synthesizer.synthesisStarted = () => {
-                debug("Synthesis started");
+                debug("Synthesis started", performance.now() - start);
             };
 
             const ssml = `
@@ -89,13 +102,26 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
                 </voice>
             </speak>`;
 
-            return await new Promise<void>((resolve, reject) => {
+            return await new Promise<PhaseTiming>((resolve, reject) => {
                 debug(`Speaking: ${text}`);
                 synthesizer.speakSsmlAsync(
                     ssml,
                     () => {
+                        debug("Speech completed");
                         synthesizer.close();
-                        resolve();
+
+                        const timing: PhaseTiming = {
+                            duration: performance.now() - start,
+                        };
+                        if (firstChunkTime !== undefined) {
+                            timing.marks = {
+                                "First Chunk": {
+                                    duration: firstChunkTime,
+                                    count: 1,
+                                },
+                            };
+                        }
+                        resolve(timing);
                     },
                     (error) => {
                         synthesizer.close();
