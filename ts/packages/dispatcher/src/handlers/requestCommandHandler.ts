@@ -10,7 +10,6 @@ import {
     Actions,
     HistoryContext,
 } from "agent-cache";
-import { DispatcherCommandHandler } from "./common/commandHandler.js";
 import {
     CommandHandlerContext,
     getTranslator,
@@ -41,6 +40,8 @@ import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incremen
 import ExifReader from "exifreader";
 import { Result } from "typechat";
 import { ProfileNames } from "../utils/profileNames.js";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/commands";
+import { ActionContext } from "@typeagent/agent-sdk";
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
@@ -686,14 +687,17 @@ async function requestExplain(
     }
 }
 
-export class RequestCommandHandler implements DispatcherCommandHandler {
+export class RequestCommandHandler implements CommandHandler {
     public readonly description = "Translate and explain a request";
     public async run(
         request: string,
-        context: CommandHandlerContext,
+        context: ActionContext<CommandHandlerContext>,
         attachments?: string[],
     ) {
-        const profiler = context.commandProfiler?.measure(ProfileNames.request);
+        const systemContext = context.sessionContext.agentContext;
+        const profiler = systemContext.commandProfiler?.measure(
+            ProfileNames.request,
+        );
         try {
             // Don't handle the request if it contains the separator
             if (request.includes(RequestAction.Separator)) {
@@ -708,7 +712,7 @@ export class RequestCommandHandler implements DispatcherCommandHandler {
             if (attachments) {
                 for (let i = 0; i < attachments?.length; i++) {
                     const [attachmentName, tags]: [string, ExifReader.Tags] =
-                        await context.session.storeUserSuppliedFile(
+                        await systemContext.session.storeUserSuppliedFile(
                             attachments![i],
                         );
                     cachedFiles.push(attachmentName);
@@ -716,29 +720,29 @@ export class RequestCommandHandler implements DispatcherCommandHandler {
                 }
             }
 
-            const history = context.session.getConfig().history
-                ? getChatHistoryForTranslation(context)
+            const history = systemContext.session.getConfig().history
+                ? getChatHistoryForTranslation(systemContext)
                 : undefined;
             if (history) {
                 // prefetch entities here
-                context.chatHistory.addEntry(
+                systemContext.chatHistory.addEntry(
                     request,
                     [],
                     "user",
-                    context.requestId,
+                    systemContext.requestId,
                     attachments,
                 );
             }
 
             // Make sure we clear any left over streaming context
-            context.streamingActionContext = undefined;
+            systemContext.streamingActionContext = undefined;
 
-            const match = await matchRequest(request, context, history);
+            const match = await matchRequest(request, systemContext, history);
             const translationResult =
                 match === undefined // undefined means not found
                     ? await translateRequest(
                           request,
-                          context,
+                          systemContext,
                           history,
                           attachments,
                           exifTags,
@@ -755,12 +759,21 @@ export class RequestCommandHandler implements DispatcherCommandHandler {
             if (
                 requestAction !== null &&
                 requestAction !== undefined &&
-                context.conversationManager
+                systemContext.conversationManager
             ) {
-                context.conversationManager.addMessage(request, [], new Date());
+                systemContext.conversationManager.addMessage(
+                    request,
+                    [],
+                    new Date(),
+                );
             }
-            await requestExecute(requestAction, context);
-            await requestExplain(requestAction, context, fromCache, fromUser);
+            await requestExecute(requestAction, systemContext);
+            await requestExplain(
+                requestAction,
+                systemContext,
+                fromCache,
+                fromUser,
+            );
         } finally {
             profiler?.stop();
         }

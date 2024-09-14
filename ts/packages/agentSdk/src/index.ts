@@ -15,13 +15,17 @@ export {
     StorageEncoding,
     TokenCachePersistence,
     ActionContext,
+    CommandDescriptor,
+    CommandDescriptorTable,
+} from "./agentInterface.js";
+
+export {
     ActionIO,
     DisplayType,
     DynamicDisplay,
     DisplayContent,
-    CommandDescriptor,
-    CommandDescriptorTable,
-} from "./agentInterface.js";
+    DisplayAppendMode,
+} from "./display.js";
 export * from "./memory.js";
 
 export { Profiler } from "./profiler.js";

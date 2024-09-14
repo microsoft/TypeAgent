@@ -2,10 +2,9 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
+import { createDispatcher } from "agent-dispatcher";
 import {
     getCacheFactory,
-    initializeCommandHandlerContext,
-    RequestCommandHandler,
     getBuiltinTranslatorNames,
 } from "agent-dispatcher/internal";
 import chalk from "chalk";
@@ -47,14 +46,14 @@ export default class RequestCommand extends Command {
         const translators = flags.translator
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
-        const handler = new RequestCommandHandler();
-        await handler.run(
-            args.request,
-            await initializeCommandHandlerContext("cli run request", {
-                translators,
-                explainerName: flags.explainer,
-                cache: false,
-            }),
+        const dispatcher = await createDispatcher("cli run request", {
+            translators,
+            explainerName: flags.explainer,
+            cache: false,
+        });
+        await dispatcher.processCommand(
+            `@request ${args.request}`,
+            undefined,
             this.loadAttachment(args.attachment),
         );
     }

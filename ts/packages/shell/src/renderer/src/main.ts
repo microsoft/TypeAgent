@@ -58,8 +58,8 @@ function addEvents(
             }
         }
     });
-    api.onResponse((_, agentMessage, append) => {
-        chatView.addAgentMessage(agentMessage, { append });
+    api.onResponse((_, agentMessage, appendMode) => {
+        chatView.addAgentMessage(agentMessage, { appendMode });
     });
     api.onRequestMetrics((_, requestId, requestMetrics) => {
         chatView.updateMetrics(requestId, requestMetrics);
