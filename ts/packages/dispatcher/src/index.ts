@@ -8,4 +8,4 @@ export type {
     RequestId,
     IAgentMessage,
 } from "./handlers/common/interactiveIO.js";
-export type { PhaseTiming, RequestMetrics } from "./utils/metrics.js";
+export type { Timing, PhaseTiming, RequestMetrics } from "./utils/metrics.js";
