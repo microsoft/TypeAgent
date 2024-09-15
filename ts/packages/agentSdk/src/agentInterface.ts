@@ -128,8 +128,8 @@ export interface SessionContext<T = unknown> {
     toggleTransientAgent(agentName: string, active: boolean): Promise<void>;
 }
 
-// TODO: only utf8 is supported for now.
-export type StorageEncoding = "utf8";
+// TODO: only utf8 & base64 is supported for now.
+export type StorageEncoding = "utf8" | "base64";
 
 export type StorageListOptions = {
     dirs?: boolean;
