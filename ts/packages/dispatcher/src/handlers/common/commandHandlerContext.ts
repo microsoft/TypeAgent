@@ -44,6 +44,7 @@ import {
     RequestId,
     getNullRequestIO,
     DispatcherName,
+    displayError,
 } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
@@ -54,6 +55,7 @@ import { getBuiltinAppAgentProvider } from "../../agent/agentConfig.js";
 import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 import { RequestMetricsManager } from "../../utils/metrics.js";
+import { getTranslatorPrefix } from "../../action/actionHandlers.js";
 
 export interface CommandResult {
     error?: boolean;
@@ -307,33 +309,31 @@ async function setAppAgentStates(
         options,
     );
 
-    processSetAppAgentStateResult(result, (message, source) =>
-        context.requestIO.notify(
-            AppAgentEvent.Error,
-            undefined,
-            message,
-            source,
-        ),
+    processSetAppAgentStateResult(result, context, (message) =>
+        context.requestIO.notify(AppAgentEvent.Error, undefined, message),
     );
 }
 
 async function updateAppAgentStates(
-    context: CommandHandlerContext,
+    context: ActionContext<CommandHandlerContext>,
     changed: DeepPartialUndefined<AppAgentState>,
 ): Promise<AppAgentState> {
-    const result = await context.agents.setState(
-        context,
+    const systemContext = context.sessionContext.agentContext;
+    const result = await systemContext.agents.setState(
+        systemContext,
         changed,
         undefined,
         false,
     );
 
-    const rollback = processSetAppAgentStateResult(result, (message, source) =>
-        context.requestIO.error(message, source),
+    const rollback = processSetAppAgentStateResult(
+        result,
+        systemContext,
+        (message) => displayError(message, context),
     );
 
     if (rollback) {
-        context.session.setConfig(rollback);
+        systemContext.session.setConfig(rollback);
     }
     const resultState: AppAgentState = {};
     if (result.changed.translators.length !== 0) {
@@ -349,14 +349,15 @@ async function updateAppAgentStates(
 
 function processSetAppAgentStateResult(
     result: any,
-    cbError: (message: string, source: string) => void,
+    systemContext: CommandHandlerContext,
+    cbError: (message: string) => void,
 ) {
     if (result.failed.actions.length !== 0) {
         const rollback: AppAgentState = { actions: {} };
         for (const [translatorName, enable, e] of result.failed.actions) {
+            const prefix = getTranslatorPrefix(translatorName, systemContext);
             cbError(
-                `Failed to ${enable ? "enable" : "disable"} ${translatorName} action: ${e.message}`,
-                translatorName,
+                `${prefix}: Failed to ${enable ? "enable" : "disable"} action: ${e.message}`,
             );
             rollback.actions![translatorName] = !enable;
         }
@@ -397,9 +398,10 @@ export async function reloadSessionOnCommandHandlerContext(
 
 export async function changeContextConfig(
     options: SessionOptions,
-    context: CommandHandlerContext,
+    context: ActionContext<CommandHandlerContext>,
 ) {
-    const changed = context.session.setConfig(options);
+    const systemContext = context.sessionContext.agentContext;
+    const changed = systemContext.session.setConfig(options);
 
     const translatorChanged = changed.hasOwnProperty("translators");
     const actionsChanged = changed.hasOwnProperty("actions");
@@ -413,7 +415,7 @@ export async function changeContextConfig(
     ) {
         // The dynamic schema for change assistant is changed.
         // Clear the cache to regenerate them.
-        context.translatorCache.clear();
+        systemContext.translatorCache.clear();
     }
 
     if (translatorChanged || actionsChanged || commandsChanged) {
@@ -421,17 +423,17 @@ export async function changeContextConfig(
     }
     if (changed.explainerName !== undefined) {
         try {
-            context.agentCache = await getAgentCache(
-                context.session,
-                context.agents,
-                context.logger,
+            systemContext.agentCache = await getAgentCache(
+                systemContext.session,
+                systemContext.agents,
+                systemContext.logger,
             );
         } catch (e: any) {
-            context.requestIO.error(`Failed to change explainer: ${e.message}`);
+            displayError(`Failed to change explainer: ${e.message}`, context);
             delete changed.explainerName;
             // Restore old explainer name
-            context.session.setConfig({
-                explainerName: context.agentCache.explainerName,
+            systemContext.session.setConfig({
+                explainerName: systemContext.agentCache.explainerName,
             });
         }
 
@@ -440,31 +442,31 @@ export async function changeContextConfig(
     }
 
     // Propagate the options to the cache
-    context.agentCache.constructionStore.setConfig(changed);
+    systemContext.agentCache.constructionStore.setConfig(changed);
 
     // cache and auto save are handled separately
     if (changed.cache !== undefined) {
         // the cache state is changed.
         // Auto save and model is configured in configAgentCache as well.
-        await configAgentCache(context.session, context.agentCache);
+        await configAgentCache(systemContext.session, systemContext.agentCache);
     } else {
         if (changed.autoSave !== undefined) {
             // Make sure the cache has a file for a persisted session
             if (changed.autoSave) {
-                if (context.session.cache) {
+                if (systemContext.session.cache) {
                     const cacheDataFilePath =
-                        await context.session.ensureCacheDataFilePath();
-                    await context.agentCache.constructionStore.save(
+                        await systemContext.session.ensureCacheDataFilePath();
+                    await systemContext.agentCache.constructionStore.save(
                         cacheDataFilePath,
                     );
                 }
             }
-            await context.agentCache.constructionStore.setAutoSave(
+            await systemContext.agentCache.constructionStore.setAutoSave(
                 changed.autoSave,
             );
         }
         if (changed.models?.explainer !== undefined) {
-            context.agentCache.model = changed.models.explainer;
+            systemContext.agentCache.model = changed.models.explainer;
         }
     }
 

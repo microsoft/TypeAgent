@@ -264,24 +264,13 @@ async function triggerRecognitionOnce(dispatcher: Dispatcher) {
     );
 }
 
-function showResult(message: IAgentMessage, mode?: DisplayAppendMode) {
+function updateDisplay(message: IAgentMessage, mode?: DisplayAppendMode) {
     // Ignore message without requestId
     if (message.requestId === undefined) {
-        console.warn("showResult: requestId is undefined");
+        console.warn("updateDisplay: requestId is undefined");
         return;
     }
-    mainWindow?.webContents.send("response", message, mode);
-}
-
-function sendStatusMessage(message: IAgentMessage, temporary: boolean = false) {
-    // Ignore message without requestId
-    if (message.requestId === undefined) {
-        console.warn(
-            `sendStatusMessage: requestId is undefined. ${message.message}`,
-        );
-        return;
-    }
-    mainWindow?.webContents.send("status-message", message, temporary);
+    mainWindow?.webContents.send("updateDisplay", message, mode);
 }
 
 function markRequestExplained(
@@ -408,26 +397,12 @@ function actionCommand(
     );
 }
 
-function sendRequestMetrics(message: IAgentMessage) {
-    if (message.metrics !== undefined && message.requestId !== undefined) {
-        mainWindow?.webContents.send(
-            "request-metrics",
-            message.requestId,
-            message.metrics,
-        );
-    }
-}
-
 const clientIO: ClientIO = {
     clear: () => {
         mainWindow?.webContents.send("clear");
     },
-    info: sendRequestMetrics,
-    status: (message) => sendStatusMessage(message, true),
-    warn: sendStatusMessage,
-    error: sendStatusMessage,
-    setDisplay: showResult,
-    appendDisplay: (message, mode) => showResult(message, mode ?? "inline"),
+    setDisplay: updateDisplay,
+    appendDisplay: (message, mode) => updateDisplay(message, mode ?? "inline"),
     setDynamicDisplay,
     searchMenuCommand,
     actionCommand,

@@ -134,7 +134,7 @@ class AgentToggleCommandHandler implements CommandHandler {
         );
         const changed = await changeContextConfig(
             getAgentToggleOptions(this.toggle, options),
-            systemContext,
+            context,
         );
 
         const changedEntries = Object.entries(changed).filter(
@@ -176,10 +176,7 @@ class ExplainerCommandHandler implements CommandHandler {
             throw new Error("Too many arguments.");
         }
 
-        await changeContextConfig(
-            { explainerName: args[0] },
-            context.sessionContext.agentContext,
-        );
+        await changeContextConfig({ explainerName: args[0] }, context);
     }
 }
 
@@ -234,7 +231,7 @@ class ConfigModelSetCommandHandler implements CommandHandler {
                     Object.keys(models).map((kind) => [kind, ""]),
                 ),
             };
-            await changeContextConfig(newConfig, systemContext);
+            await changeContextConfig(newConfig, context);
             displayResult(`Reset to default model for all`, context);
             return;
         }
@@ -271,7 +268,7 @@ class ConfigModelSetCommandHandler implements CommandHandler {
                     [kind]: model,
                 },
             },
-            systemContext,
+            context,
         );
     }
 }
@@ -380,7 +377,8 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                     async: getToggleHandlerTable(
                         "asynchronous explanation",
                         async (context, enable) => {
-                            context.explanationAsynchronousMode = enable;
+                            context.sessionContext.agentContext.explanationAsynchronousMode =
+                                enable;
                         },
                     ),
                 },
@@ -390,7 +388,7 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
             dev: getToggleHandlerTable(
                 "development mode",
                 async (context, enable) => {
-                    context.developerMode = enable;
+                    context.sessionContext.agentContext.developerMode = enable;
                 },
             ),
             log: {
@@ -400,7 +398,8 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                     db: getToggleHandlerTable(
                         "logging",
                         async (context, enable) => {
-                            context.dblogging = false;
+                            context.sessionContext.agentContext.dblogging =
+                                false;
                         },
                     ),
                 },

@@ -14,8 +14,6 @@ import {
     getActiveTranslatorList,
 } from "./handlers/common/commandHandlerContext.js";
 
-import { SwitcherName } from "./handlers/requestCommandHandler.js";
-
 import { unicodeChar } from "./utils/interactive.js";
 import {
     CommandDescriptor,
@@ -104,8 +102,8 @@ async function parseCommand(
 ) {
     let input = originalInput.trim();
     if (!input.startsWith("@")) {
-        // default to request
-        input = `request ${input}`;
+        // default to dispatcher request
+        input = `dispatcher request ${input}`;
     } else {
         input = input.substring(1);
     }
@@ -156,7 +154,16 @@ export async function processCommandNoLock(
             attachments,
         );
     } catch (e: any) {
-        context.requestIO.error(`ERROR: ${e.message}`);
+        context.requestIO.appendDisplay(
+            {
+                type: "text",
+                content: `ERROR: ${e.message}`,
+                kind: "error",
+            },
+            undefined,
+            DispatcherName,
+            "block",
+        );
         debugInteractive(e.stack);
     }
 }
@@ -256,14 +263,7 @@ export function getSettingSummary(context: CommandHandlerContext) {
 }
 
 export function getTranslatorNameToEmojiMap(context: CommandHandlerContext) {
-    const emojis = context.agents
-        .getTranslatorConfigs()
-        .map(([name, config]) => [name, config.emojiChar] as const);
-
-    const tMap = new Map<string, string>(emojis);
-    tMap.set(DispatcherName, "🤖");
-    tMap.set(SwitcherName, "↔️");
-    return tMap;
+    return new Map<string, string>(Object.entries(context.agents.getEmojis()));
 }
 
 export function getPrompt(context: CommandHandlerContext) {

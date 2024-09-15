@@ -98,12 +98,12 @@ class ConstructionNewCommandHandler implements CommandHandler {
         );
         await checkOverwriteFile(constructionPath, systemContext.requestIO);
 
-        await changeContextConfig({ cache: false }, systemContext);
+        await changeContextConfig({ cache: false }, context);
         if (constructionPath) {
             await fs.promises.writeFile(constructionPath, "");
         }
         systemContext.session.setCacheDataFilePath(constructionPath);
-        await changeContextConfig({ cache: true }, systemContext);
+        await changeContextConfig({ cache: true }, context);
         const filePath = constructionStore.getFilePath();
         displaySuccess(
             `Construction store initialized ${filePath ?? ""}`,
@@ -134,9 +134,9 @@ class ConstructionLoadCommandHandler implements CommandHandler {
             throw new Error(`File not found: ${constructionPath}`);
         }
 
-        await changeContextConfig({ cache: false }, systemContext);
+        await changeContextConfig({ cache: false }, context);
         systemContext.session.setCacheDataFilePath(constructionPath);
-        await changeContextConfig({ cache: true }, systemContext);
+        await changeContextConfig({ cache: true }, context);
 
         displaySuccess(`Construction loaded: ${constructionPath}`, context);
     }
@@ -206,7 +206,7 @@ class ConstructionAutoCommandHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
         const state = request === "" || request === "on";
-        await changeContextConfig({ autoSave: state }, systemContext);
+        await changeContextConfig({ autoSave: state }, context);
         displaySuccess(
             `Construction auto save ${state ? "on" : "off"}`,
             context,
@@ -223,7 +223,7 @@ class ConstructionOffCommandHandler implements CommandHandler {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
         await checkRecreateStore(constructionStore, systemContext.requestIO);
-        await changeContextConfig({ cache: false }, systemContext);
+        await changeContextConfig({ cache: false }, context);
         displaySuccess("Construction store disabled.", context);
     }
 }
@@ -380,7 +380,10 @@ export function getConstructionCommandHandlers(): CommandHandlerTable {
             delete: new ConstructionDeleteCommandHandler(),
             merge: getToggleHandlerTable(
                 "construction merge",
-                async (context: CommandHandlerContext, enable: boolean) => {
+                async (
+                    context: ActionContext<CommandHandlerContext>,
+                    enable: boolean,
+                ) => {
                     await changeContextConfig(
                         { mergeMatchSets: enable },
                         context,
@@ -389,7 +392,10 @@ export function getConstructionCommandHandlers(): CommandHandlerTable {
             ),
             wildcard: getToggleHandlerTable(
                 "wildcard matching",
-                async (context: CommandHandlerContext, enable: boolean) => {
+                async (
+                    context: ActionContext<CommandHandlerContext>,
+                    enable: boolean,
+                ) => {
                     await changeContextConfig(
                         { matchWildcard: enable },
                         context,

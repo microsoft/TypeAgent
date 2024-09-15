@@ -80,6 +80,7 @@ export class AppAgentManager implements TranslatorConfigProvider {
         string,
         string
     >();
+    private readonly emojis: Record<string, string> = {};
 
     public isTranslatorEnabled(translatorName: string) {
         const appAgentName = getAppAgentName(translatorName);
@@ -101,6 +102,10 @@ export class AppAgentManager implements TranslatorConfigProvider {
             : false;
     }
 
+    public getEmojis(): Readonly<Record<string, string>> {
+        return this.emojis;
+    }
+
     public async addProvider(
         provider: AppAgentProvider,
         context: CommandHandlerContext,
@@ -108,15 +113,19 @@ export class AppAgentManager implements TranslatorConfigProvider {
         for (const name of provider.getAppAgentNames()) {
             // TODO: detect duplicate names
             const manifest = await provider.getAppAgentManifest(name);
+            this.emojis[name] = manifest.emojiChar;
 
             // TODO: detect duplicate names
             const translatorConfigs = convertToTranslatorConfigs(
                 name,
                 manifest,
             );
+
             const entries = Object.entries(translatorConfigs);
             for (const [name, config] of entries) {
                 this.translatorConfigs.set(name, config);
+                this.emojis[name] = config.emojiChar;
+
                 if (config.injected) {
                     for (const info of getTranslatorActionInfo(config, name)) {
                         this.injectedTranslatorForActionName.set(

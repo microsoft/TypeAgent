@@ -52,7 +52,7 @@ export default class RequestCommand extends Command {
             cache: false,
         });
         await dispatcher.processCommand(
-            `@request ${args.request}`,
+            `@dispatcher request ${args.request}`,
             undefined,
             this.loadAttachment(args.attachment),
         );

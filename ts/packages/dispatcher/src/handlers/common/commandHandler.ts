@@ -7,7 +7,10 @@ import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/commands";
 
 export function getToggleCommandHandlers(
     name: string,
-    toggle: (context: CommandHandlerContext, enable: boolean) => Promise<void>,
+    toggle: (
+        context: ActionContext<CommandHandlerContext>,
+        enable: boolean,
+    ) => Promise<void>,
 ) {
     return {
         on: {
@@ -19,7 +22,7 @@ export function getToggleCommandHandlers(
                 if (request !== "") {
                     throw new Error(`Invalid extra arguments: ${request}`);
                 }
-                await toggle(context.sessionContext.agentContext, true);
+                await toggle(context, true);
             },
         },
         off: {
@@ -31,7 +34,7 @@ export function getToggleCommandHandlers(
                 if (request !== "") {
                     throw new Error(`Invalid extra arguments: ${request}`);
                 }
-                await toggle(context.sessionContext.agentContext, false);
+                await toggle(context, false);
             },
         },
     };
@@ -39,7 +42,10 @@ export function getToggleCommandHandlers(
 
 export function getToggleHandlerTable(
     name: string,
-    toggle: (context: CommandHandlerContext, enable: boolean) => Promise<void>,
+    toggle: (
+        context: ActionContext<CommandHandlerContext>,
+        enable: boolean,
+    ) => Promise<void>,
 ): CommandHandlerTable {
     return {
         description: `Toggle ${name}`,

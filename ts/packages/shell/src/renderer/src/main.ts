@@ -58,11 +58,8 @@ function addEvents(
             }
         }
     });
-    api.onResponse((_, agentMessage, appendMode) => {
+    api.onUpdateDisplay((_, agentMessage, appendMode) => {
         chatView.addAgentMessage(agentMessage, { appendMode });
-    });
-    api.onRequestMetrics((_, requestId, requestMetrics) => {
-        chatView.updateMetrics(requestId, requestMetrics);
     });
     api.onSetDynamicActionDisplay(
         (_, source, id, actionIndex, displayId, nextRefreshMs) =>
@@ -85,9 +82,6 @@ function addEvents(
     });
     api.onClear((_) => {
         chatView.clear();
-    });
-    api.onStatusMessage((_, message, temporary) => {
-        chatView.showStatusMessage(message, temporary);
     });
     api.onMarkRequestExplained((_, id, timestamp, fromCache) => {
         chatView.markRequestExplained(id, timestamp, fromCache);

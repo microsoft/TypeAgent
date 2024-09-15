@@ -106,22 +106,27 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
                 debug(`Speaking: ${text}`);
                 synthesizer.speakSsmlAsync(
                     ssml,
-                    () => {
-                        debug("Speech completed");
+                    (result) => {
+                        debug("Speech completed", result);
                         synthesizer.close();
-
-                        const timing: PhaseTiming = {
-                            duration: performance.now() - start,
-                        };
-                        if (firstChunkTime !== undefined) {
-                            timing.marks = {
-                                "First Chunk": {
-                                    duration: firstChunkTime,
-                                    count: 1,
-                                },
+                        if (
+                            result.reason ===
+                            speechSDK.ResultReason.SynthesizingAudioCompleted
+                        ) {
+                            const timing: PhaseTiming = {
+                                duration: performance.now() - start,
                             };
+                            if (firstChunkTime !== undefined) {
+                                timing.marks = {
+                                    "First Chunk": {
+                                        duration: firstChunkTime,
+                                        count: 1,
+                                    },
+                                };
+                            }
+                            resolve(timing);
                         }
-                        resolve(timing);
+                        reject(new Error(result.errorDetails));
                     },
                     (error) => {
                         synthesizer.close();
