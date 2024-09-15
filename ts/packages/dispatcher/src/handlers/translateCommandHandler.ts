@@ -13,10 +13,7 @@ export class TranslateCommandHandler implements CommandHandler {
         request: string,
         context: ActionContext<CommandHandlerContext>,
     ) {
-        const requestAction = await translateRequest(
-            request,
-            context.sessionContext.agentContext,
-        );
+        const requestAction = await translateRequest(request, context);
         displaySuccess(`${requestAction}`, context);
     }
 }

@@ -113,7 +113,7 @@ export interface ClientAPI {
         images: string[],
     ) => Promise<RequestMetrics | undefined>;
     getDynamicDisplay: (source: string, id: string) => Promise<DynamicDisplay>;
-    onResponse(
+    onUpdateDisplay(
         callback: (
             e: Electron.IpcRendererEvent,
             message: IAgentMessage,
@@ -138,13 +138,6 @@ export interface ClientAPI {
             e: Electron.IpcRendererEvent,
             updateMessage: string,
             group_id: string,
-        ) => void,
-    ): void;
-    onStatusMessage(
-        callback: (
-            e: Electron.IpcRendererEvent,
-            message: IAgentMessage,
-            temporary: boolean,
         ) => void,
     ): void;
     onActionCommand(
@@ -244,13 +237,6 @@ export interface ClientAPI {
             requestId: string,
             source: string,
             data: any,
-        ) => void,
-    );
-    onRequestMetrics(
-        callback: (
-            e: Electron.IpcRendererEvent,
-            requestId: string,
-            metrics: RequestMetrics,
         ) => void,
     );
 }

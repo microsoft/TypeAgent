@@ -209,12 +209,6 @@ body {
   align-self: flex-end;
 }
 
-.chat-message-temp {
-  .chat-message-left;
-  font-style: italic;
-  color: #002b3d;
-}
-
 /* Body */
 .chat-message-body {
   border-radius: 8px;
@@ -237,6 +231,26 @@ body {
 .chat-message-content {
   padding: 6px 15px 6px 15px;
   word-wrap: break-word;
+}
+
+.chat-message-kind-status {
+  font-style: italic;
+  color: grey;
+}
+
+.chat-message-kind-warning {
+  font-style: italic;
+  color: rgb(146, 146, 0);
+}
+
+.chat-message-kind-error {
+  font-style: italic;
+  color: red;
+}
+
+.chat-message-kind-success {
+  font-style: italic;
+  color: green;
 }
 
 .chat-message-agent-text {
@@ -278,6 +292,7 @@ body {
   display: none;
   visibility: hidden;
 }
+
 .agent-icon {
   width: 30px;
   height: 30px;

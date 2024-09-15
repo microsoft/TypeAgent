@@ -23,6 +23,10 @@ import { getStorage } from "./storageImpl.js";
 import { getUserProfileDir } from "../utils/userData.js";
 import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
 import { ProfileNames } from "../utils/profileNames.js";
+import {
+    displayError,
+    displayStatus,
+} from "../handlers/common/interactiveIO.js";
 
 const debugAgent = registerDebug("typeagent:agent");
 const debugActions = registerDebug("typeagent:actions");
@@ -31,7 +35,7 @@ function getActionContext(
     appAgentName: string,
     context: CommandHandlerContext,
     requestId: string,
-    actionIndex: number,
+    actionIndex?: number,
 ): ActionContext<unknown> {
     const sessionContext = context.agents.getSessionContext(appAgentName);
     const actionIO: ActionIO = {
@@ -139,7 +143,7 @@ export async function getDynamicDisplay(
 
 async function executeAction(
     action: Action,
-    context: CommandHandlerContext,
+    context: ActionContext<CommandHandlerContext>,
     actionIndex: number,
 ): Promise<ActionResult | undefined> {
     const translatorName = action.translatorName;
@@ -147,11 +151,13 @@ async function executeAction(
     if (translatorName === undefined) {
         throw new Error(`Cannot execute action without translator name.`);
     }
+
+    const systemContext = context.sessionContext.agentContext;
     const appAgentName = getAppAgentName(translatorName);
-    const appAgent = context.agents.getAppAgent(appAgentName);
+    const appAgent = systemContext.agents.getAppAgent(appAgentName);
 
     // Update the last action translator.
-    context.lastActionTranslatorName = translatorName;
+    systemContext.lastActionTranslatorName = translatorName;
 
     if (appAgent.executeAction === undefined) {
         throw new Error(
@@ -161,26 +167,23 @@ async function executeAction(
 
     // Reuse the same streaming action context if one is available.
     const actionContext =
-        actionIndex === 0 && context.streamingActionContext
-            ? context.streamingActionContext
+        actionIndex === 0 && systemContext.streamingActionContext
+            ? systemContext.streamingActionContext
             : getActionContext(
                   appAgentName,
-                  context,
-                  context.requestId!,
+                  systemContext,
+                  systemContext.requestId!,
                   actionIndex,
               );
 
-    actionContext.profiler = context.commandProfiler?.measure(
+    actionContext.profiler = systemContext.commandProfiler?.measure(
         ProfileNames.executeAction,
         true,
         actionIndex,
     );
     let returnedResult: ActionResult | undefined;
     try {
-        context.requestIO.status(
-            `Executing action ${action.fullActionName}`,
-            action.translatorName,
-        );
+        displayStatus(`Executing action ${action.fullActionName}`, context);
         returnedResult = await appAgent.executeAction(action, actionContext);
     } finally {
         actionContext.profiler?.stop();
@@ -196,10 +199,10 @@ async function executeAction(
         if (
             returnedResult.error === undefined &&
             returnedResult.literalText &&
-            context.conversationManager
+            systemContext.conversationManager
         ) {
             // TODO: convert entity values to facets
-            context.conversationManager.addMessage(
+            systemContext.conversationManager.addMessage(
                 returnedResult.literalText,
                 returnedResult.entities,
                 new Date(),
@@ -211,33 +214,33 @@ async function executeAction(
         debugActions(actionResultToString(result));
     }
     if (result.error !== undefined) {
-        context.requestIO.error(result.error, translatorName);
-        context.chatHistory.addEntry(
+        displayError(result.error, context);
+        systemContext.chatHistory.addEntry(
             `Action ${action.fullActionName} failed: ${result.error}`,
             [],
             "assistant",
-            context.requestId,
+            systemContext.requestId,
         );
     } else {
         if (result.displayContent !== undefined) {
             actionContext.actionIO.setDisplay(result.displayContent);
         }
         if (result.dynamicDisplayId !== undefined) {
-            context.clientIO?.setDynamicDisplay(
+            systemContext.clientIO?.setDynamicDisplay(
                 translatorName,
-                context.requestId,
+                systemContext.requestId,
                 actionIndex,
                 result.dynamicDisplayId,
                 result.dynamicDisplayNextRefreshMs!,
             );
         }
-        context.chatHistory.addEntry(
+        systemContext.chatHistory.addEntry(
             result.literalText
                 ? result.literalText
                 : `Action ${action.fullActionName} completed.`,
             result.entities,
             "assistant",
-            context.requestId,
+            systemContext.requestId,
         );
     }
     return result;
@@ -245,7 +248,7 @@ async function executeAction(
 
 export async function executeActions(
     actions: Actions,
-    context: CommandHandlerContext,
+    context: ActionContext<CommandHandlerContext>,
 ) {
     debugActions(`Executing actions: ${JSON.stringify(actions, undefined, 2)}`);
     let actionIndex = 0;
@@ -323,7 +326,6 @@ export async function executeCommand(
         appAgentName,
         context,
         context.requestId!,
-        0,
     );
 
     const appAgent = context.agents.getAppAgent(appAgentName);

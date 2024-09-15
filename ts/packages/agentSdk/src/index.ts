@@ -25,6 +25,7 @@ export {
     DynamicDisplay,
     DisplayContent,
     DisplayAppendMode,
+    DisplayMessageKind,
 } from "./display.js";
 export * from "./memory.js";
 

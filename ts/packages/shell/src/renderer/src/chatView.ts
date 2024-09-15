@@ -17,6 +17,7 @@ import {
     DisplayAppendMode,
     DisplayContent,
     DisplayType,
+    DisplayMessageKind,
     DynamicDisplay,
 } from "@typeagent/agent-sdk";
 import { TTS } from "./tts";
@@ -236,6 +237,7 @@ class MessageContainer {
     private metricsDetailDiv?: HTMLDivElement;
     private ttsMetricsDiv?: HTMLDivElement;
     private lastAppendMode?: DisplayAppendMode;
+    private completed = false;
     public get source() {
         return this._source;
     }
@@ -289,6 +291,13 @@ class MessageContainer {
         sourceIcon?: string,
         appendMode?: DisplayAppendMode,
     ) {
+        if (typeof content !== "string" && content.kind === "info") {
+            // Don't display info
+            return;
+        }
+
+        this.flushLastTemporary();
+
         this._source = source;
         // set source and source icon
         (this.timestampDiv.firstChild as HTMLDivElement).innerText = source; // name
@@ -302,6 +311,29 @@ class MessageContainer {
                 : appendMode,
         );
         this.lastAppendMode = appendMode;
+
+        this.updateDivState();
+    }
+
+    public complete() {
+        this.completed = true;
+        this.flushLastTemporary();
+        this.updateDivState();
+    }
+
+    private updateDivState() {
+        if (this.completed && !this.messageDiv.firstChild) {
+            this.hide();
+        } else {
+            this.show();
+        }
+    }
+
+    private flushLastTemporary() {
+        if (this.lastAppendMode === "temporary") {
+            this.messageDiv.lastChild?.remove();
+        }
+        this.lastAppendMode = undefined;
     }
 
     private ensureMetricsDiv() {
@@ -351,13 +383,7 @@ class MessageGroup {
     public readonly userMessage: HTMLDivElement;
     public userMetricsDiv?: HTMLDivElement;
     private statusMessage: MessageContainer | undefined;
-    private readonly statusMessages: {
-        message: DisplayContent;
-        temporary: boolean;
-    }[] = [];
     private readonly agentMessages: MessageContainer[] = [];
-
-    private completed = false;
     constructor(
         private readonly chatView: ChatView,
         request: DisplayContent,
@@ -403,16 +429,15 @@ class MessageGroup {
     }
 
     private requestCompleted(metrics: RequestMetrics | undefined) {
-        this.completed = true;
         this.updateMetrics(metrics);
-        if (this.statusMessages.length === 0) {
+        if (this.statusMessage === undefined) {
             this.addStatusMessage(
-                { message: "Request completed", source: "shell" },
-                true,
+                { message: "Command completed", source: "shell" },
+                false,
             );
         } else {
-            // completed status changed
-            this.updateStatusMessageDivState();
+            this.statusMessage.complete();
+            this.chatView.updateScroll();
         }
 
         const tts = this.chatView.tts;
@@ -432,22 +457,6 @@ class MessageGroup {
         }
     }
 
-    private updateStatusMessageDivState() {
-        if (this.statusMessage === undefined) {
-            return;
-        }
-        const showStatus =
-            !this.completed ||
-            this.agentMessages.length === 0 ||
-            this.statusMessages.some((m) => !m.temporary);
-        if (showStatus) {
-            this.statusMessage.show();
-        } else {
-            this.statusMessage.hide();
-        }
-        this.chatView.updateScroll();
-    }
-
     private requestException(error: any) {
         console.error(error);
         this.addStatusMessage(
@@ -459,7 +468,7 @@ class MessageGroup {
     private ensureStatusMessage(source: string) {
         if (this.statusMessage === undefined) {
             this.statusMessage = new MessageContainer(
-                "chat-message-temp",
+                "chat-message-left",
                 source,
                 this.agents,
                 this.userMessageContainer,
@@ -472,24 +481,15 @@ class MessageGroup {
     public addStatusMessage(msg: IAgentMessage, temporary: boolean) {
         let message = msg.message;
         const statusMessage = this.ensureStatusMessage(msg.source);
-        const messages = this.statusMessages
-            .filter((m) => !m.temporary)
-            .map((m) => m.message);
-        messages.push(message);
-        let first = true;
-        for (const message of messages) {
-            statusMessage.setMessage(
-                message,
-                msg.source,
-                this.agents.get(msg.source),
-                first ? undefined : "block",
-            );
-            first = false;
-        }
-        this.statusMessages.push({ message, temporary });
+        statusMessage.setMessage(
+            message,
+            msg.source,
+            this.agents.get(msg.source),
+            temporary ? "temporary" : "block",
+        );
 
         this.updateMetrics(msg.metrics);
-        this.updateStatusMessageDivState();
+        this.chatView.updateScroll();
     }
 
     public updateMetrics(metrics?: RequestMetrics) {
@@ -511,6 +511,10 @@ class MessageGroup {
                 );
             }
 
+            if (metrics.command !== undefined) {
+                this.statusMessage?.updateMetrics(metrics.command);
+            }
+
             for (let i = 0; i < this.agentMessages.length; i++) {
                 const agentMessage = this.agentMessages[i];
                 const info = metrics.actions[i];
@@ -527,10 +531,15 @@ class MessageGroup {
     }
 
     public ensureAgentMessage(msg: IAgentMessage, notification = false) {
-        const index = msg.actionIndex ?? 0;
+        const statusMessage = this.ensureStatusMessage(msg.source);
+
+        const index = msg.actionIndex;
+        if (index === undefined) {
+            return statusMessage;
+        }
         const agentMessage = this.agentMessages[index];
         if (agentMessage === undefined) {
-            let beforeElem = this.ensureStatusMessage(msg.source);
+            let beforeElem = statusMessage;
             for (let i = 0; i < index + 1; i++) {
                 if (this.agentMessages[i] === undefined) {
                     const newAgentMessage = new MessageContainer(
@@ -546,7 +555,7 @@ class MessageGroup {
                 }
                 beforeElem = this.agentMessages[i];
             }
-            this.updateStatusMessageDivState();
+            this.chatView.updateScroll();
         }
 
         this.updateMetrics(msg.metrics);
@@ -589,6 +598,7 @@ export function setContent(
     }
 
     let type: DisplayType;
+    let kind: DisplayMessageKind | undefined;
     let text: string;
     if (typeof content === "string") {
         type = "text";
@@ -596,15 +606,22 @@ export function setContent(
     } else {
         type = content.type;
         text = content.content;
+        kind = content.kind;
     }
 
-    let contentDiv: HTMLDivElement | undefined;
-    if (elm.lastChild && appendMode === "inline") {
-        // If we are inline then reuse the last div
-        contentDiv = elm.lastChild as HTMLDivElement;
-    } else {
+    const kindStyle = kind ? `chat-message-kind-${kind}` : "";
+
+    let contentDiv = elm.lastChild as HTMLDivElement | null;
+    if (
+        appendMode !== "inline" ||
+        !contentDiv ||
+        (kindStyle !== undefined && !contentDiv.classList.contains(kindStyle))
+    ) {
         // Create a new div
         contentDiv = document.createElement("div");
+        if (kindStyle) {
+            contentDiv.classList.add(kindStyle);
+        }
         elm.appendChild(contentDiv);
         if (appendMode === "inline") {
             elm.style.display = "flex";
@@ -620,7 +637,7 @@ export function setContent(
         } else {
             const span = document.createElement("span");
             // create a text span so we can set "whitespace: break-spaces" css style of text content.
-            span.className = "chat-message-agent-text";
+            span.className = `chat-message-agent-text ${kindStyle}`;
             contentDiv.appendChild(span);
             contentElm = span;
         }
@@ -1466,10 +1483,6 @@ export class ChatView {
         input.dispatchEvent(keyboardEvent);
 
         (window as any).electron.ipcRenderer.send("send-input-text-complete");
-    }
-
-    updateMetrics(requestId: string, metrics: RequestMetrics) {
-        this.getMessageGroup(requestId)?.updateMetrics(metrics);
     }
 }
 

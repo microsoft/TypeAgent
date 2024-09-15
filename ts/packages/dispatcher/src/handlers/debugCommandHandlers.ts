@@ -5,7 +5,11 @@ import { CommandHandler } from "@typeagent/agent-sdk/helpers/commands";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import inspector from "node:inspector";
 import { ActionContext } from "@typeagent/agent-sdk";
-import { displayWarn } from "./common/interactiveIO.js";
+import {
+    displayStatus,
+    displaySuccess,
+    displayWarn,
+} from "./common/interactiveIO.js";
 
 export class DebugCommandHandler implements CommandHandler {
     public readonly description = "Start node inspector";
@@ -15,10 +19,12 @@ export class DebugCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
     ) {
         if (this.debugging) {
-            displayWarn("Node inspector already started", context);
+            displayWarn("Node inspector already started.", context);
             return;
         }
+        displayStatus("Waiting for debugger to attach", context);
         inspector.open(undefined, undefined, true);
         this.debugging = true;
+        displaySuccess("Debugger attached", context);
     }
 }

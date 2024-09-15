@@ -61,7 +61,7 @@ class HelpCommandHandler implements CommandHandler {
     ) {
         const printHandleTable = (
             table: CommandDescriptorTable,
-            command: string,
+            command?: string,
         ) => {
             displayResult((log: (message?: string) => void) => {
                 log(`${table.description}`);
@@ -72,7 +72,12 @@ class HelpCommandHandler implements CommandHandler {
                 } else {
                     log("Usage: @<command> ...");
                     log("Commands:");
-                    log(`  @<agentName> <subcommand>: command for 'agentName'`);
+
+                    if (command === undefined) {
+                        log(
+                            `  @<agentName> <subcommand>: command for 'agentName'`,
+                        );
+                    }
                 }
 
                 for (const name in table.commands) {
@@ -85,7 +90,7 @@ class HelpCommandHandler implements CommandHandler {
             }, context);
         };
         if (request === "") {
-            printHandleTable(handlers, "");
+            printHandleTable(systemHandlers, undefined);
         } else {
             const result = await resolveCommand(
                 request,
@@ -149,13 +154,19 @@ class RunCommandScriptHandler implements CommandHandler {
     }
 }
 
-const handlers: CommandHandlerTable = {
-    description: "Agent Dispatcher System Commands",
+const dispatcherHandlers: CommandHandlerTable = {
+    description: "Type Agent Dispatcher Commands",
     commands: {
         request: new RequestCommandHandler(),
         translate: new TranslateCommandHandler(),
         explain: new ExplainCommandHandler(),
         correct: new CorrectCommandHandler(),
+    },
+};
+
+const systemHandlers: CommandHandlerTable = {
+    description: "Type Agent System Commands",
+    commands: {
         session: getSessionCommandHandlers(),
         history: getHistoryCommandHandlers(),
         const: getConstructionCommandHandlers(),
@@ -191,9 +202,12 @@ const handlers: CommandHandlerTable = {
 };
 
 const inlineHandlers: { [key: string]: AppAgent } = {
+    dispatcher: {
+        ...getCommandInterface(dispatcherHandlers),
+    },
     system: {
         executeAction: executeSystemAction,
-        ...getCommandInterface(handlers),
+        ...getCommandInterface(systemHandlers),
     },
 };
 

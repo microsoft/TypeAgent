@@ -70,14 +70,11 @@ const api: ClientAPI = {
     onSearchMenuCommand: (callback) => {
         ipcRenderer.on("search-menu-command", callback);
     },
-    onResponse(callback) {
-        ipcRenderer.on("response", callback);
+    onUpdateDisplay(callback) {
+        ipcRenderer.on("updateDisplay", callback);
     },
     onSetDynamicActionDisplay(callback) {
         ipcRenderer.on("set-dynamic-action-display", callback);
-    },
-    onStatusMessage(callback) {
-        ipcRenderer.on("status-message", callback);
     },
     onClear(callback) {
         ipcRenderer.on("clear", callback);
@@ -135,9 +132,6 @@ const api: ClientAPI = {
     },
     onNotify(callback) {
         ipcRenderer.on("notification-arrived", callback);
-    },
-    onRequestMetrics(callback) {
-        ipcRenderer.on("request-metrics", callback);
     },
 };
 

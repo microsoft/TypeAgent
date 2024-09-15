@@ -13,6 +13,7 @@ import {
     CommandHandler,
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/commands";
+import { displayStatus } from "./common/interactiveIO.js";
 
 export type UserRequestList = {
     messages: UserRequest[];
@@ -42,8 +43,7 @@ class RandomOfflineCommandHandler implements CommandHandler {
         request: string,
         context: ActionContext<CommandHandlerContext>,
     ) {
-        const systemContext = context.sessionContext.agentContext;
-        systemContext.requestIO.status(`Selecting random request...`);
+        displayStatus(`Selecting random request...`, context);
 
         if (this.list == undefined) {
             this.list = await this.getRequests();
@@ -51,6 +51,7 @@ class RandomOfflineCommandHandler implements CommandHandler {
 
         const randomRequest = this.list[randomInt(0, this.list.length)];
 
+        const systemContext = context.sessionContext.agentContext;
         systemContext.requestIO.notify(
             "randomCommandSelected",
             systemContext.requestId,
@@ -89,10 +90,7 @@ class RandomOnlineCommandHandler implements CommandHandler {
         request: string,
         context: ActionContext<CommandHandlerContext>,
     ) {
-        const systemContext = context.sessionContext.agentContext;
-        systemContext.requestIO.status(
-            `Generating random request using LLM...`,
-        );
+        displayStatus(`Generating random request using LLM...`, context);
 
         //
         // Create Model
@@ -127,6 +125,7 @@ class RandomOnlineCommandHandler implements CommandHandler {
                     randomInt(0, response.data.messages.length)
                 ].message;
 
+            const systemContext = context.sessionContext.agentContext;
             systemContext.requestIO.notify(
                 "randomCommandSelected",
                 systemContext.requestId,

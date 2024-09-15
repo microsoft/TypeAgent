@@ -37,6 +37,9 @@
       "name": "chat-agent",
       "execMode": "dispatcher"
     },
+    "dispatcher": {
+      "emojiChar": "🔧"
+    },
     "system": {
       "emojiChar": "🔧",
       "subTranslators": {

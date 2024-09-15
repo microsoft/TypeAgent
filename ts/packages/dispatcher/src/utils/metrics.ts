@@ -21,6 +21,7 @@ export type PhaseTiming = {
 };
 export type RequestMetrics = {
     parse?: PhaseTiming | undefined;
+    command?: PhaseTiming | undefined;
     actions: (PhaseTiming | undefined)[];
     duration?: number | undefined;
 };
@@ -126,19 +127,21 @@ export class RequestMetricsManager {
                     actions[index].duration! += actionMeasure.duration;
                 }
             }
-        } else {
-            const executeCommandMeasures = reader.getMeasures(
-                ProfileNames.executeCommand,
-            );
-            if (executeCommandMeasures) {
-                parseDuration = minStart(executeCommandMeasures) - commandStart;
+        }
 
-                const executeCommandDuration = totalDuration(
-                    executeCommandMeasures,
-                );
-                if (executeCommandDuration !== undefined) {
-                    actions[0] = { duration: executeCommandDuration };
-                }
+        const executeCommandMeasures = reader.getMeasures(
+            ProfileNames.executeCommand,
+        );
+
+        let command: PhaseTiming | undefined;
+        if (executeCommandMeasures) {
+            parseDuration = minStart(executeCommandMeasures) - commandStart;
+
+            const executeCommandDuration = totalDuration(
+                executeCommandMeasures,
+            );
+            if (executeCommandDuration !== undefined) {
+                command = { duration: executeCommandDuration };
             }
         }
 
@@ -155,7 +158,12 @@ export class RequestMetricsManager {
             parse.marks = { "First Token": firstToken };
         }
 
-        return { parse: getInfo(parse), actions, duration: commandDuration };
+        return {
+            parse: getInfo(parse),
+            command,
+            actions,
+            duration: commandDuration,
+        };
     }
     public endCommand(requestId: string) {
         const metrics = this.getMetrics(requestId);
