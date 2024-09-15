@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import fs from "node:fs";
-import { StopWatch } from "common-utils";
+import { getMimeType, StopWatch } from "common-utils";
 import {
     ChatResponseAction,
     GenerateResponseAction,
@@ -22,6 +22,7 @@ import {
     AppAgent,
     createActionResultNoDisplay,
     ActionResultSuccess,
+    createActionResultFromHtmlDisplay,
 } from "@typeagent/agent-sdk";
 import { PromptSection } from "typechat";
 import {
@@ -31,6 +32,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { fileURLToPath } from "node:url";
 import { conversation as Conversation } from "knowledge-processor";
+import { getImageElement } from "../../../commonUtils/dist/image.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -55,6 +57,30 @@ export async function executeChatResponseAction(
         throw new Error(`Invalid chat action: ${chatAction.actionName}`);
     }
     return handleChatResponse(chatAction, context);
+}
+
+async function rehydrateImages(context: ActionContext, files: string[]) {
+
+    let html = "<div>";
+
+    for(let i = 0; i < files.length; i++) {
+
+        let name = files[i];
+        if (files[i].lastIndexOf("\\") > -1) {
+            name = files[i].substring(files[i].lastIndexOf("\\") + 1);
+        }
+
+        let a = await context.sessionContext.sessionStorage?.read(`\\..\\user_files\\${name}`, "base64");
+
+        if (a) {
+            
+            html += getImageElement(`data:image/${getMimeType(name.substring(name.indexOf(".")))};base64,${a}`);
+        }
+    }
+
+    html += "</div>";
+
+    return html;
 }
 
 async function handleChatResponse(
@@ -82,6 +108,17 @@ async function handleChatResponse(
                     entities = parameters.userRequestEntities.concat(entities);
                 }
                 result.entities = entities;
+
+                // TODO: cleanup
+                // turn related files into entities
+                for(const file of generateResponseAction.parameters.relatedFiles) {
+                    let name = file;
+                    if (file.lastIndexOf("\\") > -1) {
+                        name = file.substring(file.lastIndexOf("\\") + 1);
+                    }
+                    result.entities.push({ name, type: [ "file", "image", "data" ]})
+                }
+
                 return result;
             }
         }
@@ -124,9 +161,13 @@ async function handleChatResponse(
                             matches.response &&
                             matches.response.answer
                         ) {
-                            return createActionResult(
-                                matches.response.answer.answer!,
-                            );
+                            if (lookupAction.parameters.retrieveRelatedFilesFromStorage) {
+                                return createActionResultFromHtmlDisplay(`<div>${matches.response.answer.answer} ${await rehydrateImages(context, lookupAction.parameters.relatedFiles)}</div>`);
+                            } else {
+                                return createActionResult(
+                                    matches.response.answer.answer!,
+                                );
+                            }
                         } else {
                             console.log("bug");
                         }

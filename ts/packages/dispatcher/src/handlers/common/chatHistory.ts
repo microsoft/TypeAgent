@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import { Entity } from "@typeagent/agent-sdk";
-import { PromptSection } from "typechat";
+import { CachedImageWithDetails } from "common-utils";
+import { PromptSection, ImagePromptContent } from "typechat";
 type PromptRole = "user" | "assistant" | "system";
 
 export interface ChatHistoryEntry {
@@ -10,7 +11,7 @@ export interface ChatHistoryEntry {
     entities: Entity[];
     role: PromptRole;
     id: string | undefined;
-    attachments?: string[] | undefined;
+    attachments?: CachedImageWithDetails[] | undefined;
 }
 
 export interface ChatHistory {
@@ -23,7 +24,7 @@ export interface ChatHistory {
         entities: Entity[],
         role: PromptRole,
         id?: string,
-        attachments?: string[],
+        attachments?: CachedImageWithDetails[],
     ): void;
     getEntry(id: string): ChatHistoryEntry | undefined;
     getPromptSections(): PromptSection[];
@@ -57,7 +58,15 @@ export function createChatHistory(): ChatHistory {
             }
             for (; i < this.entries.length; ++i) {
                 const entry = this.entries[i];
-                sections.push({ role: entry.role, content: entry.text });
+
+                if (entry.text.length > 0) {
+                    sections.push({ role: entry.role, content: entry.text });
+                    if (entry.attachments && entry.attachments.length > 0) {
+                        for(const attachment of entry.attachments) {
+                            sections.push({ role: entry.role, content: [{ type: "image_url", image_url: { url: attachment.image, detail: "high" } }] } );
+                        }
+                    }
+                }
             }
             return sections;
         },
@@ -66,9 +75,9 @@ export function createChatHistory(): ChatHistory {
             entities: Entity[],
             role: PromptRole = "user",
             id?: string,
-            attachments?: string[],
+            attachments?: CachedImageWithDetails[],
         ): void {
-            this.entries.push({ text, entities, role, id, attachments });
+            this.entries.push({ text, entities, role, id, attachments});
             const index = this.entries.length - 1;
             if (id) {
                 if (role === "user") {

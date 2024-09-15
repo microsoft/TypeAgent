@@ -20,7 +20,7 @@ import {
     isActionActive,
 } from "./common/commandHandlerContext.js";
 
-import { getColorElapsedString, Profiler } from "common-utils";
+import { CachedImageWithDetails, getColorElapsedString, Profiler } from "common-utils";
 import {
     executeActions,
     startStreamPartialAction,
@@ -211,8 +211,7 @@ async function translateRequestWithTranslator(
     request: string,
     context: CommandHandlerContext,
     history?: HistoryContext,
-    attachments?: string[],
-    exifTags?: ExifReader.Tags[],
+    attachments?: CachedImageWithDetails[],
 ) {
     context.requestIO.status(
         `[${translatorName}] Translating '${request}'`,
@@ -281,7 +280,6 @@ async function translateRequestWithTranslator(
         history?.promptSections,
         onProperty,
         attachments,
-        exifTags,
     );
     translator.createRequestPrompt = orp;
 
@@ -475,8 +473,7 @@ export async function translateRequest(
     request: string,
     context: CommandHandlerContext,
     history?: HistoryContext,
-    attachments?: string[],
-    exifTags?: ExifReader.Tags[],
+    attachments?: CachedImageWithDetails[],
 ): Promise<TranslationResult | undefined | null> {
     if (!context.session.bot) {
         context.requestIO.error("No translation found (GPT is off).");
@@ -506,7 +503,6 @@ export async function translateRequest(
         context,
         history,
         attachments,
-        exifTags,
     );
     if (action === undefined) {
         return undefined;
@@ -705,17 +701,16 @@ export class RequestCommandHandler implements DispatcherCommandHandler {
             );
         }
 
-        // store attachements for later reuse
-        let cachedFiles: string[] = new Array<string>();
-        let exifTags: ExifReader.Tags[] = new Array<ExifReader.Tags>();
+        // store attachments for later reuse
+        let cachedAttachments: CachedImageWithDetails[] = new Array<CachedImageWithDetails>();
         if (attachments) {
             for (let i = 0; i < attachments?.length; i++) {
                 const [attachmentName, tags]: [string, ExifReader.Tags] =
                     await context.session.storeUserSuppliedFile(
                         attachments![i],
                     );
-                cachedFiles.push(attachmentName);
-                exifTags.push(tags);
+
+                cachedAttachments.push(new CachedImageWithDetails(tags, attachmentName, attachments![i]));
             }
         }
 
@@ -729,7 +724,7 @@ export class RequestCommandHandler implements DispatcherCommandHandler {
                 [],
                 "user",
                 context.requestId,
-                attachments,
+                cachedAttachments,
             );
         }
 
@@ -743,8 +738,7 @@ export class RequestCommandHandler implements DispatcherCommandHandler {
                       request,
                       context,
                       history,
-                      attachments,
-                      exifTags,
+                      cachedAttachments,
                   )
                 : match; // result or null
 

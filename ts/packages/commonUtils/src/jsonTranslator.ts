@@ -19,7 +19,7 @@ import {
     createIncrementalJsonParser,
     IncrementalJsonValueCallBack,
 } from "./incrementalJsonParser.js";
-import ExifReader from "exifreader";
+import { CachedImageWithDetails } from "./image.js";
 
 const debug = registerDebug("typeagent:prompt");
 
@@ -61,8 +61,7 @@ export interface TypeChatJsonTranslatorWithStreaming<T extends object>
         request: string,
         promptPreamble?: string | PromptSection[],
         cb?: IncrementalJsonValueCallBack,
-        attachments?: string[] | undefined,
-        exifTags?: ExifReader.Tags[] | undefined,
+        attachments?: CachedImageWithDetails[] | undefined,
     ) => Promise<Result<T>>;
 }
 
@@ -80,10 +79,9 @@ export function enableJsonTranslatorStreaming<T extends object>(
         request: string,
         promptPreamble?: string | PromptSection[],
         cb?: IncrementalJsonValueCallBack,
-        attachments?: string[],
-        exifTags?: ExifReader.Tags[],
+        attachments?: CachedImageWithDetails[]
     ) => {
-        attachAttachments(attachments, exifTags, promptPreamble);
+        attachAttachments(attachments, promptPreamble);
 
         if (cb === undefined) {
             return innerFn(request, promptPreamble);
@@ -120,8 +118,7 @@ export function enableJsonTranslatorStreaming<T extends object>(
 }
 
 function attachAttachments(
-    attachments: string[] | undefined,
-    exifTags: ExifReader.Tags[] | undefined,
+    attachments: CachedImageWithDetails[] | undefined,
     promptPreamble?: string | PromptSection[],
 ) {
     let pp: PromptSection[] = promptPreamble as PromptSection[];
@@ -131,25 +128,28 @@ function attachAttachments(
             pp.unshift({
                 role: "user",
                 content: [
-                    { type: "text", text: "\n" },
                     {
                         type: "image_url",
-                        image_url: { url: attachments[i], detail: "high" },
+                        image_url: { url: attachments[i].image, detail: "high" },
                     },
-                    { type: "text", text: "\n" },
                     {
                         type: "text",
                         text:
                             "Here is the EXIF information for the image: " +
-                            JSON.stringify(exifTags![i]),
+                            JSON.stringify(attachments![i].exifTags),
                     },
+                    {
+                        type: "text",
+                        text:
+                            `File Name: ${attachments![i].storageLocation}`,
+                    },                    
                 ],
             });
         }
 
         pp.unshift({
             role: "user",
-            content: "Here are some images provided by the user.",
+            content: "Here are some new images provided by the user.",
         });
     }
 }

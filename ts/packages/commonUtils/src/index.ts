@@ -42,3 +42,7 @@ export * from "./profiler.js";
 export { simpleStarRegex } from "./simpleStartRegex.js";
 
 export { createRpc } from "./rpc.js";
+
+export { CachedImageWithDetails, getImageElement } from "./image.js";
+
+export { getFileExtensionForMimeType, getMimeType } from "./mimeTypes.js"

@@ -3,6 +3,7 @@
 
 import { Entity } from "@typeagent/agent-sdk";
 import { HistoryContext } from "agent-cache";
+import { CachedImageWithDetails } from "common-utils";
 import { request } from "http";
 import { TypeChatJsonTranslator } from "typechat";
 
@@ -13,7 +14,7 @@ function entityToText(entity: Entity) {
 export function makeRequestPromptCreator(
     translator: TypeChatJsonTranslator<object>,
     history: HistoryContext | undefined,
-    attachments: string[] | undefined,
+    attachments: CachedImageWithDetails[] | undefined,
 ) {
     let promptSections: any[] = [];
     let entities = [];

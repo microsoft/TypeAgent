@@ -54,7 +54,7 @@ export type TermFilter = {
     timeRange?: DateTimeRange | undefined; // in this time range
 };
 
-// this action is used to lookup information from past conversations or the internet and generate a response based on the lookup results, for example "what did we say about the project last week?" or "what is the current price of Microsoft stock?"
+// this action is used to lookup information and images from past conversations or the internet and generate a response based on the lookup results, for example "what did we say about the project last week?" or "what is the current price of Microsoft stock?" or "show me that picture"
 export interface LookupAndGenerateResponseAction {
     actionName: "lookupAndGenerateResponse";
     parameters: {
@@ -68,6 +68,10 @@ export interface LookupAndGenerateResponseAction {
         // the search strings to look up on the user's behalf should be specific enough to return the correct information
         // it is recommended to include the same entities as in the user request
         internetLookups?: string[];
+        // Any file references to images referred to by the message
+        relatedFiles: string[];
+        // Are the contents of the files needed at this time?
+        retrieveRelatedFilesFromStorage: boolean;
     };
 }
 
@@ -84,5 +88,7 @@ export interface GenerateResponseAction {
         userRequestEntities: Entity[];
         // ALL the actions and entities present in the generated text
         generatedTextEntities: Entity[];
+        // The file names of any attachments
+        relatedFiles: string[];
     };
 }
