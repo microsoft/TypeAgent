@@ -278,7 +278,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const chatView = new ChatView(idGenerator, agents);
     const cameraView = new CameraView((image: HTMLImageElement) => {
-        image.classList.add("chat-inpput-dropImage");
+        image.classList.add("chat-input-dropImage");
         chatView.chatInput.textarea.textEntry.append(image);
     });
 
