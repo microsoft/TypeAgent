@@ -22,6 +22,7 @@ import {
 import { getColorElapsedString } from "common-utils";
 import {
     executeActions,
+    getTranslatorPrefix,
     startStreamPartialAction,
     validateWildcardMatch,
 } from "../action/actionHandlers.js";
@@ -51,8 +52,6 @@ import {
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
-
-export const SwitcherName = "switcher";
 
 async function confirmTranslation(
     elapsedMs: number,
@@ -230,8 +229,10 @@ async function translateRequestWithTranslator(
     attachments?: string[],
     exifTags?: ExifReader.Tags[],
 ) {
-    displayStatus(`[${translatorName}] Translating '${request}'`, context);
     const systemContext = context.sessionContext.agentContext;
+    const prefix = getTranslatorPrefix(translatorName, systemContext);
+    displayStatus(`${prefix}Translating '${request}'`, context);
+
     const translator = getTranslator(systemContext, translatorName);
 
     const orp = translator.createRequestPrompt;
@@ -265,8 +266,13 @@ async function translateRequestWithTranslator(
                               systemContext.agents.getInjectedTranslatorForActionName(
                                   value,
                               ) ?? translatorName;
+
+                          const prefix = getTranslatorPrefix(
+                              actionTranslatorName,
+                              systemContext,
+                          );
                           displayStatus(
-                              `[${actionTranslatorName}] Translating '${request}' into action '${value}'`,
+                              `${prefix}Translating '${request}' into action '${value}'`,
                               context,
                           );
                           const config =
@@ -328,7 +334,7 @@ async function findAssistantForRequest(
     context: ActionContext<CommandHandlerContext>,
 ): Promise<NextTranslation | undefined> {
     displayStatus(
-        `[switcher] Looking for another assistant to handle request '${request}'`,
+        `[↔️ (switcher)] Looking for another assistant to handle request '${request}'`,
         context,
     );
     const systemContext = context.sessionContext.agentContext;

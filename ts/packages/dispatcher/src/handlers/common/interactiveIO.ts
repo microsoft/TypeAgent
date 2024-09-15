@@ -68,7 +68,7 @@ export interface ClientIO {
         visible?: boolean,
     ): void;
     setDisplay(message: IAgentMessage): void;
-    appendDisplay(message: IAgentMessage, mode?: DisplayAppendMode): void;
+    appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void;
     askYesNo(
         message: string,
         requestId: RequestId,
@@ -135,7 +135,7 @@ export interface RequestIO {
         message: DisplayContent,
         actionIndex: number | undefined,
         source: string,
-        mode?: DisplayAppendMode,
+        mode: DisplayAppendMode,
     ): void;
 
     // Input
@@ -233,7 +233,7 @@ export function getConsoleRequestIO(
             content: DisplayContent,
             _actionIndex: number | undefined,
             _source: string,
-            mode: DisplayAppendMode = "inline",
+            mode: DisplayAppendMode,
         ) => displayContent(content, mode),
 
         isInputEnabled: () => stdio !== undefined,
@@ -307,7 +307,7 @@ export function getRequestIO(
             content: DisplayContent,
             actionIndex: number,
             source: string,
-            mode?: DisplayAppendMode,
+            mode: DisplayAppendMode,
         ) =>
             clientIO.appendDisplay(
                 makeClientIOMessage(

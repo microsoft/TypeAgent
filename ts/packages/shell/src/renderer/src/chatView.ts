@@ -296,6 +296,7 @@ class MessageContainer {
             return;
         }
 
+        // Flush last temporary reset the lastAppendMode.
         this.flushLastTemporary();
 
         this._source = source;
@@ -332,8 +333,8 @@ class MessageContainer {
     private flushLastTemporary() {
         if (this.lastAppendMode === "temporary") {
             this.messageDiv.lastChild?.remove();
+            this.lastAppendMode = undefined;
         }
-        this.lastAppendMode = undefined;
     }
 
     private ensureMetricsDiv() {
@@ -364,7 +365,11 @@ class MessageContainer {
             ttsMetricsDiv.className = "metrics-tts";
             this.ttsMetricsDiv = ttsMetricsDiv;
         }
-        this.ttsMetricsDiv!.innerHTML = `TTS Synthesis: <b>${formatTimeReaderFriendly(timing.duration!)}</b><br>TTS First Chunk: <b>${formatTimeReaderFriendly(timing.marks!["First Chunk"].duration)}</b>`;
+        const firstChunkTime = timing.marks?.["First Chunk"];
+        const firstChunkTimeStr = firstChunkTime
+            ? `<br>TTS First Chunk: <b>${formatTimeReaderFriendly(timing.marks!["First Chunk"].duration)}</b>`
+            : "";
+        this.ttsMetricsDiv!.innerHTML = `TTS Synthesis: <b>${formatTimeReaderFriendly(timing.duration!)}</b>${firstChunkTimeStr}`;
     }
     public show() {
         this.div.classList.remove("chat-message-hidden");
@@ -609,7 +614,7 @@ export function setContent(
         kind = content.kind;
     }
 
-    const kindStyle = kind ? `chat-message-kind-${kind}` : "";
+    const kindStyle = kind ? `chat-message-kind-${kind}` : undefined;
 
     let contentDiv = elm.lastChild as HTMLDivElement | null;
     if (
@@ -623,9 +628,6 @@ export function setContent(
             contentDiv.classList.add(kindStyle);
         }
         elm.appendChild(contentDiv);
-        if (appendMode === "inline") {
-            elm.style.display = "flex";
-        }
     }
 
     let contentElm: HTMLElement = contentDiv;
@@ -637,7 +639,7 @@ export function setContent(
         } else {
             const span = document.createElement("span");
             // create a text span so we can set "whitespace: break-spaces" css style of text content.
-            span.className = `chat-message-agent-text ${kindStyle}`;
+            span.className = `chat-message-agent-text`;
             contentDiv.appendChild(span);
             contentElm = span;
         }

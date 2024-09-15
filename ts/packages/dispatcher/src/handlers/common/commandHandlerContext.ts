@@ -55,6 +55,7 @@ import { getBuiltinAppAgentProvider } from "../../agent/agentConfig.js";
 import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 import { RequestMetricsManager } from "../../utils/metrics.js";
+import { getTranslatorPrefix } from "../../action/actionHandlers.js";
 
 export interface CommandResult {
     error?: boolean;
@@ -308,7 +309,7 @@ async function setAppAgentStates(
         options,
     );
 
-    processSetAppAgentStateResult(result, (message) =>
+    processSetAppAgentStateResult(result, context, (message) =>
         context.requestIO.notify(AppAgentEvent.Error, undefined, message),
     );
 }
@@ -325,8 +326,10 @@ async function updateAppAgentStates(
         false,
     );
 
-    const rollback = processSetAppAgentStateResult(result, (message) =>
-        displayError(message, context),
+    const rollback = processSetAppAgentStateResult(
+        result,
+        systemContext,
+        (message) => displayError(message, context),
     );
 
     if (rollback) {
@@ -346,13 +349,15 @@ async function updateAppAgentStates(
 
 function processSetAppAgentStateResult(
     result: any,
+    systemContext: CommandHandlerContext,
     cbError: (message: string) => void,
 ) {
     if (result.failed.actions.length !== 0) {
         const rollback: AppAgentState = { actions: {} };
         for (const [translatorName, enable, e] of result.failed.actions) {
+            const prefix = getTranslatorPrefix(translatorName, systemContext);
             cbError(
-                `Failed to ${enable ? "enable" : "disable"} ${translatorName} action: ${e.message}`,
+                `${prefix}: Failed to ${enable ? "enable" : "disable"} action: ${e.message}`,
             );
             rollback.actions![translatorName] = !enable;
         }

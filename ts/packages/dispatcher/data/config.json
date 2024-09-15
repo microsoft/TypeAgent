@@ -38,7 +38,7 @@
       "execMode": "dispatcher"
     },
     "dispatcher": {
-      "emojiChar": "🔧"
+      "emojiChar": "🤖"
     },
     "system": {
       "emojiChar": "🔧",

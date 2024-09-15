@@ -31,6 +31,14 @@ import {
 const debugAgent = registerDebug("typeagent:agent");
 const debugActions = registerDebug("typeagent:actions");
 
+export function getTranslatorPrefix(
+    translatorName: string,
+    systemContext: CommandHandlerContext,
+) {
+    const config = systemContext.agents.getTranslatorConfig(translatorName);
+    return `[${config.emojiChar} ${translatorName}] `;
+}
+
 function getActionContext(
     appAgentName: string,
     context: CommandHandlerContext,
@@ -183,7 +191,14 @@ async function executeAction(
     );
     let returnedResult: ActionResult | undefined;
     try {
-        displayStatus(`Executing action ${action.fullActionName}`, context);
+        const prefix = getTranslatorPrefix(
+            action.translatorName,
+            systemContext,
+        );
+        displayStatus(
+            `${prefix}Executing action ${action.fullActionName}`,
+            context,
+        );
         returnedResult = await appAgent.executeAction(action, actionContext);
     } finally {
         actionContext.profiler?.stop();

@@ -14,8 +14,6 @@ import {
     getActiveTranslatorList,
 } from "./handlers/common/commandHandlerContext.js";
 
-import { SwitcherName } from "./handlers/requestCommandHandler.js";
-
 import { unicodeChar } from "./utils/interactive.js";
 import {
     CommandDescriptor,
@@ -265,12 +263,7 @@ export function getSettingSummary(context: CommandHandlerContext) {
 }
 
 export function getTranslatorNameToEmojiMap(context: CommandHandlerContext) {
-    const tMap = new Map<string, string>(
-        Object.entries(context.agents.getEmojis()),
-    );
-    tMap.set(DispatcherName, "🤖");
-    tMap.set(SwitcherName, "↔️");
-    return tMap;
+    return new Map<string, string>(Object.entries(context.agents.getEmojis()));
 }
 
 export function getPrompt(context: CommandHandlerContext) {

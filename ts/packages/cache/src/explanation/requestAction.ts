@@ -52,14 +52,9 @@ export interface JSONAction {
     parameters: ParamObjectType;
 }
 
-const unknownTranslatorName = "<system>";
 function parseActionNameParts(fullActionName: string) {
     const parts = fullActionName.split(".");
-    const translatorNamePart = parts.slice(0, -1).join(".");
-    const translatorName =
-        translatorNamePart === unknownTranslatorName
-            ? undefined
-            : translatorNamePart;
+    const translatorName = parts.slice(0, -1).join(".");
     const actionName = parts.at(-1)!;
     return { translatorName, actionName };
 }
@@ -119,7 +114,7 @@ function copyActionValue(
 export class Action {
     constructor(
         private readonly action: IAction,
-        public readonly translatorName: string | undefined,
+        public readonly translatorName: string,
     ) {}
 
     public get actionName() {
@@ -135,7 +130,7 @@ export class Action {
     }
 
     public get translatorNameString(): string {
-        return this.translatorName ?? unknownTranslatorName;
+        return this.translatorName;
     }
     public toString() {
         return `${this.fullActionName}(${JSON.stringify(this.action.parameters)})`;

@@ -324,7 +324,7 @@ function getActionContextShim(
                 content,
             });
         },
-        appendDisplay(content: DisplayContent, mode?: DisplayAppendMode): void {
+        appendDisplay(content: DisplayContent, mode: DisplayAppendMode): void {
             rpc.send("appendDisplay", {
                 actionContextId,
                 content,
