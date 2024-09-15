@@ -47,12 +47,7 @@ export class ExpandableTextarea {
             }
             if (event.key === "Enter") {
                 event.preventDefault();
-                const text = this.getTextEntry().innerHTML;
-                if (text.length > 0) {
-                    this.entryHandlers.onSend(text);
-                    this.textEntry.innerText = "";
-                    this.preText = undefined;
-                }
+                this.send(sendButton);
             } else if (event.altKey && this.entryHandlers.altHandler !== undefined) {
                 this.entryHandlers.altHandler(this, event);
             } else if (event.key == "Escape") {
@@ -80,12 +75,15 @@ export class ExpandableTextarea {
         return this.textEntry;
     }
 
-    send() {
+    send(sendButton?: HTMLButtonElement) {
         const text = this.getTextEntry().innerHTML;
         if (text.length > 0) {
             this.entryHandlers.onSend(text);
             this.textEntry.innerText = "";
             this.preText = undefined;
+            if (sendButton) {
+                sendButton.disabled = true;
+            }
         }
     }
 }
@@ -157,7 +155,7 @@ export class ChatInput {
             onChange,
             onKeydown,
         },
-        this.sendButton);        
+        this.sendButton);       
 
         this.textarea.getTextEntry().ondragenter = (e: DragEvent) => {
             if (!this.dragEnabled) {
@@ -213,10 +211,6 @@ export class ChatInput {
                 this.loadImageFile(e.dataTransfer.files[0]);
             }
 
-            if (this.sendButton !== undefined) {
-                this.sendButton.disabled = (this.textarea.textEntry.innerHTML.length == 0);
-            }
-
             e.preventDefault();
         };
 
@@ -229,10 +223,6 @@ export class ChatInput {
         this.input.onchange = () => {
             if (this.input.files && this.input.files?.length > 0) {
                 this.loadImageFile(this.input.files[0]);
-            }
-
-            if (this.sendButton !== undefined) {
-                this.sendButton.disabled = (this.textarea.textEntry.innerHTML.length == 0);
             }
         };
 
@@ -316,6 +306,12 @@ export class ChatInput {
         dropImg.className = "chat-input-dropImage";
 
         this.textarea.getTextEntry().append(dropImg);
+
+        if (this.sendButton !== undefined) {
+            this.sendButton.disabled = (this.textarea.textEntry.innerHTML.length == 0);
+        }
+
+        this.textarea.getTextEntry().focus();
     }
 
     clear() {
