@@ -698,7 +698,7 @@ function updateMetrics(
     }
     if (metrics.duration) {
         let timeDiv = document.createElement("div");
-        timeDiv.innerHTML = `${name} Elapse Time: <b>${formatTimeReaderFriendly(metrics.duration)}</b>${total !== undefined ? `<br>Total Elapsed Time: <b>${formatTimeReaderFriendly(total)}</b>` : ""}`;
+        timeDiv.innerHTML = `${name} Elapsed Time: <b>${formatTimeReaderFriendly(metrics.duration)}</b>${total !== undefined ? `<br>Total Elapsed Time: <b>${formatTimeReaderFriendly(total)}</b>` : ""}`;
         div.append(timeDiv);
     }
 }
