@@ -61,10 +61,11 @@ export function createChatHistory(): ChatHistory {
 
                 if (entry.text.length > 0) {
                     sections.push({ role: entry.role, content: entry.text });
-                    if (entry.attachments && entry.attachments.length > 0) {
-                        for(const attachment of entry.attachments) {
-                            sections.push({ role: entry.role, content: [{ type: "image_url", image_url: { url: attachment.image, detail: "high" } }] } );
-                        }
+                }
+
+                if (entry.attachments && entry.attachments.length > 0) {
+                    for(const attachment of entry.attachments) {
+                        sections.push({ role: entry.role, content: [{ type: "image_url", image_url: { url: attachment.image, detail: "high" } }] } );
                     }
                 }
             }

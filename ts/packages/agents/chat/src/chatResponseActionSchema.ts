@@ -75,7 +75,7 @@ export interface LookupAndGenerateResponseAction {
     };
 }
 
-// this is the way to handle requests for known information that is not stored in application memory or conversation memory, such as facts, definitions, explanations, or other information that can be generated without a lookup
+// this is the way to handle requests for known information that is not stored in application memory or conversation memory, such as facts, definitions, explanations, image captioning, or other information that can be generated without a lookup
 // this action is never used when the request is for private information from past conversations including private events, plans, projects in progress, and other items from discussions with team members or the assistant, unless the information is present in the chat history
 export interface GenerateResponseAction {
     actionName: "generateResponse";

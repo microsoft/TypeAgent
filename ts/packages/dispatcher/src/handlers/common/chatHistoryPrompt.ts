@@ -48,11 +48,11 @@ export function makeRequestPromptCreator(
 
         if (attachments !== undefined && attachments?.length > 0) {
             imageSuffix =
-                "including any images provided (and related EXIF infomration), ";
+                "including any images provided, ";
 
             if (request.length == 0) {
                 request =
-                    "Caption this image in detail and include relevant EXIF information like date/time & location.";
+                    "Caption the new image in detail and include relevant EXIF information like date/time & location.";
             }
         }
 
