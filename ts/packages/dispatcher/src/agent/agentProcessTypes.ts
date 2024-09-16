@@ -3,6 +3,7 @@
 
 import {
     AppAgentEvent,
+    DisplayAppendMode,
     DisplayContent,
     DisplayType,
     StorageListOptions,
@@ -22,8 +23,8 @@ export type AgentContextCallFunctions = {
     appendDisplay: (param: {
         actionContextId: number;
         message: DisplayContent;
+        mode: DisplayAppendMode;
     }) => void;
-    performanceMark: (param: { actionContextId: number; name: string }) => void;
 };
 
 export type AgentContextInvokeFunctions = {

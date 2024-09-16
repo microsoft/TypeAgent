@@ -69,7 +69,6 @@ async function ensureWebsocketConnected() {
 
         webSocket = await createWebSocket();
         if (!webSocket) {
-            showBadgeError();
             resolve(undefined);
             return;
         }
@@ -94,10 +93,8 @@ async function ensureWebsocketConnected() {
                     );
                 } else if (data.messageType == "siteTranslatorStatus") {
                     if (data.body.status == "initializing") {
-                        showBadgeBusy();
                         console.log(`Initializing ${data.body.translator}`);
                     } else if (data.body.status == "initialized") {
-                        showBadgeHealthy();
                         console.log(
                             `Finished initializing ${data.body.translator}`,
                         );
@@ -130,7 +127,6 @@ async function ensureWebsocketConnected() {
         webSocket.onclose = (event: object) => {
             console.log("websocket connection closed");
             webSocket = undefined;
-            showBadgeError();
             reconnectWebSocket();
         };
 
@@ -161,7 +157,6 @@ export function reconnectWebSocket() {
         if (webSocket && webSocket.readyState === WebSocket.OPEN) {
             console.log("Clearing reconnect retry interval");
             clearInterval(connectionCheckIntervalId);
-            showBadgeHealthy();
         } else {
             console.log("Retrying connection");
             await ensureWebsocketConnected();
@@ -1177,7 +1172,6 @@ async function runBrowserAction(action: any) {
                 // TODO: Need to invalidate schema cache if html changes
                 if (targetSchema && targetSchema.length > 0) {
                     responseObject = targetSchema[0].body;
-                    showBadgeHealthy();
                 }
             }
 
@@ -1275,40 +1269,6 @@ async function runSiteAction(messageType: string, action: any) {
     return confirmationMessage;
 }
 
-function showBadgeError() {
-    chrome.action.setBadgeBackgroundColor({ color: "#F00" }, () => {
-        chrome.action.setBadgeText({ text: "!" });
-    });
-}
-
-function showBadgeHealthy() {
-    chrome.action.setBadgeText({
-        text: "",
-    });
-}
-
-function showBadgeBusy() {
-    chrome.action.setBadgeBackgroundColor({ color: "#0000FF" }, () => {
-        chrome.action.setBadgeText({ text: "..." });
-    });
-}
-
-chrome.action?.onClicked.addListener(async (tab) => {
-    try {
-        const connected = await ensureWebsocketConnected();
-        if (!connected) {
-            reconnectWebSocket();
-            showBadgeError();
-        } else {
-            await toggleSiteTranslator(tab);
-            showBadgeHealthy();
-        }
-    } catch {
-        reconnectWebSocket();
-        showBadgeError();
-    }
-});
-
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
     const targetTab = await chrome.tabs.get(activeInfo.tabId);
     await toggleSiteTranslator(targetTab);
@@ -1360,7 +1320,6 @@ chrome.windows?.onFocusChanged.addListener(async (windowId) => {
     const connected = await ensureWebsocketConnected();
     if (!connected) {
         reconnectWebSocket();
-        showBadgeError();
     }
 
     const targetTab = await getActiveTab();
@@ -1385,21 +1344,12 @@ chrome.windows?.onFocusChanged.addListener(async (windowId) => {
     }
 });
 
-chrome.windows?.onCreated.addListener(async (windowId) => {
-    console.log("Window Created");
-});
-
-chrome.windows?.onRemoved.addListener(async (windowId) => {
-    console.log("Window Removed");
-});
-
 chrome.runtime.onStartup.addListener(async () => {
     console.log("Browser Agent Service Worker started");
     try {
         const connected = await ensureWebsocketConnected();
         if (!connected) {
             reconnectWebSocket();
-            showBadgeError();
         }
     } catch {
         reconnectWebSocket();
@@ -1417,68 +1367,5 @@ chrome.runtime.onMessageExternal.addListener(
                 }
             }
         };
-    },
-);
-
-chrome.runtime.onInstalled.addListener(() => {
-    chrome.contextMenus.create({
-        title: "Refresh crossword agent",
-        id: "reInitCrosswordPage",
-    });
-
-    chrome.contextMenus.create({
-        title: "Clear crossword cache",
-        id: "clearCrosswordPageCache",
-    });
-});
-
-chrome.contextMenus?.onClicked.addListener(
-    async (info: chrome.contextMenus.OnClickData, tab?: chrome.tabs.Tab) => {
-        if (tab == undefined) {
-            return;
-        }
-
-        switch (info.menuItemId) {
-            case "reInitCrosswordPage": {
-                // insert site-specific script
-                await chrome.tabs.sendMessage(tab.id!, {
-                    type: "setup_UniversalCrossword",
-                });
-
-                // trigger translator
-                if (webSocket && webSocket.readyState === WebSocket.OPEN) {
-                    webSocket.send(
-                        JSON.stringify({
-                            source: "browser",
-                            target: "dispatcher",
-                            messageType: "enableSiteTranslator",
-                            body: "browser.crossword",
-                        }),
-                    );
-                }
-
-                break;
-            }
-            case "clearCrosswordPageCache": {
-                // remove cached schema for current tab
-                const key = tab.url;
-                const value = await chrome.storage.session.get(["pageSchema"]);
-                if (value && Array.isArray(value.pageSchema)) {
-                    const updatedSchema = value.pageSchema.filter(
-                        (c: { url: any }) => c.url !== key,
-                    );
-
-                    await chrome.storage.session.set({
-                        pageSchema: updatedSchema,
-                    });
-                } else {
-                    await chrome.storage.session.set({
-                        pageSchema: [],
-                    });
-                }
-
-                break;
-            }
-        }
     },
 );

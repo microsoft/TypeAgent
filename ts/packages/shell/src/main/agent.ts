@@ -13,6 +13,8 @@ import {
 } from "@typeagent/agent-sdk/helpers/commands";
 import { AppAgentProvider } from "agent-dispatcher";
 import { ShellSettings } from "./shellSettings.js";
+import path from "path";
+import { app, BrowserWindow } from "electron";
 
 type ShellContext = {
     settings: ShellSettings;
@@ -24,6 +26,30 @@ const config: AppAgentManifest = {
 
 class ShellShowSettingsCommandHandler implements CommandHandler {
     public readonly description = "Show shell settings";
+    public async run(_input: string, context: ActionContext<ShellContext>) {
+        const agentContext = context.sessionContext.agentContext;
+        agentContext.settings.show("settings");
+    }
+}
+
+class ShellShowHelpCommandHandler implements CommandHandler {
+    public readonly description = "Show shell help";
+    public async run(_input: string, context: ActionContext<ShellContext>) {
+        const agentContext = context.sessionContext.agentContext;
+        agentContext.settings.show("help");
+    }
+}
+
+class ShellShowMetricsCommandHandler implements CommandHandler {
+    public readonly description = "Show shell metrics";
+    public async run(_input: string, context: ActionContext<ShellContext>) {
+        const agentContext = context.sessionContext.agentContext;
+        agentContext.settings.show("Metrics");
+    }
+}
+
+class ShellShowRawSettingsCommandHandler implements CommandHandler {
+    public readonly description = "Shows raw JSON shell settings";
     public async run(_input: string, context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
         const message: string[] = [];
@@ -70,12 +96,74 @@ class ShellSetSettingCommandHandler implements CommandHandler {
     }
 }
 
+class ShellRunDemoCommandHandler implements CommandHandler {
+    public readonly description = "Run Demo";
+    public async run(_input: string, context: ActionContext<ShellContext>) {
+        context.sessionContext.agentContext.settings.runDemo();
+    }
+}
+
+class ShellRunDemoInteractiveCommandHandler implements CommandHandler {
+    public readonly description = "Run Demo Interactive";
+    public async run(_input: string, context: ActionContext<ShellContext>) {
+        context.sessionContext.agentContext.settings.runDemo(true);
+    }
+}
+
+class ShellSetTopMostCommandHandler implements CommandHandler {
+    public readonly description =
+        "Always keep the shell window on top of other windows";
+    public async run(_input: string, context: ActionContext<ShellContext>) {
+        context.sessionContext.agentContext.settings.toggleTopMost();
+    }
+}
+
+class ShellShowWebContentView implements CommandHandler {
+    public readonly description = "Show a new Web Content view";
+    public async run(_input: string, context: ActionContext<ShellContext>) {
+        // context.sessionContext.agentContext.settings.toggleTopMost();
+        const browserExtensionPath = path.join(
+            app.getAppPath(),
+            "../agents/browser/dist/electron",
+        );
+        console.log(context.sessionContext.agentContext.settings);
+
+        const win = new BrowserWindow({
+            width: 800,
+            height: 1500,
+            autoHideMenuBar: true,
+        });
+        win.removeMenu();
+        win.loadURL("https://paleobiodb.org/navigator/");
+        await win.webContents.session.loadExtension(browserExtensionPath);
+        // Get all service workers.
+        console.log(win.webContents.session.serviceWorkers.getAllRunning());
+    }
+}
+
 const handlers: CommandHandlerTable = {
     description: "Shell settings command",
-    defaultSubCommand: new ShellShowSettingsCommandHandler(),
     commands: {
-        show: new ShellShowSettingsCommandHandler(),
+        show: {
+            description: "Show shell settings",
+            defaultSubCommand: new ShellShowSettingsCommandHandler(),
+            commands: {
+                settings: new ShellShowSettingsCommandHandler(),
+                help: new ShellShowHelpCommandHandler(),
+                metrics: new ShellShowMetricsCommandHandler(),
+                raw: new ShellShowRawSettingsCommandHandler(),
+            },
+        },
         set: new ShellSetSettingCommandHandler(),
+        run: {
+            description: "Run Demo",
+            defaultSubCommand: new ShellRunDemoCommandHandler(),
+            commands: {
+                interactive: new ShellRunDemoInteractiveCommandHandler(),
+            },
+        },
+        topmost: new ShellSetTopMostCommandHandler(),
+        showWindow: new ShellShowWebContentView(),
     },
 };
 

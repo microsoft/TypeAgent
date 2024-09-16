@@ -14,17 +14,15 @@ import {
     getActiveTranslatorList,
 } from "./handlers/common/commandHandlerContext.js";
 
-import { SwitcherName } from "./handlers/requestCommandHandler.js";
-
 import { unicodeChar } from "./utils/interactive.js";
 import {
     CommandDescriptor,
     CommandDescriptorTable,
 } from "@typeagent/agent-sdk";
 
-import { Profiler } from "common-utils";
 import { executeCommand } from "./action/actionHandlers.js";
 import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/commands";
+import { RequestMetrics } from "./utils/metrics.js";
 
 const debugInteractive = registerDebug("typeagent:cli:interactive");
 
@@ -98,58 +96,56 @@ export async function resolveCommand(
     };
 }
 
-export async function processCommandNoLock(
+async function parseCommand(
     originalInput: string,
     context: CommandHandlerContext,
-    requestId?: RequestId,
-    attachments?: string[],
 ) {
     let input = originalInput.trim();
     if (!input.startsWith("@")) {
-        // default to request
-        input = `request ${input}`;
+        // default to dispatcher request
+        input = `dispatcher request ${input}`;
     } else {
         input = input.substring(1);
     }
-
-    const oldRequestIO = context.requestIO;
-    context.requestId = requestId;
-    if (context.clientIO) {
-        context.requestIO = getRequestIO(context, context.clientIO, requestId);
+    const result = await resolveCommand(input, context);
+    if (result === undefined) {
+        throw new Error(`Unknown command '${input}'`);
     }
-
-    try {
-        Profiler.getInstance().start(context.requestId);
-
-        const result = await resolveCommand(input, context);
-        if (result === undefined) {
+    if (result.descriptor === undefined) {
+        if (result.table !== undefined) {
+            throw new Error(
+                `Command '${input}' requires a subcommand. Try '@help ${input}' for the list of sub commands.`,
+            );
+        }
+        const subCommand = result.command?.pop();
+        const appAgentName = result.appAgentName;
+        const command = input.startsWith(`@${appAgentName}`)
+            ? `${appAgentName} ${result.command?.join(" ") ?? ""}`
+            : result.command?.join(" ") ?? "";
+        if (subCommand !== undefined) {
+            throw new Error(
+                `Unknown command '${subCommand}' ${
+                    command
+                        ? ` for '@${command}'. Try '@help ${command}' for the list of subcommands.`
+                        : "Try '@help' for a list of commands."
+                }`,
+            );
+        } else {
             throw new Error(`Unknown command '${input}'`);
         }
-        if (result.descriptor === undefined) {
-            if (result.table !== undefined) {
-                throw new Error(
-                    `Command '${input}' requires a subcommand. Try '@help ${input}' for the list of sub commands.`,
-                );
-            }
-            const subCommand = result.command?.pop();
-            const appAgentName = result.appAgentName;
-            const command = input.startsWith(`@${appAgentName}`)
-                ? `${appAgentName} ${result.command?.join(" ") ?? ""}`
-                : result.command?.join(" ") ?? "";
-            if (subCommand !== undefined) {
-                throw new Error(
-                    `Unknown command '${subCommand}' ${
-                        command
-                            ? ` for '@${command}'. Try '@help ${command}' for the list of subcommands.`
-                            : "Try '@help' for a list of commands."
-                    }`,
-                );
-            } else {
-                throw new Error(`Unknown command '${input}'`);
-            }
-        }
+    }
 
-        context.logger?.logEvent("command", { originalInput });
+    context.logger?.logEvent("command", { originalInput });
+    return result;
+}
+
+export async function processCommandNoLock(
+    originalInput: string,
+    context: CommandHandlerContext,
+    attachments?: string[],
+) {
+    try {
+        const result = await parseCommand(originalInput, context);
         await executeCommand(
             result.command,
             result.args,
@@ -158,14 +154,18 @@ export async function processCommandNoLock(
             attachments,
         );
     } catch (e: any) {
-        context.requestIO.error(`ERROR: ${e.message}`);
+        context.requestIO.appendDisplay(
+            {
+                type: "text",
+                content: `ERROR: ${e.message}`,
+                kind: "error",
+            },
+            undefined,
+            DispatcherName,
+            "block",
+        );
         debugInteractive(e.stack);
-    } finally {
-        Profiler.getInstance().stop(context.requestId);
     }
-
-    context.requestId = undefined;
-    context.requestIO = oldRequestIO;
 }
 
 export async function processCommand(
@@ -173,15 +173,34 @@ export async function processCommand(
     context: CommandHandlerContext,
     requestId?: RequestId,
     attachments?: string[],
-) {
+): Promise<RequestMetrics | undefined> {
     // Process one command at at time.
     return context.commandLock(async () => {
-        return processCommandNoLock(
-            originalInput,
-            context,
-            requestId,
-            attachments,
-        );
+        context.requestId = requestId;
+        if (requestId) {
+            context.commandProfiler =
+                context.metricsManager?.beginCommand(requestId);
+        }
+        const oldRequestIO = context.requestIO;
+        try {
+            if (context.clientIO) {
+                context.requestIO = getRequestIO(context, context.clientIO);
+            }
+
+            await processCommandNoLock(originalInput, context, attachments);
+        } finally {
+            context.commandProfiler?.stop();
+            context.commandProfiler = undefined;
+
+            const metrics = requestId
+                ? context.metricsManager?.endCommand(requestId)
+                : undefined;
+
+            context.requestId = undefined;
+            context.requestIO = oldRequestIO;
+
+            return metrics;
+        }
     });
 }
 
@@ -244,14 +263,7 @@ export function getSettingSummary(context: CommandHandlerContext) {
 }
 
 export function getTranslatorNameToEmojiMap(context: CommandHandlerContext) {
-    const emojis = context.agents
-        .getTranslatorConfigs()
-        .map(([name, config]) => [name, config.emojiChar] as const);
-
-    const tMap = new Map<string, string>(emojis);
-    tMap.set(DispatcherName, "🤖");
-    tMap.set(SwitcherName, "↔️");
-    return tMap;
+    return new Map<string, string>(Object.entries(context.agents.getEmojis()));
 }
 
 export function getPrompt(context: CommandHandlerContext) {

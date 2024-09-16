@@ -1,76 +1,79 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { log } from "node:console";
 import {
-    DispatcherCommandHandler,
-    DispatcherHandlerTable,
-} from "./common/commandHandler.js";
+    CommandHandler,
+    CommandHandlerTable,
+} from "@typeagent/agent-sdk/helpers/commands";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
-import { processCommandNoLock } from "../command.js";
 import { NotifyCommands } from "./common/interactiveIO.js";
+import { ActionContext } from "@typeagent/agent-sdk";
 
-class NotifyInfoCommandHandler implements DispatcherCommandHandler {
+class NotifyInfoCommandHandler implements CommandHandler {
     description: string = "Shows the number of notifications available";
     help?: string;
     public async run(
         request: string,
-        context: CommandHandlerContext,
+        context: ActionContext<CommandHandlerContext>,
     ): Promise<void> {
-        context.requestIO.notify(
+        const systemContext = context.sessionContext.agentContext;
+        systemContext.requestIO.notify(
             "showNotifications",
-            context.requestId,
+            systemContext.requestId,
             NotifyCommands.ShowSummary,
         );
     }
 }
 
-class NotifyClearCommandHandler implements DispatcherCommandHandler {
+class NotifyClearCommandHandler implements CommandHandler {
     description: string = "Clears notifications";
     help?: string;
     public async run(
         request: string,
-        context: CommandHandlerContext,
+        context: ActionContext<CommandHandlerContext>,
     ): Promise<void> {
-        context.requestIO.notify(
+        const systemContext = context.sessionContext.agentContext;
+        systemContext.requestIO.notify(
             "showNotifications",
-            context.requestId,
+            systemContext.requestId,
             NotifyCommands.Clear,
         );
     }
 }
 
-class NotifyShowUnreadCommandHandler implements DispatcherCommandHandler {
+class NotifyShowUnreadCommandHandler implements CommandHandler {
     description: string = "Shows unread notifications";
     help?: string;
     public async run(
         request: string,
-        context: CommandHandlerContext,
+        context: ActionContext<CommandHandlerContext>,
     ): Promise<void> {
-        context.requestIO.notify(
+        const systemContext = context.sessionContext.agentContext;
+        systemContext.requestIO.notify(
             "showNotifications",
-            context.requestId,
+            systemContext.requestId,
             NotifyCommands.ShowUnread,
         );
     }
 }
 
-class NotifyShowAllCommandHandler implements DispatcherCommandHandler {
+class NotifyShowAllCommandHandler implements CommandHandler {
     description: string = "Shows all notifications";
     help?: string;
     public async run(
         request: string,
-        context: CommandHandlerContext,
+        context: ActionContext<CommandHandlerContext>,
     ): Promise<void> {
-        context.requestIO.notify(
+        const systemContext = context.sessionContext.agentContext;
+        systemContext.requestIO.notify(
             "showNotifications",
-            context.requestId,
+            systemContext.requestId,
             NotifyCommands.ShowAll,
         );
     }
 }
 
-export function getNotifyCommandHandlers(): DispatcherHandlerTable {
+export function getNotifyCommandHandlers(): CommandHandlerTable {
     return {
         description: "Notify commands",
         defaultSubCommand: new NotifyInfoCommandHandler(),

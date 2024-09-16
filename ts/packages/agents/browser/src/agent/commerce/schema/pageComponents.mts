@@ -1,11 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type ElementSelector = {
-  // CSS Selector for the interactive element on the page
-  cssSelector: string;
-};
-
 export type AddToCartButton = {
   // css selector for the add to cart button
   cssSelector: string;

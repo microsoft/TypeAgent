@@ -179,55 +179,6 @@ importers:
         specifier: ^5.0.5
         version: 5.0.5
 
-  examples/siteSchemas:
-    dependencies:
-      aiclient:
-        specifier: workspace:*
-        version: link:../../packages/aiclient
-      common-utils:
-        specifier: workspace:*
-        version: link:../../packages/commonUtils
-      copyfiles:
-        specifier: ^2.4.1
-        version: 2.4.1
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.3.1
-      find-config:
-        specifier: ^1.0.0
-        version: 1.0.0
-      jsonpath:
-        specifier: ^1.1.1
-        version: 1.1.1
-      typeagent:
-        specifier: workspace:*
-        version: link:../../packages/typeagent
-      typechat:
-        specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.3)
-      typescript:
-        specifier: ^5.4.2
-        version: 5.4.3
-      ws:
-        specifier: ^8.17.1
-        version: 8.17.1
-    devDependencies:
-      '@types/find-config':
-        specifier: 1.0.4
-        version: 1.0.4
-      '@types/jsonpath':
-        specifier: ^0.2.4
-        version: 0.2.4
-      '@types/node':
-        specifier: ^18.18.7
-        version: 18.18.7
-      '@types/ws':
-        specifier: ^8.5.10
-        version: 8.5.10
-      rimraf:
-        specifier: ^5.0.5
-        version: 5.0.5
-
   examples/whisperClient:
     dependencies:
       chalk:
@@ -1016,6 +967,9 @@ importers:
 
   packages/commonUtils:
     dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../agentSdk
       aiclient:
         specifier: workspace:*
         version: link:../aiclient

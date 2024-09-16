@@ -58,8 +58,8 @@ function addEvents(
             }
         }
     });
-    api.onResponse((_, agentMessage, append) => {
-        chatView.addAgentMessage(agentMessage, { append });
+    api.onUpdateDisplay((_, agentMessage, appendMode) => {
+        chatView.addAgentMessage(agentMessage, { appendMode });
     });
     api.onSetDynamicActionDisplay(
         (_, source, id, actionIndex, displayId, nextRefreshMs) =>
@@ -82,9 +82,6 @@ function addEvents(
     });
     api.onClear((_) => {
         chatView.clear();
-    });
-    api.onStatusMessage((_, message, temporary) => {
-        chatView.showStatusMessage(message, temporary);
     });
     api.onMarkRequestExplained((_, id, timestamp, fromCache) => {
         chatView.markRequestExplained(id, timestamp, fromCache);
@@ -122,8 +119,8 @@ function addEvents(
         chatView.addUserMessage(`@random`);
     });
     api.onShowDialog((_, key) => {
-        if (key == "Settings") {
-            settingsView.showTabs();
+        if (key.toLocaleLowerCase() == "settings") {
+            tabsView.showTab(key);
         }
 
         tabsView.showTab(key);
@@ -293,7 +290,7 @@ document.addEventListener("DOMContentLoaded", function () {
         cameraView.toggleVisibility();
     };
 
-    const settingsView = new SettingsView(tabs, chatView);
+    const settingsView = new SettingsView(chatView);
     tabs.getTabContainerByName("Settings").append(settingsView.getContainer());
     tabs.getTabContainerByName("Metrics").append(
         new MetricsView().getContainer(),

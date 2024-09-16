@@ -11,6 +11,8 @@ import {
     TokenCachePersistence,
     ActionIO,
     DisplayType,
+    DisplayContent,
+    DisplayAppendMode,
     AppAgentEvent,
 } from "@typeagent/agent-sdk";
 
@@ -316,16 +318,17 @@ function getActionContextShim(
         get type(): DisplayType {
             return "text";
         },
-        setDisplay(content: string): void {
+        setDisplay(content: DisplayContent): void {
             rpc.send("setDisplay", {
                 actionContextId,
                 content,
             });
         },
-        appendDisplay(content: string): void {
+        appendDisplay(content: DisplayContent, mode: DisplayAppendMode): void {
             rpc.send("appendDisplay", {
                 actionContextId,
                 content,
+                mode,
             });
         },
     };
@@ -337,12 +340,6 @@ function getActionContextShim(
         },
         get actionIO() {
             return actionIO;
-        },
-        performanceMark: (name: string): void => {
-            rpc.send("performanceMark", {
-                actionContextId,
-                name,
-            });
         },
     };
 }
