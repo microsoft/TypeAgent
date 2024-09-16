@@ -170,6 +170,7 @@ export type SessionConfig = Required<AppAgentState> &
 const defaultSessionConfig: SessionConfig = {
     translators: undefined,
     actions: undefined,
+    commands: undefined,
     explainerName: getDefaultExplainerName(),
     models: {
         translator: "",

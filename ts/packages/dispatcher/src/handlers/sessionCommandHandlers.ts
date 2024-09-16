@@ -83,7 +83,6 @@ class SessionResetCommandHandler implements CommandHandler {
         request: string,
         context: ActionContext<CommandHandlerContext>,
     ) {
-        const systemContext = context.sessionContext.agentContext;
         await changeContextConfig(getDefaultSessionConfig(), context);
         displaySuccess(`Session settings revert to default.`, context);
     }
