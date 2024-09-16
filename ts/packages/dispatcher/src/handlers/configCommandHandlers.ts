@@ -9,7 +9,10 @@ import {
     CommandHandlerContext,
     changeContextConfig,
 } from "./common/commandHandlerContext.js";
-import { TranslatorConfigProvider } from "../translation/agentTranslators.js";
+import {
+    getAppAgentName,
+    TranslatorConfigProvider,
+} from "../translation/agentTranslators.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
 import { getServiceHostCommandHandlers } from "./serviceHost/serviceHostCommandHandler.js";
 import { getLocalWhisperCommandHandlers } from "./serviceHost/localWhisperCommandHandler.js";
@@ -100,7 +103,15 @@ function getAgentToggleOptions(
         case AgentToggle.Action:
             return { actions: options };
         case AgentToggle.Agent:
-            return { translators: options, actions: options };
+            return {
+                translators: options,
+                actions: options,
+                commands: Object.fromEntries(
+                    Object.entries(options).filter(
+                        ([name, _]) => getAppAgentName(name) === name,
+                    ),
+                ),
+            };
     }
 }
 

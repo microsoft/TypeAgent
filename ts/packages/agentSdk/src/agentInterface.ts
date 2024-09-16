@@ -9,6 +9,7 @@ import { Profiler } from "./profiler.js";
 //==============================================================================
 export type AppAgentManifest = {
     emojiChar: string;
+    commandDefaultEnabled?: boolean;
 } & TranslatorDefinition;
 
 export type SchemaDefinition = {
@@ -21,6 +22,7 @@ export type SchemaDefinition = {
 };
 
 export type TranslatorDefinition = {
+    defaultEnabled?: boolean;
     translationDefaultEnabled?: boolean;
     actionDefaultEnabled?: boolean;
     transient?: boolean; // whether the translator is transient, default is false

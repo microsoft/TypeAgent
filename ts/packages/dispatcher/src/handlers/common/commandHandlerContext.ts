@@ -50,7 +50,11 @@ import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
 import { ActionContext, AppAgentEvent, Profiler } from "@typeagent/agent-sdk";
 import { conversation as Conversation } from "knowledge-processor";
-import { AppAgentManager, AppAgentState } from "./appAgentManager.js";
+import {
+    AppAgentManager,
+    AppAgentState,
+    SetStateResult,
+} from "./appAgentManager.js";
 import { getBuiltinAppAgentProvider } from "../../agent/agentConfig.js";
 import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
@@ -309,6 +313,9 @@ async function setAppAgentStates(
         options,
     );
 
+    // Only rollback if user explicitly change state.
+    // Ignore the returned rollback state for initialization and keep the session setting as is.
+
     processSetAppAgentStateResult(result, context, (message) =>
         context.requestIO.notify(AppAgentEvent.Error, undefined, message),
     );
@@ -336,35 +343,34 @@ async function updateAppAgentStates(
         systemContext.session.setConfig(rollback);
     }
     const resultState: AppAgentState = {};
-    if (result.changed.translators.length !== 0) {
-        resultState.translators = Object.fromEntries(
-            result.changed.translators,
-        );
-    }
-    if (result.changed.actions.length !== 0) {
-        resultState.actions = Object.fromEntries(result.changed.actions);
+    for (const [stateName, changed] of Object.entries(result.changed)) {
+        if (changed.length !== 0) {
+            resultState[stateName as keyof AppAgentState] =
+                Object.fromEntries(changed);
+        }
     }
     return resultState;
 }
 
 function processSetAppAgentStateResult(
-    result: any,
+    result: SetStateResult,
     systemContext: CommandHandlerContext,
     cbError: (message: string) => void,
-) {
-    if (result.failed.actions.length !== 0) {
-        const rollback: AppAgentState = { actions: {} };
-        for (const [translatorName, enable, e] of result.failed.actions) {
+): AppAgentState | undefined {
+    let hasFailed = false;
+    const rollback = { actions: {}, commands: {} };
+    for (const [stateName, failed] of Object.entries(result.failed)) {
+        for (const [translatorName, enable, e] of failed) {
+            hasFailed = true;
             const prefix = getTranslatorPrefix(translatorName, systemContext);
             cbError(
-                `${prefix}: Failed to ${enable ? "enable" : "disable"} action: ${e.message}`,
+                `${prefix}: Failed to ${enable ? "enable" : "disable"} ${stateName}: ${e.message}`,
             );
-            rollback.actions![translatorName] = !enable;
+            (rollback as any)[stateName][translatorName] = !enable;
         }
-        return rollback;
     }
 
-    return undefined;
+    return hasFailed ? rollback : undefined;
 }
 
 export async function closeCommandHandlerContext(
