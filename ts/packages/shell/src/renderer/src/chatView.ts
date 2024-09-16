@@ -238,6 +238,7 @@ class MessageContainer {
     private ttsMetricsDiv?: HTMLDivElement;
     private lastAppendMode?: DisplayAppendMode;
     private completed = false;
+
     public get source() {
         return this._source;
     }
@@ -246,6 +247,7 @@ class MessageContainer {
         private _source: string,
         agents: Map<string, string>,
         beforeElem: Element,
+        private hideMetrics,
     ) {
         const div = document.createElement("div");
         div.className = className;
@@ -267,7 +269,10 @@ class MessageContainer {
         this.iconDiv = agentIconDiv;
 
         const messageBodyDiv = document.createElement("div");
-        messageBodyDiv.className = "chat-message-agent";
+        const bodyClass = this.hideMetrics
+            ? "chat-message-body-hide-metrics"
+            : "chat-message-body";
+        messageBodyDiv.className = `${bodyClass} chat-message-agent`;
         div.append(messageBodyDiv);
         this.messageBodyDiv = messageBodyDiv;
 
@@ -340,7 +345,8 @@ class MessageContainer {
     private ensureMetricsDiv() {
         if (this.metricsDetailDiv === undefined) {
             const metricsContainer = document.createElement("div");
-            metricsContainer.className = "chat-message-metrics-left";
+            metricsContainer.className =
+                "chat-message-metrics chat-message-metrics-left";
             this.messageBodyDiv.append(metricsContainer);
 
             const metricsDetails = document.createElement("div");
@@ -380,6 +386,22 @@ class MessageContainer {
     public scrollIntoView() {
         this.div.scrollIntoView(false);
     }
+
+    public setMetricsVisible(visible: boolean) {
+        this.hideMetrics = !visible;
+        updateMetricsVisibility(visible, this.messageBodyDiv);
+    }
+}
+
+function updateMetricsVisibility(visible: boolean, div: HTMLDivElement) {
+    const addClass = visible
+        ? "chat-message-body"
+        : "chat-message-body-hide-metrics";
+    const removeClass = visible
+        ? "chat-message-body-hide-metrics"
+        : "chat-message-body";
+    div.classList.remove(removeClass);
+    div.classList.add(addClass);
 }
 
 class MessageGroup {
@@ -396,6 +418,7 @@ class MessageGroup {
         requestPromise: Promise<RequestMetrics | undefined>,
         timeStamp: Date,
         public agents: Map<string, string>,
+        private hideMetrics,
     ) {
         const userMessageContainer = document.createElement("div");
         userMessageContainer.className = "chat-message-right";
@@ -407,7 +430,10 @@ class MessageGroup {
         userMessageContainer.appendChild(timeStampDiv);
 
         const userMessageBody = document.createElement("div");
-        userMessageBody.className = "chat-message-user";
+        const bodyClass = this.hideMetrics
+            ? "chat-message-body-hide-metrics"
+            : "chat-message-body";
+        userMessageBody.className = `${bodyClass} chat-message-user`;
         userMessageContainer.appendChild(userMessageBody);
 
         const userMessage = document.createElement("div");
@@ -433,6 +459,14 @@ class MessageGroup {
             .catch((error) => this.requestException(error));
     }
 
+    public setMetricsVisible(visible: boolean) {
+        this.hideMetrics = !visible;
+        updateMetricsVisibility(visible, this.userMessageBody);
+        this.statusMessage?.setMetricsVisible(visible);
+        for (const agentMessage of this.agentMessages) {
+            agentMessage.setMetricsVisible(visible);
+        }
+    }
     private requestCompleted(metrics: RequestMetrics | undefined) {
         this.updateMetrics(metrics);
         if (this.statusMessage === undefined) {
@@ -477,6 +511,7 @@ class MessageGroup {
                 source,
                 this.agents,
                 this.userMessageContainer,
+                this.hideMetrics,
             );
         }
 
@@ -502,7 +537,8 @@ class MessageGroup {
             if (metrics.parse !== undefined) {
                 if (this.userMetricsDiv === undefined) {
                     const metricsContainer = document.createElement("div");
-                    metricsContainer.className = "chat-message-metrics-right";
+                    metricsContainer.className =
+                        "chat-message-metrics chat-message-metrics-right";
                     this.userMessageBody.append(metricsContainer);
 
                     this.userMetricsDiv = document.createElement("div");
@@ -552,6 +588,7 @@ class MessageGroup {
                         msg.source,
                         this.agents,
                         beforeElem.div,
+                        this.hideMetrics,
                     );
                     if (notification) {
                         newAgentMessage.div.classList.add("notification");
@@ -799,6 +836,8 @@ export class ChatView {
     commandBackStackIndex = -1;
     registeredActions: Map<string, ActionInfo> = new Map<string, ActionInfo>();
     actionCascade: ActionCascade | undefined = undefined;
+
+    private hideMetrics = true;
     constructor(
         private idGenerator: IdGenerator,
         public agents: Map<string, string>,
@@ -1270,6 +1309,7 @@ export class ChatView {
             getClientAPI().processShellRequest(requestText, id, images),
             new Date(),
             this.agents,
+            this.hideMetrics,
         );
 
         if (hidden) {
@@ -1485,6 +1525,13 @@ export class ChatView {
         input.dispatchEvent(keyboardEvent);
 
         (window as any).electron.ipcRenderer.send("send-input-text-complete");
+    }
+
+    public setMetricsVisible(visible: boolean) {
+        this.hideMetrics = !visible;
+        for (const messageGroup of this.idToMessageGroup.values()) {
+            messageGroup.setMetricsVisible(visible);
+        }
     }
 }
 

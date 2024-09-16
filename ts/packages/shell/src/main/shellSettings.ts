@@ -33,6 +33,7 @@ export class ShellSettings
     public ttsSettings: TTSSettings;
     public agentGreeting: boolean;
     public multiModalContent: boolean;
+    public devUI: boolean;
     public onSettingsChanged: EmptyFunction | null;
     public onShowSettingsDialog: ((dialogName: string) => void) | null;
     public onRunDemo: ((interactive: boolean) => void) | null;
@@ -73,6 +74,7 @@ export class ShellSettings
         this.ttsSettings = settings.ttsSettings;
         this.agentGreeting = settings.agentGreeting;
         this.multiModalContent = settings.multiModalContent;
+        this.devUI = settings.devUI;
 
         this.onSettingsChanged = null;
         this.onShowSettingsDialog = null;

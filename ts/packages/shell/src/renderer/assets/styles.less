@@ -218,12 +218,13 @@ body {
 
 .chat-message-user {
   .chat-message-body;
+  position: relative;
   background-color: lavender;
 }
 
 .chat-message-agent {
-  .chat-message-body;
-  margin-left: 30px;
+  left: 30px;
+  position: relative;
   background-color: #d6f3ff;
 }
 
@@ -259,12 +260,10 @@ body {
 
 .chat-message-metrics {
   margin: 0px;
-  padding: 5px;
   border-radius: 0px 0px 8px 8px;
   font-size: 8px;
   font-style: normal;
   z-index: 100;
-  position: relative;
   text-align: right;
 }
 
@@ -278,13 +277,43 @@ body {
   background-color: rgb(150, 150, 202);
 }
 
+/* hidden metrics */
+.chat-message-body-hide-metrics {
+  .chat-message-body;
+}
+.chat-message-body-hide-metrics .chat-message-metrics {
+  display: none;
+}
+
+.chat-message-body-hide-metrics:hover {
+  border-radius: 8px 8px 0px 0px;
+}
+
+.chat-message-body-hide-metrics:hover .chat-message-metrics {
+  display: block;
+  position: absolute;
+  width: 100%;
+  transform-origin: 0 0;
+  transform: scaleY(0);
+  animation: metrics 0.15s ease-out 0s forwards;
+}
+
+@keyframes metrics {
+  0% {
+  }
+  100% {
+    transform: scaleY(1);
+    overflow: visible;
+  }
+}
+
 .metrics-tts {
   text-align: left;
 }
 
 .metrics-details {
   display: inline-flex;
-  width: 100%;
+  margin: 5px;
   justify-content: space-between;
 }
 
