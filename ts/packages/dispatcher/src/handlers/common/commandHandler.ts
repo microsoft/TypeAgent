@@ -1,30 +1,24 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { ActionContext } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
-
-export interface CommandHandler {
-    description: string;
-    help?: string;
-    run(request: string, context: CommandHandlerContext): Promise<void>;
-}
-
-export type HandlerTable = {
-    description: string;
-    commands: {
-        [key: string]: CommandHandler | HandlerTable;
-    };
-    defaultSubCommand?: CommandHandler | undefined;
-};
+import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/commands";
 
 export function getToggleCommandHandlers(
     name: string,
-    toggle: (context: CommandHandlerContext, enable: boolean) => Promise<void>,
+    toggle: (
+        context: ActionContext<CommandHandlerContext>,
+        enable: boolean,
+    ) => Promise<void>,
 ) {
     return {
         on: {
             description: `Turn on ${name}`,
-            run: async (request: string, context: CommandHandlerContext) => {
+            run: async (
+                request: string,
+                context: ActionContext<CommandHandlerContext>,
+            ) => {
                 if (request !== "") {
                     throw new Error(`Invalid extra arguments: ${request}`);
                 }
@@ -33,7 +27,10 @@ export function getToggleCommandHandlers(
         },
         off: {
             description: `Turn off ${name}`,
-            run: async (request: string, context: CommandHandlerContext) => {
+            run: async (
+                request: string,
+                context: ActionContext<CommandHandlerContext>,
+            ) => {
                 if (request !== "") {
                     throw new Error(`Invalid extra arguments: ${request}`);
                 }
@@ -45,8 +42,11 @@ export function getToggleCommandHandlers(
 
 export function getToggleHandlerTable(
     name: string,
-    toggle: (context: CommandHandlerContext, enable: boolean) => Promise<void>,
-): HandlerTable {
+    toggle: (
+        context: ActionContext<CommandHandlerContext>,
+        enable: boolean,
+    ) => Promise<void>,
+): CommandHandlerTable {
     return {
         description: `Toggle ${name}`,
         defaultSubCommand: undefined,

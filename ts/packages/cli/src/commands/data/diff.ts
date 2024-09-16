@@ -6,7 +6,7 @@ import path from "node:path";
 import os from "node:os";
 import child_process from "node:child_process";
 import { Args, Command } from "@oclif/core";
-import { readTestData } from "agent-dispatcher";
+import { readTestData } from "agent-dispatcher/internal";
 
 export default class ExplanationDataDiffCommand extends Command {
     static args = {

@@ -79,7 +79,7 @@ export class AzureSpeech {
 
         if (!tokenResult.success) {
             throw new Error(
-                `AzureSpeech: getIdentityBasedTokenAsync: Failed to get identity based token! tokenResule: ${tokenResult}`,
+                `AzureSpeech: getIdentityBasedTokenAsync: Failed to get identity based token! tokenResult: ${tokenResult}`,
             );
         }
 

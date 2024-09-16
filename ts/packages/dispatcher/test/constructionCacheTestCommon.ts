@@ -18,7 +18,7 @@ import {
     createActionProps,
     normalizeParamValue,
 } from "agent-cache";
-import { loadTranslatorSchemaConfig } from "../src/utils/loadSchemaConfig.js";
+import { loadBuiltinTranslatorSchemaConfig } from "../src/translation/agentTranslators.js";
 import { glob } from "glob";
 import { fileURLToPath } from "node:url";
 
@@ -28,7 +28,7 @@ export async function getImportedCache(
 ) {
     const cache = getCacheFactory().create(
         explainerName,
-        loadTranslatorSchemaConfig,
+        loadBuiltinTranslatorSchemaConfig,
         {
             mergeMatchSets: merge,
             cacheConflicts: true,

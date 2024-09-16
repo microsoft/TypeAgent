@@ -2,10 +2,13 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { RequestCommandHandler } from "agent-dispatcher";
-import { initializeCommandHandlerContext } from "agent-dispatcher";
-import { getCacheFactory } from "agent-dispatcher";
-import { getTranslatorNames } from "agent-dispatcher";
+import { createDispatcher } from "agent-dispatcher";
+import {
+    getCacheFactory,
+    getBuiltinTranslatorNames,
+} from "agent-dispatcher/internal";
+import chalk from "chalk";
+import { readFileSync, existsSync } from "fs";
 
 export default class RequestCommand extends Command {
     static args = {
@@ -14,12 +17,16 @@ export default class RequestCommand extends Command {
                 "Request to translate and get an explanation of the translation",
             required: true,
         }),
+        attachment: Args.string({
+            description: "A path to a file to attach with the request",
+            required: false,
+        }),
     };
 
     static flags = {
         translator: Flags.string({
             description: "Translator name",
-            options: getTranslatorNames(),
+            options: getBuiltinTranslatorNames(),
             multiple: true,
         }),
         explainer: Flags.string({
@@ -39,14 +46,34 @@ export default class RequestCommand extends Command {
         const translators = flags.translator
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
-        const handler = new RequestCommandHandler();
-        await handler.run(
-            args.request,
-            await initializeCommandHandlerContext("cli run request", {
-                translators,
-                explainerName: flags.explainer,
-                cache: false,
-            }),
+        const dispatcher = await createDispatcher("cli run request", {
+            translators,
+            explainerName: flags.explainer,
+            cache: false,
+        });
+        await dispatcher.processCommand(
+            `@dispatcher request ${args.request}`,
+            undefined,
+            this.loadAttachment(args.attachment),
         );
+    }
+
+    loadAttachment(fileName: string | undefined): string[] | undefined {
+        if (fileName === undefined) {
+            return undefined;
+        }
+
+        if (!existsSync(fileName)) {
+            console.error(
+                chalk.red(`ERROR: The file '${fileName}' does not exist.`),
+            );
+
+            throw Error(`ERROR: The file '${fileName}' does not exist.`);
+        }
+
+        let retVal: string[] = new Array<string>();
+        retVal.push(Buffer.from(readFileSync(fileName)).toString("base64"));
+
+        return retVal;
     }
 }

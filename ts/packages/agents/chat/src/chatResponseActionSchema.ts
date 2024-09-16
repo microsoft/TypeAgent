@@ -11,25 +11,8 @@ export type Entity = {
 };
 
 export type ChatResponseAction =
-    | GenerateResponseAction
-    | LookupAndGenerateResponseAction;
-
-// use this GenerateResponseAction if the request should be handled by showing the user a generated message instead of running an action which will generate a message
-// this is the way to handle requests for general chat information like "what is the weather" or "tell me a joke"
-// prefer this action to switching to a different assistant if the request is for general chat information
-export interface GenerateResponseAction {
-    actionName: "generateResponse";
-    parameters: {
-        // the original request from the user
-        originalRequest: string;
-        // the generated text to show the user; this should be a complete response to the user's request
-        generatedText: string;
-        // ALL the actions and entities present in the text of the user's request
-        userRequestEntities: Entity[];
-        // ALL the actions and entities present in the generated text
-        generatedTextEntities: Entity[];
-    };
-}
+    | LookupAndGenerateResponseAction
+    | GenerateResponseAction;
 
 export type DateVal = {
     day: number;
@@ -71,12 +54,13 @@ export type TermFilter = {
     timeRange?: DateTimeRange | undefined; // in this time range
 };
 
+// this action is used to lookup information from past conversations or the internet and generate a response based on the lookup results, for example "what did we say about the project last week?" or "what is the current price of Microsoft stock?"
 export interface LookupAndGenerateResponseAction {
     actionName: "lookupAndGenerateResponse";
     parameters: {
         // the original request from the user
         originalRequest: string;
-        // if the request is for information from past conversations use the conversation lookup filters
+        // if the request is for private information from past conversations including private events, plans, projects in progress, and other items from discussions with team members or the assistant, use the conversation lookup filters
         conversationLookupFilters?: TermFilter[];
         // if the request is for contemporary internet information including sports scores, news events, or current commerce offerings, use the lookups parameter to request a lookup of the information on the user's behalf; the assistant will generate a response based on the lookup results
         // Lookup *facts* you don't know or if your facts are out of date.
@@ -84,5 +68,21 @@ export interface LookupAndGenerateResponseAction {
         // the search strings to look up on the user's behalf should be specific enough to return the correct information
         // it is recommended to include the same entities as in the user request
         internetLookups?: string[];
+    };
+}
+
+// this is the way to handle requests for known information that is not stored in application memory or conversation memory, such as facts, definitions, explanations, or other information that can be generated without a lookup
+// this action is never used when the request is for private information from past conversations including private events, plans, projects in progress, and other items from discussions with team members or the assistant, unless the information is present in the chat history
+export interface GenerateResponseAction {
+    actionName: "generateResponse";
+    parameters: {
+        // the original request from the user
+        originalRequest: string;
+        // the generated text to show the user; this should be a complete response to the user's request
+        generatedText: string;
+        // ALL the actions and entities present in the text of the user's request
+        userRequestEntities: Entity[];
+        // ALL the actions and entities present in the generated text
+        generatedTextEntities: Entity[];
     };
 }

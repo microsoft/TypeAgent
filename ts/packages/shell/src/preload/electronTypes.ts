@@ -2,6 +2,14 @@
 // Licensed under the MIT License.
 
 import { ElectronAPI } from "@electron-toolkit/preload";
+import {
+    AppAgentEvent,
+    DisplayAppendMode,
+    DynamicDisplay,
+} from "@typeagent/agent-sdk";
+import { ShellSettings } from "../main/shellSettings.js";
+import { IAgentMessage } from "agent-dispatcher";
+import { RequestMetrics } from "agent-dispatcher";
 
 export type SpeechToken = {
     token: string;
@@ -75,6 +83,19 @@ export type ActionTemplateSequence = {
     prefaceMultiple?: string;
 };
 
+export enum NotifyCommands {
+    ShowSummary = "summarize",
+    Clear = "clear",
+    ShowUnread = "unread",
+    ShowAll = "all",
+}
+
+export type EmptyFunction = () => void;
+export type SetSettingFunction = (name: string, value: any) => void;
+export interface ClientSettingsProvider {
+    set: SetSettingFunction | null;
+}
+
 // end duplicate type section
 
 export interface ClientAPI {
@@ -86,23 +107,27 @@ export interface ClientAPI {
             useLocalWhisper?: boolean,
         ) => void,
     ) => void;
-    processShellRequest: (request: string, id: string) => Promise<void>;
-    sendPartialInput: (text: string) => void;
-    onResponse(
+    processShellRequest: (
+        request: string,
+        id: string,
+        images: string[],
+    ) => Promise<RequestMetrics | undefined>;
+    getDynamicDisplay: (source: string, id: string) => Promise<DynamicDisplay>;
+    onUpdateDisplay(
         callback: (
             e: Electron.IpcRendererEvent,
-            response: string | undefined,
-            id: string,
-            source: string,
-            actionIndex?: number,
-            group_id?: string,
+            message: IAgentMessage,
+            mode?: DisplayAppendMode,
         ) => void,
     ): void;
-    onUpdate(
+    onSetDynamicActionDisplay(
         callback: (
             e: Electron.IpcRendererEvent,
-            updateMessage: string,
-            group_id: string,
+            source: string,
+            id: string,
+            actionIndex: number,
+            displayId: string,
+            nextRefreshMs: number,
         ) => void,
     ): void;
     onSetPartialInputHandler(
@@ -113,15 +138,6 @@ export interface ClientAPI {
             e: Electron.IpcRendererEvent,
             updateMessage: string,
             group_id: string,
-        ) => void,
-    ): void;
-    onStatusMessage(
-        callback: (
-            e: Electron.IpcRendererEvent,
-            message: string,
-            id: string,
-            source: string,
-            temporary: boolean,
         ) => void,
     ): void;
     onActionCommand(
@@ -198,16 +214,31 @@ export interface ClientAPI {
     onRandomMessageRequested(
         callback: (e: Electron.IpcRendererEvent, key: string) => void,
     ): void;
-    onMicrophoneChangeRequested(
-        callback: (
-            e: Electron.IpcRendererEvent,
-            micId: string,
-            micName: string,
-        ) => void,
-    ): void;
     onShowDialog(
         callback: (e: Electron.IpcRendererEvent, key: string) => void,
     ): void;
+    onSettingsChanged(
+        callback: (
+            e: Electron.IpcRendererEvent,
+            settings: ShellSettings,
+        ) => void,
+    );
+    onNotificationCommand(
+        callback: (
+            e: Electron.IpcRendererEvent,
+            requestId: string,
+            command: string,
+        ) => void,
+    );
+    onNotify(
+        callback: (
+            e: Electron.IpcRendererEvent,
+            event: AppAgentEvent,
+            requestId: string,
+            source: string,
+            data: any,
+        ) => void,
+    );
 }
 
 export interface ElectronWindowFields {

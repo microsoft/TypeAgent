@@ -1,9 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DispatcherAgentContext } from "@typeagent/agent-sdk";
-
-import { BrowserActionContext } from "../browserActionHandler.mjs";
+import { ActionContext } from "@typeagent/agent-sdk";
+import { BrowserActionContext } from "../actionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
 import { createCommercePageTranslator } from "./translator.mjs";
 import {
@@ -14,16 +13,17 @@ import {
 
 export async function handleCommerceAction(
   action: any,
-  context: DispatcherAgentContext<BrowserActionContext>,
+  context: ActionContext<BrowserActionContext>,
 ) {
   let message = "OK";
-  if (!context.context.browserConnector) {
+  if (!context.sessionContext.agentContext.browserConnector) {
     throw new Error("No connection to browser session.");
   }
 
-  const browser: BrowserConnector = context.context.browserConnector;
+  const browser: BrowserConnector =
+    context.sessionContext.agentContext.browserConnector;
 
-  const agent = await createCommercePageTranslator("GPT_4_O");
+  const agent = await createCommercePageTranslator("GPT_4_O_MINI");
 
   switch (action.actionName) {
     case "searchForProductAction":
@@ -57,6 +57,7 @@ export async function handleCommerceAction(
 
     if (!response.success) {
       console.error("Attempt to get product tilefailed");
+      console.error(response.message);
       return;
     }
 

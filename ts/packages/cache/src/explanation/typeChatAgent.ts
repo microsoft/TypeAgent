@@ -25,7 +25,7 @@ export type TypeChatAgentResult<T extends object = object> =
     | TypeChatAgentSuccess<T>
     | TypeChatAgentError;
 
-const debugAgent = registerDebug("typeagent:agent:correction");
+const debugAgent = registerDebug("typeagent:typechatagent:correction");
 
 export type ValidationError = string | string[];
 

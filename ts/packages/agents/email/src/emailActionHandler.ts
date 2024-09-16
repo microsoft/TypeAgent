@@ -11,13 +11,14 @@ import {
 import { generateNotes } from "typeagent";
 import { openai } from "aiclient";
 import {
-    DispatcherAction,
-    DispatcherAgent,
-    DispatcherAgentContext,
-    createTurnImpressionFromDisplay,
+    ActionContext,
+    AppAction,
+    AppAgent,
+    SessionContext,
+    createActionResultFromHtmlDisplay,
 } from "@typeagent/agent-sdk";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeEmailContext,
         updateAgentContext: updateEmailContext,
@@ -37,30 +38,30 @@ async function initializeEmailContext() {
 
 async function updateEmailContext(
     enable: boolean,
-    context: DispatcherAgentContext<EmailActionContext>,
+    context: SessionContext<EmailActionContext>,
 ): Promise<void> {
     if (enable) {
-        context.context.mailClient = await createMailGraphClient();
+        context.agentContext.mailClient = await createMailGraphClient();
     } else {
-        context.context.mailClient = undefined;
+        context.agentContext.mailClient = undefined;
     }
 }
 
 async function executeEmailAction(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<EmailActionContext>,
+    action: AppAction,
+    context: ActionContext<EmailActionContext>,
 ) {
     let result = await handleEmailAction(action as EmailAction, context);
     if (result) {
-        return createTurnImpressionFromDisplay(result);
+        return createActionResultFromHtmlDisplay(result);
     }
 }
 
 async function handleEmailAction(
     action: EmailAction,
-    context: DispatcherAgentContext<EmailActionContext>,
+    context: ActionContext<EmailActionContext>,
 ) {
-    const { mailClient } = context.context;
+    const { mailClient } = context.sessionContext.agentContext;
     if (!mailClient || !mailClient?.isGraphClientInitialized()) {
         return "Not handling email actions ...";
     }

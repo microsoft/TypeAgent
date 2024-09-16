@@ -5,25 +5,46 @@ import { app } from "electron";
 import registerDebug from "debug";
 import { readFileSync, existsSync, writeFileSync } from "fs";
 import path from "path";
+import {
+    defaultSettings,
+    ShellSettingsType,
+    TTSSettings,
+} from "./shellSettingsType.js";
+import {
+    ClientSettingsProvider,
+    EmptyFunction,
+} from "../preload/electronTypes.js";
 
 const debugShell = registerDebug("typeagent:shell");
 
-export class ShellSettings {
+export class ShellSettings
+    implements ShellSettingsType, ClientSettingsProvider
+{
     private static instance: ShellSettings;
 
-    public size?: number[] = [900, 1200];
+    public size: number[];
     public position?: number[];
-    public zoomLevel: number = 1;
-    public devTools?: boolean = false;
+    public zoomLevel: number;
+    public devTools: boolean;
     public microphoneId?: string;
     public microphoneName?: string;
+    public notifyFilter: string;
+    public tts: boolean;
+    public ttsSettings: TTSSettings;
+    public agentGreeting: boolean;
+    public multiModalContent: boolean;
+    public devUI: boolean;
+    public onSettingsChanged: EmptyFunction | null;
+    public onShowSettingsDialog: ((dialogName: string) => void) | null;
+    public onRunDemo: ((interactive: boolean) => void) | null;
+    public toggleToopMost: EmptyFunction | null;
 
     public get width(): number | undefined {
-        return this.size ? this.size[0] : undefined;
+        return this.size[0];
     }
 
     public get height(): number | undefined {
-        return this.size ? this.size[1] : undefined;
+        return this.size[1];
     }
 
     public get x(): number | undefined {
@@ -34,20 +55,31 @@ export class ShellSettings {
         return this.position ? this.position[1] : undefined;
     }
 
-    private constructor() {
-        let settings = ShellSettings.load();
-
-        if (settings) {
-            if (settings.size) {
-                this.size = settings.size;
-            }
-
-            this.position = settings.position;
-            this.zoomLevel = settings.zoomLevel;
-            this.devTools = settings.devTools;
-            this.microphoneId = settings.microphoneId;
-            this.microphoneName = settings.microphoneName;
+    private constructor(settings: ShellSettingsType | null = null) {
+        if (settings === null) {
+            settings = {
+                ...defaultSettings,
+                ...ShellSettings.load(),
+            };
         }
+
+        this.size = settings.size;
+        this.position = settings.position;
+        this.zoomLevel = settings.zoomLevel;
+        this.devTools = settings.devTools;
+        this.microphoneId = settings.microphoneId;
+        this.microphoneName = settings.microphoneName;
+        this.notifyFilter = settings.notifyFilter;
+        this.tts = settings.tts;
+        this.ttsSettings = settings.ttsSettings;
+        this.agentGreeting = settings.agentGreeting;
+        this.multiModalContent = settings.multiModalContent;
+        this.devUI = settings.devUI;
+
+        this.onSettingsChanged = null;
+        this.onShowSettingsDialog = null;
+        this.onRunDemo = null;
+        this.toggleToopMost = null;
     }
 
     public static get filePath(): string {
@@ -62,7 +94,11 @@ export class ShellSettings {
         return ShellSettings.instance;
     };
 
-    private static load(): any {
+    public getSerializable(): ShellSettings {
+        return new ShellSettings(ShellSettings.getinstance());
+    }
+
+    private static load(): Partial<ShellSettingsType> | null {
         debugShell(
             `Loading shell settings from '${this.filePath}'`,
             performance.now(),
@@ -82,5 +118,53 @@ export class ShellSettings {
         );
 
         writeFileSync(ShellSettings.filePath, JSON.stringify(this));
+    }
+
+    public set(name: string, value: any) {
+        const t = typeof ShellSettings.getinstance()[name];
+
+        if (t === typeof value) {
+            ShellSettings.getinstance()[name] = value;
+        } else {
+            switch (t) {
+                case "string":
+                    ShellSettings.getinstance()[name] = value;
+                    break;
+                case "number":
+                    ShellSettings.getinstance()[name] = Number(value);
+                    break;
+                case "boolean":
+                    if (typeof value === t) {
+                    }
+                    ShellSettings.getinstance()[name] =
+                        value.toLowerCase() === "true" || value === "1";
+                    break;
+                case "object":
+                    ShellSettings.getinstance()[name] = JSON.parse(value);
+                    break;
+            }
+        }
+
+        if (ShellSettings.getinstance().onSettingsChanged != null) {
+            ShellSettings.getinstance().onSettingsChanged!();
+        }
+    }
+
+    public show(dialogName: string = "settings") {
+        if (ShellSettings.getinstance().onShowSettingsDialog != null) {
+            ShellSettings.getinstance().onShowSettingsDialog!(dialogName);
+        }
+    }
+
+    public runDemo(interactive: boolean = false) {
+        if (ShellSettings.getinstance().onRunDemo != null) {
+            ShellSettings.getinstance().onRunDemo!(interactive);
+        }
+    }
+
+    public toggleTopMost() {
+        if (ShellSettings.getinstance().toggleToopMost != null) {
+            ShellSettings.getinstance().toggleToopMost!();
+        }
     }
 }

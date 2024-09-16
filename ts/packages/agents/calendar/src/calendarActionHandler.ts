@@ -22,17 +22,16 @@ import {
     getNWeeksDateRangeISO,
 } from "./calendarQueryHelper.js";
 import {
-    DispatcherAgentContext,
-    Entity,
-    ImpressionInterpreter,
-    defaultImpressionInterpreter,
-    createTurnImpressionFromDisplay,
-    createTurnImpressionFromError,
-    DispatcherAction,
-    DispatcherAgent,
+    SessionContext,
+    createActionResultFromTextDisplay,
+    createActionResultFromHtmlDisplay,
+    createActionResultFromError,
+    AppAction,
+    AppAgent,
+    ActionContext,
 } from "@typeagent/agent-sdk";
 
-export function instantiate(): DispatcherAgent {
+export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeCalendarContext,
         updateAgentContext: updateCalendarContext,
@@ -49,7 +48,6 @@ type CalendarActionContext = {
     calendarClient: CalendarClient | undefined;
     graphEventIds: GraphEventRefIds[] | undefined;
     mapGraphEntity: Map<string, GraphEntity> | undefined;
-    interpreter: ImpressionInterpreter;
 };
 
 async function initializeCalendarContext() {
@@ -57,7 +55,6 @@ async function initializeCalendarContext() {
         calendarClient: undefined,
         graphEventIds: undefined,
         mapGraphEntity: undefined,
-        interpreter: createImpressionInterpreter(),
     };
 }
 
@@ -108,51 +105,29 @@ function getLocalEventId(
     return localEventId;
 }
 
-function createImpressionInterpreter(): ImpressionInterpreter {
-    return {
-        entityToText,
-        getEntityId,
-    };
-
-    function entityToText(entity: Entity): string {
-        const gentity = entity.value as GraphEntity;
-        return (
-            defaultImpressionInterpreter.entityToText(entity) +
-            "\n" +
-            JSON.stringify(gentity.localId, undefined, 2) +
-            "\n"
-        );
-    }
-
-    function getEntityId(entity: Entity): string | undefined {
-        const gentity = entity.value as GraphEntity;
-        return gentity ? gentity.localId : undefined;
-    }
-}
-
 async function updateCalendarContext(
     enable: boolean,
-    context: DispatcherAgentContext<CalendarActionContext>,
+    context: SessionContext<CalendarActionContext>,
 ): Promise<void> {
     if (enable) {
-        context.context.calendarClient = await createCalendarGraphClient();
+        context.agentContext.calendarClient = await createCalendarGraphClient();
 
-        if (context.context.calendarClient) {
-            context.context.graphEventIds = [];
-            context.context.mapGraphEntity = new Map();
+        if (context.agentContext.calendarClient) {
+            context.agentContext.graphEventIds = [];
+            context.agentContext.mapGraphEntity = new Map();
         }
     } else {
-        context.context.calendarClient = undefined;
+        context.agentContext.calendarClient = undefined;
     }
 }
 
 async function executeCalendarAction(
-    action: DispatcherAction,
-    context: DispatcherAgentContext<CalendarActionContext>,
+    action: AppAction,
+    context: ActionContext<CalendarActionContext>,
 ) {
     let result = await handleCalendarAction(
         action as CalendarAction,
-        context.context,
+        context.sessionContext.agentContext,
     );
     return result;
 }
@@ -292,7 +267,7 @@ export async function handleCalendarAction(
         !calendarContext.calendarClient ||
         !calendarContext.calendarClient?.isGraphClientInitialized()
     ) {
-        return createTurnImpressionFromDisplay(
+        return createActionResultFromTextDisplay(
             "Not handling calendar actions ...",
         );
     }
@@ -399,21 +374,17 @@ export async function handleCalendarAction(
                         console.log(displayText);
 
                         let result =
-                            createTurnImpressionFromDisplay(displayText);
+                            createActionResultFromHtmlDisplay(displayText);
 
                         if (result && localId) {
                             result.entities = [
                                 {
                                     name: `${actionEvent.description}`,
                                     type: ["event"],
-                                    value: calendarContext.mapGraphEntity?.get(
-                                        localId,
-                                    ) as any,
-                                    interpreter: calendarContext.interpreter,
-                                } as Entity, // Add 'as Entity' to specify the type
+                                    additionalEntityText: localId,
+                                    uniqueId: localId,
+                                },
                             ];
-                            result.impressionInterpreter =
-                                calendarContext.interpreter;
 
                             return result;
                         }
@@ -423,7 +394,7 @@ export async function handleCalendarAction(
                                 "Failed to add the event, please try again!",
                             ),
                         );
-                        return createTurnImpressionFromError(
+                        return createActionResultFromError(
                             "Failed to add the event, please try again!",
                         );
                     }
@@ -435,7 +406,7 @@ export async function handleCalendarAction(
                                 : err,
                         ),
                     );
-                    return createTurnImpressionFromError(err);
+                    return createActionResultFromError(err);
                 }
             } else {
                 console.log(
@@ -445,7 +416,7 @@ export async function handleCalendarAction(
                             : err,
                     ),
                 );
-                return createTurnImpressionFromError(err);
+                return createActionResultFromError(err);
             }
             break;
 
@@ -498,7 +469,7 @@ export async function handleCalendarAction(
                     const err =
                         "Please provide a valid date and time range to search for events.";
                     console.log(chalk.bgYellowBright(err));
-                    return createTurnImpressionFromError(err);
+                    return createActionResultFromError(err);
                 }
             } else if (actionEvent && actionEvent.description) {
                 let findResults =
@@ -564,13 +535,13 @@ export async function handleCalendarAction(
                     const err =
                         "Please provide a valid date and time range to search for events.";
                     console.log(chalk.bgYellowBright(err));
-                    return createTurnImpressionFromError(err);
+                    return createActionResultFromError(err);
                 }
             } else {
                 const err =
                     "Please provide participant and  valid date and time range to search for events.";
                 console.log(chalk.bgYellowBright(err));
-                return createTurnImpressionFromError(err);
+                return createActionResultFromError(err);
             }
             break;
 
@@ -632,20 +603,16 @@ export async function handleCalendarAction(
                     );
                     console.log(displayText);
 
-                    let result = createTurnImpressionFromDisplay(displayText);
+                    let result = createActionResultFromHtmlDisplay(displayText);
                     if (result && localId) {
                         result.entities = [
                             {
                                 name: `${actionEvent.description}`,
                                 type: ["event"],
-                                value: calendarContext.mapGraphEntity?.get(
-                                    localId,
-                                ) as any,
-                                interpreter: calendarContext.interpreter,
-                            } as Entity,
+                                additionalEntityText: localId,
+                                uniqueId: localId,
+                            },
                         ];
-                        result.impressionInterpreter =
-                            calendarContext.interpreter;
                         return result;
                     }
                 } else {
@@ -654,7 +621,7 @@ export async function handleCalendarAction(
                             "Failed to add the event, please try again!",
                         ),
                     );
-                    return createTurnImpressionFromError(
+                    return createActionResultFromError(
                         "Failed to add the event, please try again!",
                     );
                 }
@@ -723,7 +690,7 @@ export async function handleCalendarAction(
                                     console.log(displayText);
 
                                     let result =
-                                        createTurnImpressionFromDisplay(
+                                        createActionResultFromHtmlDisplay(
                                             displayText,
                                         );
 
@@ -731,15 +698,11 @@ export async function handleCalendarAction(
                                         {
                                             name: `${meeting.subject}`,
                                             type: ["event"],
-                                            value: calendarContext.mapGraphEntity?.get(
+                                            additionalEntityText:
                                                 lastLocalEventId,
-                                            ) as any,
-                                            interpreter:
-                                                calendarContext.interpreter,
-                                        } as Entity,
+                                            uniqueId: lastLocalEventId,
+                                        },
                                     ];
-                                    result.impressionInterpreter =
-                                        calendarContext.interpreter;
                                     return result;
                                 } else {
                                     // Could happen because the calendar event was deleted
@@ -752,11 +715,11 @@ export async function handleCalendarAction(
                                             calendarContext,
                                         );
 
-                                        return createTurnImpressionFromError(
+                                        return createActionResultFromError(
                                             "Looks like the event was deleted, please try again!",
                                         );
                                     } else {
-                                        return createTurnImpressionFromError(
+                                        return createActionResultFromError(
                                             "Failed to add the participants to the event, please try again!",
                                         );
                                     }
@@ -772,7 +735,7 @@ export async function handleCalendarAction(
             console.log(chalk.gray("UNKNOWN action type:"));
             break;
     }
-    return createTurnImpressionFromError("Failed to execute the action!");
+    return createActionResultFromError("Failed to execute the action!");
 }
 
 async function populateMeetingDetailsFromEvent(
@@ -782,22 +745,16 @@ async function populateMeetingDetailsFromEvent(
     if (events instanceof Array) {
         if (events && events.length > 0) {
             const displayText = findEventsDisplayHtml(events);
-            const literalText = `Action calendar.${actionName} completed.`;
-            let result = createTurnImpressionFromDisplay(displayText);
-            result.literalText = literalText;
+            let result = createActionResultFromHtmlDisplay(displayText);
             return result;
         } else {
             const displayText = `You have a meeting free day 😊`;
-            const literalText = `Action calendar.${actionName} completed.`;
-            let result = createTurnImpressionFromDisplay(displayText);
-            result.literalText = literalText;
+            let result = createActionResultFromTextDisplay(displayText);
             return result;
         }
     } else {
         const displayText = findEventsDisplayHtml(events);
-        const literalText = `Action calendar.${actionName} completed.`;
-        let result = createTurnImpressionFromDisplay(displayText);
-        result.literalText = literalText;
+        let result = createActionResultFromHtmlDisplay(displayText);
         return result;
     }
 }

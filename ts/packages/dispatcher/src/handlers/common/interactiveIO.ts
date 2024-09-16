@@ -5,7 +5,17 @@ import { askYesNo } from "../../utils/interactive.js";
 import readline from "readline/promises";
 import { SearchMenuItem, ActionTemplateSequence } from "common-utils";
 import chalk from "chalk";
+import { CommandHandlerContext } from "./commandHandlerContext.js";
+import {
+    ActionContext,
+    AppAgentEvent,
+    DisplayContent,
+    DisplayAppendMode,
+    DisplayMessageKind,
+} from "@typeagent/agent-sdk";
+import { RequestMetrics } from "../../utils/metrics.js";
 
+export const DispatcherName = "dispatcher";
 export type RequestId = string | undefined;
 
 export type SearchMenuCommand =
@@ -20,6 +30,13 @@ export type ActionUICommand = "register" | "replace" | "remove";
 
 export type SearchMenuState = "active" | "inactive";
 
+export enum NotifyCommands {
+    ShowSummary = "summarize",
+    Clear = "clear",
+    ShowUnread = "unread",
+    ShowAll = "all",
+}
+
 export type SearchMenuContext = {
     state: SearchMenuState;
     menuId: string;
@@ -27,15 +44,17 @@ export type SearchMenuContext = {
     choices?: string[];
 };
 
+export interface IAgentMessage {
+    message: DisplayContent;
+    requestId?: string | undefined;
+    source: string;
+    actionIndex?: number | undefined;
+    metrics?: RequestMetrics | undefined;
+}
+
 // Client provided IO
 export interface ClientIO {
     clear(): void;
-    info(message: string, requestId: RequestId, source: string): void;
-    status(message: string, requestId: RequestId, source: string): void;
-    success(message: string, requestId: RequestId, source: string): void;
-    result(message: string, requestId: RequestId, source: string): void;
-    warn(message: string, requestId: RequestId, source: string): void;
-    error(message: string, requestId: RequestId, source: string): void;
     actionCommand(
         actionTemplates: ActionTemplateSequence,
         command: ActionUICommand,
@@ -48,14 +67,8 @@ export interface ClientIO {
         choices?: SearchMenuItem[],
         visible?: boolean,
     ): void;
-    setActionStatus(
-        message: string,
-        requestId: RequestId,
-        source: string,
-        actionIndex: number,
-        groupId?: string,
-    ): void;
-    updateActionStatus(message: string, groupId: string): void;
+    setDisplay(message: IAgentMessage): void;
+    appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void;
     askYesNo(
         message: string,
         requestId: RequestId,
@@ -65,7 +78,12 @@ export interface ClientIO {
         message: string,
         requestId: RequestId,
     ): Promise<string | undefined>;
-    notify(event: string, requestId: RequestId, data: any): void;
+    notify(
+        event: string,
+        requestId: RequestId,
+        data: any,
+        source: string,
+    ): void;
     notify(
         event: "explained",
         requestId: RequestId,
@@ -74,34 +92,50 @@ export interface ClientIO {
             fromCache: boolean;
             fromUser: boolean;
         },
+        source: string,
     ): void;
-
+    setDynamicDisplay(
+        source: string,
+        requestId: RequestId,
+        actionIndex: number,
+        displayId: string,
+        nextRefreshMs: number,
+    ): void;
     exit(): void;
 }
 
 // Dispatcher request specific IO
 
 type LogFn = (log: (message?: string) => void) => void;
-function getMessage(input: string | LogFn) {
-    return typeof input === "function" ? gatherMessages(input) : input;
+function getMessage(
+    input: string | string[] | LogFn,
+    kind?: DisplayMessageKind,
+): DisplayContent {
+    const content =
+        typeof input === "function"
+            ? gatherMessages(input)
+            : Array.isArray(input)
+              ? input.join("\n")
+              : input;
+    return kind ? { type: "text", content, kind } : content;
 }
 
 export interface RequestIO {
     type: "html" | "text";
+    context: CommandHandlerContext | undefined;
     clear(): void;
-    info(message: string | LogFn): void;
-    status(message: string | LogFn): void;
-    success(message: string | LogFn): void;
-    warn(message: string | LogFn): void;
-    error(message: string | LogFn): void;
-    result(message: string | LogFn): void;
 
     // Action status
-    setActionStatus(
-        message: string,
-        actionIndex: number,
+    setDisplay(
+        message: DisplayContent,
+        actionIndex: number | undefined,
         source: string,
-        groupId?: string,
+    ): void;
+    appendDisplay(
+        message: DisplayContent,
+        actionIndex: number | undefined,
+        source: string,
+        mode: DisplayAppendMode,
     ): void;
 
     // Input
@@ -115,13 +149,75 @@ export interface RequestIO {
     ): Promise<string | undefined>;
     notify(
         event: "explained",
+        requestId: RequestId,
         data: {
             time: string;
             fromCache: boolean;
             fromUser: boolean;
         },
     ): void;
-    notify(event: "randomCommandSelected", data: { message: string }): void;
+    notify(
+        event: "randomCommandSelected",
+        requestId: RequestId,
+        data: { message: string },
+    ): void;
+    notify(
+        event: AppAgentEvent,
+        requestId: RequestId,
+        message: string,
+        source?: string,
+    ): void;
+    notify(
+        event: "showNotifications",
+        requestId: RequestId,
+        filter: NotifyCommands,
+    ): void;
+}
+
+let lastAppendMode: DisplayAppendMode | undefined;
+function displayContent(
+    content: DisplayContent,
+    appendMode?: DisplayAppendMode,
+) {
+    let message: string;
+    if (typeof content === "string") {
+        message = content;
+    } else {
+        // TODO: should reject html content
+        message = content.content;
+        switch (content.kind) {
+            case "status":
+                message = chalk.grey(content.content);
+                break;
+            case "error":
+                message = chalk.red(content.content);
+                break;
+            case "warning":
+                message = chalk.yellow(content.content);
+                break;
+            case "info":
+                message = chalk.grey(content.content);
+                break;
+            case "success":
+                message = chalk.greenBright(content.content);
+                break;
+            default:
+                message = chalk.green(content.content);
+                break;
+        }
+    }
+
+    if (appendMode !== "inline") {
+        if (lastAppendMode === "inline") {
+            process.stdout.write("\n");
+        }
+        process.stdout.write(message);
+        process.stdout.write("\n");
+    } else {
+        process.stdout.write(message);
+    }
+
+    lastAppendMode = appendMode;
 }
 
 export function getConsoleRequestIO(
@@ -129,19 +225,16 @@ export function getConsoleRequestIO(
 ): RequestIO {
     return {
         type: "text",
+        context: undefined,
         clear: () => console.clear(),
-        info: (input: string | LogFn) => console.info(getMessage(input)),
-        status: (input: string | LogFn) =>
-            console.log(chalk.gray(getMessage(input))),
-        success: (input: string | LogFn) =>
-            console.log(chalk.greenBright(getMessage(input))),
-        result: (input: string | LogFn) => console.log(getMessage(input)),
-        warn: (input: string | LogFn) =>
-            console.warn(chalk.yellow(getMessage(input))),
-        error: (input: string | LogFn) =>
-            console.error(chalk.red(getMessage(input))),
+        setDisplay: (content: DisplayContent) => displayContent(content),
 
-        setActionStatus: (status: string) => console.log(chalk.grey(status)),
+        appendDisplay: (
+            content: DisplayContent,
+            _actionIndex: number | undefined,
+            _source: string,
+            mode: DisplayAppendMode,
+        ) => displayContent(content, mode),
 
         isInputEnabled: () => stdio !== undefined,
         askYesNo: async (message: string, defaultValue?: boolean) => {
@@ -150,45 +243,81 @@ export function getConsoleRequestIO(
         question: async (message: string) => {
             return await stdio?.question(`${message}: `);
         },
-        notify: (event: string, data: any) => {
-            // ignored.
+        notify: (event: string, requestId: RequestId, data: any) => {
+            switch (event) {
+                case AppAgentEvent.Error:
+                    console.error(chalk.red(data));
+                    break;
+                case AppAgentEvent.Warning:
+                    console.warn(chalk.yellow(data));
+                    break;
+                case AppAgentEvent.Info:
+                    console.info(data);
+                    break;
+                default:
+                // ignored.
+            }
         },
     };
 }
 
-export function getRequestIO(
-    clientIO: ClientIO,
+function makeClientIOMessage(
+    context: CommandHandlerContext | undefined,
+    message: DisplayContent,
     requestId: RequestId,
     source: string,
+    actionIndex?: number,
+): IAgentMessage {
+    return {
+        message,
+        requestId,
+        source,
+        actionIndex,
+        metrics:
+            requestId !== undefined
+                ? context?.metricsManager?.getMetrics(requestId)
+                : undefined,
+    };
+}
+
+export function getRequestIO(
+    context: CommandHandlerContext | undefined,
+    clientIO: ClientIO,
 ): RequestIO {
+    const requestId = context?.requestId;
     return {
         type: "html",
+        context: context,
         clear: () => clientIO.clear(),
-        info: (input: string | LogFn) =>
-            clientIO.info(getMessage(input), requestId, source),
-        status: (input: string | LogFn) =>
-            clientIO.status(chalk.grey(getMessage(input)), requestId, source),
-        success: (input: string | LogFn) =>
-            clientIO.success(chalk.green(getMessage(input)), requestId, source),
-        warn: (input: string | LogFn) =>
-            clientIO.warn(chalk.yellow(getMessage(input)), requestId, source),
-        error: (input: string | LogFn) =>
-            clientIO.error(chalk.red(getMessage(input)), requestId, source),
-        result: (input: string | LogFn) =>
-            clientIO.result(getMessage(input), requestId, source),
-
-        setActionStatus: (
-            status: string,
+        setDisplay: (
+            content: DisplayContent,
             actionIndex: number,
             source: string,
-            groupId?: string,
         ) =>
-            clientIO.setActionStatus(
-                status,
-                requestId,
-                source,
-                actionIndex,
-                groupId,
+            clientIO.setDisplay(
+                makeClientIOMessage(
+                    context,
+                    content,
+                    requestId,
+                    source,
+                    actionIndex,
+                ),
+            ),
+        appendDisplay: (
+            content: DisplayContent,
+            actionIndex: number,
+            source: string,
+            mode: DisplayAppendMode,
+        ) =>
+            clientIO.appendDisplay(
+                makeClientIOMessage(
+                    context,
+                    content,
+                    requestId,
+                    source,
+                    actionIndex,
+                ),
+                mode,
             ),
 
         isInputEnabled: () => true,
@@ -196,8 +325,13 @@ export function getRequestIO(
             clientIO.askYesNo(message, requestId, defaultValue),
         question: async (message: string) =>
             clientIO.question(message, requestId),
-        notify(event: string, data: any) {
-            clientIO.notify(event, requestId, data);
+        notify(
+            event: string,
+            requestId: RequestId,
+            data: any,
+            source: string = DispatcherName,
+        ) {
+            clientIO.notify(event, requestId, data, source);
         },
     };
 }
@@ -205,14 +339,10 @@ export function getRequestIO(
 export function getNullRequestIO(): RequestIO {
     return {
         type: "text",
+        context: undefined,
         clear: () => {},
-        info: () => {},
-        status: () => {},
-        success: () => {},
-        warn: () => {},
-        error: () => {},
-        result: () => {},
-        setActionStatus: () => {},
+        setDisplay: () => {},
+        appendDisplay: () => {},
         isInputEnabled: () => false,
         askYesNo: async () => false,
         question: async () => undefined,
@@ -240,4 +370,55 @@ export async function gatherMessagesAsync(
     });
 
     return messages.join("\n");
+}
+
+function displayMessage(
+    message: string | string[] | LogFn,
+    context: ActionContext<unknown>,
+    kind?: DisplayMessageKind,
+    appendMode: DisplayAppendMode = "block",
+) {
+    context.actionIO.appendDisplay(getMessage(message, kind), appendMode);
+}
+
+export async function displayInfo(
+    message: string | string[] | LogFn,
+    context: ActionContext<unknown>,
+) {
+    displayMessage(message, context, "info");
+}
+
+export async function displayStatus(
+    message: string | string[] | LogFn,
+    context: ActionContext<unknown>,
+) {
+    displayMessage(message, context, "status", "temporary");
+}
+
+export async function displayWarn(
+    message: string | string[] | LogFn,
+    context: ActionContext<unknown>,
+) {
+    displayMessage(message, context, "warning");
+}
+
+export async function displayError(
+    message: string | string[] | LogFn,
+    context: ActionContext<unknown>,
+) {
+    displayMessage(message, context, "error");
+}
+
+export async function displaySuccess(
+    message: string | string[] | LogFn,
+    context: ActionContext<unknown>,
+) {
+    displayMessage(message, context, "success");
+}
+
+export async function displayResult(
+    message: string | string[] | LogFn,
+    context: ActionContext<unknown>,
+) {
+    displayMessage(message, context);
 }

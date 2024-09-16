@@ -1,79 +1,129 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type TopLevelTranslatorConfig = {
-    emojiChar: string;
-} & HierarchicalTranslatorConfig;
+import { ActionIO, DisplayType, DynamicDisplay } from "./display.js";
+import { Profiler } from "./profiler.js";
 
-export type HierarchicalTranslatorConfig = {
-    defaultEnabled?: boolean;
-    actionDefaultEnabled?: boolean;
-    schema?: {
-        description: string;
-        schemaFile: string;
-        schemaType: string;
-        constructions?: {
-            data: string[];
-            file: string;
-        };
-        translations?: string[];
-        dataFrameColumns?: { [key: string]: string };
-        injected?: boolean; // whether the translator is injected into other domains, default is false
-        cached?: boolean; // whether the translator's action should be cached, default is true
-        streamingActions?: string[];
-    };
-    subTranslators?: { [key: string]: HierarchicalTranslatorConfig };
+//==============================================================================
+// Manifest
+//==============================================================================
+export type AppAgentManifest = {
+    emojiChar: string;
+    commandDefaultEnabled?: boolean;
+} & TranslatorDefinition;
+
+export type SchemaDefinition = {
+    description: string;
+    schemaType: string;
+    schemaFile: string;
+    injected?: boolean; // whether the translator is injected into other domains, default is false
+    cached?: boolean; // whether the translator's action should be cached, default is true
+    streamingActions?: string[];
 };
 
-export interface DispatcherAction {
+export type TranslatorDefinition = {
+    defaultEnabled?: boolean;
+    translationDefaultEnabled?: boolean;
+    actionDefaultEnabled?: boolean;
+    transient?: boolean; // whether the translator is transient, default is false
+
+    schema?: SchemaDefinition;
+    subTranslators?: { [key: string]: TranslatorDefinition };
+};
+
+//==============================================================================
+// App Agent
+//==============================================================================
+export interface AppAction {
     actionName: string;
     translatorName?: string | undefined;
 }
 
-export interface DispatcherActionWithParameters extends DispatcherAction {
+export interface AppActionWithParameters extends AppAction {
     parameters: { [key: string]: any };
 }
 
-export interface DispatcherAgent {
+export type CommandDescriptor = {
+    description: string;
+    help?: string;
+};
+
+export type CommandDescriptorTable = {
+    description: string;
+    commands: Record<string, CommandDescriptor | CommandDescriptorTable>;
+    defaultSubCommand?: CommandDescriptor | undefined;
+};
+
+export interface AppAgentCommandInterface {
+    // Commands
+    getCommands(
+        context: SessionContext,
+    ): Promise<CommandDescriptor | CommandDescriptorTable>;
+
+    executeCommand(
+        command: string[] | undefined,
+        args: string,
+        context: ActionContext<unknown>,
+        attachments?: string[],
+    ): Promise<void>;
+}
+
+export interface AppAgent extends Partial<AppAgentCommandInterface> {
+    // Setup
     initializeAgentContext?(): Promise<any>;
     updateAgentContext?(
         enable: boolean,
-        context: DispatcherAgentContext,
+        context: SessionContext,
         translatorName: string, // for sub-translators
     ): Promise<void>;
+    closeAgentContext?(context: SessionContext): Promise<void>;
+
+    // Actions
     streamPartialAction?(
         actionName: string,
         name: string,
         value: string,
-        partial: boolean,
-        dispatcherContext: DispatcherAgentContext,
+        delta: string | undefined,
+        context: ActionContext<unknown>,
     ): void;
     executeAction?(
-        action: DispatcherAction,
-        context: DispatcherAgentContext,
-        actionIndex: number, // TODO: can we avoid passing this index?
+        action: AppAction,
+        context: ActionContext<unknown>,
     ): Promise<any>; // TODO: define return type.
+
+    // Cache extensions
     validateWildcardMatch?(
-        action: DispatcherAction,
-        context: DispatcherAgentContext,
+        action: AppAction,
+        context: SessionContext,
     ): Promise<boolean>;
-    closeAgentContext?(context: DispatcherAgentContext): Promise<void>;
+
+    // Output
+    getDynamicDisplay?(
+        type: DisplayType,
+        dynamicDisplayId: string,
+        context: SessionContext,
+    ): Promise<DynamicDisplay>;
 }
 
-export interface DispatcherAgentContext<T = any> {
-    readonly context: T;
+//==============================================================================
+// Context
+//==============================================================================
+export enum AppAgentEvent {
+    Error = "error",
+    Warning = "warning",
+    Info = "info",
+    Debug = "debug",
+}
 
-    // TODO: review if these should be exposed.
-    readonly requestIO: DispatcherAgentIO;
-    readonly requestId: RequestId;
+export interface SessionContext<T = unknown> {
+    readonly agentContext: T;
     readonly sessionStorage: Storage | undefined;
     readonly profileStorage: Storage; // storage that are preserved across sessions
-    currentTranslatorName: string;
-    issueCommand(command: string): Promise<void>;
-    getUpdateActionStatus():
-        | ((message: string, group_id: string) => void)
-        | undefined;
-    toggleAgent(name: string, enable: boolean): Promise<void>;
+
+    notify(event: AppAgentEvent, message: string): void;
+
+    // can only toggle the sub agent of the current agent
+    toggleTransientAgent(agentName: string, active: boolean): Promise<void>;
 }
 
 // TODO: only utf8 is supported for now.
@@ -98,23 +148,9 @@ export interface Storage {
     getTokenCachePersistence(): Promise<TokenCachePersistence>;
 }
 
-// TODO: review if these should be exposed. Duplicated from dispatcher's interactiveIO.ts
-export type RequestId = string | undefined;
-
-export interface DispatcherAgentIO {
-    type: "html" | "text";
-    clear(): void;
-    info(message: string): void;
-    status(message: string): void;
-    success(message: string): void;
-    warn(message: string): void;
-    error(message: string): void;
-    result(message: string): void;
-
-    // Action status
-    setActionStatus(
-        message: string,
-        actionIndex: number,
-        groupId?: string,
-    ): void;
+export interface ActionContext<T = void> {
+    profiler?: Profiler | undefined;
+    streamingContext: unknown;
+    readonly actionIO: ActionIO;
+    readonly sessionContext: SessionContext<T>;
 }

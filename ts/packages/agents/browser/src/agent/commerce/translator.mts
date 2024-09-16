@@ -11,9 +11,8 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 import path from "path";
 import fs from "fs";
 import { openai as ai } from "aiclient";
-
 import { fileURLToPath } from "node:url";
-import { ShoppingAction } from "./schema/userActions.mjs";
+import { ShoppingActions } from "./schema/userActions.mjs";
 
 export type HtmlFragments = {
   frameId: string;
@@ -96,7 +95,7 @@ function getScreenshotPromptSection(
 }
 
 export async function createCommercePageTranslator(
-  model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O",
+  model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O" | "GPT_4_O_MINI",
 ) {
   const packageRoot = path.join("..", "..", "..");
   const pageSchema = await fs.promises.readFile(
@@ -109,9 +108,9 @@ export async function createCommercePageTranslator(
     "utf8",
   );
 
-  const agent = new ECommerceSiteAgent<ShoppingAction>(
+  const agent = new ECommerceSiteAgent<ShoppingActions>(
     pageSchema,
-    "ShoppingAction",
+    "ShoppingActions",
     model,
   );
   return agent;
@@ -165,7 +164,8 @@ export class ECommerceSiteAgent<T extends object> {
       {
         type: "text",
         text: `
-        Use the layout information provided and the user request below to generate a SINGLE "${translator.validator.getTypeName()}" response using the typescript schema below:
+        Use the layout information provided and the user request below to generate a SINGLE "${translator.validator.getTypeName()}" response using the typescript schema below.
+        You should stop searching and return current result as soon as you find a result that matches the user's criteria:
         
         '''
         ${translator.validator.getSchemaText()}

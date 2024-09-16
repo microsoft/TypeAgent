@@ -14,11 +14,12 @@ import {
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { TypeChatConstraintsValidator } from "./constraints.js";
 import registerDebug from "debug";
-import { openai as ai } from "aiclient";
+import { openai as ai, ChatMessage } from "aiclient";
 import {
     createIncrementalJsonParser,
     IncrementalJsonValueCallBack,
 } from "./incrementalJsonParser.js";
+import ExifReader from "exifreader";
 
 const debug = registerDebug("typeagent:prompt");
 
@@ -60,6 +61,8 @@ export interface TypeChatJsonTranslatorWithStreaming<T extends object>
         request: string,
         promptPreamble?: string | PromptSection[],
         cb?: IncrementalJsonValueCallBack,
+        attachments?: string[] | undefined,
+        exifTags?: ExifReader.Tags[] | undefined,
     ) => Promise<Result<T>>;
 }
 
@@ -70,23 +73,6 @@ export function enableJsonTranslatorStreaming<T extends object>(
     if (!ai.supportsStreaming(model)) {
         throw new Error("Model does not support streaming");
     }
-    const complete = model.complete.bind(model);
-    const completeStream = model.completeStream.bind(model);
-    model.complete = async (
-        prompt: string | PromptSection[],
-        cb?: () => void,
-    ) => {
-        if (cb === undefined) {
-            return complete(prompt);
-        }
-        const chunks = [];
-        for await (const chunk of completeStream(prompt)) {
-            chunks.push(chunk);
-            cb();
-        }
-        return success(chunks.join(""));
-    };
-
     const innerFn = translator.translate;
     const translatorWithStreaming =
         translator as TypeChatJsonTranslatorWithStreaming<T>;
@@ -94,7 +80,11 @@ export function enableJsonTranslatorStreaming<T extends object>(
         request: string,
         promptPreamble?: string | PromptSection[],
         cb?: IncrementalJsonValueCallBack,
+        attachments?: string[],
+        exifTags?: ExifReader.Tags[],
     ) => {
+        attachAttachments(attachments, exifTags, promptPreamble);
+
         if (cb === undefined) {
             return innerFn(request, promptPreamble);
         }
@@ -104,9 +94,16 @@ export function enableJsonTranslatorStreaming<T extends object>(
             const parser = createIncrementalJsonParser(cb, {
                 partial: true,
             });
-            model.complete = async (prompt: string | PromptSection[]) => {
+            model.complete = async (
+                prompt: string | PromptSection[] | ChatMessage[],
+            ) => {
+                debug(prompt);
                 const chunks = [];
-                for await (const chunk of completeStream(prompt)) {
+                const result = await model.completeStream(prompt);
+                if (!result.success) {
+                    return result;
+                }
+                for await (const chunk of result.data) {
                     chunks.push(chunk);
                     parser.parse(chunk);
                 }
@@ -120,6 +117,41 @@ export function enableJsonTranslatorStreaming<T extends object>(
     };
 
     return translatorWithStreaming;
+}
+
+function attachAttachments(
+    attachments: string[] | undefined,
+    exifTags: ExifReader.Tags[] | undefined,
+    promptPreamble?: string | PromptSection[],
+) {
+    let pp: PromptSection[] = promptPreamble as PromptSection[];
+
+    if (attachments && attachments.length > 0 && pp) {
+        for (let i = 0; i < attachments.length; i++) {
+            pp.unshift({
+                role: "user",
+                content: [
+                    { type: "text", text: "\n" },
+                    {
+                        type: "image_url",
+                        image_url: { url: attachments[i], detail: "high" },
+                    },
+                    { type: "text", text: "\n" },
+                    {
+                        type: "text",
+                        text:
+                            "Here is the EXIF information for the image: " +
+                            JSON.stringify(exifTags![i]),
+                    },
+                ],
+            });
+        }
+
+        pp.unshift({
+            role: "user",
+            content: "Here are some images provided by the user.",
+        });
+    }
 }
 
 /**
@@ -180,7 +212,7 @@ export function createJsonTranslatorFromSchemaDef<T extends object>(
             `\`\`\`\n${validator.getSchemaText()}\`\`\`\n` +
             `The following is the latest user request:\n` +
             `"""\n${request}\n"""\n` +
-            `Based on all available information in our chat history, the following is the latest user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
+            `Based on all available information in our chat history including images previoiusly provided, the following is the latest user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
         );
     };
     return translator;

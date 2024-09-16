@@ -4,6 +4,8 @@ Calendar agent is **sample code** that explores how to build a typed calendar ag
 
 This agent depends on the utility library [graph-utils](../agentUtils/graphUtils/src/calendarClient.ts) to implement different calendar actions.
 
+The calendar agent uses the Microsoft Graph API to interact with the user's calendar. The agent uses `@microsoft/microsoft-graph-client` library to interact with the Microsoft Graph API. The agent enables operations like create, update, delete, find etc on calendar events.
+
 To build the calendar agent, it needs to provide a manifest and an instantiation entry point.  
 These are declared in the `package.json` as export paths:
 
@@ -25,6 +27,15 @@ Note: You have to just do this once to create a Graph Client application.
 ### Manifest
 
 When loading calendar agent in a NPM package, the dispatcher first loads the [calendarManifest.json](./src/calendarManifest.json).
+
+### Fix issues with identity cache
+
+The calendar agent uses the `@azure/identity-cache-persistence` package to persist the user's identity information using device code flow, if you are facing issues with the identity cache, you can clear the cache by running the following commands:
+
+```
+cd %localappdata%/.IdentityService
+del typeagent-tokencache*
+```
 
 ### Sample User Requests
 

@@ -1,9 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommandHandler } from "./common/commandHandler.js";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/commands";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import registerDebug from "debug";
+import { ActionContext } from "@typeagent/agent-sdk";
+import { displaySuccess } from "./common/interactiveIO.js";
 
 function toNamespace(regexp: RegExp) {
     return regexp
@@ -23,7 +25,10 @@ function getCurrentTraceSettings() {
 
 export class TraceCommandHandler implements CommandHandler {
     public readonly description = "Enable or disable trace namespaces";
-    public async run(input: string, context: CommandHandlerContext) {
+    public async run(
+        input: string,
+        context: ActionContext<CommandHandlerContext>,
+    ) {
         if (input !== "") {
             if (input === "-" || input === "-*") {
                 registerDebug.disable();
@@ -34,8 +39,9 @@ export class TraceCommandHandler implements CommandHandler {
             }
         }
 
-        context.requestIO.success(
+        displaySuccess(
             `Current trace settings: ${getCurrentTraceSettings().join(",")}`,
+            context,
         );
     }
 }

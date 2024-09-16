@@ -3,14 +3,14 @@
 TypeAgent Dispatcher is **sample code** and the core component that explores how to build a **single personal assistant** implementation with TypeChat:
 
 - [TypeAgent Shell](../shell) and [TypeAgent CLI](../cli) are two front ends that make use of this shared component.
-- Extensible [dispatcher agents](../dispatcherAgent/README.md) architecture.
+- Extensible [application agents](../agentSdk/README.md) architecture.
 - [Agent Cache](../cache/README.md) to lower latency and cost.
 
-Dispatcher processes user requests and asks LLM to translate it into an action based on a schema provided by the dispatcher agents. It has ability to automatically switch between different agents to provide a seamless experience in a extensible and scalable way.
+Dispatcher processes user requests and asks LLM to translate it into an action based on a schema provided by the application agents. It has ability to automatically switch between different agents to provide a seamless experience in a extensible and scalable way.
 
 ## Usage
 
-User can request actions provided by [dispatcher agents](../dispatcherAgent/README.md) using natural language.
+User can request actions provided by [application agents](../agentSdk/README.md) using natural language.
 
 For example, in the [CLI](../cli):
 
@@ -50,7 +50,7 @@ To list all the translator (and explainer) configured:
 ```bash
 [📅💊📩📝👀🪟⚛️💬🔧]>@config translator
 Usage: @config translator [-]<translator>]
-   <translator>: player, calendar, email, list, browser, browser.paleoBioDb, desktop, code, code.code-debug, code.code-display, code.code-general, phrases, books, chat, correction, system.config, system.session
+   <translator>: player, calendar, email, list, browser, browser.paleoBioDb, desktop, code, code.code-debug, code.code-display, code.code-general, phrases, books, chat, correction, photo, system.config, system.session
 ```
 
 ### Explainer
@@ -137,7 +137,7 @@ Addition Dispatcher Agent can be create to extend the capabilities of the **sing
 
 ### NPM Module
 
-Go to dispatcher agent [README](../dispatcherAgent/README.md) for details on how to create a dispatcher agent in a NPM modules.
+Go to Agent SDK [README](../agentSdk/README.md) for details on how to create a dispatcher agent in a NPM modules.
 
 Dispatcher currently only supports "static" loading of dispatcher agent. To add a dispatcher agent:
 

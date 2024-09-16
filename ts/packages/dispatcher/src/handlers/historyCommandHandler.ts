@@ -1,13 +1,22 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommandHandler, HandlerTable } from "./common/commandHandler.js";
+import {
+    CommandHandler,
+    CommandHandlerTable,
+} from "@typeagent/agent-sdk/helpers/commands";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
+import { ActionContext } from "@typeagent/agent-sdk";
+import { displayResult } from "./common/interactiveIO.js";
 
 export class HistoryListCommandHandler implements CommandHandler {
     public readonly description = "List history";
-    public async run(input: string, context: CommandHandlerContext) {
-        const history = context.chatHistory;
+    public async run(
+        input: string,
+        context: ActionContext<CommandHandlerContext>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const history = systemContext.chatHistory;
 
         let index = 0;
         const output = [];
@@ -15,11 +24,12 @@ export class HistoryListCommandHandler implements CommandHandler {
             output.push(`${index}: ${JSON.stringify(entry, undefined, 2)}`);
             index++;
         }
-        context.requestIO.result(output.join("\n"));
+
+        displayResult(output, context);
     }
 }
 
-export function getHistoryCommandHandlers(): HandlerTable {
+export function getHistoryCommandHandlers(): CommandHandlerTable {
     return {
         description: "History commands",
         defaultSubCommand: new HistoryListCommandHandler(),

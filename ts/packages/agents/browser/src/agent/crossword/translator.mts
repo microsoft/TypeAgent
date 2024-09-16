@@ -2,14 +2,12 @@
 // Licensed under the MIT License.
 
 import {
-  //createLanguageModel,
   createJsonTranslator,
   TypeChatJsonTranslator,
   TypeChatLanguageModel,
   PromptSection,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-
 import { Crossword } from "./schema/pageSchema.mjs";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -70,7 +68,7 @@ function getHtmlTextOnlyPromptSection(fragments: HtmlFragments[] | undefined) {
 }
 
 export async function createCrosswordPageTranslator(
-  model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O",
+  model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O" | "GPT_4_O_MINI",
 ) {
   const packageRoot = path.join("..", "..", "..");
   const pageSchema = await fs.promises.readFile(

@@ -4,16 +4,34 @@
 const path = require("path");
 const CopyPlugin = require("copy-webpack-plugin");
 const NodePolyfillPlugin = require("node-polyfill-webpack-plugin");
-const srcDir = path.join(__dirname, "src");
+const srcDir = path.join(__dirname, "src", "extension");
+const electronSrcDir = path.join(__dirname, "src", "electron");
 
 module.exports = {
     mode: "production",
     entry: {
-        contentScript: path.join(srcDir, "contentScript.ts"),
-        serviceWorker: path.join(srcDir, "serviceWorker.ts"),
-        "sites/commerce": path.join(srcDir, "sites", "commerce.ts"),
-        "sites/crossword": path.join(srcDir, "sites", "crossword.ts"),
-        "sites/paleobiodb": path.join(srcDir, "sites", "paleobiodb.ts"),
+        "extension/contentScript": path.join(srcDir, "contentScript.ts"),
+        "electron/contentScript": path.join(srcDir, "contentScript.ts"),
+        "extension/serviceWorker": path.join(srcDir, "serviceWorker.ts"),
+        "electron/serviceWorker": path.join(electronSrcDir, "serviceWorker.ts"),
+        "extension/uiEventsDispatcher": path.join(
+            srcDir,
+            "uiEventsDispatcher.ts",
+        ),
+        "electron/uiEventsDispatcher": path.join(
+            srcDir,
+            "uiEventsDispatcher.ts",
+        ),
+        "extension/sites/paleobiodb": path.join(
+            srcDir,
+            "sites",
+            "paleobiodb.ts",
+        ),
+        "electron/sites/paleobiodb": path.join(
+            srcDir,
+            "sites",
+            "paleobiodb.ts",
+        ),
     },
     output: {
         path: path.join(__dirname, "dist"),
@@ -66,8 +84,34 @@ module.exports = {
     plugins: [
         new CopyPlugin({
             patterns: [
-                { from: ".", to: ".", context: "public" },
-                { from: "../../../.env", to: ".", noErrorOnMissing: true },
+                { from: path.join(srcDir, "manifest.json"), to: "./extension" },
+                {
+                    from: path.join(electronSrcDir, "manifest.json"),
+                    to: "./electron",
+                },
+                {
+                    from: path.join(srcDir, "patchListeners.js"),
+                    to: "./extension",
+                },
+                {
+                    from: path.join(srcDir, "patchListeners.js"),
+                    to: "./electron",
+                },
+                {
+                    from: ".",
+                    to: "./extension/images",
+                    context: path.join(srcDir, "images"),
+                },
+                {
+                    from: "../../../.env",
+                    to: "./extension",
+                    noErrorOnMissing: true,
+                },
+                {
+                    from: "../../../.env",
+                    to: "./electron",
+                    noErrorOnMissing: true,
+                },
             ],
         }),
 

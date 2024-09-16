@@ -3,7 +3,6 @@
 
 import { IdGenerator, getClientAPI } from "./main";
 import { ChatInput, ExpandableTextarea, questionInput } from "./chatInput";
-import { SpeechInfo } from "./speech";
 import { SearchMenu } from "./search";
 import { AnsiUp } from "ansi_up";
 import { iconCheckMarkCircle, iconX, iconRoadrunner } from "./icon";
@@ -14,6 +13,17 @@ import {
     SearchMenuItem,
 } from "../../preload/electronTypes";
 import { ActionCascade } from "./ActionCascade";
+import {
+    DisplayAppendMode,
+    DisplayContent,
+    DisplayType,
+    DisplayMessageKind,
+    DynamicDisplay,
+} from "@typeagent/agent-sdk";
+import { TTS } from "./tts";
+import { IAgentMessage } from "agent-dispatcher";
+import DOMPurify from "dompurify";
+import { PhaseTiming, RequestMetrics } from "agent-dispatcher";
 
 export interface InputChoice {
     element: HTMLElement;
@@ -218,21 +228,197 @@ export class PlayerShimCursor {
     }
 }
 
+class MessageContainer {
+    public readonly div: HTMLDivElement;
+    private readonly messageBodyDiv: HTMLDivElement;
+    private readonly messageDiv: HTMLDivElement;
+    private readonly timestampDiv: HTMLDivElement;
+    private readonly iconDiv: HTMLDivElement;
+    private metricsDetailDiv?: HTMLDivElement;
+    private ttsMetricsDiv?: HTMLDivElement;
+    private lastAppendMode?: DisplayAppendMode;
+    private completed = false;
+
+    public get source() {
+        return this._source;
+    }
+    constructor(
+        className: string,
+        private _source: string,
+        agents: Map<string, string>,
+        beforeElem: Element,
+        private hideMetrics,
+    ) {
+        const div = document.createElement("div");
+        div.className = className;
+
+        const timestampDiv = createTimestampDiv(
+            new Date(),
+            "chat-timestamp-left",
+        );
+        div.append(timestampDiv);
+        this.timestampDiv = timestampDiv;
+
+        const agentIconDiv = document.createElement("div");
+        agentIconDiv.className = "agent-icon";
+        agentIconDiv.innerText = agents
+            .get(_source)
+            ?.toString()
+            .substring(0, 1) as string;
+        div.append(agentIconDiv);
+        this.iconDiv = agentIconDiv;
+
+        const messageBodyDiv = document.createElement("div");
+        const bodyClass = this.hideMetrics
+            ? "chat-message-body-hide-metrics"
+            : "chat-message-body";
+        messageBodyDiv.className = `${bodyClass} chat-message-agent`;
+        div.append(messageBodyDiv);
+        this.messageBodyDiv = messageBodyDiv;
+
+        const message = document.createElement("div");
+        message.className = "chat-message-content";
+        messageBodyDiv.append(message);
+        this.messageDiv = message;
+
+        // The chat message list has the style flex-direction: column-reverse;
+        beforeElem.before(div);
+
+        this.div = div;
+    }
+
+    public getMessage() {
+        return this.messageDiv.innerText;
+    }
+    public setMessage(
+        content: DisplayContent,
+        source: string,
+        sourceIcon?: string,
+        appendMode?: DisplayAppendMode,
+    ) {
+        if (typeof content !== "string" && content.kind === "info") {
+            // Don't display info
+            return;
+        }
+
+        // Flush last temporary reset the lastAppendMode.
+        this.flushLastTemporary();
+
+        this._source = source;
+        // set source and source icon
+        (this.timestampDiv.firstChild as HTMLDivElement).innerText = source; // name
+        this.iconDiv.innerText = sourceIcon ?? "❔"; // icon
+
+        setContent(
+            this.messageDiv,
+            content,
+            appendMode === "inline" && this.lastAppendMode !== "inline"
+                ? "block"
+                : appendMode,
+        );
+        this.lastAppendMode = appendMode;
+
+        this.updateDivState();
+    }
+
+    public complete() {
+        this.completed = true;
+        this.flushLastTemporary();
+        this.updateDivState();
+    }
+
+    private updateDivState() {
+        if (this.completed && !this.messageDiv.firstChild) {
+            this.hide();
+        } else {
+            this.show();
+        }
+    }
+
+    private flushLastTemporary() {
+        if (this.lastAppendMode === "temporary") {
+            this.messageDiv.lastChild?.remove();
+            this.lastAppendMode = undefined;
+        }
+    }
+
+    private ensureMetricsDiv() {
+        if (this.metricsDetailDiv === undefined) {
+            const metricsContainer = document.createElement("div");
+            metricsContainer.className =
+                "chat-message-metrics chat-message-metrics-left";
+            this.messageBodyDiv.append(metricsContainer);
+
+            const metricsDetails = document.createElement("div");
+            metricsDetails.className = "metrics-details";
+            metricsContainer.append(metricsDetails);
+            this.metricsDetailDiv = metricsDetails;
+        }
+        return this.metricsDetailDiv;
+    }
+    public updateMetrics(metrics: PhaseTiming, total?: number) {
+        const metricsDiv = this.ensureMetricsDiv();
+        updateMetrics(metricsDiv, "Action", metrics, total);
+        if (this.ttsMetricsDiv) {
+            metricsDiv.prepend(this.ttsMetricsDiv);
+        }
+    }
+
+    public addTTSTiming(timing: PhaseTiming) {
+        if (this.ttsMetricsDiv === undefined) {
+            const ttsMetricsDiv = document.createElement("div");
+            this.ensureMetricsDiv().prepend(ttsMetricsDiv);
+            ttsMetricsDiv.className = "metrics-tts";
+            this.ttsMetricsDiv = ttsMetricsDiv;
+        }
+        const firstChunkTime = timing.marks?.["First Chunk"];
+        const firstChunkTimeStr = firstChunkTime
+            ? `<br>TTS First Chunk: <b>${formatTimeReaderFriendly(timing.marks!["First Chunk"].duration)}</b>`
+            : "";
+        this.ttsMetricsDiv!.innerHTML = `TTS Synthesis: <b>${formatTimeReaderFriendly(timing.duration!)}</b>${firstChunkTimeStr}`;
+    }
+    public show() {
+        this.div.classList.remove("chat-message-hidden");
+    }
+    public hide() {
+        this.div.classList.add("chat-message-hidden");
+    }
+    public scrollIntoView() {
+        this.div.scrollIntoView(false);
+    }
+
+    public setMetricsVisible(visible: boolean) {
+        this.hideMetrics = !visible;
+        updateMetricsVisibility(visible, this.messageBodyDiv);
+    }
+}
+
+function updateMetricsVisibility(visible: boolean, div: HTMLDivElement) {
+    const addClass = visible
+        ? "chat-message-body"
+        : "chat-message-body-hide-metrics";
+    const removeClass = visible
+        ? "chat-message-body-hide-metrics"
+        : "chat-message-body";
+    div.classList.remove(removeClass);
+    div.classList.add(addClass);
+}
+
 class MessageGroup {
     public readonly userMessageContainer: HTMLDivElement;
+    public readonly userMessageBody: HTMLDivElement;
     public readonly userMessage: HTMLDivElement;
-    private statusMessageDiv: HTMLDivElement | undefined;
-    private readonly statusMessages: { message: string; temporary: boolean }[] =
-        [];
-    private readonly agentMessageDivs: HTMLDivElement[] = [];
-
-    private completed = false;
+    public userMetricsDiv?: HTMLDivElement;
+    private statusMessage: MessageContainer | undefined;
+    private readonly agentMessages: MessageContainer[] = [];
     constructor(
-        request: string,
+        private readonly chatView: ChatView,
+        request: DisplayContent,
         container: HTMLDivElement,
-        requestPromise: Promise<void>,
+        requestPromise: Promise<RequestMetrics | undefined>,
         timeStamp: Date,
         public agents: Map<string, string>,
+        private hideMetrics,
     ) {
         const userMessageContainer = document.createElement("div");
         userMessageContainer.className = "chat-message-right";
@@ -243,9 +429,16 @@ class MessageGroup {
         );
         userMessageContainer.appendChild(timeStampDiv);
 
+        const userMessageBody = document.createElement("div");
+        const bodyClass = this.hideMetrics
+            ? "chat-message-body-hide-metrics"
+            : "chat-message-body";
+        userMessageBody.className = `${bodyClass} chat-message-user`;
+        userMessageContainer.appendChild(userMessageBody);
+
         const userMessage = document.createElement("div");
-        userMessage.className = "chat-message-user";
-        userMessageContainer.appendChild(userMessage);
+        userMessage.className = "chat-message-content";
+        userMessageBody.appendChild(userMessage);
 
         setContent(userMessage, request);
 
@@ -258,147 +451,157 @@ class MessageGroup {
         }
 
         this.userMessageContainer = userMessageContainer;
+        this.userMessageBody = userMessageBody;
         this.userMessage = userMessage;
 
         requestPromise
-            .then(() => this.requestCompleted())
+            .then((metrics) => this.requestCompleted(metrics))
             .catch((error) => this.requestException(error));
     }
 
-    private requestCompleted() {
-        this.completed = true;
-        if (this.statusMessages.length === 0) {
-            this.addStatusMessage("Request completed", "shell", true);
+    public setMetricsVisible(visible: boolean) {
+        this.hideMetrics = !visible;
+        updateMetricsVisibility(visible, this.userMessageBody);
+        this.statusMessage?.setMetricsVisible(visible);
+        for (const agentMessage of this.agentMessages) {
+            agentMessage.setMetricsVisible(visible);
         }
-        this.updateStatusMessageDivState();
     }
-
-    private updateStatusMessageDivState() {
-        if (this.statusMessageDiv === undefined) {
-            return;
+    private requestCompleted(metrics: RequestMetrics | undefined) {
+        this.updateMetrics(metrics);
+        if (this.statusMessage === undefined) {
+            this.addStatusMessage(
+                { message: "Command completed", source: "shell" },
+                false,
+            );
+        } else {
+            this.statusMessage.complete();
+            this.chatView.updateScroll();
         }
-        if (
-            !this.completed ||
-            this.agentMessageDivs.length === 0 ||
-            this.statusMessages.some((m) => !m.temporary)
-        ) {
-            this.statusMessageDiv.classList.remove("chat-message-hidden");
 
-            if (
-                this.userMessageContainer.parentElement?.firstChild ==
-                this.statusMessageDiv
-            ) {
-                this.statusMessageDiv.scrollIntoView(false);
+        const tts = this.chatView.tts;
+        if (tts) {
+            for (const agentMessage of this.agentMessages) {
+                if (agentMessage.source === "chat") {
+                    const message = agentMessage.getMessage();
+                    if (message) {
+                        tts.speak(message).then((timings) => {
+                            if (timings) {
+                                agentMessage.addTTSTiming(timings);
+                            }
+                        });
+                    }
+                }
             }
-
-            return;
         }
-
-        if (this.agentMessageDivs.length > 0) {
-            this.agentMessageDivs[
-                this.agentMessageDivs.length - 1
-            ].scrollIntoView(false);
-        }
-
-        this.statusMessageDiv.classList.add("chat-message-hidden");
     }
 
     private requestException(error: any) {
         console.error(error);
-        this.addStatusMessage(`Processing Error: ${error}`, `Shell`, false);
-    }
-
-    private ensureStatusMessageDiv(source: string) {
-        if (this.statusMessageDiv === undefined) {
-            this.statusMessageDiv = document.createElement("div");
-            this.setupAgentMessageDiv(
-                this.statusMessageDiv,
-                "chat-message chat-message-temp",
-                "chat-message-agent",
-                source,
-            );
-            this.userMessageContainer.before(this.statusMessageDiv);
-        }
-
-        return this.statusMessageDiv;
-    }
-
-    public addStatusMessage(
-        message: string,
-        source: string,
-        temporary: boolean,
-    ) {
-        const div = this.ensureStatusMessageDiv(source)
-            .lastChild as HTMLDivElement;
-        setSource(this.statusMessageDiv as HTMLDivElement, source, this.agents);
-
-        let contentDiv: HTMLDivElement;
-        if (
-            this.statusMessages.length !== 0 &&
-            this.statusMessages[this.statusMessages.length - 1]?.temporary
-        ) {
-            contentDiv = div.lastChild as HTMLDivElement;
-        } else {
-            contentDiv = document.createElement("div");
-            div.appendChild(contentDiv);
-        }
-        this.statusMessages.push({ message, temporary });
-
-        setContent(contentDiv, message);
-
-        this.updateStatusMessageDivState();
-    }
-
-    public setupAgentMessageDiv(
-        messageDiv: HTMLDivElement,
-        classes: string,
-        messageClass: string,
-        source: string,
-    ) {
-        messageDiv.className = classes;
-
-        const timestampDiv = createTimestampDiv(
-            new Date(),
-            "chat-timestamp-left",
+        this.addStatusMessage(
+            { message: `Processing Error: ${error}`, source: "shell" },
+            false,
         );
-        messageDiv.append(timestampDiv);
-
-        const agentIconDiv = document.createElement("div");
-        agentIconDiv.className = "agent-icon";
-        agentIconDiv.innerText = this.agents
-            .get(source as string)
-            ?.toString()
-            .substring(0, 1) as string;
-        messageDiv.append(agentIconDiv);
-
-        const message = document.createElement("div");
-        message.className = messageClass;
-        messageDiv.append(message);
     }
 
-    public ensureAgentMessage(source: string, actionIndex?: number) {
-        const index = actionIndex ?? 0;
-        const agentMessage = this.agentMessageDivs[index];
-        if (agentMessage === undefined) {
-            let beforeElem = this.ensureStatusMessageDiv(source);
-            for (let i = 0; i < index + 1; i++) {
-                if (this.agentMessageDivs[i] === undefined) {
-                    this.agentMessageDivs[i] = document.createElement("div");
-                    this.setupAgentMessageDiv(
-                        this.agentMessageDivs[i],
-                        "chat-message chat-message-left",
-                        "chat-message-agent",
-                        source,
-                    );
+    private ensureStatusMessage(source: string) {
+        if (this.statusMessage === undefined) {
+            this.statusMessage = new MessageContainer(
+                "chat-message-left",
+                source,
+                this.agents,
+                this.userMessageContainer,
+                this.hideMetrics,
+            );
+        }
 
-                    // The chat message list has the style flex-direction: column-reverse;
-                    beforeElem.before(this.agentMessageDivs[i]);
+        return this.statusMessage;
+    }
+
+    public addStatusMessage(msg: IAgentMessage, temporary: boolean) {
+        let message = msg.message;
+        const statusMessage = this.ensureStatusMessage(msg.source);
+        statusMessage.setMessage(
+            message,
+            msg.source,
+            this.agents.get(msg.source),
+            temporary ? "temporary" : "block",
+        );
+
+        this.updateMetrics(msg.metrics);
+        this.chatView.updateScroll();
+    }
+
+    public updateMetrics(metrics?: RequestMetrics) {
+        if (metrics) {
+            if (metrics.parse !== undefined) {
+                if (this.userMetricsDiv === undefined) {
+                    const metricsContainer = document.createElement("div");
+                    metricsContainer.className =
+                        "chat-message-metrics chat-message-metrics-right";
+                    this.userMessageBody.append(metricsContainer);
+
+                    this.userMetricsDiv = document.createElement("div");
+                    metricsContainer.append(this.userMetricsDiv);
+                    this.userMetricsDiv.className = "metrics-details";
                 }
-                beforeElem = this.agentMessageDivs[i];
+                updateMetrics(
+                    this.userMetricsDiv,
+                    "Translation",
+                    metrics.parse,
+                );
+            }
+
+            if (metrics.command !== undefined) {
+                this.statusMessage?.updateMetrics(metrics.command);
+            }
+
+            for (let i = 0; i < this.agentMessages.length; i++) {
+                const agentMessage = this.agentMessages[i];
+                const info = metrics.actions[i];
+                if (info !== undefined) {
+                    agentMessage.updateMetrics(
+                        info,
+                        i === this.agentMessages.length - 1
+                            ? metrics.duration
+                            : undefined,
+                    );
+                }
             }
         }
-        this.updateStatusMessageDivState();
-        return this.agentMessageDivs[index];
+    }
+
+    public ensureAgentMessage(msg: IAgentMessage, notification = false) {
+        const statusMessage = this.ensureStatusMessage(msg.source);
+
+        const index = msg.actionIndex;
+        if (index === undefined) {
+            return statusMessage;
+        }
+        const agentMessage = this.agentMessages[index];
+        if (agentMessage === undefined) {
+            let beforeElem = statusMessage;
+            for (let i = 0; i < index + 1; i++) {
+                if (this.agentMessages[i] === undefined) {
+                    const newAgentMessage = new MessageContainer(
+                        "chat-message-left",
+                        msg.source,
+                        this.agents,
+                        beforeElem.div,
+                        this.hideMetrics,
+                    );
+                    if (notification) {
+                        newAgentMessage.div.classList.add("notification");
+                    }
+                    this.agentMessages[i] = newAgentMessage;
+                }
+                beforeElem = this.agentMessages[i];
+            }
+            this.chatView.updateScroll();
+        }
+
+        this.updateMetrics(msg.metrics);
+        return this.agentMessages[index];
     }
 
     public updateMessageText(message: string) {
@@ -411,23 +614,83 @@ ansi_up.use_classes = true;
 
 function textToHtml(text: string): string {
     const value = ansi_up.ansi_to_html(text);
-    const line = value.replace(/\n/gm, "<br>").replace(/  /g, " &nbsp;");
+    const line = value.replace(/\n/gm, "<br>");
     return line;
 }
 
 function stripAnsi(text: string): string {
-    return text.replace(/\x1b\[[0-9;]*m/g, "");
+    return text
+        .replace(/&/gm, "&amp;")
+        .replace(/</gm, "&lt;")
+        .replace(/>/gm, "&gt;")
+        .replace(/\x1b\[[0-9;]*m/g, "");
 }
 
 const enableText2Html = true;
-export function setContent(elm: HTMLElement, text: string) {
-    if (text.startsWith("<")) {
-        elm.innerHTML = text;
-    } else if (enableText2Html) {
-        elm.innerHTML = textToHtml(text);
-    } else {
-        elm.innerText = stripAnsi(text);
+export function setContent(
+    elm: HTMLElement,
+    content: DisplayContent,
+    appendMode?: DisplayAppendMode,
+) {
+    // Remove existing content if we are not appending.
+    if (appendMode === undefined) {
+        while (elm.firstChild) {
+            elm.removeChild(elm.firstChild);
+        }
     }
+
+    let type: DisplayType;
+    let kind: DisplayMessageKind | undefined;
+    let text: string;
+    if (typeof content === "string") {
+        type = "text";
+        text = content;
+    } else {
+        type = content.type;
+        text = content.content;
+        kind = content.kind;
+    }
+
+    const kindStyle = kind ? `chat-message-kind-${kind}` : undefined;
+
+    let contentDiv = elm.lastChild as HTMLDivElement | null;
+    if (
+        appendMode !== "inline" ||
+        !contentDiv ||
+        (kindStyle !== undefined && !contentDiv.classList.contains(kindStyle))
+    ) {
+        // Create a new div
+        contentDiv = document.createElement("div");
+        if (kindStyle) {
+            contentDiv.classList.add(kindStyle);
+        }
+        elm.appendChild(contentDiv);
+    }
+
+    let contentElm: HTMLElement = contentDiv;
+    if (type === "text") {
+        const prevElm = contentDiv.lastChild as HTMLElement | null;
+        if (prevElm?.classList.contains("chat-message-agent-text")) {
+            // If there is an existing text element then append to it.
+            contentElm = prevElm;
+        } else {
+            const span = document.createElement("span");
+            // create a text span so we can set "whitespace: break-spaces" css style of text content.
+            span.className = `chat-message-agent-text`;
+            contentDiv.appendChild(span);
+            contentElm = span;
+        }
+    }
+
+    // Process content according to type
+    const contentHtml =
+        type === "html"
+            ? DOMPurify.sanitize(text, { ADD_ATTR: ["target"] })
+            : enableText2Html
+              ? textToHtml(text)
+              : stripAnsi(text);
+
+    contentElm.innerHTML += contentHtml;
 }
 
 export function createTimestampDiv(timestamp: Date, className: string) {
@@ -450,17 +713,41 @@ export function createTimestampDiv(timestamp: Date, className: string) {
     return timeStampDiv;
 }
 
-export function setSource(
-    agentMessageDiv: HTMLDivElement,
-    source: string,
-    agents: Map<string, string>,
+function updateMetrics(
+    div: HTMLDivElement,
+    name: string,
+    metrics: PhaseTiming,
+    total?: number,
 ) {
-    (agentMessageDiv.firstChild?.firstChild as HTMLDivElement).innerText =
-        source; // name
+    // clear out previous perf data
+    div.innerHTML = "";
+    const marksDiv = document.createElement("div");
+    div.append(marksDiv);
 
-    const iconDiv: HTMLDivElement = agentMessageDiv
-        .children[1] as HTMLDivElement;
-    iconDiv.innerText = agents.get(source as string) as string; // icon
+    if (metrics.marks) {
+        for (const [key, value] of Object.entries(metrics.marks)) {
+            const { duration, count } = value;
+            const avg = duration / count;
+            let mDiv = document.createElement("div");
+            mDiv.innerHTML = `${key}: <b>${formatTimeReaderFriendly(avg)}${count > 1 ? ` (avg of ${count})` : ""}</b>`;
+            marksDiv.append(mDiv);
+        }
+    }
+    if (metrics.duration) {
+        let timeDiv = document.createElement("div");
+        timeDiv.innerHTML = `${name} Elapsed Time: <b>${formatTimeReaderFriendly(metrics.duration)}</b>${total !== undefined ? `<br>Total Elapsed Time: <b>${formatTimeReaderFriendly(total)}</b>` : ""}`;
+        div.append(timeDiv);
+    }
+}
+
+function formatTimeReaderFriendly(time: number) {
+    if (time < 1) {
+        return `${time.toFixed(3)}ms`;
+    } else if (time > 1000) {
+        return `${(time / 1000).toFixed(1)}s`;
+    } else {
+        return `${time.toFixed(1)}ms`;
+    }
 }
 
 export function getSelectionXCoord() {
@@ -530,12 +817,12 @@ export function proposeYesNo(
     chatView.addChoicePanel(choices);
 }
 
+const DynamicDisplayMinRefreshIntervalMs = 15;
 export class ChatView {
     private topDiv: HTMLDivElement;
     private messageDiv: HTMLDivElement;
     private inputContainer: HTMLDivElement;
 
-    private groupToElements: Map<string, HTMLDivElement[]> = new Map();
     private idToMessageGroup: Map<string, MessageGroup> = new Map();
     chatInput: ChatInput;
     idToSearchMenu = new Map<string, SearchMenu>();
@@ -550,21 +837,26 @@ export class ChatView {
     registeredActions: Map<string, ActionInfo> = new Map<string, ActionInfo>();
     actionCascade: ActionCascade | undefined = undefined;
 
+    private hideMetrics = true;
     constructor(
         private idGenerator: IdGenerator,
-        public speechInfo: SpeechInfo,
         public agents: Map<string, string>,
+        public tts?: TTS,
     ) {
         this.topDiv = document.createElement("div");
         this.topDiv.className = "chat-container";
         this.messageDiv = document.createElement("div");
         this.messageDiv.className = "chat scroll_enabled";
+
         this.chatInput = new ChatInput(
-            this.speechInfo,
             "phraseDiv",
             "reco",
-            (message) => {
-                this.addUserMessage(message);
+            (messageHtml) => {
+                // message from chat input are from innerHTML
+                this.addUserMessage({
+                    type: "html",
+                    content: messageHtml,
+                });
                 if (this.searchMenu) {
                     this.cancelSearchMenu();
                 }
@@ -572,7 +864,7 @@ export class ChatView {
             (eta: ExpandableTextarea) => {
                 if (this.partialInputEnabled) {
                     this.placeSearchMenu();
-                    getClientAPI().sendPartialInput(eta.getEditedText());
+                    // TODO: NYI
                 } else if (this.searchMenu) {
                     this.placeSearchMenu();
                     this.searchMenu.completePrefix(eta.getEditedText());
@@ -598,10 +890,9 @@ export class ChatView {
                 } else if (this.chatInput) {
                     if (!ev.altKey && !ev.ctrlKey) {
                         if (ev.key == "ArrowUp" || ev.key == "ArrowDown") {
-                            const messages =
-                                this.messageDiv.querySelectorAll(
-                                    ".chat-message-user",
-                                );
+                            const messages = this.messageDiv.querySelectorAll(
+                                ".chat-message-user:not(.chat-message-hidden) .chat-message-content",
+                            );
 
                             if (
                                 ev.key == "ArrowUp" &&
@@ -847,6 +1138,131 @@ export class ChatView {
         // console.log(`Partial input handler enabled: ${enabled}`);
     }
 
+    private dynamicDisplays: {
+        source: string;
+        id: string;
+        actionIndex: number;
+        displayId: string;
+        nextRefreshTime: number;
+    }[] = [];
+    private timer: number | undefined = undefined;
+    private scheduledRefreshTime: number | undefined = undefined;
+    setDynamicDisplay(
+        source: string,
+        id: string,
+        actionIndex: number,
+        displayId: string,
+        nextRefreshMs: number,
+    ) {
+        const now = Date.now();
+        const agentMessage = this.ensureAgentMessage({
+            message: "",
+            requestId: id,
+            source: source,
+            actionIndex: actionIndex,
+        });
+        if (agentMessage === undefined) {
+            return;
+        }
+        this.dynamicDisplays.push({
+            source,
+            id,
+            actionIndex,
+            displayId,
+            nextRefreshTime:
+                Math.max(nextRefreshMs, DynamicDisplayMinRefreshIntervalMs) +
+                now,
+        });
+
+        this.scheduleDynamicDisplayRefresh(now);
+    }
+    private scheduleDynamicDisplayRefresh(now: number) {
+        if (this.dynamicDisplays.length === 0) {
+            return;
+        }
+        this.dynamicDisplays.sort(
+            (a, b) => a.nextRefreshTime - b.nextRefreshTime,
+        );
+        const nextRefreshTime = this.dynamicDisplays[0].nextRefreshTime;
+        const scheduledRefreshTime = this.scheduledRefreshTime;
+        if (
+            scheduledRefreshTime === undefined ||
+            nextRefreshTime < scheduledRefreshTime
+        ) {
+            if (this.timer !== undefined) {
+                window.clearInterval(this.timer);
+                this.timer = undefined;
+            }
+            const interval = nextRefreshTime - now;
+            this.scheduledRefreshTime = nextRefreshTime;
+            this.timer = window.setTimeout(() => {
+                this.scheduledRefreshTime = undefined;
+                this.timer = undefined;
+                this.refreshDynamicDisplays();
+            }, interval);
+        }
+    }
+
+    private async refreshDynamicDisplays() {
+        const now = Date.now();
+        let item = this.dynamicDisplays[0];
+        const currentDisplay = new Map<string, DynamicDisplay>();
+        while (item && item.nextRefreshTime <= now) {
+            this.dynamicDisplays.shift()!;
+            const { id, source, actionIndex, displayId } = item;
+            try {
+                // Only call getDynamicDisplay once if there are multiple
+                let result = currentDisplay.get(`${source}:${displayId}`);
+                if (result === undefined) {
+                    result = await getClientAPI().getDynamicDisplay(
+                        source,
+                        displayId,
+                    );
+                    currentDisplay.set(`${source}:${displayId}`, result);
+                }
+                this.addAgentMessage(
+                    {
+                        message: result.content,
+                        requestId: id,
+                        source: source,
+                        actionIndex: actionIndex,
+                    },
+                    { dynamicUpdate: true },
+                );
+                if (result.nextRefreshMs !== -1) {
+                    this.dynamicDisplays.push({
+                        source,
+                        id,
+                        actionIndex,
+                        displayId,
+                        nextRefreshTime:
+                            Math.max(
+                                result.nextRefreshMs,
+                                DynamicDisplayMinRefreshIntervalMs,
+                            ) + now,
+                    });
+                }
+            } catch (error: any) {
+                currentDisplay.set(`${source}:${displayId}`, {
+                    content: error.message,
+                    nextRefreshMs: -1,
+                });
+                this.addAgentMessage(
+                    {
+                        message: error.message,
+                        requestId: id,
+                        source: source,
+                        actionIndex: actionIndex,
+                    },
+                    { dynamicUpdate: true },
+                );
+            }
+
+            item = this.dynamicDisplays[0];
+        }
+        this.scheduleDynamicDisplayRefresh(now);
+    }
+
     private getMessageGroup(id: string) {
         const messageGroup = this.idToMessageGroup.get(id);
         if (messageGroup === undefined) {
@@ -855,35 +1271,76 @@ export class ChatView {
         return messageGroup;
     }
 
-    showStatusMessage(
-        message: string,
-        id: string,
-        source: string,
-        temporary: boolean,
-    ) {
-        this.getMessageGroup(id)?.addStatusMessage(message, source, temporary);
+    showStatusMessage(msg: IAgentMessage, temporary: boolean) {
+        this.getMessageGroup(msg.requestId as string)?.addStatusMessage(
+            msg,
+            temporary,
+        );
+        this.updateScroll();
     }
 
     clear() {
         this.messageDiv.replaceChildren();
         this.idToMessageGroup.clear();
-        this.groupToElements.clear();
         this.commandBackStackIndex = -1;
     }
 
-    addUserMessage(request: string) {
+    async addUserMessage(request: DisplayContent, hidden: boolean = false) {
         const id = this.idGenerator.genId();
-        this.idToMessageGroup.set(
-            id,
-            new MessageGroup(
-                request,
-                this.messageDiv,
-                getClientAPI().processShellRequest(request, id),
-                new Date(),
-                this.agents,
-            ),
+
+        let images: string[] = [];
+        let requestText: string;
+        if (typeof request === "string") {
+            requestText = request;
+        } else if (request.type === "html") {
+            let tempDiv: HTMLDivElement = document.createElement("div");
+            tempDiv.innerHTML = request.content;
+
+            images = await this.extractMultiModalContent(tempDiv);
+            requestText = tempDiv.innerText;
+        } else {
+            requestText = request.content;
+        }
+
+        const mg: MessageGroup = new MessageGroup(
+            this,
+            request,
+            this.messageDiv,
+            getClientAPI().processShellRequest(requestText, id, images),
+            new Date(),
+            this.agents,
+            this.hideMetrics,
         );
+
+        if (hidden) {
+            mg.userMessageContainer.classList.add("chat-message-hidden");
+            mg.userMessage.classList.add("chat-message-hidden");
+        }
+
+        this.idToMessageGroup.set(id, mg);
+        this.updateScroll();
         this.commandBackStackIndex = -1;
+    }
+
+    async extractMultiModalContent(tempDiv: HTMLDivElement): Promise<string[]> {
+        let images = tempDiv.querySelectorAll<HTMLImageElement>(
+            ".chat-inpput-dropImage",
+        );
+        let retVal: string[] = new Array<string>(images.length);
+        for (let i = 0; i < images.length; i++) {
+            if (images[i].src.startsWith("data:image")) {
+                retVal[i] = images[i].src;
+            } else if (images[i].src.startsWith("blob:")) {
+                let response = await fetch(images[i].src);
+                let blob = await response.blob();
+                let ab = await blob.arrayBuffer();
+                retVal[i] = `data:image/png;base64,` + _arrayBufferToBase64(ab);
+            } else {
+                console.log("Unknown image source type.");
+            }
+        }
+
+        return retVal;
     }
 
     markRequestExplained(id: string, timestamp: string, fromCache?: boolean) {
@@ -916,51 +1373,44 @@ export class ChatView {
     }
 
     addAgentMessage(
-        text: string,
-        id: string,
-        source: string,
-        actionIndex?: number,
-        groupId?: string,
+        msg: IAgentMessage,
+        options?: {
+            appendMode?: DisplayAppendMode;
+            dynamicUpdate?: boolean;
+            notification?: boolean;
+        },
     ) {
-        const messageContainer = this.ensureAgentMessage(
-            id,
-            source,
-            actionIndex,
-        ) as HTMLDivElement;
-        const message = messageContainer.lastChild as HTMLDivElement;
-        if (message === undefined) {
-            return undefined;
-        }
+        const dynamicUpdate = options?.dynamicUpdate ?? false;
+        const notification = options?.notification ?? false;
+        const content: DisplayContent = msg.message;
+        const source: string = msg.source;
 
-        setSource(messageContainer, source, this.agents);
-        setContent(message, text);
-        if (!groupId) {
-            const innerDiv = message.firstChild as HTMLDivElement;
-            if (innerDiv && innerDiv.dataset && innerDiv.dataset.group) {
-                console.log(`group: ${innerDiv.dataset.group}`);
-                groupId = innerDiv.dataset.group;
-            }
+        const agentMessage = this.ensureAgentMessage(msg, notification);
+        if (agentMessage === undefined) {
+            return;
         }
-        if (groupId) {
-            let group = this.groupToElements.get(groupId);
-            if (group === undefined) {
-                group = [];
-                this.groupToElements.set(groupId, group);
-            }
-            group.push(message);
+        agentMessage.setMessage(
+            content,
+            source,
+            this.agents.get(source),
+            options?.appendMode,
+        );
+
+        if (!dynamicUpdate) {
+            this.updateScroll();
+            this.chatInputFocus();
         }
-        this.chatInputFocus();
+    }
+    updateScroll() {
+        if (this.messageDiv.firstElementChild) {
+            this.messageDiv.firstElementChild.scrollIntoView(false);
+        }
     }
 
-    private ensureAgentMessage(
-        id: string,
-        source: string,
-        actionIndex?: number,
-    ) {
-        return this.getMessageGroup(id)?.ensureAgentMessage(
-            source,
-            actionIndex,
-        );
+    private ensureAgentMessage(msg: IAgentMessage, notification = false) {
+        return this.getMessageGroup(
+            msg.requestId as string,
+        )?.ensureAgentMessage(msg, notification);
     }
 
     chatInputFocus() {
@@ -980,14 +1430,19 @@ export class ChatView {
         requestId: string,
         source: string,
     ) {
-        const agentMessage = this.ensureAgentMessage(requestId, source);
+        const agentMessage = this.ensureAgentMessage({
+            message: "",
+            requestId,
+            source,
+        });
         if (agentMessage === undefined) {
             return;
         }
-        agentMessage.className = "chat-message chat-message-confirm";
+        agentMessage.div.className = "chat-message chat-message-confirm";
         const proposeElm = this.proposeAction(message, requestId);
-        agentMessage.appendChild(proposeElm);
+        agentMessage.div.appendChild(proposeElm);
         proposeYesNo(this, askYesNoId, requestId, message, source);
+        this.updateScroll();
     }
 
     answerYesNo(
@@ -996,10 +1451,13 @@ export class ChatView {
         requestId: string,
         source: string,
     ) {
+        let message = answer ? "Accepted!" : "Rejected!";
         this.showStatusMessage(
-            answer ? "Accepted!" : "Rejected!",
-            requestId,
-            source,
+            {
+                message,
+                requestId,
+                source,
+            },
             true,
         );
         getClientAPI().sendYesNo(questionId, answer);
@@ -1012,12 +1470,16 @@ export class ChatView {
         requestId: string,
         source: string,
     ) {
-        const agentMessage = this.ensureAgentMessage(requestId, source);
+        const agentMessage = this.ensureAgentMessage({
+            message: "",
+            requestId,
+            source,
+        });
         if (agentMessage === undefined) {
             return;
         }
-        agentMessage.innerHTML = "";
-        this.showStatusMessage(message, requestId, source, true);
+        agentMessage.div.innerHTML = "";
+        this.showStatusMessage({ message, requestId, source }, true);
         if (this.searchMenu) {
             this.searchMenuAnswerHandler = (item) => {
                 this.answer(questionId, item.selectedText, requestId);
@@ -1029,23 +1491,16 @@ export class ChatView {
                 message,
                 requestId,
             );
-            agentMessage.appendChild(replacementElm);
+            agentMessage.div.appendChild(replacementElm);
         }
     }
 
     answer(questionId: number, answer: string, requestId: string) {
-        this.showStatusMessage("Answer sent!", requestId, "shell", true);
+        let message = "Answer sent!";
+        let source = "shell";
+        this.showStatusMessage({ message, requestId, source }, true);
         console.log(answer);
         getClientAPI().sendAnswer(questionId, answer);
-    }
-
-    updateGroup(text: string, groupId: string) {
-        const group = this.groupToElements.get(groupId);
-        if (group !== undefined) {
-            for (const message of group) {
-                message.innerHTML = text;
-            }
-        }
     }
 
     getMessageElm() {
@@ -1071,4 +1526,31 @@ export class ChatView {
 
         (window as any).electron.ipcRenderer.send("send-input-text-complete");
     }
+
+    public setMetricsVisible(visible: boolean) {
+        this.hideMetrics = !visible;
+        for (const messageGroup of this.idToMessageGroup.values()) {
+            messageGroup.setMetricsVisible(visible);
+        }
+    }
+}
+
+export function _arrayBufferToBase64(buffer: ArrayBuffer) {
+    let binary = "";
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (var i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+}
+
+export function _base64ToArrayBuffer(base64: string): Uint8Array {
+    const binaryString = window.atob(base64);
+    const len = binaryString.length;
+    const bytes: Uint8Array = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
 }

@@ -6,8 +6,9 @@ import { composeTranslatorSchemas } from "common-utils";
 import {
     getAssistantSelectionSchemas,
     getFullSchemaText,
-    getTranslatorNames,
-} from "agent-dispatcher";
+    getBuiltinTranslatorNames,
+    getBuiltinTranslatorConfigProvider,
+} from "agent-dispatcher/internal";
 
 export default class Schema extends Command {
     static description = "Show schema used by translators";
@@ -30,23 +31,26 @@ export default class Schema extends Command {
         translator: Args.string({
             description: "Translator name",
             required: true,
-            options: getTranslatorNames(),
+            options: getBuiltinTranslatorNames(),
         }),
     };
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(Schema);
+        const provider = getBuiltinTranslatorConfigProvider();
         if (!flags.assistant) {
             console.log(
                 getFullSchemaText(
                     args.translator,
+                    provider,
                     flags.change,
                     flags.multiple,
                 ),
             );
         } else {
             const schemas = getAssistantSelectionSchemas(
-                getTranslatorNames(),
+                getBuiltinTranslatorNames(),
+                provider,
             ).map((entry) => entry.schema);
             console.log(
                 composeTranslatorSchemas("AllAssistantSelection", schemas),

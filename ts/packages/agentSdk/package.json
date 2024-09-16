@@ -12,7 +12,8 @@
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./helpers/commands": "./dist/commands.js"
   },
   "scripts": {
     "build": "npm run tsc",
@@ -22,7 +23,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "typechat": "^0.1.0"
+    "typechat": "^0.1.1"
   },
   "devDependencies": {
     "@types/debug": "^4.1.10",

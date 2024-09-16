@@ -31,14 +31,17 @@ async function ensureWebsocketConnected() {
     webSocket.onmessage = async (event: any) => {
         const data: WebSocketMessage = arrayBufferToJson(event.data);
         if (data.target == "code" && data.messageType == "translatedAction") {
-            const message = await handleVSCodeActions(data.body);
+            const message = await handleVSCodeActions(data.body.action);
             webSocket?.send(
                 JSON.stringify({
                     source: data.target,
                     target: data.source,
                     messageType: "confirmAction",
                     id: data.id,
-                    body: message,
+                    body: {
+                        callId: data.body.callId,
+                        message,
+                    },
                 }),
             );
         }

@@ -51,7 +51,7 @@ async function question(
 export async function processRequests<T>(
     interactivePrompt: string | ((context: T) => string),
     inputs: string[] | readline.Interface,
-    processRequest: (request: string, context: T) => Promise<void>,
+    processRequest: (request: string, context: T) => Promise<any>,
     context: T,
 ) {
     while (true) {

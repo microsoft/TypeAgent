@@ -1,14 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { DisplayContent } from "./display.js";
+
 export interface Entity {
     // the name of the entity such as "Bach" or "frog"
     name: string;
     // the types of the entity such as "artist" or "animal"; an entity can have multiple types; entity types should be single words
     type: string[];
-    // a value associated with the entity such as { birthYear: 1685 } for "Bach" or { destination: "Paris" } for "flight"
-    value?: object;
-    interpreter?: ImpressionInterpreter | undefined;
+
+    additionalEntityText?: string;
+    uniqueId?: string;
 }
 
 export type AssociationType = string;
@@ -34,16 +36,6 @@ export interface Relationship {
     association: Association;
 }
 
-/**
- * Return the entity's id, if one exists
- * @param entity
- */
-export function getEntityId(entity: Entity): string | undefined {
-    return entity.interpreter?.getEntityId
-        ? entity.interpreter.getEntityId(entity)
-        : undefined;
-}
-
 export function entitiesToString(entities: Entity[], indent = ""): string {
     // entities in the format "name (type1, type2)"
     return entities
@@ -51,16 +43,16 @@ export function entitiesToString(entities: Entity[], indent = ""): string {
         .join("\n");
 }
 
-export function turnImpressionToString(turnImpression: TurnImpression): string {
-    if (turnImpression.error) {
-        return `Error: ${turnImpression.error}`;
+export function actionResultToString(actionResult: ActionResult): string {
+    if (actionResult.error) {
+        return `Error: ${actionResult.error}`;
     } else {
         // add to result all non-empty fields of the turn impression, using entitiesToString for the entities
-        const fields = Object.entries(turnImpression)
-            .filter(([key, value]) => value && value.length > 0)
+        const fields = Object.entries(actionResult)
+            .filter(([key, value]) => Array.isArray(value) && value.length > 0)
             .map(([key, value]) => {
                 if (key === "entities") {
-                    return `${key}:\n${entitiesToString(value, "  ")}`;
+                    return `${key}:\n${entitiesToString(value as Entity[], "  ")}`;
                 }
                 return `${key}: ${value}`;
             });
@@ -68,51 +60,79 @@ export function turnImpressionToString(turnImpression: TurnImpression): string {
     }
 }
 
-export const defaultImpressionInterpreter: ImpressionInterpreter = {
-    entityToText: (entity) => `${entity.name} (${entity.type.join(", ")})`,
+export type ActionResultError = {
+    error: string;
 };
 
-export interface ImpressionInterpreter {
-    entityToText: (entity: Entity) => string;
-    getEntityId?: (entity: Entity) => string | undefined;
-}
-
-export interface TurnImpression {
+export type ActionResultSuccessNoDisplay = {
     literalText?: string | undefined;
+    displayContent?: undefined;
     entities: Entity[];
     relationships?: Relationship[] | undefined;
-    displayText: string;
-    error?: string | undefined;
+    dynamicDisplayId?: string | undefined;
+    dynamicDisplayNextRefreshMs?: number | undefined;
+    error?: undefined;
+};
 
-    // REVIEW: this is not "remoteable", need to redesign to enable dispatcher agent isolation.
-    impressionInterpreter?: ImpressionInterpreter;
+export type ActionResultSuccess = {
+    literalText?: string | undefined;
+    displayContent: DisplayContent;
+    entities: Entity[];
+    relationships?: Relationship[] | undefined;
+    dynamicDisplayId?: string | undefined;
+    dynamicDisplayNextRefreshMs?: number | undefined;
+    error?: undefined;
+};
+
+export type ActionResult =
+    | ActionResultSuccessNoDisplay
+    | ActionResultSuccess
+    | ActionResultError;
+
+export function createActionResultNoDisplay(
+    literalText: string,
+): ActionResultSuccessNoDisplay {
+    return {
+        literalText,
+        entities: [],
+    };
 }
 
-export function createTurnImpressionFromDisplay(
+export function createActionResult(literalText: string): ActionResultSuccess {
+    return {
+        literalText,
+        entities: [],
+        displayContent: literalText,
+    };
+}
+
+export function createActionResultFromTextDisplay(
     displayText: string,
     literalText?: string,
-): TurnImpression {
+): ActionResultSuccess {
     return {
         literalText,
         entities: [],
-        displayText,
+        displayContent: displayText,
     };
 }
 
-export function createTurnImpressionFromError(error: string): TurnImpression {
+export function createActionResultFromHtmlDisplay(
+    displayText: string,
+    literalText?: string,
+): ActionResultSuccess {
     return {
+        literalText,
         entities: [],
-        displayText: "",
+        displayContent: {
+            type: "html",
+            content: displayText,
+        },
+    };
+}
+
+export function createActionResultFromError(error: string): ActionResultError {
+    return {
         error,
-    };
-}
-
-export function createTurnImpressionFromLiteral(
-    literalText: string,
-): TurnImpression {
-    return {
-        literalText,
-        entities: [],
-        displayText: literalText,
     };
 }

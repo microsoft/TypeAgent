@@ -31,6 +31,7 @@ import { SetOp, unionArrays } from "../setOperations.js";
 import { ConcreteEntity } from "./knowledgeSchema.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TopicMerger } from "./topics.js";
+import { open } from "fs";
 
 /**
  * A conversation manager lets you dynamically:
@@ -106,10 +107,11 @@ export async function createConversationManager(
     conversationOrPath: string | Conversation,
     createNew: boolean,
 ): Promise<ConversationManager> {
-    const embeddingModel = createEmbeddingCache(
+    /*const embeddingModel = createEmbeddingCache(
         openai.createEmbeddingModel(),
         64,
-    );
+    );*/
+    const embeddingModel = openai.createEmbeddingModel();
     const knowledgeModel = openai.createChatModel();
     const answerModel = openai.createChatModel();
 

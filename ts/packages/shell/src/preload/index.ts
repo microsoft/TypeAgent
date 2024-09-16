@@ -4,6 +4,51 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { ClientAPI, SpeechToken } from "./electronTypes.js"; // Custom APIs for renderer
+import { RequestMetrics } from "agent-dispatcher";
+
+function getProcessShellRequest() {
+    const pendingRequests = new Map<
+        string,
+        {
+            resolve: (metrics?: RequestMetrics) => void;
+            reject: (reason?: any) => void;
+        }
+    >();
+
+    ipcRenderer.on(
+        "process-shell-request-done",
+        (_, id: string, metrics?: RequestMetrics) => {
+            const pendingRequest = pendingRequests.get(id);
+            if (pendingRequest !== undefined) {
+                pendingRequest.resolve(metrics);
+                pendingRequests.delete(id);
+            } else {
+                console.warn(`Pending request ${id} not found`);
+            }
+        },
+    );
+    ipcRenderer.on(
+        "process-shell-request-error",
+        (_, id: string, message: string) => {
+            const pendingRequest = pendingRequests.get(id);
+            if (pendingRequest !== undefined) {
+                pendingRequest.reject(new Error(message));
+                pendingRequests.delete(id);
+            } else {
+                console.warn(
+                    `Pending request ${id} not found for error: ${message}`,
+                );
+            }
+        },
+    );
+
+    return (request: string, id: string, images: string[]) => {
+        return new Promise<RequestMetrics | undefined>((resolve, reject) => {
+            pendingRequests.set(id, { resolve, reject });
+            ipcRenderer.send("process-shell-request", request, id, images);
+        });
+    };
+}
 
 const api: ClientAPI = {
     onListenEvent: (
@@ -14,11 +59,10 @@ const api: ClientAPI = {
             useLocalWhisper?: boolean,
         ) => void,
     ) => ipcRenderer.on("listen-event", callback),
-    processShellRequest: (request: string, id: string) => {
-        return ipcRenderer.invoke("request", request, id);
-    },
-    sendPartialInput: (text: string) => {
-        ipcRenderer.send("partial-input", text);
+
+    processShellRequest: getProcessShellRequest(),
+    getDynamicDisplay(source: string, id: string) {
+        return ipcRenderer.invoke("get-dynamic-display", source, id);
     },
     onActionCommand: (callback) => {
         ipcRenderer.on("action-command", callback);
@@ -26,14 +70,11 @@ const api: ClientAPI = {
     onSearchMenuCommand: (callback) => {
         ipcRenderer.on("search-menu-command", callback);
     },
-    onResponse(callback) {
-        ipcRenderer.on("response", callback);
+    onUpdateDisplay(callback) {
+        ipcRenderer.on("updateDisplay", callback);
     },
-    onStatusMessage(callback) {
-        ipcRenderer.on("status-message", callback);
-    },
-    onUpdate(callback) {
-        ipcRenderer.on("update", callback);
+    onSetDynamicActionDisplay(callback) {
+        ipcRenderer.on("set-dynamic-action-display", callback);
     },
     onClear(callback) {
         ipcRenderer.on("clear", callback);
@@ -80,11 +121,17 @@ const api: ClientAPI = {
     onRandomMessageRequested(callback) {
         ipcRenderer.on("random-message-requested", callback);
     },
-    onMicrophoneChangeRequested(callback) {
-        ipcRenderer.on("microphone-change-requested", callback);
-    },
     onShowDialog(callback) {
         ipcRenderer.on("show-dialog", callback);
+    },
+    onSettingsChanged(callback) {
+        ipcRenderer.on("settings-changed", callback);
+    },
+    onNotificationCommand(callback) {
+        ipcRenderer.on("notification-command", callback);
+    },
+    onNotify(callback) {
+        ipcRenderer.on("notification-arrived", callback);
     },
 };
 

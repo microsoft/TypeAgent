@@ -6,9 +6,9 @@ import chalk from "chalk";
 import { CorrectionRecord } from "agent-cache";
 import {
     getCacheFactory,
-    getTranslatorNames,
+    getBuiltinTranslatorNames,
     readTestData,
-} from "agent-dispatcher";
+} from "agent-dispatcher/internal";
 import { getTestDataFiles } from "../../../../dispatcher/dist/utils/config.js";
 import path from "node:path";
 
@@ -148,7 +148,7 @@ export default class ExplanationDataStatCommmand extends Command {
     static flags = {
         translator: Flags.string({
             description: "Filter by translator",
-            options: getTranslatorNames(),
+            options: getBuiltinTranslatorNames(),
             multiple: true,
         }),
         explainer: Flags.string({

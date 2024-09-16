@@ -11,12 +11,12 @@ import {
     TestDataEntry,
     FailedTestDataEntry,
     getCacheFactory,
-    loadTranslatorSchemaConfig,
     getBuiltinConstructionConfig,
     GenerateDataInput,
     getEmptyTestData,
     getTestDataFiles,
-} from "agent-dispatcher";
+    loadBuiltinTranslatorSchemaConfig,
+} from "agent-dispatcher/internal";
 import {
     Actions,
     getDefaultExplainerName,
@@ -430,7 +430,7 @@ export default class ExplanationDataRegenerateCommmand extends Command {
         if (builtinConstructionConfig !== undefined) {
             const agentCache = getCacheFactory().create(
                 flags.builtin!,
-                loadTranslatorSchemaConfig,
+                loadBuiltinTranslatorSchemaConfig,
             );
             await agentCache.constructionStore.newCache(
                 flags.none ? undefined : builtinConstructionConfig.file,

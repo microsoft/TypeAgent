@@ -181,54 +181,145 @@ body {
   position: relative;
 }
 
-.chat-message {
-  /* use a common class for all messages */
+.chat-input-drag {
+  color: #cccccc;
+  font-style: italic;
+}
+
+/* Container */
+.chat-message-container {
   padding-left: 10px;
   padding-right: 10px;
-  padding-bottom: 5px;
   margin-bottom: 8px;
   margin-top: 8px;
-  border-radius: 8px;
+  width: 55%;
   transform-origin: 0 100%;
   transform: scale(0);
-  word-wrap: normal;
   animation: message 0.15s ease-out 0s forwards;
 }
 
 .chat-message-left {
-  width: 55%;
+  .chat-message-container;
   margin-left: 10px;
 }
 
 .chat-message-right {
-  width: 55%;
+  .chat-message-container;
   margin-right: 10px;
   align-self: flex-end;
 }
 
-.chat-message-temp {
-  .chat-message-left;
+/* Body */
+.chat-message-body {
+  border-radius: 8px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.chat-message-user {
+  .chat-message-body;
+  position: relative;
+  background-color: lavender;
+}
+
+.chat-message-agent {
+  left: 30px;
+  position: relative;
+  background-color: #d6f3ff;
+}
+
+/* Content */
+.chat-message-content {
+  padding: 6px 15px 6px 15px;
+  word-wrap: break-word;
+}
+
+.chat-message-kind-status {
   font-style: italic;
-  color: darkgreen;
-  padding: 6px 15px 8px 15px;
+  color: grey;
+}
+
+.chat-message-kind-warning {
+  font-style: italic;
+  color: rgb(146, 146, 0);
+}
+
+.chat-message-kind-error {
+  font-style: italic;
+  color: red;
+}
+
+.chat-message-kind-success {
+  font-style: italic;
+  color: green;
+}
+
+.chat-message-agent-text {
+  white-space: break-spaces;
+}
+
+.chat-message-metrics {
+  margin: 0px;
+  border-radius: 0px 0px 8px 8px;
+  font-size: 8px;
+  font-style: normal;
+  z-index: 100;
+  text-align: right;
+}
+
+.chat-message-metrics-left {
+  .chat-message-metrics;
+  background-color: #c2edff;
+}
+
+.chat-message-metrics-right {
+  .chat-message-metrics;
+  background-color: rgb(150, 150, 202);
+}
+
+/* hidden metrics */
+.chat-message-body-hide-metrics {
+  .chat-message-body;
+}
+.chat-message-body-hide-metrics .chat-message-metrics {
+  display: none;
+}
+
+.chat-message-body-hide-metrics:hover {
+  border-radius: 8px 8px 0px 0px;
+}
+
+.chat-message-body-hide-metrics:hover .chat-message-metrics {
+  display: block;
+  position: absolute;
+  width: 100%;
+  transform-origin: 0 0;
+  transform: scaleY(0);
+  animation: metrics 0.15s ease-out 0s forwards;
+}
+
+@keyframes metrics {
+  0% {
+  }
+  100% {
+    transform: scaleY(1);
+    overflow: visible;
+  }
+}
+
+.metrics-tts {
+  text-align: left;
+}
+
+.metrics-details {
+  display: inline-flex;
+  margin: 5px;
+  justify-content: space-between;
 }
 
 .chat-message-hidden {
   display: none;
   visibility: hidden;
-}
-
-.chat-message-user {
-  .chat-message;
-  background-color: lavender;
-  padding: 6px 15px 8px 15px;
-}
-
-.chat-message-agent {
-  .chat-message;
-  margin-left: 30px;
-  background-color: @chat-input-bg;
-  padding: 6px 15px 8px 15px;
 }
 
 .agent-icon {
@@ -285,6 +376,11 @@ body {
   align-self: flex-end;
   border: none;
   background-color: transparent;
+  width: 32px;
+  height: 32px;
+  padding: 0px;
+  margin: 0px 5px;
+  cursor: pointer;
 }
 
 .chat-input-micSelector {
@@ -293,6 +389,10 @@ body {
   background-color: white;
   width: 100%;
   max-width: 85%;
+}
+
+.chat-inpput-dropImage {
+  width: 96px;
 }
 
 .chat-timestamp {
@@ -500,4 +600,35 @@ span.ansi-bright-white-fg {
 
 .metric-label {
   margin-right: 5px;
+}
+
+input[type="file"] {
+  display: none;
+}
+
+.custom-file-upload {
+  border: 0px solid #ccc;
+  display: inline-block;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.notification {
+  font-size: 10px;
+}
+
+.notification-error {
+  color: red;
+}
+
+.notification-warning {
+  color: orange;
+}
+
+.notification-info {
+  color: blue;
+}
+
+.notification-debug {
+  color: pink;
 }

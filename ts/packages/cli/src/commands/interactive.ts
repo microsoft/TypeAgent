@@ -4,15 +4,15 @@
 import { Args, Command, Flags } from "@oclif/core";
 import readline from "readline/promises";
 import {
-    getTranslatorNames,
+    getBuiltinTranslatorNames,
     getCacheFactory,
     processCommand,
     processRequests,
     getPrompt,
-    CommandHandlerContext,
     initializeCommandHandlerContext,
+    CommandHandlerContext,
     closeCommandHandlerContext,
-} from "agent-dispatcher";
+} from "agent-dispatcher/internal";
 import inspector from "node:inspector";
 
 export default class Interactive extends Command {
@@ -20,7 +20,7 @@ export default class Interactive extends Command {
     static flags = {
         translator: Flags.string({
             description: "Translator names",
-            options: getTranslatorNames(),
+            options: getBuiltinTranslatorNames(),
             multiple: true,
         }),
         explainer: Flags.string({

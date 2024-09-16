@@ -13,18 +13,14 @@
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    "./agent/manifest": "./src/agent/desktopManifest.json",
-    "./agent/handlers": "./dist/agent/desktopActionHandler.js"
+    "./agent/manifest": "./src/manifest.json",
+    "./agent/handlers": "./dist/actionHandler.js"
   },
-  "main": "dist/main.js",
   "scripts": {
     "build": "npm run tsc",
-    "postbuild": "copyfiles -u 1 \"src/**/*.txt\" \"src/**/*.html\" dist",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
-    "dev": "tsx src/main.ts",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
-    "start": "node dist/main.js",
     "tsc": "tsc -p src"
   },
   "dependencies": {
@@ -38,9 +34,10 @@
     "debug": "^4.3.4",
     "dotenv": "^16.3.1",
     "express": "^4.19.2",
+    "find-config": "^1.0.0",
     "open": "^7.0.4",
     "typeagent": "workspace:*",
-    "typechat": "^0.1.0",
+    "typechat": "^0.1.1",
     "ws": "^8.17.1"
   },
   "devDependencies": {
@@ -48,6 +45,7 @@
     "@types/cors": "^2.8.17",
     "@types/debug": "^4.1.10",
     "@types/express": "^4.17.17",
+    "@types/find-config": "1.0.4",
     "@types/node": "^20.3.1",
     "@types/ws": "^8.5.10",
     "copyfiles": "^2.4.1",
