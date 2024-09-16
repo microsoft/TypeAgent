@@ -43,3 +43,5 @@ export * from "./profiler/profileLogger.js";
 export * from "./profiler/profileReader.js";
 
 export { createRpc } from "./rpc.js";
+
+export { getDirectorySize } from "./fileSystemStats.js"

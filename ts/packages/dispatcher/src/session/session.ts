@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DeepPartialUndefined } from "common-utils";
+import { DeepPartialUndefined, getDirectorySize } from "common-utils";
 import { CacheConfig, AgentCache, getDefaultExplainerName } from "agent-cache";
 import registerDebug from "debug";
 import fs from "node:fs";
@@ -439,6 +439,14 @@ export class Session {
 
         throw "Unsupported MIME type"!;
     }
+
+    getSessionSizeOnDisk() {
+        if (this.dir) {
+            return getDirectorySize(this.dir);
+        } else {
+            return -1;
+        }
+    }
 }
 
 export async function configAgentCache(
@@ -542,4 +550,8 @@ export async function getSessionCaches(dir: string) {
     }
 
     return ret;
+}
+
+export function getAllSessionsSize(): number {
+    return getDirectorySize(getSessionsDirPath());
 }
