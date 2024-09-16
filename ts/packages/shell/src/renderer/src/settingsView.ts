@@ -160,6 +160,8 @@ export class SettingsView {
                       this.shellSettings.ttsSettings.voice,
                   )
                 : undefined;
+
+            chatView.setMetricsVisible(this.shellSettings.devUI);
         };
 
         const updateInputs = () => {
