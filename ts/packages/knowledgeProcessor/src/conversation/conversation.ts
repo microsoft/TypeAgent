@@ -64,7 +64,6 @@ import {
     createActionIndex,
 } from "./actions.js";
 import { SearchTermsAction, TermFilter } from "./knowledgeTermSearchSchema.js";
-import { createLabelIndex, LabelIndex } from "./labels.js";
 
 export interface RecentItems<T> {
     readonly entries: collections.CircularArray<T>;
@@ -124,13 +123,11 @@ export interface Conversation<
     TTopicId = any,
     TEntityId = any,
     TActionId = any,
-    TLabelId = any,
 > {
     readonly messages: TextStore<MessageId>;
     readonly knowledge: ObjectFolder<ExtractedKnowledge>;
 
     getMessageIndex(): Promise<MessageIndex<MessageId>>;
-    getLabelIndex(): Promise<LabelIndex<TLabelId, MessageId>>;
     getEntityIndex(): Promise<EntityIndex<TEntityId, MessageId>>;
     getTopicsIndex(level?: number): Promise<TopicIndex<TTopicId, MessageId>>;
     getActionIndex(): Promise<ActionIndex<TActionId, MessageId>>;
@@ -139,7 +136,6 @@ export interface Conversation<
     removeKnowledge(): Promise<void>;
     removeActions(): Promise<void>;
     removeMessageIndex(): Promise<void>;
-    removeLabels(): Promise<void>;
     /**
      *
      * @param removeMessages If you want the original messages also removed. Set to false if you just want to rebuild the indexes
@@ -149,7 +145,7 @@ export interface Conversation<
     addMessage(
         message: string | TextBlock,
         timestamp?: Date,
-        label?: string,
+        messageLabel?: string,
     ): Promise<SourceTextBlock<MessageId>>;
     addKnowledgeForMessage(
         message: SourceTextBlock<MessageId>,
@@ -166,6 +162,7 @@ export interface Conversation<
     searchTerms(
         filters: TermFilter[],
         options: ConversationSearchOptions,
+        messageLabel?: string | undefined,
     ): Promise<SearchResponse>;
     searchMessages(
         query: string,
@@ -435,7 +432,6 @@ export async function createConversation(
     fSys?: FileSystem | undefined,
 ): Promise<Conversation<string, string, string>> {
     type MessageId = string;
-    type LabelId = string;
     type TopicId = string;
     type EntityId = string;
     type ActionId = string;
@@ -448,8 +444,6 @@ export async function createConversation(
         folderSettings,
         fSys,
     );
-    const labelPath = path.join(rootPath, "labels");
-    let labelIndex: LabelIndex | undefined;
 
     let messageIndex: MessageIndex<MessageId> | undefined;
     const knowledgeStore = await createObjectFolder<
@@ -468,7 +462,6 @@ export async function createConversation(
         messages,
         knowledge: knowledgeStore,
         getMessageIndex,
-        getLabelIndex,
         getEntityIndex,
         getTopicsIndex,
         getActionIndex,
@@ -477,7 +470,6 @@ export async function createConversation(
         removeKnowledge,
         removeActions,
         removeMessageIndex,
-        removeLabels,
         clear,
         addMessage,
         addKnowledgeForMessage,
@@ -499,18 +491,6 @@ export async function createConversation(
             );
         }
         return messageIndex;
-    }
-
-    async function getLabelIndex(): Promise<LabelIndex> {
-        if (!labelIndex) {
-            labelIndex = await createLabelIndex(
-                settings.indexSettings,
-                labelPath,
-                folderSettings,
-                fSys,
-            );
-        }
-        return labelIndex;
     }
 
     async function getEntityIndex(): Promise<EntityIndex> {
@@ -592,14 +572,8 @@ export async function createConversation(
         messageIndex = undefined;
     }
 
-    async function removeLabels(): Promise<void> {
-        await removeDir(labelPath, fSys);
-        labelIndex = undefined;
-    }
-
     async function clear(removeMessages: boolean): Promise<void> {
         await removeMessageIndex();
-        await removeLabels();
         await removeKnowledge();
 
         if (removeMessages) {
@@ -608,11 +582,7 @@ export async function createConversation(
     }
 
     async function load() {
-        await Promise.all([
-            loadKnowledge(),
-            getMessageIndex(),
-            getLabelIndex(),
-        ]);
+        await Promise.all([loadKnowledge(), getMessageIndex()]);
     }
 
     async function loadTopicIndex(name: string): Promise<TopicIndex> {
@@ -639,10 +609,6 @@ export async function createConversation(
                 : message;
         timestamp ??= new Date();
         const blockId = await messages.put(messageBlock, timestamp);
-        if (label) {
-            const labelIndex = await getLabelIndex();
-            await labelIndex.put(label, [blockId]);
-        }
         return { ...messageBlock, blockId, timestamp };
     }
 
@@ -716,7 +682,7 @@ export async function createConversation(
     ): Promise<void> {
         if (knowledge.entities && knowledge.entities.length > 0) {
             const entityIndex = await getEntityIndex();
-            knowledgeIds.entityIds = await entityIndex.putNext(
+            knowledgeIds.entityIds = await entityIndex.addNext(
                 knowledge.entities,
                 timestamp,
             );
@@ -729,7 +695,7 @@ export async function createConversation(
     ): Promise<void> {
         if (knowledge.entities && knowledge.entities.length > 0) {
             const entityIndex = await getEntityIndex();
-            await entityIndex.putMultiple(
+            await entityIndex.addMultiple(
                 knowledge.entities,
                 knowledgeIds.entityIds,
             );
@@ -820,6 +786,7 @@ export async function createConversation(
     async function searchTerms(
         filters: TermFilter[],
         options: ConversationSearchOptions,
+        messageLabel?: string | undefined,
     ): Promise<SearchResponse> {
         const [entityIndex, topicIndex, actionIndex] = await Promise.all([
             getEntityIndex(),
