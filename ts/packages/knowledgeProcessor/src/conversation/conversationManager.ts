@@ -46,12 +46,14 @@ export interface ConversationManager {
      *
      * @param message
      * @param entities If entities is NOT supplied, then will extract knowledge from message
-     * @param timestamp
+     * @param timestamp message timestamp
+     * @param label optional label for this message
      */
     addMessage(
         messageText: string,
         entities?: ConcreteEntity[] | undefined,
-        timestamp?: Date,
+        timestamp?: Date | undefined,
+        label?: string | undefined,
     ): Promise<any>;
     /**
      * Search the conversation and return an answer
@@ -166,7 +168,8 @@ export async function createConversationManager(
     function addMessage(
         messageText: string,
         knownEntities?: ConcreteEntity[] | undefined,
-        timestamp?: Date,
+        timestamp?: Date | undefined,
+        label?: string | undefined,
     ): Promise<any> {
         return addMessageToConversation(
             conversation,
@@ -175,6 +178,7 @@ export async function createConversationManager(
             messageText,
             knownEntities,
             timestamp,
+            label,
         );
     }
 
@@ -280,6 +284,7 @@ export async function createConversationManager(
  * @param messageText
  * @param knownEntities
  * @param timestamp
+ * @param label optional label for the message
  */
 export async function addMessageToConversation(
     conversation: Conversation,
@@ -287,9 +292,10 @@ export async function addMessageToConversation(
     topicMerger: TopicMerger | undefined,
     messageText: string,
     knownEntities?: ConcreteEntity[] | undefined,
-    timestamp?: Date,
+    timestamp?: Date | undefined,
+    label?: string | undefined,
 ): Promise<any> {
-    const block = await conversation.addMessage(messageText, timestamp);
+    const block = await conversation.addMessage(messageText, timestamp, label);
     await extractKnowledgeAndIndex(
         conversation,
         knowledgeExtractor,

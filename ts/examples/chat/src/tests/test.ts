@@ -172,12 +172,30 @@ export function testCircularArray() {
     console.log([...buffer]);
 }
 
-export async function testConversationEntities(): Promise<void> {
-    const testConversation = await conversation.createConversationManager(
+async function createConversationManager(): Promise<conversation.ConversationManager> {
+    return await conversation.createConversationManager(
         "testConversation",
         "/data/tests",
         true,
     );
+}
+
+export async function testLabels(): Promise<boolean> {
+    const testConversation = await createConversationManager();
+    const testMessage = "Bach ate pizza while he wrote fugues";
+    const testLabel = "Bach Food";
+    await testConversation.conversation.addMessage(
+        testMessage,
+        undefined,
+        testLabel,
+    );
+    const labels = await testConversation.conversation.getLabelIndex();
+    const messageIds = await labels.get(testLabel);
+    return messageIds !== undefined && messageIds.length === 1;
+}
+
+export async function testConversationEntities(): Promise<void> {
+    const testConversation = await createConversationManager();
     const testMessage = "Bach ate pizza while he wrote fugues";
     let entity1: conversation.ConcreteEntity = {
         name: "bach",
@@ -238,6 +256,7 @@ export async function runTestCases(): Promise<void> {
 }
 
 export async function runTests(): Promise<void> {
+    await testLabels();
     await testConversationEntities();
     await runTestCases();
     // await runKnowledgeTests();

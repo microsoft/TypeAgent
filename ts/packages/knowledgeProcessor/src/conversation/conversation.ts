@@ -149,6 +149,7 @@ export interface Conversation<
     addMessage(
         message: string | TextBlock,
         timestamp?: Date,
+        label?: string,
     ): Promise<SourceTextBlock<MessageId>>;
     addKnowledgeForMessage(
         message: SourceTextBlock<MessageId>,
@@ -627,6 +628,7 @@ export async function createConversation(
     async function addMessage(
         message: string | TextBlock,
         timestamp?: Date,
+        label?: string,
     ): Promise<SourceTextBlock<any, MessageId>> {
         const messageBlock: TextBlock =
             typeof message === "string"
@@ -637,6 +639,10 @@ export async function createConversation(
                 : message;
         timestamp ??= new Date();
         const blockId = await messages.put(messageBlock, timestamp);
+        if (label) {
+            const labelIndex = await getLabelIndex();
+            await labelIndex.put(label, [blockId]);
+        }
         return { ...messageBlock, blockId, timestamp };
     }
 
