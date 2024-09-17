@@ -498,6 +498,17 @@ export async function createTextIndex<TSourceId = any>(
         return matches;
     }
 
+    async function prefixMatchText(value: string): Promise<TextId[]> {
+        // optimize when switch textIdMap from Map to sorted list
+        const matches: TextId[] = [];
+        for (const text of textIdMap.keys()) {
+            if (text.startsWith(value)) {
+                matches.push(text);
+            }
+        }
+        return matches;
+    }
+
     async function loadTextIdMap(): Promise<Map<string, TextId>> {
         const map = new Map<string, TextId>();
         const allIds = await entriesFolder.allNames();

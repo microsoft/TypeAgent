@@ -648,7 +648,7 @@ export async function runChatMemory(): Promise<void> {
                             const [message, knowledge] = knowledgeResult;
                             await writeKnowledgeResult(message, knowledge);
                             const knowledgeIds =
-                                await context.conversation.putNext(
+                                await context.conversation.addKnowledgeForMessage(
                                     message,
                                     knowledge,
                                 );
@@ -665,7 +665,7 @@ export async function runChatMemory(): Promise<void> {
                                     );
                                 }
                             }
-                            await context.conversation.putIndex(
+                            await context.conversation.addKnowledgeToIndex(
                                 knowledge,
                                 knowledgeIds,
                             );

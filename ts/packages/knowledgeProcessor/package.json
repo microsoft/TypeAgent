@@ -20,6 +20,7 @@
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "test": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
     "tsc": "tsc -p src"
   },
   "dependencies": {
@@ -29,9 +30,11 @@
   },
   "devDependencies": {
     "@types/node": "^18.18.7",
+    "@types/jest": "^29.5.7",
     "copyfiles": "^2.4.1",
     "prettier": "^3.2.5",
     "rimraf": "^5.0.5",
+    "jest": "^29.7.0",
     "typescript": "^5.4.2"
   }
 }
