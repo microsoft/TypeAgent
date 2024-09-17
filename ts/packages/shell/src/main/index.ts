@@ -145,7 +145,7 @@ function createWindow(): void {
         runDemo(mainWindow!, interactive);
     };
 
-    ShellSettings.getinstance().toggleToopMost = () => {
+    ShellSettings.getinstance().toggleTopMost = () => {
         mainWindow?.setAlwaysOnTop(!mainWindow?.isAlwaysOnTop());
     };
 }
