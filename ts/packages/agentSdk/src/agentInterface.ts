@@ -61,7 +61,7 @@ export interface AppAgentCommandInterface {
     ): Promise<CommandDescriptor | CommandDescriptorTable>;
 
     executeCommand(
-        command: string[],
+        commands: string[],
         args: string,
         context: ActionContext<unknown>,
         attachments?: string[],

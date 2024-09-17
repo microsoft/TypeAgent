@@ -116,7 +116,7 @@ const agentInvokeHandlers: AgentInvokeFunctions = {
     },
     async executeCommand(
         param: Partial<ActionContextParams> & {
-            command: string[];
+            commands: string[];
             args: string;
         },
     ) {
@@ -124,7 +124,7 @@ const agentInvokeHandlers: AgentInvokeFunctions = {
             throw new Error("Invalid invocation of executeCommand");
         }
         return agent.executeCommand(
-            param.command,
+            param.commands,
             param.args,
             getActionContextShim(param),
         );

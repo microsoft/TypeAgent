@@ -26,8 +26,7 @@ export class MailClient {
         if (this.graphClient === undefined) {
             this.graphClient = await GraphClient.getInstance();
             this.graphClient?.authenticateUser();
-        }
-        else if (fLogin) {
+        } else if (fLogin) {
             await this.graphClient.ensureTokenIsValid();
             this.graphClient.loadUserEmailAddresses();
         }

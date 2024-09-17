@@ -34,7 +34,7 @@ export function getCommandInterface(
     return {
         getCommands: async () => handlers,
         executeCommand: async (
-            command: string[],
+            commands: string[],
             args: string,
             context: ActionContext<unknown>,
             attachments?: string[],
@@ -43,7 +43,7 @@ export function getCommandInterface(
             const commandPrefix: string[] = [];
 
             while (true) {
-                const currCommand = command.shift();
+                const currCommand = commands.shift();
                 if (currCommand === undefined) {
                     break;
                 }

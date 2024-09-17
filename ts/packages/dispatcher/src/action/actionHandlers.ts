@@ -331,7 +331,7 @@ export function startStreamPartialAction(
 }
 
 export async function executeCommand(
-    command: string[],
+    commands: string[],
     args: string,
     appAgentName: string,
     context: CommandHandlerContext,
@@ -357,7 +357,7 @@ export async function executeCommand(
 
     try {
         return await appAgent.executeCommand(
-            command,
+            commands,
             args,
             actionContext,
             attachments,

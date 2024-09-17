@@ -26,16 +26,14 @@ export class CalendarClient {
     public async initGraphClient(fLogin: boolean): Promise<void> {
         if (this.graphClient === undefined) {
             this.graphClient = await GraphClient.getInstance();
-            if(fLogin &&  this.graphClient)
-            {
+            if (fLogin && this.graphClient) {
                 await this.graphClient.authenticateUser();
                 this.graphClient.loadUserEmailAddresses();
             }
             this.indexCalendarEvents();
             this.startSyncThread();
-        }
-        else{
-            if(fLogin) {
+        } else {
+            if (fLogin) {
                 this.stopSyncThread();
                 await this.graphClient.ensureTokenIsValid();
                 this.startSyncThread();

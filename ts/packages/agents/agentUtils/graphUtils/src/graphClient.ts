@@ -79,6 +79,8 @@ export class GraphClient {
 
     private graphLock: Limiter;
     private static instance: GraphClient | undefined = undefined;
+    private readonly MSGRAPH_AUTH_URL: string =
+        "https://graph.microsoft.com/.default";
 
     private constructor() {
         this.graphLock = createLimiter(1);
@@ -163,9 +165,9 @@ export class GraphClient {
 
     public async authenticateUserFromCache(): Promise<boolean> {
         if (this._deviceCodeCredential) {
-            let authRecord: AuthCacheContent | undefined  = await this.getAuthRecordFromCache();
+            let authRecord: AuthCacheContent | undefined =
+                await this.getAuthRecordFromCache();
             if (authRecord != undefined) {
-
                 const currentTime = new Date().getTime();
                 if (currentTime >= authRecord.tokenExpiration) {
                     await this.ensureTokenIsValid();
@@ -251,7 +253,7 @@ export class GraphClient {
 
         if (this._usernamePasswordCredential) {
             let token = await this._usernamePasswordCredential.getToken(
-                "https://graph.microsoft.com/.default",
+                this.MSGRAPH_AUTH_URL,
             );
             if (token === undefined) {
                 this.logger(chalk.red("Failed to get token"));
@@ -287,13 +289,15 @@ export class GraphClient {
 
     private async handleTokenExpiration(): Promise<void> {
         const authRecordPath = this.AUTH_RECORD_PATH;
-        
+
         if (!existsSync(authRecordPath)) {
             await this.writeAuthRecordToFile();
         } else {
-            const fileContent = JSON.parse(readFileSync(authRecordPath, 'utf8'));
+            const fileContent = JSON.parse(
+                readFileSync(authRecordPath, "utf8"),
+            );
             const tokenExpiration = fileContent.tokenExpiration || 0;
-    
+
             // Check if the token is expiring within 5 minutes (300,000 ms)
             if (Date.now() >= tokenExpiration - 300000) {
                 await this.writeAuthRecordToFile();
@@ -303,30 +307,38 @@ export class GraphClient {
 
     private async writeAuthRecordToFile(): Promise<void> {
         try {
-            if(this._deviceCodeCredential !== undefined) {
+            if (this._deviceCodeCredential !== undefined) {
                 const token = await this._deviceCodeCredential.getToken(
-                    "https://graph.microsoft.com/.default"
+                    this.MSGRAPH_AUTH_URL,
                 );
-        
-                const authRecord = await this._deviceCodeCredential.authenticate(
-                    "https://graph.microsoft.com/.default"
-                );
-        
+
+                const authRecord =
+                    await this._deviceCodeCredential.authenticate(
+                        this.MSGRAPH_AUTH_URL,
+                    );
+
                 if (authRecord) {
-                    const serializedAuthRecord = serializeAuthenticationRecord(authRecord);
+                    const serializedAuthRecord =
+                        serializeAuthenticationRecord(authRecord);
                     const content = {
                         authRecord: serializedAuthRecord,
-                        tokenExpiration: token.expiresOnTimestamp // Add token expiration timestamp
+                        tokenExpiration: token.expiresOnTimestamp, // Add token expiration timestamp
                     };
-                    writeFileSync(this.AUTH_RECORD_PATH, JSON.stringify(content, null, 2));
-                    this.logger(chalk.green('Token refreshed and expiration saved.'));
+                    writeFileSync(
+                        this.AUTH_RECORD_PATH,
+                        JSON.stringify(content, null, 2),
+                    );
+                    this.logger(
+                        chalk.green("Token refreshed and expiration saved."),
+                    );
                 }
             }
         } catch (error) {
-            this.logger(chalk.red(`Error writing auth record to file: ${error}`));
+            this.logger(
+                chalk.red(`Error writing auth record to file: ${error}`),
+            );
         }
     }
-    
 
     public async refreshTokenFromDeviceCodeCred(): Promise<void> {
         const retries = 3;
@@ -376,7 +388,7 @@ export class GraphClient {
                         } finally {
                             this._userClient = undefined;
                             await this._usernamePasswordCredential.getToken(
-                                "https://graph.microsoft.com/.default",
+                                this.MSGRAPH_AUTH_URL,
                             );
 
                             if (this._settings) {
@@ -395,19 +407,22 @@ export class GraphClient {
         }
     }
 
-    public async getAuthRecordFromCache(): Promise<AuthCacheContent | undefined> {
-    
+    public async getAuthRecordFromCache(): Promise<
+        AuthCacheContent | undefined
+    > {
         const authRecordPath = path.join(process.cwd(), this.AUTH_RECORD_PATH);
         if (!existsSync(authRecordPath)) {
             return undefined;
         }
 
-        const fileContent = readFileSync(authRecordPath, { encoding: 'utf-8' });
+        const fileContent = readFileSync(authRecordPath, { encoding: "utf-8" });
         try {
             const content: AuthCacheContent = JSON.parse(fileContent);
             return content;
         } catch (error) {
-            this.logger(chalk.red(`Error reading auth record from cache:${error}`));
+            this.logger(
+                chalk.red(`Error reading auth record from cache:${error}`),
+            );
             return undefined;
         }
     }
@@ -501,10 +516,10 @@ export class GraphClient {
     ): Promise<string[]> {
         let emailAddresses: string[] = [];
         try {
-            if(this._userEmailAddresses.size === 0) {
+            if (this._userEmailAddresses.size === 0) {
                 await this.loadUserEmailAddresses();
             }
-            
+
             for (const username of usernames) {
                 for (const [name, addr] of this._userEmailAddresses.entries()) {
                     if (name.toLowerCase().includes(username.toLowerCase())) {
