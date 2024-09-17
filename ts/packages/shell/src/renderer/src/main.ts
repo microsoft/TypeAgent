@@ -289,6 +289,10 @@ document.addEventListener("DOMContentLoaded", function () {
     const cameraView = new CameraView((image: HTMLImageElement) => {
         image.classList.add("chat-input-dropImage");
         chatView.chatInput.textarea.textEntry.append(image);
+
+        if (chatView.chatInput.sendButton !== undefined) {
+            chatView.chatInput.sendButton.disabled = (chatView.chatInput.textarea.textEntry.innerHTML.length == 0);
+        }
     });
 
     wrapper.appendChild(cameraView.getContainer());
