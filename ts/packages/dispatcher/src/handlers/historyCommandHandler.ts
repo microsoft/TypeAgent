@@ -29,12 +29,28 @@ export class HistoryListCommandHandler implements CommandHandler {
     }
 }
 
+export class HistoryClearCommandHandler implements CommandHandler {
+    public readonly description = "List history";
+    public async run(
+        input: string,
+        context: ActionContext<CommandHandlerContext>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const history = systemContext.chatHistory;
+
+        history.entries.length = 0;
+
+        displayResult("Chat history cleared.", context);
+    }
+}
+
 export function getHistoryCommandHandlers(): CommandHandlerTable {
     return {
         description: "History commands",
         defaultSubCommand: new HistoryListCommandHandler(),
         commands: {
             list: new HistoryListCommandHandler(),
+            clear: new HistoryClearCommandHandler(),
         },
     };
 }
