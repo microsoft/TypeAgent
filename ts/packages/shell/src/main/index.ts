@@ -75,9 +75,9 @@ function createWindow(): void {
         },
         x: ShellSettings.getinstance().x,
         y: ShellSettings.getinstance().y,
-    });
+    });   
 
-    setupDevicePermissinos(mainWindow);
+    setupDevicePermissions(mainWindow);
 
     mainWindow.on("ready-to-show", () => {
         mainWindow!.show();
@@ -145,7 +145,7 @@ function createWindow(): void {
         runDemo(mainWindow!, interactive);
     };
 
-    ShellSettings.getinstance().toggleTopMost = () => {
+    ShellSettings.getinstance().onToggleTopMost = () => {
         mainWindow?.setAlwaysOnTop(!mainWindow?.isAlwaysOnTop());
     };
 }
@@ -154,7 +154,7 @@ function createWindow(): void {
  * Allows the application to gain access to camea devices
  * @param mainWindow the main browser window
  */
-function setupDevicePermissinos(mainWindow: BrowserWindow) {
+function setupDevicePermissions(mainWindow: BrowserWindow) {
     let grantedDeviceThroughPermHandler;
 
     mainWindow.webContents.session.on(
@@ -447,6 +447,9 @@ const clientIO: ClientIO = {
     exit: () => {
         app.quit();
     },
+    takeAction: (action: string) => {
+        mainWindow?.webContents.send("take-action", action);
+    }
 };
 
 async function setDynamicDisplay(

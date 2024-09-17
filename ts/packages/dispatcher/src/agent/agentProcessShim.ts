@@ -242,6 +242,12 @@ export async function createAgentProcessShim(
                 .get(param.actionContextId)
                 .actionIO.appendDisplay(param.message, param.mode);
         },
+        takeAction: (param: {
+            actionContextId: number;
+            action: string;
+        }) => {
+            actionContextMap.get(param.actionContextId).actionIO.takeAction(param.action);
+        }
     };
 
     const rpc = createRpc<

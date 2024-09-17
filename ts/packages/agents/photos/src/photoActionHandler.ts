@@ -36,9 +36,7 @@ async function photoValidateWildcardMatch(
     action: AppAction,
     context: SessionContext<PhotoActionContext>,
 ) {
-    if (action.actionName === "describePhoto") {
-        // TODO: implement?
-    }
+
     return true;
 }
 
@@ -50,14 +48,6 @@ async function updatePhotoContext(
     enable: boolean,
     context: SessionContext<PhotoActionContext>,
 ): Promise<void> {
-    if (enable && context.sessionStorage) {
-        // context.context.store = await createListStoreForSession(
-        //     context.sessionStorage,
-        //     "lists.json",
-        // );
-    } else {
-        //context.context.store = undefined;
-    }
 }
 
 async function handlePhotoAction(
@@ -67,16 +57,13 @@ async function handlePhotoAction(
     let result: ActionResult | undefined = undefined;
     switch (action.actionName) {
         case "takePhoto": {
-            const takePhotoAction = action as TakePhotoAction;
-            const literalText = `I can't access your camera yet: ${takePhotoAction.parameters.originalRequest}`;
-            result = createActionResult(literalText);
+            photoContext.actionIO.takeAction("show-camera");
+            result = createActionResult("showing camera...");
             break;
         }
         case "uploadImage": {
-            const uploadImageAction = action as UploadImageAction;
-            const literalText = `I can't do that yet.: ${uploadImageAction.parameters.originalRequest}`;
-            result = createActionResult(literalText);
-
+            photoContext.actionIO.takeAction("upload-file");
+            result = createActionResult("showing open file dialog...");
             break;
         }
         default:

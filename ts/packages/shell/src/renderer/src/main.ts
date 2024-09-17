@@ -24,6 +24,7 @@ function addEvents(
     agents: Map<string, string>,
     settingsView: SettingsView,
     tabsView: TabView,
+    cameraView: CameraView,
 ) {
     console.log("add listen event");
     const api = getClientAPI();
@@ -174,6 +175,17 @@ function addEvents(
             //}
         },
     );
+    api.onTakeAction((_, action: string) => {
+        switch(action) {
+            case "show-camera": {
+                cameraView.show();
+                return;
+            }
+            case "upload-file": {
+                chatView.chatInput.attachButton.click();
+            }
+        }
+    });
 }
 
 function showNotifications(
@@ -297,7 +309,7 @@ document.addEventListener("DOMContentLoaded", function () {
     );
     tabs.getTabContainerByName("Help").append(new HelpView().getContainer());
 
-    addEvents(chatView, agents, settingsView, tabs);
+    addEvents(chatView, agents, settingsView, tabs, cameraView);
 
     chatView.chatInputFocus();
 

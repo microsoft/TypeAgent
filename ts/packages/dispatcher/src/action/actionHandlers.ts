@@ -64,6 +64,9 @@ function getActionContext(
                 mode,
             );
         },
+        takeAction(action: string): void {
+            context.requestIO.takeAction(action);
+        }
     };
     return {
         streamingContext: undefined,

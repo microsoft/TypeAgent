@@ -31,4 +31,7 @@ export interface ActionIO {
 
     // Append content to the display, default mode is "inline"
     appendDisplay(content: DisplayContent, mode?: DisplayAppendMode): void;
+
+    // Tell the host process take a specific action
+    takeAction(action: string): void;
 }

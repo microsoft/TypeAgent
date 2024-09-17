@@ -239,6 +239,7 @@ export interface ClientAPI {
             data: any,
         ) => void,
     );
+    onTakeAction(callback: (e: Electron.IpcRendererEvent, action: string) => void);
 }
 
 export interface ElectronWindowFields {

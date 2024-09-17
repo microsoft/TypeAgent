@@ -331,6 +331,12 @@ function getActionContextShim(
                 mode,
             });
         },
+        takeAction(action: string) {
+            rpc.send("takeAction", {
+                actionContextId,
+                action
+            })
+        },
     };
     return {
         // streamingContext is only used by the agent, so it is not mirrored back to the dispatcher.
