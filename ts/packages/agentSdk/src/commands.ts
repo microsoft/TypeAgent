@@ -34,35 +34,33 @@ export function getCommandInterface(
     return {
         getCommands: async () => handlers,
         executeCommand: async (
-            command: string[] | undefined,
+            command: string[],
             args: string,
             context: ActionContext<unknown>,
             attachments?: string[],
         ) => {
             let curr: CommandHandlerTable | CommandHandler = handlers;
             const commandPrefix: string[] = [];
-            if (command) {
-                while (true) {
-                    const currCommand = command.shift();
-                    if (currCommand === undefined) {
-                        break;
-                    }
-                    commandPrefix.push(currCommand);
-                    if (!isCommandDescriptorTable(curr)) {
-                        break;
-                    }
-                    const next:
-                        | CommandHandlerTable
-                        | CommandHandler
-                        | undefined = curr.commands[currCommand];
-                    if (next === undefined) {
-                        throw new Error(
-                            `Unknown command '${currCommand}' in '${commandPrefix.join(" ")}'`,
-                        );
-                    }
-                    curr = next;
+
+            while (true) {
+                const currCommand = command.shift();
+                if (currCommand === undefined) {
+                    break;
                 }
+                commandPrefix.push(currCommand);
+                if (!isCommandDescriptorTable(curr)) {
+                    break;
+                }
+                const next: CommandHandlerTable | CommandHandler | undefined =
+                    curr.commands[currCommand];
+                if (next === undefined) {
+                    throw new Error(
+                        `Unknown command '${currCommand}' in '${commandPrefix.join(" ")}'`,
+                    );
+                }
+                curr = next;
             }
+
             if (isCommandDescriptorTable(curr)) {
                 if (curr.defaultSubCommand === undefined) {
                     throw new Error(

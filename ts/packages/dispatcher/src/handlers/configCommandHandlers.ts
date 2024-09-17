@@ -17,7 +17,7 @@ import { getCacheFactory } from "../utils/cacheFactory.js";
 import { getServiceHostCommandHandlers } from "./serviceHost/serviceHostCommandHandler.js";
 import { getLocalWhisperCommandHandlers } from "./serviceHost/localWhisperCommandHandler.js";
 
-import { parseRequestArgs } from "../utils/args.js";
+import { parseCommandArgs } from "../utils/args.js";
 import { getChatModelNames, simpleStarRegex } from "common-utils";
 import { openai as ai } from "aiclient";
 import { SessionConfig } from "../session/session.js";
@@ -124,7 +124,7 @@ class AgentToggleCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        const { args } = parseRequestArgs(request);
+        const { args } = parseCommandArgs(request);
         if (args.length < 1) {
             displayWarn((log) => {
                 log(
@@ -172,7 +172,7 @@ class ExplainerCommandHandler implements CommandHandler {
         request: string,
         context: ActionContext<CommandHandlerContext>,
     ) {
-        const { args } = parseRequestArgs(request);
+        const { args } = parseCommandArgs(request);
         if (args.length < 1) {
             displayWarn((log) => {
                 log("Usage: @config explainer <explainer>");
@@ -210,7 +210,7 @@ class ConfigModelShowCommandHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
         const models = systemContext.session.getConfig().models;
-        const { args } = parseRequestArgs(request);
+        const { args } = parseCommandArgs(request);
         if (args.length > 1) {
             throw new Error("Too many arguments.");
         }
@@ -234,7 +234,7 @@ class ConfigModelSetCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        const { args } = parseRequestArgs(request);
+        const { args } = parseCommandArgs(request);
         const models = systemContext.session.getConfig().models;
         if (args.length === 0) {
             const newConfig = {

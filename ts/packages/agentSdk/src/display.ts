@@ -14,6 +14,7 @@ export type DisplayContent =
           type: DisplayType; // Type of the content
           content: string;
           kind?: DisplayMessageKind; // Optional message kind for client specific styling
+          speak?: boolean; // Optional flag to indicate if the content should be spoken
       };
 
 export type DisplayMessageKind =

@@ -27,19 +27,27 @@ import { RequestMetrics } from "./utils/metrics.js";
 const debugInteractive = registerDebug("typeagent:cli:interactive");
 
 type ResolveCommandResult = {
-    command: string[] | undefined;
-    args: string;
+    // The resolved app agent name
     appAgentName: string;
-    descriptor: CommandDescriptor | undefined;
+
+    // The resolved commands.
+    command: string[];
+
+    // The resolve arguments
+    args: string[];
+
+    // The table the resolved commands is in.  Undefined if the app agent has no subcommand. (e.g. @<agent> <args>)
     table: CommandDescriptorTable | undefined;
+
+    // The descriptor of the resolved command.  Undefined if the last command index is not a command in the table.
+    descriptor: CommandDescriptor | undefined;
 };
 
 export async function resolveCommand(
     input: string,
     context: CommandHandlerContext,
-    useDefault: boolean = true,
 ): Promise<ResolveCommandResult> {
-    const args = input.match(/"[^"]+"|\S+/g) ?? [];
+    const args: string[] = input.match(/"[^"]+"|\S+/g) ?? [];
     let appAgentName = "system";
     const arg0 = args[0];
     if (arg0 !== undefined && context.agents.isCommandEnabled(arg0)) {
@@ -50,49 +58,45 @@ export async function resolveCommand(
     const commands = await appAgent.getCommands?.(sessionContext);
     if (commands === undefined || !isCommandDescriptorTable(commands)) {
         return {
-            command: undefined,
-            args: args.join(" "),
+            command: [],
+            args,
             appAgentName,
             descriptor: commands ?? { description: "No description available" },
             table: undefined,
         };
     }
 
-    let currentTable = commands;
+    let table = commands;
     let descriptor: CommandDescriptor | undefined;
-    let table: CommandDescriptorTable | undefined;
     const commandPrefix: string[] = [];
     while (true) {
         const subCommand = args.shift();
         if (subCommand === undefined) {
-            descriptor = useDefault
-                ? currentTable.defaultSubCommand
-                : undefined;
-            table = descriptor === undefined ? currentTable : undefined;
+            descriptor = table.defaultSubCommand;
+            break;
+        }
+
+        const currentTable = table.commands[subCommand];
+        if (currentTable === undefined) {
+            // Unknown command
+            args.unshift(subCommand);
             break;
         }
 
         commandPrefix.push(subCommand);
-        const c = currentTable.commands[subCommand];
-        if (c === undefined) {
-            // Unknown command
-            table = currentTable;
+        if (!isCommandDescriptorTable(currentTable)) {
+            descriptor = currentTable;
             break;
         }
-
-        if (!isCommandDescriptorTable(c)) {
-            descriptor = c;
-            break;
-        }
-        currentTable = c;
+        table = currentTable;
     }
 
     return {
         command: commandPrefix,
-        args: args.join(" "),
+        args,
         appAgentName,
-        descriptor,
         table,
+        descriptor,
     };
 }
 
@@ -108,35 +112,35 @@ async function parseCommand(
         input = input.substring(1);
     }
     const result = await resolveCommand(input, context);
-    if (result === undefined) {
-        throw new Error(`Unknown command '${input}'`);
+    if (result.descriptor !== undefined) {
+        context.logger?.logEvent("command", {
+            originalInput,
+            appAgentName: result.appAgentName,
+            command: result.command,
+            args: result.args,
+        });
+        return result;
     }
-    if (result.descriptor === undefined) {
-        if (result.table !== undefined) {
-            throw new Error(
-                `Command '${input}' requires a subcommand. Try '@help ${input}' for the list of sub commands.`,
-            );
-        }
-        const subCommand = result.command?.pop();
-        const appAgentName = result.appAgentName;
-        const command = input.startsWith(`@${appAgentName}`)
-            ? `${appAgentName} ${result.command?.join(" ") ?? ""}`
-            : result.command?.join(" ") ?? "";
-        if (subCommand !== undefined) {
-            throw new Error(
-                `Unknown command '${subCommand}' ${
-                    command
-                        ? ` for '@${command}'. Try '@help ${command}' for the list of subcommands.`
-                        : "Try '@help' for a list of commands."
-                }`,
-            );
-        } else {
-            throw new Error(`Unknown command '${input}'`);
-        }
+    if (result.table !== undefined) {
+        throw new Error(
+            `Command '${input}' requires a subcommand. Try '@help ${input}' for the list of sub commands.`,
+        );
     }
-
-    context.logger?.logEvent("command", { originalInput });
-    return result;
+    const subCommand = result.command?.pop();
+    const appAgentName = result.appAgentName;
+    const command = input.startsWith(`@${appAgentName}`)
+        ? `${appAgentName} ${result.command?.join(" ") ?? ""}`
+        : result.command?.join(" ") ?? "";
+    if (subCommand !== undefined) {
+        throw new Error(
+            `Unknown command '${subCommand}' ${
+                command
+                    ? ` for '@${command}'. Try '@help ${command}' for the list of subcommands.`
+                    : "Try '@help' for a list of commands."
+            }`,
+        );
+    }
+    throw new Error(`Unknown command '${input}'`);
 }
 
 export async function processCommandNoLock(
@@ -148,7 +152,7 @@ export async function processCommandNoLock(
         const result = await parseCommand(originalInput, context);
         await executeCommand(
             result.command,
-            result.args,
+            result.args.join(" "),
             result.appAgentName,
             context,
             attachments,

@@ -290,6 +290,19 @@ class MessageContainer {
     public getMessage() {
         return this.messageDiv.innerText;
     }
+
+    public getSpeakableMessage() {
+        const elms = this.messageDiv.querySelectorAll(".chat-message-speak");
+        let speakableMessage: string[] = [];
+        for (const elm of elms) {
+            const content = elm.textContent;
+            if (content) {
+                speakableMessage.push(content);
+            }
+        }
+        return speakableMessage.join(" ");
+    }
+
     public setMessage(
         content: DisplayContent,
         source: string,
@@ -454,6 +467,8 @@ class MessageGroup {
         this.userMessageBody = userMessageBody;
         this.userMessage = userMessage;
 
+        this.chatView.tts?.stop();
+
         requestPromise
             .then((metrics) => this.requestCompleted(metrics))
             .catch((error) => this.requestException(error));
@@ -481,9 +496,18 @@ class MessageGroup {
 
         const tts = this.chatView.tts;
         if (tts) {
+            tts.stop();
+            const statusMessage = this.statusMessage?.getSpeakableMessage();
+            if (statusMessage) {
+                tts.speak(statusMessage).then((timings) => {
+                    if (timings) {
+                        this.statusMessage?.addTTSTiming(timings);
+                    }
+                });
+            }
             for (const agentMessage of this.agentMessages) {
                 if (agentMessage.source === "chat") {
-                    const message = agentMessage.getMessage();
+                    const message = agentMessage.getSpeakableMessage();
                     if (message) {
                         tts.speak(message).then((timings) => {
                             if (timings) {
@@ -627,6 +651,19 @@ function stripAnsi(text: string): string {
 }
 
 const enableText2Html = true;
+
+function matchKindStyle(elm: HTMLElement, kindStyle?: string) {
+    if (kindStyle !== undefined) {
+        return elm.classList.contains(kindStyle);
+    }
+    for (const cls of elm.classList) {
+        if (cls.startsWith("chat-message-kind-")) {
+            return false;
+        }
+    }
+    return true;
+}
+
 export function setContent(
     elm: HTMLElement,
     content: DisplayContent,
@@ -642,27 +679,38 @@ export function setContent(
     let type: DisplayType;
     let kind: DisplayMessageKind | undefined;
     let text: string;
+    let speak: boolean;
     if (typeof content === "string") {
         type = "text";
         text = content;
+        speak = false;
     } else {
         type = content.type;
         text = content.content;
         kind = content.kind;
+        speak = content.speak ?? false;
     }
 
     const kindStyle = kind ? `chat-message-kind-${kind}` : undefined;
+    const speakStyle = speak ? "chat-message-speak" : undefined;
 
     let contentDiv = elm.lastChild as HTMLDivElement | null;
     if (
         appendMode !== "inline" ||
         !contentDiv ||
-        (kindStyle !== undefined && !contentDiv.classList.contains(kindStyle))
+        contentDiv.classList.contains("chat-message-speak") !== speak ||
+        !matchKindStyle(contentDiv, kindStyle)
     ) {
         // Create a new div
         contentDiv = document.createElement("div");
         if (kindStyle) {
             contentDiv.classList.add(kindStyle);
+        }
+        if (speakStyle) {
+            contentDiv.classList.add(speakStyle);
+        }
+        if (appendMode === "inline") {
+            contentDiv.style.display = "inline-block";
         }
         elm.appendChild(contentDiv);
     }

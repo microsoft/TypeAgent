@@ -331,7 +331,7 @@ export function startStreamPartialAction(
 }
 
 export async function executeCommand(
-    command: string[] | undefined,
+    command: string[],
     args: string,
     appAgentName: string,
     context: CommandHandlerContext,

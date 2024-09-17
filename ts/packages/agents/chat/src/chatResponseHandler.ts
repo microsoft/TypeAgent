@@ -74,7 +74,7 @@ async function handleChatResponse(
 
                 const needDisplay = context.streamingContext !== generatedText;
                 const result = needDisplay
-                    ? createActionResult(generatedText)
+                    ? createActionResult(generatedText, true)
                     : createActionResultNoDisplay(generatedText);
 
                 let entities = parameters.generatedTextEntities || [];
@@ -525,6 +525,10 @@ function streamPartialChatResponseAction(
             context.streamingContext = "";
         }
         context.streamingContext += delta;
-        context.actionIO.appendDisplay(delta);
+        context.actionIO.appendDisplay({
+            type: "text",
+            content: delta,
+            speak: true,
+        });
     }
 }
