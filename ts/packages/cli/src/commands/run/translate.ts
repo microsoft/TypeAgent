@@ -2,11 +2,8 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import {
-    initializeCommandHandlerContext,
-    TranslateCommandHandler,
-    getBuiltinTranslatorNames,
-} from "agent-dispatcher/internal";
+import { createDispatcher } from "agent-dispatcher";
+import { getBuiltinTranslatorNames } from "agent-dispatcher/internal";
 
 export default class TranslateCommand extends Command {
     static args = {
@@ -32,17 +29,15 @@ export default class TranslateCommand extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(TranslateCommand);
-        const handler = new TranslateCommandHandler();
         const translators = flags.translator
             ? Object.fromEntries(flags.translator.map((name) => [name, true]))
             : undefined;
-        await handler.run(
-            args.request,
-            await initializeCommandHandlerContext("cli run translate", {
-                translators,
-                actions: {}, // We don't need any actions
-                cache: false,
-            }),
-        );
+
+        const dispatcher = await createDispatcher("cli run translate", {
+            translators,
+            actions: {}, // We don't need any actions
+            cache: false,
+        });
+        await dispatcher.processCommand(`@translate ${args.request}`);
     }
 }

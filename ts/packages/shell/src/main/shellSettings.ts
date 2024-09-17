@@ -28,14 +28,16 @@ export class ShellSettings
     public devTools: boolean;
     public microphoneId?: string;
     public microphoneName?: string;
-    public hideMenu: boolean;
-    public hideTabs: boolean;
     public notifyFilter: string;
     public tts: boolean;
     public ttsSettings: TTSSettings;
     public agentGreeting: boolean;
     public multiModalContent: boolean;
+    public devUI: boolean;
     public onSettingsChanged: EmptyFunction | null;
+    public onShowSettingsDialog: ((dialogName: string) => void) | null;
+    public onRunDemo: ((interactive: boolean) => void) | null;
+    public toggleToopMost: EmptyFunction | null;
 
     public get width(): number | undefined {
         return this.size[0];
@@ -53,11 +55,13 @@ export class ShellSettings
         return this.position ? this.position[1] : undefined;
     }
 
-    private constructor() {
-        const settings: ShellSettingsType = {
-            ...defaultSettings,
-            ...ShellSettings.load(),
-        };
+    private constructor(settings: ShellSettingsType | null = null) {
+        if (settings === null) {
+            settings = {
+                ...defaultSettings,
+                ...ShellSettings.load(),
+            };
+        }
 
         this.size = settings.size;
         this.position = settings.position;
@@ -65,15 +69,17 @@ export class ShellSettings
         this.devTools = settings.devTools;
         this.microphoneId = settings.microphoneId;
         this.microphoneName = settings.microphoneName;
-        this.hideMenu = settings.hideMenu;
-        this.hideTabs = settings.hideTabs;
         this.notifyFilter = settings.notifyFilter;
         this.tts = settings.tts;
         this.ttsSettings = settings.ttsSettings;
         this.agentGreeting = settings.agentGreeting;
         this.multiModalContent = settings.multiModalContent;
+        this.devUI = settings.devUI;
 
         this.onSettingsChanged = null;
+        this.onShowSettingsDialog = null;
+        this.onRunDemo = null;
+        this.toggleToopMost = null;
     }
 
     public static get filePath(): string {
@@ -87,6 +93,10 @@ export class ShellSettings
 
         return ShellSettings.instance;
     };
+
+    public getSerializable(): ShellSettings {
+        return new ShellSettings(ShellSettings.getinstance());
+    }
 
     private static load(): Partial<ShellSettingsType> | null {
         debugShell(
@@ -137,6 +147,24 @@ export class ShellSettings
 
         if (ShellSettings.getinstance().onSettingsChanged != null) {
             ShellSettings.getinstance().onSettingsChanged!();
+        }
+    }
+
+    public show(dialogName: string = "settings") {
+        if (ShellSettings.getinstance().onShowSettingsDialog != null) {
+            ShellSettings.getinstance().onShowSettingsDialog!(dialogName);
+        }
+    }
+
+    public runDemo(interactive: boolean = false) {
+        if (ShellSettings.getinstance().onRunDemo != null) {
+            ShellSettings.getinstance().onRunDemo!(interactive);
+        }
+    }
+
+    public toggleTopMost() {
+        if (ShellSettings.getinstance().toggleToopMost != null) {
+            ShellSettings.getinstance().toggleToopMost!();
         }
     }
 }

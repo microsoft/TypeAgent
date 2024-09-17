@@ -11,6 +11,7 @@ import {
     CommandDescriptor,
     CommandDescriptorTable,
     DisplayContent,
+    DisplayAppendMode,
 } from "@typeagent/agent-sdk";
 import {
     AgentCallFunctions,
@@ -235,15 +236,11 @@ export async function createAgentProcessShim(
         appendDisplay: (param: {
             actionContextId: number;
             message: DisplayContent;
+            mode: DisplayAppendMode;
         }) => {
             actionContextMap
                 .get(param.actionContextId)
-                .actionIO.appendDisplay(param.message);
-        },
-        performanceMark: (param: { actionContextId: number; name: string }) => {
-            actionContextMap
-                .get(param.actionContextId)
-                .performanceMark(param.name);
+                .actionIO.appendDisplay(param.message, param.mode);
         },
     };
 
@@ -321,7 +318,7 @@ export async function createAgentProcessShim(
             return rpc.invoke("getCommands", getContextParam(context));
         },
         executeCommand(
-            commands: string[] | undefined,
+            commands: string[],
             args: string,
             context: ActionContext<ShimContext>,
         ) {

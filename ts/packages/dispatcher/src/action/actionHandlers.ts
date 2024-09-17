@@ -16,21 +16,34 @@ import {
     DisplayType,
     DisplayContent,
     ActionContext,
+    DisplayAppendMode,
 } from "@typeagent/agent-sdk";
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
 import { getUserProfileDir } from "../utils/userData.js";
-import { Profiler } from "common-utils";
 import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
+import { ProfileNames } from "../utils/profileNames.js";
+import {
+    displayError,
+    displayStatus,
+} from "../handlers/common/interactiveIO.js";
 
 const debugAgent = registerDebug("typeagent:agent");
 const debugActions = registerDebug("typeagent:actions");
+
+export function getTranslatorPrefix(
+    translatorName: string,
+    systemContext: CommandHandlerContext,
+) {
+    const config = systemContext.agents.getTranslatorConfig(translatorName);
+    return `[${config.emojiChar} ${translatorName}] `;
+}
 
 function getActionContext(
     appAgentName: string,
     context: CommandHandlerContext,
     requestId: string,
-    actionIndex: number,
+    actionIndex?: number,
 ): ActionContext<unknown> {
     const sessionContext = context.agents.getSessionContext(appAgentName);
     const actionIO: ActionIO = {
@@ -40,8 +53,16 @@ function getActionContext(
         setDisplay(content: DisplayContent): void {
             context.requestIO.setDisplay(content, actionIndex, appAgentName);
         },
-        appendDisplay(content: DisplayContent): void {
-            context.requestIO.appendDisplay(content, actionIndex, appAgentName);
+        appendDisplay(
+            content: DisplayContent,
+            mode: DisplayAppendMode = "inline",
+        ): void {
+            context.requestIO.appendDisplay(
+                content,
+                actionIndex,
+                appAgentName,
+                mode,
+            );
         },
     };
     return {
@@ -51,9 +72,6 @@ function getActionContext(
         },
         get actionIO() {
             return actionIO;
-        },
-        performanceMark(markName: string) {
-            Profiler.getInstance().mark(requestId, markName);
         },
     };
 }
@@ -78,8 +96,8 @@ export function createSessionContext<T = unknown>(
         get profileStorage() {
             return profileStorage;
         },
-        notify(event: AppAgentEvent, data: any) {
-            context.requestIO.notify(event, data, name);
+        notify(event: AppAgentEvent, message: string) {
+            context.requestIO.notify(event, undefined, message, name);
         },
         async toggleTransientAgent(subAgentName: string, enable: boolean) {
             if (!subAgentName.startsWith(`${name}.`)) {
@@ -133,7 +151,7 @@ export async function getDynamicDisplay(
 
 async function executeAction(
     action: Action,
-    context: CommandHandlerContext,
+    context: ActionContext<CommandHandlerContext>,
     actionIndex: number,
 ): Promise<ActionResult | undefined> {
     const translatorName = action.translatorName;
@@ -141,11 +159,13 @@ async function executeAction(
     if (translatorName === undefined) {
         throw new Error(`Cannot execute action without translator name.`);
     }
+
+    const systemContext = context.sessionContext.agentContext;
     const appAgentName = getAppAgentName(translatorName);
-    const appAgent = context.agents.getAppAgent(appAgentName);
+    const appAgent = systemContext.agents.getAppAgent(appAgentName);
 
     // Update the last action translator.
-    context.lastActionTranslatorName = translatorName;
+    systemContext.lastActionTranslatorName = translatorName;
 
     if (appAgent.executeAction === undefined) {
         throw new Error(
@@ -155,16 +175,35 @@ async function executeAction(
 
     // Reuse the same streaming action context if one is available.
     const actionContext =
-        actionIndex === 0 && context.streamingActionContext
-            ? context.streamingActionContext
+        actionIndex === 0 && systemContext.streamingActionContext
+            ? systemContext.streamingActionContext
             : getActionContext(
                   appAgentName,
-                  context,
-                  context.requestId!,
+                  systemContext,
+                  systemContext.requestId!,
                   actionIndex,
               );
-    const returnedResult: ActionResult | undefined =
-        await appAgent.executeAction(action, actionContext);
+
+    actionContext.profiler = systemContext.commandProfiler?.measure(
+        ProfileNames.executeAction,
+        true,
+        actionIndex,
+    );
+    let returnedResult: ActionResult | undefined;
+    try {
+        const prefix = getTranslatorPrefix(
+            action.translatorName,
+            systemContext,
+        );
+        displayStatus(
+            `${prefix}Executing action ${action.fullActionName}`,
+            context,
+        );
+        returnedResult = await appAgent.executeAction(action, actionContext);
+    } finally {
+        actionContext.profiler?.stop();
+        actionContext.profiler = undefined;
+    }
 
     let result: ActionResult;
     if (returnedResult === undefined) {
@@ -175,10 +214,10 @@ async function executeAction(
         if (
             returnedResult.error === undefined &&
             returnedResult.literalText &&
-            context.conversationManager
+            systemContext.conversationManager
         ) {
             // TODO: convert entity values to facets
-            context.conversationManager.addMessage(
+            systemContext.conversationManager.addMessage(
                 returnedResult.literalText,
                 returnedResult.entities,
                 new Date(),
@@ -190,33 +229,33 @@ async function executeAction(
         debugActions(actionResultToString(result));
     }
     if (result.error !== undefined) {
-        context.requestIO.error(result.error, translatorName);
-        context.chatHistory.addEntry(
+        displayError(result.error, context);
+        systemContext.chatHistory.addEntry(
             `Action ${action.fullActionName} failed: ${result.error}`,
             [],
             "assistant",
-            context.requestId,
+            systemContext.requestId,
         );
     } else {
         if (result.displayContent !== undefined) {
             actionContext.actionIO.setDisplay(result.displayContent);
         }
         if (result.dynamicDisplayId !== undefined) {
-            context.clientIO?.setDynamicDisplay(
+            systemContext.clientIO?.setDynamicDisplay(
                 translatorName,
-                context.requestId,
+                systemContext.requestId,
                 actionIndex,
                 result.dynamicDisplayId,
                 result.dynamicDisplayNextRefreshMs!,
             );
         }
-        context.chatHistory.addEntry(
+        systemContext.chatHistory.addEntry(
             result.literalText
                 ? result.literalText
                 : `Action ${action.fullActionName} completed.`,
             result.entities,
             "assistant",
-            context.requestId,
+            systemContext.requestId,
         );
     }
     return result;
@@ -224,7 +263,7 @@ async function executeAction(
 
 export async function executeActions(
     actions: Actions,
-    context: CommandHandlerContext,
+    context: ActionContext<CommandHandlerContext>,
 ) {
     debugActions(`Executing actions: ${JSON.stringify(actions, undefined, 2)}`);
     let actionIndex = 0;
@@ -292,7 +331,7 @@ export function startStreamPartialAction(
 }
 
 export async function executeCommand(
-    command: string[] | undefined,
+    command: string[],
     args: string,
     appAgentName: string,
     context: CommandHandlerContext,
@@ -302,13 +341,29 @@ export async function executeCommand(
         appAgentName,
         context,
         context.requestId!,
-        0,
     );
+
     const appAgent = context.agents.getAppAgent(appAgentName);
     if (appAgent.executeCommand === undefined) {
         throw new Error(
             `Agent ${appAgentName} does not support executeCommand.`,
         );
     }
-    return appAgent.executeCommand(command, args, actionContext, attachments);
+
+    actionContext.profiler = context.commandProfiler?.measure(
+        ProfileNames.executeCommand,
+        true,
+    );
+
+    try {
+        return await appAgent.executeCommand(
+            command,
+            args,
+            actionContext,
+            attachments,
+        );
+    } finally {
+        actionContext.profiler?.stop();
+        actionContext.profiler = undefined;
+    }
 }

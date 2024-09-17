@@ -1,7 +1,6 @@
 {
   "emojiChar": "👀",
-  "translationDefaultEnabled": false,
-  "actionDefaultEnabled": false,
+  "defaultEnabled": false,
   "schema": {
     "description": "Browser agent that allows you control an existing browser window and perform actions such as opening a new tab, closing a tab, scrolling, zooming and navigating to a specific URL.",
     "schemaFile": "./actionsSchema.mts",
@@ -9,8 +8,7 @@
   },
   "subTranslators": {
     "paleoBioDb": {
-      "translationDefaultEnabled": false,
-      "actionDefaultEnabled": false,
+      "defaultEnabled": false,
       "transient": true,
       "schema": {
         "description": "This enables users to explore paleological data. Users can filter fossil data by location, by geological time and by taxon.",
@@ -19,8 +17,7 @@
       }
     },
     "crossword": {
-      "translationDefaultEnabled": false,
-      "actionDefaultEnabled": false,
+      "defaultEnabled": false,
       "transient": true,
       "schema": {
         "description": "This allows users to interact with a crossword puzzle.",
@@ -29,8 +26,7 @@
       }
     },
     "commerce": {
-      "translationDefaultEnabled": false,
-      "actionDefaultEnabled": false,
+      "defaultEnabled": false,
       "transient": true,
       "schema": {
         "description": "This allows users to interact with e-commerce websites to find, compare and purchase various products.",

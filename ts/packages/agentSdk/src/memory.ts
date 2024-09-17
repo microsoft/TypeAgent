@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DisplayContent } from "./agentInterface.js";
+import { DisplayContent } from "./display.js";
 
 export interface Entity {
     // the name of the entity such as "Bach" or "frog"
@@ -98,11 +98,20 @@ export function createActionResultNoDisplay(
     };
 }
 
-export function createActionResult(literalText: string): ActionResultSuccess {
+export function createActionResult(
+    literalText: string,
+    speak?: boolean,
+): ActionResultSuccess {
     return {
         literalText,
         entities: [],
-        displayContent: literalText,
+        displayContent: speak
+            ? {
+                  type: "text",
+                  content: literalText,
+                  speak: true,
+              }
+            : literalText,
     };
 }
 

@@ -5,11 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import chalk from "chalk";
-import {
-    DispatcherCommandHandler,
-    DispatcherHandlerTable,
-    getToggleHandlerTable,
-} from "./common/commandHandler.js";
+import { getToggleHandlerTable } from "./common/commandHandler.js";
 import {
     CommandHandlerContext,
     changeContextConfig,
@@ -19,10 +15,20 @@ import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { ConstructionStore, printImportConstructionResult } from "agent-cache";
 import { getSessionCacheDirPath } from "../explorer.js";
 import { getAppAgentName } from "../translation/agentTranslators.js";
-import { RequestIO } from "./common/interactiveIO.js";
-import { parseRequestArgs } from "../utils/args.js";
+import {
+    displayResult,
+    displaySuccess,
+    displayWarn,
+    RequestIO,
+} from "./common/interactiveIO.js";
+import { parseCommandArgs } from "../utils/args.js";
 import { glob } from "glob";
 import { getDispatcherConfig } from "../utils/config.js";
+import {
+    CommandHandler,
+    CommandHandlerTable,
+} from "@typeagent/agent-sdk/helpers/commands";
+import { ActionContext } from "@typeagent/agent-sdk";
 
 async function checkRecreateStore(
     constructionStore: ConstructionStore,
@@ -77,38 +83,47 @@ function resolvePathWithSession(
     return path.resolve(request);
 }
 
-class ConstructionNewCommandHandler implements DispatcherCommandHandler {
+class ConstructionNewCommandHandler implements CommandHandler {
     public readonly description = "Create a new construction store";
-    public async run(request: string, context: CommandHandlerContext) {
-        const constructionStore = context.agentCache.constructionStore;
-        await checkRecreateStore(constructionStore, context.requestIO);
+    public async run(
+        request: string,
+        context: ActionContext<CommandHandlerContext>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const constructionStore = systemContext.agentCache.constructionStore;
+        await checkRecreateStore(constructionStore, systemContext.requestIO);
         const constructionPath = resolvePathWithSession(
             request,
-            context.session.dir,
+            systemContext.session.dir,
         );
-        await checkOverwriteFile(constructionPath, context.requestIO);
+        await checkOverwriteFile(constructionPath, systemContext.requestIO);
 
         await changeContextConfig({ cache: false }, context);
         if (constructionPath) {
             await fs.promises.writeFile(constructionPath, "");
         }
-        context.session.setCacheDataFilePath(constructionPath);
+        systemContext.session.setCacheDataFilePath(constructionPath);
         await changeContextConfig({ cache: true }, context);
         const filePath = constructionStore.getFilePath();
-        context.requestIO.success(
+        displaySuccess(
             `Construction store initialized ${filePath ?? ""}`,
+            context,
         );
     }
 }
 
-class ConstructionLoadCommandHandler implements DispatcherCommandHandler {
+class ConstructionLoadCommandHandler implements CommandHandler {
     public readonly description = "Load a construction store from disk";
-    public async run(request: string, context: CommandHandlerContext) {
-        const constructionStore = context.agentCache.constructionStore;
-        await checkRecreateStore(constructionStore, context.requestIO);
+    public async run(
+        request: string,
+        context: ActionContext<CommandHandlerContext>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const constructionStore = systemContext.agentCache.constructionStore;
+        await checkRecreateStore(constructionStore, systemContext.requestIO);
         const constructionPath =
-            resolvePathWithSession(request, context.session.dir, true) ??
-            context.session.getCacheDataFilePath();
+            resolvePathWithSession(request, systemContext.session.dir, true) ??
+            systemContext.session.getCacheDataFilePath();
         if (constructionPath === undefined) {
             throw new Error(
                 `No construction file specified and no existing construction file in session to load.`,
@@ -120,44 +135,49 @@ class ConstructionLoadCommandHandler implements DispatcherCommandHandler {
         }
 
         await changeContextConfig({ cache: false }, context);
-        context.session.setCacheDataFilePath(constructionPath);
+        systemContext.session.setCacheDataFilePath(constructionPath);
         await changeContextConfig({ cache: true }, context);
 
-        context.requestIO.success(`Construction loaded: ${constructionPath}`);
+        displaySuccess(`Construction loaded: ${constructionPath}`, context);
     }
 }
 
-class ConstructionSaveCommandHandler implements DispatcherCommandHandler {
+class ConstructionSaveCommandHandler implements CommandHandler {
     public readonly description = "Save construction store to disk";
-    public async run(request: string, context: CommandHandlerContext) {
-        const constructionStore = context.agentCache.constructionStore;
+    public async run(
+        request: string,
+        context: ActionContext<CommandHandlerContext>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const constructionStore = systemContext.agentCache.constructionStore;
         const constructionPath = resolvePathWithSession(
             request,
-            context.session.dir,
+            systemContext.session.dir,
         );
-        await checkOverwriteFile(constructionPath, context.requestIO);
+        await checkOverwriteFile(constructionPath, systemContext.requestIO);
         if (await constructionStore.save(constructionPath)) {
             const filePath = constructionStore.getFilePath()!;
-            context.session.setCacheDataFilePath(filePath);
-            context.requestIO.success(`Construction saved: ${filePath}`);
+            systemContext.session.setCacheDataFilePath(filePath);
+            displaySuccess(`Construction saved: ${filePath}`, context);
         } else {
-            context.requestIO.warn(
-                `Construction not modified. Nothing written.`,
-            );
+            displayWarn(`Construction not modified. Nothing written.`, context);
         }
     }
 }
 
-class ConstructionInfoCommandHandler implements DispatcherCommandHandler {
+class ConstructionInfoCommandHandler implements CommandHandler {
     public readonly description = "Show current construction store info";
-    public async run(request: string, context: CommandHandlerContext) {
-        const constructionStore = context.agentCache.constructionStore;
+    public async run(
+        request: string,
+        context: ActionContext<CommandHandlerContext>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const constructionStore = systemContext.agentCache.constructionStore;
         const info = constructionStore.getInfo();
         if (info === undefined) {
-            context.requestIO.error("Construction is disabled.");
-            return;
+            throw new Error("Construction is disabled.");
         }
-        context.requestIO.result((log) => {
+        displayResult((log) => {
             log(`User constructions:`);
             if (info.filePath) {
                 log(`  File: ${info.filePath}${info.modified ? "*" : ""}`);
@@ -174,36 +194,49 @@ class ConstructionInfoCommandHandler implements DispatcherCommandHandler {
             for (const [key, value] of Object.entries(info.config)) {
                 log(`${key.padStart(20)}: ${value}`);
             }
-        });
+        }, context);
     }
 }
 
-class ConstructionAutoCommandHandler implements DispatcherCommandHandler {
+class ConstructionAutoCommandHandler implements CommandHandler {
     public readonly description = "Toggle construction auto save";
-    public async run(request: string, context: CommandHandlerContext) {
+    public async run(
+        request: string,
+        context: ActionContext<CommandHandlerContext>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
         const state = request === "" || request === "on";
         await changeContextConfig({ autoSave: state }, context);
-        context.requestIO.success(
+        displaySuccess(
             `Construction auto save ${state ? "on" : "off"}`,
+            context,
         );
     }
 }
 
-class ConstructionOffCommandHandler implements DispatcherCommandHandler {
+class ConstructionOffCommandHandler implements CommandHandler {
     public readonly description = "Disable construction store";
-    public async run(request: string, context: CommandHandlerContext) {
-        const constructionStore = context.agentCache.constructionStore;
-        await checkRecreateStore(constructionStore, context.requestIO);
+    public async run(
+        request: string,
+        context: ActionContext<CommandHandlerContext>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const constructionStore = systemContext.agentCache.constructionStore;
+        await checkRecreateStore(constructionStore, systemContext.requestIO);
         await changeContextConfig({ cache: false }, context);
-        context.requestIO.success("Construction store disabled.");
+        displaySuccess("Construction store disabled.", context);
     }
 }
 
-class ConstructionListCommandHandler implements DispatcherCommandHandler {
+class ConstructionListCommandHandler implements CommandHandler {
     public readonly description = "List constructions";
-    public async run(request: string, context: CommandHandlerContext) {
-        const constructionStore = context.agentCache.constructionStore;
-        const { flags } = parseRequestArgs(
+    public async run(
+        request: string,
+        context: ActionContext<CommandHandlerContext>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const constructionStore = systemContext.agentCache.constructionStore;
+        const { flags } = parseCommandArgs(
             request,
             {
                 verbose: { char: "v", default: false },
@@ -253,17 +286,21 @@ async function expandPaths(paths: string[]) {
     );
 }
 
-class ConstructionImportCommandHandler implements DispatcherCommandHandler {
+class ConstructionImportCommandHandler implements CommandHandler {
     public readonly description = "Import constructions from test data";
-    public async run(request: string, context: CommandHandlerContext) {
-        const { args, flags } = parseRequestArgs(request, {
+    public async run(
+        request: string,
+        context: ActionContext<CommandHandlerContext>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const { args, flags } = parseCommandArgs(request, {
             test: { char: "t", default: false },
         });
 
         const inputs =
             args.length !== 0
                 ? await expandPaths(args)
-                : await getImportTranslationFiles(context, flags.test);
+                : await getImportTranslationFiles(systemContext, flags.test);
 
         if (inputs.length === 0) {
             if (args.length === 0) {
@@ -282,19 +319,20 @@ class ConstructionImportCommandHandler implements DispatcherCommandHandler {
         );
 
         const matched = data.filter(
-            (d) => d.data.explainerName === context.agentCache.explainerName,
+            (d) =>
+                d.data.explainerName === systemContext.agentCache.explainerName,
         );
 
         if (matched.length === 0) {
             throw new Error(
-                `No matching data found for explainer ${context.agentCache.explainerName}`,
+                `No matching data found for explainer ${systemContext.agentCache.explainerName}`,
             );
         }
         console.log(chalk.gray(`Importing from:`));
         matched.forEach((f) => {
             console.log(chalk.grey(`  ${f.file}`));
         });
-        const result = await context.agentCache.import(
+        const result = await systemContext.agentCache.import(
             matched.map((d) => d.data),
         );
 
@@ -302,11 +340,14 @@ class ConstructionImportCommandHandler implements DispatcherCommandHandler {
     }
 }
 
-class ConstructionDeleteCommandHandler implements DispatcherCommandHandler {
+class ConstructionDeleteCommandHandler implements CommandHandler {
     public readonly description = "Delete a construction by id";
 
-    public async run(request: string, context: CommandHandlerContext) {
-        const { args } = parseRequestArgs(request);
+    public async run(
+        request: string,
+        context: ActionContext<CommandHandlerContext>,
+    ) {
+        const { args } = parseCommandArgs(request);
         if (args.length !== 2) {
             throw new Error(
                 "Invalid arguments. '@const delete <namespace> <id>' expected.",
@@ -317,12 +358,13 @@ class ConstructionDeleteCommandHandler implements DispatcherCommandHandler {
         if (id.toString() !== args[1]) {
             throw new Error(`Invalid construction id: ${args[1]}`);
         }
-        const constructionStore = context.agentCache.constructionStore;
+        const systemContext = context.sessionContext.agentContext;
+        const constructionStore = systemContext.agentCache.constructionStore;
         await constructionStore.delete(args[0], id);
     }
 }
 
-export function getConstructionCommandHandlers(): DispatcherHandlerTable {
+export function getConstructionCommandHandlers(): CommandHandlerTable {
     return {
         description: "Command to manage the construction store",
         defaultSubCommand: undefined,
@@ -338,7 +380,10 @@ export function getConstructionCommandHandlers(): DispatcherHandlerTable {
             delete: new ConstructionDeleteCommandHandler(),
             merge: getToggleHandlerTable(
                 "construction merge",
-                async (context: CommandHandlerContext, enable: boolean) => {
+                async (
+                    context: ActionContext<CommandHandlerContext>,
+                    enable: boolean,
+                ) => {
                     await changeContextConfig(
                         { mergeMatchSets: enable },
                         context,
@@ -347,7 +392,10 @@ export function getConstructionCommandHandlers(): DispatcherHandlerTable {
             ),
             wildcard: getToggleHandlerTable(
                 "wildcard matching",
-                async (context: CommandHandlerContext, enable: boolean) => {
+                async (
+                    context: ActionContext<CommandHandlerContext>,
+                    enable: boolean,
+                ) => {
                     await changeContextConfig(
                         { matchWildcard: enable },
                         context,
