@@ -336,6 +336,7 @@ export class AppAgentManager implements TranslatorConfigProvider {
     public async close() {
         for (const record of this.agents.values()) {
             record.actions.clear();
+            record.commands = false;
             await this.closeSessionContext(record);
         }
     }
