@@ -53,6 +53,9 @@ class SessionNewCommandHandler implements CommandHandler {
                 flags.persist,
             ),
         );
+
+        context.sessionContext.agentContext.chatHistory.entries.length = 0;
+
         displaySuccess(
             `New session created${
                 systemContext.session.dir
