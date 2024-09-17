@@ -287,8 +287,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const chatView = new ChatView(idGenerator, agents);
     const cameraView = new CameraView((image: HTMLImageElement) => {
-        image.classList.add("chat-input-dropImage");
-        chatView.chatInput.textarea.textEntry.append(image);
+
+        // copy image
+        const newImage: HTMLImageElement = document.createElement("img");
+        newImage.src = image.src;
+
+        newImage.classList.add("chat-input-dropImage");
+        chatView.chatInput.textarea.textEntry.append(newImage);
 
         if (chatView.chatInput.sendButton !== undefined) {
             chatView.chatInput.sendButton.disabled = (chatView.chatInput.textarea.textEntry.innerHTML.length == 0);
