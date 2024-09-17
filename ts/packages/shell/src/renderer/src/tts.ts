@@ -68,13 +68,13 @@ const defaultVoiceStyle = "chat";
 function getAzureTTSProvider(voiceName?: string): TTS | undefined {
     let currentCancelId = 0;
     let lastPromise: Promise<PhaseTiming> | undefined;
-    let cancel: ((error: string) => void) | undefined;
+    let cancel: (() => void) | undefined;
 
     return {
         stop: () => {
             if (cancel !== undefined) {
                 currentCancelId++;
-                cancel("Speech cancelled");
+                cancel();
             }
         },
         speak: async (
