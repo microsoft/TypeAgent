@@ -52,7 +52,7 @@ export function makeRequestPromptCreator(
 
             if (request.length == 0) {
                 request =
-                    "Caption the new image in detail and include relevant EXIF information like date/time & location.";
+                    `Caption image '${attachments[0].storageLocation}' in detail and include relevant EXIF information like date/time & location.`;
             }
         }
 

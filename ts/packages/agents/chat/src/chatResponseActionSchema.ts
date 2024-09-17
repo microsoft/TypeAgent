@@ -60,7 +60,7 @@ export interface LookupAndGenerateResponseAction {
     parameters: {
         // the original request from the user
         originalRequest: string;
-        // if the request is for private information from past conversations including private events, plans, projects in progress, and other items from discussions with team members or the assistant, use the conversation lookup filters
+        // if the request is for private information from past conversations including private events, plans, projects in progress, files, and other items from discussions with team members or the assistant, use the conversation lookup filters
         conversationLookupFilters?: TermFilter[];
         // if the request is for contemporary internet information including sports scores, news events, or current commerce offerings, use the lookups parameter to request a lookup of the information on the user's behalf; the assistant will generate a response based on the lookup results
         // Lookup *facts* you don't know or if your facts are out of date.

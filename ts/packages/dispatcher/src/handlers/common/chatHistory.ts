@@ -65,6 +65,8 @@ export function createChatHistory(): ChatHistory {
 
                 if (entry.attachments && entry.attachments.length > 0) {
                     for(const attachment of entry.attachments) {
+                        sections.push({ role: entry.role, content: [{ type: "text", text: attachment.storageLocation }] } );
+                        sections.push({ role: entry.role, content: [{ type: "text", text: JSON.stringify(attachment.exifTags) }] } );
                         sections.push({ role: entry.role, content: [{ type: "image_url", image_url: { url: attachment.image, detail: "high" } }] } );
                     }
                 }
