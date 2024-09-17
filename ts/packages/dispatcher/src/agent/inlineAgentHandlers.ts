@@ -37,6 +37,7 @@ import {
 } from "../handlers/common/interactiveIO.js";
 import { getPrompt, processCommandNoLock, resolveCommand } from "../command.js";
 import { RequestCommandHandler } from "../handlers/requestCommandHandler.js";
+import { DisplayCommandHandler } from "../handlers/displayCommandHandler.js";
 /* ==End Experimental== */
 
 function executeSystemAction(
@@ -61,7 +62,7 @@ class HelpCommandHandler implements CommandHandler {
     ) {
         const printHandleTable = (
             table: CommandDescriptorTable,
-            command?: string,
+            command: string | undefined,
         ) => {
             displayResult((log: (message?: string) => void) => {
                 log(`${table.description}`);
@@ -95,11 +96,7 @@ class HelpCommandHandler implements CommandHandler {
             const result = await resolveCommand(
                 request,
                 context.sessionContext.agentContext,
-                false,
             );
-            if (result === undefined) {
-                throw new Error(`Unknown command '${request}'`);
-            }
 
             if (result.descriptor !== undefined) {
                 if (result.descriptor.help) {
@@ -111,10 +108,21 @@ class HelpCommandHandler implements CommandHandler {
                     );
                 }
             } else {
-                printHandleTable(
-                    result.table!,
-                    result.command?.join(" ") ?? "",
-                );
+                if (result.table === undefined) {
+                    throw new Error(`Unknown command '${request}'`);
+                }
+                const command = result.command.join(" ");
+                if (result.args.length === 0) {
+                    printHandleTable(result.table, command);
+                } else {
+                    const subCommand =
+                        command === ""
+                            ? "command of"
+                            : `subcommand of ${result.command.join(" ")} in`;
+                    throw new Error(
+                        `'${result.args[0]}' is not a '${subCommand}' app agent '${result.appAgentName}'`,
+                    );
+                }
             }
         }
     }
@@ -171,6 +179,7 @@ const systemHandlers: CommandHandlerTable = {
         history: getHistoryCommandHandlers(),
         const: getConstructionCommandHandlers(),
         config: getConfigCommandHandlers(),
+        display: new DisplayCommandHandler(),
         trace: new TraceCommandHandler(),
         help: new HelpCommandHandler(),
         debug: new DebugCommandHandler(),

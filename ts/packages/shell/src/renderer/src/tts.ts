@@ -17,6 +17,7 @@ export const enum TTSProvider {
 
 export type TTS = {
     speak(text: string): Promise<PhaseTiming | undefined>;
+    stop(): void;
 };
 
 function getBrowserTTSProvider(voiceName?: string): TTS | undefined {
@@ -55,6 +56,9 @@ function getBrowserTTSProvider(voiceName?: string): TTS | undefined {
                 speechSynthesis.speak(utterance);
             });
         },
+        stop: () => {
+            speechSynthesis.cancel();
+        },
     };
 }
 
@@ -62,18 +66,40 @@ const defaultVoiceName = "en-US-AndrewMultilingualNeural";
 const defaultVoiceStyle = "chat";
 
 function getAzureTTSProvider(voiceName?: string): TTS | undefined {
+    let currentCancelId = 0;
+    let lastPromise: Promise<PhaseTiming> | undefined;
+    let cancel: ((error: string) => void) | undefined;
+
     return {
+        stop: () => {
+            if (cancel !== undefined) {
+                currentCancelId++;
+                cancel("Speech cancelled");
+            }
+        },
         speak: async (
             text: string,
             voiceStyle?: string,
         ): Promise<PhaseTiming> => {
+            const cancelId = currentCancelId;
             debug("Speech started");
             const start = performance.now();
             let firstChunkTime: number | undefined = undefined;
+
+            while (lastPromise !== undefined) {
+                await lastPromise;
+                if (currentCancelId !== cancelId) {
+                    debug("Speech cancelled");
+                    throw new Error("Speech cancelled");
+                }
+            }
+
+            const audioDestination = new speechSDK.SpeakerAudioDestination();
             const synthesizer = new speechSDK.SpeechSynthesizer(
                 getSpeechConfig(await getSpeechToken())!,
-                speechSDK.AudioConfig.fromDefaultSpeakerOutput(),
+                speechSDK.AudioConfig.fromSpeakerOutput(audioDestination),
             );
+
             synthesizer.synthesisCompleted = () => {
                 debug("Synthesis ended", performance.now() - start);
             };
@@ -88,32 +114,76 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
                 debug("Synthesis started", performance.now() - start);
             };
 
-            const ssml = `
-            <speak
-                version='1.0'
-                xmlns='http://www.w3.org/2001/10/synthesis'
-                xmlns:mstts='https://www.w3.org/2001/mstts'
-                xml:lang='en-US'
-            >
-                <voice name='${voiceName ?? defaultVoiceName}'>
-                    <mstts:express-as style='${voiceStyle ?? defaultVoiceStyle}'>
-                        ${text}
-                    </mstts:express-as>
-                </voice>
-            </speak>`;
-
-            return await new Promise<PhaseTiming>((resolve, reject) => {
+            lastPromise = new Promise<PhaseTiming>((resolve, reject) => {
                 debug(`Speaking: ${text}`);
+                let timing: PhaseTiming | undefined;
+                let audioEnded = false;
+                let finished = false;
+
+                const cleanup = () => {
+                    if (!finished) {
+                        lastPromise = undefined;
+                        cancel = undefined;
+                        finished = true;
+
+                        audioDestination.pause();
+                        audioDestination.close();
+                        return true;
+                    }
+                    return false;
+                };
+                const success = () => {
+                    if (timing && audioEnded && cleanup()) {
+                        resolve(timing);
+                    }
+                };
+
+                const failed = (error: string) => {
+                    if (cleanup()) {
+                        reject(new Error(error));
+                    }
+                };
+
+                cancel = () => {
+                    debug("Cancelling speech");
+                    if (cleanup()) {
+                        if (timing) {
+                            resolve(timing);
+                        } else {
+                            reject(new Error("Speech cancelled"));
+                        }
+                    }
+                };
+
+                audioDestination.onAudioEnd = () => {
+                    debug("Speech ended");
+                    audioEnded = true;
+                    success();
+                };
+
+                const ssml = `
+                <speak
+                    version='1.0'
+                    xmlns='http://www.w3.org/2001/10/synthesis'
+                    xmlns:mstts='https://www.w3.org/2001/mstts'
+                    xml:lang='en-US'
+                >
+                    <voice name='${voiceName ?? defaultVoiceName}'>
+                        <mstts:express-as style='${voiceStyle ?? defaultVoiceStyle}'>
+                            ${text}
+                        </mstts:express-as>
+                    </voice>
+                </speak>`;
                 synthesizer.speakSsmlAsync(
                     ssml,
                     (result) => {
-                        debug("Speech completed", result);
+                        debug("Synthesis completed", result);
                         synthesizer.close();
                         if (
                             result.reason ===
                             speechSDK.ResultReason.SynthesizingAudioCompleted
                         ) {
-                            const timing: PhaseTiming = {
+                            timing = {
                                 duration: performance.now() - start,
                             };
                             if (firstChunkTime !== undefined) {
@@ -124,17 +194,19 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
                                     },
                                 };
                             }
-                            resolve(timing);
+                            success();
+                            return;
                         }
-                        reject(new Error(result.errorDetails));
+                        failed(result.errorDetails);
                     },
                     (error) => {
+                        debugError(`Synthesis error ${error}`);
                         synthesizer.close();
-                        debugError(`Speech error ${error}`);
-                        reject(error);
+                        failed(error);
                     },
                 );
             });
+            return lastPromise;
         },
     };
 }

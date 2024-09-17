@@ -116,7 +116,7 @@ const agentInvokeHandlers: AgentInvokeFunctions = {
     },
     async executeCommand(
         param: Partial<ActionContextParams> & {
-            command: string[] | undefined;
+            command: string[];
             args: string;
         },
     ) {

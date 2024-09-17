@@ -97,7 +97,7 @@ function getTypeFromValue(key: string, value?: FlagValueType) {
 
     return typeof value as "string" | "number" | "boolean";
 }
-export function parseRequestArgs<T extends FlagInput>(
+export function parseCommandArgs<T extends FlagInput>(
     request: string,
     defaultFlags?: T,
     noArgs: boolean = false,
