@@ -7,8 +7,6 @@ export {
     SchemaDefinition,
     AppAgent,
     AppAgentEvent,
-    AppAction,
-    AppActionWithParameters,
     SessionContext,
     StorageListOptions,
     Storage,
@@ -16,6 +14,7 @@ export {
     TokenCachePersistence,
     ActionContext,
     CommandDescriptor,
+    CommandDescriptors,
     CommandDescriptorTable,
 } from "./agentInterface.js";
 
@@ -27,6 +26,16 @@ export {
     DisplayAppendMode,
     DisplayMessageKind,
 } from "./display.js";
-export * from "./memory.js";
+
+export {
+    AppAction,
+    AppActionWithParameters,
+    ActionResultError,
+    ActionResultSuccessNoDisplay,
+    ActionResultSuccess,
+    ActionResult,
+} from "./action.js";
+
+export { Entity } from "./memory.js";
 
 export { Profiler } from "./profiler.js";

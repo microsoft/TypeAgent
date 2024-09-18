@@ -25,7 +25,7 @@ type CodeActionContext = {
     pendingCall: Map<
         number,
         {
-            resolve: () => void;
+            resolve: (value?: undefined) => void;
             context: ActionContext<CodeActionContext>;
         }
     >;
@@ -112,7 +112,7 @@ async function executeCodeAction(
     if (webSocketEndpoint) {
         try {
             const callId = agentContext.nextCallId++;
-            return new Promise<void>((resolve) => {
+            return new Promise<undefined>((resolve) => {
                 agentContext.pendingCall.set(callId, {
                     resolve,
                     context,
@@ -135,5 +135,4 @@ async function executeCodeAction(
     } else {
         throw new Error("No websocket connection.");
     }
-    return undefined;
 }
