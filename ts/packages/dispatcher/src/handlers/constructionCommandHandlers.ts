@@ -15,19 +15,19 @@ import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { ConstructionStore, printImportConstructionResult } from "agent-cache";
 import { getSessionCacheDirPath } from "../explorer.js";
 import { getAppAgentName } from "../translation/agentTranslators.js";
-import {
-    displayResult,
-    displaySuccess,
-    displayWarn,
-    RequestIO,
-} from "./common/interactiveIO.js";
+import { RequestIO } from "./common/interactiveIO.js";
 import { parseCommandArgs } from "../utils/args.js";
 import { glob } from "glob";
 import { getDispatcherConfig } from "../utils/config.js";
 import {
+    displayResult,
+    displaySuccess,
+    displayWarn,
+} from "@typeagent/agent-sdk/helpers/display";
+import {
     CommandHandler,
     CommandHandlerTable,
-} from "@typeagent/agent-sdk/helpers/commands";
+} from "@typeagent/agent-sdk/helpers/command";
 import { ActionContext } from "@typeagent/agent-sdk";
 
 async function checkRecreateStore(

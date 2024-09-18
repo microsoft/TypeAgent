@@ -41,14 +41,14 @@ import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incremen
 import ExifReader from "exifreader";
 import { Result } from "typechat";
 import { ProfileNames } from "../utils/profileNames.js";
-import { CommandHandler } from "@typeagent/agent-sdk/helpers/commands";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { ActionContext } from "@typeagent/agent-sdk";
 import {
     displayError,
     displayInfo,
     displayStatus,
     displayWarn,
-} from "./common/interactiveIO.js";
+} from "@typeagent/agent-sdk/helpers/display";
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");

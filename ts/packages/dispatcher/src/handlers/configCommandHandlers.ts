@@ -26,8 +26,11 @@ import { ActionContext } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
     CommandHandlerTable,
-} from "@typeagent/agent-sdk/helpers/commands";
-import { displayResult, displayWarn } from "./common/interactiveIO.js";
+} from "@typeagent/agent-sdk/helpers/command";
+import {
+    displayResult,
+    displayWarn,
+} from "@typeagent/agent-sdk/helpers/display";
 
 function parseToggleTranslatorName(
     args: string[],

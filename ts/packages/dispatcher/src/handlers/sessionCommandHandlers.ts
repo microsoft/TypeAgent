@@ -20,13 +20,13 @@ import { parseCommandArgs } from "../utils/args.js";
 import {
     CommandHandler,
     CommandHandlerTable,
-} from "@typeagent/agent-sdk/helpers/commands";
+} from "@typeagent/agent-sdk/helpers/command";
 import { ActionContext } from "@typeagent/agent-sdk";
 import {
     displayResult,
     displaySuccess,
     displayWarn,
-} from "./common/interactiveIO.js";
+} from "@typeagent/agent-sdk/helpers/display";
 
 class SessionNewCommandHandler implements CommandHandler {
     public readonly description = "Create a new empty session";

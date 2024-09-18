@@ -3,7 +3,7 @@
 
 import { ActionContext } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
-import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/commands";
+import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/command";
 
 export function getToggleCommandHandlers(
     name: string,
