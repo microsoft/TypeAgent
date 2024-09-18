@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { AppAction } from "./action.js";
 import { ActionIO, DisplayType, DynamicDisplay } from "./display.js";
 import { ActionResult } from "./memory.js";
 import { Profiler } from "./profiler.js";
@@ -35,15 +36,6 @@ export type TranslatorDefinition = {
 //==============================================================================
 // App Agent
 //==============================================================================
-export interface AppAction {
-    actionName: string;
-    translatorName?: string | undefined;
-}
-
-export interface AppActionWithParameters extends AppAction {
-    parameters: { [key: string]: any };
-}
-
 export type CommandDescriptor = {
     description: string;
     help?: string;
