@@ -206,9 +206,14 @@ export async function runCodeChat(): Promise<void> {
             description: "Answer questions about code",
             options: {
                 question: { description: "Question to ask" },
-                sourcePath: {
+                sourceFile: {
                     description: "Path to source file",
                     type: "path",
+                    defaultValue: sampleFiles.testCode,
+                },
+                verbose: {
+                    type: "boolean",
+                    defaultValue: false,
                 },
             },
         };
@@ -219,17 +224,25 @@ export async function runCodeChat(): Promise<void> {
         const question =
             namedArgs.question ??
             "I am looking for an example of how to raise a number to a power";
-        printer.writeLine(question);
+        printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
+        printer.writeLine(`Question:\n${question}\n`);
 
-        const functions = await loadCodeChunks(namedArgs.sourcePath);
+        const functions = await loadCodeChunks(namedArgs.sourceFile);
         await asyncArray.mapAsync(
             functions,
             2,
             (funcCode, index) => codeReviewer.answer(question, funcCode),
             (funcCode, index, answers) => {
-                const lines = codeToLines(funcCode);
-                printAnswers(lines, answers);
-                printer.writeLine();
+                if (
+                    answers.answerStatus !== "NotAnswered" ||
+                    namedArgs.verbose
+                ) {
+                    const lines = codeToLines(funcCode);
+                    printAnswers(lines, answers);
+                    printer.writeLine();
+                } else {
+                    printer.writeLine(".");
+                }
                 // Only continue searching if no answers found
                 return answers.answerStatus !== "Answered";
             },
