@@ -86,6 +86,12 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
             const start = performance.now();
             let firstChunkTime: number | undefined = undefined;
 
+            const audioDestination = new speechSDK.SpeakerAudioDestination();
+            const synthesizer = new speechSDK.SpeechSynthesizer(
+                getSpeechConfig(await getSpeechToken())!,
+                speechSDK.AudioConfig.fromSpeakerOutput(audioDestination),
+            );
+
             while (lastPromise !== undefined) {
                 await lastPromise;
                 if (currentCancelId !== cancelId) {
@@ -93,12 +99,6 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
                     throw new Error("Speech cancelled");
                 }
             }
-
-            const audioDestination = new speechSDK.SpeakerAudioDestination();
-            const synthesizer = new speechSDK.SpeechSynthesizer(
-                getSpeechConfig(await getSpeechToken())!,
-                speechSDK.AudioConfig.fromSpeakerOutput(audioDestination),
-            );
 
             synthesizer.synthesisCompleted = () => {
                 debug("Synthesis ended", performance.now() - start);
