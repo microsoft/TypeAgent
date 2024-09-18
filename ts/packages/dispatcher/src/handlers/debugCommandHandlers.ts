@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommandHandler } from "@typeagent/agent-sdk/helpers/commands";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import inspector from "node:inspector";
 import { ActionContext } from "@typeagent/agent-sdk";
@@ -9,7 +9,7 @@ import {
     displayStatus,
     displaySuccess,
     displayWarn,
-} from "./common/interactiveIO.js";
+} from "@typeagent/agent-sdk/helpers/display";
 
 export class DebugCommandHandler implements CommandHandler {
     public readonly description = "Start node inspector";

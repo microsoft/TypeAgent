@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommandHandler } from "@typeagent/agent-sdk/helpers/commands";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../internal.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 import { parseCommandArgs } from "../utils/args.js";

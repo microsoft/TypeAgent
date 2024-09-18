@@ -68,12 +68,14 @@ import {
 import registerDebug from "debug";
 import {
     ActionIO,
-    createActionResultFromHtmlDisplay,
-    createActionResultFromTextDisplay,
     DisplayContent,
     Storage,
     ActionResult,
 } from "@typeagent/agent-sdk";
+import {
+    createActionResultFromHtmlDisplay,
+    createActionResultFromTextDisplay,
+} from "@typeagent/agent-sdk/helpers/action";
 
 const debugSpotify = registerDebug("typeagent:spotify");
 const debugSpotifyError = registerDebug("typeagent:spotify:error");

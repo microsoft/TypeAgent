@@ -6,7 +6,7 @@ import chalk from "chalk";
 import { ChildProcess, fork } from "child_process";
 import { getPackageFilePath } from "../../utils/getPackageFilePath.js";
 import { ActionContext } from "@typeagent/agent-sdk";
-import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/commands";
+import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/command";
 
 export async function createServiceHost() {
     return new Promise<ChildProcess | undefined>((resolve, reject) => {

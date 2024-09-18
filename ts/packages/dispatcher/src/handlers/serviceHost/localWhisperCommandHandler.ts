@@ -5,8 +5,11 @@ import { CommandHandlerContext } from "../common/commandHandlerContext.js";
 import chalk from "chalk";
 import { ChildProcess, spawn } from "child_process";
 import { getPackageFilePath } from "../../utils/getPackageFilePath.js";
-import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/commands";
-import { displayResult, displayWarn } from "../common/interactiveIO.js";
+import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/command";
+import {
+    displayResult,
+    displayWarn,
+} from "@typeagent/agent-sdk/helpers/display";
 import { ActionContext } from "@typeagent/agent-sdk";
 
 export async function createLocalWhisperHost() {

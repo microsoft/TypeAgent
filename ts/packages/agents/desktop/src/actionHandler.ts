@@ -4,9 +4,9 @@
 import {
     ActionContext,
     AppActionWithParameters,
-    createActionResult,
     SessionContext,
 } from "@typeagent/agent-sdk";
+import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import {
     disableDesktopActionContext,
     DesktopActionContext,

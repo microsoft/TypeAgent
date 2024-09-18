@@ -12,8 +12,8 @@ import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
     CommandHandlerTable,
-} from "@typeagent/agent-sdk/helpers/commands";
-import { displayStatus } from "./common/interactiveIO.js";
+} from "@typeagent/agent-sdk/helpers/command";
+import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
 
 export type UserRequestList = {
     messages: UserRequest[];
