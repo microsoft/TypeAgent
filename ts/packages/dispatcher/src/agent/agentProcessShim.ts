@@ -227,20 +227,20 @@ export async function createAgentProcessShim(
         },
         setDisplay: (param: {
             actionContextId: number;
-            message: DisplayContent;
+            content: DisplayContent;
         }) => {
             actionContextMap
                 .get(param.actionContextId)
-                .actionIO.setDisplay(param.message);
+                .actionIO.setDisplay(param.content);
         },
         appendDisplay: (param: {
             actionContextId: number;
-            message: DisplayContent;
+            content: DisplayContent;
             mode: DisplayAppendMode;
         }) => {
             actionContextMap
                 .get(param.actionContextId)
-                .actionIO.appendDisplay(param.message, param.mode);
+                .actionIO.appendDisplay(param.content, param.mode);
         },
     };
 
