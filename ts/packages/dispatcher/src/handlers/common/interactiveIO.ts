@@ -262,7 +262,7 @@ export function getConsoleRequestIO(
             }
         },
         takeAction: (action: string) => {
-            return stdio?.write("This command is not supported.\n");
+            return stdio?.write("This command is not supported in the CLI.\n");
         }
     };
 }

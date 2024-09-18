@@ -58,12 +58,12 @@ async function handlePhotoAction(
     switch (action.actionName) {
         case "takePhoto": {
             photoContext.actionIO.takeAction("show-camera");
-            result = createActionResult("showing camera...");
+            result = createActionResult("Action Completed.");
             break;
         }
         case "uploadImage": {
             photoContext.actionIO.takeAction("upload-file");
-            result = createActionResult("showing open file dialog...");
+            result = createActionResult("Action Completed.");
             break;
         }
         default:
