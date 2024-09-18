@@ -145,11 +145,11 @@ export interface Conversation<
     addMessage(
         message: string | TextBlock,
         timestamp?: Date,
-        messageLabel?: string,
     ): Promise<SourceTextBlock<MessageId>>;
     addKnowledgeForMessage(
         message: SourceTextBlock<MessageId>,
         knowledge: ExtractedKnowledge<MessageId>,
+        label?: string | undefined,
     ): Promise<ExtractedKnowledgeIds<TTopicId, TEntityId, TActionId>>;
     addKnowledgeToIndex(
         knowledge: ExtractedKnowledge<MessageId>,
@@ -598,7 +598,6 @@ export async function createConversation(
     async function addMessage(
         message: string | TextBlock,
         timestamp?: Date,
-        label?: string,
     ): Promise<SourceTextBlock<any, MessageId>> {
         const messageBlock: TextBlock =
             typeof message === "string"
@@ -615,13 +614,14 @@ export async function createConversation(
     async function addKnowledgeForMessage(
         message: SourceTextBlock<MessageId>,
         knowledge: ExtractedKnowledge<MessageId>,
+        label?: string | undefined,
     ): Promise<ExtractedKnowledgeIds<TopicId, EntityId, ActionId>> {
         await knowledgeStore.put(knowledge, message.blockId);
         const knowledgeIds: ExtractedKnowledgeIds<TopicId, EntityId, ActionId> =
             {};
 
         await Promise.all([
-            addNextEntities(knowledge, knowledgeIds, message.timestamp),
+            addNextEntities(knowledge, knowledgeIds, message.timestamp, label),
             addNextTopics(knowledge, knowledgeIds, message.timestamp),
             addNextActions(knowledge, knowledgeIds, message.timestamp),
         ]);
@@ -679,12 +679,14 @@ export async function createConversation(
         knowledge: ExtractedKnowledge<MessageId>,
         knowledgeIds: ExtractedKnowledgeIds<TopicId, EntityId, ActionId>,
         timestamp?: Date | undefined,
+        label?: string | undefined,
     ): Promise<void> {
         if (knowledge.entities && knowledge.entities.length > 0) {
             const entityIndex = await getEntityIndex();
             knowledgeIds.entityIds = await entityIndex.addNext(
                 knowledge.entities,
                 timestamp,
+                label,
             );
         }
     }
@@ -786,7 +788,7 @@ export async function createConversation(
     async function searchTerms(
         filters: TermFilter[],
         options: ConversationSearchOptions,
-        messageLabel?: string | undefined,
+        label?: string | undefined,
     ): Promise<SearchResponse> {
         const [entityIndex, topicIndex, actionIndex] = await Promise.all([
             getEntityIndex(),

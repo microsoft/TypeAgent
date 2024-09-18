@@ -295,13 +295,14 @@ export async function addMessageToConversation(
     timestamp?: Date | undefined,
     label?: string | undefined,
 ): Promise<any> {
-    const block = await conversation.addMessage(messageText, timestamp, label);
+    const block = await conversation.addMessage(messageText, timestamp);
     await extractKnowledgeAndIndex(
         conversation,
         knowledgeExtractor,
         topicMerger,
         block,
         knownEntities,
+        label,
     );
 }
 
@@ -311,6 +312,7 @@ async function extractKnowledgeAndIndex(
     topicMerger: TopicMerger | undefined,
     message: SourceTextBlock,
     knownEntities?: ConcreteEntity[] | undefined,
+    label?: string | undefined,
 ) {
     const messageIndex = await conversation.getMessageIndex();
     await messageIndex.put(message.value, message.blockId);
@@ -342,6 +344,7 @@ async function extractKnowledgeAndIndex(
             topicMerger,
             message,
             extractedKnowledge,
+            label,
         );
     }
 }
@@ -369,11 +372,13 @@ async function indexKnowledge(
     topicMerger: TopicMerger | undefined,
     message: SourceTextBlock,
     knowledge: ExtractedKnowledge,
+    label?: string | undefined,
 ): Promise<void> {
     // Add next message... this updates the "sequence"
     const knowledgeIds = await conversation.addKnowledgeForMessage(
         message,
         knowledge,
+        label,
     );
     if (topicMerger) {
         const mergedTopic = await topicMerger.next(true, true);

@@ -180,6 +180,28 @@ async function createConversationManager(): Promise<conversation.ConversationMan
     );
 }
 
+export async function testLabels(): Promise<void> {
+    const testConversation = await createConversationManager();
+    const testMessages = [
+        "Bach ate pizza while he wrote fugues",
+        "Bach ate ice cream while he wrote fugues",
+    ];
+    const testLabel = "Bach Food";
+    await testConversation.addMessage(
+        testMessages[0],
+        undefined,
+        undefined,
+        testLabel,
+    );
+    const entities = await testConversation.conversation.getEntityIndex();
+    const ids = await entities.labels.get(testLabel);
+    if (ids && ids.length > 0) {
+        console.log(ids);
+    } else {
+        console.log("bug");
+    }
+}
+
 export async function testConversationEntities(): Promise<void> {
     const testConversation = await createConversationManager();
     const testMessage = "Bach ate pizza while he wrote fugues";
@@ -242,6 +264,7 @@ export async function runTestCases(): Promise<void> {
 }
 
 export async function runTests(): Promise<void> {
+    await testLabels();
     await testConversationEntities();
     await runTestCases();
     // await runKnowledgeTests();

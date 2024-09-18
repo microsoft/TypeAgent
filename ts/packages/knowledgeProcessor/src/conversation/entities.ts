@@ -27,6 +27,7 @@ import {
     addToSet,
     createFrequencyTable,
     intersect,
+    intersectArrays,
     intersectMultiple,
     intersectUnionMultiple,
     removeUndefined,
@@ -67,6 +68,7 @@ export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
     searchTerms(
         filter: TermFilter,
         options: EntitySearchOptions,
+        messageLabel?: string | undefined,
     ): Promise<EntitySearchResult<TEntityId>>;
     loadSourceIds(
         sourceIdLog: TemporalLog<TSourceId>,
@@ -90,32 +92,32 @@ export async function createEntityIndex<TSourceId = string>(
     fSys?: FileSystem,
 ): Promise<EntityIndex<string, TSourceId, string>> {
     type EntityId = string;
-    const [entityStore] = await Promise.all([
+    const [entityStore, nameIndex, typeIndex, facetIndex] = await Promise.all([
         createKnowledgeStore<ExtractedEntity<TSourceId>>(
             settings,
             rootPath,
             folderSettings,
             fSys,
         ),
+        createTextIndex<EntityId>(
+            settings,
+            path.join(rootPath, "names"),
+            folderSettings,
+            fSys,
+        ),
+        createTextIndex<EntityId>(
+            settings,
+            path.join(rootPath, "types"),
+            folderSettings,
+            fSys,
+        ),
+        createTextIndex<EntityId>(
+            settings,
+            path.join(rootPath, "facets"),
+            folderSettings,
+            fSys,
+        ),
     ]);
-    const nameIndex = await createTextIndex<EntityId>(
-        settings,
-        path.join(rootPath, "names"),
-        folderSettings,
-        fSys,
-    );
-    const typeIndex = await createTextIndex<EntityId>(
-        settings,
-        path.join(rootPath, "types"),
-        folderSettings,
-        fSys,
-    );
-    const facetIndex = await createTextIndex<EntityId>(
-        settings,
-        path.join(rootPath, "facets"),
-        folderSettings,
-        fSys,
-    );
     return {
         ...entityStore,
         nameIndex,
@@ -296,6 +298,7 @@ export async function createEntityIndex<TSourceId = string>(
     async function searchTerms(
         filter: TermFilter,
         options: EntitySearchOptions,
+        messageLabel?: string | undefined,
     ): Promise<EntitySearchResult<EntityId>> {
         const results = createSearchResults();
         if (filter.timeRange) {
@@ -334,6 +337,12 @@ export async function createEntityIndex<TSourceId = string>(
                     itemsFromTemporalSequence(results.temporalSequence),
                 ),
             ];
+        }
+        const labelIds = messageLabel
+            ? await entityStore.labels.get(messageLabel)
+            : undefined;
+        if (labelIds) {
+            results.entityIds = intersectArrays(results.entityIds, labelIds);
         }
         if (results.entityIds && results.temporalSequence) {
             // The temporal sequence maintains all entity ids seen at a timestamp.
