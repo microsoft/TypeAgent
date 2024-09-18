@@ -14,12 +14,14 @@ export interface LabelIndex<TLabelId = any, TSourceId = any> {
 }
 
 export async function createLabelIndex<TSourceId = any>(
-    settings: TextIndexSettings,
+    indexSettings: TextIndexSettings,
     rootPath: string,
     folderSettings?: ObjectFolderSettings,
     fSys?: FileSystem,
 ): Promise<LabelIndex<string, TSourceId>> {
     type TagId = string;
+    const settings: TextIndexSettings = { ...indexSettings };
+    settings.semanticIndex = false;
     const textIndex = await createTextIndex<TSourceId>(
         settings,
         rootPath,

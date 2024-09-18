@@ -176,12 +176,15 @@ export async function createTextIndex<TSourceId = any>(
         folderSettings,
         fSys,
     );
-    const semanticIndex = await createSemanticIndexFolder(
-        folderPath,
-        folderSettings,
-        settings.embeddingModel,
-        fSys,
-    );
+    const semanticIndex =
+        settings.semanticIndex !== undefined && settings.semanticIndex
+            ? await createSemanticIndexFolder(
+                  folderPath,
+                  folderSettings,
+                  settings.embeddingModel,
+                  fSys,
+              )
+            : undefined;
 
     return {
         text: () => textIdMap.keys(),
@@ -297,7 +300,9 @@ export async function createTextIndex<TSourceId = any>(
         if (postings && postings.length > 0) {
             tasks.push(postingFolder.put(postings, textId));
         }
-        tasks.push(semanticIndex.put(text, textId));
+        if (semanticIndex) {
+            tasks.push(semanticIndex.put(text, textId));
+        }
         await Promise.all(tasks);
         return textId;
     }
@@ -332,7 +337,7 @@ export async function createTextIndex<TSourceId = any>(
                 minScore,
             );
             postingsNearest = [...unionMultiple(...nearestPostings)];
-        } else if (!postings || postings.length === 0) {
+        } else if (semanticIndex && (!postings || postings.length === 0)) {
             const textId = await semanticIndex.nearestNeighbor(value, minScore);
             if (textId) {
                 postingsNearest = await postingFolder.get(textId.item);
@@ -362,7 +367,7 @@ export async function createTextIndex<TSourceId = any>(
                 minScore,
             );
             postingsNearest = unionMultiple(...nearestPostings);
-        } else if (!postings || postings.length === 0) {
+        } else if (semanticIndex && (!postings || postings.length === 0)) {
             const textId = await semanticIndex.nearestNeighbor(value, minScore);
             if (textId) {
                 postingsNearest = await postingFolder.get(textId.item);
@@ -433,7 +438,7 @@ export async function createTextIndex<TSourceId = any>(
         if (exactMatchId) {
             matchedIds.push(exactMatchId);
         }
-        if (maxMatches > 1) {
+        if (semanticIndex && maxMatches > 1) {
             const nearestMatches = await semanticIndex.nearestNeighbors(
                 value,
                 maxMatches,
@@ -483,6 +488,9 @@ export async function createTextIndex<TSourceId = any>(
         maxMatches: number,
         minScore?: number,
     ): Promise<ScoredItem<TextId>[]> {
+        if (!semanticIndex) {
+            return [];
+        }
         let matches = await semanticIndex.nearestNeighbors(
             value,
             maxMatches,
@@ -541,6 +549,9 @@ export async function createTextIndex<TSourceId = any>(
         maxMatches?: number,
         minScore?: number,
     ) {
+        if (!semanticIndex) {
+            return [];
+        }
         maxMatches ??= 1;
         const nearestText = await semanticIndex.nearestNeighbors(
             value,
