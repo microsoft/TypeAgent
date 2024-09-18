@@ -2,14 +2,17 @@
 // Licensed under the MIT License.
 
 // import ts from "typescript";
-import { getAbsolutePath, readAllLines, asyncArray } from "typeagent";
+import {
+    getAbsolutePath,
+    readAllLines,
+    asyncArray,
+    removeDir,
+} from "typeagent";
 import {
     CommandHandler,
     CommandMetadata,
     InteractiveIo,
     addStandardHandlers,
-    displayHelp,
-    getArg,
     parseNamedArguments,
     runConsole,
 } from "interactive-app";
@@ -22,25 +25,31 @@ import {
     tsCode,
     CodeDocumentation,
     createSemanticCodeIndex,
+    Module,
+    StoredCodeBlock,
 } from "code-processor";
 import { CodePrinter } from "./codePrinter.js";
 import path from "path";
 import { openai } from "aiclient";
+import ts from "typescript";
+import chalk from "chalk";
+import { pathToFileURL } from "url";
 
 export async function runCodeChat(): Promise<void> {
     const codeReviewer = createCodeReviewer();
+    const sampleFiles = {
+        snippet: "../../src/codeChat/testCode/snippet.ts",
+        testCode: "../../src/codeChat/testCode/testCode.ts",
+    };
+    const sampleModuleDir = "../../dist/codeChat/testCode";
+    // For answer/code indexing examples
     const folderPath = "/data/code";
     const vectorModel = openai.createEmbeddingModel();
-    const codeIndex = await createSemanticCodeIndex(
-        path.join(folderPath, "index"),
-        codeReviewer,
-        vectorModel,
-    );
+    const codeIndexPath = path.join(folderPath, "index");
+    let codeIndex = await ensureCodeIndex();
     let printer: CodePrinter;
 
     const handlers: Record<string, CommandHandler> = {
-        help,
-        "--?": help,
         review,
         debug,
         breakpoints,
@@ -48,6 +57,7 @@ export async function runCodeChat(): Promise<void> {
         document,
         indexCode,
         findCode,
+        clearCodeIndex,
         regex,
     };
     addStandardHandlers(handlers);
@@ -64,65 +74,136 @@ export async function runCodeChat(): Promise<void> {
 
     function onStart(io: InteractiveIo): void {
         printer = new CodePrinter(io);
-        printer.writeLine("AI Code");
+        printer.writeLine("\nCode Diagnostics with TypeChat");
     }
 
-    async function help(args: string[], io: InteractiveIo): Promise<void> {
-        displayHelp(args, handlers, io);
+    function reviewDef(): CommandMetadata {
+        return {
+            description: "Review the given Typescript file",
+            options: {
+                sourceFile: {
+                    description: "Path to source file",
+                    type: "path",
+                    defaultValue: sampleFiles.testCode,
+                },
+                verbose: {
+                    description: "Verbose output",
+                    type: "boolean",
+                    defaultValue: false,
+                },
+            },
+        };
     }
-
+    handlers.review.metadata = reviewDef();
     async function review(args: string[]): Promise<void> {
-        const sourceFile = getArg(
-            args,
-            0,
-            "../../src/codeChat/testCode/testCode.ts",
-        );
-        const sourcePath = getAbsolutePath(sourceFile, import.meta.url);
-        const sourceText = await readAllLines(sourcePath);
-        const review = await codeReviewer.review(sourceText);
-        printCodeReview(sourceText, review);
+        const namedArgs = parseNamedArguments(args, reviewDef());
+
+        printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
+
+        // Load file to review
+        const code = await loadTypescriptCode(namedArgs.sourceFile);
+        if (namedArgs.verbose) {
+            printer.writeCodeLines(code.sourceText);
+        }
+        // Run a code review
+        const review = await codeReviewer.review(code.sourceText);
+        printCodeReview(code.sourceText, review);
     }
 
+    function debugDef(): CommandMetadata {
+        return {
+            description: "Debug the given Typescript file",
+            options: {
+                sourceFile: {
+                    description: "Path to source file",
+                    type: "path",
+                    defaultValue: sampleFiles.snippet,
+                },
+                moduleDir: {
+                    description: "Path to modules dir",
+                    type: "path",
+                },
+                bug: {
+                    description: "A description of the observed bug",
+                    defaultValue:
+                        "I am observing assertion failures in the code below. Review the code below and explain why",
+                },
+                verbose: {
+                    description: "Verbose output",
+                    type: "boolean",
+                    defaultValue: false,
+                },
+            },
+        };
+    }
+    handlers.debug.metadata = debugDef();
     async function debug(args: string[]): Promise<void> {
-        const sourceFile = "../../src/codeChat/testCode/snippet.ts";
-        const sourcePath = getAbsolutePath(sourceFile, import.meta.url);
-        const sourceText = await readAllLines(sourcePath);
-        let sourceCode = await tsCode.loadSourceFile(sourcePath);
+        const namedArgs = parseNamedArguments(args, debugDef());
 
-        const moduleDir = getAbsolutePath(
-            "../../dist/codeChat/testCode",
-            import.meta.url,
+        printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
+        printer.writeLine(`Bug Description:\n${namedArgs.bug}\n`);
+
+        const code = await loadTypescriptCode(
+            namedArgs.sourceFile,
+            namedArgs.moduleDir,
         );
-        const modules = await tsCode.loadImports(sourceCode, moduleDir);
+        if (namedArgs.verbose) {
+            printer.writeCodeLines(code.sourceText);
+        }
         const review = await codeReviewer.debug(
-            "I am observing assertion failures in the code below. Review the code below and explain why",
-            sourceText,
-            modules,
+            namedArgs.bug,
+            code.sourceText,
+            code.modules,
         );
-        printer.writeJson(review);
-        printCodeReview(sourceText, review);
+        printCodeReview(code.sourceText, review);
     }
 
+    function breakpointDef(): CommandMetadata {
+        return {
+            description:
+                "Suggest where to set breakpoints in a Typescript file",
+            options: {
+                sourceFile: {
+                    description: "Path to source file",
+                    type: "path",
+                    defaultValue: sampleFiles.snippet,
+                },
+                moduleDir: {
+                    description: "Path to modules dir",
+                    type: "path",
+                },
+                bug: {
+                    description: "A description of the observed bug",
+                    defaultValue:
+                        "I am observing assertion failures in the code below.",
+                },
+                verbose: {
+                    description: "Verbose output",
+                    type: "boolean",
+                    defaultValue: false,
+                },
+            },
+        };
+    }
+    handlers.breakpoints.metadata = breakpointDef();
     async function breakpoints(args: string[]): Promise<void> {
-        const observation =
-            "I am observing assertion failures in the code below. Review the code below and explain why";
-        const sourceFile = "../../src/codeChat/testCode/snippet.ts";
-        const sourcePath = getAbsolutePath(sourceFile, import.meta.url);
-        const sourceText = await readAllLines(sourcePath);
-        let sourceCode = await tsCode.loadSourceFile(sourcePath);
+        const namedArgs = parseNamedArguments(args, breakpointDef());
+        const code = await loadTypescriptCode(
+            namedArgs.sourceFile,
+            namedArgs.moduleDir,
+        );
 
-        const moduleDir = getAbsolutePath(
-            "../../dist/codeChat/testCode",
-            import.meta.url,
-        );
-        const modules = await tsCode.loadImports(sourceCode, moduleDir);
+        printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
+        printer.writeLine(`Bug Description:\n${namedArgs.bug}\n`);
         const suggestions = await codeReviewer.breakpoints(
-            observation,
-            sourceText,
-            modules,
+            namedArgs.bug,
+            code.sourceText,
+            code.modules,
         );
-        printer.writeLine(observation);
-        printBreakpoints(sourceText, suggestions);
+        if (namedArgs.verbose) {
+            printer.writeCodeLines(code.sourceText);
+        }
+        printBreakpoints(code.sourceText, suggestions);
     }
 
     function answerDef(): CommandMetadata {
@@ -130,9 +211,14 @@ export async function runCodeChat(): Promise<void> {
             description: "Answer questions about code",
             options: {
                 question: { description: "Question to ask" },
-                sourcePath: {
+                sourceFile: {
                     description: "Path to source file",
                     type: "path",
+                    defaultValue: sampleFiles.testCode,
+                },
+                verbose: {
+                    type: "boolean",
+                    defaultValue: false,
                 },
             },
         };
@@ -143,17 +229,25 @@ export async function runCodeChat(): Promise<void> {
         const question =
             namedArgs.question ??
             "I am looking for an example of how to raise a number to a power";
-        printer.writeLine(question);
+        printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
+        printer.writeLine(`Question:\n${question}\n`);
 
-        const functions = await loadCodeChunks(namedArgs.sourcePath);
+        const functions = await loadCodeChunks(namedArgs.sourceFile);
         await asyncArray.mapAsync(
             functions,
             2,
             (funcCode, index) => codeReviewer.answer(question, funcCode),
             (funcCode, index, answers) => {
-                const lines = codeToLines(funcCode);
-                printAnswers(lines, answers);
-                printer.writeLine();
+                if (
+                    answers.answerStatus !== "NotAnswered" ||
+                    namedArgs.verbose
+                ) {
+                    const lines = codeToLines(funcCode);
+                    printAnswers(lines, answers);
+                    printer.writeLine();
+                } else {
+                    printer.writeLine(".");
+                }
                 // Only continue searching if no answers found
                 return answers.answerStatus !== "Answered";
             },
@@ -164,9 +258,10 @@ export async function runCodeChat(): Promise<void> {
         return {
             description: "Document given code",
             options: {
-                sourcePath: {
+                sourceFile: {
                     description: "Path to source file",
                     type: "path",
+                    defaultValue: sampleFiles.testCode,
                 },
             },
         };
@@ -174,7 +269,7 @@ export async function runCodeChat(): Promise<void> {
     handlers.document.metadata = documentDef();
     async function document(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, documentDef());
-        const functions = await loadCodeChunks(namedArgs.sourcePath);
+        const functions = await loadCodeChunks(namedArgs.sourceFile);
         await asyncArray.mapAsync(
             functions,
             2,
@@ -191,10 +286,19 @@ export async function runCodeChat(): Promise<void> {
     function indexDef(): CommandMetadata {
         return {
             description: "Index given code",
-            options: {
-                sourcePath: {
+            args: {
+                sourceFile: {
                     description: "Path to source file",
                     type: "path",
+                },
+            },
+            options: {
+                module: {
+                    description: "Module name",
+                },
+                verbose: {
+                    type: "boolean",
+                    defaultValue: false,
                 },
             },
         };
@@ -202,7 +306,9 @@ export async function runCodeChat(): Promise<void> {
     handlers.indexCode.metadata = indexDef();
     async function indexCode(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, indexDef());
-        const fullPath = getSourcePath(namedArgs.sourcePath);
+        const fullPath = getSourcePath(namedArgs.sourceFile);
+        const moduleName =
+            namedArgs.module ?? path.basename(fullPath, path.extname(fullPath));
         const sourceFile = await tsCode.loadSourceFile(fullPath);
         const statements = tsCode.getTopLevelStatements(sourceFile);
         await asyncArray.forEachAsync(
@@ -211,26 +317,62 @@ export async function runCodeChat(): Promise<void> {
             async (statement, index) => {
                 let name = tsCode.getStatementName(statement);
                 if (name) {
+                    name = `${moduleName}.${name}`;
                     let code = tsCode.getTextOfStatement(sourceFile, statement);
                     const text = await codeIndex.put(
                         { code, language: "typescript" },
                         name,
+                        fullPath,
                     );
                     if (text) {
-                        printer.writeTitle(name);
-                        printer.writeLine(text);
+                        if (namedArgs.verbose) {
+                            printer.writeTitle(name);
+                            printer.writeLine(text);
+                        } else {
+                            printer.writeBullet(name);
+                        }
                     }
                 }
             },
         );
     }
 
+    function findCodeDef(): CommandMetadata {
+        return {
+            description: "Query the code index",
+            args: {
+                query: {
+                    description: "Query to run",
+                },
+            },
+            options: {
+                maxMatches: {
+                    description: "Max number of matches",
+                    type: "number",
+                    defaultValue: 1,
+                },
+            },
+        };
+    }
+    handlers.findCode.metadata = findCodeDef();
     async function findCode(args: string[]): Promise<void> {
-        const query = getArg(args, 0);
-        const matches = await codeIndex.find(query, 5);
+        const namedArgs = parseNamedArguments(args, findCodeDef());
+        const matches = await codeIndex.find(
+            namedArgs.query,
+            namedArgs.maxMatches,
+        );
         for (const match of matches) {
-            console.log(match.item);
+            const name = match.item;
+            printer.writeInColor(chalk.green, name);
+            const codeBlock = await codeIndex.get(name);
+            printCodeBlock(codeBlock);
+            printer.writeLine();
         }
+    }
+
+    handlers.clearCodeIndex.metadata = "Clear the code index";
+    async function clearCodeIndex(args: string[]): Promise<void> {
+        codeIndex = await ensureCodeIndex(true);
     }
 
     handlers.regex.metadata =
@@ -248,7 +390,7 @@ export async function runCodeChat(): Promise<void> {
     }
 
     function getSourcePath(sourcePath?: string): string {
-        sourcePath ??= "../../src/codeChat/testCode/testCode.ts";
+        sourcePath ??= sampleFiles.testCode;
         return getAbsolutePath(sourcePath, import.meta.url);
     }
 
@@ -260,7 +402,19 @@ export async function runCodeChat(): Promise<void> {
         return tsCode.loadChunksFromFile(fullPath, chunkSize);
     }
 
+    async function ensureCodeIndex(createNew: boolean = false) {
+        if (createNew) {
+            await removeDir(codeIndexPath);
+        }
+        return await createSemanticCodeIndex(
+            codeIndexPath,
+            codeReviewer,
+            vectorModel,
+        );
+    }
+
     function printCodeReview(lines: string[], review: CodeReview): void {
+        printer.writeHeading("\nCODE REVIEW\n");
         for (let i = 0; i < lines.length; ++i) {
             printer.writeCodeReview(lines[i], i + 1, review);
             printer.writeCodeLine(i + 1, lines[i]);
@@ -271,6 +425,7 @@ export async function runCodeChat(): Promise<void> {
         lines: string[],
         suggestions: BreakPointSuggestions,
     ): void {
+        printer.writeHeading("SUGGESTED BREAKPOINTS");
         for (let i = 0; i < lines.length; ++i) {
             printer.writeBreakpoints(lines[i], i + 1, suggestions);
             printer.writeCodeLine(i + 1, lines[i]);
@@ -294,5 +449,64 @@ export async function runCodeChat(): Promise<void> {
             printer.writeDocs(lines[i], i + 1, docs);
             printer.writeCodeLine(i + 1, lines[i]);
         }
+    }
+
+    function printCodeBlock(codeBlock: StoredCodeBlock | undefined): void {
+        if (codeBlock) {
+            const code = codeBlock.code.code;
+            if (typeof code === "string") {
+                printer.writeLine(code);
+            } else {
+                printer.writeCodeLines(code);
+            }
+            if (codeBlock.sourcePath) {
+                printer.writeInColor(
+                    chalk.gray,
+                    pathToFileURL(codeBlock.sourcePath).toString(),
+                );
+            }
+        }
+    }
+
+    function isSampleFile(sourceFile: string): boolean {
+        sourceFile = sourceFile.toLowerCase();
+        for (const value of Object.values(sampleFiles)) {
+            if (value.toLowerCase() === sourceFile) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    type TypeScriptCode = {
+        sourcePath: string;
+        sourceText: string[];
+        sourceCode: ts.SourceFile;
+        modules: Module[] | undefined;
+    };
+
+    async function loadTypescriptCode(
+        sourceFile: string,
+        moduleDir?: string | undefined,
+    ): Promise<TypeScriptCode> {
+        const sourcePath = getAbsolutePath(sourceFile, import.meta.url);
+        const sourceText = await readAllLines(sourcePath); // Load lines of code
+        const sourceCode = await tsCode.loadSourceFile(sourcePath);
+        if (!moduleDir && isSampleFile(sourceFile)) {
+            moduleDir = sampleModuleDir;
+        }
+        let modules = moduleDir
+            ? await tsCode.loadImports(
+                  sourceCode,
+                  getAbsolutePath(moduleDir, import.meta.url),
+              )
+            : undefined;
+
+        return {
+            sourcePath,
+            sourceText,
+            sourceCode,
+            modules,
+        };
     }
 }
