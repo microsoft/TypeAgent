@@ -16,6 +16,7 @@ export {
     TokenCachePersistence,
     ActionContext,
     CommandDescriptor,
+    CommandDescriptors,
     CommandDescriptorTable,
 } from "./agentInterface.js";
 
