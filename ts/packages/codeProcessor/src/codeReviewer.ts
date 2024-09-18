@@ -47,8 +47,10 @@ export interface CodeReviewer {
     document(code: CodeBlock, facets?: string): Promise<CodeDocumentation>;
 }
 
-export function createCodeReviewer(): CodeReviewer {
-    const model = openai.createChatModel();
+export function createCodeReviewer(
+    model?: ChatModel | undefined,
+): CodeReviewer {
+    model ??= openai.createChatModel();
     const codeReviewSchema = ["codeReviewSchema.ts"];
     const reviewTranslator = createReviewTranslator<CodeReview>(
         model,

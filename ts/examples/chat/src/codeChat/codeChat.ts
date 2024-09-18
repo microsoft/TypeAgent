@@ -8,7 +8,6 @@ import {
     CommandMetadata,
     InteractiveIo,
     addStandardHandlers,
-    displayHelp,
     getArg,
     parseNamedArguments,
     runConsole,
@@ -33,6 +32,7 @@ export async function runCodeChat(): Promise<void> {
     const codeReviewer = createCodeReviewer();
     const sampleFiles = {
         snippet: "../../src/codeChat/testCode/snippet.ts",
+        testCode: "../../src/codeChat/testCode/testCode.ts",
     };
     const sampleModuleDir = "../../dist/codeChat/testCode";
     // For answer/code indexing examples
@@ -46,8 +46,6 @@ export async function runCodeChat(): Promise<void> {
     let printer: CodePrinter;
 
     const handlers: Record<string, CommandHandler> = {
-        help,
-        "--?": help,
         review,
         debug,
         breakpoints,
@@ -71,23 +69,40 @@ export async function runCodeChat(): Promise<void> {
 
     function onStart(io: InteractiveIo): void {
         printer = new CodePrinter(io);
-        printer.writeLine("Code Diagnostics with TypeChat");
+        printer.writeLine("\nCode Diagnostics with TypeChat");
     }
 
-    async function help(args: string[], io: InteractiveIo): Promise<void> {
-        displayHelp(args, handlers, io);
+    function reviewDef(): CommandMetadata {
+        return {
+            description: "Review the given Typescript file",
+            options: {
+                sourceFile: {
+                    description: "Path to source file",
+                    type: "path",
+                    defaultValue: sampleFiles.testCode,
+                },
+                verbose: {
+                    description: "Verbose output",
+                    type: "boolean",
+                    defaultValue: false,
+                },
+            },
+        };
     }
-
+    handlers.review.metadata = reviewDef();
     async function review(args: string[]): Promise<void> {
-        const sourceFile = getArg(
-            args,
-            0,
-            "../../src/codeChat/testCode/testCode.ts",
-        );
-        const sourcePath = getAbsolutePath(sourceFile, import.meta.url);
-        const sourceText = await readAllLines(sourcePath);
-        const review = await codeReviewer.review(sourceText);
-        printCodeReview(sourceText, review);
+        const namedArgs = parseNamedArguments(args, reviewDef());
+
+        printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
+
+        // Load file to review
+        const code = await loadTypescriptCode(namedArgs.sourceFile);
+        if (namedArgs.verbose) {
+            printer.writeCodeLines(code.sourceText);
+        }
+        // Run a code review
+        const review = await codeReviewer.review(code.sourceText);
+        printCodeReview(code.sourceText, review);
     }
 
     function debugDef(): CommandMetadata {
@@ -119,12 +134,14 @@ export async function runCodeChat(): Promise<void> {
     handlers.debug.metadata = debugDef();
     async function debug(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, debugDef());
+
+        printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
+        printer.writeLine(`Bug Description:\n${namedArgs.bug}\n`);
+
         const code = await loadTypescriptCode(
             namedArgs.sourceFile,
             namedArgs.moduleDir,
         );
-        printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
-        printer.writeLine(`Bug Description:\n${namedArgs.bug}\n`);
         if (namedArgs.verbose) {
             printer.writeCodeLines(code.sourceText);
         }
@@ -136,26 +153,52 @@ export async function runCodeChat(): Promise<void> {
         printCodeReview(code.sourceText, review);
     }
 
+    function breakpointDef(): CommandMetadata {
+        return {
+            description:
+                "Suggest where to set breakpoints in a Typescript file",
+            options: {
+                sourceFile: {
+                    description: "Path to source file",
+                    type: "path",
+                    defaultValue: sampleFiles.snippet,
+                },
+                moduleDir: {
+                    description: "Path to modules dir",
+                    type: "path",
+                },
+                bug: {
+                    description: "A description of the observed bug",
+                    defaultValue:
+                        "I am observing assertion failures in the code below.",
+                },
+                verbose: {
+                    description: "Verbose output",
+                    type: "boolean",
+                    defaultValue: false,
+                },
+            },
+        };
+    }
+    handlers.breakpoints.metadata = breakpointDef();
     async function breakpoints(args: string[]): Promise<void> {
-        const observation =
-            "I am observing assertion failures in the code below. Review the code below and explain why";
-        const sourceFile = sampleFiles.snippet;
-        const sourcePath = getAbsolutePath(sourceFile, import.meta.url);
-        const sourceText = await readAllLines(sourcePath);
-        let sourceCode = await tsCode.loadSourceFile(sourcePath);
+        const namedArgs = parseNamedArguments(args, breakpointDef());
+        const code = await loadTypescriptCode(
+            namedArgs.sourceFile,
+            namedArgs.moduleDir,
+        );
 
-        const moduleDir = getAbsolutePath(
-            "../../dist/codeChat/testCode",
-            import.meta.url,
-        );
-        const modules = await tsCode.loadImports(sourceCode, moduleDir);
+        printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
+        printer.writeLine(`Bug Description:\n${namedArgs.bug}\n`);
         const suggestions = await codeReviewer.breakpoints(
-            observation,
-            sourceText,
-            modules,
+            namedArgs.bug,
+            code.sourceText,
+            code.modules,
         );
-        printer.writeLine(observation);
-        printBreakpoints(sourceText, suggestions);
+        if (namedArgs.verbose) {
+            printer.writeCodeLines(code.sourceText);
+        }
+        printBreakpoints(code.sourceText, suggestions);
     }
 
     function answerDef(): CommandMetadata {
@@ -353,7 +396,7 @@ export async function runCodeChat(): Promise<void> {
         moduleDir?: string | undefined,
     ): Promise<TypeScriptCode> {
         const sourcePath = getAbsolutePath(sourceFile, import.meta.url);
-        const sourceText = await readAllLines(sourcePath);
+        const sourceText = await readAllLines(sourcePath); // Load lines of code
         const sourceCode = await tsCode.loadSourceFile(sourcePath);
         if (!moduleDir && isSampleFile(sourceFile)) {
             moduleDir = sampleModuleDir;
