@@ -44,6 +44,9 @@ export interface TemporalLog<TId = any, T = any> {
     getNext(id: TId): Promise<dateTime.Timestamped<T> | undefined>;
 
     getTimeRange(): Promise<DateRange | undefined>;
+
+    remove(id: TId): Promise<void>;
+    removeInRange(startAt: Date, stopAt?: Date): Promise<TId[]>;
     clear(): Promise<void>;
 
     getUrl(id: TId): URL;
@@ -73,8 +76,8 @@ export async function createTemporalLog<T>(
         allObjects,
         get,
         getMultiple,
-        getIdsInRange: getIdsInTimeRange,
-        getEntriesInRange: getEntriesInTimeRange,
+        getIdsInRange,
+        getEntriesInRange,
         put,
         newest,
         newestObjects,
@@ -84,6 +87,8 @@ export async function createTemporalLog<T>(
         getNext,
         getTimeRange,
         getUrl,
+        remove,
+        removeInRange,
         clear: sequence.clear,
     };
 
@@ -137,10 +142,7 @@ export async function createTemporalLog<T>(
         );
     }
 
-    async function getIdsInTimeRange(
-        startAt: Date,
-        stopAt?: Date,
-    ): Promise<TId[]> {
+    async function getIdsInRange(startAt: Date, stopAt?: Date): Promise<TId[]> {
         const allIds = await sequence.allNames();
         let startIndex = collections.binarySearchFirst(
             allIds,
@@ -167,11 +169,11 @@ export async function createTemporalLog<T>(
         return allIds.slice(startIndex, startIndex + count);
     }
 
-    async function getEntriesInTimeRange(
+    async function getEntriesInRange(
         startAt: Date,
         stopAt?: Date,
     ): Promise<dateTime.Timestamped<T>[]> {
-        const ids = await getIdsInTimeRange(startAt, stopAt);
+        const ids = await getIdsInRange(startAt, stopAt);
         if (ids.length === 0) {
             return [];
         }
@@ -219,6 +221,7 @@ export async function createTemporalLog<T>(
     }
 
     async function getTimeRange(): Promise<DateRange | undefined> {
+        // TODO: cache the time range.
         const allIds = await sequence.allNames();
         if (allIds.length === 0) {
             return undefined;
@@ -236,6 +239,18 @@ export async function createTemporalLog<T>(
 
     async function put(value: T, timestamp?: Date, id?: string): Promise<TId> {
         return putTimestampedObject(sequence, value, timestamp);
+    }
+
+    async function remove(id: TId): Promise<void> {
+        sequence.remove(id);
+    }
+
+    async function removeInRange(startAt: Date, stopAt?: Date): Promise<TId[]> {
+        const idsToRemove = await getIdsInRange(startAt, stopAt);
+        for (const id of idsToRemove) {
+            await sequence.remove(id);
+        }
+        return idsToRemove;
     }
 
     function getUrl(id: string): URL {
