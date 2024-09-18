@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { ActionIO, DisplayType, DynamicDisplay } from "./display.js";
+import { ActionResult } from "./memory.js";
 import { Profiler } from "./profiler.js";
 
 //==============================================================================
@@ -50,15 +51,15 @@ export type CommandDescriptor = {
 
 export type CommandDescriptorTable = {
     description: string;
-    commands: Record<string, CommandDescriptor | CommandDescriptorTable>;
+    commands: Record<string, CommandDescriptors>;
     defaultSubCommand?: CommandDescriptor | undefined;
 };
 
+export type CommandDescriptors = CommandDescriptor | CommandDescriptorTable;
+
 export interface AppAgentCommandInterface {
     // Commands
-    getCommands(
-        context: SessionContext,
-    ): Promise<CommandDescriptor | CommandDescriptorTable>;
+    getCommands(context: SessionContext): Promise<CommandDescriptors>;
 
     executeCommand(
         commands: string[],
@@ -70,7 +71,7 @@ export interface AppAgentCommandInterface {
 
 export interface AppAgent extends Partial<AppAgentCommandInterface> {
     // Setup
-    initializeAgentContext?(): Promise<any>;
+    initializeAgentContext?(): Promise<unknown>;
     updateAgentContext?(
         enable: boolean,
         context: SessionContext,
@@ -89,7 +90,7 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
     executeAction?(
         action: AppAction,
         context: ActionContext<unknown>,
-    ): Promise<any>; // TODO: define return type.
+    ): Promise<ActionResult | undefined>;
 
     // Cache extensions
     validateWildcardMatch?(

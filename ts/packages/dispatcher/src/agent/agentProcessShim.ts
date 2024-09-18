@@ -8,10 +8,9 @@ import {
     SessionContext,
     StorageListOptions,
     AppAgentEvent,
-    CommandDescriptor,
-    CommandDescriptorTable,
     DisplayContent,
     DisplayAppendMode,
+    CommandDescriptors,
 } from "@typeagent/agent-sdk";
 import {
     AgentCallFunctions,
@@ -314,7 +313,7 @@ export async function createAgentProcessShim(
 
         getCommands(
             context: SessionContext<ShimContext>,
-        ): Promise<CommandDescriptor | CommandDescriptorTable> {
+        ): Promise<CommandDescriptors> {
             return rpc.invoke("getCommands", getContextParam(context));
         },
         executeCommand(
