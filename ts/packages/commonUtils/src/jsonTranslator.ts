@@ -146,11 +146,6 @@ function attachAttachments(
                 ],
             });
         }
-
-        // pp.unshift({
-        //     role: "user",
-        //     content: "Here are some new images provided by the user.",
-        // });
     }
 }
 
