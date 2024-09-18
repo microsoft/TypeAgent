@@ -24,10 +24,10 @@ import {
     AppAction,
     ActionResult,
     ActionResultSuccess,
-    createActionResultFromHtmlDisplay,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
+    createActionResultFromHtmlDisplay,
     createActionResultNoDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
 import { fileURLToPath } from "node:url";
