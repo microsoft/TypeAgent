@@ -2,13 +2,17 @@
 // Licensed under the MIT License.
 
 // import ts from "typescript";
-import { getAbsolutePath, readAllLines, asyncArray } from "typeagent";
+import {
+    getAbsolutePath,
+    readAllLines,
+    asyncArray,
+    removeDir,
+} from "typeagent";
 import {
     CommandHandler,
     CommandMetadata,
     InteractiveIo,
     addStandardHandlers,
-    getArg,
     parseNamedArguments,
     runConsole,
 } from "interactive-app";
@@ -38,11 +42,8 @@ export async function runCodeChat(): Promise<void> {
     // For answer/code indexing examples
     const folderPath = "/data/code";
     const vectorModel = openai.createEmbeddingModel();
-    const codeIndex = await createSemanticCodeIndex(
-        path.join(folderPath, "index"),
-        codeReviewer,
-        vectorModel,
-    );
+    const codeIndexPath = path.join(folderPath, "index");
+    let codeIndex = await ensureCodeIndex();
     let printer: CodePrinter;
 
     const handlers: Record<string, CommandHandler> = {
@@ -53,6 +54,7 @@ export async function runCodeChat(): Promise<void> {
         document,
         indexCode,
         findCode,
+        clearCodeIndex,
         regex,
     };
     addStandardHandlers(handlers);
@@ -253,9 +255,10 @@ export async function runCodeChat(): Promise<void> {
         return {
             description: "Document given code",
             options: {
-                sourcePath: {
+                sourceFile: {
                     description: "Path to source file",
                     type: "path",
+                    defaultValue: sampleFiles.testCode,
                 },
             },
         };
@@ -263,7 +266,7 @@ export async function runCodeChat(): Promise<void> {
     handlers.document.metadata = documentDef();
     async function document(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, documentDef());
-        const functions = await loadCodeChunks(namedArgs.sourcePath);
+        const functions = await loadCodeChunks(namedArgs.sourceFile);
         await asyncArray.mapAsync(
             functions,
             2,
@@ -280,10 +283,16 @@ export async function runCodeChat(): Promise<void> {
     function indexDef(): CommandMetadata {
         return {
             description: "Index given code",
-            options: {
-                sourcePath: {
+            args: {
+                sourceFile: {
                     description: "Path to source file",
                     type: "path",
+                },
+            },
+            options: {
+                verbose: {
+                    type: "boolean",
+                    defaultValue: false,
                 },
             },
         };
@@ -291,7 +300,7 @@ export async function runCodeChat(): Promise<void> {
     handlers.indexCode.metadata = indexDef();
     async function indexCode(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, indexDef());
-        const fullPath = getSourcePath(namedArgs.sourcePath);
+        const fullPath = getSourcePath(namedArgs.sourceFile);
         const sourceFile = await tsCode.loadSourceFile(fullPath);
         const statements = tsCode.getTopLevelStatements(sourceFile);
         await asyncArray.forEachAsync(
@@ -306,20 +315,40 @@ export async function runCodeChat(): Promise<void> {
                         name,
                     );
                     if (text) {
-                        printer.writeTitle(name);
-                        printer.writeLine(text);
+                        if (namedArgs.verbose) {
+                            printer.writeTitle(name);
+                            printer.writeLine(text);
+                        } else {
+                            printer.writeBullet(name);
+                        }
                     }
                 }
             },
         );
     }
 
+    function findCodeDef(): CommandMetadata {
+        return {
+            description: "Query the code index",
+            args: {
+                query: {
+                    description: "Query to run",
+                },
+            },
+        };
+    }
+    handlers.findCode.metadata = findCodeDef();
     async function findCode(args: string[]): Promise<void> {
-        const query = getArg(args, 0);
-        const matches = await codeIndex.find(query, 5);
+        const namedArgs = parseNamedArguments(args, findCodeDef());
+        const matches = await codeIndex.find(namedArgs.query, 5);
         for (const match of matches) {
             console.log(match.item);
         }
+    }
+
+    handlers.clearCodeIndex.metadata = "Clear the code index";
+    async function clearCodeIndex(args: string[]): Promise<void> {
+        codeIndex = await ensureCodeIndex(true);
     }
 
     handlers.regex.metadata =
@@ -347,6 +376,17 @@ export async function runCodeChat(): Promise<void> {
     ): Promise<string[]> {
         const fullPath = getSourcePath(sourcePath);
         return tsCode.loadChunksFromFile(fullPath, chunkSize);
+    }
+
+    async function ensureCodeIndex(createNew: boolean = false) {
+        if (createNew) {
+            await removeDir(codeIndexPath);
+        }
+        return await createSemanticCodeIndex(
+            codeIndexPath,
+            codeReviewer,
+            vectorModel,
+        );
     }
 
     function printCodeReview(lines: string[], review: CodeReview): void {
