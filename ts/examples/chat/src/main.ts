@@ -9,10 +9,7 @@ import { runChatMemory } from "./memory/chatMemory.js";
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
 
-let chatName = process.argv[2];
-if (!chatName) {
-    chatName = "memory";
-}
+let chatName = "memory";
 switch (chatName) {
     default:
         console.log("Unknown chat type: " + chatName);

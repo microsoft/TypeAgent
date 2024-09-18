@@ -22,13 +22,20 @@ import {
     tsCode,
     CodeDocumentation,
     createSemanticCodeIndex,
+    Module,
 } from "code-processor";
 import { CodePrinter } from "./codePrinter.js";
 import path from "path";
 import { openai } from "aiclient";
+import ts from "typescript";
 
 export async function runCodeChat(): Promise<void> {
     const codeReviewer = createCodeReviewer();
+    const sampleFiles = {
+        snippet: "../../src/codeChat/testCode/snippet.ts",
+    };
+    const sampleModuleDir = "../../dist/codeChat/testCode";
+    // For answer/code indexing examples
     const folderPath = "/data/code";
     const vectorModel = openai.createEmbeddingModel();
     const codeIndex = await createSemanticCodeIndex(
@@ -64,7 +71,7 @@ export async function runCodeChat(): Promise<void> {
 
     function onStart(io: InteractiveIo): void {
         printer = new CodePrinter(io);
-        printer.writeLine("AI Code");
+        printer.writeLine("Code Diagnostics with TypeChat");
     }
 
     async function help(args: string[], io: InteractiveIo): Promise<void> {
@@ -83,30 +90,56 @@ export async function runCodeChat(): Promise<void> {
         printCodeReview(sourceText, review);
     }
 
+    function debugDef(): CommandMetadata {
+        return {
+            description: "Debug the given Typescript file",
+            options: {
+                sourceFile: {
+                    description: "Path to source file",
+                    type: "path",
+                    defaultValue: sampleFiles.snippet,
+                },
+                moduleDir: {
+                    description: "Path to modules dir",
+                    type: "path",
+                },
+                bug: {
+                    description: "A description of the observed bug",
+                    defaultValue:
+                        "I am observing assertion failures in the code below. Review the code below and explain why",
+                },
+                verbose: {
+                    description: "Verbose output",
+                    type: "boolean",
+                    defaultValue: false,
+                },
+            },
+        };
+    }
+    handlers.debug.metadata = debugDef();
     async function debug(args: string[]): Promise<void> {
-        const sourceFile = "../../src/codeChat/testCode/snippet.ts";
-        const sourcePath = getAbsolutePath(sourceFile, import.meta.url);
-        const sourceText = await readAllLines(sourcePath);
-        let sourceCode = await tsCode.loadSourceFile(sourcePath);
-
-        const moduleDir = getAbsolutePath(
-            "../../dist/codeChat/testCode",
-            import.meta.url,
+        const namedArgs = parseNamedArguments(args, debugDef());
+        const code = await loadTypescriptCode(
+            namedArgs.sourceFile,
+            namedArgs.moduleDir,
         );
-        const modules = await tsCode.loadImports(sourceCode, moduleDir);
+        printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
+        printer.writeLine(`Bug Description:\n${namedArgs.bug}\n`);
+        if (namedArgs.verbose) {
+            printer.writeCodeLines(code.sourceText);
+        }
         const review = await codeReviewer.debug(
-            "I am observing assertion failures in the code below. Review the code below and explain why",
-            sourceText,
-            modules,
+            namedArgs.bug,
+            code.sourceText,
+            code.modules,
         );
-        printer.writeJson(review);
-        printCodeReview(sourceText, review);
+        printCodeReview(code.sourceText, review);
     }
 
     async function breakpoints(args: string[]): Promise<void> {
         const observation =
             "I am observing assertion failures in the code below. Review the code below and explain why";
-        const sourceFile = "../../src/codeChat/testCode/snippet.ts";
+        const sourceFile = sampleFiles.snippet;
         const sourcePath = getAbsolutePath(sourceFile, import.meta.url);
         const sourceText = await readAllLines(sourcePath);
         let sourceCode = await tsCode.loadSourceFile(sourcePath);
@@ -261,6 +294,7 @@ export async function runCodeChat(): Promise<void> {
     }
 
     function printCodeReview(lines: string[], review: CodeReview): void {
+        printer.writeHeading("\nCODE REVIEW\n");
         for (let i = 0; i < lines.length; ++i) {
             printer.writeCodeReview(lines[i], i + 1, review);
             printer.writeCodeLine(i + 1, lines[i]);
@@ -271,6 +305,7 @@ export async function runCodeChat(): Promise<void> {
         lines: string[],
         suggestions: BreakPointSuggestions,
     ): void {
+        printer.writeHeading("SUGGESTED BREAKPOINTS");
         for (let i = 0; i < lines.length; ++i) {
             printer.writeBreakpoints(lines[i], i + 1, suggestions);
             printer.writeCodeLine(i + 1, lines[i]);
@@ -294,5 +329,47 @@ export async function runCodeChat(): Promise<void> {
             printer.writeDocs(lines[i], i + 1, docs);
             printer.writeCodeLine(i + 1, lines[i]);
         }
+    }
+
+    function isSampleFile(sourceFile: string): boolean {
+        sourceFile = sourceFile.toLowerCase();
+        for (const value of Object.values(sampleFiles)) {
+            if (value.toLowerCase() === sourceFile) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    type TypeScriptCode = {
+        sourcePath: string;
+        sourceText: string[];
+        sourceCode: ts.SourceFile;
+        modules: Module[] | undefined;
+    };
+
+    async function loadTypescriptCode(
+        sourceFile: string,
+        moduleDir?: string | undefined,
+    ): Promise<TypeScriptCode> {
+        const sourcePath = getAbsolutePath(sourceFile, import.meta.url);
+        const sourceText = await readAllLines(sourcePath);
+        const sourceCode = await tsCode.loadSourceFile(sourcePath);
+        if (!moduleDir && isSampleFile(sourceFile)) {
+            moduleDir = sampleModuleDir;
+        }
+        let modules = moduleDir
+            ? await tsCode.loadImports(
+                  sourceCode,
+                  getAbsolutePath(moduleDir, import.meta.url),
+              )
+            : undefined;
+
+        return {
+            sourcePath,
+            sourceText,
+            sourceCode,
+            modules,
+        };
     }
 }
