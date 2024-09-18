@@ -290,6 +290,9 @@ export async function runCodeChat(): Promise<void> {
                 },
             },
             options: {
+                module: {
+                    description: "Module name",
+                },
                 verbose: {
                     type: "boolean",
                     defaultValue: false,
@@ -301,6 +304,8 @@ export async function runCodeChat(): Promise<void> {
     async function indexCode(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, indexDef());
         const fullPath = getSourcePath(namedArgs.sourceFile);
+        const moduleName =
+            namedArgs.module ?? path.basename(fullPath, path.extname(fullPath));
         const sourceFile = await tsCode.loadSourceFile(fullPath);
         const statements = tsCode.getTopLevelStatements(sourceFile);
         await asyncArray.forEachAsync(
@@ -309,6 +314,7 @@ export async function runCodeChat(): Promise<void> {
             async (statement, index) => {
                 let name = tsCode.getStatementName(statement);
                 if (name) {
+                    name = `${moduleName}.${name}`;
                     let code = tsCode.getTextOfStatement(sourceFile, statement);
                     const text = await codeIndex.put(
                         { code, language: "typescript" },
@@ -366,7 +372,7 @@ export async function runCodeChat(): Promise<void> {
     }
 
     function getSourcePath(sourcePath?: string): string {
-        sourcePath ??= "../../src/codeChat/testCode/testCode.ts";
+        sourcePath ??= sampleFiles.testCode;
         return getAbsolutePath(sourcePath, import.meta.url);
     }
 
