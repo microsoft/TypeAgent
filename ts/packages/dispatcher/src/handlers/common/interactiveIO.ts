@@ -106,8 +106,6 @@ export interface ClientIO {
 
 // Dispatcher request specific IO
 
-
-
 export interface RequestIO {
     type: "html" | "text";
     context: CommandHandlerContext | undefined;
