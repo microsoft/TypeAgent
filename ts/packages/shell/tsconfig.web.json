@@ -6,7 +6,6 @@
     "src/preload/electronTypes.ts"
   ],
   "compilerOptions": {
-    "target": "es2022",
     "incremental": true,
     "noEmit": true,
     "moduleResolution": "bundler"

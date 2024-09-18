@@ -65,101 +65,128 @@ function getBrowserTTSProvider(voiceName?: string): TTS | undefined {
 const defaultVoiceName = "en-US-AndrewMultilingualNeural";
 const defaultVoiceStyle = "chat";
 
-function getAzureTTSProvider(voiceName?: string): TTS | undefined {
-    let currentCancelId = 0;
-    let lastPromise: Promise<PhaseTiming> | undefined;
-    let cancel: (() => void) | undefined;
+type PlayQueueItem = {
+    cancel: () => void;
+    play: () => void;
+};
 
+function getAzureTTSProvider(voiceName?: string): TTS | undefined {
+    let current: PlayQueueItem | undefined = undefined;
+    let playQueue: PlayQueueItem[] = [];
+    let currentCancelId = 0;
+    let nextId = 0;
     return {
         stop: () => {
-            if (cancel !== undefined) {
-                currentCancelId++;
-                cancel();
+            const queue = playQueue;
+            playQueue = [];
+            if (current) {
+                current.cancel();
+                current = undefined;
             }
+            for (const item of queue) {
+                item.cancel();
+            }
+            currentCancelId++;
+            nextId = 0;
         },
         speak: async (
             text: string,
             voiceStyle?: string,
         ): Promise<PhaseTiming> => {
             const cancelId = currentCancelId;
-            debug("Speech started");
+            const callId = nextId++;
+            const id = `${cancelId}:${callId}`;
+            debug(`${id}: Speech Called: ${text}`);
+
             const start = performance.now();
             let firstChunkTime: number | undefined = undefined;
-
+            let empty = false;
+            let cleaned = false;
+            let closed = false;
             const audioDestination = new speechSDK.SpeakerAudioDestination();
-            const synthesizer = new speechSDK.SpeechSynthesizer(
-                getSpeechConfig(await getSpeechToken())!,
-                speechSDK.AudioConfig.fromSpeakerOutput(audioDestination),
-            );
-
-            while (lastPromise !== undefined) {
-                await lastPromise;
-                if (currentCancelId !== cancelId) {
-                    debug("Speech cancelled");
-                    throw new Error("Speech cancelled");
-                }
-            }
+            const synthesizer: speechSDK.SpeechSynthesizer =
+                new speechSDK.SpeechSynthesizer(
+                    getSpeechConfig(await getSpeechToken())!,
+                    speechSDK.AudioConfig.fromSpeakerOutput(audioDestination),
+                );
 
             synthesizer.synthesisCompleted = () => {
-                debug("Synthesis ended", performance.now() - start);
+                debug(`${id}: Synthesis ended`, performance.now() - start);
             };
 
             synthesizer.synthesizing = () => {
                 if (firstChunkTime === undefined) {
                     firstChunkTime = performance.now() - start;
-                    debug("First chunk", firstChunkTime);
+                    debug(`${id}: First chunk`, firstChunkTime);
                 }
             };
             synthesizer.synthesisStarted = () => {
-                debug("Synthesis started", performance.now() - start);
+                debug(`${id}: Synthesis started`, performance.now() - start);
             };
 
-            lastPromise = new Promise<PhaseTiming>((resolve, reject) => {
-                debug(`Speaking: ${text}`);
-                let timing: PhaseTiming | undefined;
-                let audioEnded = false;
-                let finished = false;
-
-                const cleanup = () => {
-                    if (!finished) {
-                        lastPromise = undefined;
-                        cancel = undefined;
-                        finished = true;
-
-                        audioDestination.pause();
-                        audioDestination.close();
-                        return true;
-                    }
+            const cleanup = () => {
+                if (cleaned) {
                     return false;
-                };
-                const success = () => {
-                    if (timing && audioEnded && cleanup()) {
-                        resolve(timing);
-                    }
-                };
+                }
+                cleaned = true;
+                audioDestination.pause();
+                audioDestination.close();
+                if (!closed) {
+                    closed = true;
+                    synthesizer.close();
+                }
+                return true;
+            };
 
-                const failed = (error: string) => {
-                    if (cleanup()) {
-                        reject(new Error(error));
-                    }
-                };
+            const finish = () => {
+                if (cleanup()) {
+                    debug(`${id}: Speech Ended`);
+                    current = playQueue.shift();
+                    current?.play();
+                }
+            };
 
-                cancel = () => {
-                    debug("Cancelling speech");
-                    if (cleanup()) {
-                        if (timing) {
-                            resolve(timing);
+            audioDestination.onAudioEnd = finish;
+
+            const item = {
+                play: () => {
+                    if (!cleaned) {
+                        if (empty) {
+                            debug(`${id}: Speech Skipped`);
+                            // If the audio is empty, onAudioEnd won't be called;
+                            finish();
                         } else {
-                            reject(new Error("Speech cancelled"));
+                            debug(`${id}: Speech Playing`);
+                            audioDestination.resume();
                         }
                     }
-                };
+                },
+                cancel: () => {
+                    if (cleanup()) {
+                        debug(`${id}: Speech Cancelled`);
+                    }
+                },
+            };
 
-                audioDestination.onAudioEnd = () => {
-                    debug("Speech ended");
-                    audioEnded = true;
-                    success();
-                };
+            if (current === undefined) {
+                current = item;
+                debug(`${id}: Speech Playing`);
+            } else {
+                debug(`${id}: Speech Queueing`);
+                playQueue.push(item);
+                audioDestination.pause();
+            }
+
+            const remove = () => {
+                empty = true;
+                if (item === current) {
+                    // If the audio is empty, onAudioEnd won't be called;
+                    finish();
+                }
+            };
+
+            return new Promise<PhaseTiming>((resolve, reject) => {
+                let timing: PhaseTiming | undefined;
 
                 const ssml = `
                 <speak
@@ -177,12 +204,13 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
                 synthesizer.speakSsmlAsync(
                     ssml,
                     (result) => {
-                        debug("Synthesis completed", result);
                         synthesizer.close();
+                        closed = true;
                         if (
                             result.reason ===
                             speechSDK.ResultReason.SynthesizingAudioCompleted
                         ) {
+                            debug(`${id}: Synthesis Success`, result);
                             timing = {
                                 duration: performance.now() - start,
                             };
@@ -194,19 +222,28 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
                                     },
                                 };
                             }
-                            success();
-                            return;
+                            resolve(timing);
+
+                            if (result.audioDuration === 0) {
+                                // If the audio is empty, onAudioEnd won't be called
+                                debug(`${id}: Empty Audio`);
+                                remove();
+                            }
+                        } else {
+                            debug(`${id}: Synthesis Failed`, result);
+                            reject(result.errorDetails);
+                            remove();
                         }
-                        failed(result.errorDetails);
                     },
                     (error) => {
-                        debugError(`Synthesis error ${error}`);
+                        debugError(`${id}: Synthesis error ${error}`);
                         synthesizer.close();
-                        failed(error);
+                        closed = true;
+                        reject(error);
+                        remove();
                     },
                 );
             });
-            return lastPromise;
         },
     };
 }
