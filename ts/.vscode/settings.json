@@ -12,5 +12,11 @@
     ],
     "[html]": {
         "editor.defaultFormatter": "vscode.html-language-features"
-    }
+    },
+    "jest.virtualFolders": [
+        {"name": "aiclient", "rootPath": "packages/aiclient"},
+        {"name": "cache", "rootPath": "packages/cache"},
+        {"name": "commonUtils", "rootPath": "packages/commonUtils"},
+        {"name": "dispatcher", "rootPath": "packages/dispatcher"}
+    ]
 }
