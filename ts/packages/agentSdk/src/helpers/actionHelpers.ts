@@ -6,8 +6,8 @@ import {
     ActionResultError,
     ActionResultSuccess,
     ActionResultSuccessNoDisplay,
-    Entity,
-} from "../memory.js";
+} from "../action.js";
+import { Entity } from "../memory.js";
 
 export function createActionResultNoDisplay(
     literalText: string,
