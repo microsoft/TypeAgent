@@ -26,11 +26,14 @@ import {
     CodeDocumentation,
     createSemanticCodeIndex,
     Module,
+    StoredCodeBlock,
 } from "code-processor";
 import { CodePrinter } from "./codePrinter.js";
 import path from "path";
 import { openai } from "aiclient";
 import ts from "typescript";
+import chalk from "chalk";
+import { pathToFileURL } from "url";
 
 export async function runCodeChat(): Promise<void> {
     const codeReviewer = createCodeReviewer();
@@ -319,6 +322,7 @@ export async function runCodeChat(): Promise<void> {
                     const text = await codeIndex.put(
                         { code, language: "typescript" },
                         name,
+                        fullPath,
                     );
                     if (text) {
                         if (namedArgs.verbose) {
@@ -341,14 +345,28 @@ export async function runCodeChat(): Promise<void> {
                     description: "Query to run",
                 },
             },
+            options: {
+                maxMatches: {
+                    description: "Max number of matches",
+                    type: "number",
+                    defaultValue: 1,
+                },
+            },
         };
     }
     handlers.findCode.metadata = findCodeDef();
     async function findCode(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, findCodeDef());
-        const matches = await codeIndex.find(namedArgs.query, 5);
+        const matches = await codeIndex.find(
+            namedArgs.query,
+            namedArgs.maxMatches,
+        );
         for (const match of matches) {
-            console.log(match.item);
+            const name = match.item;
+            printer.writeInColor(chalk.green, name);
+            const codeBlock = await codeIndex.get(name);
+            printCodeBlock(codeBlock);
+            printer.writeLine();
         }
     }
 
@@ -430,6 +448,23 @@ export async function runCodeChat(): Promise<void> {
         for (let i = 0; i < lines.length; ++i) {
             printer.writeDocs(lines[i], i + 1, docs);
             printer.writeCodeLine(i + 1, lines[i]);
+        }
+    }
+
+    function printCodeBlock(codeBlock: StoredCodeBlock | undefined): void {
+        if (codeBlock) {
+            const code = codeBlock.code.code;
+            if (typeof code === "string") {
+                printer.writeLine(code);
+            } else {
+                printer.writeCodeLines(code);
+            }
+            if (codeBlock.sourcePath) {
+                printer.writeInColor(
+                    chalk.gray,
+                    pathToFileURL(codeBlock.sourcePath).toString(),
+                );
+            }
         }
     }
 

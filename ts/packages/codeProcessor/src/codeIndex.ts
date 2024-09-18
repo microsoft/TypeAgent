@@ -4,15 +4,22 @@
 import {
     ScoredItem,
     createEmbeddingFolder,
+    createObjectFolder,
     createSemanticIndex,
 } from "typeagent";
 import { CodeBlock } from "./code.js";
 import { CodeReviewer } from "./codeReviewer.js";
 import { TextEmbeddingModel } from "aiclient";
+import path from "path";
 
 export interface SemanticCodeIndex {
     find(question: string, maxMatches: number): Promise<ScoredItem<string>[]>;
-    put(code: CodeBlock, name: string): Promise<string>;
+    get(name: string): Promise<StoredCodeBlock | undefined>;
+    put(
+        code: CodeBlock,
+        name: string,
+        sourcePath?: string | undefined,
+    ): Promise<string>;
     remove(name: string): Promise<void>;
 }
 
@@ -21,10 +28,16 @@ export async function createSemanticCodeIndex(
     codeReviewer: CodeReviewer,
     embeddingModel?: TextEmbeddingModel,
 ): Promise<SemanticCodeIndex> {
-    const embeddingFolder = await createEmbeddingFolder(folderPath);
+    const embeddingFolder = await createEmbeddingFolder(
+        path.join(folderPath, "embeddings"),
+    );
     const codeIndex = createSemanticIndex(embeddingFolder, embeddingModel);
+    const codeStore = await createObjectFolder<StoredCodeBlock>(
+        path.join(folderPath, "code"),
+    );
     return {
         find,
+        get: (name) => codeStore.get(name),
         put,
         remove,
     };
@@ -36,7 +49,11 @@ export async function createSemanticCodeIndex(
         return codeIndex.nearestNeighbors(question, maxMatches);
     }
 
-    async function put(code: CodeBlock, name: string): Promise<string> {
+    async function put(
+        code: CodeBlock,
+        name: string,
+        sourcePath?: string | undefined,
+    ): Promise<string> {
         const docs = await codeReviewer.document(code);
         let text = name;
         if (docs.comments) {
@@ -46,6 +63,7 @@ export async function createSemanticCodeIndex(
             }
         }
         await codeIndex.put(text, name);
+        await codeStore.put({ code, sourcePath }, name);
         return text;
     }
 
@@ -53,3 +71,8 @@ export async function createSemanticCodeIndex(
         return codeIndex.store.remove(name);
     }
 }
+
+export type StoredCodeBlock = {
+    code: CodeBlock;
+    sourcePath?: string | undefined;
+};

@@ -119,7 +119,8 @@
             //"preLaunchTask": "pnpm: build",
             "outFiles": [
                 "${workspaceFolder}/**/*.js"
-            ]
+            ],
+            //"args": ["code"]
         },
         {
             "name": "Launch YOUR Example",
