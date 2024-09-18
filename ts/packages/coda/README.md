@@ -2,11 +2,11 @@
 
 ## Build
 
-To build the browser extension, run `pnpm run build` in this folder.
+To build the vs code extension, run `pnpm run build` in this folder.
 
 ## Deploy
 
-To deploy the extension locally in your vscode environment, run `pnpm run deploy:local` in this folder.
+To deploy the extension locally in your vscode environment, run `pnpm run deploy:local` in this folder. You should see the extension in the list of installed extensions in vscode using the command `code --list-extensions`. To uninstall the extension, run `code --uninstall-extension aisystems.copilot-coda`.
 
 ## Features
 
@@ -26,7 +26,7 @@ To deploy the extension locally in your vscode environment, run `pnpm run deploy
 
 ## Requirements
 
-This extension works is integrated to work with the code app agent in the dispatcher. You can manually turn the code app agent on using the typeagent cli or shell.
+This extension is integrated to work with the code app agent in the dispatcher. You can manually turn the code app agent on using the typeagent cli or shell.
 
 ## Trademarks
 

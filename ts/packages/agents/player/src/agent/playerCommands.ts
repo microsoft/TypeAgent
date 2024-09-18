@@ -5,7 +5,7 @@ import { ActionContext } from "@typeagent/agent-sdk";
 import {
     getCommandInterface,
     CommandHandlerTable,
-} from "@typeagent/agent-sdk/helpers/commands";
+} from "@typeagent/agent-sdk/helpers/command";
 import { PlayerActionContext } from "./playerHandlers.js";
 import { loadHistoryFile } from "../client.js";
 import { AppAgentCommandInterface } from "../../../../agentSdk/dist/agentInterface.js";

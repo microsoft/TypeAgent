@@ -7,8 +7,8 @@ import {
     AppAgent,
     SessionContext,
     ActionResult,
-    createActionResult,
 } from "@typeagent/agent-sdk";
+import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import { PhotoAction, TakePhotoAction, UploadImageAction } from "./photoSchema.js";
 
 export function instantiate(): AppAgent {

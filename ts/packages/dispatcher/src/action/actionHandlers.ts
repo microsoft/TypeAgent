@@ -7,26 +7,28 @@ import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
     ActionIO,
-    createActionResult,
     AppAgentEvent,
     SessionContext,
     ActionResult,
-    actionResultToString,
     DynamicDisplay,
     DisplayType,
     DisplayContent,
     ActionContext,
     DisplayAppendMode,
 } from "@typeagent/agent-sdk";
+import {
+    createActionResult,
+    actionResultToString,
+} from "@typeagent/agent-sdk/helpers/action";
+import {
+    displayError,
+    displayStatus,
+} from "@typeagent/agent-sdk/helpers/display";
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
 import { getUserProfileDir } from "../utils/userData.js";
 import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
 import { ProfileNames } from "../utils/profileNames.js";
-import {
-    displayError,
-    displayStatus,
-} from "../handlers/common/interactiveIO.js";
 
 const debugAgent = registerDebug("typeagent:agent");
 const debugActions = registerDebug("typeagent:actions");
@@ -41,10 +43,11 @@ export function getTranslatorPrefix(
 
 function getActionContext(
     appAgentName: string,
-    context: CommandHandlerContext,
+    systemContext: CommandHandlerContext,
     requestId: string,
     actionIndex?: number,
-): ActionContext<unknown> {
+) {
+    let context = systemContext;
     const sessionContext = context.agents.getSessionContext(appAgentName);
     const actionIO: ActionIO = {
         get type() {
@@ -68,7 +71,7 @@ function getActionContext(
             context.requestIO.takeAction(action);
         }
     };
-    return {
+    const actionContext: ActionContext<unknown> = {
         streamingContext: undefined,
         get sessionContext() {
             return sessionContext;
@@ -77,6 +80,28 @@ function getActionContext(
             return actionIO;
         },
     };
+    return {
+        actionContext,
+        closeActionContext: () => {
+            closeContextObject(actionIO);
+            closeContextObject(actionContext);
+            // This will cause undefined except if context is access for the rare case
+            // the implementation function are saved.
+            (context as any) = undefined;
+        },
+    };
+}
+
+function closeContextObject(o: any) {
+    const descriptors = Object.getOwnPropertyDescriptors(o);
+    for (const [name, desc] of Object.entries(descriptors)) {
+        // TODO: Note this doesn't prevent the function continue to be call if is saved.
+        Object.defineProperty(o, name, {
+            get: () => {
+                throw new Error("Context is closed.");
+            },
+        });
+    }
 }
 
 export function createSessionContext<T = unknown>(
@@ -177,7 +202,7 @@ async function executeAction(
     }
 
     // Reuse the same streaming action context if one is available.
-    const actionContext =
+    const { actionContext, closeActionContext } =
         actionIndex === 0 && systemContext.streamingActionContext
             ? systemContext.streamingActionContext
             : getActionContext(
@@ -186,6 +211,8 @@ async function executeAction(
                   systemContext.requestId!,
                   actionIndex,
               );
+
+    systemContext.streamingActionContext = undefined;
 
     actionContext.profiler = systemContext.commandProfiler?.measure(
         ProfileNames.executeAction,
@@ -261,6 +288,8 @@ async function executeAction(
             systemContext.requestId,
         );
     }
+
+    closeActionContext();
     return result;
 }
 
@@ -313,14 +342,14 @@ export function startStreamPartialAction(
         );
     }
 
-    const actionContext = getActionContext(
+    const actionContextWithClose = getActionContext(
         appAgentName,
         context,
         context.requestId!,
         0,
     );
 
-    context.streamingActionContext = actionContext;
+    context.streamingActionContext = actionContextWithClose;
 
     return (name: string, value: any, delta?: string) => {
         appAgent.streamPartialAction!(
@@ -328,7 +357,7 @@ export function startStreamPartialAction(
             name,
             value,
             delta,
-            actionContext,
+            actionContextWithClose.actionContext,
         );
     };
 }
@@ -340,12 +369,6 @@ export async function executeCommand(
     context: CommandHandlerContext,
     attachments?: string[],
 ) {
-    const actionContext = getActionContext(
-        appAgentName,
-        context,
-        context.requestId!,
-    );
-
     const appAgent = context.agents.getAppAgent(appAgentName);
     if (appAgent.executeCommand === undefined) {
         throw new Error(
@@ -353,12 +376,18 @@ export async function executeCommand(
         );
     }
 
-    actionContext.profiler = context.commandProfiler?.measure(
-        ProfileNames.executeCommand,
-        true,
+    const { actionContext, closeActionContext } = getActionContext(
+        appAgentName,
+        context,
+        context.requestId!,
     );
 
     try {
+        actionContext.profiler = context.commandProfiler?.measure(
+            ProfileNames.executeCommand,
+            true,
+        );
+
         return await appAgent.executeCommand(
             commands,
             args,
@@ -368,5 +397,6 @@ export async function executeCommand(
     } finally {
         actionContext.profiler?.stop();
         actionContext.profiler = undefined;
+        closeActionContext();
     }
 }

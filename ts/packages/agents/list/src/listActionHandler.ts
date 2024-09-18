@@ -8,9 +8,11 @@ import {
     SessionContext,
     Storage,
     ActionResult,
+} from "@typeagent/agent-sdk";
+import {
     createActionResultFromTextDisplay,
     createActionResultFromHtmlDisplay,
-} from "@typeagent/agent-sdk";
+} from "@typeagent/agent-sdk/helpers/action";
 import {
     ListAction,
     AddItemsAction,

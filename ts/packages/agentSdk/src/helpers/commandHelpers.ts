@@ -5,8 +5,9 @@ import {
     ActionContext,
     AppAgentCommandInterface,
     CommandDescriptor,
+    CommandDescriptors,
     CommandDescriptorTable,
-} from "./agentInterface.js";
+} from "../agentInterface.js";
 
 export interface CommandHandler extends CommandDescriptor {
     run(
@@ -23,7 +24,7 @@ export interface CommandHandlerTable extends CommandDescriptorTable {
 }
 
 export function isCommandDescriptorTable(
-    entry: CommandDescriptor | CommandDescriptorTable,
+    entry: CommandDescriptors,
 ): entry is CommandDescriptorTable {
     return (entry as CommandDescriptorTable).commands !== undefined;
 }

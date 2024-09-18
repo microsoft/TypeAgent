@@ -15,16 +15,16 @@ import {
     AppAction,
     AppAgent,
     SessionContext,
+} from "@typeagent/agent-sdk";
+import {
     createActionResultFromHtmlDisplay,
     createActionResultFromError,
-} from "@typeagent/agent-sdk";
-
+} from "@typeagent/agent-sdk/helpers/action";
 import {
     CommandHandler,
     CommandHandlerTable,
     getCommandInterface,
-} from "@typeagent/agent-sdk/helpers/commands";
-import { get } from "http";
+} from "@typeagent/agent-sdk/helpers/command";
 
 export class MailClientLoginCommandHandler implements CommandHandler {
     public readonly description = "Log into the MS Graph to access email";

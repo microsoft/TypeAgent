@@ -44,7 +44,6 @@ import {
     RequestId,
     getNullRequestIO,
     DispatcherName,
-    displayError,
 } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
@@ -60,6 +59,7 @@ import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 import { RequestMetricsManager } from "../../utils/metrics.js";
 import { getTranslatorPrefix } from "../../action/actionHandlers.js";
+import { displayError } from "@typeagent/agent-sdk/helpers/display";
 
 export interface CommandResult {
     error?: boolean;
@@ -72,6 +72,11 @@ export type SetSettingFunction = (name: string, value: any) => void;
 export interface ClientSettingsProvider {
     set: SetSettingFunction | null;
 }
+
+type ActionContextWithClose = {
+    actionContext: ActionContext<unknown>;
+    closeActionContext: () => void;
+};
 
 // Command Handler Context definition.
 export type CommandHandlerContext = {
@@ -104,7 +109,7 @@ export type CommandHandlerContext = {
 
     transientAgents: Record<string, boolean | undefined>;
 
-    streamingActionContext?: ActionContext<unknown> | undefined;
+    streamingActionContext?: ActionContextWithClose | undefined;
 
     metricsManager?: RequestMetricsManager | undefined;
     commandProfiler?: Profiler | undefined;

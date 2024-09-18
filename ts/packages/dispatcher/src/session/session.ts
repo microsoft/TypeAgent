@@ -14,7 +14,6 @@ import {
     getUniqueFileName,
     getYMDPrefix,
 } from "../utils/userData.js";
-import { TranslatorConfigProvider } from "../translation/agentTranslators.js";
 import ExifReader from "exifreader";
 import { AppAgentState } from "../handlers/common/appAgentManager.js";
 
@@ -61,6 +60,9 @@ function mergeConfig(
     for (const key of keys) {
         if (options.hasOwnProperty(key)) {
             const value = options[key];
+            if (value === undefined) {
+                continue;
+            }
             if (typeof value === "object") {
                 const strictKey = flexKeys ? !flexKeys.includes(key) : strict;
                 if (config[key] === undefined) {
@@ -84,9 +86,7 @@ function mergeConfig(
 }
 
 function cloneConfig(config: SessionConfig): SessionConfig {
-    const clone: any = {};
-    mergeConfig(clone, config, false);
-    return clone;
+    return structuredClone(config);
 }
 
 async function loadSessions(): Promise<Sessions> {
@@ -261,6 +261,9 @@ export class Session {
     public static async load(dir: string) {
         const sessionData = await readSessionData(dir);
         debugSession(`Loading session: ${dir}`);
+        debugSession(
+            `Config: ${JSON.stringify(sessionData.config, undefined, 2)}`,
+        );
         return new Session(sessionData, dir);
     }
 
@@ -396,6 +399,10 @@ export class Session {
                 config: this.config,
                 cacheData: this.cacheData,
             };
+            debugSession(`Saving session: ${this.dir}`);
+            debugSession(
+                `Config: ${JSON.stringify(data.config, undefined, 2)}`,
+            );
             fs.writeFileSync(
                 sessionDataFilePath,
                 JSON.stringify(data, undefined, 2),

@@ -3,7 +3,7 @@
 
 import { printProcessExplanationResult } from "agent-cache";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
-import { CommandHandler } from "@typeagent/agent-sdk/helpers/commands";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { ActionContext } from "@typeagent/agent-sdk";
 
 export class CorrectCommandHandler implements CommandHandler {

@@ -13,12 +13,12 @@ import {
     AppAgent,
     SessionContext,
     AppAction,
-    createActionResultFromError,
     ActionContext,
     DisplayType,
     AppAgentEvent,
     DynamicDisplay,
 } from "@typeagent/agent-sdk";
+import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import { searchAlbum, searchArtists, searchTracks } from "../client.js";
 import { htmlStatus } from "../playback.js";
 import { getPlayerCommandInterface } from "./playerCommands.js";

@@ -14,7 +14,8 @@ import {
     CommandHandlerTable,
     getCommandInterface,
     isCommandDescriptorTable,
-} from "@typeagent/agent-sdk/helpers/commands";
+} from "@typeagent/agent-sdk/helpers/command";
+import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 import { executeSessionAction } from "../action/system/sessionActionHandler.js";
 import { executeConfigAction } from "../action/system/configActionHandler.js";
 import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
@@ -31,10 +32,7 @@ import { TranslateCommandHandler } from "../handlers/translateCommandHandler.js"
 import { getRandomCommandHandlers } from "../handlers/randomCommandHandler.js";
 import { getNotifyCommandHandlers } from "../handlers/notifyCommandHandler.js";
 import { processRequests } from "../utils/interactive.js";
-import {
-    displayResult,
-    getConsoleRequestIO,
-} from "../handlers/common/interactiveIO.js";
+import { getConsoleRequestIO } from "../handlers/common/interactiveIO.js";
 import { getPrompt, processCommandNoLock, resolveCommand } from "../command.js";
 import { RequestCommandHandler } from "../handlers/requestCommandHandler.js";
 import { DisplayCommandHandler } from "../handlers/displayCommandHandler.js";

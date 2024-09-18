@@ -2,10 +2,13 @@
 // Licensed under the MIT License.
 
 import {
+    ActionResult,
     AppAgentEvent,
+    CommandDescriptors,
     DisplayAppendMode,
     DisplayContent,
     DisplayType,
+    DynamicDisplay,
     StorageListOptions,
 } from "@typeagent/agent-sdk";
 import { JSONAction } from "agent-cache";
@@ -18,11 +21,11 @@ export type AgentContextCallFunctions = {
     }): void;
     setDisplay: (param: {
         actionContextId: number;
-        message: DisplayContent;
+        content: DisplayContent;
     }) => void;
     appendDisplay: (param: {
         actionContextId: number;
-        message: DisplayContent;
+        content: DisplayContent;
         mode: DisplayAppendMode;
     }) => void;
     takeAction: (param: {
@@ -48,7 +51,7 @@ export type AgentContextInvokeFunctions = {
         contextId: number;
         session: boolean;
         storagePath: string;
-        options: StorageListOptions;
+        options?: StorageListOptions | undefined;
     }) => Promise<any>;
     storageExists: (param: {
         contextId: number;
@@ -88,27 +91,27 @@ export type AgentCallFunctions = {
 };
 
 export type AgentInvokeFunctions = {
-    initializeAgentContext: () => Promise<any>;
+    initializeAgentContext: () => Promise<unknown>;
     updateAgentContext: (
         param: Partial<ContextParams> & {
             enable: boolean;
             translatorName: string;
         },
-    ) => Promise<any>;
+    ) => Promise<void>;
     executeAction: (
         param: Partial<ActionContextParams> & { action: JSONAction },
-    ) => Promise<any>;
+    ) => Promise<ActionResult | undefined>;
     validateWildcardMatch: (
         param: Partial<ContextParams> & { action: JSONAction },
-    ) => Promise<any>;
+    ) => Promise<boolean>;
     getDynamicDisplay: (
         param: Partial<ContextParams> & {
             type: DisplayType;
             displayId: string;
         },
-    ) => Promise<any>;
-    closeAgentContext: (param: Partial<ContextParams>) => Promise<any>;
-    getCommands: (param: Partial<ContextParams>) => Promise<any>;
+    ) => Promise<DynamicDisplay>;
+    closeAgentContext: (param: Partial<ContextParams>) => Promise<void>;
+    getCommands: (param: Partial<ContextParams>) => Promise<CommandDescriptors>;
     executeCommand(
         param: Partial<ActionContextParams> & {
             commands: string[];
