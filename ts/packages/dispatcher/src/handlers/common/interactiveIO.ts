@@ -7,11 +7,9 @@ import { SearchMenuItem, ActionTemplateSequence } from "common-utils";
 import chalk from "chalk";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
 import {
-    ActionContext,
     AppAgentEvent,
     DisplayContent,
     DisplayAppendMode,
-    DisplayMessageKind,
 } from "@typeagent/agent-sdk";
 import { RequestMetrics } from "../../utils/metrics.js";
 

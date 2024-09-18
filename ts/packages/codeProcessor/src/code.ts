@@ -1,8 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import ts from "typescript";
-import { MessageSourceRole, PromptBuilder, readAllText } from "typeagent";
+import { MessageSourceRole, readAllText } from "typeagent";
 import { PromptSection } from "typechat";
 
 /**

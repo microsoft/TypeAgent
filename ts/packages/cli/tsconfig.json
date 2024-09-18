@@ -6,7 +6,6 @@
     // These settings need to match src/tsconfig.json and needed here for oclif dev mode to work for ts-node to work
     "rootDir": "./src",
     "outDir": "./dist",
-    "noUnusedLocals": false,
   },
   "include": [],
   "references": [
