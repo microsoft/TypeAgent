@@ -1,9 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AppAction } from "./action.js";
+import { AppAction, ActionResult } from "./action.js";
 import { ActionIO, DisplayType, DynamicDisplay } from "./display.js";
-import { ActionResult } from "./memory.js";
 import { Profiler } from "./profiler.js";
 
 //==============================================================================
