@@ -507,8 +507,8 @@ export async function handleCalendarAction(
                         actionEvent.description,
                     );
 
-                if (findResults.length == 0) {
-                    let findResults: any =
+                if (findResults.length === 0) {
+                    findResults =
                         await calendarContext.calendarClient?.findCalendarEventsBySubject(
                             actionEvent.description,
                         );

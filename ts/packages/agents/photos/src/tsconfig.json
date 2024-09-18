@@ -4,7 +4,6 @@
     "composite": true,
     "rootDir": ".",
     "outDir": "../dist",
-    "noUnusedLocals": false,
   },
   "include": ["./**/*"],
   "ts-node": {
