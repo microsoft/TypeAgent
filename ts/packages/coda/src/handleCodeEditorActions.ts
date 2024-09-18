@@ -307,7 +307,7 @@ export async function handleGeneralKBActions(
             actionResult.handled = false;
         }
     }
-    return action;
+    return actionResult;
 }
 
 export async function handleBaseEditorActions(

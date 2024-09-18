@@ -18,11 +18,11 @@ export type AgentContextCallFunctions = {
     }): void;
     setDisplay: (param: {
         actionContextId: number;
-        message: DisplayContent;
+        content: DisplayContent;
     }) => void;
     appendDisplay: (param: {
         actionContextId: number;
-        message: DisplayContent;
+        content: DisplayContent;
         mode: DisplayAppendMode;
     }) => void;
 };
