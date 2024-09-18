@@ -1,13 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-import { CommandHandler } from "@typeagent/agent-sdk/helpers/commands";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import {
     CommandHandlerContext,
     updateCorrectionContext,
 } from "./common/commandHandlerContext.js";
 import { RequestAction, printProcessRequestActionResult } from "agent-cache";
 import { ActionContext } from "@typeagent/agent-sdk";
-import { displayResult, displayStatus } from "./common/interactiveIO.js";
+import {
+    displayResult,
+    displayStatus,
+} from "@typeagent/agent-sdk/helpers/display";
 
 export class ExplainCommandHandler implements CommandHandler {
     public readonly description = "Explain a translated request with action";

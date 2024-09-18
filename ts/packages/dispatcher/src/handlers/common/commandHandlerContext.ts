@@ -44,7 +44,6 @@ import {
     RequestId,
     getNullRequestIO,
     DispatcherName,
-    displayError,
 } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
@@ -60,6 +59,7 @@ import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 import { RequestMetricsManager } from "../../utils/metrics.js";
 import { getTranslatorPrefix } from "../../action/actionHandlers.js";
+import { displayError } from "@typeagent/agent-sdk/helpers/display";
 
 export interface CommandResult {
     error?: boolean;

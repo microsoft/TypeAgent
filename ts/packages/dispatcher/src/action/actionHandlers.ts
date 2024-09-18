@@ -7,26 +7,28 @@ import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
     ActionIO,
-    createActionResult,
     AppAgentEvent,
     SessionContext,
     ActionResult,
-    actionResultToString,
     DynamicDisplay,
     DisplayType,
     DisplayContent,
     ActionContext,
     DisplayAppendMode,
 } from "@typeagent/agent-sdk";
+import {
+    createActionResult,
+    actionResultToString,
+} from "@typeagent/agent-sdk/helpers/action";
+import {
+    displayError,
+    displayStatus,
+} from "@typeagent/agent-sdk/helpers/display";
 import { MatchResult } from "agent-cache";
 import { getStorage } from "./storageImpl.js";
 import { getUserProfileDir } from "../utils/userData.js";
 import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
 import { ProfileNames } from "../utils/profileNames.js";
-import {
-    displayError,
-    displayStatus,
-} from "../handlers/common/interactiveIO.js";
 
 const debugAgent = registerDebug("typeagent:agent");
 const debugActions = registerDebug("typeagent:actions");

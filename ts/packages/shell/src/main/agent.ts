@@ -10,7 +10,7 @@ import {
     CommandHandler,
     CommandHandlerTable,
     getCommandInterface,
-} from "@typeagent/agent-sdk/helpers/commands";
+} from "@typeagent/agent-sdk/helpers/command";
 import { AppAgentProvider } from "agent-dispatcher";
 import { ShellSettings } from "./shellSettings.js";
 import path from "path";
