@@ -73,6 +73,11 @@ export interface ClientSettingsProvider {
     set: SetSettingFunction | null;
 }
 
+type ActionContextWithClose = {
+    actionContext: ActionContext<unknown>;
+    closeActionContext: () => void;
+};
+
 // Command Handler Context definition.
 export type CommandHandlerContext = {
     agents: AppAgentManager;
@@ -104,7 +109,7 @@ export type CommandHandlerContext = {
 
     transientAgents: Record<string, boolean | undefined>;
 
-    streamingActionContext?: ActionContext<unknown> | undefined;
+    streamingActionContext?: ActionContextWithClose | undefined;
 
     metricsManager?: RequestMetricsManager | undefined;
     commandProfiler?: Profiler | undefined;
