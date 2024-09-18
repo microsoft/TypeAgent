@@ -52,7 +52,7 @@ export function makeRequestPromptCreator(
 
             if (request.length == 0) {
                 request =
-                    `Caption image '${attachments[0].storageLocation}' in detail and include relevant EXIF information like date/time & location.`;
+                    `Caption the first image in no less than 150 words without making any assumptions, remain factual.`;
             }
         }
 
@@ -75,8 +75,8 @@ export function makeRequestPromptCreator(
             `Current Date is ${new Date().toLocaleDateString("en-US")}.\n` +
             `The following is the latest user request:\n` +
             `"""\n${request}\n"""\n` +
-            `Based primarily on the request but considering all available information in our chat history, ${imageSuffix}the following is the latest user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`;
-        // console.log(prompt);
+            `Based primarily on the request but considering all available information in our chat history, the following is the latest user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`;
+        //console.log(prompt);
         return prompt;
     };
 }

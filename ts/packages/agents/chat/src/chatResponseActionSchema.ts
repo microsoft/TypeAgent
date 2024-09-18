@@ -60,7 +60,7 @@ export interface LookupAndGenerateResponseAction {
     parameters: {
         // the original request from the user
         originalRequest: string;
-        // if the request is for private information from past conversations including private events, plans, projects in progress, files, and other items from discussions with team members or the assistant, use the conversation lookup filters
+        // if the request is for private information from past conversations including private events, plans, projects in progress, files or file names, and other items from discussions with team members or the assistant, use the conversation lookup filters
         conversationLookupFilters?: TermFilter[];
         // if the request is for contemporary internet information including sports scores, news events, or current commerce offerings, use the lookups parameter to request a lookup of the information on the user's behalf; the assistant will generate a response based on the lookup results
         // Lookup *facts* you don't know or if your facts are out of date.
@@ -75,7 +75,7 @@ export interface LookupAndGenerateResponseAction {
     };
 }
 
-// this is the way to handle requests for known information that is not stored in application memory or conversation memory, such as facts, definitions, explanations, image captioning, or other information that can be generated without a lookup
+// this is the way to handle requests for known information that is not stored in application memory or conversation memory, such as facts, definitions, explanations, captioning, or other information that can be generated without a lookup
 // this action is never used when the request is for private information from past conversations including private events, plans, projects in progress, and other items from discussions with team members or the assistant, unless the information is present in the chat history
 export interface GenerateResponseAction {
     actionName: "generateResponse";
@@ -84,7 +84,7 @@ export interface GenerateResponseAction {
         originalRequest: string;
         // the generated text to show the user; this should be a complete response to the user's request
         generatedText: string;
-        // ALL the actions and entities present in the text of the user's request
+        // ALL the actions and entities present in the text of the user's request including attachments
         userRequestEntities: Entity[];
         // ALL the actions and entities present in the generated text
         generatedTextEntities: Entity[];

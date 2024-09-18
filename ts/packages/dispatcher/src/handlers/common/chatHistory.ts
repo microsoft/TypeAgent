@@ -4,6 +4,7 @@
 import { Entity } from "@typeagent/agent-sdk";
 import { CachedImageWithDetails } from "common-utils";
 import { PromptSection, ImagePromptContent } from "typechat";
+import { extractRelevantExifTags } from "../../../../commonUtils/dist/image.js";
 type PromptRole = "user" | "assistant" | "system";
 
 export interface ChatHistoryEntry {
@@ -66,7 +67,7 @@ export function createChatHistory(): ChatHistory {
                 if (entry.attachments && entry.attachments.length > 0) {
                     for(const attachment of entry.attachments) {
                         sections.push({ role: entry.role, content: [{ type: "text", text: attachment.storageLocation }] } );
-                        sections.push({ role: entry.role, content: [{ type: "text", text: JSON.stringify(attachment.exifTags) }] } );
+                        sections.push({ role: entry.role, content: [{ type: "text", text: `EXIF Tags: ${extractRelevantExifTags(attachment.exifTags)}` }] } );
                         sections.push({ role: entry.role, content: [{ type: "image_url", image_url: { url: attachment.image, detail: "high" } }] } );
                     }
                 }

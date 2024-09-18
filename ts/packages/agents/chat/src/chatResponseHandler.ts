@@ -170,6 +170,7 @@ async function handleChatResponse(
                             }
                         } else {
                             console.log("bug");
+                            return createActionResult("I don't know anything about that.");
                         }
                     }
                 }

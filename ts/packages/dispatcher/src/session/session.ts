@@ -427,7 +427,7 @@ export class Session {
         const tags: ExifReader.Tags = ExifReader.load(buffer);
 
         fs.writeFile(fileName, buffer, () => {});
-
+        
         return [uniqueFileName, tags];
     }
 

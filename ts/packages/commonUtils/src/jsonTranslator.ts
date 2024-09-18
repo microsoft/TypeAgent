@@ -19,7 +19,7 @@ import {
     createIncrementalJsonParser,
     IncrementalJsonValueCallBack,
 } from "./incrementalJsonParser.js";
-import { CachedImageWithDetails } from "./image.js";
+import { CachedImageWithDetails, extractRelevantExifTags } from "./image.js";
 
 const debug = registerDebug("typeagent:prompt");
 
@@ -129,28 +129,28 @@ function attachAttachments(
                 role: "user",
                 content: [
                     {
-                        type: "image_url",
-                        image_url: { url: attachments[i].image, detail: "high" },
-                    },
-                    {
-                        type: "text",
-                        text:
-                            "Here is the EXIF information for the image: " +
-                            JSON.stringify(attachments![i].exifTags),
-                    },
-                    {
                         type: "text",
                         text:
                             `File Name: ${attachments![i].storageLocation}`,
-                    },                    
+                    },
+                    {
+                        type: "image_url",
+                        image_url: { url: attachments[i].image, detail: "high" },
+                    },                
+                    {
+                        type: "text",
+                        text:
+                            `Image EXIF tags: \n${extractRelevantExifTags(attachments![i].exifTags)}`,
+                    },    
+
                 ],
             });
         }
 
-        pp.unshift({
-            role: "user",
-            content: "Here are some new images provided by the user.",
-        });
+        // pp.unshift({
+        //     role: "user",
+        //     content: "Here are some new images provided by the user.",
+        // });
     }
 }
 
