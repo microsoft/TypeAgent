@@ -39,7 +39,7 @@ if (typeof module.instantiate !== "function") {
 const agent: AppAgent = module.instantiate();
 
 const agentInvokeHandlers: AgentInvokeFunctions = {
-    async initializeAgentContext(): Promise<any> {
+    async initializeAgentContext(): Promise<unknown> {
         if (agent.initializeAgentContext === undefined) {
             throw new Error("Invalid invocation of initializeAgentContext");
         }
@@ -176,11 +176,11 @@ function getStorage(contextId: number, session: boolean): Storage {
                 session,
             });
         },
-        save: async (data: string): Promise<void> => {
+        save: async (token: string): Promise<void> => {
             return rpc.invoke("tokenCacheWrite", {
                 contextId,
                 session,
-                data,
+                token,
             });
         },
     };

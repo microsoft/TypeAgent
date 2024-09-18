@@ -173,7 +173,7 @@ export async function createAgentProcessShim(
             contextId: number;
             session: boolean;
             storagePath: string;
-            options: StorageListOptions;
+            options?: StorageListOptions | undefined;
         }) => {
             const context = contextMap.get(param.contextId);
             return getStorage(param, context).list(
@@ -251,8 +251,8 @@ export async function createAgentProcessShim(
     >(process, agentContextInvokeHandlers, agentContextCallHandlers);
 
     const agent: AppAgent = {
-        initializeAgentContext(): Promise<ShimContext> {
-            return rpc.invoke("initializeAgentContext");
+        initializeAgentContext() {
+            return rpc.invoke("initializeAgentContext", undefined);
         },
         updateAgentContext(
             enable,
@@ -265,7 +265,7 @@ export async function createAgentProcessShim(
                 translatorName,
             });
         },
-        executeAction(action, context: ActionContext<ShimContext>) {
+        executeAction(action: any, context: ActionContext<ShimContext>) {
             return withActionContextAsync(context, (contextParams) =>
                 rpc.invoke("executeAction", {
                     ...contextParams,
@@ -273,7 +273,10 @@ export async function createAgentProcessShim(
                 }),
             );
         },
-        validateWildcardMatch(action, context: SessionContext<ShimContext>) {
+        validateWildcardMatch(
+            action: any,
+            context: SessionContext<ShimContext>,
+        ) {
             return rpc.invoke("validateWildcardMatch", {
                 ...getContextParam(context),
                 action,

@@ -47,7 +47,7 @@ export type AgentContextInvokeFunctions = {
         contextId: number;
         session: boolean;
         storagePath: string;
-        options: StorageListOptions;
+        options?: StorageListOptions | undefined;
     }) => Promise<any>;
     storageExists: (param: {
         contextId: number;
