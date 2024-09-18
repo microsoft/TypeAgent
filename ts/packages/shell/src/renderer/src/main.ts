@@ -25,7 +25,6 @@ function addEvents(
     settingsView: SettingsView,
     tabsView: TabView,
 ) {
-    console.log("add listen event");
     const api = getClientAPI();
     api.onListenEvent((_, name, token, useLocalWhisper) => {
         console.log(`listen event: ${name}`);

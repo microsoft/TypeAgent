@@ -520,15 +520,23 @@ function streamPartialChatResponseAction(
         return;
     }
 
-    if (name === "parameters.generatedText" && delta !== undefined) {
-        if (context.streamingContext === undefined) {
-            context.streamingContext = "";
+    // don't stream empty string and undefined as well.
+    if (name === "parameters.generatedText") {
+        if (delta === undefined) {
+            // we finish the streaming text.  add an empty string to flush the speaking buffer.
+            context.actionIO.appendDisplay("");
         }
-        context.streamingContext += delta;
-        context.actionIO.appendDisplay({
-            type: "text",
-            content: delta,
-            speak: true,
-        });
+        // Don't stream empty deltas
+        if (delta) {
+            if (context.streamingContext === undefined) {
+                context.streamingContext = "";
+            }
+            context.streamingContext += delta;
+            context.actionIO.appendDisplay({
+                type: "text",
+                content: delta,
+                speak: true,
+            });
+        }
     }
 }
