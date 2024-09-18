@@ -26,7 +26,6 @@ function addEvents(
     tabsView: TabView,
     cameraView: CameraView,
 ) {
-    console.log("add listen event");
     const api = getClientAPI();
     api.onListenEvent((_, name, token, useLocalWhisper) => {
         console.log(`listen event: ${name}`);

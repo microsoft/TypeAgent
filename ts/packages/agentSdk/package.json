@@ -15,6 +15,7 @@
     ".": "./dist/index.js",
     "./helpers/commands": "./dist/commands.js"
   },
+  "types": "./dist/index.d.ts",
   "scripts": {
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",

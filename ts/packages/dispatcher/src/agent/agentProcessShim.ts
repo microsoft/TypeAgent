@@ -324,7 +324,7 @@ export async function createAgentProcessShim(
             return rpc.invoke("getCommands", getContextParam(context));
         },
         executeCommand(
-            commands: string[] | undefined,
+            commands: string[],
             args: string,
             context: ActionContext<ShimContext>,
         ) {

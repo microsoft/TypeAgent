@@ -111,7 +111,7 @@ export type AgentInvokeFunctions = {
     getCommands: (param: Partial<ContextParams>) => Promise<any>;
     executeCommand(
         param: Partial<ActionContextParams> & {
-            command: string[] | undefined;
+            commands: string[];
             args: string;
         },
     ): Promise<void>;

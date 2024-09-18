@@ -21,7 +21,7 @@ import {
     displayWarn,
     RequestIO,
 } from "./common/interactiveIO.js";
-import { parseRequestArgs } from "../utils/args.js";
+import { parseCommandArgs } from "../utils/args.js";
 import { glob } from "glob";
 import { getDispatcherConfig } from "../utils/config.js";
 import {
@@ -236,7 +236,7 @@ class ConstructionListCommandHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
-        const { flags } = parseRequestArgs(
+        const { flags } = parseCommandArgs(
             request,
             {
                 verbose: { char: "v", default: false },
@@ -293,7 +293,7 @@ class ConstructionImportCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        const { args, flags } = parseRequestArgs(request, {
+        const { args, flags } = parseCommandArgs(request, {
             test: { char: "t", default: false },
         });
 
@@ -347,7 +347,7 @@ class ConstructionDeleteCommandHandler implements CommandHandler {
         request: string,
         context: ActionContext<CommandHandlerContext>,
     ) {
-        const { args } = parseRequestArgs(request);
+        const { args } = parseCommandArgs(request);
         if (args.length !== 2) {
             throw new Error(
                 "Invalid arguments. '@const delete <namespace> <id>' expected.",

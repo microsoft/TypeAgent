@@ -239,10 +239,13 @@ class MessageContainer {
     private lastAppendMode?: DisplayAppendMode;
     private completed = false;
 
+    private pendingSpeakText: string = "";
+
     public get source() {
         return this._source;
     }
     constructor(
+        private chatView: ChatView,
         className: string,
         private _source: string,
         agents: Map<string, string>,
@@ -290,6 +293,7 @@ class MessageContainer {
     public getMessage() {
         return this.messageDiv.innerText;
     }
+
     public setMessage(
         content: DisplayContent,
         source: string,
@@ -309,20 +313,79 @@ class MessageContainer {
         (this.timestampDiv.firstChild as HTMLDivElement).innerText = source; // name
         this.iconDiv.innerText = sourceIcon ?? "❔"; // icon
 
-        setContent(
+        const speakText = setContent(
             this.messageDiv,
             content,
             appendMode === "inline" && this.lastAppendMode !== "inline"
                 ? "block"
                 : appendMode,
         );
+
+        this.speak(speakText, appendMode);
+
         this.lastAppendMode = appendMode;
 
         this.updateDivState();
     }
 
+    private speak(
+        speakText: string | undefined,
+        appendMode?: DisplayAppendMode,
+    ) {
+        const tts = this.chatView.tts;
+        if (tts === undefined) {
+            return;
+        }
+        if (speakText === undefined) {
+            // Flush the pending text.
+            this.flushPendingSpeak();
+            return;
+        }
+
+        if (appendMode !== "inline") {
+            this.flushPendingSpeak();
+            tts.speak(speakText);
+            return;
+        }
+
+        this.pendingSpeakText += speakText;
+        const minSpeak = 10; // TODO: Adjust this value.
+        if (this.pendingSpeakText.length <= minSpeak) {
+            // Too short to speak.
+            return;
+        }
+        const segmenter = new Intl.Segmenter(navigator.language, {
+            granularity: "sentence",
+        });
+        const segments = Array.from(segmenter.segment(this.pendingSpeakText));
+
+        if (segments.length < 2) {
+            // No sentence boundary.
+            return;
+        }
+
+        // Try Keep the last segment and speak the rest.
+        const index = segments[segments.length - 1].index;
+        if (index <= minSpeak) {
+            // Too short to speak.
+            return;
+        }
+
+        tts.speak(this.pendingSpeakText.slice(0, index));
+        this.pendingSpeakText = this.pendingSpeakText.slice(index);
+    }
+
+    private flushPendingSpeak() {
+        // Flush the pending text.
+        if (this.pendingSpeakText) {
+            this.chatView.tts?.speak(this.pendingSpeakText);
+            this.pendingSpeakText = "";
+        }
+    }
+
     public complete() {
         this.completed = true;
+        this.flushPendingSpeak();
         this.flushLastTemporary();
         this.updateDivState();
     }
@@ -454,6 +517,8 @@ class MessageGroup {
         this.userMessageBody = userMessageBody;
         this.userMessage = userMessage;
 
+        this.chatView.tts?.stop();
+
         requestPromise
             .then((metrics) => this.requestCompleted(metrics))
             .catch((error) => this.requestException(error));
@@ -478,22 +543,6 @@ class MessageGroup {
             this.statusMessage.complete();
             this.chatView.updateScroll();
         }
-
-        const tts = this.chatView.tts;
-        if (tts) {
-            for (const agentMessage of this.agentMessages) {
-                if (agentMessage.source === "chat") {
-                    const message = agentMessage.getMessage();
-                    if (message) {
-                        tts.speak(message).then((timings) => {
-                            if (timings) {
-                                agentMessage.addTTSTiming(timings);
-                            }
-                        });
-                    }
-                }
-            }
-        }
     }
 
     private requestException(error: any) {
@@ -507,6 +556,7 @@ class MessageGroup {
     private ensureStatusMessage(source: string) {
         if (this.statusMessage === undefined) {
             this.statusMessage = new MessageContainer(
+                this.chatView,
                 "chat-message-left",
                 source,
                 this.agents,
@@ -584,6 +634,7 @@ class MessageGroup {
             for (let i = 0; i < index + 1; i++) {
                 if (this.agentMessages[i] === undefined) {
                     const newAgentMessage = new MessageContainer(
+                        this.chatView,
                         "chat-message-left",
                         msg.source,
                         this.agents,
@@ -619,19 +670,35 @@ function textToHtml(text: string): string {
 }
 
 function stripAnsi(text: string): string {
+    return text.replace(/\x1b\[[0-9;]*m/g, "");
+}
+
+function encodeTextToHtml(text: string): string {
     return text
         .replace(/&/gm, "&amp;")
         .replace(/</gm, "&lt;")
-        .replace(/>/gm, "&gt;")
-        .replace(/\x1b\[[0-9;]*m/g, "");
+        .replace(/>/gm, "&gt;");
 }
 
 const enableText2Html = true;
+
+function matchKindStyle(elm: HTMLElement, kindStyle?: string) {
+    if (kindStyle !== undefined) {
+        return elm.classList.contains(kindStyle);
+    }
+    for (const cls of elm.classList) {
+        if (cls.startsWith("chat-message-kind-")) {
+            return false;
+        }
+    }
+    return true;
+}
+
 export function setContent(
     elm: HTMLElement,
     content: DisplayContent,
     appendMode?: DisplayAppendMode,
-) {
+): string | undefined {
     // Remove existing content if we are not appending.
     if (appendMode === undefined) {
         while (elm.firstChild) {
@@ -642,29 +709,37 @@ export function setContent(
     let type: DisplayType;
     let kind: DisplayMessageKind | undefined;
     let text: string;
+    let speak: boolean;
     if (typeof content === "string") {
         type = "text";
         text = content;
+        speak = false;
     } else {
         type = content.type;
         text = content.content;
         kind = content.kind;
+        speak = content.speak ?? false;
     }
 
     const kindStyle = kind ? `chat-message-kind-${kind}` : undefined;
 
     let contentDiv = elm.lastChild as HTMLDivElement | null;
+    let newDiv = true;
     if (
         appendMode !== "inline" ||
         !contentDiv ||
-        (kindStyle !== undefined && !contentDiv.classList.contains(kindStyle))
+        !matchKindStyle(contentDiv, kindStyle)
     ) {
         // Create a new div
         contentDiv = document.createElement("div");
         if (kindStyle) {
             contentDiv.classList.add(kindStyle);
         }
+        if (appendMode === "inline") {
+            contentDiv.style.display = "inline-block";
+        }
         elm.appendChild(contentDiv);
+        newDiv = false;
     }
 
     let contentElm: HTMLElement = contentDiv;
@@ -688,9 +763,23 @@ export function setContent(
             ? DOMPurify.sanitize(text, { ADD_ATTR: ["target"], ADD_DATA_URI_TAGS: ["img"], ADD_URI_SAFE_ATTR: ['src'] })
             : enableText2Html
               ? textToHtml(text)
-              : stripAnsi(text);
+              : stripAnsi(encodeTextToHtml(text));
 
     contentElm.innerHTML += contentHtml;
+
+    if (!speak) {
+        return undefined;
+    }
+    if (type === "text") {
+        return stripAnsi(text);
+    }
+
+    if (newDiv) {
+        return contentElm.innerText;
+    }
+
+    const parser = new DOMParser();
+    return parser.parseFromString(contentHtml, "text/html").body.innerText;
 }
 
 export function createTimestampDiv(timestamp: Date, className: string) {

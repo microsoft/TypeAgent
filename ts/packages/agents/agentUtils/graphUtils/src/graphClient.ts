@@ -52,6 +52,11 @@ export interface DynamicObject {
     [key: string]: any;
 }
 
+type AuthCacheContent = {
+    authRecord: string;
+    tokenExpiration: number;
+};
+
 export class GraphClient {
     private _settings: AppSettings | undefined = undefined;
     private _deviceCodeCredential: DeviceCodeCredential | undefined = undefined;
@@ -74,6 +79,8 @@ export class GraphClient {
 
     private graphLock: Limiter;
     private static instance: GraphClient | undefined = undefined;
+    private readonly MSGRAPH_AUTH_URL: string =
+        "https://graph.microsoft.com/.default";
 
     private constructor() {
         this.graphLock = createLimiter(1);
@@ -93,7 +100,6 @@ export class GraphClient {
 
                         if (fInitialized && instance._userClient) {
                             GraphClient.instance = instance;
-                            await instance.loadUserEmailAddresses();
                         }
                     }
                 }
@@ -147,6 +153,31 @@ export class GraphClient {
         }
     }
 
+    public async authenticateUser(): Promise<boolean> {
+        try {
+            await this.refreshTokenFromDeviceCodeCred();
+            return true;
+        } catch (error) {
+            this.logger(chalk.red(`Error refreshing token:${error}`));
+        }
+        return false;
+    }
+
+    public async authenticateUserFromCache(): Promise<boolean> {
+        if (this._deviceCodeCredential) {
+            let authRecord: AuthCacheContent | undefined =
+                await this.getAuthRecordFromCache();
+            if (authRecord != undefined) {
+                const currentTime = new Date().getTime();
+                if (currentTime >= authRecord.tokenExpiration) {
+                    await this.ensureTokenIsValid();
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
     public async initializeGraphFromDeviceCode(): Promise<boolean> {
         let isValidSettings: boolean = this.loadMSGraphSettings();
 
@@ -183,14 +214,9 @@ export class GraphClient {
                     name: "typeagent-tokencache",
                 },
             });
-
-            if (this._deviceCodeCredential) {
-                await this.saveAuthRecordToCache();
-            }
         }
 
         if (this._deviceCodeCredential) {
-            await this.refreshTokenFromDeviceCodeCred();
             this.createClient(this._deviceCodeCredential);
         }
 
@@ -198,7 +224,7 @@ export class GraphClient {
     }
 
     public async initializeGraphFromUserCred() {
-        let isValidSettings: boolean = await this.loadMSGraphSettings();
+        let isValidSettings: boolean = this.loadMSGraphSettings();
 
         if (!isValidSettings || !this._settings) {
             this.logger(chalk.red("Unable to load settings"));
@@ -227,7 +253,7 @@ export class GraphClient {
 
         if (this._usernamePasswordCredential) {
             let token = await this._usernamePasswordCredential.getToken(
-                "https://graph.microsoft.com/.default",
+                this.MSGRAPH_AUTH_URL,
             );
             if (token === undefined) {
                 this.logger(chalk.red("Failed to get token"));
@@ -261,32 +287,68 @@ export class GraphClient {
         return this._userClient;
     }
 
+    private async handleTokenExpiration(): Promise<void> {
+        const authRecordPath = this.AUTH_RECORD_PATH;
+
+        if (!existsSync(authRecordPath)) {
+            await this.writeAuthRecordToFile();
+        } else {
+            const fileContent = JSON.parse(
+                readFileSync(authRecordPath, "utf8"),
+            );
+            const tokenExpiration = fileContent.tokenExpiration || 0;
+
+            // Check if the token is expiring within 5 minutes (300,000 ms)
+            if (Date.now() >= tokenExpiration - 300000) {
+                await this.writeAuthRecordToFile();
+            }
+        }
+    }
+
+    private async writeAuthRecordToFile(): Promise<void> {
+        try {
+            if (this._deviceCodeCredential !== undefined) {
+                const token = await this._deviceCodeCredential.getToken(
+                    this.MSGRAPH_AUTH_URL,
+                );
+
+                const authRecord =
+                    await this._deviceCodeCredential.authenticate(
+                        this.MSGRAPH_AUTH_URL,
+                    );
+
+                if (authRecord) {
+                    const serializedAuthRecord =
+                        serializeAuthenticationRecord(authRecord);
+                    const content = {
+                        authRecord: serializedAuthRecord,
+                        tokenExpiration: token.expiresOnTimestamp, // Add token expiration timestamp
+                    };
+                    writeFileSync(
+                        this.AUTH_RECORD_PATH,
+                        JSON.stringify(content, null, 2),
+                    );
+                    this.logger(
+                        chalk.green("Token refreshed and expiration saved."),
+                    );
+                }
+            }
+        } catch (error) {
+            this.logger(
+                chalk.red(`Error writing auth record to file: ${error}`),
+            );
+        }
+    }
+
     public async refreshTokenFromDeviceCodeCred(): Promise<void> {
         const retries = 3;
-
         if (
             this._deviceCodeCredential !== undefined &&
             this._userClient !== undefined
         ) {
             for (let i = 0; i < retries; i++) {
                 try {
-                    const token = await this._deviceCodeCredential.getToken(
-                        "https://graph.microsoft.com/.default",
-                    );
-                    if (
-                        Date.now() >=
-                        (token.expiresOnTimestamp || 0) - 300000
-                    ) {
-                        const authRecord =
-                            await this._deviceCodeCredential.authenticate(
-                                "https://graph.microsoft.com/.default",
-                            );
-                        if (authRecord) {
-                            const content =
-                                serializeAuthenticationRecord(authRecord);
-                            writeFileSync(this.AUTH_RECORD_PATH, content);
-                        }
-                    }
+                    await this.handleTokenExpiration();
                     return;
                 } catch (error) {
                     this.logger(chalk.red(`Error refreshing token:${error}`));
@@ -326,7 +388,7 @@ export class GraphClient {
                         } finally {
                             this._userClient = undefined;
                             await this._usernamePasswordCredential.getToken(
-                                "https://graph.microsoft.com/.default",
+                                this.MSGRAPH_AUTH_URL,
                             );
 
                             if (this._settings) {
@@ -345,36 +407,24 @@ export class GraphClient {
         }
     }
 
-    public async saveAuthRecordToCache(): Promise<void> {
-        if (this._deviceCodeCredential) {
-            let authRecord: AuthenticationRecord | undefined;
-            try {
-                authRecord = await this._deviceCodeCredential.authenticate(
-                    "https://graph.microsoft.com/.default",
-                );
-            } catch (error) {
-                this.logger(chalk.red(`Error refreshing token:${error}`));
-            }
-
-            if (authRecord) {
-                const content = serializeAuthenticationRecord(authRecord);
-                writeFileSync(this.AUTH_RECORD_PATH, content);
-            }
-        }
-    }
-
     public async getAuthRecordFromCache(): Promise<
-        AuthenticationRecord | undefined
+        AuthCacheContent | undefined
     > {
-        const fileContent = readFileSync(
-            path.join(process.cwd(), this.AUTH_RECORD_PATH),
-            {
-                encoding: "utf-8",
-            },
-        );
-        const authRecord: AuthenticationRecord =
-            deserializeAuthenticationRecord(fileContent);
-        return authRecord;
+        const authRecordPath = path.join(process.cwd(), this.AUTH_RECORD_PATH);
+        if (!existsSync(authRecordPath)) {
+            return undefined;
+        }
+
+        const fileContent = readFileSync(authRecordPath, { encoding: "utf-8" });
+        try {
+            const content: AuthCacheContent = JSON.parse(fileContent);
+            return content;
+        } catch (error) {
+            this.logger(
+                chalk.red(`Error reading auth record from cache:${error}`),
+            );
+            return undefined;
+        }
     }
 
     public async getUserTokenAsync(): Promise<string> {
@@ -437,7 +487,7 @@ export class GraphClient {
     }
 
     public async loadUserEmailAddresses(): Promise<void> {
-        this.ensureTokenIsValid();
+        await this.ensureTokenIsValid();
         try {
             const response = await this._userClient
                 ?.api("/users")
@@ -466,6 +516,10 @@ export class GraphClient {
     ): Promise<string[]> {
         let emailAddresses: string[] = [];
         try {
+            if (this._userEmailAddresses.size === 0) {
+                await this.loadUserEmailAddresses();
+            }
+
             for (const username of usernames) {
                 for (const [name, addr] of this._userEmailAddresses.entries()) {
                     if (name.toLowerCase().includes(username.toLowerCase())) {
