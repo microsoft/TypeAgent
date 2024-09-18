@@ -98,11 +98,20 @@ export function createActionResultNoDisplay(
     };
 }
 
-export function createActionResult(literalText: string): ActionResultSuccess {
+export function createActionResult(
+    literalText: string,
+    speak?: boolean,
+): ActionResultSuccess {
     return {
         literalText,
         entities: [],
-        displayContent: literalText,
+        displayContent: speak
+            ? {
+                  type: "text",
+                  content: literalText,
+                  speak: true,
+              }
+            : literalText,
     };
 }
 

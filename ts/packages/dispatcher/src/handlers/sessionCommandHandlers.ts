@@ -16,7 +16,7 @@ import {
     getSessionCaches,
 } from "../session/session.js";
 import chalk from "chalk";
-import { parseRequestArgs } from "../utils/args.js";
+import { parseCommandArgs } from "../utils/args.js";
 import {
     CommandHandler,
     CommandHandlerTable,
@@ -35,7 +35,7 @@ class SessionNewCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        const { flags } = parseRequestArgs(
+        const { flags } = parseCommandArgs(
             request,
             {
                 keep: false,
@@ -53,6 +53,9 @@ class SessionNewCommandHandler implements CommandHandler {
                 flags.persist,
             ),
         );
+
+        context.sessionContext.agentContext.chatHistory.entries.length = 0;
+
         displaySuccess(
             `New session created${
                 systemContext.session.dir

@@ -15,10 +15,22 @@ enum AddressToType {
 
 export class MailClient {
     private readonly logger = registerDebug("typeagent:graphUtils:mailClient");
-    public constructor(private readonly graphClient: GraphClient | undefined) {}
+    private graphClient: GraphClient | undefined = undefined;
+    public constructor() {}
 
     public isGraphClientInitialized(): boolean {
         return this.graphClient && this.graphClient.getClient() ? true : false;
+    }
+
+    public async initGraphClient(fLogin: boolean): Promise<void> {
+        if (this.graphClient === undefined) {
+            this.graphClient = await GraphClient.getInstance();
+            this.graphClient?.authenticateUser();
+        } else if (fLogin) {
+            await this.graphClient.ensureTokenIsValid();
+            this.graphClient.loadUserEmailAddresses();
+        }
+        return;
     }
 
     public async getInboxAsync(): Promise<PageCollection | undefined> {
@@ -272,5 +284,6 @@ export class MailClient {
 }
 
 export async function createMailGraphClient(): Promise<MailClient> {
-    return new MailClient(await GraphClient.getInstance());
+    //return new MailClient(await GraphClient.getInstance());
+    return new MailClient();
 }
