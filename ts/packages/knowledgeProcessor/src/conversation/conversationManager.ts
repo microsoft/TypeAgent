@@ -66,6 +66,7 @@ export interface ConversationManager {
     search(
         query: string,
         termFilters?: TermFilter[] | undefined,
+        labelFilter?: string | undefined,
         fuzzySearchOptions?: SearchOptions | undefined,
         maxMessages?: number | undefined,
         progress?: ((value: any) => void) | undefined,
@@ -81,6 +82,7 @@ export interface ConversationManager {
     getSearchResponse(
         query: string,
         termFilters?: TermFilter[] | undefined,
+        labelFilter?: string | undefined,
         fuzzySearchOptions?: SearchOptions | undefined,
         maxMessages?: number | undefined,
         progress?: ((value: any) => void) | undefined,
@@ -185,6 +187,7 @@ export async function createConversationManager(
     async function search(
         query: string,
         termFilters?: TermFilter[] | undefined,
+        labelFilter?: string | undefined,
         fuzzySearchOptions?: SearchOptions | undefined,
         maxMessages?: number | undefined,
         progress?: ((value: any) => void) | undefined,
@@ -192,6 +195,7 @@ export async function createConversationManager(
         return searchProcessor.searchTerms(
             query,
             termFilters,
+            labelFilter,
             createSearchProcessingSettings(
                 fuzzySearchOptions,
                 maxMessages,
@@ -203,6 +207,7 @@ export async function createConversationManager(
     async function getSearchResponse(
         query: string,
         termFilters?: TermFilter[] | undefined,
+        labelFilter?: string | undefined,
         fuzzySearchOptions?: SearchOptions | undefined,
         maxMessages?: number | undefined,
         progress?: ((value: any) => void) | undefined,
@@ -213,7 +218,12 @@ export async function createConversationManager(
             progress,
         );
         options.skipAnswerGeneration = true;
-        return searchProcessor.searchTerms(query, termFilters, options);
+        return searchProcessor.searchTerms(
+            query,
+            termFilters,
+            labelFilter,
+            options,
+        );
     }
 
     async function generateAnswerForSearchResponse(

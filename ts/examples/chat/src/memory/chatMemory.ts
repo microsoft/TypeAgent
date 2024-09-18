@@ -204,6 +204,7 @@ export async function runChatMemory(): Promise<void> {
                 undefined,
                 undefined,
                 undefined,
+                undefined,
                 (q) => printer.writeJson(q),
             );
             if (results) {
@@ -1128,6 +1129,7 @@ export async function runChatMemory(): Promise<void> {
 
         const result = await searcher.searchTerms(
             query,
+            undefined,
             undefined,
             searchOptions,
         );

@@ -161,8 +161,8 @@ export interface Conversation<
     ): Promise<SearchResponse>;
     searchTerms(
         filters: TermFilter[],
+        labelFilter: string | undefined,
         options: ConversationSearchOptions,
-        messageLabel?: string | undefined,
     ): Promise<SearchResponse>;
     searchMessages(
         query: string,
@@ -787,8 +787,8 @@ export async function createConversation(
 
     async function searchTerms(
         filters: TermFilter[],
+        labelFilter: string | undefined,
         options: ConversationSearchOptions,
-        label?: string | undefined,
     ): Promise<SearchResponse> {
         const [entityIndex, topicIndex, actionIndex] = await Promise.all([
             getEntityIndex(),
@@ -806,6 +806,7 @@ export async function createConversation(
 
             const entityResult = await entityIndex.searchTerms(
                 filter,
+                labelFilter,
                 options.entity,
             );
             results.entities.push(entityResult);

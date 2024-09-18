@@ -184,7 +184,7 @@ export async function testLabels(): Promise<void> {
     const testConversation = await createConversationManager();
     const testMessages = [
         "Bach ate pizza while he wrote fugues",
-        "Bach ate ice cream while he wrote fugues",
+        "Bach did jumping jacks while he wrote fugues",
     ];
     const testLabel = "Bach Food";
     await testConversation.addMessage(
@@ -193,10 +193,29 @@ export async function testLabels(): Promise<void> {
         undefined,
         testLabel,
     );
+    await testConversation.addMessage(testMessages[1]);
+
     const entities = await testConversation.conversation.getEntityIndex();
     const ids = await entities.labels.get(testLabel);
     if (ids && ids.length > 0) {
         console.log(ids);
+    } else {
+        console.log("bug");
+    }
+
+    const query = "What exercise did we talk about?";
+    let matches = await testConversation.search(query);
+    if (matches && matches.response && matches.response.answer) {
+        console.log(matches.response.answer);
+    } else {
+        console.log("bug");
+    }
+
+    matches = await testConversation.search(query, undefined, testLabel);
+    if (matches && matches.response) {
+        if (matches.response.hasEntities()) {
+            console.log("bug");
+        }
     } else {
         console.log("bug");
     }

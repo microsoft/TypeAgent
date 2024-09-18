@@ -54,6 +54,7 @@ export interface ConversationSearchProcessor {
     searchTerms(
         query: string,
         filters: TermFilter[] | undefined,
+        labelFilter: string | undefined,
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponse | undefined>;
     /**
@@ -131,6 +132,7 @@ export function createSearchProcessor(
     async function searchTerms(
         query: string,
         filters: TermFilter[] | undefined,
+        labelFilter: string | undefined,
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponse | undefined> {
         const context = await buildContext();
@@ -163,6 +165,7 @@ export function createSearchProcessor(
         if (rr.action.actionName !== "unknown") {
             rr.response = await handleGetAnswersTerms(
                 query,
+                labelFilter,
                 rr.action,
                 options,
             );
@@ -247,6 +250,7 @@ export function createSearchProcessor(
 
     async function handleGetAnswersTerms(
         query: string,
+        labelFilter: string | undefined,
         action: GetAnswerWithTermsAction,
         options: SearchProcessingOptions,
     ): Promise<SearchResponse> {
@@ -282,6 +286,7 @@ export function createSearchProcessor(
         }
         const response = await conversation.searchTerms(
             action.parameters.filters,
+            labelFilter,
             searchOptions,
         );
         await adjustMessages(query, response, searchOptions, options);

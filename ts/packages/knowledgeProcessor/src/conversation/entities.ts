@@ -67,8 +67,8 @@ export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
     ): Promise<EntitySearchResult<TEntityId>>;
     searchTerms(
         filter: TermFilter,
+        labelFilter: string | undefined,
         options: EntitySearchOptions,
-        messageLabel?: string | undefined,
     ): Promise<EntitySearchResult<TEntityId>>;
     loadSourceIds(
         sourceIdLog: TemporalLog<TSourceId>,
@@ -297,8 +297,8 @@ export async function createEntityIndex<TSourceId = string>(
 
     async function searchTerms(
         filter: TermFilter,
+        labelFilter: string | undefined,
         options: EntitySearchOptions,
-        messageLabel?: string | undefined,
     ): Promise<EntitySearchResult<EntityId>> {
         const results = createSearchResults();
         if (filter.timeRange) {
@@ -338,8 +338,8 @@ export async function createEntityIndex<TSourceId = string>(
                 ),
             ];
         }
-        const labelIds = messageLabel
-            ? await entityStore.labels.get(messageLabel)
+        const labelIds = labelFilter
+            ? await entityStore.labels.get(labelFilter)
             : undefined;
         if (labelIds) {
             results.entityIds = intersectArrays(results.entityIds, labelIds);
