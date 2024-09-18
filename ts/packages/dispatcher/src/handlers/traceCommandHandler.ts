@@ -1,11 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommandHandler } from "@typeagent/agent-sdk/helpers/commands";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import registerDebug from "debug";
 import { ActionContext } from "@typeagent/agent-sdk";
-import { displaySuccess } from "./common/interactiveIO.js";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
+import { displaySuccess } from "@typeagent/agent-sdk/helpers/display";
 
 function toNamespace(regexp: RegExp) {
     return regexp

@@ -6,7 +6,7 @@ import {
     AppAgentCommandInterface,
     CommandDescriptor,
     CommandDescriptorTable,
-} from "./agentInterface.js";
+} from "../agentInterface.js";
 
 export interface CommandHandler extends CommandDescriptor {
     run(

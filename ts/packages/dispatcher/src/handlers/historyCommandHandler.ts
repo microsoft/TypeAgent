@@ -4,10 +4,10 @@
 import {
     CommandHandler,
     CommandHandlerTable,
-} from "@typeagent/agent-sdk/helpers/commands";
+} from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
-import { displayResult } from "./common/interactiveIO.js";
+import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 
 export class HistoryListCommandHandler implements CommandHandler {
     public readonly description = "List history";

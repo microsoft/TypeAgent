@@ -23,18 +23,20 @@ import {
 } from "./calendarQueryHelper.js";
 import {
     SessionContext,
-    createActionResultFromTextDisplay,
-    createActionResultFromHtmlDisplay,
-    createActionResultFromError,
     AppAction,
     AppAgent,
     ActionContext,
 } from "@typeagent/agent-sdk";
 import {
+    createActionResultFromTextDisplay,
+    createActionResultFromHtmlDisplay,
+    createActionResultFromError,
+} from "@typeagent/agent-sdk/helpers/action";
+import {
     CommandHandler,
     CommandHandlerTable,
     getCommandInterface,
-} from "@typeagent/agent-sdk/helpers/commands";
+} from "@typeagent/agent-sdk/helpers/command";
 
 export class CalendarClientLoginCommandHandler implements CommandHandler {
     public readonly description = "Log into the MS Graph to access calendar";

@@ -17,18 +17,18 @@ import {
     Entity,
 } from "typeagent";
 import { ChatModel, bing, openai } from "aiclient";
+import { PromptSection } from "typechat";
 import {
     ActionContext,
     AppAgent,
-    createActionResultNoDisplay,
-    ActionResultSuccess,
-} from "@typeagent/agent-sdk";
-import { PromptSection } from "typechat";
-import {
     AppAction,
     ActionResult,
-    createActionResult,
+    ActionResultSuccess,
 } from "@typeagent/agent-sdk";
+import {
+    createActionResult,
+    createActionResultNoDisplay,
+} from "@typeagent/agent-sdk/helpers/action";
 import { fileURLToPath } from "node:url";
 import { conversation as Conversation } from "knowledge-processor";
 

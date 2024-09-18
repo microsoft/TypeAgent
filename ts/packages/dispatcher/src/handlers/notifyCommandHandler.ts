@@ -4,7 +4,7 @@
 import {
     CommandHandler,
     CommandHandlerTable,
-} from "@typeagent/agent-sdk/helpers/commands";
+} from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import { NotifyCommands } from "./common/interactiveIO.js";
 import { ActionContext } from "@typeagent/agent-sdk";

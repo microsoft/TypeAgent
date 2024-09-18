@@ -8,8 +8,8 @@ import {
   AppActionWithParameters,
   AppAgent,
   SessionContext,
-  createActionResult,
 } from "@typeagent/agent-sdk";
+import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import {
   getBoardSchema,
