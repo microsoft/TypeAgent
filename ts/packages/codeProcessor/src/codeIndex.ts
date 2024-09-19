@@ -7,7 +7,7 @@ import {
     createObjectFolder,
     createSemanticIndex,
 } from "typeagent";
-import { CodeBlock } from "./code.js";
+import { CodeBlock, StoredCodeBlock } from "./code.js";
 import { CodeReviewer } from "./codeReviewer.js";
 import { TextEmbeddingModel } from "aiclient";
 import path from "path";
@@ -71,8 +71,3 @@ export async function createSemanticCodeIndex(
         return codeIndex.store.remove(name);
     }
 }
-
-export type StoredCodeBlock = {
-    code: CodeBlock;
-    sourcePath?: string | undefined;
-};

@@ -942,6 +942,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
+      knowledge-processor:
+        specifier: workspace:*
+        version: link:../knowledgeProcessor
       typeagent:
         specifier: workspace:*
         version: link:../typeagent

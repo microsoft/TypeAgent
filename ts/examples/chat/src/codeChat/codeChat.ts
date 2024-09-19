@@ -2,12 +2,7 @@
 // Licensed under the MIT License.
 
 // import ts from "typescript";
-import {
-    getAbsolutePath,
-    readAllLines,
-    asyncArray,
-    removeDir,
-} from "typeagent";
+import { asyncArray, removeDir } from "typeagent";
 import {
     CommandHandler,
     CommandMetadata,
@@ -17,7 +12,6 @@ import {
     runConsole,
 } from "interactive-app";
 import {
-    CodeReview,
     BreakPointSuggestions,
     CodeAnswer,
     createCodeReviewer,
@@ -25,23 +19,17 @@ import {
     tsCode,
     CodeDocumentation,
     createSemanticCodeIndex,
-    Module,
     StoredCodeBlock,
 } from "code-processor";
 import { CodePrinter } from "./codePrinter.js";
 import path from "path";
 import { openai } from "aiclient";
-import ts from "typescript";
 import chalk from "chalk";
 import { pathToFileURL } from "url";
+import { getSourcePath, loadTypescriptCode, sampleFiles } from "./common.js";
 
 export async function runCodeChat(): Promise<void> {
     const codeReviewer = createCodeReviewer();
-    const sampleFiles = {
-        snippet: "../../src/codeChat/testCode/snippet.ts",
-        testCode: "../../src/codeChat/testCode/testCode.ts",
-    };
-    const sampleModuleDir = "../../dist/codeChat/testCode";
     // For answer/code indexing examples
     const folderPath = "/data/code";
     const vectorModel = openai.createEmbeddingModel();
@@ -107,7 +95,7 @@ export async function runCodeChat(): Promise<void> {
         }
         // Run a code review
         const review = await codeReviewer.review(code.sourceText);
-        printCodeReview(code.sourceText, review);
+        printer.writeFullCodeReview(code.sourceText, review);
     }
 
     function debugDef(): CommandMetadata {
@@ -155,7 +143,7 @@ export async function runCodeChat(): Promise<void> {
             code.sourceText,
             code.modules,
         );
-        printCodeReview(code.sourceText, review);
+        printer.writeFullCodeReview(code.sourceText, review);
     }
 
     function breakpointDef(): CommandMetadata {
@@ -389,11 +377,6 @@ export async function runCodeChat(): Promise<void> {
         }
     }
 
-    function getSourcePath(sourcePath?: string): string {
-        sourcePath ??= sampleFiles.testCode;
-        return getAbsolutePath(sourcePath, import.meta.url);
-    }
-
     function loadCodeChunks(
         sourcePath?: string,
         chunkSize: number = 2048,
@@ -411,14 +394,6 @@ export async function runCodeChat(): Promise<void> {
             codeReviewer,
             vectorModel,
         );
-    }
-
-    function printCodeReview(lines: string[], review: CodeReview): void {
-        printer.writeHeading("\nCODE REVIEW\n");
-        for (let i = 0; i < lines.length; ++i) {
-            printer.writeCodeReview(lines[i], i + 1, review);
-            printer.writeCodeLine(i + 1, lines[i]);
-        }
     }
 
     function printBreakpoints(
@@ -466,47 +441,5 @@ export async function runCodeChat(): Promise<void> {
                 );
             }
         }
-    }
-
-    function isSampleFile(sourceFile: string): boolean {
-        sourceFile = sourceFile.toLowerCase();
-        for (const value of Object.values(sampleFiles)) {
-            if (value.toLowerCase() === sourceFile) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    type TypeScriptCode = {
-        sourcePath: string;
-        sourceText: string[];
-        sourceCode: ts.SourceFile;
-        modules: Module[] | undefined;
-    };
-
-    async function loadTypescriptCode(
-        sourceFile: string,
-        moduleDir?: string | undefined,
-    ): Promise<TypeScriptCode> {
-        const sourcePath = getAbsolutePath(sourceFile, import.meta.url);
-        const sourceText = await readAllLines(sourcePath); // Load lines of code
-        const sourceCode = await tsCode.loadSourceFile(sourcePath);
-        if (!moduleDir && isSampleFile(sourceFile)) {
-            moduleDir = sampleModuleDir;
-        }
-        let modules = moduleDir
-            ? await tsCode.loadImports(
-                  sourceCode,
-                  getAbsolutePath(moduleDir, import.meta.url),
-              )
-            : undefined;
-
-        return {
-            sourcePath,
-            sourceText,
-            sourceCode,
-            modules,
-        };
     }
 }

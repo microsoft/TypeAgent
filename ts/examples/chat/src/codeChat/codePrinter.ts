@@ -15,6 +15,7 @@ import {
     RelevantLine,
 } from "code-processor";
 import chalk from "chalk";
+import { pathToFileURL } from "url";
 
 export class CodePrinter extends ChatPrinter {
     constructor(io: InteractiveIo) {
@@ -128,6 +129,20 @@ export class CodePrinter extends ChatPrinter {
             if (relevantLine) {
                 this.writeDocLine(relevantLine);
             }
+        }
+    }
+
+    public writeFullCodeReview(lines: string[], review: CodeReview): void {
+        this.writeHeading("\nCODE REVIEW\n");
+        for (let i = 0; i < lines.length; ++i) {
+            this.writeCodeReview(lines[i], i + 1, review);
+            this.writeCodeLine(i + 1, lines[i]);
+        }
+    }
+
+    public writeSourceLink(sourcePath: string | undefined): void {
+        if (sourcePath) {
+            this.writeInColor(chalk.gray, pathToFileURL(sourcePath).toString());
         }
     }
 }

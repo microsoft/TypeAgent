@@ -120,7 +120,7 @@
             "outFiles": [
                 "${workspaceFolder}/**/*.js"
             ],
-            //"args": ["code"]
+            "args": ["codeMemory"]
         },
         {
             "name": "Launch YOUR Example",
