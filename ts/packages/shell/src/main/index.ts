@@ -662,20 +662,19 @@ function zoomOut(mainWindow: BrowserWindow) {
 const isMac = process.platform === "darwin";
 
 function setupZoomHandlers(mainWindow: BrowserWindow) {
-    // For some reason zoom out's Ctrl+- accelerator doesn't work. Manually handle it.
     mainWindow.webContents.on("before-input-event", (_event, input) => {
         if ((isMac ? input.meta : input.control) && input.type === "keyDown") {
-            // In addition to CmdOrCtrl+= accelerator
             if (
-                input.key == "NumpadAdd" ||
-                input.key == "+" ||
-                input.key == "="
+                input.key === "NumpadAdd" ||
+                input.key === "+" ||
+                input.key === "="
             ) {
                 zoomIn(mainWindow);
-            } else if (input.key == "-" || input.key == "NumpadMinus") {
-                // REVIEW: accelerator doesn't work for CmdOrCtrl+-. Handle manually.
-                // Handle both regular and numpad minus
+            } else if (input.key === "-" || input.key === "NumpadMinus") {
                 zoomOut(mainWindow);
+            } else if (input.key === "0") {
+                mainWindow.webContents.zoomLevel = 0;
+                ShellSettings.getinstance().set("zoomLevel", 0);
             }
         }
     });
