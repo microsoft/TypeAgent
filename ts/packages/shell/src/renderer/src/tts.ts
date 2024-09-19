@@ -5,7 +5,6 @@ import registerDebug from "debug";
 import * as speechSDK from "microsoft-cognitiveservices-speech-sdk";
 import { getSpeechConfig } from "./speech";
 import { getSpeechToken } from "./speechToken";
-import { PhaseTiming } from "agent-dispatcher";
 
 const debug = registerDebug("typeagent:shell:tts");
 const debugError = registerDebug("typeagent:shell:tts:error");
@@ -16,7 +15,10 @@ export const enum TTSProvider {
 }
 
 export type TTS = {
-    speak(text: string): Promise<PhaseTiming | undefined>;
+    speak(
+        text: string,
+        cbAudioStart?: () => void,
+    ): Promise<TTSMetrics | undefined>;
     stop(): void;
 };
 
@@ -70,6 +72,11 @@ type PlayQueueItem = {
     play: () => void;
 };
 
+export type TTSMetrics = {
+    firstChunkTime?: number;
+    duration: number;
+};
+
 function getAzureTTSProvider(voiceName?: string): TTS | undefined {
     let current: PlayQueueItem | undefined = undefined;
     let playQueue: PlayQueueItem[] = [];
@@ -91,8 +98,8 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
         },
         speak: async (
             text: string,
-            voiceStyle?: string,
-        ): Promise<PhaseTiming> => {
+            cbAudioStart?: () => void,
+        ): Promise<TTSMetrics> => {
             const cancelId = currentCancelId;
             const callId = nextId++;
             const id = `${cancelId}:${callId}`;
@@ -146,6 +153,9 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
                 }
             };
 
+            if (cbAudioStart) {
+                audioDestination.onAudioStart = cbAudioStart;
+            }
             audioDestination.onAudioEnd = finish;
 
             const item = {
@@ -185,9 +195,7 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
                 }
             };
 
-            return new Promise<PhaseTiming>((resolve, reject) => {
-                let timing: PhaseTiming | undefined;
-
+            return new Promise<TTSMetrics>((resolve, reject) => {
                 const ssml = `
                 <speak
                     version='1.0'
@@ -196,7 +204,7 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
                     xml:lang='en-US'
                 >
                     <voice name='${voiceName ?? defaultVoiceName}'>
-                        <mstts:express-as style='${voiceStyle ?? defaultVoiceStyle}'>
+                        <mstts:express-as style='${defaultVoiceStyle}'>
                             ${text}
                         </mstts:express-as>
                     </voice>
@@ -211,18 +219,11 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
                             speechSDK.ResultReason.SynthesizingAudioCompleted
                         ) {
                             debug(`${id}: Synthesis Success`, result);
-                            timing = {
+
+                            resolve({
                                 duration: performance.now() - start,
-                            };
-                            if (firstChunkTime !== undefined) {
-                                timing.marks = {
-                                    "First Chunk": {
-                                        duration: firstChunkTime,
-                                        count: 1,
-                                    },
-                                };
-                            }
-                            resolve(timing);
+                                firstChunkTime,
+                            });
 
                             if (result.audioDuration === 0) {
                                 // If the audio is empty, onAudioEnd won't be called
