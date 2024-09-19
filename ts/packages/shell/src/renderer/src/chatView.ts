@@ -495,7 +495,10 @@ class MessageContainer {
         return this.metricsDiv;
     }
 
-    public updateMainMetrics(metrics: PhaseTiming, total?: number) {
+    public updateMainMetrics(metrics?: PhaseTiming, total?: number) {
+        if (metrics === undefined && total === undefined) {
+            return;
+        }
         const metricsDiv = this.ensureMetricsDiv();
         updateMetrics(
             metricsDiv.mainMetricsDiv,
@@ -735,21 +738,20 @@ class MessageGroup {
                 );
             }
 
-            if (metrics.command !== undefined) {
-                this.statusMessage?.updateMainMetrics(metrics.command);
-            }
+            this.statusMessage?.updateMainMetrics(
+                metrics.command,
+                this.agentMessages.length === 0 ? metrics.duration : undefined,
+            );
 
             for (let i = 0; i < this.agentMessages.length; i++) {
                 const agentMessage = this.agentMessages[i];
                 const info = metrics.actions[i];
-                if (info !== undefined) {
-                    agentMessage.updateMainMetrics(
-                        info,
-                        i === this.agentMessages.length - 1
-                            ? metrics.duration
-                            : undefined,
-                    );
-                }
+                agentMessage.updateMainMetrics(
+                    info,
+                    i === this.agentMessages.length - 1
+                        ? metrics.duration
+                        : undefined,
+                );
             }
         }
     }
@@ -942,14 +944,14 @@ function updateMetrics(
     mainMetricsDiv: HTMLDivElement,
     markMetricsDiv: HTMLDivElement,
     name: string,
-    metrics: PhaseTiming,
+    metrics?: PhaseTiming,
     total?: number,
 ) {
     // clear out previous perf data
     mainMetricsDiv.innerHTML = "";
     markMetricsDiv.innerHTML = "";
 
-    if (metrics.marks) {
+    if (metrics?.marks) {
         const messages: string[] = [];
         for (const [key, value] of Object.entries(metrics.marks)) {
             const { duration, count } = value;
@@ -957,14 +959,14 @@ function updateMetrics(
         }
         markMetricsDiv.innerHTML = messages.join("<br>");
     }
-    if (metrics.duration) {
-        const messages: string[] = [];
+    const messages: string[] = [];
+    if (metrics?.duration) {
         messages.push(metricsString(`${name} Elapsed Time`, metrics.duration));
-        if (total !== undefined) {
-            messages.push(metricsString("Total Elapsed Time", total));
-        }
-        mainMetricsDiv.innerHTML = messages.join("<br>");
     }
+    if (total !== undefined) {
+        messages.push(metricsString("Total Elapsed Time", total));
+    }
+    mainMetricsDiv.innerHTML = messages.join("<br>");
 }
 
 function formatTimeReaderFriendly(time: number) {
