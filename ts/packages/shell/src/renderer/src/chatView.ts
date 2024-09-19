@@ -1121,25 +1121,29 @@ export class ChatView {
                                 ".chat-message-user:not(.chat-message-hidden) .chat-message-content",
                             );
 
-                            if (
-                                ev.key == "ArrowUp" &&
-                                this.commandBackStackIndex < messages.length - 1
-                            ) {
-                                this.commandBackStackIndex++;
-                            } else if (
-                                ev.key == "ArrowDown" &&
-                                this.commandBackStackIndex > -1
-                            ) {
-                                this.commandBackStackIndex--;
-                            }
+                            if (messages.length !== 0) {
+                                if (
+                                    ev.key == "ArrowUp" &&
+                                    this.commandBackStackIndex <
+                                        messages.length - 1
+                                ) {
+                                    this.commandBackStackIndex++;
+                                } else if (
+                                    ev.key == "ArrowDown" &&
+                                    this.commandBackStackIndex > -1
+                                ) {
+                                    this.commandBackStackIndex--;
+                                }
 
-                            if (this.commandBackStackIndex == -1) {
-                                this.chatInput.clear();
-                            } else if (messages.length > 0) {
-                                this.chatInput.textarea.textEntry.textContent =
-                                    messages[
-                                        this.commandBackStackIndex
-                                    ].textContent;
+                                if (this.commandBackStackIndex == -1) {
+                                    this.chatInput.clear();
+                                } else {
+                                    const content =
+                                        messages[this.commandBackStackIndex]
+                                            .textContent;
+                                    this.chatInput.textarea.setContent(content);
+                                }
+                                return false;
                             }
                         }
                     }
