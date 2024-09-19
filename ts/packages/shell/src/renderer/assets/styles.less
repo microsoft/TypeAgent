@@ -268,7 +268,7 @@ img {
 .chat-message-metrics {
   margin: 0px;
   border-radius: 0px 0px 8px 8px;
-  font-size: 8px;
+  font-size: 10px;
   font-style: normal;
   z-index: 100;
   text-align: right;
@@ -289,6 +289,10 @@ img {
   .chat-message-body;
 }
 .chat-message-body-hide-metrics .chat-message-metrics {
+  display: none;
+}
+
+.chat-message-body-hide-metrics .tts-metrics {
   display: none;
 }
 
@@ -314,14 +318,17 @@ img {
   }
 }
 
-.metrics-tts {
-  text-align: left;
-}
-
 .metrics-details {
   display: inline-flex;
-  margin: 5px;
   justify-content: space-between;
+  width: 100%;
+  margin-top: 5px;
+  margin-bottom: 5px;
+}
+
+.metrics-details > div {
+  margin-left: 5px;
+  margin-right: 5px;
 }
 
 .chat-message-hidden {

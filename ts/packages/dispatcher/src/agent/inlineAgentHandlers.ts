@@ -116,9 +116,9 @@ class HelpCommandHandler implements CommandHandler {
                     const subCommand =
                         command === ""
                             ? "command of"
-                            : `subcommand of ${result.command.join(" ")} in`;
+                            : `subcommand of '${result.command.join(" ")}' in`;
                     throw new Error(
-                        `'${result.args[0]}' is not a '${subCommand}' app agent '${result.appAgentName}'`,
+                        `'${result.args[0]}' is not a ${subCommand} app agent '${result.appAgentName}'`,
                     );
                 }
             }

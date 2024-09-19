@@ -75,6 +75,24 @@ export class ExpandableTextarea {
         return this.textEntry;
     }
 
+    setContent(content: string | null) {
+        if (this.textEntry.textContent !== content) {
+            this.textEntry.textContent = content;
+        }
+
+        // Set the cursor to the end of the text
+        setTimeout(() => {
+            const r = document.createRange();
+            r.selectNodeContents(this.textEntry);
+            r.collapse(false);
+            const s = document.getSelection();
+            if (s) {
+                s.removeAllRanges();
+                s.addRange(r);
+            }
+        }, 0);
+    }
+
     send(sendButton?: HTMLButtonElement) {
         const text = this.getTextEntry().innerHTML;
         if (text.length > 0) {
