@@ -268,6 +268,13 @@ class InteractiveApp {
                 `To run a command, prefix its name with: ${this._settings.commandPrefix}\n`,
             );
         }
+        if (this._settings.handlers) {
+            if (this._settings.handlers.help !== undefined) {
+                this.stdio.stdout.write(
+                    "Type @help to get help on available commands.\n",
+                );
+            }
+        }
     }
 }
 
@@ -640,8 +647,10 @@ export function addStandardHandlers(
     handlers: Record<string, CommandHandler>,
 ): void {
     handlers.help = help;
+    handlers.help.metadata = "Display help";
     handlers["--?"] = help;
     handlers.commands = commands;
+    handlers.commands.metadata = "List all commands";
     handlers.cls = cls;
     handlers.cls.metadata = "Clear the screen";
 
