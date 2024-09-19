@@ -22,6 +22,14 @@ export class CodePrinter extends ChatPrinter {
         super(io);
     }
 
+    public writeCode(lines: string | string[]): void {
+        if (typeof lines === "string") {
+            this.writeInColor(chalk.cyanBright, lines);
+        } else {
+            this.writeCodeLines(lines);
+        }
+    }
+
     public writeCodeLines(lines: string[]): void {
         for (let i = 0; i < lines.length; ++i) {
             this.writeCodeLine(i + 1, lines[i]);
@@ -144,5 +152,9 @@ export class CodePrinter extends ChatPrinter {
         if (sourcePath) {
             this.writeInColor(chalk.gray, pathToFileURL(sourcePath).toString());
         }
+    }
+
+    public writeScore(score: number): void {
+        this.writeInColor(chalk.green, `[${score}]`);
     }
 }

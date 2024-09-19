@@ -44,6 +44,7 @@ export async function runCodeMemory(): Promise<void> {
         clearMemory,
         codeReview,
         codeImport,
+        codeSearch,
         bugs,
         comments,
     };
@@ -139,6 +140,35 @@ export async function runCodeMemory(): Promise<void> {
                 }
             },
         );
+    }
+
+    function codeSearchDef(): CommandMetadata {
+        return {
+            description: "Search for code in memory",
+            args: {
+                query: argQuery(),
+            },
+            options: {
+                maxMatches: argMaxMatches(),
+                minScore: argMinScore(),
+            },
+        };
+    }
+    handlers.codeSearch.metadata = codeSearchDef();
+    async function codeSearch(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, codeSearchDef());
+        const matches = await developerMemory.searchCode(
+            namedArgs.query,
+            namedArgs.maxMatches,
+            namedArgs.minScore,
+        );
+        for (const match of matches) {
+            printer.writeScore(match.score);
+            const storedCode = await developerMemory.getById(match.item);
+            if (storedCode) {
+                printer.writeCode(storedCode.code.code);
+            }
+        }
     }
 
     function bugsDef(): CommandMetadata {
