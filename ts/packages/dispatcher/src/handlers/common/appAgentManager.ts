@@ -17,7 +17,7 @@ import { createSessionContext } from "../../action/actionHandlers.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 import registerDebug from "debug";
 import { getTranslatorActionInfo } from "../../translation/actionInfo.js";
-import { DeepPartialUndefined } from "common-utils";
+import { DeepPartialUndefinedAndNull } from "common-utils";
 
 const debug = registerDebug("typeagent:agents");
 const debugError = registerDebug("typeagent:agents:error");
@@ -36,14 +36,16 @@ type AppAgentRecord = {
 };
 
 export type AppAgentState = {
-    translators?: Record<string, boolean> | undefined;
-    actions?: Record<string, boolean> | undefined;
-    commands?: Record<string, boolean> | undefined;
+    translators: Record<string, boolean> | undefined;
+    actions: Record<string, boolean> | undefined;
+    commands: Record<string, boolean> | undefined;
 };
 
+export type AppAgentStateOptions = DeepPartialUndefinedAndNull<AppAgentState>;
+
 function getEffectiveValue(
-    force: DeepPartialUndefined<AppAgentState> | undefined,
-    overrides: DeepPartialUndefined<AppAgentState> | undefined,
+    force: AppAgentStateOptions | undefined,
+    overrides: AppAgentStateOptions | undefined,
     kind: "translators" | "actions" | "commands",
     name: string,
     useDefault: boolean,
@@ -52,27 +54,16 @@ function getEffectiveValue(
 ): boolean {
     const forceState = force?.[kind];
     if (forceState !== undefined) {
-        // false if the value is missing.
-        return forceState[name] ?? false;
+        // false if forceState is null or the value is missing.
+        return forceState?.[name] ?? false;
     }
-    if (overrides !== undefined && overrides.hasOwnProperty(kind)) {
-        const state = overrides[kind];
-        if (state === undefined) {
-            // explicit undefined means to use default;
-            return defaultValue;
-        }
 
-        if (state.hasOwnProperty(name)) {
-            const enabled = state[name];
-            if (enabled === undefined) {
-                // explicit undefined means to use default;
-                return defaultValue;
-            }
-            return enabled;
-        }
+    const enabled = overrides?.[kind]?.[name];
+    if (enabled === undefined) {
+        return useDefault ? defaultValue : currentValue;
     }
-    // no explicit value
-    return useDefault ? defaultValue : currentValue;
+    // null means default value
+    return enabled ?? defaultValue;
 }
 
 export type SetStateResult = {
@@ -204,8 +195,8 @@ export class AppAgentManager implements TranslatorConfigProvider {
 
     public async setState(
         context: CommandHandlerContext,
-        overrides?: DeepPartialUndefined<AppAgentState>,
-        force?: DeepPartialUndefined<AppAgentState>,
+        overrides?: AppAgentStateOptions,
+        force?: AppAgentStateOptions,
         useDefault: boolean = true,
     ): Promise<SetStateResult> {
         const changedTranslators: [string, boolean][] = [];
