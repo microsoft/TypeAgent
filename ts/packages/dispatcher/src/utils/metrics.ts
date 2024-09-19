@@ -106,24 +106,7 @@ export class RequestMetricsManager {
         const commandDuration = totalDuration(commandMeasures);
 
         let parseDuration: number | undefined = commandDuration;
-
-        const executeCommandMeasures = reader.getMeasures(
-            ProfileNames.executeCommand,
-        );
-
         let command: PhaseTiming | undefined;
-        if (executeCommandMeasures) {
-            // Exclude the execution time from parse time.
-            parseDuration = minStart(executeCommandMeasures) - commandStart;
-
-            const executeCommandDuration = totalDuration(
-                executeCommandMeasures,
-            );
-            if (executeCommandDuration !== undefined) {
-                command = { duration: executeCommandDuration };
-            }
-        }
-
         const actions: PhaseTiming[] = [];
         const requestMeasures = reader.getMeasures(ProfileNames.request);
         if (requestMeasures !== undefined) {
@@ -133,7 +116,7 @@ export class RequestMetricsManager {
             );
 
             if (actionMeasures !== undefined) {
-                // Exclude the action time from parse time.
+                // Includes translation time by exclude the action time.
                 parseDuration = minStart(actionMeasures) - commandStart;
                 for (const actionMeasure of actionMeasures) {
                     if (actionMeasure.duration === undefined) {
@@ -145,14 +128,28 @@ export class RequestMetricsManager {
                     }
                     actions[index].duration! += actionMeasure.duration;
                 }
-            } else {
-                // Include translation time.
-                parseDuration = commandDuration;
+            }
+        } else {
+            // For non request command
+            const executeCommandMeasures = reader.getMeasures(
+                ProfileNames.executeCommand,
+            );
+
+            if (executeCommandMeasures) {
+                // Exclude the execution time from parse time.
+                parseDuration = minStart(executeCommandMeasures) - commandStart;
+
+                const executeCommandDuration = totalDuration(
+                    executeCommandMeasures,
+                );
+                if (executeCommandDuration !== undefined) {
+                    command = { duration: executeCommandDuration };
+                }
             }
         }
 
         const parse: PhaseTiming = {
-            duration: parseDuration ?? commandDuration,
+            duration: parseDuration,
         };
 
         const firstToken = totalMarkDuration(
