@@ -140,6 +140,13 @@ export class CodePrinter extends ChatPrinter {
         }
     }
 
+    public writeAllDocs(lines: string[], docs: CodeDocumentation): void {
+        for (let i = 0; i < lines.length; ++i) {
+            this.writeDocs(lines[i], i + 1, docs);
+            this.writeCodeLine(i + 1, lines[i]);
+        }
+    }
+
     public writeFullCodeReview(lines: string[], review: CodeReview): void {
         this.writeHeading("\nCODE REVIEW\n");
         for (let i = 0; i < lines.length; ++i) {
@@ -150,11 +157,20 @@ export class CodePrinter extends ChatPrinter {
 
     public writeSourceLink(sourcePath: string | undefined): void {
         if (sourcePath) {
-            this.writeInColor(chalk.gray, pathToFileURL(sourcePath).toString());
+            this.writeInColor(
+                chalk.blueBright,
+                pathToFileURL(sourcePath).toString(),
+            );
         }
     }
 
     public writeScore(score: number): void {
         this.writeInColor(chalk.green, `[${score}]`);
+    }
+
+    public writeTimestamp(timestamp?: Date): void {
+        if (timestamp) {
+            this.writeInColor(chalk.gray, timestamp.toString());
+        }
     }
 }

@@ -17,7 +17,6 @@ import {
     createCodeReviewer,
     codeToLines,
     tsCode,
-    CodeDocumentation,
     createSemanticCodeIndex,
     StoredCodeBlock,
 } from "code-processor";
@@ -26,7 +25,12 @@ import path from "path";
 import { openai } from "aiclient";
 import chalk from "chalk";
 import { pathToFileURL } from "url";
-import { getSourcePath, loadTypescriptCode, sampleFiles } from "./common.js";
+import {
+    getSourcePath,
+    loadCodeChunks,
+    loadTypescriptCode,
+    sampleFiles,
+} from "./common.js";
 
 export async function runCodeChat(): Promise<void> {
     const codeReviewer = createCodeReviewer();
@@ -264,7 +268,7 @@ export async function runCodeChat(): Promise<void> {
                 codeReviewer.document({ code, language: "typescript" }),
             (code, index, docs) => {
                 const lines = codeToLines(code);
-                printDocs(lines, docs);
+                printer.writeAllDocs(lines, docs);
                 printer.writeLine();
             },
         );
@@ -376,14 +380,6 @@ export async function runCodeChat(): Promise<void> {
         }
     }
 
-    function loadCodeChunks(
-        sourcePath?: string,
-        chunkSize: number = 2048,
-    ): Promise<string[]> {
-        const fullPath = getSourcePath(sourcePath);
-        return tsCode.loadChunksFromFile(fullPath, chunkSize);
-    }
-
     async function ensureCodeIndex(createNew: boolean = false) {
         if (createNew) {
             await removeDir(codeIndexPath);
@@ -414,13 +410,6 @@ export async function runCodeChat(): Promise<void> {
         }
         for (let i = 0; i < lines.length; ++i) {
             printer.writeAnswer(lines[i], i + 1, answer);
-            printer.writeCodeLine(i + 1, lines[i]);
-        }
-    }
-
-    function printDocs(lines: string[], docs: CodeDocumentation): void {
-        for (let i = 0; i < lines.length; ++i) {
-            printer.writeDocs(lines[i], i + 1, docs);
             printer.writeCodeLine(i + 1, lines[i]);
         }
     }

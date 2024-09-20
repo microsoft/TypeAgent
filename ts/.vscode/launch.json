@@ -121,6 +121,7 @@
                 "${workspaceFolder}/**/*.js"
             ],
             "args": ["codeMemory"]
+            //"args": ["code"]
         },
         {
             "name": "Launch YOUR Example",

@@ -53,6 +53,14 @@ export async function loadTypescriptCode(
     };
 }
 
+export function loadCodeChunks(
+    sourcePath?: string,
+    chunkSize: number = 2048,
+): Promise<string[]> {
+    const fullPath = getSourcePath(sourcePath);
+    return tsCode.loadChunksFromFile(fullPath, chunkSize);
+}
+
 export function createTypescriptBlock(
     typescriptCode: string | TypeScriptCode,
     sourcePath?: string,
@@ -80,7 +88,7 @@ export function getSourcePath(sourcePath?: string): string {
     return getAbsolutePath(sourcePath, import.meta.url);
 }
 
-export function argSourcePath(): ArgDef {
+export function argSourceFile(): ArgDef {
     return {
         description: "Path to source file",
         type: "path",
@@ -130,5 +138,13 @@ export function argMinScore(): ArgDef {
         description: "Min query match score",
         type: "number",
         defaultValue: 0.7,
+    };
+}
+
+export function argCount(count = Number.MAX_SAFE_INTEGER): ArgDef {
+    return {
+        description: "Max items to display",
+        type: "number",
+        defaultValue: count,
     };
 }

@@ -4,6 +4,7 @@ import {
     codeBlockNameFromFilePath,
     codeBlockNameToString,
     CodeReviewIndex,
+    codeToLines,
     createCodeReviewer,
     createDeveloperMemory,
     ExtractedCodeReview,
@@ -21,13 +22,15 @@ import {
 } from "interactive-app";
 import {
     argConcurrency,
+    argCount,
     argMaxMatches,
     argMinScore,
     argQuery,
-    argSourcePath,
+    argSourceFile,
     argVerbose,
     createTypescriptBlock,
     getSourcePath,
+    loadCodeChunks,
     loadTypescriptCode,
     TypeScriptCode,
 } from "./common.js";
@@ -45,6 +48,7 @@ export async function runCodeMemory(): Promise<void> {
     const handlers: Record<string, CommandHandler> = {
         clearMemory,
         codeReview,
+        codeDocument,
         codeImport,
         codeSearch,
         bugs,
@@ -76,7 +80,7 @@ export async function runCodeMemory(): Promise<void> {
         return {
             description: "Review the given Typescript file",
             options: {
-                sourceFile: argSourcePath(),
+                sourceFile: argSourceFile(),
                 verbose: argVerbose(),
                 save: {
                     type: "boolean",
@@ -110,11 +114,50 @@ export async function runCodeMemory(): Promise<void> {
         await developerMemory.addReview(codeId, review);
     }
 
+    function codeDocumentDef(): CommandMetadata {
+        return {
+            description: "Document given code",
+            options: {
+                sourceFile: argSourceFile(),
+                concurrency: argConcurrency(2),
+            },
+        };
+    }
+    handlers.codeDocument.metadata = codeDocumentDef();
+    async function codeDocument(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, codeDocumentDef());
+        const functions = await loadCodeChunks(namedArgs.sourceFile);
+        const concurrency = namedArgs.concurrency;
+        for (let i = 0; i < functions.length; i += concurrency) {
+            let slice = functions.slice(i, i + concurrency);
+            if (slice.length === 0) {
+                break;
+            }
+            printer.writeInColor(
+                chalk.gray,
+                `[Documenting functions ${i + 1} to ${i + slice.length}] / ${functions.length}`,
+            );
+            const results = await asyncArray.mapAsync(
+                slice,
+                concurrency,
+                (code) =>
+                    codeReviewer.document({ code, language: "typescript" }),
+            );
+            for (let r = 0; r < results.length; ++r) {
+                const docs = results[r];
+                const code = slice[r];
+                const lines = codeToLines(code);
+                printer.writeAllDocs(lines, docs);
+                printer.writeLine();
+            }
+        }
+    }
+
     function codeImportDef(): CommandMetadata {
         return {
             description: "Import code into developer memory",
             options: {
-                sourceFile: argSourcePath(),
+                sourceFile: argSourceFile(),
                 concurrency: argConcurrency(),
             },
         };
@@ -192,6 +235,7 @@ export async function runCodeMemory(): Promise<void> {
                 query: argQuery(),
                 maxMatches: argMaxMatches(),
                 minScore: argMinScore(),
+                count: argCount(),
             },
         };
     }
@@ -274,9 +318,20 @@ export async function runCodeMemory(): Promise<void> {
     async function showReviews(
         index: CodeReviewIndex,
         callback: (line: LineReview) => void,
+        count: number = Number.MAX_SAFE_INTEGER,
     ) {
-        for await (const entry of index.store.entries()) {
-            await printReview(index, entry, callback);
+        let counter = 0;
+        for await (const entry of index.store.sequence.newestObjects()) {
+            ++counter;
+            printer.write(`[${counter}] `);
+            printer.writeTimestamp(entry.timestamp);
+            const review = await index.store.get(entry.value[0]);
+            if (review) {
+                await printReview(index, review, callback);
+            }
+            if (counter === count) {
+                break;
+            }
         }
     }
 

@@ -12,7 +12,7 @@ import { FileSystem, ObjectFolderSettings, ScoredItem } from "typeagent";
 import path from "path";
 import { TextEmbeddingModel } from "aiclient";
 import { CodeReviewer } from "./codeReviewer.js";
-import { CodeReview, LineReview } from "./codeReviewSchema.js";
+import { CodeReview, LineReview, Severity } from "./codeReviewSchema.js";
 
 export type CodeBlockName = {
     name: string;
@@ -208,6 +208,10 @@ export async function createDeveloperMemory(
 export type ExtractedCodeReview<TSourceId = any> = {
     value: LineReview[];
     sourceId: TSourceId;
+};
+
+export type CodeReviewFilter = {
+    severity?: Severity | undefined;
 };
 
 export interface CodeReviewIndex<TReviewId = any, TSourceId = any> {
