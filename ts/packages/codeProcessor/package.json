@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "aiclient": "workspace:*",
+    "knowledge-processor": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "typescript": "^5.4.2"

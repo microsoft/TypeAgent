@@ -1,6 +1,6 @@
 # knowledge-processor
 
-**Sample code** that explores how to:
+**Sample code** and early ideas that explore how to:
 
 - Use TypeChat to extract **_structured knowledge_** from conversations, transcripts and documents.
 - Implement a **Structured RAG**. The exploration includes ideas on how to:

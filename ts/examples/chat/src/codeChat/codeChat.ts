@@ -2,12 +2,7 @@
 // Licensed under the MIT License.
 
 // import ts from "typescript";
-import {
-    getAbsolutePath,
-    readAllLines,
-    asyncArray,
-    removeDir,
-} from "typeagent";
+import { asyncArray, removeDir } from "typeagent";
 import {
     CommandHandler,
     CommandMetadata,
@@ -17,31 +12,28 @@ import {
     runConsole,
 } from "interactive-app";
 import {
-    CodeReview,
     BreakPointSuggestions,
     CodeAnswer,
     createCodeReviewer,
     codeToLines,
     tsCode,
-    CodeDocumentation,
     createSemanticCodeIndex,
-    Module,
     StoredCodeBlock,
 } from "code-processor";
 import { CodePrinter } from "./codePrinter.js";
 import path from "path";
 import { openai } from "aiclient";
-import ts from "typescript";
 import chalk from "chalk";
 import { pathToFileURL } from "url";
+import {
+    getSourcePath,
+    loadCodeChunks,
+    loadTypescriptCode,
+    sampleFiles,
+} from "./common.js";
 
 export async function runCodeChat(): Promise<void> {
     const codeReviewer = createCodeReviewer();
-    const sampleFiles = {
-        snippet: "../../src/codeChat/testCode/snippet.ts",
-        testCode: "../../src/codeChat/testCode/testCode.ts",
-    };
-    const sampleModuleDir = "../../dist/codeChat/testCode";
     // For answer/code indexing examples
     const folderPath = "/data/code";
     const vectorModel = openai.createEmbeddingModel();
@@ -50,10 +42,10 @@ export async function runCodeChat(): Promise<void> {
     let printer: CodePrinter;
 
     const handlers: Record<string, CommandHandler> = {
-        review,
-        debug,
-        breakpoints,
-        answer,
+        codeReview,
+        codeDebug,
+        codeBreakpoints,
+        codeAnswer,
         document,
         indexCode,
         findCode,
@@ -74,7 +66,6 @@ export async function runCodeChat(): Promise<void> {
 
     function onStart(io: InteractiveIo): void {
         printer = new CodePrinter(io);
-        printer.writeLine("\nCode Diagnostics with TypeChat");
     }
 
     function reviewDef(): CommandMetadata {
@@ -94,8 +85,8 @@ export async function runCodeChat(): Promise<void> {
             },
         };
     }
-    handlers.review.metadata = reviewDef();
-    async function review(args: string[]): Promise<void> {
+    handlers.codeReview.metadata = reviewDef();
+    async function codeReview(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, reviewDef());
 
         printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
@@ -107,7 +98,7 @@ export async function runCodeChat(): Promise<void> {
         }
         // Run a code review
         const review = await codeReviewer.review(code.sourceText);
-        printCodeReview(code.sourceText, review);
+        printer.writeFullCodeReview(code.sourceText, review);
     }
 
     function debugDef(): CommandMetadata {
@@ -136,8 +127,8 @@ export async function runCodeChat(): Promise<void> {
             },
         };
     }
-    handlers.debug.metadata = debugDef();
-    async function debug(args: string[]): Promise<void> {
+    handlers.codeDebug.metadata = debugDef();
+    async function codeDebug(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, debugDef());
 
         printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
@@ -155,7 +146,7 @@ export async function runCodeChat(): Promise<void> {
             code.sourceText,
             code.modules,
         );
-        printCodeReview(code.sourceText, review);
+        printer.writeFullCodeReview(code.sourceText, review, false);
     }
 
     function breakpointDef(): CommandMetadata {
@@ -185,8 +176,8 @@ export async function runCodeChat(): Promise<void> {
             },
         };
     }
-    handlers.breakpoints.metadata = breakpointDef();
-    async function breakpoints(args: string[]): Promise<void> {
+    handlers.codeBreakpoints.metadata = breakpointDef();
+    async function codeBreakpoints(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, breakpointDef());
         const code = await loadTypescriptCode(
             namedArgs.sourceFile,
@@ -223,8 +214,8 @@ export async function runCodeChat(): Promise<void> {
             },
         };
     }
-    handlers.answer.metadata = answerDef();
-    async function answer(args: string[]): Promise<void> {
+    handlers.codeAnswer.metadata = answerDef();
+    async function codeAnswer(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, answerDef());
         const question =
             namedArgs.question ??
@@ -277,7 +268,7 @@ export async function runCodeChat(): Promise<void> {
                 codeReviewer.document({ code, language: "typescript" }),
             (code, index, docs) => {
                 const lines = codeToLines(code);
-                printDocs(lines, docs);
+                printer.writeAllDocs(lines, docs);
                 printer.writeLine();
             },
         );
@@ -389,19 +380,6 @@ export async function runCodeChat(): Promise<void> {
         }
     }
 
-    function getSourcePath(sourcePath?: string): string {
-        sourcePath ??= sampleFiles.testCode;
-        return getAbsolutePath(sourcePath, import.meta.url);
-    }
-
-    function loadCodeChunks(
-        sourcePath?: string,
-        chunkSize: number = 2048,
-    ): Promise<string[]> {
-        const fullPath = getSourcePath(sourcePath);
-        return tsCode.loadChunksFromFile(fullPath, chunkSize);
-    }
-
     async function ensureCodeIndex(createNew: boolean = false) {
         if (createNew) {
             await removeDir(codeIndexPath);
@@ -411,14 +389,6 @@ export async function runCodeChat(): Promise<void> {
             codeReviewer,
             vectorModel,
         );
-    }
-
-    function printCodeReview(lines: string[], review: CodeReview): void {
-        printer.writeHeading("\nCODE REVIEW\n");
-        for (let i = 0; i < lines.length; ++i) {
-            printer.writeCodeReview(lines[i], i + 1, review);
-            printer.writeCodeLine(i + 1, lines[i]);
-        }
     }
 
     function printBreakpoints(
@@ -444,13 +414,6 @@ export async function runCodeChat(): Promise<void> {
         }
     }
 
-    function printDocs(lines: string[], docs: CodeDocumentation): void {
-        for (let i = 0; i < lines.length; ++i) {
-            printer.writeDocs(lines[i], i + 1, docs);
-            printer.writeCodeLine(i + 1, lines[i]);
-        }
-    }
-
     function printCodeBlock(codeBlock: StoredCodeBlock | undefined): void {
         if (codeBlock) {
             const code = codeBlock.code.code;
@@ -466,47 +429,5 @@ export async function runCodeChat(): Promise<void> {
                 );
             }
         }
-    }
-
-    function isSampleFile(sourceFile: string): boolean {
-        sourceFile = sourceFile.toLowerCase();
-        for (const value of Object.values(sampleFiles)) {
-            if (value.toLowerCase() === sourceFile) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    type TypeScriptCode = {
-        sourcePath: string;
-        sourceText: string[];
-        sourceCode: ts.SourceFile;
-        modules: Module[] | undefined;
-    };
-
-    async function loadTypescriptCode(
-        sourceFile: string,
-        moduleDir?: string | undefined,
-    ): Promise<TypeScriptCode> {
-        const sourcePath = getAbsolutePath(sourceFile, import.meta.url);
-        const sourceText = await readAllLines(sourcePath); // Load lines of code
-        const sourceCode = await tsCode.loadSourceFile(sourcePath);
-        if (!moduleDir && isSampleFile(sourceFile)) {
-            moduleDir = sampleModuleDir;
-        }
-        let modules = moduleDir
-            ? await tsCode.loadImports(
-                  sourceCode,
-                  getAbsolutePath(moduleDir, import.meta.url),
-              )
-            : undefined;
-
-        return {
-            sourcePath,
-            sourceText,
-            sourceCode,
-            modules,
-        };
     }
 }
