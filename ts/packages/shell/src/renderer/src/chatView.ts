@@ -20,7 +20,7 @@ import {
     DisplayMessageKind,
     DynamicDisplay,
 } from "@typeagent/agent-sdk";
-import { TTS, TTSMetrics } from "./tts";
+import { TTS, TTSMetrics } from "./tts/tts";
 import { IAgentMessage } from "agent-dispatcher";
 import DOMPurify from "dompurify";
 import { PhaseTiming, RequestMetrics } from "agent-dispatcher";
