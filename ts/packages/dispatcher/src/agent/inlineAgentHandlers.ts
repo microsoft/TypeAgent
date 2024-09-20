@@ -28,7 +28,6 @@ import { getSessionCommandHandlers } from "../handlers/sessionCommandHandlers.js
 import { getHistoryCommandHandlers } from "../handlers/historyCommandHandler.js";
 import { TraceCommandHandler } from "../handlers/traceCommandHandler.js";
 import { TranslateCommandHandler } from "../handlers/translateCommandHandler.js";
-/* ==Experimental== */
 import { getRandomCommandHandlers } from "../handlers/randomCommandHandler.js";
 import { getNotifyCommandHandlers } from "../handlers/notifyCommandHandler.js";
 import { processRequests } from "../utils/interactive.js";
@@ -36,7 +35,6 @@ import { getConsoleRequestIO } from "../handlers/common/interactiveIO.js";
 import { getPrompt, processCommandNoLock, resolveCommand } from "../command.js";
 import { RequestCommandHandler } from "../handlers/requestCommandHandler.js";
 import { DisplayCommandHandler } from "../handlers/displayCommandHandler.js";
-/* ==End Experimental== */
 
 function executeSystemAction(
     action: AppAction,
@@ -116,9 +114,9 @@ class HelpCommandHandler implements CommandHandler {
                     const subCommand =
                         command === ""
                             ? "command of"
-                            : `subcommand of ${result.command.join(" ")} in`;
+                            : `subcommand of '${result.command.join(" ")}' in`;
                     throw new Error(
-                        `'${result.args[0]}' is not a '${subCommand}' app agent '${result.appAgentName}'`,
+                        `'${result.args[0]}' is not a ${subCommand} app agent '${result.appAgentName}'`,
                     );
                 }
             }

@@ -358,6 +358,23 @@ class MessageContainer {
         this.updateDivState();
     }
 
+    private speakText(tts: TTS, speakText: string) {
+        let cbAudioStart: (() => void) | undefined;
+        if (this.audioStart === undefined) {
+            this.audioStart = -1;
+            cbAudioStart = () => {
+                this.audioStart = performance.now();
+                this.updateFirstResponseMetrics();
+            };
+        }
+        const p = tts.speak(speakText, cbAudioStart);
+        p.then((timing) => {
+            if (timing) {
+                this.addTTSTiming(timing);
+            }
+        });
+    }
+
     private speak(
         speakText: string | undefined,
         appendMode?: DisplayAppendMode,
@@ -368,13 +385,13 @@ class MessageContainer {
         }
         if (speakText === undefined) {
             // Flush the pending text.
-            this.flushPendingSpeak();
+            this.flushPendingSpeak(tts);
             return;
         }
 
         if (appendMode !== "inline") {
-            this.flushPendingSpeak();
-            tts.speak(speakText);
+            this.flushPendingSpeak(tts);
+            this.speakText(tts, speakText);
             return;
         }
 
@@ -401,39 +418,24 @@ class MessageContainer {
             return;
         }
 
-        let cbAudioStart: (() => void) | undefined;
-        if (this.audioStart === undefined) {
-            this.audioStart = -1;
-            cbAudioStart = () => {
-                this.audioStart = performance.now();
-                this.updateFirstResponseMetrics();
-            };
-        }
-
-        const p = tts.speak(
-            this.pendingSpeakText.slice(0, index),
-            cbAudioStart,
-        );
+        const speakTextPartial = this.pendingSpeakText.slice(0, index);
         this.pendingSpeakText = this.pendingSpeakText.slice(index);
-
-        p.then((timing) => {
-            if (timing) {
-                this.addTTSTiming(timing);
-            }
-        });
+        this.speakText(tts, speakTextPartial);
     }
 
-    private flushPendingSpeak() {
+    private flushPendingSpeak(tts: TTS) {
         // Flush the pending text.
         if (this.pendingSpeakText) {
-            this.chatView.tts?.speak(this.pendingSpeakText);
+            this.speakText(tts, this.pendingSpeakText);
             this.pendingSpeakText = "";
         }
     }
 
     public complete() {
         this.completed = true;
-        this.flushPendingSpeak();
+        if (this.chatView.tts) {
+            this.flushPendingSpeak(this.chatView.tts);
+        }
         this.flushLastTemporary();
         this.updateDivState();
     }
@@ -495,7 +497,10 @@ class MessageContainer {
         return this.metricsDiv;
     }
 
-    public updateMainMetrics(metrics: PhaseTiming, total?: number) {
+    public updateMainMetrics(metrics?: PhaseTiming, total?: number) {
+        if (metrics === undefined && total === undefined) {
+            return;
+        }
         const metricsDiv = this.ensureMetricsDiv();
         updateMetrics(
             metricsDiv.mainMetricsDiv,
@@ -735,21 +740,20 @@ class MessageGroup {
                 );
             }
 
-            if (metrics.command !== undefined) {
-                this.statusMessage?.updateMainMetrics(metrics.command);
-            }
+            this.statusMessage?.updateMainMetrics(
+                metrics.command,
+                this.agentMessages.length === 0 ? metrics.duration : undefined,
+            );
 
             for (let i = 0; i < this.agentMessages.length; i++) {
                 const agentMessage = this.agentMessages[i];
                 const info = metrics.actions[i];
-                if (info !== undefined) {
-                    agentMessage.updateMainMetrics(
-                        info,
-                        i === this.agentMessages.length - 1
-                            ? metrics.duration
-                            : undefined,
-                    );
-                }
+                agentMessage.updateMainMetrics(
+                    info,
+                    i === this.agentMessages.length - 1
+                        ? metrics.duration
+                        : undefined,
+                );
             }
         }
     }
@@ -942,14 +946,14 @@ function updateMetrics(
     mainMetricsDiv: HTMLDivElement,
     markMetricsDiv: HTMLDivElement,
     name: string,
-    metrics: PhaseTiming,
+    metrics?: PhaseTiming,
     total?: number,
 ) {
     // clear out previous perf data
     mainMetricsDiv.innerHTML = "";
     markMetricsDiv.innerHTML = "";
 
-    if (metrics.marks) {
+    if (metrics?.marks) {
         const messages: string[] = [];
         for (const [key, value] of Object.entries(metrics.marks)) {
             const { duration, count } = value;
@@ -957,14 +961,14 @@ function updateMetrics(
         }
         markMetricsDiv.innerHTML = messages.join("<br>");
     }
-    if (metrics.duration) {
-        const messages: string[] = [];
+    const messages: string[] = [];
+    if (metrics?.duration) {
         messages.push(metricsString(`${name} Elapsed Time`, metrics.duration));
-        if (total !== undefined) {
-            messages.push(metricsString("Total Elapsed Time", total));
-        }
-        mainMetricsDiv.innerHTML = messages.join("<br>");
     }
+    if (total !== undefined) {
+        messages.push(metricsString("Total Elapsed Time", total));
+    }
+    mainMetricsDiv.innerHTML = messages.join("<br>");
 }
 
 function formatTimeReaderFriendly(time: number) {
@@ -1121,25 +1125,29 @@ export class ChatView {
                                 ".chat-message-user:not(.chat-message-hidden) .chat-message-content",
                             );
 
-                            if (
-                                ev.key == "ArrowUp" &&
-                                this.commandBackStackIndex < messages.length - 1
-                            ) {
-                                this.commandBackStackIndex++;
-                            } else if (
-                                ev.key == "ArrowDown" &&
-                                this.commandBackStackIndex > -1
-                            ) {
-                                this.commandBackStackIndex--;
-                            }
+                            if (messages.length !== 0) {
+                                if (
+                                    ev.key == "ArrowUp" &&
+                                    this.commandBackStackIndex <
+                                        messages.length - 1
+                                ) {
+                                    this.commandBackStackIndex++;
+                                } else if (
+                                    ev.key == "ArrowDown" &&
+                                    this.commandBackStackIndex > -1
+                                ) {
+                                    this.commandBackStackIndex--;
+                                }
 
-                            if (this.commandBackStackIndex == -1) {
-                                this.chatInput.clear();
-                            } else if (messages.length > 0) {
-                                this.chatInput.textarea.textEntry.textContent =
-                                    messages[
-                                        this.commandBackStackIndex
-                                    ].textContent;
+                                if (this.commandBackStackIndex == -1) {
+                                    this.chatInput.clear();
+                                } else {
+                                    const content =
+                                        messages[this.commandBackStackIndex]
+                                            .textContent;
+                                    this.chatInput.textarea.setContent(content);
+                                }
+                                return false;
                             }
                         }
                     }

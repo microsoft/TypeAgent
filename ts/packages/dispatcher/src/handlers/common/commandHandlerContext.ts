@@ -4,7 +4,6 @@
 import { ChildProcess } from "child_process";
 import {
     ChildLogger,
-    DeepPartialUndefined,
     Limiter,
     Logger,
     LoggerSink,
@@ -27,7 +26,6 @@ import {
     Session,
     SessionOptions,
     configAgentCache,
-    getDefaultSessionConfig,
 } from "../../session/session.js";
 import {
     getDefaultBuiltinTranslatorName,
@@ -51,7 +49,7 @@ import { ActionContext, AppAgentEvent, Profiler } from "@typeagent/agent-sdk";
 import { conversation as Conversation } from "knowledge-processor";
 import {
     AppAgentManager,
-    AppAgentState,
+    AppAgentStateOptions,
     SetStateResult,
 } from "./appAgentManager.js";
 import { getBuiltinAppAgentProvider } from "../../agent/agentConfig.js";
@@ -192,10 +190,7 @@ async function getSession(persistSession: boolean = false) {
     }
     if (session === undefined) {
         // fill in the translator/action later.
-        session = await Session.create(
-            getDefaultSessionConfig(),
-            persistSession,
-        );
+        session = await Session.create(undefined, persistSession);
     }
     return session;
 }
@@ -310,7 +305,7 @@ export async function initializeCommandHandlerContext(
 
 async function setAppAgentStates(
     context: CommandHandlerContext,
-    options?: DeepPartialUndefined<AppAgentState>,
+    options?: AppAgentStateOptions,
 ) {
     const result = await context.agents.setState(
         context,
@@ -328,8 +323,8 @@ async function setAppAgentStates(
 
 async function updateAppAgentStates(
     context: ActionContext<CommandHandlerContext>,
-    changed: DeepPartialUndefined<AppAgentState>,
-): Promise<AppAgentState> {
+    changed: AppAgentStateOptions,
+): Promise<AppAgentStateOptions> {
     const systemContext = context.sessionContext.agentContext;
     const result = await systemContext.agents.setState(
         systemContext,
@@ -347,10 +342,10 @@ async function updateAppAgentStates(
     if (rollback) {
         systemContext.session.setConfig(rollback);
     }
-    const resultState: AppAgentState = {};
+    const resultState: AppAgentStateOptions = {};
     for (const [stateName, changed] of Object.entries(result.changed)) {
         if (changed.length !== 0) {
-            resultState[stateName as keyof AppAgentState] =
+            resultState[stateName as keyof AppAgentStateOptions] =
                 Object.fromEntries(changed);
         }
     }
@@ -361,7 +356,7 @@ function processSetAppAgentStateResult(
     result: SetStateResult,
     systemContext: CommandHandlerContext,
     cbError: (message: string) => void,
-): AppAgentState | undefined {
+): AppAgentStateOptions | undefined {
     let hasFailed = false;
     const rollback = { actions: {}, commands: {} };
     for (const [stateName, failed] of Object.entries(result.failed)) {
