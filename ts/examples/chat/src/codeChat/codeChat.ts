@@ -62,7 +62,6 @@ export async function runCodeChat(): Promise<void> {
 
     function onStart(io: InteractiveIo): void {
         printer = new CodePrinter(io);
-        printer.writeLine("\nCode Diagnostics with TypeChat");
     }
 
     function reviewDef(): CommandMetadata {

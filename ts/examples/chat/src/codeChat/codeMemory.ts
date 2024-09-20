@@ -1,5 +1,6 @@
 import { openai } from "aiclient";
 import {
+    CodeBlockName,
     codeBlockNameFromFilePath,
     codeBlockNameToString,
     CodeReviewIndex,
@@ -32,6 +33,7 @@ import {
 } from "./common.js";
 import { asyncArray, removeDir } from "typeagent";
 import ts from "typescript";
+import chalk from "chalk";
 
 export async function runCodeMemory(): Promise<void> {
     const chatModel = openai.createChatModel();
@@ -62,7 +64,6 @@ export async function runCodeMemory(): Promise<void> {
 
     function onStart(io: InteractiveIo): void {
         printer = new CodePrinter(io);
-        printer.writeLine("\nDeveloper Memory");
     }
 
     handlers.clearMemory.metadata = "Clear memory";
@@ -120,26 +121,39 @@ export async function runCodeMemory(): Promise<void> {
     }
     handlers.codeImport.metadata = codeImportDef();
     async function codeImport(args: string[]): Promise<void> {
-        const namedArgs = parseNamedArguments(args);
+        const namedArgs = parseNamedArguments(args, codeImportDef());
         const fullPath = getSourcePath(namedArgs.sourceFile);
         const sourceFile = await tsCode.loadSourceFile(fullPath);
         // Currently, we only import top level statements from the file
-        const statements = tsCode.getTopLevelStatements(sourceFile);
-        await asyncArray.forEachAsync(
-            statements,
-            namedArgs.concurrency,
-            async (statement, index) => {
-                if (
-                    await importStatement(
-                        sourceFile,
-                        statement,
-                        fullPath,
-                        namedArgs.verbose,
-                    )
-                ) {
-                }
-            },
+        let statements = tsCode.getTopLevelStatements(sourceFile);
+        if (statements.length === 0) {
+            printer.writeLine("No top level statements.");
+            return;
+        }
+        statements = statements.filter(
+            (s) => tsCode.getStatementName(s) !== undefined,
         );
+        const concurrency = namedArgs.concurrency;
+        for (let i = 0; i < statements.length; i += concurrency) {
+            let slice = statements.slice(i, i + concurrency);
+            if (slice.length === 0) {
+                break;
+            }
+            printer.writeInColor(
+                chalk.gray,
+                `[Indexing statements ${i + 1} to ${i + slice.length}] / ${statements.length}`,
+            );
+            const importedNames = await asyncArray.mapAsync(
+                slice,
+                concurrency,
+                (statement) => importStatement(sourceFile, statement, fullPath),
+            );
+            for (const name of importedNames) {
+                if (name) {
+                    printer.writeBullet(codeBlockNameToString(name));
+                }
+            }
+        }
     }
 
     function codeSearchDef(): CommandMetadata {
@@ -238,11 +252,10 @@ export async function runCodeMemory(): Promise<void> {
         sourceFile: ts.SourceFile,
         statement: ts.Statement,
         fullPath: string,
-        verbose: boolean = false,
-    ): Promise<boolean> {
+    ): Promise<CodeBlockName | undefined> {
         let name = tsCode.getStatementName(statement);
         if (!name) {
-            return false;
+            return undefined;
         }
 
         const codeText = tsCode.getTextOfStatement(sourceFile, statement);
@@ -251,14 +264,7 @@ export async function runCodeMemory(): Promise<void> {
             createTypescriptBlock(codeText, fullPath),
             codeName,
         );
-        if (verbose) {
-            printer.writeTitle(name);
-            printer.writeLine(codeText);
-        } else {
-            printer.writeBullet(name);
-        }
-
-        return true;
+        return codeName;
     }
 
     async function createMemory() {
