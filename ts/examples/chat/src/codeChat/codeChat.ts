@@ -42,10 +42,10 @@ export async function runCodeChat(): Promise<void> {
     let printer: CodePrinter;
 
     const handlers: Record<string, CommandHandler> = {
-        review,
-        debug,
-        breakpoints,
-        answer,
+        codeReview,
+        codeDebug,
+        codeBreakpoints,
+        codeAnswer,
         document,
         indexCode,
         findCode,
@@ -85,8 +85,8 @@ export async function runCodeChat(): Promise<void> {
             },
         };
     }
-    handlers.review.metadata = reviewDef();
-    async function review(args: string[]): Promise<void> {
+    handlers.codeReview.metadata = reviewDef();
+    async function codeReview(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, reviewDef());
 
         printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
@@ -127,8 +127,8 @@ export async function runCodeChat(): Promise<void> {
             },
         };
     }
-    handlers.debug.metadata = debugDef();
-    async function debug(args: string[]): Promise<void> {
+    handlers.codeDebug.metadata = debugDef();
+    async function codeDebug(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, debugDef());
 
         printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
@@ -146,7 +146,7 @@ export async function runCodeChat(): Promise<void> {
             code.sourceText,
             code.modules,
         );
-        printer.writeFullCodeReview(code.sourceText, review);
+        printer.writeFullCodeReview(code.sourceText, review, false);
     }
 
     function breakpointDef(): CommandMetadata {
@@ -176,8 +176,8 @@ export async function runCodeChat(): Promise<void> {
             },
         };
     }
-    handlers.breakpoints.metadata = breakpointDef();
-    async function breakpoints(args: string[]): Promise<void> {
+    handlers.codeBreakpoints.metadata = breakpointDef();
+    async function codeBreakpoints(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, breakpointDef());
         const code = await loadTypescriptCode(
             namedArgs.sourceFile,
@@ -214,8 +214,8 @@ export async function runCodeChat(): Promise<void> {
             },
         };
     }
-    handlers.answer.metadata = answerDef();
-    async function answer(args: string[]): Promise<void> {
+    handlers.codeAnswer.metadata = answerDef();
+    async function codeAnswer(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, answerDef());
         const question =
             namedArgs.question ??

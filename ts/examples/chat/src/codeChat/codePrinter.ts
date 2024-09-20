@@ -147,8 +147,14 @@ export class CodePrinter extends ChatPrinter {
         }
     }
 
-    public writeFullCodeReview(lines: string[], review: CodeReview): void {
-        this.writeHeading("\nCODE REVIEW\n");
+    public writeFullCodeReview(
+        lines: string[],
+        review: CodeReview,
+        showTitle: boolean = true,
+    ): void {
+        if (showTitle) {
+            this.writeHeading("\nCODE REVIEW\n");
+        }
         for (let i = 0; i < lines.length; ++i) {
             this.writeCodeReview(lines[i], i + 1, review);
             this.writeCodeLine(i + 1, lines[i]);
