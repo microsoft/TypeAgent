@@ -7,7 +7,7 @@ import {
     ShellSettingsType,
 } from "../../main/shellSettingsType.js";
 import { ChatView } from "./chatView.js";
-import { getTTS, getTTSProviders, getTTSVoices } from "./tts.js";
+import { getTTS, getTTSProviders, getTTSVoices } from "./tts/tts.js";
 
 function addOption(
     select: HTMLSelectElement,
