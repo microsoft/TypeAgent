@@ -3,7 +3,7 @@
 
 import { getAzureTTSProvider, getAzureVoices } from "./ttsAzure";
 import { getBrowserTTSProvider } from "./ttsBrowser";
-import { getLocalTTSProvider } from "./ttsLocal";
+import { getLocalTTSProvider, getLocalVoices } from "./ttsLocal";
 
 export const enum TTSProvider {
     Browser = "browser",
@@ -33,14 +33,14 @@ export async function getTTSVoices(
         case TTSProvider.Azure:
             return getAzureVoices();
         case TTSProvider.Local:
-            return ["default"];
+            return getLocalVoices();
         default:
             return [];
     }
 }
 
 export function getTTSProviders() {
-    return [TTSProvider.Browser, TTSProvider.Azure /*, TTSProvider.Local*/];
+    return [TTSProvider.Browser, TTSProvider.Azure, TTSProvider.Local];
 }
 
 export function getTTS(provider?: string, voiceName?: string): TTS | undefined {
@@ -48,7 +48,7 @@ export function getTTS(provider?: string, voiceName?: string): TTS | undefined {
         case TTSProvider.Browser:
             return getBrowserTTSProvider(voiceName);
         case TTSProvider.Local:
-            return getLocalTTSProvider();
+            return getLocalTTSProvider(voiceName);
         case TTSProvider.Azure:
         case undefined: // default to Azure
             return getAzureTTSProvider(voiceName);

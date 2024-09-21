@@ -9,10 +9,25 @@ import { createPlayQueue } from "./ttsAzure";
 const debug = registerDebug("typeagent:shell:tts");
 const debugError = registerDebug("typeagent:shell:tts:error");
 
-async function synthesize(text: string) {
-    const response = await fetch(
-        `http://localhost:5002/api/tts?text=${encodeURIComponent(text)}&speaker_id=p376`,
-    );
+export async function getLocalVoices(): Promise<[string, string][]> {
+    const response = await fetch("http://localhost:8002/voices");
+
+    if (response.ok) {
+        return await response.json();
+    } else {
+        throw new Error(`Failed to fetch voices: ${response.statusText}`);
+    }
+}
+
+async function synthesize(text: string, voiceName?: string) {
+    const opt: RequestInit = {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text, voiceName }),
+    };
+    const response = await fetch(`http://localhost:8002/synthesize`, opt);
 
     if (response.ok) {
         const blob = await response.blob();
@@ -22,10 +37,7 @@ async function synthesize(text: string) {
     }
 }
 
-export async function getLocalVoices(): Promise<string[]> {
-    return ["default"];
-}
-export function getLocalTTSProvider(): TTS {
+export function getLocalTTSProvider(voiceName?: string): TTS {
     let currentCancelId = 0;
     let nextId = 0;
     const queue = createPlayQueue();
@@ -62,7 +74,10 @@ export function getLocalTTSProvider(): TTS {
 
                 const blob = new Blob([audioData]);
                 audio = new Audio(URL.createObjectURL(blob));
-                audio.onended = doneCallback;
+                audio.onended = () => {
+                    debug(`${id}: Speech Ended`);
+                    doneCallback!();
+                };
                 audio.play();
                 cbAudioStart?.();
             };
@@ -93,7 +108,7 @@ export function getLocalTTSProvider(): TTS {
             queue.add(item);
 
             try {
-                const data = await synthesize(text);
+                const data = await synthesize(text, voiceName);
                 debug(`${id}: Synthesis Success`);
                 audioData = data;
                 startPlay();
