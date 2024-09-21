@@ -222,7 +222,7 @@ export interface ClientAPI {
             e: Electron.IpcRendererEvent,
             settings: ShellSettings,
         ) => void,
-    );
+    ): void;
     onNotificationCommand(
         callback: (
             e: Electron.IpcRendererEvent,
@@ -238,7 +238,8 @@ export interface ClientAPI {
             source: string,
             data: any,
         ) => void,
-    );
+    ): void;
+    onUpdateListVisualization(callback: (e: Electron.IpcRendererEvent, data) => void): void;
 }
 
 export interface ElectronWindowFields {

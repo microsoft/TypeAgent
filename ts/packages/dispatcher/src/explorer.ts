@@ -5,4 +5,5 @@ export {
     getSessionNames,
     getSessionCaches,
     getSessionCacheDirPath,
+    getSessionsDirPath,
 } from "./session/session.js";
