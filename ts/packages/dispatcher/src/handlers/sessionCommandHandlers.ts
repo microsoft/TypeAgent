@@ -47,9 +47,7 @@ class SessionNewCommandHandler implements CommandHandler {
         await setSessionOnCommandHandlerContext(
             systemContext,
             await Session.create(
-                flags.keep
-                    ? systemContext.session.getConfig()
-                    : getDefaultSessionConfig(),
+                flags.keep ? systemContext.session.getConfig() : undefined,
                 flags.persist,
             ),
         );
@@ -87,6 +85,14 @@ class SessionResetCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
     ) {
         await changeContextConfig(getDefaultSessionConfig(), context);
+        await changeContextConfig(
+            {
+                translators: null,
+                actions: null,
+                commands: null,
+            },
+            context,
+        );
         displaySuccess(`Session settings revert to default.`, context);
     }
 }

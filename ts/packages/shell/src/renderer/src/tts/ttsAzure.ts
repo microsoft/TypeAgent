@@ -2,88 +2,48 @@
 // Licensed under the MIT License.
 
 import registerDebug from "debug";
+
 import * as speechSDK from "microsoft-cognitiveservices-speech-sdk";
-import { getSpeechConfig } from "./speech";
-import { getSpeechToken } from "./speechToken";
+import { getSpeechConfig } from "../speech";
+import { getSpeechToken } from "../speechToken";
+import { TTS, TTSMetrics } from "./tts";
 
 const debug = registerDebug("typeagent:shell:tts");
 const debugError = registerDebug("typeagent:shell:tts:error");
-
-export const enum TTSProvider {
-    Browser = "browser",
-    Azure = "azure",
-}
-
-export type TTS = {
-    speak(
-        text: string,
-        cbAudioStart?: () => void,
-    ): Promise<TTSMetrics | undefined>;
-    stop(): void;
-};
-
-function getBrowserTTSProvider(voiceName?: string): TTS | undefined {
-    return {
-        speak: async (text: string) => {
-            const voices = speechSynthesis.getVoices();
-            if (voices.length === 0) {
-                // No voice available;
-                debugError("No voice available");
-                return;
-            }
-
-            const voice = voiceName
-                ? voices.find((v) => v.name === voiceName)
-                : null;
-            if (voice === undefined) {
-                // specified voice not found
-                debugError(`${voiceName} not available`);
-                return;
-            }
-            return new Promise<undefined>((resolve, reject) => {
-                debug(`Speaking: ${text}`);
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.voice = voice;
-                utterance.addEventListener("start", () => {
-                    debug("Speech started");
-                });
-                utterance.addEventListener("error", (ev) => {
-                    debug(`Speech error: ${ev.error}`);
-                    reject(ev.error);
-                });
-                utterance.addEventListener("end", () => {
-                    debug("Speech ended");
-                    resolve(undefined);
-                });
-                speechSynthesis.speak(utterance);
-            });
-        },
-        stop: () => {
-            speechSynthesis.cancel();
-        },
-    };
-}
 
 const defaultVoiceName = "en-US-AndrewMultilingualNeural";
 const defaultVoiceStyle = "chat";
 
 type PlayQueueItem = {
     cancel: () => void;
-    play: () => void;
+    play: (cbDone: () => void) => void;
 };
 
-export type TTSMetrics = {
-    firstChunkTime?: number;
-    duration: number;
+type PlayQueue = {
+    add: (item: PlayQueueItem) => void;
+    cancel: () => void;
 };
 
-function getAzureTTSProvider(voiceName?: string): TTS | undefined {
+export function createPlayQueue(): PlayQueue {
     let current: PlayQueueItem | undefined = undefined;
     let playQueue: PlayQueueItem[] = [];
-    let currentCancelId = 0;
-    let nextId = 0;
+
+    const audioDone = () => {
+        current = playQueue.shift();
+        if (current) {
+            current.play(audioDone);
+        }
+    };
     return {
-        stop: () => {
+        add(item: PlayQueueItem) {
+            if (current === undefined) {
+                current = item;
+                current.play(audioDone);
+            } else {
+                playQueue.push(item);
+            }
+        },
+        cancel() {
             const queue = playQueue;
             playQueue = [];
             if (current) {
@@ -93,6 +53,17 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
             for (const item of queue) {
                 item.cancel();
             }
+        },
+    };
+}
+
+export function getAzureTTSProvider(voiceName?: string): TTS {
+    let currentCancelId = 0;
+    let nextId = 0;
+    const queue = createPlayQueue();
+    return {
+        stop: () => {
+            queue.cancel();
             currentCancelId++;
             nextId = 0;
         },
@@ -107,7 +78,6 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
 
             const start = performance.now();
             let firstChunkTime: number | undefined = undefined;
-            let empty = false;
             let cleaned = false;
             let closed = false;
             const audioDestination = new speechSDK.SpeakerAudioDestination();
@@ -135,6 +105,7 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
                 if (cleaned) {
                     return false;
                 }
+                cbAudioStart = undefined;
                 cleaned = true;
                 audioDestination.pause();
                 audioDestination.close();
@@ -145,31 +116,43 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
                 return true;
             };
 
-            const finish = () => {
-                if (cleanup()) {
-                    debug(`${id}: Speech Ended`);
-                    current = playQueue.shift();
-                    current?.play();
+            let doneCallback: (() => void) | undefined;
+
+            const finish = (success: boolean) => {
+                if (doneCallback) {
+                    // Call back if we are playing.
+                    if (success) {
+                        debug(
+                            success
+                                ? `${id}: Speech Ended`
+                                : `${id}: Speech Skipped`,
+                        );
+                    }
+                    doneCallback();
+                    doneCallback = undefined;
                 }
+                cleanup();
             };
 
             if (cbAudioStart) {
                 audioDestination.onAudioStart = cbAudioStart;
             }
-            audioDestination.onAudioEnd = finish;
+            audioDestination.onAudioEnd = () => finish(true);
+            audioDestination.pause();
 
             const item = {
-                play: () => {
-                    if (!cleaned) {
-                        if (empty) {
-                            debug(`${id}: Speech Skipped`);
-                            // If the audio is empty, onAudioEnd won't be called;
-                            finish();
-                        } else {
-                            debug(`${id}: Speech Playing`);
-                            audioDestination.resume();
-                        }
+                play: (cbDone: () => void) => {
+                    if (cleaned) {
+                        cbDone();
+                        debug(`${id}: Speech Skipped`);
+                        return;
                     }
+                    if (doneCallback) {
+                        throw new Error("Already playing");
+                    }
+                    doneCallback = cbDone;
+                    debug(`${id}: Speech Playing`);
+                    audioDestination.resume();
                 },
                 cancel: () => {
                     if (cleanup()) {
@@ -178,22 +161,8 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
                 },
             };
 
-            if (current === undefined) {
-                current = item;
-                debug(`${id}: Speech Playing`);
-            } else {
-                debug(`${id}: Speech Queueing`);
-                playQueue.push(item);
-                audioDestination.pause();
-            }
-
-            const remove = () => {
-                empty = true;
-                if (item === current) {
-                    // If the audio is empty, onAudioEnd won't be called;
-                    finish();
-                }
-            };
+            debug(`${id}: Speech Queueing`);
+            queue.add(item);
 
             return new Promise<TTSMetrics>((resolve, reject) => {
                 const ssml = `
@@ -228,20 +197,20 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
                             if (result.audioDuration === 0) {
                                 // If the audio is empty, onAudioEnd won't be called
                                 debug(`${id}: Empty Audio`);
-                                remove();
+                                finish(false);
                             }
                         } else {
                             debug(`${id}: Synthesis Failed`, result);
                             reject(result.errorDetails);
-                            remove();
+                            finish(false);
                         }
                     },
                     (error) => {
-                        debugError(`${id}: Synthesis error ${error}`);
+                        debugError(`${id}: Synthesis Error ${error}`);
                         synthesizer.close();
                         closed = true;
                         reject(error);
-                        remove();
+                        finish(false);
                     },
                 );
             });
@@ -251,7 +220,7 @@ function getAzureTTSProvider(voiceName?: string): TTS | undefined {
 
 // Load once.
 let azureVoicesP: Promise<[string, string][]> | undefined;
-async function getAzureVoices() {
+export async function getAzureVoices() {
     if (azureVoicesP === undefined) {
         azureVoicesP = (async () => {
             const synthesizer = new speechSDK.SpeechSynthesizer(
@@ -272,38 +241,4 @@ async function getAzureVoices() {
         })();
     }
     return azureVoicesP;
-}
-
-export async function getTTSVoices(
-    provider: string,
-): Promise<string[] | [string, string][]> {
-    switch (provider) {
-        case TTSProvider.Browser:
-            return speechSynthesis.getVoices().map((v) => v.name);
-        case TTSProvider.Azure:
-            return getAzureVoices();
-        default:
-            return [];
-    }
-}
-
-export function getTTSProviders() {
-    return [TTSProvider.Browser, TTSProvider.Azure];
-}
-
-export function getTTS(provider?: string, voiceName?: string): TTS | undefined {
-    switch (provider) {
-        case TTSProvider.Browser:
-            return getBrowserTTSProvider(voiceName);
-        case TTSProvider.Azure:
-            return getAzureTTSProvider(voiceName);
-        case undefined:
-            return (
-                // Default toe azure tts first
-                getAzureTTSProvider(voiceName) ??
-                getBrowserTTSProvider(voiceName)
-            );
-        default:
-            return undefined;
-    }
 }

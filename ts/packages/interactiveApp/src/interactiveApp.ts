@@ -338,7 +338,9 @@ export function createNamedArgs(): NamedArgs {
         let value = namedArgs[key];
         if (value === undefined) {
             if (required) {
-                throw Error(`A value for ${key} was not supplied`);
+                throw Error(
+                    `A value for required arg '${key}' was not supplied`,
+                );
             }
             return value;
         }

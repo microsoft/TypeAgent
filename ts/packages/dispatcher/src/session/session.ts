@@ -15,7 +15,11 @@ import {
     getYMDPrefix,
 } from "../utils/userData.js";
 import ExifReader from "exifreader";
-import { AppAgentState } from "../handlers/common/appAgentManager.js";
+import {
+    AppAgentState,
+    AppAgentStateOptions,
+} from "../handlers/common/appAgentManager.js";
+import { cloneConfig, mergeConfig } from "./options.js";
 
 const debugSession = registerDebug("typeagent:session");
 
@@ -44,50 +48,6 @@ export function getSessionCacheDirPath(dir: string) {
 }
 
 let releaseLock: () => Promise<void> | undefined;
-
-type ConfigObject = {
-    [key: string]: any;
-};
-
-function mergeConfig(
-    config: ConfigObject,
-    options: ConfigObject,
-    strict: boolean = true,
-    flexKeys?: string[],
-) {
-    const changed: ConfigObject = {};
-    const keys = strict ? Object.keys(config) : Object.keys(options);
-    for (const key of keys) {
-        if (options.hasOwnProperty(key)) {
-            const value = options[key];
-            if (value === undefined) {
-                continue;
-            }
-            if (typeof value === "object") {
-                const strictKey = flexKeys ? !flexKeys.includes(key) : strict;
-                if (config[key] === undefined) {
-                    if (strictKey) {
-                        continue;
-                    }
-                    config[key] = {};
-                }
-
-                const changedValue = mergeConfig(config[key], value, strictKey);
-                if (Object.keys(changedValue).length !== 0) {
-                    changed[key] = changedValue;
-                }
-            } else if (!config.hasOwnProperty(key) || config[key] !== value) {
-                config[key] = value;
-                changed[key] = value;
-            }
-        }
-    }
-    return changed;
-}
-
-function cloneConfig(config: SessionConfig): SessionConfig {
-    return structuredClone(config);
-}
 
 async function loadSessions(): Promise<Sessions> {
     // If we ever load the session config, we lock it until the process exits
@@ -163,9 +123,11 @@ type DispatcherConfig = {
     matchWildcard: boolean;
 };
 
-export type SessionConfig = Required<AppAgentState> &
-    DispatcherConfig &
-    CacheConfig;
+export type SessionConfig = AppAgentState & DispatcherConfig & CacheConfig;
+
+export type SessionOptions = AppAgentStateOptions &
+    DeepPartialUndefined<DispatcherConfig> &
+    DeepPartialUndefined<CacheConfig>;
 
 const defaultSessionConfig: SessionConfig = {
     translators: undefined,
@@ -207,8 +169,6 @@ type SessionData = {
     cacheData: SessionCacheData;
 };
 
-export type SessionOptions = DeepPartialUndefined<SessionConfig>;
-
 // Fill in missing fields when loading sessions from disk
 function ensureSessionData(data: any): SessionData {
     if (data.config === undefined) {
@@ -249,7 +209,10 @@ export class Session {
     private config: SessionConfig;
     private cacheData: SessionCacheData;
 
-    public static async create(config: SessionConfig, persist: boolean) {
+    public static async create(
+        config: SessionConfig = defaultSessionConfig,
+        persist: boolean,
+    ) {
         const session = new Session(
             { config: cloneConfig(config), cacheData: {} },
             persist ? await newSessionDir() : undefined,

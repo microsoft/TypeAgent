@@ -20,7 +20,7 @@ import {
     DisplayMessageKind,
     DynamicDisplay,
 } from "@typeagent/agent-sdk";
-import { TTS, TTSMetrics } from "./tts";
+import { TTS, TTSMetrics } from "./tts/tts";
 import { IAgentMessage } from "agent-dispatcher";
 import DOMPurify from "dompurify";
 import { PhaseTiming, RequestMetrics } from "agent-dispatcher";
@@ -358,6 +358,23 @@ class MessageContainer {
         this.updateDivState();
     }
 
+    private speakText(tts: TTS, speakText: string) {
+        let cbAudioStart: (() => void) | undefined;
+        if (this.audioStart === undefined) {
+            this.audioStart = -1;
+            cbAudioStart = () => {
+                this.audioStart = performance.now();
+                this.updateFirstResponseMetrics();
+            };
+        }
+        const p = tts.speak(speakText, cbAudioStart);
+        p.then((timing) => {
+            if (timing) {
+                this.addTTSTiming(timing);
+            }
+        });
+    }
+
     private speak(
         speakText: string | undefined,
         appendMode?: DisplayAppendMode,
@@ -368,13 +385,13 @@ class MessageContainer {
         }
         if (speakText === undefined) {
             // Flush the pending text.
-            this.flushPendingSpeak();
+            this.flushPendingSpeak(tts);
             return;
         }
 
         if (appendMode !== "inline") {
-            this.flushPendingSpeak();
-            tts.speak(speakText);
+            this.flushPendingSpeak(tts);
+            this.speakText(tts, speakText);
             return;
         }
 
@@ -401,39 +418,24 @@ class MessageContainer {
             return;
         }
 
-        let cbAudioStart: (() => void) | undefined;
-        if (this.audioStart === undefined) {
-            this.audioStart = -1;
-            cbAudioStart = () => {
-                this.audioStart = performance.now();
-                this.updateFirstResponseMetrics();
-            };
-        }
-
-        const p = tts.speak(
-            this.pendingSpeakText.slice(0, index),
-            cbAudioStart,
-        );
+        const speakTextPartial = this.pendingSpeakText.slice(0, index);
         this.pendingSpeakText = this.pendingSpeakText.slice(index);
-
-        p.then((timing) => {
-            if (timing) {
-                this.addTTSTiming(timing);
-            }
-        });
+        this.speakText(tts, speakTextPartial);
     }
 
-    private flushPendingSpeak() {
+    private flushPendingSpeak(tts: TTS) {
         // Flush the pending text.
         if (this.pendingSpeakText) {
-            this.chatView.tts?.speak(this.pendingSpeakText);
+            this.speakText(tts, this.pendingSpeakText);
             this.pendingSpeakText = "";
         }
     }
 
     public complete() {
         this.completed = true;
-        this.flushPendingSpeak();
+        if (this.chatView.tts) {
+            this.flushPendingSpeak(this.chatView.tts);
+        }
         this.flushLastTemporary();
         this.updateDivState();
     }
