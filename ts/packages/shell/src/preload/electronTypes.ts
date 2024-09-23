@@ -239,8 +239,12 @@ export interface ClientAPI {
             data: any,
         ) => void,
     ): void;
-    onUpdateListVisualization(callback: (e: Electron.IpcRendererEvent, data) => void): void;
-    onUpdateKnowledgeVisualization(callback: (e: Electron.IpcRendererEvent, data) => void): void;
+    onUpdateListVisualization(
+        callback: (e: Electron.IpcRendererEvent, data) => void,
+    ): void;
+    onUpdateKnowledgeVisualization(
+        callback: (e: Electron.IpcRendererEvent, data) => void,
+    ): void;
 }
 
 export interface ElectronWindowFields {

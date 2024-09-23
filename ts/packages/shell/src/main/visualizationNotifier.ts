@@ -13,59 +13,61 @@ export class TypeAgentList {
 }
 
 export class KnowledgeGraph {
-    constructor(public id: string, public parents?: string[]) {};
+    constructor(
+        public id: string,
+        public parents?: string[],
+    ) {}
 }
 
-type EntityFacet = {  
-    name: string;  
-    value: {  
-      amount: number;  
-      units: string;  
-    };  
-  };  
-    
-  type EntityValue = {  
-    name: string;  
-    type: string[];  
-    facets?: EntityFacet[];  
-  };  
-    
-  type Entity = {  
-    value: EntityValue;  
-    sourceIds: string[];  
-  };  
-    
-  type Topic = {  
-    value: string;  
-    sourceIds: string[];  
-    type: number;  
-  };  
-    
-  type ActionParam = {  
-    name: string;  
-    value: number | string;  
-  };  
-    
-  type ActionValue = {  
-    verbs: string[];  
-    verbTense: string;  
-    subjectEntityName: string;  
-    objectEntityName: string;  
-    indirectObjectEntityName: string;  
-    params?: ActionParam[];  
-  };  
-    
-  type Action = {  
-    value: ActionValue;  
-    sourceIds: string[];  
-  };  
-    
-  type Knowledge = {  
-    entities: Entity[];  
-    topics: Topic[];  
-    actions: Action[];  
-  };  
-  
+type EntityFacet = {
+    name: string;
+    value: {
+        amount: number;
+        units: string;
+    };
+};
+
+type EntityValue = {
+    name: string;
+    type: string[];
+    facets?: EntityFacet[];
+};
+
+type Entity = {
+    value: EntityValue;
+    sourceIds: string[];
+};
+
+type Topic = {
+    value: string;
+    sourceIds: string[];
+    type: number;
+};
+
+type ActionParam = {
+    name: string;
+    value: number | string;
+};
+
+type ActionValue = {
+    verbs: string[];
+    verbTense: string;
+    subjectEntityName: string;
+    objectEntityName: string;
+    indirectObjectEntityName: string;
+    params?: ActionParam[];
+};
+
+type Action = {
+    value: ActionValue;
+    sourceIds: string[];
+};
+
+type Knowledge = {
+    entities: Entity[];
+    topics: Topic[];
+    actions: Action[];
+};
 
 export class VisualizationNotifier {
     private static instance: VisualizationNotifier;
@@ -79,39 +81,44 @@ export class VisualizationNotifier {
     private constructor() {
         this.onListChanged = null;
         this.onKnowledgeUpdated = null;
-        
 
         // file watchers
-        fs.watch(getSessionsDirPath(), { recursive: true}, async (_, fileName) => {
-            if (fileName?.endsWith("lists.json")) {
-                const l = await this.enumerateLists();
-                if (this.onListChanged != null) {
-                    this.onListChanged!(l);
-                }    
-            }
-          });
-
-          //TODO: implement knowledge
-          const kDir: string = path.join("conversation", "knowledge");
-          fs.watch(getSessionsDirPath(), { recursive: true}, async (_, fileName) => {
-            if (fileName!.indexOf(kDir) > -1) {
-
-                // TODO: debounce
-                ++this.knowledgeFileDebounce;
-
-                setTimeout(async () => {
-                    --this.knowledgeFileDebounce;
-
-                    if (this.knowledgeFileDebounce == 0) {
-                        const k = await this.enumerateKnowledge();
-                        if (this.onKnowledgeUpdated != null) {
-                            this.onKnowledgeUpdated!(k);
-                        }    
-        
+        fs.watch(
+            getSessionsDirPath(),
+            { recursive: true },
+            async (_, fileName) => {
+                if (fileName?.endsWith("lists.json")) {
+                    const l = await this.enumerateLists();
+                    if (this.onListChanged != null) {
+                        this.onListChanged!(l);
                     }
-                }, 1000);
-            }
-          });
+                }
+            },
+        );
+
+        //TODO: implement knowledge
+        const kDir: string = path.join("conversation", "knowledge");
+        fs.watch(
+            getSessionsDirPath(),
+            { recursive: true },
+            async (_, fileName) => {
+                if (fileName!.indexOf(kDir) > -1) {
+                    // TODO: debounce
+                    ++this.knowledgeFileDebounce;
+
+                    setTimeout(async () => {
+                        --this.knowledgeFileDebounce;
+
+                        if (this.knowledgeFileDebounce == 0) {
+                            const k = await this.enumerateKnowledge();
+                            if (this.onKnowledgeUpdated != null) {
+                                this.onKnowledgeUpdated!(k);
+                            }
+                        }
+                    }, 1000);
+                }
+            },
+        );
 
         // run first file scans
         setTimeout(async () => {
@@ -127,7 +134,6 @@ export class VisualizationNotifier {
                 this.onKnowledgeUpdated!(know);
             }
         }, 3500);
-
     }
 
     public static getinstance = (): VisualizationNotifier => {
@@ -148,7 +154,6 @@ export class VisualizationNotifier {
 
         // get all the sessions
         sessions.map((n) => {
-
             // TODO: remove after testing
             if (n.startsWith(".")) {
                 return;
@@ -179,7 +184,7 @@ export class VisualizationNotifier {
         let retValue: KnowledgeGraph[][] = new Array<KnowledgeGraph[]>();
 
         // create levels
-        for(let i = 0; i < 6; i++) {
+        for (let i = 0; i < 6; i++) {
             retValue.push(new Array<KnowledgeGraph>());
         }
 
@@ -190,16 +195,25 @@ export class VisualizationNotifier {
         retValue[0].push(new KnowledgeGraph(`${lastSession} - Knowledge`));
 
         // get the knowledge for this session
-        const knowledgeMap: Map<string, Knowledge> = new Map<string, Knowledge>();
-        const knowledgeDir: string = path.join(getSessionsDirPath(), lastSession, "conversation", "knowledge");
+        const knowledgeMap: Map<string, Knowledge> = new Map<
+            string,
+            Knowledge
+        >();
+        const knowledgeDir: string = path.join(
+            getSessionsDirPath(),
+            lastSession,
+            "conversation",
+            "knowledge",
+        );
         const files: string[] = fs.readdirSync(knowledgeDir);
         files.map((f) => {
-
             // level 1
-            retValue[1].push(new KnowledgeGraph(f, [`${lastSession} - Knowledge`]));
+            retValue[1].push(
+                new KnowledgeGraph(f, [`${lastSession} - Knowledge`]),
+            );
 
             const s: Buffer = fs.readFileSync(path.join(knowledgeDir, f));
-            const kk: Knowledge = JSON.parse(s.toString()) //todo: finish
+            const kk: Knowledge = JSON.parse(s.toString()); //todo: finish
 
             knowledgeMap.set(f, kk);
         });
@@ -220,8 +234,8 @@ export class VisualizationNotifier {
                 // level 3
                 k.entities.map((n: Entity) => {
                     n.value.type.map((t: string) => {
-                        retValue[3].push(new KnowledgeGraph(t, ["entities"]))
-                    });                    
+                        retValue[3].push(new KnowledgeGraph(t, ["entities"]));
+                    });
                     //retValue[3].push(new KnowledgeGraph(, ["entities"]))
                 });
             }
@@ -235,7 +249,7 @@ export class VisualizationNotifier {
                     retValue[3].push(new KnowledgeGraph(n.value, ["topics"]));
                 });
             }
-            
+
             // level 2 - parents
             if (k.actions?.length > 0) {
                 actions.parents?.push(s);
@@ -244,13 +258,11 @@ export class VisualizationNotifier {
                 k.actions.map((a: Action) => {
                     a.value.verbs.map((v: string) => {
                         retValue[3].push(new KnowledgeGraph(v, ["actions"]));
-                    })
+                    });
                     //retValue[3].push(new KnowledgeGraph(n.value.name, ["entities"]))
                 });
             }
         });
-
-
 
         return retValue;
     }

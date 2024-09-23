@@ -37,7 +37,11 @@ import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
 import { AppAgentEvent, DisplayAppendMode } from "@typeagent/agent-sdk";
 import { shellAgentProvider } from "./agent.js";
-import { KnowledgeGraph, TypeAgentList, VisualizationNotifier } from "./visualizationNotifier.js";
+import {
+    KnowledgeGraph,
+    TypeAgentList,
+    VisualizationNotifier,
+} from "./visualizationNotifier.js";
 
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
@@ -91,8 +95,7 @@ function createWindow(): void {
             zoomFactor: ShellSettings.getinstance().zoomLevel,
         },
         x: 0,
-        y: 0, 
-
+        y: 0,
     });
 
     setupDevicePermissinos(mainWindow);
@@ -105,12 +108,12 @@ function createWindow(): void {
         }
 
         vizWindow?.webContents.openDevTools();
-    });    
+    });
 
     vizWindow.on("ready-to-show", () => {
         vizWindow!.show();
         vizWindow?.webContents.openDevTools();
-    });    
+    });
 
     mainWindow.webContents.setWindowOpenHandler((details) => {
         shell.openExternal(details.url);
@@ -147,7 +150,7 @@ function createWindow(): void {
         vizWindow.loadURL(process.env["ELECTRON_RENDERER_URL"] + "/tree.html");
     } else {
         mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
-        vizWindow.loadFile(join(__dirname, "../renderer/tree.html"))
+        vizWindow.loadFile(join(__dirname, "../renderer/tree.html"));
     }
 
     mainWindow.removeMenu();
@@ -176,11 +179,15 @@ function createWindow(): void {
         mainWindow?.setAlwaysOnTop(!mainWindow?.isAlwaysOnTop());
     };
 
-    VisualizationNotifier.getinstance().onListChanged = (lists: TypeAgentList) => {
+    VisualizationNotifier.getinstance().onListChanged = (
+        lists: TypeAgentList,
+    ) => {
         vizWindow?.webContents.send("update-list-visualization", lists);
     };
 
-    VisualizationNotifier.getinstance().onKnowledgeUpdated = (graph: KnowledgeGraph[][]) => {
+    VisualizationNotifier.getinstance().onKnowledgeUpdated = (
+        graph: KnowledgeGraph[][],
+    ) => {
         vizWindow?.webContents.send("update-knowledge-visualization", graph);
     };
 }
