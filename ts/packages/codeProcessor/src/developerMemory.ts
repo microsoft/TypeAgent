@@ -8,7 +8,12 @@ import {
     TextIndexSettings,
 } from "knowledge-processor";
 import { CodeBlock, StoredCodeBlock } from "./code.js";
-import { FileSystem, ObjectFolderSettings, ScoredItem } from "typeagent";
+import {
+    asyncArray,
+    FileSystem,
+    ObjectFolderSettings,
+    ScoredItem,
+} from "typeagent";
 import path from "path";
 import { TextEmbeddingModel } from "aiclient";
 import { CodeReviewer } from "./codeReviewer.js";
@@ -206,7 +211,7 @@ export async function createDeveloperMemory(
 }
 
 export type ExtractedCodeReview<TSourceId = any> = {
-    value: LineReview[];
+    value: LineReview;
     sourceId: TSourceId;
 };
 
@@ -216,7 +221,7 @@ export type CodeReviewFilter = {
 
 export interface CodeReviewIndex<TReviewId = any, TSourceId = any> {
     readonly store: KnowledgeStore<ExtractedCodeReview, TReviewId>;
-    add(sourceId: TSourceId, review: LineReview[]): Promise<TReviewId>;
+    add(sourceId: TSourceId, review: LineReview[]): Promise<TReviewId[]>;
     search(
         query: string,
         maxMatches: number,
@@ -252,14 +257,25 @@ export async function createCodeReviewIndex<TSourceId = any>(
     async function add(
         sourceId: TSourceId,
         review: LineReview[],
-    ): Promise<ReviewId> {
-        const item: ExtractedCodeReview<TSourceId> = {
-            value: review,
-            sourceId,
-        };
-        const reviewIds = await store.addNext([item]);
+    ): Promise<ReviewId[]> {
+        const items: ExtractedCodeReview<TSourceId>[] = review.map((line) => {
+            return {
+                value: line,
+                sourceId,
+            };
+        });
+        const reviewIds = await asyncArray.mapAsync(
+            items,
+            settings.concurrency,
+            async (item) => addItem(item),
+        );
+        return reviewIds;
+    }
+
+    async function addItem(review: ExtractedCodeReview<TSourceId>) {
+        const reviewIds = await store.addNext([review]);
         const reviewId = reviewIds[0];
-        const text = reviewToString(item.value);
+        const text = lineReviewToString(review.value);
         await storeIndex.put(text, reviewId);
         return reviewId;
     }
@@ -275,15 +291,6 @@ export async function createCodeReviewIndex<TSourceId = any>(
             minScore,
         );
         return matches.map((match) => match.item);
-    }
-
-    function reviewToString(review: LineReview[]): string {
-        let text = "";
-        for (const line of review) {
-            text += lineReviewToString(line);
-            text += "\n";
-        }
-        return text;
     }
 
     function lineReviewToString(review: LineReview): string {
