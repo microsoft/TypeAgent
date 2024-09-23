@@ -36,7 +36,6 @@ async function photoValidateWildcardMatch(
     action: AppAction,
     context: SessionContext<PhotoActionContext>,
 ) {
-
     return true;
 }
 
@@ -47,8 +46,7 @@ async function initializePhotoContext() {
 async function updatePhotoContext(
     enable: boolean,
     context: SessionContext<PhotoActionContext>,
-): Promise<void> {
-}
+): Promise<void> {}
 
 async function handlePhotoAction(
     action: PhotoAction,

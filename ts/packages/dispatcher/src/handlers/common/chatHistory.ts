@@ -65,10 +65,37 @@ export function createChatHistory(): ChatHistory {
                 }
 
                 if (entry.attachments && entry.attachments.length > 0) {
-                    for(const attachment of entry.attachments) {
-                        sections.push({ role: entry.role, content: [{ type: "text", text: attachment.storageLocation }] } );
-                        sections.push({ role: entry.role, content: [{ type: "text", text: `EXIF Tags: ${extractRelevantExifTags(attachment.exifTags)}` }] } );
-                        sections.push({ role: entry.role, content: [{ type: "image_url", image_url: { url: attachment.image, detail: "high" } }] } );
+                    for (const attachment of entry.attachments) {
+                        sections.push({
+                            role: entry.role,
+                            content: [
+                                {
+                                    type: "text",
+                                    text: attachment.storageLocation,
+                                },
+                            ],
+                        });
+                        sections.push({
+                            role: entry.role,
+                            content: [
+                                {
+                                    type: "text",
+                                    text: `EXIF Tags: ${extractRelevantExifTags(attachment.exifTags)}`,
+                                },
+                            ],
+                        });
+                        sections.push({
+                            role: entry.role,
+                            content: [
+                                {
+                                    type: "image_url",
+                                    image_url: {
+                                        url: attachment.image,
+                                        detail: "high",
+                                    },
+                                },
+                            ],
+                        });
                     }
                 }
             }
@@ -81,7 +108,7 @@ export function createChatHistory(): ChatHistory {
             id?: string,
             attachments?: CachedImageWithDetails[],
         ): void {
-            this.entries.push({ text, entities, role, id, attachments});
+            this.entries.push({ text, entities, role, id, attachments });
             const index = this.entries.length - 1;
             if (id) {
                 if (role === "user") {

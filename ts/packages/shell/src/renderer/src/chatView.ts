@@ -898,7 +898,11 @@ export function setContent(
     // Process content according to type
     const contentHtml =
         type === "html"
-            ? DOMPurify.sanitize(text, { ADD_ATTR: ["target"], ADD_DATA_URI_TAGS: ["img"], ADD_URI_SAFE_ATTR: ['src'] })
+            ? DOMPurify.sanitize(text, {
+                  ADD_ATTR: ["target"],
+                  ADD_DATA_URI_TAGS: ["img"],
+                  ADD_URI_SAFE_ATTR: ["src"],
+              })
             : enableText2Html
               ? textToHtml(text)
               : stripAnsi(encodeTextToHtml(text));
@@ -1561,7 +1565,6 @@ export class ChatView {
         );
         let retVal: string[] = new Array<string>(images.length);
         for (let i = 0; i < images.length; i++) {
-
             images[i].classList.remove("chat-input-dropImage");
             images[i].classList.add("chat-input-image");
 

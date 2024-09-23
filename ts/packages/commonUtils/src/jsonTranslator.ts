@@ -79,7 +79,7 @@ export function enableJsonTranslatorStreaming<T extends object>(
         request: string,
         promptPreamble?: string | PromptSection[],
         cb?: IncrementalJsonValueCallBack,
-        attachments?: CachedImageWithDetails[]
+        attachments?: CachedImageWithDetails[],
     ) => {
         attachAttachments(attachments, promptPreamble);
 
@@ -130,19 +130,19 @@ function attachAttachments(
                 content: [
                     {
                         type: "text",
-                        text:
-                            `File Name: ${attachments![i].storageLocation}`,
+                        text: `File Name: ${attachments![i].storageLocation}`,
                     },
                     {
                         type: "image_url",
-                        image_url: { url: attachments[i].image, detail: "high" },
-                    },                
+                        image_url: {
+                            url: attachments[i].image,
+                            detail: "high",
+                        },
+                    },
                     {
                         type: "text",
-                        text:
-                            `Image EXIF tags: \n${extractRelevantExifTags(attachments![i].exifTags)}`,
-                    },    
-
+                        text: `Image EXIF tags: \n${extractRelevantExifTags(attachments![i].exifTags)}`,
+                    },
                 ],
             });
         }

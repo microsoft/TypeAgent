@@ -1,18 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import ExifReader from"exifreader"
+import ExifReader from "exifreader";
 
 export class CachedImageWithDetails {
     constructor(
-        public exifTags: ExifReader.Tags, 
-        public storageLocation: string, 
-        public image: string) {
-    }
+        public exifTags: ExifReader.Tags,
+        public storageLocation: string,
+        public image: string,
+    ) {}
 }
 
 export function getImageElement(imgData: string): string {
-    return`<img src="${imgData}" />`;
+    return `<img src="${imgData}" />`;
 }
 
 export function extractRelevantExifTags(exifTags: ExifReader.Tags) {
@@ -27,6 +27,6 @@ export function extractRelevantExifTags(exifTags: ExifReader.Tags) {
     ${exifTags.GPSAltitudeRef ? "GPS Altitude Reference: " + exifTags.GPSAltitudeRef.value : ""}
     ${exifTags.GPSAltitude ? "GPS Altitude: " + exifTags.GPSAltitude.description : ""}
     `;
-console.log(tags);
+    console.log(tags);
     return tags;
 }

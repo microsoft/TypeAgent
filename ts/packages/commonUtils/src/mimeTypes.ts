@@ -25,5 +25,5 @@ export function getMimeType(fileExtension: string): string {
             return "image/gif";
     }
 
-    throw "Unsupported file extension."
+    throw "Unsupported file extension.";
 }

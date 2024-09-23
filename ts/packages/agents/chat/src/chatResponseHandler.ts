@@ -60,21 +60,23 @@ export async function executeChatResponseAction(
 }
 
 async function rehydrateImages(context: ActionContext, files: string[]) {
-
     let html = "<div>";
 
-    for(let i = 0; i < files.length; i++) {
-
+    for (let i = 0; i < files.length; i++) {
         let name = files[i];
         if (files[i].lastIndexOf("\\") > -1) {
             name = files[i].substring(files[i].lastIndexOf("\\") + 1);
         }
 
-        let a = await context.sessionContext.sessionStorage?.read(`\\..\\user_files\\${name}`, "base64");
+        let a = await context.sessionContext.sessionStorage?.read(
+            `\\..\\user_files\\${name}`,
+            "base64",
+        );
 
         if (a) {
-            
-            html += getImageElement(`data:image/${getMimeType(name.substring(name.indexOf(".")))};base64,${a}`);
+            html += getImageElement(
+                `data:image/${getMimeType(name.substring(name.indexOf(".")))};base64,${a}`,
+            );
         }
     }
 
@@ -111,13 +113,19 @@ async function handleChatResponse(
 
                 // TODO: cleanup
                 // turn related files into entities
-                if (generateResponseAction.parameters.relatedFiles !== undefined) {
-                    for(const file of generateResponseAction.parameters.relatedFiles) {
+                if (
+                    generateResponseAction.parameters.relatedFiles !== undefined
+                ) {
+                    for (const file of generateResponseAction.parameters
+                        .relatedFiles) {
                         let name = file;
                         if (file.lastIndexOf("\\") > -1) {
                             name = file.substring(file.lastIndexOf("\\") + 1);
                         }
-                        result.entities.push({ name, type: [ "file", "image", "data" ]})
+                        result.entities.push({
+                            name,
+                            type: ["file", "image", "data"],
+                        });
                     }
                 }
 
@@ -163,8 +171,15 @@ async function handleChatResponse(
                             matches.response &&
                             matches.response.answer
                         ) {
-                            if (lookupAction.parameters.retrieveRelatedFilesFromStorage && lookupAction.parameters.relatedFiles !== undefined) {
-                                return createActionResultFromHtmlDisplay(`<div>${matches.response.answer.answer} ${await rehydrateImages(context, lookupAction.parameters.relatedFiles)}</div>`);
+                            if (
+                                lookupAction.parameters
+                                    .retrieveRelatedFilesFromStorage &&
+                                lookupAction.parameters.relatedFiles !==
+                                    undefined
+                            ) {
+                                return createActionResultFromHtmlDisplay(
+                                    `<div>${matches.response.answer.answer} ${await rehydrateImages(context, lookupAction.parameters.relatedFiles)}</div>`,
+                                );
                             } else {
                                 return createActionResult(
                                     matches.response.answer.answer!,
@@ -172,7 +187,9 @@ async function handleChatResponse(
                             }
                         } else {
                             console.log("bug");
-                            return createActionResult("I don't know anything about that.");
+                            return createActionResult(
+                                "I don't know anything about that.",
+                            );
                         }
                     }
                 }

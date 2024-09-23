@@ -334,8 +334,8 @@ function getActionContextShim(
         takeAction(action: string) {
             rpc.send("takeAction", {
                 actionContextId,
-                action
-            })
+                action,
+            });
         },
     };
     return {

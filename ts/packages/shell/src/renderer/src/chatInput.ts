@@ -48,7 +48,10 @@ export class ExpandableTextarea {
             if (event.key === "Enter") {
                 event.preventDefault();
                 this.send(sendButton);
-            } else if (event.altKey && this.entryHandlers.altHandler !== undefined) {
+            } else if (
+                event.altKey &&
+                this.entryHandlers.altHandler !== undefined
+            ) {
                 this.entryHandlers.altHandler(this, event);
             } else if (event.key == "Escape") {
                 this.textEntry.textContent = "";
@@ -62,7 +65,7 @@ export class ExpandableTextarea {
             }
 
             if (sendButton !== undefined) {
-                sendButton.disabled = (this.textEntry.innerHTML.length == 0);
+                sendButton.disabled = this.textEntry.innerHTML.length == 0;
             }
         });
     }
@@ -130,7 +133,7 @@ export function questionInput(
                 // REVIEW: text is from innerHTML, is that ok?
                 chatView.answer(questionId, html, id);
             },
-        },        
+        },
     );
     const replacementDiv = textarea.getTextEntry();
     setTimeout(() => {
@@ -162,18 +165,22 @@ export class ChatInput {
         this.inputContainer = document.createElement("div");
         this.inputContainer.className = "chat-input";
         this.sendButton = document.createElement("button");
-        this.sendButton.appendChild(iconSend()); 
+        this.sendButton.appendChild(iconSend());
         this.sendButton.className = "chat-input-button";
         this.sendButton.onclick = () => {
             this.textarea.send();
         };
         this.sendButton.disabled = true;
-        this.textarea = new ExpandableTextarea(inputId, "user-textarea", {
-            onSend: messageHandler,
-            onChange,
-            onKeydown,
-        },
-        this.sendButton);       
+        this.textarea = new ExpandableTextarea(
+            inputId,
+            "user-textarea",
+            {
+                onSend: messageHandler,
+                onChange,
+                onKeydown,
+            },
+            this.sendButton,
+        );
 
         this.textarea.getTextEntry().ondragenter = (e: DragEvent) => {
             if (!this.dragEnabled) {
@@ -268,7 +275,6 @@ export class ChatInput {
                 );
             }
         });
-        
 
         const listeningMic = iconMicrophoneListening();
         listeningMic.className = "chat-message-hidden";
@@ -281,7 +287,7 @@ export class ChatInput {
         this.camButton = document.createElement("button");
         this.camButton.appendChild(iconCamera());
         this.camButton.className = "chat-input-button";
-        
+
         this.attachButton = document.createElement("label");
         this.attachButton.htmlFor = this.input.id;
         this.attachButton.appendChild(iconAttach());
@@ -299,7 +305,7 @@ export class ChatInput {
             }
         });
 
-        this.inputContainer.appendChild(this.attachButton);        
+        this.inputContainer.appendChild(this.attachButton);
         this.inputContainer.appendChild(this.camButton);
         this.inputContainer.appendChild(this.micButton);
         this.inputContainer.appendChild(this.textarea.getTextEntry());
@@ -326,7 +332,8 @@ export class ChatInput {
         this.textarea.getTextEntry().append(dropImg);
 
         if (this.sendButton !== undefined) {
-            this.sendButton.disabled = (this.textarea.textEntry.innerHTML.length == 0);
+            this.sendButton.disabled =
+                this.textarea.textEntry.innerHTML.length == 0;
         }
 
         this.textarea.getTextEntry().focus();

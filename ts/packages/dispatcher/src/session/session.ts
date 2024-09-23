@@ -421,11 +421,12 @@ export class Session {
         const fileExtension: string = this.getFileExtensionForMimeType(
             file.substring(5, file.indexOf(";")),
         );
-        const uniqueFileName: string = getUniqueFileName(filesDir, "attachment_", fileExtension);
-        const fileName: string = path.join(
+        const uniqueFileName: string = getUniqueFileName(
             filesDir,
-            uniqueFileName,
+            "attachment_",
+            fileExtension,
         );
+        const fileName: string = path.join(filesDir, uniqueFileName);
         const buffer = Buffer.from(
             file.substring(file.indexOf(";base64,") + ";base64,".length),
             "base64",
@@ -434,7 +435,7 @@ export class Session {
         const tags: ExifReader.Tags = ExifReader.load(buffer);
 
         fs.writeFile(fileName, buffer, () => {});
-        
+
         return [uniqueFileName, tags];
     }
 

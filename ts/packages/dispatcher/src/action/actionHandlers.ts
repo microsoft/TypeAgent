@@ -69,7 +69,7 @@ function getActionContext(
         },
         takeAction(action: string): void {
             context.requestIO.takeAction(action);
-        }
+        },
     };
     const actionContext: ActionContext<unknown> = {
         streamingContext: undefined,

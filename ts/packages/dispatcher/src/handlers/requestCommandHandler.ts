@@ -303,7 +303,7 @@ async function translateRequestWithTranslator(
             history?.promptSections,
             onProperty,
             attachments,
-            );
+        );
     } finally {
         translator.createRequestPrompt = orp;
         profiler?.stop();
@@ -727,18 +727,25 @@ export class RequestCommandHandler implements CommandHandler {
                 );
             }
 
-        // store attachments for later reuse
-        let cachedAttachments: CachedImageWithDetails[] = new Array<CachedImageWithDetails>();
-        if (attachments) {
-            for (let i = 0; i < attachments?.length; i++) {
-                const [attachmentName, tags]: [string, ExifReader.Tags] =
-                    await systemContext.session.storeUserSuppliedFile(
-                        attachments![i],
-                    );
+            // store attachments for later reuse
+            let cachedAttachments: CachedImageWithDetails[] =
+                new Array<CachedImageWithDetails>();
+            if (attachments) {
+                for (let i = 0; i < attachments?.length; i++) {
+                    const [attachmentName, tags]: [string, ExifReader.Tags] =
+                        await systemContext.session.storeUserSuppliedFile(
+                            attachments![i],
+                        );
 
-                cachedAttachments.push(new CachedImageWithDetails(tags, attachmentName, attachments![i]));
+                    cachedAttachments.push(
+                        new CachedImageWithDetails(
+                            tags,
+                            attachmentName,
+                            attachments![i],
+                        ),
+                    );
+                }
             }
-        }
 
             const history = systemContext.session.getConfig().history
                 ? getChatHistoryForTranslation(systemContext)
@@ -757,16 +764,16 @@ export class RequestCommandHandler implements CommandHandler {
             // Make sure we clear any left over streaming context
             systemContext.streamingActionContext = undefined;
 
-        const match = await matchRequest(request, context, history);
-        const translationResult =
-            match === undefined // undefined means not found
-                ? await translateRequest(
-                      request,
-                      context,
-                      history,
-                      cachedAttachments,
-                  )
-                : match; // result or null
+            const match = await matchRequest(request, context, history);
+            const translationResult =
+                match === undefined // undefined means not found
+                    ? await translateRequest(
+                          request,
+                          context,
+                          history,
+                          cachedAttachments,
+                      )
+                    : match; // result or null
 
             if (!translationResult) {
                 // undefined means not found or not translated

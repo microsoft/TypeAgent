@@ -45,8 +45,7 @@ export function makeRequestPromptCreator(
     return (request: string) => {
         if (attachments !== undefined && attachments?.length > 0) {
             if (request.length == 0) {
-                request =
-                    `Caption the first image in no less than 150 words without making any assumptions, remain factual.`;
+                request = `Caption the first image in no less than 150 words without making any assumptions, remain factual.`;
             }
         }
 

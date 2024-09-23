@@ -75,7 +75,7 @@ function createWindow(): void {
         },
         x: ShellSettings.getinstance().x,
         y: ShellSettings.getinstance().y,
-    });   
+    });
 
     setupDevicePermissions(mainWindow);
 
@@ -449,7 +449,7 @@ const clientIO: ClientIO = {
     },
     takeAction: (action: string) => {
         mainWindow?.webContents.send("take-action", action);
-    }
+    },
 };
 
 async function setDynamicDisplay(

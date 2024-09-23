@@ -158,7 +158,7 @@ export interface RequestIO {
         requestId: RequestId,
         filter: NotifyCommands,
     ): void;
-    takeAction(action: string): void;    
+    takeAction(action: string): void;
 }
 
 let lastAppendMode: DisplayAppendMode | undefined;
@@ -247,7 +247,7 @@ export function getConsoleRequestIO(
         },
         takeAction: (action: string) => {
             return stdio?.write("This command is not supported in the CLI.\n");
-        }
+        },
     };
 }
 
@@ -325,7 +325,7 @@ export function getRequestIO(
         },
         takeAction(action: string) {
             clientIO.takeAction(action);
-        }
+        },
     };
 }
 

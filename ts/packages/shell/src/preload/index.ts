@@ -135,7 +135,7 @@ const api: ClientAPI = {
     },
     onTakeAction(callback) {
         ipcRenderer.on("take-action", callback);
-    }
+    },
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to

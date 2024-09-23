@@ -175,7 +175,7 @@ function addEvents(
         },
     );
     api.onTakeAction((_, action: string) => {
-        switch(action) {
+        switch (action) {
             case "show-camera": {
                 cameraView.show();
                 return;
@@ -286,7 +286,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const chatView = new ChatView(idGenerator, agents);
     const cameraView = new CameraView((image: HTMLImageElement) => {
-
         // copy image
         const newImage: HTMLImageElement = document.createElement("img");
         newImage.src = image.src;
@@ -295,7 +294,8 @@ document.addEventListener("DOMContentLoaded", function () {
         chatView.chatInput.textarea.textEntry.append(newImage);
 
         if (chatView.chatInput.sendButton !== undefined) {
-            chatView.chatInput.sendButton.disabled = (chatView.chatInput.textarea.textEntry.innerHTML.length == 0);
+            chatView.chatInput.sendButton.disabled =
+                chatView.chatInput.textarea.textEntry.innerHTML.length == 0;
         }
     });
 

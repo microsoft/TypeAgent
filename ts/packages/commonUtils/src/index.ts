@@ -46,4 +46,4 @@ export { createRpc } from "./rpc.js";
 
 export { CachedImageWithDetails, getImageElement } from "./image.js";
 
-export { getFileExtensionForMimeType, getMimeType } from "./mimeTypes.js"
+export { getFileExtensionForMimeType, getMimeType } from "./mimeTypes.js";
