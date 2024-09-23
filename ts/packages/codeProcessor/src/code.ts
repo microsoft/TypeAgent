@@ -50,6 +50,16 @@ export type CodeBlock = {
     language: string;
 };
 
+export function codeBlockToString(code: CodeBlock): string {
+    const text = code.code;
+    return typeof text === "string" ? text : text.join("\n");
+}
+
+export interface StoredCodeBlock {
+    code: CodeBlock;
+    sourcePath?: string | undefined;
+}
+
 export type Module = {
     text: string;
     moduleName?: string; // if text is from an imported module

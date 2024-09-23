@@ -5,6 +5,7 @@ Code Processor is sample code that explores how to use TypeChat and schemas to w
 - Code analysis and review
 - LLM mediated debugging assistance
 - Search and Q&A
+- Code Knowledge
 
 ## Trademarks
 

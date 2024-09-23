@@ -7,4 +7,5 @@ export * from "./codeReviewer.js";
 export * from "./codeReviewSchema.js";
 export * from "./codeAnswerSchema.js";
 export * from "./codeDocSchema.js";
+export * from "./developerMemory.js";
 export * from "./codeIndex.js";

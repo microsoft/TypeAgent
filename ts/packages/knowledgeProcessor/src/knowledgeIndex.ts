@@ -642,6 +642,7 @@ export async function removeSemanticIndexFolder(
 
 export interface KnowledgeStore<T, TId = any> {
     readonly settings: TextIndexSettings;
+    readonly store: ObjectFolder<T>;
     readonly sequence: TemporalLog<TId, TId[]>;
     readonly labels: LabelIndex<TId>;
     entries(): AsyncIterableIterator<T>;
@@ -684,6 +685,7 @@ export async function createKnowledgeStore<T>(
 
     return {
         settings,
+        store: entries,
         sequence,
         labels,
         entries: entries.allObjects,
