@@ -27,7 +27,6 @@ import {
     addToSet,
     createFrequencyTable,
     intersect,
-    intersectArrays,
     intersectMultiple,
     intersectUnionMultiple,
     removeUndefined,
@@ -37,7 +36,6 @@ import {
 } from "../setOperations.js";
 import {
     TemporalLog,
-    createTemporalLog,
     filterTemporalSequence,
     getRangeOfTemporalSequence,
     itemsFromTemporalSequence,
@@ -67,7 +65,6 @@ export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
     ): Promise<EntitySearchResult<TEntityId>>;
     searchTerms(
         filter: TermFilter,
-        labelFilter: string | undefined,
         options: EntitySearchOptions,
     ): Promise<EntitySearchResult<TEntityId>>;
     loadSourceIds(
@@ -297,7 +294,6 @@ export async function createEntityIndex<TSourceId = string>(
 
     async function searchTerms(
         filter: TermFilter,
-        labelFilter: string | undefined,
         options: EntitySearchOptions,
     ): Promise<EntitySearchResult<EntityId>> {
         const results = createSearchResults();
@@ -337,12 +333,6 @@ export async function createEntityIndex<TSourceId = string>(
                     itemsFromTemporalSequence(results.temporalSequence),
                 ),
             ];
-        }
-        const labelIds = labelFilter
-            ? await entityStore.labels.get(labelFilter)
-            : undefined;
-        if (labelIds) {
-            results.entityIds = intersectArrays(results.entityIds, labelIds);
         }
         if (results.entityIds && results.temporalSequence) {
             // The temporal sequence maintains all entity ids seen at a timestamp.

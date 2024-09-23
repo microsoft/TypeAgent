@@ -161,7 +161,6 @@ export interface Conversation<
     ): Promise<SearchResponse>;
     searchTerms(
         filters: TermFilter[],
-        labelFilter: string | undefined,
         options: ConversationSearchOptions,
     ): Promise<SearchResponse>;
     searchMessages(
@@ -621,7 +620,7 @@ export async function createConversation(
             {};
 
         await Promise.all([
-            addNextEntities(knowledge, knowledgeIds, message.timestamp, label),
+            addNextEntities(knowledge, knowledgeIds, message.timestamp),
             addNextTopics(knowledge, knowledgeIds, message.timestamp),
             addNextActions(knowledge, knowledgeIds, message.timestamp),
         ]);
@@ -679,14 +678,12 @@ export async function createConversation(
         knowledge: ExtractedKnowledge<MessageId>,
         knowledgeIds: ExtractedKnowledgeIds<TopicId, EntityId, ActionId>,
         timestamp?: Date | undefined,
-        label?: string | undefined,
     ): Promise<void> {
         if (knowledge.entities && knowledge.entities.length > 0) {
             const entityIndex = await getEntityIndex();
             knowledgeIds.entityIds = await entityIndex.addNext(
                 knowledge.entities,
                 timestamp,
-                label,
             );
         }
     }
@@ -787,7 +784,6 @@ export async function createConversation(
 
     async function searchTerms(
         filters: TermFilter[],
-        labelFilter: string | undefined,
         options: ConversationSearchOptions,
     ): Promise<SearchResponse> {
         const [entityIndex, topicIndex, actionIndex] = await Promise.all([
@@ -806,7 +802,6 @@ export async function createConversation(
 
             const entityResult = await entityIndex.searchTerms(
                 filter,
-                labelFilter,
                 options.entity,
             );
             results.entities.push(entityResult);

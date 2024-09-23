@@ -13,13 +13,11 @@ import {
     createEmbeddingFolder,
     createObjectFolder,
     createSemanticIndex,
-    dateTime,
     removeDir,
 } from "typeagent";
 import {
     FrequencyTable,
     SetOp,
-    intersectArrays,
     intersectMultiple,
     intersectUnionMultiple,
     removeUndefined,
@@ -30,7 +28,6 @@ import {
 import { TextBlock, TextBlockType } from "./text.js";
 import { TemporalLog, createTemporalLog } from "./temporal.js";
 import { TextEmbeddingModel } from "aiclient";
-import { createLabelIndex, LabelIndex } from "./conversation/labels.js";
 
 export interface KeyValueIndex<TKeyId, TValueId> {
     get(id: TKeyId): Promise<TValueId[] | undefined>;
@@ -644,16 +641,11 @@ export interface KnowledgeStore<T, TId = any> {
     readonly settings: TextIndexSettings;
     readonly store: ObjectFolder<T>;
     readonly sequence: TemporalLog<TId, TId[]>;
-    readonly labels: LabelIndex<TId>;
     entries(): AsyncIterableIterator<T>;
     get(id: TId): Promise<T | undefined>;
     getMultiple(ids: TId[]): Promise<T[]>;
     add(item: T, id?: TId): Promise<TId>;
-    addNext(
-        items: T[],
-        timestamp?: Date | undefined,
-        label?: string | undefined,
-    ): Promise<TId[]>;
+    addNext(items: T[], timestamp?: Date | undefined): Promise<TId[]>;
 }
 
 export async function createKnowledgeStore<T>(
@@ -663,7 +655,7 @@ export async function createKnowledgeStore<T>(
     fSys?: FileSystem,
 ): Promise<KnowledgeStore<T, string>> {
     type TId = string;
-    const [sequence, entries, labels] = await Promise.all([
+    const [sequence, entries] = await Promise.all([
         createTemporalLog<TId[]>(
             { concurrency: settings.concurrency },
             path.join(rootPath, "sequence"),
@@ -675,19 +667,12 @@ export async function createKnowledgeStore<T>(
             folderSettings,
             fSys,
         ),
-        createLabelIndex<TId>(
-            settings,
-            path.join(rootPath, "labels"),
-            folderSettings,
-            fSys,
-        ),
     ]);
 
     return {
         settings,
         store: entries,
         sequence,
-        labels,
         entries: entries.allObjects,
         get: entries.get,
         getMultiple,
@@ -715,9 +700,6 @@ export async function createKnowledgeStore<T>(
 
         itemIds.sort();
         await sequence.put(itemIds, timestamp);
-        if (label) {
-            await labels.put(label, itemIds);
-        }
         return itemIds;
     }
 
