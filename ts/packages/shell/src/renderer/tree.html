@@ -346,16 +346,12 @@ ${d.incoming.length} incoming`));
     {"name":"flare.vis.Visualization","size":16540,"imports":["flare.animate.Transitioner","flare.vis.operator.IOperator","flare.animate.Scheduler","flare.vis.events.VisualizationEvent","flare.vis.data.Tree","flare.vis.events.DataEvent","flare.vis.axis.Axes","flare.vis.axis.CartesianAxes","flare.util.Displays","flare.vis.operator.OperatorList","flare.vis.controls.ControlList","flare.animate.ISchedulable","flare.vis.data.Data"]}
     ];
     var data_orig2 = [
-  { "name": "session.knowledge.entity", "imports": [] },
-  { "name": "session.knowledge.action", "imports": [] },
-  { "name": "session.knowledge.topic", "imports": [] },
-  { "name": "session.knowledge.message", "imports": [] },
-  { "name": "session.knowledge.type", "imports": [] },
-  { "name": "session.knowledge.param", "imports": [] },
-  {
+    {
     "name": "session.knowledge.message.2024_09_23_09_48_26_122",
     "imports": ["session.knowledge.message"]
   },
+
+
   {
     "name": "session.knowledge.message.2024_09_23_09_48_26_125",
     "imports": ["session.knowledge.message"]
@@ -673,7 +669,14 @@ ${d.incoming.length} incoming`));
   {
     "name": "session.knowledge.message.2024_09_23_11_59_18_423",
     "imports": ["session.knowledge.message"]
-  }
+  },
+  { "name": "session.knowledge.entity", "imports": ["session.knowledge"] },
+  { "name": "session.knowledge.action", "imports": ["session.knowledge"] },
+  { "name": "session.knowledge.topic", "imports": ["session.knowledge"] },
+  { "name": "session.knowledge.message", "imports": ["session.knowledge"] },
+  { "name": "session.knowledge.type", "imports": ["session.knowledge"] },
+  { "name": "session.knowledge.param", "imports": ["session.knowledge"] },
+  { "name": "session.knowledge", "imports": [] },
 ]
 
 
