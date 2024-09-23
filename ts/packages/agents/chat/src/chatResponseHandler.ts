@@ -111,12 +111,14 @@ async function handleChatResponse(
 
                 // TODO: cleanup
                 // turn related files into entities
-                for(const file of generateResponseAction.parameters.relatedFiles) {
-                    let name = file;
-                    if (file.lastIndexOf("\\") > -1) {
-                        name = file.substring(file.lastIndexOf("\\") + 1);
+                if (generateResponseAction.parameters.relatedFiles !== undefined) {
+                    for(const file of generateResponseAction.parameters.relatedFiles) {
+                        let name = file;
+                        if (file.lastIndexOf("\\") > -1) {
+                            name = file.substring(file.lastIndexOf("\\") + 1);
+                        }
+                        result.entities.push({ name, type: [ "file", "image", "data" ]})
                     }
-                    result.entities.push({ name, type: [ "file", "image", "data" ]})
                 }
 
                 return result;
@@ -161,7 +163,7 @@ async function handleChatResponse(
                             matches.response &&
                             matches.response.answer
                         ) {
-                            if (lookupAction.parameters.retrieveRelatedFilesFromStorage) {
+                            if (lookupAction.parameters.retrieveRelatedFilesFromStorage && lookupAction.parameters.relatedFiles !== undefined) {
                                 return createActionResultFromHtmlDisplay(`<div>${matches.response.answer.answer} ${await rehydrateImages(context, lookupAction.parameters.relatedFiles)}</div>`);
                             } else {
                                 return createActionResult(
