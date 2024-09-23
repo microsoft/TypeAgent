@@ -69,9 +69,9 @@ export interface LookupAndGenerateResponseAction {
         // it is recommended to include the same entities as in the user request
         internetLookups?: string[];
         // Any file references to images referred to by the message
-        relatedFiles: string[];
+        relatedFiles?: string[];
         // Are the contents of the files needed at this time?
-        retrieveRelatedFilesFromStorage: boolean;
+        retrieveRelatedFilesFromStorage?: boolean;
     };
 }
 
@@ -89,6 +89,6 @@ export interface GenerateResponseAction {
         // ALL the actions and entities present in the generated text
         generatedTextEntities: Entity[];
         // The file names of any attachments
-        relatedFiles: string[];
+        relatedFiles?: string[];
     };
 }

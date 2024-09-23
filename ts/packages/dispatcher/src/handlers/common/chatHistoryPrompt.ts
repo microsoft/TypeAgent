@@ -43,13 +43,7 @@ export function makeRequestPromptCreator(
     }
 
     return (request: string) => {
-        // image adjustments
-        let imageSuffix = "";
-
         if (attachments !== undefined && attachments?.length > 0) {
-            imageSuffix =
-                "including any images provided, ";
-
             if (request.length == 0) {
                 request =
                     `Caption the first image in no less than 150 words without making any assumptions, remain factual.`;
