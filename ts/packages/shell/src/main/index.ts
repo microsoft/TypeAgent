@@ -37,7 +37,7 @@ import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
 import { AppAgentEvent, DisplayAppendMode } from "@typeagent/agent-sdk";
 import { shellAgentProvider } from "./agent.js";
-import { TypeAgentList, VisualizationNotifier } from "./visualizationNotifier.js";
+import { KnowledgeGraph, TypeAgentList, VisualizationNotifier } from "./visualizationNotifier.js";
 
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
@@ -178,6 +178,10 @@ function createWindow(): void {
 
     VisualizationNotifier.getinstance().onListChanged = (lists: TypeAgentList) => {
         vizWindow?.webContents.send("update-list-visualization", lists);
+    };
+
+    VisualizationNotifier.getinstance().onKnowledgeUpdated = (graph: KnowledgeGraph[][]) => {
+        vizWindow?.webContents.send("update-knowledge-visualization", graph);
     };
 }
 

@@ -91,7 +91,7 @@ export class TidyTree {
                 .attr("paint-order", "stroke")
                 .attr("stroke", this.config.halo)
                 .attr("stroke-width", this.config.haloWidth)
-                .text((d, i) => {console.log(d); return L[i];});
+                .text((_, i) => { return L[i];});
           
             this.tree = svg.node();
         }

@@ -136,6 +136,9 @@ const api: ClientAPI = {
     onUpdateListVisualization(callback) {
         ipcRenderer.on("update-list-visualization", callback);
     },
+    onUpdateKnowledgeVisualization(callback) {
+        ipcRenderer.on("update-knowledge-visualization", callback);
+    },
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to
