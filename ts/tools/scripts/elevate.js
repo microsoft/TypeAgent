@@ -4,7 +4,7 @@
 
 const config = require("./elevate.config.json");
 
-async function elevate() {
+async function elevate(startDateTime) {
     const { getClient } = await import("./lib/pimClient.mjs");
 
     // get PIM client
@@ -18,6 +18,7 @@ async function elevate() {
             expirationType: element.properties.ScheduleInfo.Expiration.Type,
             expirationDuration:
                 element.properties.ScheduleInfo.Expiration.Duration,
+            startDateTime: startDateTime,
         });
     });
 }
@@ -33,7 +34,22 @@ async function elevate() {
             console.log("Uses configuration from elevate.config.json.");
             return;
         default:
-            await elevate();
+            let date = new Date();
+            if (command == "tomorrow_morning") {
+                date.setDate(date.getDate() + 1);
+                date.setHours(8, 0, 0);
+            } else {
+                try {
+                    date = new Date(Date.parse(command));
+                } catch {
+                    console.log(
+                        `Unable to parse date '${command}'.  The expected format is '2024-09-30T09:01:00'`,
+                    );
+                    return;
+                }
+            }
+
+            await elevate(date.toISOString());
             break;
     }
 })().catch((e) => {
