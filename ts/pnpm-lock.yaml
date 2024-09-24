@@ -1174,6 +1174,9 @@ importers:
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.3.1
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@18.18.7)(ts-node@10.9.1(@types/node@18.18.7)(typescript@5.4.3))
