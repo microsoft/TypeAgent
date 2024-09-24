@@ -34,18 +34,19 @@ async function elevate(startDateTime) {
             console.log("Uses configuration from elevate.config.json.");
             return;
         default:
-
             const start = undefined;
 
             const date = new Date();
-            if (command == "tomorrow_morning") {                    
+            if (command == "tomorrow_morning") {
                 date.setDate(date.getDate() + 1);
                 date.setHours(8, 0, 0);
             } else {
                 try {
                     date = Date.parse(start);
                 } catch {
-                    console.log(`Unable to parse date '${command}'.  The expected format is '2024-09-30T09:01:00'`);
+                    console.log(
+                        `Unable to parse date '${command}'.  The expected format is '2024-09-30T09:01:00'`,
+                    );
                 }
             }
 
