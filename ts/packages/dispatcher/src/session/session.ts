@@ -384,10 +384,12 @@ export class Session {
         const fileExtension: string = this.getFileExtensionForMimeType(
             file.substring(5, file.indexOf(";")),
         );
-        const fileName: string = path.join(
+        const uniqueFileName: string = getUniqueFileName(
             filesDir,
-            getUniqueFileName(filesDir, "attachment_", fileExtension),
+            "attachment_",
+            fileExtension,
         );
+        const fileName: string = path.join(filesDir, uniqueFileName);
         const buffer = Buffer.from(
             file.substring(file.indexOf(";base64,") + ";base64,".length),
             "base64",
@@ -397,7 +399,7 @@ export class Session {
 
         fs.writeFile(fileName, buffer, () => {});
 
-        return [fileName, tags];
+        return [uniqueFileName, tags];
     }
 
     getFileExtensionForMimeType(mime: string): string {

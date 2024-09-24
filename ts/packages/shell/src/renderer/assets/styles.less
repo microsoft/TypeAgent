@@ -13,6 +13,13 @@ body {
   font-size: 14px;
 }
 
+img {
+  max-width: 320px;
+  max-height: 320px;
+  width: 100%;
+  height: 100%;
+}
+
 .wrapper {
   height: 100%;
   width: 100%;
@@ -27,7 +34,7 @@ body {
   resize: none;
   outline: 0px solid transparent;
   min-height: 30px;
-  line-height: 20px;
+  line-height: 30px;
   font-family: inherit;
   font-size: inherit;
   align-self: flex-start;
@@ -390,6 +397,10 @@ body {
   cursor: pointer;
 }
 
+.chat-input-button:disabled svg {
+  fill: lightslategray;
+}
+
 .chat-input-micSelector {
   border: 0px;
   margin-left: 25px;
@@ -398,8 +409,18 @@ body {
   max-width: 85%;
 }
 
-.chat-inpput-dropImage {
-  width: 96px;
+.chat-input-dropImage {
+  max-width: 96px;
+  max-height: 96px;
+  width: auto;
+  height: auto;
+}
+
+.chat-input-image {
+  max-width: 320px;
+  max-height: 320px;
+  width: auto;
+  height: auto;
 }
 
 .chat-timestamp {

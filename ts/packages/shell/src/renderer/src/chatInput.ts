@@ -7,7 +7,8 @@ import {
     iconMicrophoneListening,
     iconMicrophoneDisabled,
     iconCamera,
-    iconImage,
+    iconAttach,
+    iconSend,
 } from "./icon";
 import { getClientAPI } from "./main";
 import { recognizeOnce } from "./speech";
@@ -23,34 +24,35 @@ export interface ExpandableTextareaHandlers {
 export class ExpandableTextarea {
     preText: HTMLSpanElement | undefined = undefined;
     textEntry: HTMLSpanElement;
+    entryHandlers: ExpandableTextareaHandlers;
 
     constructor(
         id: string,
         className: string,
         handlers: ExpandableTextareaHandlers,
+        sendButton?: HTMLButtonElement,
     ) {
+        this.entryHandlers = handlers;
         this.textEntry = document.createElement("span");
         this.textEntry.className = className;
         this.textEntry.contentEditable = "true";
         this.textEntry.role = "textbox";
         this.textEntry.id = id;
         this.textEntry.addEventListener("keydown", (event) => {
-            if (handlers.onKeydown !== undefined) {
-                if (!handlers.onKeydown(this, event)) {
+            if (this.entryHandlers.onKeydown !== undefined) {
+                if (!this.entryHandlers.onKeydown(this, event)) {
                     event.preventDefault();
                     return false;
                 }
             }
             if (event.key === "Enter") {
                 event.preventDefault();
-                const text = this.getTextEntry().innerHTML;
-                if (text.length > 0) {
-                    handlers.onSend(text);
-                    this.textEntry.innerText = "";
-                    this.preText = undefined;
-                }
-            } else if (event.altKey && handlers.altHandler !== undefined) {
-                handlers.altHandler(this, event);
+                this.send(sendButton);
+            } else if (
+                event.altKey &&
+                this.entryHandlers.altHandler !== undefined
+            ) {
+                this.entryHandlers.altHandler(this, event);
             } else if (event.key == "Escape") {
                 this.textEntry.textContent = "";
                 event.preventDefault();
@@ -58,8 +60,12 @@ export class ExpandableTextarea {
             return true;
         });
         this.textEntry.addEventListener("input", () => {
-            if (handlers.onChange !== undefined) {
-                handlers.onChange(this);
+            if (this.entryHandlers.onChange !== undefined) {
+                this.entryHandlers.onChange(this);
+            }
+
+            if (sendButton !== undefined) {
+                sendButton.disabled = this.textEntry.innerHTML.length == 0;
             }
         });
     }
@@ -88,6 +94,18 @@ export class ExpandableTextarea {
                 s.addRange(r);
             }
         }, 0);
+    }
+
+    send(sendButton?: HTMLButtonElement) {
+        const text = this.getTextEntry().innerHTML;
+        if (text.length > 0) {
+            this.entryHandlers.onSend(text);
+            this.textEntry.innerText = "";
+            this.preText = undefined;
+            if (sendButton) {
+                sendButton.disabled = true;
+            }
+        }
     }
 }
 
@@ -130,11 +148,12 @@ export class ChatInput {
     inputContainer: HTMLDivElement;
     textarea: ExpandableTextarea;
     micButton: HTMLButtonElement;
-    picButton: HTMLLabelElement;
+    attachButton: HTMLLabelElement;
     camButton: HTMLButtonElement;
     dragTemp: string | undefined = undefined;
     input: HTMLInputElement;
     public dragEnabled: boolean = true;
+    sendButton: HTMLButtonElement;
 
     constructor(
         inputId: string,
@@ -145,12 +164,23 @@ export class ChatInput {
     ) {
         this.inputContainer = document.createElement("div");
         this.inputContainer.className = "chat-input";
-        this.textarea = new ExpandableTextarea(inputId, "user-textarea", {
-            onSend: messageHandler,
-            onChange,
-            onKeydown,
-        });
-        this.inputContainer.appendChild(this.textarea.getTextEntry());
+        this.sendButton = document.createElement("button");
+        this.sendButton.appendChild(iconSend());
+        this.sendButton.className = "chat-input-button";
+        this.sendButton.onclick = () => {
+            this.textarea.send();
+        };
+        this.sendButton.disabled = true;
+        this.textarea = new ExpandableTextarea(
+            inputId,
+            "user-textarea",
+            {
+                onSend: messageHandler,
+                onChange,
+                onKeydown,
+            },
+            this.sendButton,
+        );
 
         this.textarea.getTextEntry().ondragenter = (e: DragEvent) => {
             if (!this.dragEnabled) {
@@ -209,11 +239,22 @@ export class ChatInput {
             e.preventDefault();
         };
 
+        this.input = document.createElement("input");
+        this.input.type = "file";
+        this.input.classList.add("chat-message-hidden");
+        this.input.id = "image_upload";
+        this.inputContainer.append(this.input);
+        this.input.accept = "image/*,.jpg,.png,.gif";
+        this.input.onchange = () => {
+            if (this.input.files && this.input.files?.length > 0) {
+                this.loadImageFile(this.input.files[0]);
+            }
+        };
+
         this.micButton = document.createElement("button");
         this.micButton.appendChild(iconMicrophone());
         this.micButton.id = buttonId;
         this.micButton.className = "chat-input-button";
-        this.inputContainer.appendChild(this.micButton);
         this.micButton.addEventListener("click", async () => {
             const useLocalWhisper =
                 await getClientAPI().getLocalWhisperStatus();
@@ -235,29 +276,6 @@ export class ChatInput {
             }
         });
 
-        this.input = document.createElement("input");
-        this.input.type = "file";
-        this.input.classList.add("chat-message-hidden");
-        this.input.id = "image_upload";
-        this.inputContainer.append(this.input);
-        this.input.accept = "image/*,.jpg,.png,.gif";
-        this.input.onchange = () => {
-            if (this.input.files && this.input.files?.length > 0) {
-                this.loadImageFile(this.input.files[0]);
-            }
-        };
-
-        this.picButton = document.createElement("label");
-        this.picButton.htmlFor = this.input.id;
-        this.picButton.appendChild(iconImage());
-        this.picButton.className = "chat-input-button";
-        this.inputContainer.appendChild(this.picButton);
-
-        this.camButton = document.createElement("button");
-        this.camButton.appendChild(iconCamera());
-        this.camButton.className = "chat-input-button";
-        this.inputContainer.appendChild(this.camButton);
-
         const listeningMic = iconMicrophoneListening();
         listeningMic.className = "chat-message-hidden";
         this.micButton.appendChild(listeningMic);
@@ -265,6 +283,15 @@ export class ChatInput {
         const disabledMic = iconMicrophoneDisabled();
         disabledMic.className = "chat-message-hidden";
         this.micButton.appendChild(disabledMic);
+
+        this.camButton = document.createElement("button");
+        this.camButton.appendChild(iconCamera());
+        this.camButton.className = "chat-input-button";
+
+        this.attachButton = document.createElement("label");
+        this.attachButton.htmlFor = this.input.id;
+        this.attachButton.appendChild(iconAttach());
+        this.attachButton.className = "chat-input-button";
 
         getSpeechToken().then((result) => {
             if (result == undefined) {
@@ -277,6 +304,12 @@ export class ChatInput {
                 button.children[2].classList.remove("chat-message-hidden");
             }
         });
+
+        this.inputContainer.appendChild(this.attachButton);
+        this.inputContainer.appendChild(this.camButton);
+        this.inputContainer.appendChild(this.micButton);
+        this.inputContainer.appendChild(this.textarea.getTextEntry());
+        this.inputContainer.appendChild(this.sendButton);
     }
 
     async loadImageFile(file: File) {
@@ -293,9 +326,17 @@ export class ChatInput {
 
         dropImg.src =
             `data:image/${mimeType};base64,` + _arrayBufferToBase64(buffer);
-        dropImg.className = "chat-inpput-dropImage";
+
+        dropImg.className = "chat-input-dropImage";
 
         this.textarea.getTextEntry().append(dropImg);
+
+        if (this.sendButton !== undefined) {
+            this.sendButton.disabled =
+                this.textarea.textEntry.innerHTML.length == 0;
+        }
+
+        this.textarea.getTextEntry().focus();
     }
 
     clear() {
