@@ -7,6 +7,9 @@ import { Path } from "../objStream";
 import { NameValue, ScoredItem } from "../memory";
 import { createTopNList } from "../vector/embeddings";
 import { createLazy, insertIntoSorted } from "../lib";
+import registerDebug from "debug";
+
+const storageError = registerDebug("typeagent:storage:error");
 
 export enum FileNameType {
     Timestamp,
@@ -180,8 +183,8 @@ export async function createObjectFolder<T>(
     }
 
     async function get(name: string): Promise<T | undefined> {
+        const filePath = fullPath(name);
         try {
-            const filePath = fullPath(name);
             if (settings?.deserializer) {
                 const buffer = await fileSystem.readBuffer(filePath);
                 if (buffer.length == 0) {
@@ -197,7 +200,7 @@ export async function createObjectFolder<T>(
             }
         } catch (err: any) {
             if (err.code !== "ENOENT") {
-                throw err;
+                storageError(`Error reading ${filePath}\n: ${err}`);
             }
         }
         return undefined;

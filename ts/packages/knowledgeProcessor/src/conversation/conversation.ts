@@ -11,13 +11,17 @@ import {
     dateTime,
     removeDir,
 } from "typeagent";
-import { TextBlock, SourceTextBlock, valueToString } from "../text.js";
+import {
+    TextBlock,
+    SourceTextBlock,
+    valueToString,
+    TextBlockType,
+} from "../text.js";
 import { Topic } from "./topicSchema.js";
 import { TextStore, createTextStore } from "../textStore.js";
 import path from "path";
 import {
     TopicIndex,
-    TopicMerger,
     TopicSearchOptions,
     TopicSearchResult,
     createTopicIndex,
@@ -35,11 +39,7 @@ import {
     createEntityIndex,
     mergeEntities,
 } from "./entities.js";
-import {
-    ExtractedKnowledge,
-    KnowledgeExtractor,
-    extractKnowledgeFromBlock,
-} from "./knowledge.js";
+import { ExtractedKnowledge } from "./knowledge.js";
 import { Filter, SearchAction } from "./knowledgeSearchWebSchema.js";
 import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
@@ -92,7 +92,6 @@ export function createRecentItemsWindow<T>(
     function getContext(maxContextLength: number): string[] {
         let sections: string[] = [];
         let totalLength = 0;
-        let i: number = entries.length - 1;
         // Get the range of sections that could be pushed on, NEWEST first
         for (const item of entries.itemsReverse()) {
             const content = valueToString(item, stringify);
@@ -137,14 +136,19 @@ export interface Conversation<
      */
     clear(removeMessages: boolean): Promise<void>;
 
-    putIndex(
+    addMessage(
+        message: string | TextBlock,
+        timestamp?: Date,
+    ): Promise<SourceTextBlock<MessageId>>;
+    addKnowledgeForMessage(
+        message: SourceTextBlock<MessageId>,
+        knowledge: ExtractedKnowledge<MessageId>,
+        label?: string | undefined,
+    ): Promise<ExtractedKnowledgeIds<TTopicId, TEntityId, TActionId>>;
+    addKnowledgeToIndex(
         knowledge: ExtractedKnowledge<MessageId>,
         knowledgeIds: ExtractedKnowledgeIds<TTopicId, TEntityId, TActionId>,
     ): Promise<void>;
-    putNext(
-        message: SourceTextBlock<MessageId>,
-        knowledge: ExtractedKnowledge<MessageId>,
-    ): Promise<ExtractedKnowledgeIds<TTopicId, TEntityId, TActionId>>;
     search(
         filters: Filter[],
         options: ConversationSearchOptions,
@@ -164,7 +168,6 @@ export interface Conversation<
           }
         | undefined
     >;
-
     addNextEntities(
         knowledge: ExtractedKnowledge<MessageId>,
         knowledgeIds: ExtractedKnowledgeIds<TTopicId, TEntityId, TActionId>,
@@ -360,21 +363,21 @@ export function createSearchResponse<
     }
 
     function hasTopics(): boolean {
-        for (const topic of allTopics()) {
+        for (const _ of allTopics()) {
             return true;
         }
         return false;
     }
 
     function hasEntities(): boolean {
-        for (const entity of allEntities()) {
+        for (const _ of allEntities()) {
             return true;
         }
         return false;
     }
 
     function hasActions(): boolean {
-        for (const action of allActions()) {
+        for (const _ of allActions()) {
             return true;
         }
         return false;
@@ -434,6 +437,7 @@ export async function createConversation(
         folderSettings,
         fSys,
     );
+
     let messageIndex: MessageIndex<MessageId> | undefined;
     const knowledgeStore = await createObjectFolder<
         ExtractedKnowledge<MessageId>
@@ -444,6 +448,8 @@ export async function createConversation(
     let entityIndex: EntityIndex | undefined;
     const actionPath = path.join(rootPath, "actions");
     let actionIndex: ActionIndex | undefined;
+
+    await load();
 
     return {
         messages,
@@ -458,8 +464,9 @@ export async function createConversation(
         removeActions,
         removeMessageIndex,
         clear,
-        putIndex,
-        putNext,
+        addMessage,
+        addKnowledgeForMessage,
+        addKnowledgeToIndex,
         search,
         searchTerms,
         searchMessages,
@@ -518,6 +525,15 @@ export async function createConversation(
         return topicIndex;
     }
 
+    async function loadKnowledge() {
+        await Promise.all([
+            getTopicsIndex(1),
+            getTopicsIndex(2),
+            getEntityIndex(),
+            getActionIndex(),
+        ]);
+    }
+
     async function removeTopics(level?: number): Promise<void> {
         const name = topicsName(level);
         topics.delete(name);
@@ -552,13 +568,18 @@ export async function createConversation(
     async function clear(removeMessages: boolean): Promise<void> {
         await removeMessageIndex();
         await removeKnowledge();
+
         if (removeMessages) {
             await messages.clear();
         }
     }
 
+    async function load() {
+        await Promise.all([loadKnowledge(), getMessageIndex()]);
+    }
+
     async function loadTopicIndex(name: string): Promise<TopicIndex> {
-        const index = await createTopicIndex(
+        const index = await createTopicIndex<MessageId>(
             settings.indexSettings,
             path.join(rootPath, name),
             folderSettings,
@@ -567,9 +588,26 @@ export async function createConversation(
         return index;
     }
 
-    async function putNext(
+    async function addMessage(
+        message: string | TextBlock,
+        timestamp?: Date,
+    ): Promise<SourceTextBlock<any, MessageId>> {
+        const messageBlock: TextBlock =
+            typeof message === "string"
+                ? {
+                      value: message,
+                      type: TextBlockType.Paragraph,
+                  }
+                : message;
+        timestamp ??= new Date();
+        const blockId = await messages.put(messageBlock, timestamp);
+        return { ...messageBlock, blockId, timestamp };
+    }
+
+    async function addKnowledgeForMessage(
         message: SourceTextBlock<MessageId>,
         knowledge: ExtractedKnowledge<MessageId>,
+        label?: string | undefined,
     ): Promise<ExtractedKnowledgeIds<TopicId, EntityId, ActionId>> {
         await knowledgeStore.put(knowledge, message.blockId);
         const knowledgeIds: ExtractedKnowledgeIds<TopicId, EntityId, ActionId> =
@@ -583,7 +621,7 @@ export async function createConversation(
         return knowledgeIds;
     }
 
-    async function putIndex(
+    async function addKnowledgeToIndex(
         knowledge: ExtractedKnowledge<MessageId>,
         knowledgeIds: ExtractedKnowledgeIds<TopicId, EntityId, ActionId>,
         message?: SourceTextBlock<MessageId>,
@@ -637,7 +675,7 @@ export async function createConversation(
     ): Promise<void> {
         if (knowledge.entities && knowledge.entities.length > 0) {
             const entityIndex = await getEntityIndex();
-            knowledgeIds.entityIds = await entityIndex.putNext(
+            knowledgeIds.entityIds = await entityIndex.addNext(
                 knowledge.entities,
                 timestamp,
             );
@@ -650,7 +688,7 @@ export async function createConversation(
     ): Promise<void> {
         if (knowledge.entities && knowledge.entities.length > 0) {
             const entityIndex = await getEntityIndex();
-            await entityIndex.putMultiple(
+            await entityIndex.addMultiple(
                 knowledge.entities,
                 knowledgeIds.entityIds,
             );

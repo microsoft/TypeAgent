@@ -104,6 +104,24 @@ export function concatArrays<T>(...arrays: (Array<T> | undefined)[]): T[] {
     return result;
 }
 
+export function removeItemFromArray<T>(array: T[], items: T | T[]): T[] {
+    if (Array.isArray(items)) {
+        for (const item of items) {
+            const pos = array.indexOf(item);
+            if (pos >= 0) {
+                array.splice(pos, 1);
+            }        
+        }
+    }
+    else {
+        const pos = array.indexOf(items);
+        if (pos >= 0) {
+            array.splice(pos, 1);
+        }    
+    }
+    return array;
+}
+
 export class CircularArray<T> implements Iterable<T> {
     private buffer: T[];
     private count: number;

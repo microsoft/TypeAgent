@@ -172,12 +172,16 @@ export function testCircularArray() {
     console.log([...buffer]);
 }
 
-export async function testConversationEntities(): Promise<void> {
-    const testConversation = await conversation.createConversationManager(
+async function createConversationManager(): Promise<conversation.ConversationManager> {
+    return await conversation.createConversationManager(
         "testConversation",
         "/data/tests",
         true,
     );
+}
+
+export async function testConversationEntities(): Promise<void> {
+    const testConversation = await createConversationManager();
     const testMessage = "Bach ate pizza while he wrote fugues";
     let entity1: conversation.ConcreteEntity = {
         name: "bach",
