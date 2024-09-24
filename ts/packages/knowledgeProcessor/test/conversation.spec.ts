@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 
 import { conversation } from "../src/index.js";
+import { shouldSkip, skipTest } from "./testCore.js";
 
 export type TestContext = {
     cm: conversation.ConversationManager;
@@ -14,35 +15,43 @@ describe("Conversation Manager", () => {
     beforeAll(async () => {
         await getContext();
     });
-    test(
-        "addEntities",
-        async () => {
-            const context = await getContext();
-            await addEntities(context.cm);
-        },
-        testTimeout,
-    );
-    test(
-        "search",
-        async () => {
-            const context = await getContext();
-            const query = "What food did we talk about?";
-            let matches = await context.cm.search(query);
-            expect(matches && matches.response && matches.response.answer);
-        },
-        testTimeout,
-    );
-    test("searchTerms", async () => {
-        const context = await getContext();
-        const query = "What food did we talk about?";
-        const filters: conversation.TermFilter[] = [
-            {
-                terms: ["food"],
-            },
-        ];
-        let matches = await context.cm.search(query, filters);
-        expect(matches && matches.response && matches.response.answer);
-    });
+    shouldSkip()
+        ? skipTest("addEntities")
+        : test(
+              "addEntities",
+              async () => {
+                  const context = await getContext();
+                  await addEntities(context.cm);
+              },
+              testTimeout,
+          );
+    shouldSkip()
+        ? skipTest("search")
+        : test(
+              "search",
+              async () => {
+                  const context = await getContext();
+                  const query = "What food did we talk about?";
+                  let matches = await context.cm.search(query);
+                  expect(
+                      matches && matches.response && matches.response.answer,
+                  );
+              },
+              testTimeout,
+          );
+    shouldSkip()
+        ? skipTest("searchTerms")
+        : test("searchTerms", async () => {
+              const context = await getContext();
+              const query = "What food did we talk about?";
+              const filters: conversation.TermFilter[] = [
+                  {
+                      terms: ["food"],
+                  },
+              ];
+              let matches = await context.cm.search(query, filters);
+              expect(matches && matches.response && matches.response.answer);
+          });
 });
 
 async function getContext(): Promise<TestContext> {
