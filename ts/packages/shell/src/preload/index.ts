@@ -79,9 +79,6 @@ const api: ClientAPI = {
     onClear(callback) {
         ipcRenderer.on("clear", callback);
     },
-    onSetPartialInputHandler(callback) {
-        ipcRenderer.on("set-partial-input-handler", callback);
-    },
     onSettingSummaryChanged(callback) {
         ipcRenderer.on("setting-summary-changed", callback);
     },

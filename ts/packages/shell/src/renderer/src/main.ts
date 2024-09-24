@@ -71,9 +71,6 @@ function addEvents(
                 nextRefreshMs,
             ),
     );
-    api.onSetPartialInputHandler((_, enabled) => {
-        chatView.enablePartialInputHandler(enabled);
-    });
     api.onActionCommand((_, actionTemplates, command, requestId) => {
         chatView.actionCommand(actionTemplates, command, requestId);
     });

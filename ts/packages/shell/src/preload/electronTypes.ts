@@ -130,9 +130,6 @@ export interface ClientAPI {
             nextRefreshMs: number,
         ) => void,
     ): void;
-    onSetPartialInputHandler(
-        callback: (e: Electron.IpcRendererEvent, enabled: boolean) => void,
-    ): void;
     onClear(
         callback: (
             e: Electron.IpcRendererEvent,
