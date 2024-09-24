@@ -32,8 +32,8 @@
     "typechat": "^0.1.1"
   },
   "devDependencies": {
-    "@types/node": "^18.18.7",
     "@types/jest": "^29.5.7",
+    "@types/node": "^18.18.7",
     "copyfiles": "^2.4.1",
     "dotenv": "^16.3.1",
     "jest": "^29.7.0",
