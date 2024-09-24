@@ -7,7 +7,6 @@ import {
     SearchOptions,
     asyncArray,
     collections,
-    createObjectFolder,
     dateTime,
 } from "typeagent";
 import {

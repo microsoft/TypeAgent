@@ -12,9 +12,8 @@ import {
     dateTime,
 } from "typeagent";
 import { intersectMultiple, setFrom } from "./setOperations.js";
-import { DateTimeRange } from "./conversation/dateTimeSchema.js";
 import { DateRange } from "../../typeagent/dist/dateTime.js";
-import { Url, pathToFileURL } from "url";
+import { pathToFileURL } from "url";
 import path from "path";
 
 /**

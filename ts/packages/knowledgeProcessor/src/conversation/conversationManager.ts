@@ -4,7 +4,7 @@
 import path from "path";
 import { openai } from "aiclient";
 import { ObjectFolderSettings, SearchOptions, collections } from "typeagent";
-import { TextBlock, SourceTextBlock, TextBlockType } from "../text.js";
+import { SourceTextBlock } from "../text.js";
 import {
     Conversation,
     ConversationSettings,
@@ -31,7 +31,6 @@ import { SetOp, unionArrays } from "../setOperations.js";
 import { ConcreteEntity } from "./knowledgeSchema.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TopicMerger } from "./topics.js";
-import { open } from "fs";
 
 /**
  * A conversation manager lets you dynamically:
@@ -152,7 +151,7 @@ export async function createConversationManager(
         KnowledgeSearchMode.WithActions,
     );
 
-    const messageIndex = await conversation.getMessageIndex();
+    await conversation.getMessageIndex();
 
     return {
         conversationName,
@@ -381,7 +380,7 @@ async function indexKnowledge(
         label,
     );
     if (topicMerger) {
-        const mergedTopic = await topicMerger.next(true, true);
+        await topicMerger.next(true, true);
     }
     await conversation.addKnowledgeToIndex(knowledge, knowledgeIds);
 }

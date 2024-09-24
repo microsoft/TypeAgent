@@ -22,7 +22,6 @@ import { TextStore, createTextStore } from "../textStore.js";
 import path from "path";
 import {
     TopicIndex,
-    TopicMerger,
     TopicSearchOptions,
     TopicSearchResult,
     createTopicIndex,
@@ -40,11 +39,7 @@ import {
     createEntityIndex,
     mergeEntities,
 } from "./entities.js";
-import {
-    ExtractedKnowledge,
-    KnowledgeExtractor,
-    extractKnowledgeFromBlock,
-} from "./knowledge.js";
+import { ExtractedKnowledge } from "./knowledge.js";
 import { Filter, SearchAction } from "./knowledgeSearchWebSchema.js";
 import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
@@ -97,7 +92,6 @@ export function createRecentItemsWindow<T>(
     function getContext(maxContextLength: number): string[] {
         let sections: string[] = [];
         let totalLength = 0;
-        let i: number = entries.length - 1;
         // Get the range of sections that could be pushed on, NEWEST first
         for (const item of entries.itemsReverse()) {
             const content = valueToString(item, stringify);
@@ -369,21 +363,21 @@ export function createSearchResponse<
     }
 
     function hasTopics(): boolean {
-        for (const topic of allTopics()) {
+        for (const _ of allTopics()) {
             return true;
         }
         return false;
     }
 
     function hasEntities(): boolean {
-        for (const entity of allEntities()) {
+        for (const _ of allEntities()) {
             return true;
         }
         return false;
     }
 
     function hasActions(): boolean {
-        for (const action of allActions()) {
+        for (const _ of allActions()) {
             return true;
         }
         return false;

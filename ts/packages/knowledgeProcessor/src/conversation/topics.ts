@@ -27,7 +27,6 @@ import {
     SourceTextBlock,
     TextBlock,
     TextBlockType,
-    collectBlockIds,
     collectBlockText,
     collectSourceIds,
 } from "../text.js";

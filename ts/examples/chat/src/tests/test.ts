@@ -180,30 +180,6 @@ async function createConversationManager(): Promise<conversation.ConversationMan
     );
 }
 
-export async function testLabels(): Promise<void> {
-    const testConversation = await createConversationManager();
-    const testMessages = [
-        "Bach ate pizza while he wrote fugues",
-        "Bach did jumping jacks while he wrote fugues",
-    ];
-    const testLabel = "Bach Food";
-    await testConversation.addMessage(
-        testMessages[0],
-        undefined,
-        undefined,
-        testLabel,
-    );
-    await testConversation.addMessage(testMessages[1]);
-
-    const query = "What exercise did we talk about?";
-    let matches = await testConversation.search(query);
-    if (matches && matches.response && matches.response.answer) {
-        console.log(matches.response.answer);
-    } else {
-        console.log("bug");
-    }
-}
-
 export async function testConversationEntities(): Promise<void> {
     const testConversation = await createConversationManager();
     const testMessage = "Bach ate pizza while he wrote fugues";
@@ -266,7 +242,6 @@ export async function runTestCases(): Promise<void> {
 }
 
 export async function runTests(): Promise<void> {
-    await testLabels();
     await testConversationEntities();
     await runTestCases();
     // await runKnowledgeTests();
