@@ -37,7 +37,7 @@ export class ShellSettings
     public onSettingsChanged: EmptyFunction | null;
     public onShowSettingsDialog: ((dialogName: string) => void) | null;
     public onRunDemo: ((interactive: boolean) => void) | null;
-    public toggleToopMost: EmptyFunction | null;
+    public onToggleTopMost: EmptyFunction | null;
 
     public get width(): number | undefined {
         return this.size[0];
@@ -79,7 +79,7 @@ export class ShellSettings
         this.onSettingsChanged = null;
         this.onShowSettingsDialog = null;
         this.onRunDemo = null;
-        this.toggleToopMost = null;
+        this.onToggleTopMost = null;
     }
 
     public static get filePath(): string {
@@ -163,8 +163,8 @@ export class ShellSettings
     }
 
     public toggleTopMost() {
-        if (ShellSettings.getinstance().toggleToopMost != null) {
-            ShellSettings.getinstance().toggleToopMost!();
+        if (ShellSettings.getinstance().onToggleTopMost != null) {
+            ShellSettings.getinstance().onToggleTopMost!();
         }
     }
 }

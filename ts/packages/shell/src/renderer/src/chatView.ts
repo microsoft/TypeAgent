@@ -20,7 +20,7 @@ import {
     DisplayMessageKind,
     DynamicDisplay,
 } from "@typeagent/agent-sdk";
-import { TTS, TTSMetrics } from "./tts";
+import { TTS, TTSMetrics } from "./tts/tts";
 import { IAgentMessage } from "agent-dispatcher";
 import DOMPurify from "dompurify";
 import { PhaseTiming, RequestMetrics } from "agent-dispatcher";
@@ -900,7 +900,11 @@ export function setContent(
     // Process content according to type
     const contentHtml =
         type === "html"
-            ? DOMPurify.sanitize(text, { ADD_ATTR: ["target"] })
+            ? DOMPurify.sanitize(text, {
+                  ADD_ATTR: ["target"],
+                  ADD_DATA_URI_TAGS: ["img"],
+                  ADD_URI_SAFE_ATTR: ["src"],
+              })
             : enableText2Html
               ? textToHtml(text)
               : stripAnsi(encodeTextToHtml(text));
@@ -1530,9 +1534,9 @@ export class ChatView {
         } else if (request.type === "html") {
             let tempDiv: HTMLDivElement = document.createElement("div");
             tempDiv.innerHTML = request.content;
-
             images = await this.extractMultiModalContent(tempDiv);
             requestText = tempDiv.innerText;
+            request.content = tempDiv.innerHTML;
         } else {
             requestText = request.content;
         }
@@ -1559,10 +1563,13 @@ export class ChatView {
 
     async extractMultiModalContent(tempDiv: HTMLDivElement): Promise<string[]> {
         let images = tempDiv.querySelectorAll<HTMLImageElement>(
-            ".chat-inpput-dropImage",
+            ".chat-input-dropImage",
         );
         let retVal: string[] = new Array<string>(images.length);
         for (let i = 0; i < images.length; i++) {
+            images[i].classList.remove("chat-input-dropImage");
+            images[i].classList.add("chat-input-image");
+
             if (images[i].src.startsWith("data:image")) {
                 retVal[i] = images[i].src;
             } else if (images[i].src.startsWith("blob:")) {

@@ -12,6 +12,7 @@ import {
     DisplayAppendMode,
 } from "@typeagent/agent-sdk";
 import { RequestMetrics } from "../../utils/metrics.js";
+import { access } from "node:fs";
 
 export const DispatcherName = "dispatcher";
 export type RequestId = string | undefined;
@@ -100,6 +101,7 @@ export interface ClientIO {
         nextRefreshMs: number,
     ): void;
     exit(): void;
+    takeAction(action: string): void;
 }
 
 // Dispatcher request specific IO
@@ -156,6 +158,7 @@ export interface RequestIO {
         requestId: RequestId,
         filter: NotifyCommands,
     ): void;
+    takeAction(action: string): void;
 }
 
 let lastAppendMode: DisplayAppendMode | undefined;
@@ -242,6 +245,9 @@ export function getConsoleRequestIO(
                 // ignored.
             }
         },
+        takeAction: (action: string) => {
+            return stdio?.write("This command is not supported in the CLI.\n");
+        },
     };
 }
 
@@ -317,6 +323,9 @@ export function getRequestIO(
         ) {
             clientIO.notify(event, requestId, data, source);
         },
+        takeAction(action: string) {
+            clientIO.takeAction(action);
+        },
     };
 }
 
@@ -331,5 +340,6 @@ export function getNullRequestIO(): RequestIO {
         askYesNo: async () => false,
         question: async () => undefined,
         notify: () => {},
+        takeAction: () => {},
     };
 }

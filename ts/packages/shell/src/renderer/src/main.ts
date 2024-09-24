@@ -24,6 +24,7 @@ function addEvents(
     agents: Map<string, string>,
     settingsView: SettingsView,
     tabsView: TabView,
+    cameraView: CameraView,
 ) {
     const api = getClientAPI();
     api.onListenEvent((_, name, token, useLocalWhisper) => {
@@ -173,6 +174,17 @@ function addEvents(
             //}
         },
     );
+    api.onTakeAction((_, action: string) => {
+        switch (action) {
+            case "show-camera": {
+                cameraView.show();
+                return;
+            }
+            case "upload-file": {
+                chatView.chatInput.attachButton.click();
+            }
+        }
+    });
 }
 
 function showNotifications(
@@ -274,8 +286,17 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const chatView = new ChatView(idGenerator, agents);
     const cameraView = new CameraView((image: HTMLImageElement) => {
-        image.classList.add("chat-inpput-dropImage");
-        chatView.chatInput.textarea.textEntry.append(image);
+        // copy image
+        const newImage: HTMLImageElement = document.createElement("img");
+        newImage.src = image.src;
+
+        newImage.classList.add("chat-input-dropImage");
+        chatView.chatInput.textarea.textEntry.append(newImage);
+
+        if (chatView.chatInput.sendButton !== undefined) {
+            chatView.chatInput.sendButton.disabled =
+                chatView.chatInput.textarea.textEntry.innerHTML.length == 0;
+        }
     });
 
     wrapper.appendChild(cameraView.getContainer());
@@ -296,7 +317,7 @@ document.addEventListener("DOMContentLoaded", function () {
     );
     tabs.getTabContainerByName("Help").append(new HelpView().getContainer());
 
-    addEvents(chatView, agents, settingsView, tabs);
+    addEvents(chatView, agents, settingsView, tabs, cameraView);
 
     chatView.chatInputFocus();
 
