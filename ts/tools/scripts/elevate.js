@@ -34,11 +34,12 @@ async function elevate(startDateTime) {
             console.log("Uses configuration from elevate.config.json.");
             return;
         default:
-            let date = new Date();
-            if (command == "tomorrow_morning") {
+            let date;
+            if (command === "tomorrow_morning") {
+                date = new Date();
                 date.setDate(date.getDate() + 1);
                 date.setHours(8, 0, 0);
-            } else {
+            } else if (command !== undefined && command !== "now") {
                 try {
                     date = new Date(Date.parse(command));
                 } catch {
@@ -49,7 +50,7 @@ async function elevate(startDateTime) {
                 }
             }
 
-            await elevate(date.toISOString());
+            await elevate(date?.toISOString());
             break;
     }
 })().catch((e) => {
