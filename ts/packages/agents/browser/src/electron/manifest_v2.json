@@ -1,0 +1,27 @@
+{
+  "manifest_version": 2,
+  "name": "Browser TypeAgent",
+  "version": "1.0",
+  "description": "Automates various browser actions.",
+  "background": {
+    "scripts": ["serviceWorker.js"],
+    "type": "module",
+    "persistent": true
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*/*"],
+      "js": ["contentScript.js"],
+      "runAt": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["patchListeners.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources":  ["sites/paleobiodb.js", "uiEventsDispatcher.js"],
+  "permissions": ["activeTab", "storage", "tabs", "<all_urls>"]
+}

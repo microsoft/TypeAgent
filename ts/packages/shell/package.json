@@ -19,7 +19,7 @@
     "build:mac": "npm run build && electron-builder --mac --config",
     "build:win": "npm run build && electron-builder --win --config",
     "clean": "rimraf --glob out *.tsbuildinfo *.done.build.log",
-    "dev": "electron-vite dev",
+    "dev": "electron-vite dev --sourcemap --remote-debugging-port=9222",
     "postinstall": "cross-env \"npm_execpath=\" electron-builder install-app-deps",
     "prettier": "prettier --check .",
     "prettier:fix": "prettier --write .",

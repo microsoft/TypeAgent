@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
+import { resolve } from "path";
 
 export default defineConfig({
   main: {
@@ -14,6 +15,12 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       sourcemap: true,
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, 'src/preload/index.ts'),
+          webview: resolve(__dirname, 'src/preload/webView.ts')
+        }
+      }
     },
   },
   renderer: {

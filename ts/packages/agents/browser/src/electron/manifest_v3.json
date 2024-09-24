@@ -12,7 +12,14 @@
     {
       "matches": ["https://*/*"],
       "js": ["contentScript.js"],
-      "runAt": "document_start"
+      "runAt": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["patchListeners.js"],
+      "run_at": "document_start",
+      "all_frames": true
     }
   ],
   "web_accessible_resources": [

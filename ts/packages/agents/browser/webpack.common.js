@@ -97,6 +97,7 @@ module.exports = {
                     from: path.join(srcDir, "patchListeners.js"),
                     to: "./electron",
                 },
+                
                 {
                     from: ".",
                     to: "./extension/images",

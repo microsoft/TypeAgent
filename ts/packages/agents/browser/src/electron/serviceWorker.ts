@@ -31,8 +31,7 @@ export async function createWebSocket() {
         configValues = await getConfigValues();
     }
 
-    let socketEndpoint =
-        configValues["WEBSOCKET_HOST"] ?? "ws://localhost:8080/";
+    let socketEndpoint = "ws://localhost:8080/prod";
 
     socketEndpoint += "?clientId=" + chrome.runtime.id;
     return new Promise<WebSocket | undefined>((resolve, reject) => {
@@ -165,11 +164,9 @@ export function reconnectWebSocket() {
 }
 
 async function getActiveTab(): Promise<chrome.tabs.Tab> {
-    let currentWindow = await chrome.windows.getCurrent();
 
     const [tab] = await chrome.tabs.query({
         active: true,
-        windowId: currentWindow.id,
     });
 
     return tab;
@@ -486,13 +483,6 @@ async function getTabAnnotatedScreenshot(downloadImage: boolean) {
 }
 
 async function getTabAccessibilityTree(targetTab: chrome.tabs.Tab) {
-    const debugTarget = { tabId: targetTab.id };
-    try {
-        await chrome.debugger.attach(debugTarget, "1.2");
-        await chrome.debugger.sendCommand(debugTarget, "Accessibility.enable");
-
-        const accessibilityTree = await chrome.debugger.sendCommand(
-            debugTarget,
             "Accessibility.getFullAXTree",
         );
         console.log(accessibilityTree);
@@ -1100,11 +1090,7 @@ async function runBrowserAction(action: any) {
             break;
         }
 
-        case "getUITree": {
-            const targetTab = await getActiveTab();
-            responseObject = await getTabAccessibilityTree(targetTab);
-            break;
-        }
+     
         case "getHTML": {
             const targetTab = await getActiveTab();
 
@@ -1274,77 +1260,21 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
     await toggleSiteTranslator(targetTab);
 });
 
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-    if (changeInfo.status === "complete" && tab.active) {
-        await toggleSiteTranslator(tab);
-    }
-    if (changeInfo.title) {
-        const addTabAction = {
-            actionName: "addTabIdToIndex",
-            parameters: {
-                id: tab.id,
-                title: tab.title,
-            },
-        };
-        await sendActionToTabIndex(addTabAction);
-    }
-});
-
-chrome.tabs.onCreated.addListener(async (tab) => {
-    const addTabAction = {
-        actionName: "addTabIdToIndex",
-        parameters: {
-            id: tab.id,
-            title: tab.title,
-        },
-    };
-    await sendActionToTabIndex(addTabAction);
-});
-
-chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
-    const removeTabAction = {
-        actionName: "deleteTabIdFromIndex",
-        parameters: {
-            id: tabId,
-        },
-    };
-    await sendActionToTabIndex(removeTabAction);
-});
-
-let embeddingsInitializedWindowId: number;
-chrome.windows?.onFocusChanged.addListener(async (windowId) => {
-    if (windowId == chrome.windows.WINDOW_ID_NONE) {
-        return;
-    }
-
-    const connected = await ensureWebsocketConnected();
-    if (!connected) {
-        reconnectWebSocket();
-    }
-
-    const targetTab = await getActiveTab();
-    await toggleSiteTranslator(targetTab);
-
-    if (embeddingsInitializedWindowId !== windowId) {
-        const tabs = await chrome.tabs.query({
-            windowId: windowId,
-        });
-        tabs.forEach(async (tab) => {
-            const addTabAction = {
-                actionName: "addTabIdToIndex",
-                parameters: {
-                    id: tab.id,
-                    title: tab.title,
-                },
-            };
-            await sendActionToTabIndex(addTabAction);
-        });
-
-        embeddingsInitializedWindowId = windowId;
-    }
-});
 
 chrome.runtime.onStartup.addListener(async () => {
+    console.log("Browser Agent Service Worker started");
+    try {
+        const connected = await ensureWebsocketConnected();
+        if (!connected) {
+            reconnectWebSocket();
+        }
+    } catch {
+        reconnectWebSocket();
+    }
+});
+
+
+chrome.runtime.onInstalled.addListener(async () => {
     console.log("Browser Agent Service Worker started");
     try {
         const connected = await ensureWebsocketConnected();
@@ -1369,3 +1299,92 @@ chrome.runtime.onMessageExternal.addListener(
         };
     },
 );
+
+function enableSiteTranslator(translatorName: string){
+    if (webSocket && webSocket.readyState === WebSocket.OPEN && translatorName) {
+        webSocket.send(
+            JSON.stringify({
+                source: "browser",
+                target: "dispatcher",
+                messageType: "enableSiteTranslator",
+                body: translatorName,
+            }),
+        );
+    }
+
+}
+
+chrome.runtime.onMessage.addListener(
+     (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
+        // const page = chrome.extension.getBackgroundPage();
+        
+                (async () => {
+        switch (message.type) {
+            case "initialize": {
+                console.log("Browser Agent Service Worker started");
+                await ensureWebsocketConnected();
+                const activeTab = await getActiveTab();
+                
+                sendResponse("Service worker initialize called. Active tab id: "+ activeTab.id +" and url "+ activeTab.url +" Websocket state "+ JSON.stringify(webSocket));
+                break;
+            }
+
+            case "setupPaleoBioDB": {
+                enableSiteTranslator("browser.paleoBioDb");
+                sendResponse("Enabled PaleoBioDB");
+                break;
+            }
+            
+            case "setupCrossword": {
+                enableSiteTranslator("browser.crossword");
+
+                sendResponse("Enabled Crossword");
+                break;
+            }
+
+            case "setupCommerce": {
+                enableSiteTranslator("browser.commerce");
+                sendResponse("Enabled Commerce");
+                break;
+            }
+
+            case "setupCode": {
+                // enableSiteTranslator("browser.commerce");
+                sendResponse("Enabled Commerce");
+                break;
+            }
+
+            case "handleBrowserAction": {
+                // sendResponse("Handling browser action");
+                const data = message.body;
+                console.log(JSON.stringify(data));
+                // sendResponse(JSON.stringify(data));
+                        const response = await runBrowserAction(message.body);
+                        sendResponse(
+                            JSON.stringify({
+                                source: data.target,
+                                target: data.source,
+                                messageType: "browserActionResponse",
+                                id: data.id,
+                                body: response,
+                            }),
+                        );
+                    
+    
+                    
+    
+                    
+                
+            
+
+
+
+                break;
+            }
+        }
+    })();
+
+    return true;
+},
+);
+
