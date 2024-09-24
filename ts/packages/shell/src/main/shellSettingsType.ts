@@ -29,6 +29,6 @@ export const defaultSettings: ShellSettingsType = {
     tts: false,
     ttsSettings: {},
     agentGreeting: false,
-    multiModalContent: false,
+    multiModalContent: true,
     devUI: false,
 };
