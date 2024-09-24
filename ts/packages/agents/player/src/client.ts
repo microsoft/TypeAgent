@@ -929,7 +929,7 @@ export async function handleCall(
         case "listDevices": {
             const html = await listAvailableDevices(clientContext);
             return html
-                ? createActionResultFromTextDisplay(html)
+                ? createActionResultFromHtmlDisplay(html)
                 : createErrorActionResult("No devices found");
         }
         case "selectDevice": {
