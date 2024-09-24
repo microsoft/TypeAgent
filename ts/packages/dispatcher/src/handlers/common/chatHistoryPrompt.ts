@@ -65,7 +65,7 @@ export function makeRequestPromptCreator(
                 "\n";
         }
         prompt +=
-            `Current Date is ${new Date().toLocaleDateString("en-US")}.\n` +
+            `Current Date is ${new Date().toLocaleDateString("en-US")}. The time is ${new Date().toLocaleTimeString()}.\n` +
             `The following is the latest user request:\n` +
             `"""\n${request}\n"""\n` +
             `Based primarily on the request but considering all available information in our chat history, the following is the latest user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`;
