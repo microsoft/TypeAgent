@@ -268,4 +268,16 @@ export class CameraView {
             this.video.classList.add("camera-hidden");
         }
     }
+
+    public show() {
+        if (this.getContainer().classList.contains("camera-hidden")) {
+            this.toggleVisibility();
+        }
+    }
+
+    public hide() {
+        if (!this.getContainer().classList.contains("camera-hidden")) {
+            this.toggleVisibility();
+        }
+    }
 }

@@ -61,7 +61,8 @@
     },
     "photo": {
       "type": "module",
-      "name": "photos-agent"
+      "name": "photos-agent",
+      "execMode": "separate"
     }
   },
   "explainers": {
