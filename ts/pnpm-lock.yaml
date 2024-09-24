@@ -1330,6 +1330,9 @@ importers:
       common-utils:
         specifier: workspace:*
         version: link:../commonUtils
+      debug:
+        specifier: ^4.3.4
+        version: 4.3.4(supports-color@8.1.1)
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.3)
@@ -1337,6 +1340,9 @@ importers:
         specifier: ^5.4.2
         version: 5.4.3
     devDependencies:
+      '@types/debug':
+        specifier: ^4.1.10
+        version: 4.1.10
       '@types/node':
         specifier: ^18.18.7
         version: 18.18.7

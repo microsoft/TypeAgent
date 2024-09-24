@@ -10,6 +10,7 @@ import {
     SearchOptions,
     SemanticIndex,
     asyncArray,
+    collections,
     createEmbeddingFolder,
     createObjectFolder,
     createSemanticIndex,
@@ -34,6 +35,7 @@ export interface KeyValueIndex<TKeyId, TValueId> {
     getMultiple(ids: TKeyId[], concurrency?: number): Promise<TValueId[][]>;
     put(postings: TValueId[], id?: TKeyId): Promise<TKeyId>;
     replace(postings: TValueId[], id: TKeyId): Promise<TKeyId>;
+    remove(id: TKeyId): Promise<void>;
 }
 
 export async function createIndexFolder<TValueId>(
@@ -52,6 +54,7 @@ export async function createIndexFolder<TValueId>(
         getMultiple,
         put,
         replace,
+        remove,
     };
 
     async function get(id: TKeyId): Promise<TValueId[] | undefined> {
@@ -80,6 +83,10 @@ export async function createIndexFolder<TValueId>(
 
     function replace(postings: TValueId[], id: TKeyId): Promise<TKeyId> {
         return indexFolder.put(postings, id);
+    }
+
+    function remove(id: TKeyId): Promise<void> {
+        return indexFolder.remove(id);
     }
 
     function preparePostings(postings?: TValueId[]): TValueId[] {
@@ -143,6 +150,7 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         maxMatches: number,
         minScore?: number,
     ): Promise<ScoredItem<TTextId>[]>;
+    remove(textId: TTextId, postings: TSourceId | TSourceId[]): Promise<void>;
 }
 
 export type TextIndexSettings = {
@@ -204,6 +212,7 @@ export async function createTextIndex<TSourceId = any>(
         getNearestTextMultiple,
         nearestNeighbors,
         nearestNeighborsText,
+        remove,
     };
 
     async function* ids(): AsyncIterableIterator<TextId> {
@@ -314,6 +323,25 @@ export async function createTextIndex<TSourceId = any>(
                 existingPostings && existingPostings.length > 0
                     ? [...union(existingPostings.values(), postings.values())]
                     : postings;
+            await postingFolder.replace(updatedPostings, textId);
+        }
+    }
+
+    async function remove(
+        textId: TextId,
+        postings: TSourceId | TSourceId[],
+    ): Promise<void> {
+        const existingPostings = await postingFolder.get(textId);
+        if (!existingPostings || existingPostings.length === 0) {
+            return;
+        }
+        let updatedPostings = collections.removeItemFromArray(
+            existingPostings,
+            postings,
+        );
+        if (updatedPostings.length === 0) {
+            await postingFolder.remove(textId);
+        } else {
             await postingFolder.replace(updatedPostings, textId);
         }
     }

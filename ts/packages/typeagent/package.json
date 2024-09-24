@@ -28,11 +28,13 @@
     "aiclient": "workspace:*",
     "cheerio": "1.0.0-rc.12",
     "common-utils": "workspace:*",
+    "debug": "^4.3.4",
     "typechat": "^0.1.1",
     "typescript": "^5.4.2"
   },
   "devDependencies": {
     "@types/node": "^18.18.7",
+    "@types/debug": "^4.1.10",
     "prettier": "^3.2.5",
     "rimraf": "^5.0.5"
   },

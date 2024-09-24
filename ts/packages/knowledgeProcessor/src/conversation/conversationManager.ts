@@ -109,11 +109,10 @@ export async function createConversationManager(
     conversationOrPath: string | Conversation,
     createNew: boolean,
 ): Promise<ConversationManager> {
-    /*const embeddingModel = createEmbeddingCache(
+    const embeddingModel = createEmbeddingCache(
         openai.createEmbeddingModel(),
         64,
-    );*/
-    const embeddingModel = openai.createEmbeddingModel();
+    );
     const knowledgeModel = openai.createChatModel();
     const answerModel = openai.createChatModel();
 
@@ -235,6 +234,7 @@ export async function createConversationManager(
                 caseSensitive: false,
                 concurrency: 2,
                 embeddingModel,
+                semanticIndex: true,
             },
         };
     }
