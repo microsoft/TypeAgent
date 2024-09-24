@@ -164,7 +164,6 @@ export function reconnectWebSocket() {
 }
 
 async function getActiveTab(): Promise<chrome.tabs.Tab> {
-
     const [tab] = await chrome.tabs.query({
         active: true,
     });
@@ -480,28 +479,6 @@ async function getTabAnnotatedScreenshot(downloadImage: boolean) {
     }
 
     return dataUrl;
-}
-
-async function getTabAccessibilityTree(targetTab: chrome.tabs.Tab) {
-            "Accessibility.getFullAXTree",
-        );
-        console.log(accessibilityTree);
-
-        const rootNode = (await chrome.debugger.sendCommand(
-            debugTarget,
-            "Accessibility.getRootAXNode",
-        )) as any;
-        console.log(rootNode);
-
-        const partialTree = await chrome.debugger.sendCommand(
-            debugTarget,
-            "Accessibility.getPartialAXTree",
-            { backendNodeId: rootNode.node.backendDOMNodeId },
-        );
-        console.log(partialTree);
-    } finally {
-        await chrome.debugger.detach(debugTarget);
-    }
 }
 
 async function getTabHTML(
@@ -830,7 +807,7 @@ async function sendActionToTabIndex(action: any) {
     });
 }
 
-async function runBrowserAction(action: any) {
+async function runBrowserAction(action: any, inputTab?: chrome.tabs.Tab) {
     let responseObject = undefined;
     let confirmationMessage = "OK";
     const actionName =
@@ -895,7 +872,7 @@ async function runBrowserAction(action: any) {
             break;
         }
         case "followLinkByText": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
             const response = await chrome.tabs.sendMessage(targetTab.id!, {
                 type: "get_page_links_by_query",
                 query: action.parameters.keywords,
@@ -918,7 +895,7 @@ async function runBrowserAction(action: any) {
             break;
         }
         case "followLinkByPosition": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
             const response = await chrome.tabs.sendMessage(targetTab.id!, {
                 type: "get_page_links_by_position",
                 position: action.parameters.position,
@@ -941,31 +918,31 @@ async function runBrowserAction(action: any) {
             break;
         }
         case "scrollDown": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
             await chrome.tabs.sendMessage(targetTab.id!, {
                 type: "scroll_down_on_page",
             });
             break;
         }
         case "scrollUp": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
             await chrome.tabs.sendMessage(targetTab.id!, {
                 type: "scroll_up_on_page",
             });
             break;
         }
         case "goBack": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
             await chrome.tabs.goBack(targetTab.id!);
             break;
         }
         case "goForward": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
             await chrome.tabs.goForward(targetTab.id!);
             break;
         }
         case "openFromHistory": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
             const historyItems = await chrome.history.search({
                 text: action.parameters.keywords,
                 maxResults: 1,
@@ -1001,7 +978,7 @@ async function runBrowserAction(action: any) {
             break;
         }
         case "readPage": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
             const article = await chrome.tabs.sendMessage(targetTab.id!, {
                 type: "read_page_content",
             });
@@ -1032,7 +1009,7 @@ async function runBrowserAction(action: any) {
             break;
         }
         case "zoomIn": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
             if (targetTab.url?.startsWith("https://paleobiodb.org/")) {
                 const result = await chrome.tabs.sendMessage(targetTab.id!, {
                     type: "run_paleoBioDb_action",
@@ -1053,7 +1030,7 @@ async function runBrowserAction(action: any) {
             break;
         }
         case "zoomOut": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
             if (targetTab.url?.startsWith("https://paleobiodb.org/")) {
                 const result = await chrome.tabs.sendMessage(targetTab.id!, {
                     type: "run_paleoBioDb_action",
@@ -1090,9 +1067,8 @@ async function runBrowserAction(action: any) {
             break;
         }
 
-     
         case "getHTML": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
 
             responseObject = await getTabHTMLFragments(
                 targetTab,
@@ -1103,7 +1079,7 @@ async function runBrowserAction(action: any) {
             break;
         }
         case "getFilteredHTMLFragments": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
 
             responseObject = await getFilteredHTMLFragments(
                 targetTab,
@@ -1112,18 +1088,18 @@ async function runBrowserAction(action: any) {
             break;
         }
         case "getPageUrl": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
             responseObject = targetTab.url;
             break;
         }
         case "awaitPageLoad": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
             await awaitPageLoad(targetTab);
             responseObject = targetTab.url;
             break;
         }
         case "clickOnElement": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
             const response = await chrome.tabs.sendMessage(targetTab.id!, {
                 type: "run_ui_event",
                 action: action,
@@ -1131,7 +1107,7 @@ async function runBrowserAction(action: any) {
             break;
         }
         case "enterTextInElement": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
             const response = await chrome.tabs.sendMessage(targetTab.id!, {
                 type: "run_ui_event",
                 action: action,
@@ -1139,7 +1115,7 @@ async function runBrowserAction(action: any) {
             break;
         }
         case "enterTextOnPage": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
             const response = await chrome.tabs.sendMessage(targetTab.id!, {
                 type: "run_ui_event",
                 action: action,
@@ -1147,7 +1123,7 @@ async function runBrowserAction(action: any) {
             break;
         }
         case "getPageSchema": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
             const key = action.parameters.url ?? targetTab.url;
             const value = await chrome.storage.session.get(["pageSchema"]);
             if (value && Array.isArray(value.pageSchema)) {
@@ -1200,11 +1176,11 @@ async function runBrowserAction(action: any) {
     };
 }
 
-async function runSiteAction(messageType: string, action: any) {
+async function runSiteAction(messageType: string, action: any, inputTab?: chrome.tabs.Tab) {
     let confirmationMessage = "OK";
     switch (messageType) {
         case "browserActionRequest.paleoBioDb": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
             const actionName =
                 action.actionName ?? action.fullActionName.split(".").at(-1);
             if (
@@ -1229,7 +1205,7 @@ async function runSiteAction(messageType: string, action: any) {
             break;
         }
         case "browserActionRequest.crossword": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
 
             const result = await chrome.tabs.sendMessage(targetTab.id!, {
                 type: "run_crossword_action",
@@ -1240,7 +1216,7 @@ async function runSiteAction(messageType: string, action: any) {
             break;
         }
         case "browserActionRequest.commerce": {
-            const targetTab = await getActiveTab();
+            const targetTab = inputTab ?? await getActiveTab();
 
             const result = await chrome.tabs.sendMessage(targetTab.id!, {
                 type: "run_commerce_action",
@@ -1260,7 +1236,6 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
     await toggleSiteTranslator(targetTab);
 });
 
-
 chrome.runtime.onStartup.addListener(async () => {
     console.log("Browser Agent Service Worker started");
     try {
@@ -1272,7 +1247,6 @@ chrome.runtime.onStartup.addListener(async () => {
         reconnectWebSocket();
     }
 });
-
 
 chrome.runtime.onInstalled.addListener(async () => {
     console.log("Browser Agent Service Worker started");
@@ -1286,7 +1260,7 @@ chrome.runtime.onInstalled.addListener(async () => {
     }
 });
 
-chrome.runtime.onMessageExternal.addListener(
+chrome.runtime.onMessageExternal?.addListener(
     (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
         async () => {
             switch (message.type) {
@@ -1300,8 +1274,12 @@ chrome.runtime.onMessageExternal.addListener(
     },
 );
 
-function enableSiteTranslator(translatorName: string){
-    if (webSocket && webSocket.readyState === WebSocket.OPEN && translatorName) {
+function enableSiteTranslator(translatorName: string) {
+    if (
+        webSocket &&
+        webSocket.readyState === WebSocket.OPEN &&
+        translatorName
+    ) {
         webSocket.send(
             JSON.stringify({
                 source: "browser",
@@ -1311,80 +1289,89 @@ function enableSiteTranslator(translatorName: string){
             }),
         );
     }
-
 }
 
 chrome.runtime.onMessage.addListener(
-     (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
+    (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
         // const page = chrome.extension.getBackgroundPage();
-        
-                (async () => {
-        switch (message.type) {
-            case "initialize": {
-                console.log("Browser Agent Service Worker started");
-                await ensureWebsocketConnected();
-                const activeTab = await getActiveTab();
-                
-                sendResponse("Service worker initialize called. Active tab id: "+ activeTab.id +" and url "+ activeTab.url +" Websocket state "+ JSON.stringify(webSocket));
-                break;
+
+        (async () => {
+            switch (message.type) {
+                case "initialize": {
+                    console.log("Browser Agent Service Worker started");
+                    await ensureWebsocketConnected();
+                    // const activeTab = await getActiveTab();                    
+
+                    sendResponse(
+                        "Service worker initialize called. Active tab id: " +
+                        sender.tab?.id +
+                            " and url " +
+                            sender.tab?.url +
+                            " Websocket state " +
+                            JSON.stringify(webSocket),
+                    );
+                    break;
+                }
+
+                case "setupPaleoBioDB": {
+                    enableSiteTranslator("browser.paleoBioDb");
+                    sendResponse("Enabled PaleoBioDB");
+                    break;
+                }
+
+                case "setupCrossword": {
+                    enableSiteTranslator("browser.crossword");
+                    sendResponse("Enabled Crossword");
+                    break;
+                }
+
+                case "setupCommerce": {
+                    enableSiteTranslator("browser.commerce");
+                    sendResponse("Enabled Commerce");
+                    break;
+                }
+
+                case "setupCode": {
+                    sendResponse("Enabled Commerce");
+                    break;
+                }
+
+                case "handleBrowserAction": {
+                    const data = message.body;
+                    // sendResponse(JSON.stringify(data));
+                    const response = await runBrowserAction(message.body, sender.tab);
+                    sendResponse(
+                        JSON.stringify({
+                            source: data.target,
+                            target: data.source,
+                            messageType: "browserActionResponse",
+                            id: data.id,
+                            body: response,
+                        }),
+                    );
+
+                    break;
+                }
+
+                case "handleSiteAction": {
+                    const data = message.body;
+                    // sendResponse(JSON.stringify(data));
+                    const response = await runSiteAction(message.messageType, message.body, sender.tab)
+                    sendResponse(
+                        JSON.stringify({
+                            source: data.target,
+                            target: data.source,
+                            messageType: "browserActionResponse",
+                            id: data.id,
+                            body: response,
+                        }),
+                    );
+
+                    break;
+                }
             }
+        })();
 
-            case "setupPaleoBioDB": {
-                enableSiteTranslator("browser.paleoBioDb");
-                sendResponse("Enabled PaleoBioDB");
-                break;
-            }
-            
-            case "setupCrossword": {
-                enableSiteTranslator("browser.crossword");
-
-                sendResponse("Enabled Crossword");
-                break;
-            }
-
-            case "setupCommerce": {
-                enableSiteTranslator("browser.commerce");
-                sendResponse("Enabled Commerce");
-                break;
-            }
-
-            case "setupCode": {
-                // enableSiteTranslator("browser.commerce");
-                sendResponse("Enabled Commerce");
-                break;
-            }
-
-            case "handleBrowserAction": {
-                // sendResponse("Handling browser action");
-                const data = message.body;
-                console.log(JSON.stringify(data));
-                // sendResponse(JSON.stringify(data));
-                        const response = await runBrowserAction(message.body);
-                        sendResponse(
-                            JSON.stringify({
-                                source: data.target,
-                                target: data.source,
-                                messageType: "browserActionResponse",
-                                id: data.id,
-                                body: response,
-                            }),
-                        );
-                    
-    
-                    
-    
-                    
-                
-            
-
-
-
-                break;
-            }
-        }
-    })();
-
-    return true;
-},
+        return true;
+    },
 );
-

@@ -554,153 +554,149 @@ document.addEventListener("fromUIEventsDispatcher", async function (e: any) {
     */
 });
 
-async function handleScriptAction(message: any, sendResponse: (response?:any) => void){
-    
-        switch (message.type) {
-            case "get_page_links_by_query": {
-                const link = matchLinks(message.query) as HTMLAnchorElement;
-                if (link && link.href) {
-                    sendResponse({ url: link.href });
-                } else {
-                    sendResponse({});
-                }
-                break;
-            }
-
-            case "get_page_links_by_position": {
-                const link = matchLinksByPostion(
-                    message.position,
-                ) as HTMLAnchorElement;
-                if (link && link.href) {
-                    sendResponse({ url: link.href });
-                } else {
-                    sendResponse({});
-                }
-                break;
-            }
-
-            case "scroll_down_on_page": {
-                window.scrollTo(
-                    0,
-                    window.scrollY + window.innerHeight * 0.9,
-                );
+async function handleScriptAction(
+    message: any,
+    sendResponse: (response?: any) => void,
+) {
+    switch (message.type) {
+        case "get_page_links_by_query": {
+            const link = matchLinks(message.query) as HTMLAnchorElement;
+            if (link && link.href) {
+                sendResponse({ url: link.href });
+            } else {
                 sendResponse({});
-                break;
             }
-
-            case "scroll_up_on_page": {
-                window.scrollTo(
-                    0,
-                    window.scrollY - window.innerHeight * 0.9,
-                );
-                sendResponse({});
-                break;
-            }
-            case "history_go_back": {
-                window.history.back();
-                
-                sendResponse({});
-                break;
-            }
-            case "history_go_forward": {
-                window.history.forward();
-                
-                sendResponse({});
-                break;
-            }
-            
-            case "zoom_in_page": {
-                
-                sendResponse({});
-                break;
-            }
-            case "zoom_out_page": {
-                window.history.forward();
-                
-                sendResponse({});
-                break;
-            }
-
-            case "read_page_content": {
-                const article = getReadablePageContent();
-                sendResponse(article);
-                break;
-            }
-
-            case "get_reduced_html": {
-                const html = getPageHTML(
-                    message.fullSize,
-                    message.inputHtml,
-                    message.frameId,
-                );
-                sendResponse(html);
-                break;
-            }
-
-            case "get_page_text": {
-                const text = getPageText(
-                    message.inputHtml,
-                    message.frameId,
-                );
-                sendResponse(text);
-                break;
-            }
-
-            case "get_filtered_html_fragments": {
-                const htmlFragments = getPageHTMLSubFragments(
-                    message.inputHtml,
-                    message.cssSelectors,
-                    message.frameId,
-                );
-                sendResponse(htmlFragments);
-                break;
-            }
-
-            case "get_maxSize_html_fragments": {
-                const htmlFragments = getPageHTMLFragments(
-                    message.inputHtml,
-                    message.frameId,
-                    message.maxFragmentSize,
-                );
-                sendResponse(htmlFragments);
-                break;
-            }
-
-            case "get_element_bounding_boxes": {
-                const boundingBoxes = getInteractiveElementsBoundingBoxes();
-                sendResponse(boundingBoxes);
-                break;
-            }
-
-            case "setup_ui_events_script": {
-                setupUIEventsScript();
-                sendResponse({});
-                break;
-            }
-
-            case "run_ui_event": {
-                sendUIEventsRequest(message.action);
-                sendResponse({});
-                break;
-            }
-
-            case "setup_paleoBioDb": {
-                setupPaleoDbScript();
-                sendResponse({});
-                break;
-            }
-
-            case "run_paleoBioDb_action": {
-                sendPaleoDbRequest(message.action);
-                sendResponse({});
-                break;
-            }
+            break;
         }
+
+        case "get_page_links_by_position": {
+            const link = matchLinksByPostion(
+                message.position,
+            ) as HTMLAnchorElement;
+            if (link && link.href) {
+                sendResponse({ url: link.href });
+            } else {
+                sendResponse({});
+            }
+            break;
+        }
+
+        case "scroll_down_on_page": {
+            window.scrollTo(0, window.scrollY + window.innerHeight * 0.9);
+            sendResponse({});
+            break;
+        }
+
+        case "scroll_up_on_page": {
+            window.scrollTo(0, window.scrollY - window.innerHeight * 0.9);
+            sendResponse({});
+            break;
+        }
+        case "history_go_back": {
+            window.history.back();
+
+            sendResponse({});
+            break;
+        }
+        case "history_go_forward": {
+            window.history.forward();
+
+            sendResponse({});
+            break;
+        }
+
+        case "zoom_in_page": {
+            sendResponse({});
+            break;
+        }
+        case "zoom_out_page": {
+            window.history.forward();
+
+            sendResponse({});
+            break;
+        }
+
+        case "read_page_content": {
+            const article = getReadablePageContent();
+            sendResponse(article);
+            break;
+        }
+
+        case "get_reduced_html": {
+            const html = getPageHTML(
+                message.fullSize,
+                message.inputHtml,
+                message.frameId,
+            );
+            sendResponse(html);
+            break;
+        }
+
+        case "get_page_text": {
+            const text = getPageText(message.inputHtml, message.frameId);
+            sendResponse(text);
+            break;
+        }
+
+        case "get_filtered_html_fragments": {
+            const htmlFragments = getPageHTMLSubFragments(
+                message.inputHtml,
+                message.cssSelectors,
+                message.frameId,
+            );
+            sendResponse(htmlFragments);
+            break;
+        }
+
+        case "get_maxSize_html_fragments": {
+            const htmlFragments = getPageHTMLFragments(
+                message.inputHtml,
+                message.frameId,
+                message.maxFragmentSize,
+            );
+            sendResponse(htmlFragments);
+            break;
+        }
+
+        case "get_element_bounding_boxes": {
+            const boundingBoxes = getInteractiveElementsBoundingBoxes();
+            sendResponse(boundingBoxes);
+            break;
+        }
+
+        case "setup_ui_events_script": {
+            setupUIEventsScript();
+            sendResponse({});
+            break;
+        }
+
+        case "run_ui_event": {
+            sendUIEventsRequest(message.action);
+            sendResponse({});
+            break;
+        }
+
+        case "setup_paleoBioDb": {
+            setupPaleoDbScript();
+            sendResponse({});
+            break;
+        }
+
+        case "run_paleoBioDb_action": {
+            sendPaleoDbRequest(message.action);
+            sendResponse({});
+            break;
+        }
+    }
 }
 
 chrome.runtime?.onMessage.addListener(
-    async (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
-await  handleScriptAction(message, sendResponse);
+    async (
+        message: any,
+        sender: chrome.runtime.MessageSender,
+        sendResponse,
+    ) => {
+        await handleScriptAction(message, sendResponse);
     },
 );
 
@@ -714,81 +710,92 @@ browserConnect?.onMessage(
     }
 )
 */
-window.addEventListener('message', async (event) => {
-    console.log(`Received message: ${event.data}`);
+window.addEventListener(
+    "message",
+    async (event) => {
+        console.log(`Received message: ${event.data}`);
 
-    if (event.data === 'initializeWorker') {
-        chrome.runtime.sendMessage({
-        type: "initialize",
-        }, response => {
-        console.log(JSON.stringify(response));
-      });
-    }
-
-    else if (event.data === 'setupPaleoBioDB') {
-        setupPaleoDbScript();
-        chrome.runtime.sendMessage({
-          type: "setupPaleoBioDB",
-          }, response => {
-          console.log(JSON.stringify(response));
-        });
-      }
-
-      else if (event.data === 'setupCrossword') {
-        setupUIEventsScript();
-        chrome.runtime.sendMessage({
-          type: "setupCrossword",
-          }, response => {
-          console.log(JSON.stringify(response));
-        });
-      }
-
-      else if (event.data === 'setupCommerce') {
-        setupUIEventsScript();
-        chrome.runtime.sendMessage({
-          type: "setupCommerce",
-          }, response => {
-          console.log(JSON.stringify(response));
-        });
-      }
-
-      else{
-        console.log(JSON.stringify(event.data));
-        if(event.data.source == "preload" && event.data.target == "contentScript"){
-
-            if(event.data.messageType == "browserActionRequest"){
-                // route this to service worker'
-                console.log("routing to service worker")
-                chrome.runtime.sendMessage({
-                    type: "handleBrowserAction",
-                    body: event.data.body
-                    }, response => {
+        if (event.data === "initializeWorker") {
+            chrome.runtime.sendMessage(
+                {
+                    type: "initialize",
+                },
+                (response) => {
                     console.log(JSON.stringify(response));
-                  });
-            }
-            
-            if(event.data.messageType == "scriptActionRequest"){
-                // route this to service worker'
-                console.log("this will be routed to Script directly");
-                
-                await  handleScriptAction(event.data.body, console.log);
-            }
-         
-        }
-      }
-
-  }, false);
-
-export async function checkServiceWorker() {
-                    const result = await chrome.runtime.sendMessage({
-                        type: "initialize",
-       
-                    })
-                    console.log("Message sent to service worker");
-                    console.log(result)
-                    
+                },
+            );
+        } else if (event.data === "setupPaleoBioDB") {
+            setupPaleoDbScript();
+            chrome.runtime.sendMessage(
+                {
+                    type: "setupPaleoBioDB",
+                },
+                (response) => {
+                    console.log(JSON.stringify(response));
+                },
+            );
+        } else if (event.data === "setupCrossword") {
+            setupUIEventsScript();
+            chrome.runtime.sendMessage(
+                {
+                    type: "setupCrossword",
+                },
+                (response) => {
+                    console.log(JSON.stringify(response));
+                },
+            );
+        } else if (event.data === "setupCommerce") {
+            setupUIEventsScript();
+            chrome.runtime.sendMessage(
+                {
+                    type: "setupCommerce",
+                },
+                (response) => {
+                    console.log(JSON.stringify(response));
+                },
+            );
+        } else {
+            console.log(JSON.stringify(event.data));
+            if (
+                event.data.source == "preload" &&
+                event.data.target == "contentScript"
+            ) {
+                if (event.data.messageType == "browserActionRequest") {
+                    console.log("routing to service worker");
+                    chrome.runtime.sendMessage(
+                        {
+                            type: "handleBrowserAction",
+                            body: event.data.body,
+                        },
+                        (response) => {
+                            console.log(JSON.stringify(response));
+                        },
+                    );
+                }else if(event.data.messageType.startsWith("browserActionRequest.")){
+                    console.log("routing to service worker");
+                    chrome.runtime.sendMessage(
+                        {
+                            type: "handleSiteAction",
+                            body: event.data.body,
+                            messageType: event.data.messageType,
+                        },
+                        (response) => {
+                            console.log(JSON.stringify(response));
+                        },
+                    );
                 }
-            
+
+                if (event.data.messageType == "scriptActionRequest") {
+                    // route this to service worker'
+                    console.log("this will be routed to Script directly");
+
+                    await handleScriptAction(event.data.body, console.log);
+                }
+            }
+        }
+    },
+    false,
+);
 
 document.addEventListener("DOMContentLoaded", async () => {
     console.log("Content Script initialized");

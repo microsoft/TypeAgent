@@ -150,8 +150,7 @@ export function reconnectWebSocket() {
     }, 5 * 1000);
 }
 
-
-async function getLatLongForLocation(locationName: string) {
+export async function getLatLongForLocation(locationName: string) {
     const mapsApiKey = process.env["BING_MAPS_API_KEY"];
     const response = await fetch(
         `http://dev.virtualearth.net/REST/v1/Locations/${locationName}?key=${mapsApiKey}`,
@@ -174,7 +173,7 @@ async function getLatLongForLocation(locationName: string) {
         return undefined;
     }
 }
-/*
+
 async function runBrowserAction(action: any) {
     console.log(JSON.stringify(action));
     // todo: get current window 
@@ -199,16 +198,9 @@ async function runSiteAction(messageType: string, action: any) {
         messageType: messageType,
         body: action
     });
-
 }
-*/
 
-async function sendScriptAction(body: any) {
-    // console.log(messageType);
-    
-    // console.log(JSON.stringify(action));
-    // todo: get current window 
-    // send window message - do we go through our exposed api or postMessage?
+export async function sendScriptAction(body: any) {
     window.postMessage({
         source: "preload",
         target: "contentScript",
@@ -218,7 +210,7 @@ async function sendScriptAction(body: any) {
 
 }
 
-
+/*
 async function runBrowserAction(action: any) {
     let responseObject = undefined;
     let confirmationMessage = "OK";
@@ -231,7 +223,7 @@ async function runBrowserAction(action: any) {
                 type: "get_page_links_by_query",
                 query: action.parameters.keywords,
             });
-/*
+
             if (response && response.url) {
                 if (action.parameters.openInNewTab) {
                     await chrome.tabs.create({
@@ -245,7 +237,7 @@ async function runBrowserAction(action: any) {
 
                 confirmationMessage = `Navigated to the  ${action.parameters.keywords} link`;
             }
-*/
+
             break;
         }
         
@@ -308,7 +300,7 @@ async function runBrowserAction(action: any) {
             });  
             break;
         }
-     /*
+     
         case "getHTML": {
             responseObject = await getTabHTMLFragments(
                 targetTab,
@@ -327,7 +319,7 @@ async function runBrowserAction(action: any) {
             );
             break;
         }
-        */
+        
 
         case "clickOnElement": {
             sendScriptAction({
@@ -387,7 +379,6 @@ async function runSiteAction(messageType: string, action: any) {
                 action: action,
             });
 
-            // to do: update confirmation to include current page screenshot.
             break;
         }
         case "browserActionRequest.crossword": {
@@ -396,7 +387,6 @@ async function runSiteAction(messageType: string, action: any) {
                 action: action,
             });
 
-            // to do: update confirmation to include current page screenshot.
             break;
         }
         case "browserActionRequest.commerce": {
@@ -405,14 +395,13 @@ async function runSiteAction(messageType: string, action: any) {
                 action: action,
             });
 
-            // to do: update confirmation to include current page screenshot.
             break;
         }
     }
 
     return confirmationMessage;
 }
-
+*/
 
 contextBridge.exposeInMainWorld('browserConnect', {
     onMessage: (callback) => ipcRenderer.on('send-message-to-web', (_event, value) => callback(value)),
@@ -436,4 +425,4 @@ window.addEventListener('message', async (event) => {
 
 window.postMessage("bridge-window-ready");
 
-window.postMessage("initializeWorker")
+// window.postMessage("initializeWorker")
