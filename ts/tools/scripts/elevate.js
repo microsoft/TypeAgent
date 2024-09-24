@@ -47,6 +47,7 @@ async function elevate(startDateTime) {
                     console.log(
                         `Unable to parse date '${command}'.  The expected format is '2024-09-30T09:01:00'`,
                     );
+                    exit(-2);
                 }
             }
 
