@@ -17,10 +17,10 @@ export default defineConfig({
       sourcemap: true,
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/preload/index.ts'),
-          webview: resolve(__dirname, 'src/preload/webView.ts')
-        }
-      }
+          index: resolve(__dirname, "src/preload/index.ts"),
+          webview: resolve(__dirname, "src/preload/webView.ts"),
+        },
+      },
     },
   },
   renderer: {

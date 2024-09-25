@@ -2,12 +2,6 @@
 // Licensed under the MIT License.
 
 export {};
-declare global {
-    interface Window {
-        browserConnect: any;
-    }
-}
-
 
 function escapeCssSelector(selector: string) {
     let prefix = "";
@@ -132,3 +126,6 @@ document.addEventListener("toUIEventsDispatcher", async function (e: any) {
     }
 });
 
+document.addEventListener("DOMContentLoaded", async () => {
+    console.log("UI Events Script initialized");
+});

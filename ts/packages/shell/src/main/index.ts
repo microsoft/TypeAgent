@@ -536,8 +536,6 @@ app.whenReady().then(async () => {
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.electron");
 
-
-
     const dispatcher = await createDispatcher("shell", {
         appAgentProviders: [shellAgentProvider],
         explanationAsynchronousMode: true,
@@ -646,7 +644,9 @@ app.whenReady().then(async () => {
             app.getAppPath(),
             "../agents/browser/dist/electron",
         );
-        await window.webContents.session.loadExtension(browserExtensionPath, { allowFileAccess: true });
+        await window.webContents.session.loadExtension(browserExtensionPath, {
+            allowFileAccess: true,
+        });
     });
 
     createWindow();

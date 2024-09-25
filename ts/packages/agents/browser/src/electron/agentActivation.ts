@@ -1,4 +1,3 @@
-
 window.addEventListener("message", async (event) => {
     if (event.data === "setupSiteAgent") {
         if (window.browserConnect) {

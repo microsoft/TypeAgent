@@ -12,7 +12,10 @@ module.exports = {
     entry: {
         "extension/contentScript": path.join(srcDir, "contentScript.ts"),
         "electron/contentScript": path.join(srcDir, "contentScript.ts"),
-        "electron/agentActivation": path.join(electronSrcDir, "agentActivation.ts"),
+        "electron/agentActivation": path.join(
+            electronSrcDir,
+            "agentActivation.ts",
+        ),
         "extension/serviceWorker": path.join(srcDir, "serviceWorker.ts"),
         "extension/uiEventsDispatcher": path.join(
             srcDir,

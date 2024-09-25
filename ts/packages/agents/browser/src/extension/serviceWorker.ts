@@ -1425,9 +1425,9 @@ chrome.runtime.onMessage.addListener(
                     break;
                 }
             }
-        }
-    }
-)
+        };
+    },
+);
 
 chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
