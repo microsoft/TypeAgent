@@ -24,10 +24,15 @@
       "all_frames": true
     },
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["patchListeners.js"],
-      "run_at": "document_start",
-      "all_frames": true
+      "matches": ["https://*/*"],
+      "js": ["uiEventsDispatcher.js"],
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://paleobiodb.org/*"],
+      "js": ["sites/paleobiodb.js"],
+      "world": "MAIN"
     }
   ],
   "web_accessible_resources": [
