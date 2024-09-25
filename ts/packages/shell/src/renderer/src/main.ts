@@ -288,11 +288,12 @@ document.addEventListener("DOMContentLoaded", function () {
         newImage.src = image.src;
 
         newImage.classList.add("chat-input-dropImage");
-        chatView.chatInput.textarea.textEntry.append(newImage);
+        chatView.chatInput.textarea.getTextEntry().append(newImage);
 
         if (chatView.chatInput.sendButton !== undefined) {
             chatView.chatInput.sendButton.disabled =
-                chatView.chatInput.textarea.textEntry.innerHTML.length == 0;
+                chatView.chatInput.textarea.getTextEntry().innerHTML.length ==
+                0;
         }
     });
 

@@ -11,7 +11,7 @@ export class SearchMenu {
     private trie: TST<SearchMenuItem> = new TST<SearchMenuItem>();
     private selected: number = -1;
     private onCompletion: (item: SearchMenuItem) => void;
-    items: SearchMenuItem[] = [];
+    private items: SearchMenuItem[] = [];
     visibleItemsCount: number = 15;
     top: number = 0;
 
@@ -81,6 +81,10 @@ export class SearchMenu {
         }
     }
 
+    public get numChoices() {
+        return this.trie.size();
+    }
+
     public focus() {
         setTimeout(() => {
             if (this.searchInput) {
@@ -92,6 +96,7 @@ export class SearchMenu {
     public completePrefix(prefix: string) {
         const items = this.trie.dataWithPrefix(prefix);
         this.replaceItems(prefix, items);
+        return items;
     }
 
     // add completions to the search menu

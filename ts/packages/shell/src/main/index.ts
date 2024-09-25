@@ -569,6 +569,9 @@ app.whenReady().then(async () => {
                 });
         },
     );
+    ipcMain.handle("get-partial-completion", async (_event, prefix: string) => {
+        return dispatcher.getPartialCompletion(prefix);
+    });
     ipcMain.handle(
         "get-dynamic-display",
         async (_event, appAgentName: string, id: string) =>
@@ -598,6 +601,8 @@ app.whenReady().then(async () => {
         ShellSettings.getinstance().tts = settings.tts;
         ShellSettings.getinstance().ttsSettings = settings.ttsSettings;
         ShellSettings.getinstance().agentGreeting = settings.agentGreeting;
+        ShellSettings.getinstance().partialCompletion =
+            settings.partialCompletion;
         ShellSettings.getinstance().save();
     });
 
@@ -691,6 +696,3 @@ function setupZoomHandlers(mainWindow: BrowserWindow) {
         }
     });
 }
-
-// In this file you can include the rest of your app"s specific main process
-// code. You can also put them in separate files and require them here.
