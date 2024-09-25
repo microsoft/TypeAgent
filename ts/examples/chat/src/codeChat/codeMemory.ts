@@ -365,9 +365,7 @@ export async function runCodeMemory(): Promise<void> {
         if (source) {
             printer.writeSourceLink(source.sourcePath);
         }
-        for (const line of entry.value) {
-            printer.writeLine(`Line ${line.lineNumber}`);
-            callback(line);
-        }
+        printer.writeLine(`Line ${entry.value.lineNumber}`);
+        callback(entry.value);
     }
 }

@@ -4,7 +4,7 @@
 import path from "path";
 import { openai } from "aiclient";
 import { ObjectFolderSettings, SearchOptions, collections } from "typeagent";
-import { TextBlock, SourceTextBlock, TextBlockType } from "../text.js";
+import { SourceTextBlock } from "../text.js";
 import {
     Conversation,
     ConversationSettings,
@@ -31,7 +31,6 @@ import { SetOp, unionArrays } from "../setOperations.js";
 import { ConcreteEntity } from "./knowledgeSchema.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TopicMerger } from "./topics.js";
-import { open } from "fs";
 
 /**
  * A conversation manager lets you dynamically:
@@ -46,12 +45,14 @@ export interface ConversationManager {
      *
      * @param message
      * @param entities If entities is NOT supplied, then will extract knowledge from message
-     * @param timestamp
+     * @param timestamp message timestamp
+     * @param label optional label for this message
      */
     addMessage(
         messageText: string,
         entities?: ConcreteEntity[] | undefined,
-        timestamp?: Date,
+        timestamp?: Date | undefined,
+        label?: string | undefined,
     ): Promise<any>;
     /**
      * Search the conversation and return an answer
@@ -107,11 +108,10 @@ export async function createConversationManager(
     conversationOrPath: string | Conversation,
     createNew: boolean,
 ): Promise<ConversationManager> {
-    /*const embeddingModel = createEmbeddingCache(
+    const embeddingModel = createEmbeddingCache(
         openai.createEmbeddingModel(),
         64,
-    );*/
-    const embeddingModel = openai.createEmbeddingModel();
+    );
     const knowledgeModel = openai.createChatModel();
     const answerModel = openai.createChatModel();
 
@@ -151,7 +151,7 @@ export async function createConversationManager(
         KnowledgeSearchMode.WithActions,
     );
 
-    const messageIndex = await conversation.getMessageIndex();
+    await conversation.getMessageIndex();
 
     return {
         conversationName,
@@ -163,10 +163,11 @@ export async function createConversationManager(
         generateAnswerForSearchResponse,
     };
 
-    async function addMessage(
+    function addMessage(
         messageText: string,
         knownEntities?: ConcreteEntity[] | undefined,
-        timestamp?: Date,
+        timestamp?: Date | undefined,
+        label?: string | undefined,
     ): Promise<any> {
         return addMessageToConversation(
             conversation,
@@ -175,6 +176,7 @@ export async function createConversationManager(
             messageText,
             knownEntities,
             timestamp,
+            label,
         );
     }
 
@@ -231,6 +233,7 @@ export async function createConversationManager(
                 caseSensitive: false,
                 concurrency: 2,
                 embeddingModel,
+                semanticIndex: true,
             },
         };
     }
@@ -280,6 +283,7 @@ export async function createConversationManager(
  * @param messageText
  * @param knownEntities
  * @param timestamp
+ * @param label optional label for the message
  */
 export async function addMessageToConversation(
     conversation: Conversation,
@@ -287,20 +291,17 @@ export async function addMessageToConversation(
     topicMerger: TopicMerger | undefined,
     messageText: string,
     knownEntities?: ConcreteEntity[] | undefined,
-    timestamp?: Date,
+    timestamp?: Date | undefined,
+    label?: string | undefined,
 ): Promise<any> {
-    const message: TextBlock = {
-        value: messageText,
-        type: TextBlockType.Paragraph,
-    };
-    timestamp ??= new Date();
-    const blockId = await conversation.messages.put(message, timestamp);
+    const block = await conversation.addMessage(messageText, timestamp);
     await extractKnowledgeAndIndex(
         conversation,
         knowledgeExtractor,
         topicMerger,
-        { ...message, blockId, timestamp },
+        block,
         knownEntities,
+        label,
     );
 }
 
@@ -310,6 +311,7 @@ async function extractKnowledgeAndIndex(
     topicMerger: TopicMerger | undefined,
     message: SourceTextBlock,
     knownEntities?: ConcreteEntity[] | undefined,
+    label?: string | undefined,
 ) {
     const messageIndex = await conversation.getMessageIndex();
     await messageIndex.put(message.value, message.blockId);
@@ -341,6 +343,7 @@ async function extractKnowledgeAndIndex(
             topicMerger,
             message,
             extractedKnowledge,
+            label,
         );
     }
 }
@@ -368,13 +371,18 @@ async function indexKnowledge(
     topicMerger: TopicMerger | undefined,
     message: SourceTextBlock,
     knowledge: ExtractedKnowledge,
+    label?: string | undefined,
 ): Promise<void> {
     // Add next message... this updates the "sequence"
-    const knowledgeIds = await conversation.putNext(message, knowledge);
+    const knowledgeIds = await conversation.addKnowledgeForMessage(
+        message,
+        knowledge,
+        label,
+    );
     if (topicMerger) {
-        const mergedTopic = await topicMerger.next(true, true);
+        await topicMerger.next(true, true);
     }
-    await conversation.putIndex(knowledge, knowledgeIds);
+    await conversation.addKnowledgeToIndex(knowledge, knowledgeIds);
 }
 
 function mergeEntities(

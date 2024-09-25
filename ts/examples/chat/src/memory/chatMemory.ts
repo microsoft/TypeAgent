@@ -86,6 +86,7 @@ function createConversationSettings(
             caseSensitive: false,
             concurrency: 2,
             embeddingModel,
+            semanticIndex: true,
         },
     };
 }
@@ -199,7 +200,13 @@ export async function runChatMemory(): Promise<void> {
         io: InteractiveIo,
     ): Promise<void> {
         if (context.searchMemory) {
-            const results = await context.searchMemory.search(line);
+            const results = await context.searchMemory.search(
+                line,
+                undefined,
+                undefined,
+                undefined,
+                (q) => printer.writeJson(q),
+            );
             if (results) {
                 await writeSearchTermsResult(results, true);
             } else {
@@ -642,7 +649,7 @@ export async function runChatMemory(): Promise<void> {
                             const [message, knowledge] = knowledgeResult;
                             await writeKnowledgeResult(message, knowledge);
                             const knowledgeIds =
-                                await context.conversation.putNext(
+                                await context.conversation.addKnowledgeForMessage(
                                     message,
                                     knowledge,
                                 );
@@ -659,7 +666,7 @@ export async function runChatMemory(): Promise<void> {
                                     );
                                 }
                             }
-                            await context.conversation.putIndex(
+                            await context.conversation.addKnowledgeToIndex(
                                 knowledge,
                                 knowledgeIds,
                             );
@@ -1198,6 +1205,7 @@ export async function runChatMemory(): Promise<void> {
         query: string,
         rr: conversation.SearchActionResponse,
         debugInfo: boolean,
+        showLinks: boolean = false,
     ) {
         writeResultStats(rr.response);
         if (rr.response) {
@@ -1216,7 +1224,7 @@ export async function runChatMemory(): Promise<void> {
                             answer.answer
                         ) {
                             printer.writeInColor(chalk.green, answer.answer);
-                            if (debugInfo) {
+                            if (debugInfo && showLinks) {
                                 writeResultLinks(rr.response);
                             }
                             return;

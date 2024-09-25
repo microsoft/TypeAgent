@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { collections, mathLib } from "typeagent";
+import { mathLib } from "typeagent";
 
 export enum SetOp {
     Union,
@@ -62,16 +62,6 @@ export function intersectUnionMultiple<T>(
     }
     const topKItems = combined.getTop();
     return topKItems;
-}
-
-export function doesIntersect<T>(
-    xArray: Iterator<T> | Array<T>,
-    yArray: Iterator<T> | Array<T>,
-): boolean {
-    for (const x of intersect(xArray, yArray)) {
-        return true;
-    }
-    return false;
 }
 
 export function* union<T>(
@@ -381,7 +371,6 @@ export function createFrequencyTable<T>(
             return topK;
         }
         // Find the k'th lowest hit count
-        let i = 0;
         let prevFreq = byFreq[0].count;
         let kCount = 1;
         for (let i = 0; i < byFreq.length; ++i) {

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createChatTranslator, dateTime, loadSchema } from "typeagent";
+import { createChatTranslator, loadSchema } from "typeagent";
 import { PromptSection } from "typechat";
 import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
@@ -61,7 +61,6 @@ export function createAnswerGenerator(
         response: SearchResponse,
         higherPrecision: boolean,
     ): Promise<AnswerResponse | undefined> {
-        const hasMessages = response.messages && response.messages.length > 0;
         const context: any = {
             entities: {
                 timeRanges: response.entityTimeRanges(),
