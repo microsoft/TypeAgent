@@ -12,7 +12,7 @@ export class CachedImageWithDetails {
 }
 
 export function getImageElement(imgData: string): string {
-    return `<img src="${imgData}" />`;
+    return `<img class="chat-input-image" src="${imgData}" />`;
 }
 
 export function extractRelevantExifTags(exifTags: ExifReader.Tags) {

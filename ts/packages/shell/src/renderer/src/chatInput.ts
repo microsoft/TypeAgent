@@ -154,6 +154,8 @@ export class ChatInput {
     input: HTMLInputElement;
     public dragEnabled: boolean = true;
     sendButton: HTMLButtonElement;
+    separator: HTMLDivElement;
+    separatorContainer: HTMLDivElement;
 
     constructor(
         inputId: string,
@@ -305,10 +307,18 @@ export class ChatInput {
             }
         });
 
+        this.separatorContainer = document.createElement("div");
+        this.separatorContainer.className =
+            "chat-input-button chat-input-separator-container";
+        this.separator = document.createElement("div");
+        this.separator.className = "chat-input-separator";
+        this.separatorContainer.append(this.separator);
+
+        this.inputContainer.appendChild(this.textarea.getTextEntry());
         this.inputContainer.appendChild(this.attachButton);
         this.inputContainer.appendChild(this.camButton);
         this.inputContainer.appendChild(this.micButton);
-        this.inputContainer.appendChild(this.textarea.getTextEntry());
+        this.inputContainer.appendChild(this.separatorContainer);
         this.inputContainer.appendChild(this.sendButton);
     }
 

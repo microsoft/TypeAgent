@@ -55,13 +55,13 @@ async function handlePhotoAction(
     let result: ActionResult | undefined = undefined;
     switch (action.actionName) {
         case "takePhoto": {
+            result = createActionResult("Showing camera...");
             photoContext.actionIO.takeAction("show-camera");
-            result = createActionResult("Action Completed.");
             break;
         }
         case "uploadImage": {
+            result = createActionResult("Showing open file dialog...");
             photoContext.actionIO.takeAction("upload-file");
-            result = createActionResult("Action Completed.");
             break;
         }
         default:
