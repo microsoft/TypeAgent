@@ -1,3 +1,14 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+export {};
+
+declare global {
+    interface Window {
+        browserConnect: any;
+    }
+}
+
 window.addEventListener("message", async (event) => {
     if (event.data === "setupSiteAgent") {
         if (window.browserConnect) {
