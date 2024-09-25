@@ -308,7 +308,8 @@ export class ChatInput {
         });
 
         this.separatorContainer = document.createElement("div");
-        this.separatorContainer.className = "chat-input-button chat-input-separator-container";
+        this.separatorContainer.className =
+            "chat-input-button chat-input-separator-container";
         this.separator = document.createElement("div");
         this.separator.className = "chat-input-separator";
         this.separatorContainer.append(this.separator);

@@ -61,7 +61,7 @@ async function handlePhotoAction(
         }
         case "uploadImage": {
             result = createActionResult("Showing open file dialog...");
-            photoContext.actionIO.takeAction("upload-file");            
+            photoContext.actionIO.takeAction("upload-file");
             break;
         }
         default:
