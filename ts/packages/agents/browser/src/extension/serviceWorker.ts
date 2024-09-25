@@ -726,58 +726,70 @@ let currentCrosswordUrl = "";
 async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
     let messageType = "enableSiteTranslator";
     let messageBody = "";
-    if (targetTab.url?.startsWith("https://paleobiodb.org")) {
-        messageType = "enableSiteTranslator";
-        messageBody = "browser.paleoBioDb";
-        currentSiteTranslator = "browser.paleoBioDb";
-    } else {
-        if (currentSiteTranslator == "browser.paleoBioDb") {
-            messageType = "disableSiteTranslator";
+    if (targetTab.url) {
+        const host = new URL(targetTab.url).host;
+
+        if (host === "paleobiodb.org" || host === "www.paleobiodb.org") {
+            messageType = "enableSiteTranslator";
             messageBody = "browser.paleoBioDb";
+            currentSiteTranslator = "browser.paleoBioDb";
+        } else {
+            if (currentSiteTranslator == "browser.paleoBioDb") {
+                messageType = "disableSiteTranslator";
+                messageBody = "browser.paleoBioDb";
+            }
         }
-    }
 
-    if (
-        targetTab.url?.startsWith("https://embed.universaluclick.com") ||
-        targetTab.url?.startsWith("https://data.puzzlexperts.com/puzzleapp") ||
-        targetTab.url?.startsWith("https://nytsyn.pzzl.com/cwd_seattle") ||
-        targetTab.url?.startsWith("https://www.wsj.com/puzzles/crossword") ||
-        targetTab.url?.startsWith(
-            "https://www.seattletimes.com/games-nytimes-crossword",
-        ) ||
-        targetTab.url?.startsWith(
-            "https://www.denverpost.com/games/daily-crossword",
-        ) ||
-        targetTab.url?.startsWith(
-            "https://www.bestcrosswords.com/bestcrosswords/guestconstructor",
-        )
-    ) {
-        messageType = "enableSiteTranslator";
-        messageBody = "browser.crossword";
-        currentSiteTranslator = "browser.crossword";
-        currentCrosswordUrl = targetTab.url;
-    }
+        if (
+            targetTab.url.startsWith("https://embed.universaluclick.com/") ||
+            targetTab.url.startsWith(
+                "https://data.puzzlexperts.com/puzzleapp",
+            ) ||
+            targetTab.url.startsWith("https://nytsyn.pzzl.com/cwd_seattle") ||
+            targetTab.url.startsWith("https://www.wsj.com/puzzles/crossword") ||
+            targetTab.url.startsWith(
+                "https://www.seattletimes.com/games-nytimes-crossword",
+            ) ||
+            targetTab.url.startsWith(
+                "https://www.denverpost.com/games/daily-crossword",
+            ) ||
+            targetTab.url.startsWith(
+                "https://www.bestcrosswords.com/bestcrosswords/guestconstructor",
+            )
+        ) {
+            messageType = "enableSiteTranslator";
+            messageBody = "browser.crossword";
+            currentSiteTranslator = "browser.crossword";
+            currentCrosswordUrl = targetTab.url;
+        }
 
-    if (
-        targetTab.url?.startsWith("https://www.homedepot.com") ||
-        targetTab.url?.startsWith("https://www.target.com") ||
-        targetTab.url?.startsWith("https://www.walmart.com")
-    ) {
-        messageType = "enableSiteTranslator";
-        messageBody = "browser.commerce";
-        currentSiteTranslator = "browser.commerce";
-    }
+        const commerceHosts = [
+            "www.homedepot.com",
+            "www.target.com",
+            "www.walmart.com",
+        ];
 
-    // trigger translator change
-    if (webSocket && webSocket.readyState === WebSocket.OPEN && messageBody) {
-        webSocket.send(
-            JSON.stringify({
-                source: "browser",
-                target: "dispatcher",
-                messageType: messageType,
-                body: messageBody,
-            }),
-        );
+        if (commerceHosts.includes(host)) {
+            messageType = "enableSiteTranslator";
+            messageBody = "browser.commerce";
+            currentSiteTranslator = "browser.commerce";
+        }
+
+        // trigger translator change
+        if (
+            webSocket &&
+            webSocket.readyState === WebSocket.OPEN &&
+            messageBody
+        ) {
+            webSocket.send(
+                JSON.stringify({
+                    source: "browser",
+                    target: "dispatcher",
+                    messageType: messageType,
+                    body: messageBody,
+                }),
+            );
+        }
     }
 }
 

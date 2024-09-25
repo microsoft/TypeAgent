@@ -13,13 +13,14 @@ window.addEventListener("message", async (event) => {
     if (event.data === "setupSiteAgent") {
         if (window.browserConnect) {
             const pageUrl = window.location.href;
+            const host = new URL(pageUrl).host;
 
-            if (pageUrl.startsWith("https://paleobiodb.org")) {
+            if (host === "paleobiodb.org" || host === "www.paleobiodb.org") {
                 window.browserConnect.enableSiteAgent("browser.paleoBioDb");
             }
 
             if (
-                pageUrl.startsWith("https://embed.universaluclick.com") ||
+                pageUrl.startsWith("https://embed.universaluclick.com/") ||
                 pageUrl.startsWith("https://data.puzzlexperts.com/puzzleapp") ||
                 pageUrl.startsWith("https://nytsyn.pzzl.com/cwd_seattle") ||
                 pageUrl.startsWith("https://www.wsj.com/puzzles/crossword") ||
@@ -36,11 +37,13 @@ window.addEventListener("message", async (event) => {
                 window.browserConnect.enableSiteAgent("browser.crossword");
             }
 
-            if (
-                pageUrl.startsWith("https://www.homedepot.com") ||
-                pageUrl.startsWith("https://www.target.com") ||
-                pageUrl.startsWith("https://www.walmart.com")
-            ) {
+            const commerceHosts = [
+                "www.homedepot.com",
+                "www.target.com",
+                "www.walmart.com",
+            ];
+
+            if (commerceHosts.includes(host)) {
                 window.browserConnect.enableSiteAgent("browser.commerce");
             }
         } else {
