@@ -582,8 +582,6 @@ export function createChatModel(
                         break;
                     }
                     const data = JSON.parse(evt.data) as ChatCompletionChunk;
-                    console.log(data);
-                    console.log(evt.data);
                     if (verifyContentIsSafe(data)) {
                         if (data.choices && data.choices.length > 0) {
                             const delta = data.choices[0].delta?.content ?? "";
