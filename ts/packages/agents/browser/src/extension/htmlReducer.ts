@@ -112,7 +112,10 @@ export class HTMLReducer {
 
     reduce(html: string): string {
         const domParser = new DOMParser();
-        let doc = domParser.parseFromString(DOMPurify.sanitize(html), "text/html");
+        let doc = domParser.parseFromString(
+            DOMPurify.sanitize(html),
+            "text/html",
+        );
 
         this.removeNodes(doc, this.linkSelectors, this.removeLinkTags);
         this.removeNodes(doc, this.metaTagSelectors, this.removeMetaTags);

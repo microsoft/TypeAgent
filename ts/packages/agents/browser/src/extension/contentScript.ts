@@ -204,7 +204,10 @@ function getPageHTMLSubFragments(
     frameId: number,
 ) {
     const domParser = new DOMParser();
-    const doc = domParser.parseFromString(DOMPurify.sanitize(documentHtml), "text/html");
+    const doc = domParser.parseFromString(
+        DOMPurify.sanitize(documentHtml),
+        "text/html",
+    );
     const elements = doc.documentElement.querySelectorAll(cssSelectors);
     let htmlFragments = [];
     if (elements) {
@@ -228,7 +231,10 @@ function getPageHTMLFragments(
         documentHtml = getPageHTML(false, documentHtml, frameId);
     }
     const domParser = new DOMParser();
-    const doc = domParser.parseFromString(DOMPurify.sanitize(documentHtml), "text/html");
+    const doc = domParser.parseFromString(
+        DOMPurify.sanitize(documentHtml),
+        "text/html",
+    );
     let htmlFragments = [];
     let node = doc.body;
     while (node) {
