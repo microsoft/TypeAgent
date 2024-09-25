@@ -727,11 +727,6 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
     let messageType = "enableSiteTranslator";
     let messageBody = "";
     if (targetTab.url?.startsWith("https://paleobiodb.org")) {
-        // insert site-specific script
-        const result = await chrome.tabs.sendMessage(targetTab.id!, {
-            type: "setup_paleoBioDb",
-        });
-
         messageType = "enableSiteTranslator";
         messageBody = "browser.paleoBioDb";
         currentSiteTranslator = "browser.paleoBioDb";
@@ -757,11 +752,6 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
             "https://www.bestcrosswords.com/bestcrosswords/guestconstructor",
         )
     ) {
-        // insert ui automation script
-        const result = await chrome.tabs.sendMessage(targetTab.id!, {
-            type: "setup_ui_events_script",
-        });
-
         messageType = "enableSiteTranslator";
         messageBody = "browser.crossword";
         currentSiteTranslator = "browser.crossword";
@@ -773,11 +763,6 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
         targetTab.url?.startsWith("https://www.target.com") ||
         targetTab.url?.startsWith("https://www.walmart.com")
     ) {
-        // insert ui automation script
-        const result = await chrome.tabs.sendMessage(targetTab.id!, {
-            type: "setup_ui_events_script",
-        });
-
         messageType = "enableSiteTranslator";
         messageBody = "browser.commerce";
         currentSiteTranslator = "browser.commerce";
@@ -1422,31 +1407,6 @@ chrome.runtime.onMessageExternal.addListener(
 
 chrome.runtime.onMessage.addListener(
     (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
-        async () => {
-            switch (message.type) {
-                case "initialize": {
-                    console.log("Browser Agent Service Worker started");
-                    try {
-                        const connected = await ensureWebsocketConnected();
-                        if (!connected) {
-                            reconnectWebSocket();
-                            showBadgeError();
-                        }
-                    } catch {
-                        reconnectWebSocket();
-                    }
-
-                    sendResponse("Service worker initialize called");
-                    break;
-                }
-            }
-        }
-    }
-)
-
-declare var electronAPI: any;
-electronAPI?.onMessage.addListener(
-    (message: any, sender: chrome.runtime.MessageSender, sendResponse: (arg0: string) => void) => {
         async () => {
             switch (message.type) {
                 case "initialize": {

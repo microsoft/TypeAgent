@@ -1,43 +1,12 @@
-const { contextBridge, ipcRenderer } = require('electron/renderer')
+const { contextBridge } = require("electron/renderer");
 
-
-export type WebSocketMessage = {
-    source: string;
-    target: string;
-    id?: string;
-    messageType: string;
-    body: any;
-};
+import {
+    WebSocketMessage,
+    createWebSocket,
+    keepWebSocketAlive,
+} from "common-utils";
 
 let webSocket: any = null;
-let configValues: Record<string, string>;
-
-export async function createWebSocket() {
-    if (!configValues) {
-        // configValues = await getConfigValues();
-    }
-
-    let socketEndpoint = "ws://localhost:8080/prod";
-
-    // socketEndpoint += "?clientId=" + chrome.runtime.id;
-    return new Promise<WebSocket | undefined>((resolve) => {
-        const webSocket = new WebSocket(socketEndpoint);
-
-        webSocket.onopen = () => {
-            console.log("websocket open");
-            resolve(webSocket);
-        };
-        webSocket.onmessage = () => {};
-        webSocket.onclose = () => {
-            console.log("websocket connection closed");
-            resolve(undefined);
-        };
-        webSocket.onerror = () => {
-            console.error("websocket error");
-            resolve(undefined);
-        };
-    });
-}
 
 async function ensureWebsocketConnected() {
     return new Promise<WebSocket | undefined>(async (resolve) => {
@@ -59,10 +28,10 @@ async function ensureWebsocketConnected() {
         }
 
         webSocket.binaryType = "blob";
-        keepWebSocketAlive(webSocket);
+        keepWebSocketAlive(webSocket, "browser");
 
         webSocket.onmessage = async (event: any) => {
-            const text = await event.data.text();
+            const text = event.data.toString();
             const data = JSON.parse(text) as WebSocketMessage;
             if (data.target == "browser") {
                 if (data.messageType == "browserActionRequest") {
@@ -120,24 +89,6 @@ async function ensureWebsocketConnected() {
     });
 }
 
-export function keepWebSocketAlive(webSocket: WebSocket) {
-    const keepAliveIntervalId = setInterval(() => {
-        if (webSocket && webSocket.readyState === WebSocket.OPEN) {
-            webSocket.send(
-                JSON.stringify({
-                    source: "browser",
-                    target: "none",
-                    messageType: "keepAlive",
-                    body: {},
-                }),
-            );
-        } else {
-            console.log("Clearing keepalive retry interval");
-            clearInterval(keepAliveIntervalId);
-        }
-    }, 20 * 1000);
-}
-
 export function reconnectWebSocket() {
     const connectionCheckIntervalId = setInterval(async () => {
         if (webSocket && webSocket.readyState === WebSocket.OPEN) {
@@ -174,73 +125,117 @@ export async function getLatLongForLocation(locationName: string) {
     }
 }
 
+export async function awaitPageLoad() {
+    /*
+    return new Promise<string | undefined>((resolve, reject) => {
+        // use window API to await pageload
+        
+    });
+    */
+}
+
+export async function getTabHTML(fullSize: boolean) {
+    let outerHTML = await sendScriptAction({
+        type: "get_reduced_html",
+        fullSize: fullSize,
+        frameId: 0,
+    });
+
+    return outerHTML;
+}
+
+export async function getTabHTMLFragments(fullSize: boolean) {
+    let htmlFragments: any[] = [];
+
+    const frameHTML = await sendScriptAction(
+        {
+            type: "get_reduced_html",
+            fullSize: fullSize,
+            frameId: 0,
+        },
+        5000,
+    );
+
+    const frameText = await sendScriptAction({
+        type: "get_page_text",
+        inputHtml: frameHTML,
+        frameId: 0,
+    });
+
+    htmlFragments.push({
+        frameId: 0,
+        content: frameHTML,
+        text: frameText,
+    });
+
+    return htmlFragments;
+}
+
+export async function sendScriptAction(body: any, timeout?: number) {
+    const timeoutPromise = new Promise((f) => setTimeout(f, timeout));
+
+    const actionPromise = new Promise<any | undefined>((resolve) => {
+        const callId = new Date().getTime().toString();
+
+        window.postMessage({
+            source: "preload",
+            target: "contentScript",
+            messageType: "scriptActionRequest",
+            id: callId,
+            body: body,
+        });
+
+        // if timeout is provided, wait for a response - otherwise fire and forget
+        if (timeout) {
+            const handler = (event: any) => {
+                if (
+                    event.data.target == "preload" &&
+                    event.data.source == "contentScript" &&
+                    event.data.messageType == "scriptActionResponse" &&
+                    event.data.id == callId &&
+                    event.data.body
+                ) {
+                    window.removeEventListener("message", handler);
+                    resolve(event.data.body);
+                }
+            };
+
+            window.addEventListener("message", handler, false);
+        } else {
+            resolve(undefined);
+        }
+    });
+
+    if (timeout) {
+        return Promise.race([actionPromise, timeoutPromise]);
+    } else {
+        return actionPromise;
+    }
+}
+
 async function runBrowserAction(action: any) {
-    console.log(JSON.stringify(action));
-    // todo: get current window 
-    // send window message - do we go through our exposed api or postMessage?
-    window.postMessage({
-        source: "preload",
-        target: "contentScript",
-        messageType: "browserActionRequest",
-        body: action
-    });
-}
-
-async function runSiteAction(messageType: string, action: any) {
-    console.log(messageType);
-    
-    console.log(JSON.stringify(action));
-    // todo: get current window 
-    // send window message - do we go through our exposed api or postMessage?
-    window.postMessage({
-        source: "preload",
-        target: "contentScript",
-        messageType: messageType,
-        body: action
-    });
-}
-
-export async function sendScriptAction(body: any) {
-    window.postMessage({
-        source: "preload",
-        target: "contentScript",
-        messageType: "scriptActionRequest",
-        body: body
-    });
-
-}
-
-/*
-async function runBrowserAction(action: any) {
-    let responseObject = undefined;
+    let responseObject: any;
     let confirmationMessage = "OK";
     const actionName =
         action.actionName ?? action.fullActionName.split(".").at(-1);
     switch (actionName) {
-        
-        case "followLinkByText": {            
-            await sendScriptAction({
-                type: "get_page_links_by_query",
-                query: action.parameters.keywords,
-            });
+        case "followLinkByText": {
+            const response = await sendScriptAction(
+                {
+                    type: "get_page_links_by_query",
+                    query: action.parameters.keywords,
+                },
+                5000,
+            );
 
             if (response && response.url) {
-                if (action.parameters.openInNewTab) {
-                    await chrome.tabs.create({
-                        url: response.url,
-                    });
-                } else {
-                    await chrome.tabs.update(targetTab.id!, {
-                        url: response.url,
-                    });
-                }
-
+                window.location.href = response.url;
                 confirmationMessage = `Navigated to the  ${action.parameters.keywords} link`;
             }
 
             break;
         }
-        
+
         case "scrollDown": {
             sendScriptAction({
                 type: "scroll_down_on_page",
@@ -265,9 +260,8 @@ async function runBrowserAction(action: any) {
             });
             break;
         }
-        
+
         case "zoomIn": {
-            
             if (window.location.href.startsWith("https://paleobiodb.org/")) {
                 sendScriptAction({
                     type: "run_paleoBioDb_action",
@@ -276,7 +270,7 @@ async function runBrowserAction(action: any) {
             } else {
                 sendScriptAction({
                     type: "zoom_in_page",
-                });                
+                });
             }
 
             break;
@@ -290,51 +284,27 @@ async function runBrowserAction(action: any) {
             } else {
                 sendScriptAction({
                     type: "zoom_out_page",
-                });                
+                });
             }
             break;
         }
         case "zoomReset": {
             sendScriptAction({
                 type: "zoom_reset",
-            });  
+            });
             break;
         }
-     
+
         case "getHTML": {
             responseObject = await getTabHTMLFragments(
-                targetTab,
                 action.parameters.fullHTML,
-                action.parameters.downloadAsFile,
-                16000,
             );
-            break;
-        }
-        case "getFilteredHTMLFragments": {
-            const targetTab = await getActiveTab();
 
-            responseObject = await getFilteredHTMLFragments(
-                targetTab,
-                action.parameters.fragments,
-            );
             break;
         }
-        
 
-        case "clickOnElement": {
-            sendScriptAction({
-                type: "run_ui_event",
-                action: action,
-            });
-            break;
-        }
-        case "enterTextInElement": {
-            sendScriptAction({
-                type: "run_ui_event",
-                action: action,
-            });
-            break;
-        }
+        case "clickOnElement":
+        case "enterTextInElement":
         case "enterTextOnPage": {
             sendScriptAction({
                 type: "run_ui_event",
@@ -342,7 +312,7 @@ async function runBrowserAction(action: any) {
             });
             break;
         }
-        
+
         case "unknown": {
             confirmationMessage = `Did not understand the request "${action.parameters.text}"`;
             break;
@@ -401,28 +371,52 @@ async function runSiteAction(messageType: string, action: any) {
 
     return confirmationMessage;
 }
-*/
 
-contextBridge.exposeInMainWorld('browserConnect', {
-    onMessage: (callback) => ipcRenderer.on('send-message-to-web', (_event, value) => callback(value)),
-    sendMessage: (value) => {
-        console.log(value);
-        ipcRenderer.send("get-message-from-web", value);
+contextBridge.exposeInMainWorld("browserConnect", {
+    enableSiteAgent: (translatorName) => {
+        if (
+            webSocket &&
+            webSocket.readyState === WebSocket.OPEN &&
+            translatorName
+        ) {
+            webSocket.send(
+                JSON.stringify({
+                    source: "browser",
+                    target: "dispatcher",
+                    messageType: "enableSiteTranslator",
+                    body: translatorName,
+                }),
+            );
+        }
     },
-})
-
+    disableSiteAgent: (translatorName) => {
+        if (
+            webSocket &&
+            webSocket.readyState === WebSocket.OPEN &&
+            translatorName
+        ) {
+            webSocket.send(
+                JSON.stringify({
+                    source: "browser",
+                    target: "dispatcher",
+                    messageType: "disableSiteTranslator",
+                    body: translatorName,
+                }),
+            );
+        }
+    },
+});
 
 await ensureWebsocketConnected();
 
-window.addEventListener('message', async (event) => {
-    console.log(`Received message: ${event.data}`);
+window.addEventListener(
+    "message",
+    async (event) => {
+        if (event.data === "page-to-bridge") {
+            console.log("Message from page to bridge");
+        }
+    },
+    false,
+);
 
-    if (event.data === 'page-to-bridge') {
-        console.log("Message from page to bridge");
-    }
-
-  }, false);
-
-window.postMessage("bridge-window-ready");
-
-// window.postMessage("initializeWorker")
+window.postMessage("setupSiteAgent");

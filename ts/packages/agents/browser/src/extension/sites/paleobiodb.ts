@@ -7,6 +7,11 @@ declare var taxaBrowser: any;
 declare var timeScale: any;
 declare var navMap: any;
 declare var map: any;
+declare global {
+    interface Window {
+        browserConnect: any;
+    }
+}
 
 function enablePaleoBioDbFilter(time: string, taxa: string) {
     if (time) {
@@ -165,6 +170,14 @@ document.addEventListener("toPaleoDbAutomation", function (e: any) {
             );
             sendResponse({});
             break;
+        }
+    }
+});
+
+window.addEventListener("message", async (event) => {
+    if (event.data === "setupSiteAgent") {
+        if (window.browserConnect) {
+            window.browserConnect.enableSiteAgent("browser.paleoBioDb");
         }
     }
 });

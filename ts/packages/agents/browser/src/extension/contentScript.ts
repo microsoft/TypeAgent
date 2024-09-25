@@ -490,18 +490,6 @@ function setIdsOnAllElements(frameId: number) {
     }
 }
 
-function setupPaleoDbScript() {
-    const helper = document.getElementById("paleobiodbAutomationScript");
-    if (helper) {
-        return;
-    }
-
-    var scriptNode = document.createElement("script");
-    scriptNode.id = "paleobiodbAutomationScript";
-    scriptNode.src = chrome.runtime.getURL("sites/paleobiodb.js");
-    (document.head || document.documentElement).appendChild(scriptNode);
-}
-
 function sendPaleoDbRequest(data: any) {
     document.dispatchEvent(
         new CustomEvent("toPaleoDbAutomation", { detail: data }),
@@ -513,45 +501,15 @@ document.addEventListener("fromPaleoDbAutomation", function (e: any) {
     console.log("received", message);
 });
 
-function setupUIEventsScript() {
-    const helper = document.getElementById("uiEventsScript");
-    if (helper) {
-        return;
-    }
-
-    var scriptNode = document.createElement("script");
-    scriptNode.id = "uiEventsScript";
-    scriptNode.src = chrome.runtime.getURL("uiEventsDispatcher.js");
-
-    scriptNode.onload = function () {
-        // setIdsOnAllElements();
-    };
-
-    (document.head || document.documentElement).appendChild(scriptNode);
-}
-
 function sendUIEventsRequest(data: any) {
     document.dispatchEvent(
         new CustomEvent("toUIEventsDispatcher", { detail: data }),
     );
 }
 
-function sendUIEventsRequestData(data: any) {
-    document.dispatchEvent(
-        new CustomEvent("toUIEventsDispatcherData", { detail: data }),
-    );
-}
-
 document.addEventListener("fromUIEventsDispatcher", async function (e: any) {
     var message = e.detail;
     console.log("received", message);
-    /*
-    const response = await chrome.runtime.sendMessage({
-        type: "uiEventsResult",
-        data: message,
-    });
-    sendUIEventsRequestData(response);
-    */
 });
 
 async function handleScriptAction(
@@ -664,20 +622,8 @@ async function handleScriptAction(
             break;
         }
 
-        case "setup_ui_events_script": {
-            setupUIEventsScript();
-            sendResponse({});
-            break;
-        }
-
         case "run_ui_event": {
             sendUIEventsRequest(message.action);
-            sendResponse({});
-            break;
-        }
-
-        case "setup_paleoBioDb": {
-            setupPaleoDbScript();
             sendResponse({});
             break;
         }
@@ -700,98 +646,15 @@ chrome.runtime?.onMessage.addListener(
     },
 );
 
-/*
-declare var browserConnect: any;
-browserConnect?.onMessage(
-    async (message: any) => {
-        await  handleScriptAction(message, browserConnect.sendMessage);
-
-        // await  handleScriptAction(message, console.log);
-    }
-)
-*/
 window.addEventListener(
     "message",
     async (event) => {
-        console.log(`Received message: ${event.data}`);
-
-        if (event.data === "initializeWorker") {
-            chrome.runtime.sendMessage(
-                {
-                    type: "initialize",
-                },
-                (response) => {
-                    console.log(JSON.stringify(response));
-                },
-            );
-        } else if (event.data === "setupPaleoBioDB") {
-            setupPaleoDbScript();
-            chrome.runtime.sendMessage(
-                {
-                    type: "setupPaleoBioDB",
-                },
-                (response) => {
-                    console.log(JSON.stringify(response));
-                },
-            );
-        } else if (event.data === "setupCrossword") {
-            setupUIEventsScript();
-            chrome.runtime.sendMessage(
-                {
-                    type: "setupCrossword",
-                },
-                (response) => {
-                    console.log(JSON.stringify(response));
-                },
-            );
-        } else if (event.data === "setupCommerce") {
-            setupUIEventsScript();
-            chrome.runtime.sendMessage(
-                {
-                    type: "setupCommerce",
-                },
-                (response) => {
-                    console.log(JSON.stringify(response));
-                },
-            );
-        } else {
-            console.log(JSON.stringify(event.data));
-            if (
-                event.data.source == "preload" &&
-                event.data.target == "contentScript"
-            ) {
-                if (event.data.messageType == "browserActionRequest") {
-                    console.log("routing to service worker");
-                    chrome.runtime.sendMessage(
-                        {
-                            type: "handleBrowserAction",
-                            body: event.data.body,
-                        },
-                        (response) => {
-                            console.log(JSON.stringify(response));
-                        },
-                    );
-                }else if(event.data.messageType.startsWith("browserActionRequest.")){
-                    console.log("routing to service worker");
-                    chrome.runtime.sendMessage(
-                        {
-                            type: "handleSiteAction",
-                            body: event.data.body,
-                            messageType: event.data.messageType,
-                        },
-                        (response) => {
-                            console.log(JSON.stringify(response));
-                        },
-                    );
-                }
-
-                if (event.data.messageType == "scriptActionRequest") {
-                    // route this to service worker'
-                    console.log("this will be routed to Script directly");
-
-                    await handleScriptAction(event.data.body, console.log);
-                }
-            }
+        if (
+            event.data.source == "preload" &&
+            event.data.target == "contentScript" &&
+            event.data.messageType == "scriptActionRequest"
+        ) {
+            await handleScriptAction(event.data.body, console.log);
         }
     },
     false,

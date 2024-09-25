@@ -14,7 +14,7 @@ import {
 import { AppAgentProvider } from "agent-dispatcher";
 import { ShellSettings } from "./shellSettings.js";
 import path from "path";
-import {  BrowserWindow } from "electron";
+import { BrowserWindow } from "electron";
 
 type ShellContext = {
     settings: ShellSettings;
@@ -121,77 +121,34 @@ class ShellSetTopMostCommandHandler implements CommandHandler {
 class ShellOpenWebContentView implements CommandHandler {
     public readonly description = "Show a new Web Content view";
     public async run(_input: string) {
-        /*
-        const browserExtensionPath = path.join(
-            app.getAppPath(),
-            "../agents/browser/dist/electron",
-        );
-*/
-        const win = new BrowserWindow({
-            width: 800,
-            height: 1500,
-            autoHideMenuBar: true,
+        let targetUrl: URL;
+        switch (_input) {
+            case "paleoBioDb":
+                targetUrl = new URL("https://paleobiodb.org/navigator/");
 
-            webPreferences: {
-                preload: path.join(__dirname, "../preload/webview.mjs"),
-                sandbox: false,
-            },
-        });
-        win.removeMenu();
-        /*
-        const extensionInfo = await win.webContents.session.loadExtension(browserExtensionPath, { allowFileAccess: true });
-        console.log(JSON.stringify(extensionInfo));
-*/
+                break;
+            case "crossword":
+                targetUrl = new URL("https://nytsyn.pzzl.com/cwd_seattle");
 
-        if (_input) {
-            switch (_input) {
-                case "paleoBioDb": {
-                    win.loadURL("https://paleobiodb.org/navigator/");
-                    win.webContents.on('did-finish-load', function() {
-                        win.webContents.send('send-message', { type: "setupPaleoBioDB" })
-                    });
-                    
-                    break;
-                }
-                case "crossword": {
-                    win.loadURL("https://nytsyn.pzzl.com/cwd_seattle");
-                    
-                    win.webContents.on('did-finish-load', function() {
-                        win.webContents.send('send-message', { type: "setupCrossword" })
-                    });
-                    break;
-                }
-                case "comerce": {
-                    win.loadURL("https://www.target.com");
-                    
-                    win.webContents.on('did-finish-load', function() {
-                        win.webContents.send('send-message', { type: "setupCommerce" })
-                    });
-                    break;
-                }
-                case "vsCode": {
-                    win.loadURL("https://vscode.dev/");
-                    
-                    win.webContents.on('did-finish-load', function() {
-                        win.webContents.send('send-message', { type: "setupCode" })
-                    });
-                    break;
-                }
-                case "news": {
-                    win.loadURL("https://www.bbc.com/");
-                    break;
-                }
-
-                
-            }
-        } else {
-            win.loadURL("https://paleobiodb.org/navigator/");
-            win.webContents.on('did-finish-load', function() {
-                win.webContents.send('send-message', { type: "setupPaleoBioDB" })
-            });
+                break;
+            default:
+                targetUrl = new URL(_input);
         }
 
-        // win.webContents.session.getExtension()?.manifest.
+        if (targetUrl) {
+            const win = new BrowserWindow({
+                width: 800,
+                height: 1500,
+                autoHideMenuBar: true,
+
+                webPreferences: {
+                    preload: path.join(__dirname, "../preload/webview.mjs"),
+                    sandbox: false,
+                },
+            });
+            win.removeMenu();
+            win.loadURL(targetUrl.toString());
+        }
     }
 }
 

@@ -12,8 +12,8 @@ module.exports = {
     entry: {
         "extension/contentScript": path.join(srcDir, "contentScript.ts"),
         "electron/contentScript": path.join(srcDir, "contentScript.ts"),
+        "electron/agentActivation": path.join(electronSrcDir, "agentActivation.ts"),
         "extension/serviceWorker": path.join(srcDir, "serviceWorker.ts"),
-        "electron/serviceWorker": path.join(electronSrcDir, "serviceWorker.ts"),
         "extension/uiEventsDispatcher": path.join(
             srcDir,
             "uiEventsDispatcher.ts",
@@ -90,15 +90,6 @@ module.exports = {
                     to: "./electron",
                 },
                 {
-                    from: path.join(srcDir, "patchListeners.js"),
-                    to: "./extension",
-                },
-                {
-                    from: path.join(srcDir, "patchListeners.js"),
-                    to: "./electron",
-                },
-                
-                {
                     from: ".",
                     to: "./extension/images",
                     context: path.join(srcDir, "images"),
@@ -106,11 +97,6 @@ module.exports = {
                 {
                     from: "../../../.env",
                     to: "./extension",
-                    noErrorOnMissing: true,
-                },
-                {
-                    from: "../../../.env",
-                    to: "./electron",
                     noErrorOnMissing: true,
                 },
             ],
