@@ -46,7 +46,8 @@ export class HistoryClearCommandHandler implements CommandHandler {
 }
 
 export class HistoryDeleteCommandHandler implements CommandHandler {
-    public readonly description = "Delete a specific message from the chat history";
+    public readonly description =
+        "Delete a specific message from the chat history";
     public async run(
         request: string,
         context: ActionContext<CommandHandlerContext>,
@@ -58,14 +59,23 @@ export class HistoryDeleteCommandHandler implements CommandHandler {
         }
         const index: number = parseInt(args[0]);
         if (index < 0 || index >= systemContext.chatHistory.entries.length) {
-            throw new Error(`The supplied index (${index}) is outside the range of available indicies (0, ${systemContext.chatHistory.entries.length})`);
+            throw new Error(
+                `The supplied index (${index}) is outside the range of available indicies (0, ${systemContext.chatHistory.entries.length})`,
+            );
         } else if (isNaN(index)) {
-            throw new Error(`The supplied value '${index}' is not a valid index.`);
+            throw new Error(
+                `The supplied value '${index}' is not a valid index.`,
+            );
         } else if (args.length === 1) {
             systemContext.chatHistory.entries.splice(index, 1);
-            displayResult(`Message ${index} deleted. ${systemContext.chatHistory.entries.length} messages remain in the chat history.`, context);
+            displayResult(
+                `Message ${index} deleted. ${systemContext.chatHistory.entries.length} messages remain in the chat history.`,
+                context,
+            );
         } else {
-            throw new Error("You must supply an index number of the message to delete.");
+            throw new Error(
+                "You must supply an index number of the message to delete.",
+            );
         }
     }
 }

@@ -4,22 +4,27 @@
   "version": "1.0",
   "description": "Automates various browser actions.",
   "action": {},
-  "background": {
-    "service_worker": "serviceWorker.js",
-    "type": "module"
-  },
   "content_scripts": [
     {
       "matches": ["https://*/*"],
       "js": ["contentScript.js"],
-      "runAt": "document_start",
-      "all_frames": true
+      "runAt": "document_start"
     },
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["patchListeners.js"],
-      "run_at": "document_start",
-      "all_frames": true
+      "matches": ["https://*/*"],
+      "js": ["agentActivation.js"],
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://*/*"],
+      "js": ["uiEventsDispatcher.js"],
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://paleobiodb.org/*"],
+      "js": ["sites/paleobiodb.js"],
+      "world": "MAIN"
     }
   ],
   "web_accessible_resources": [
