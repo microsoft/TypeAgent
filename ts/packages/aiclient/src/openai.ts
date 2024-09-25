@@ -403,22 +403,22 @@ export function supportsStreaming(
 }
 
 type FilterContentResult = {
-    hate?: FilterResult,
-    self_harm?: FilterResult,
-    sexual?: FilterResult,
-    violence?: FilterResult,
-    error?: FilterError,
+    hate?: FilterResult;
+    self_harm?: FilterResult;
+    sexual?: FilterResult;
+    violence?: FilterResult;
+    error?: FilterError;
 };
 
 type FilterError = {
-    code: string,
-    message: string,
-}
+    code: string;
+    message: string;
+};
 
 type FilterResult = {
-    filtered: boolean,
-    severity: string,
-}
+    filtered: boolean;
+    severity: string;
+};
 
 // NOTE: these are not complete
 type ChatCompletion = {
@@ -428,9 +428,9 @@ type ChatCompletion = {
 
 type ChatCompletionChoice = {
     message?: ChatContent;
-    content_filter_results?: FilterContentResult | ContentFilterError,
-    finish_reason?: string,
-}
+    content_filter_results?: FilterContentResult | ContentFilterError;
+    finish_reason?: string;
+};
 
 type ChatCompletionChunk = {
     id: string;
@@ -439,19 +439,19 @@ type ChatCompletionChunk = {
 
 type ChatCompletionDelta = {
     delta: ChatContent;
-    content_filter_results?: FilterContentResult | ContentFilterError,
-    finish_reason?: string,
-}
+    content_filter_results?: FilterContentResult | ContentFilterError;
+    finish_reason?: string;
+};
 
 type ChatContent = {
     content?: string | null;
     role: "assistant";
-}
+};
 
 type ContentFilterError = {
     code: string;
     message: string;
-}
+};
 
 /**
  * Create a client for an Open AI chat model
@@ -597,29 +597,30 @@ export function createChatModel(
     }
 
     function verifyContentIsSafe(data: ChatCompletionChunk): boolean {
-            
         let filters: string[] = new Array<string>();
 
         data.choices.map((c: ChatCompletionDelta) => {
             if (c.finish_reason == "content_filter_error") {
                 const err = c.content_filter_results as ContentFilterError;
-                throw new Error(`There was a content filter error (${err.code}): ${err.message}`);
+                throw new Error(
+                    `There was a content filter error (${err.code}): ${err.message}`,
+                );
             }
 
             const cfr = c.content_filter_results as FilterContentResult;
             if (cfr) {
-                    if (cfr?.hate?.filtered) {
-                        filters.push("hate");
-                    }
-                    if (cfr?.self_harm?.filtered) {
-                        filters.push("self_harm");
-                    }
-                    if (cfr?.sexual?.filtered) {
-                        filters.push("sexual");
-                    }
-                    if (cfr?.violence?.filtered) {
-                        filters.push("violence");
-                    }
+                if (cfr.hate?.filtered) {
+                    filters.push("hate");
+                }
+                if (cfr.self_harm?.filtered) {
+                    filters.push("self_harm");
+                }
+                if (cfr.sexual?.filtered) {
+                    filters.push("sexual");
+                }
+                if (cfr.violence?.filtered) {
+                    filters.push("violence");
+                }
 
                 if (filters.length > 0) {
                     let msg = `A content filter has been triggered by one or more messages. The triggered filters are: ${filters.join(", ")}`;
