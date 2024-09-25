@@ -177,10 +177,13 @@ async function handleChatResponse(
                                 lookupAction.parameters.relatedFiles !==
                                     undefined
                             ) {
-                                if (matches.response?.answer.answer !== undefined) {
-                                return createActionResultFromHtmlDisplay(
-                                    `<div>${matches.response.answer.answer} ${await rehydrateImages(context, lookupAction.parameters.relatedFiles)}</div>`,
-                                );
+                                if (
+                                    matches.response?.answer.answer !==
+                                    undefined
+                                ) {
+                                    return createActionResultFromHtmlDisplay(
+                                        `<div>${matches.response.answer.answer} ${await rehydrateImages(context, lookupAction.parameters.relatedFiles)}</div>`,
+                                    );
                                 } else {
                                     return createActionResultFromHtmlDisplay(
                                         `<div>${await rehydrateImages(context, lookupAction.parameters.relatedFiles)}</div>`,
