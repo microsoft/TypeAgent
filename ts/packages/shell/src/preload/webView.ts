@@ -230,12 +230,13 @@ async function runBrowserAction(action: any) {
                 },
                 5000,
             );
-
+            console.log("We should navigate to " + JSON.stringify(response));
+            /*
             if (response && response.url) {
                 window.location.href = response.url;
                 confirmationMessage = `Navigated to the  ${action.parameters.keywords} link`;
             }
-
+*/
             break;
         }
 

@@ -4,6 +4,7 @@
 import { Readability, isProbablyReaderable } from "@mozilla/readability";
 import { HTMLReducer } from "./htmlReducer";
 import { convert } from "html-to-text";
+import DOMPurify from "dompurify";
 
 function isVisible(element: HTMLElement) {
     var html = document.documentElement;
@@ -203,7 +204,10 @@ function getPageHTMLSubFragments(
     frameId: number,
 ) {
     const domParser = new DOMParser();
-    const doc = domParser.parseFromString(documentHtml, "text/html");
+    const doc = domParser.parseFromString(
+        DOMPurify.sanitize(documentHtml),
+        "text/html",
+    );
     const elements = doc.documentElement.querySelectorAll(cssSelectors);
     let htmlFragments = [];
     if (elements) {
@@ -227,7 +231,10 @@ function getPageHTMLFragments(
         documentHtml = getPageHTML(false, documentHtml, frameId);
     }
     const domParser = new DOMParser();
-    const doc = domParser.parseFromString(documentHtml, "text/html");
+    const doc = domParser.parseFromString(
+        DOMPurify.sanitize(documentHtml),
+        "text/html",
+    );
     let htmlFragments = [];
     let node = doc.body;
     while (node) {
