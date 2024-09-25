@@ -402,26 +402,56 @@ export function supportsStreaming(
     return "completeStream" in model;
 }
 
+type FilterContentResult = {
+    hate?: FilterResult,
+    self_harm?: FilterResult,
+    sexual?: FilterResult,
+    violence?: FilterResult,
+    error?: FilterError,
+};
+
+type FilterError = {
+    code: string,
+    message: string,
+}
+
+type FilterResult = {
+    filtered: boolean,
+    severity: string,
+}
+
 // NOTE: these are not complete
 type ChatCompletion = {
     id: string;
-    choices: {
-        message?: {
-            content?: string | null;
-            role: "assistant";
-        };
-    }[];
+    choices: ChatCompletionChoice[];
 };
+
+type ChatCompletionChoice = {
+    message?: ChatContent;
+    content_filter_results?: FilterContentResult | ContentFilterError,
+    finish_reason?: string,
+}
 
 type ChatCompletionChunk = {
     id: string;
-    choices: {
-        delta: {
-            content?: string | null;
-            role: "assistant";
-        };
-    }[];
+    choices: ChatCompletionDelta[];
 };
+
+type ChatCompletionDelta = {
+    delta: ChatContent;
+    content_filter_results?: FilterContentResult | ContentFilterError,
+    finish_reason?: string,
+}
+
+type ChatContent = {
+    content?: string | null;
+    role: "assistant";
+}
+
+type ContentFilterError = {
+    code: string;
+    message: string;
+}
 
 /**
  * Create a client for an Open AI chat model
@@ -552,16 +582,55 @@ export function createChatModel(
                         break;
                     }
                     const data = JSON.parse(evt.data) as ChatCompletionChunk;
-                    if (data.choices && data.choices.length > 0) {
-                        const delta = data.choices[0].delta?.content ?? "";
-                        if (delta) {
-                            yield delta;
+                    console.log(data);
+                    console.log(evt.data);
+                    if (verifyContentIsSafe(data)) {
+                        if (data.choices && data.choices.length > 0) {
+                            const delta = data.choices[0].delta?.content ?? "";
+                            if (delta) {
+                                yield delta;
+                            }
                         }
                     }
                 }
             })(),
         };
         // Stream chunks back
+    }
+
+    function verifyContentIsSafe(data: ChatCompletionChunk): boolean {
+            
+        let filters: string[] = new Array<string>();
+
+        data.choices.map((c: ChatCompletionDelta) => {
+            if (c.finish_reason == "content_filter_error") {
+                const err = c.content_filter_results as ContentFilterError;
+                throw new Error(`There was a content filter error (${err.code}): ${err.message}`);
+            }
+
+            const cfr = c.content_filter_results as FilterContentResult;
+            if (cfr) {
+                    if (cfr?.hate?.filtered) {
+                        filters.push("hate");
+                    }
+                    if (cfr?.self_harm?.filtered) {
+                        filters.push("self_harm");
+                    }
+                    if (cfr?.sexual?.filtered) {
+                        filters.push("sexual");
+                    }
+                    if (cfr?.violence?.filtered) {
+                        filters.push("violence");
+                    }
+
+                if (filters.length > 0) {
+                    let msg = `A content filter has been triggered by one or more messages. The triggered filters are: ${filters.join(", ")}`;
+                    throw new Error(`${msg}`);
+                }
+            }
+        });
+
+        return true;
     }
 }
 
