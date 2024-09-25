@@ -331,6 +331,9 @@ importers:
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
+      dompurify:
+        specifier: ^3.1.6
+        version: 3.1.6
       html-to-text:
         specifier: ^9.0.5
         version: 9.0.5
@@ -356,6 +359,9 @@ importers:
       '@types/chrome':
         specifier: ^0.0.256
         version: 0.0.256
+      '@types/dompurify':
+        specifier: ^3.0.5
+        version: 3.0.5
       '@types/html-to-text':
         specifier: ^9.0.4
         version: 9.0.4
@@ -1046,7 +1052,7 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
-      browser-automation:
+      browser-typeagent:
         specifier: workspace:*
         version: link:../agents/browser
       calendar:

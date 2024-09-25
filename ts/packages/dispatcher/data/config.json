@@ -22,7 +22,7 @@
     },
     "browser": {
       "type": "module",
-      "name": "browser-automation"      
+      "name": "browser-typeagent"      
     },
     "desktop": {
       "type": "module",
