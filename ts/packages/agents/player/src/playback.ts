@@ -198,12 +198,14 @@ export async function listAvailableDevices(context: IClientContext) {
     const devices = await getDevices(context.service);
     if (devices && devices.devices.length > 0) {
         let devHTML = "<div><div>Available Devices...</div><ul>\n";
+        let literalText = "Available devices:\n";
         for (const device of devices.devices) {
             const description = `${device.name} (${device.type})${device.is_active ? " [active]" : ""}`;
             console.log(chalk.magenta(`Device ${description}`));
             devHTML += `<li>${description}</li>\n`;
+            literalText += `    ${description}\n`;
         }
         devHTML += "</ul></div>";
-        return devHTML;
+        return { html: devHTML, lit: literalText };
     }
 }
