@@ -200,7 +200,7 @@ export async function createObjectFolder<T>(
             }
         } catch (err: any) {
             if (err.code !== "ENOENT") {
-                storageError(`Error reading ${filePath}\n: ${err}`);
+                logError("objectFolder.get", filePath, err);
             }
         }
         return undefined;
@@ -242,7 +242,6 @@ export async function createObjectFolder<T>(
     }
 
     async function loadFileNames(): Promise<string[]> {
-        //console.log(`Loading names: ${folderPath}`);
         let names = await fileSystem.readdir(folderPath);
         if (settings?.allowSubFolders) {
             names = removeDirNames(names);
@@ -464,14 +463,14 @@ function generateMonotonicName(
     };
 }
 
-function* createFileNameGenerator(
+export function* createFileNameGenerator(
     nameGenerator: () => string,
     isNameAcceptable: (name: string) => boolean,
 ): IterableIterator<string> {
     let prevName: string = "";
     while (true) {
         let nextName = nameGenerator();
-        if (prevName === nextName && !isNameAcceptable(nextName)) {
+        if (prevName === nextName || !isNameAcceptable(nextName)) {
             const extendedName = generateMonotonicName(
                 1,
                 nextName,
@@ -481,12 +480,10 @@ function* createFileNameGenerator(
             if (!extendedName) {
                 continue;
             }
-            prevName = nextName;
             nextName = extendedName;
-        } else {
-            prevName = nextName;
         }
         yield nextName;
+        prevName = nextName;
     }
 }
 
@@ -522,7 +519,7 @@ function createFileSystem(): FileSystem {
         readdir,
         readFileNames,
         readDirectoryNames,
-        write: (path, data) => fs.promises.writeFile(path, data),
+        write,
         readBuffer: (path) => fs.promises.readFile(path),
         read: (path) => fs.promises.readFile(path, "utf-8"),
         removeFile: (path) => fs.promises.unlink(path),
@@ -554,6 +551,15 @@ function createFileSystem(): FileSystem {
         );
     }
 
+    async function write(path: string, data: string | Buffer): Promise<void> {
+        try {
+            await fs.promises.writeFile(path, data);
+        } catch (error: any) {
+            logError("fileSystem.write", path, error);
+            throw error;
+        }
+    }
+
     async function copyDir(fromPath: string, toPath: string): Promise<void> {
         const sourceFileNames = await readdir(fromPath);
         for (const fileName of sourceFileNames) {
@@ -574,4 +580,10 @@ function createFileSystem(): FileSystem {
 
 function intString(num: number, minDigits: number): string {
     return num.toString().padStart(minDigits, "0");
+}
+
+function logError(where: string, message: string, error: any) {
+    const errorText = `ERROR:${where}\n${message}\n${error}`;
+    console.log(errorText);
+    storageError(errorText);
 }

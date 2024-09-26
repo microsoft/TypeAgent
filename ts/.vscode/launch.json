@@ -221,7 +221,16 @@
 				"${workspaceFolder}/packages/coda/out/**/*.js"
 			],
 			"preLaunchTask": "${defaultBuildTask}"
-		}
+		},
+        {
+            "name": "Launch Jest Current File",
+            "type": "node",  
+            "request": "launch", 
+            "program": "${fileDirname}/../node_modules/jest/bin/jest.js", 
+            "args": ["${fileDirname}/../dist/test/${fileBasenameNoExtension}.js"], 
+            "console": "integratedTerminal", 
+            "internalConsoleOptions": "neverOpen"
+        },  
     ]
 }
 
