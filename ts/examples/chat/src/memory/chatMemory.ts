@@ -1190,27 +1190,25 @@ export async function runChatMemory(): Promise<void> {
         timestampA: Date,
     ) {
         // Don't record questions about the search history
-        return context.searchMemory &&
+        if (
+            context.searchMemory &&
             context.searchMemory.conversationName !== context.conversationName
-            ? new Promise(async (resolve) => {
-                  if (context.searchMemory) {
-                      try {
-                          await context.searchMemory.addMessage(
-                              `USER:\n${question}`,
-                              undefined,
-                              timestampQ,
-                          );
-                          await context.searchMemory.addMessage(
-                              `ASSISTANT:\n${answer}`,
-                              undefined,
-                              timestampA,
-                          );
-                      } catch (e) {
-                          printer.writeError(`Error updating history\n${e}`);
-                      }
-                  }
-              })
-            : undefined;
+        ) {
+            try {
+                context.searchMemory.queueAddMessage(
+                    `USER:\n${question}`,
+                    undefined,
+                    timestampQ,
+                );
+                context.searchMemory.queueAddMessage(
+                    `ASSISTANT:\n${answer}`,
+                    undefined,
+                    timestampA,
+                );
+            } catch (e) {
+                printer.writeError(`Error updating history\n${e}`);
+            }
+        }
     }
 
     async function writeSearchResults(
