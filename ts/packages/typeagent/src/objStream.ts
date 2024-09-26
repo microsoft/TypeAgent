@@ -219,6 +219,15 @@ export function getAbsolutePath(
 }
 
 /**
+ * Get the name of the file referenced by filePath
+ * @param filePath
+ * @returns
+ */
+export function getFileName(filePath: string): string {
+    return path.basename(filePath, path.extname(filePath));
+}
+
+/**
  * Read all text from a file.
  * @param filePath can be direct or relative
  * @param basePath if filePath is relative, then this is a basePath

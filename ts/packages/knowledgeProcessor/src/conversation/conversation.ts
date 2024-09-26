@@ -143,7 +143,6 @@ export interface Conversation<
     addKnowledgeForMessage(
         message: SourceTextBlock<MessageId>,
         knowledge: ExtractedKnowledge<MessageId>,
-        label?: string | undefined,
     ): Promise<ExtractedKnowledgeIds<TTopicId, TEntityId, TActionId>>;
     addKnowledgeToIndex(
         knowledge: ExtractedKnowledge<MessageId>,
@@ -607,7 +606,6 @@ export async function createConversation(
     async function addKnowledgeForMessage(
         message: SourceTextBlock<MessageId>,
         knowledge: ExtractedKnowledge<MessageId>,
-        label?: string | undefined,
     ): Promise<ExtractedKnowledgeIds<TopicId, EntityId, ActionId>> {
         await knowledgeStore.put(knowledge, message.blockId);
         const knowledgeIds: ExtractedKnowledgeIds<TopicId, EntityId, ActionId> =

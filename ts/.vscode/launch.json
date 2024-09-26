@@ -221,7 +221,7 @@
 				"${workspaceFolder}/packages/coda/out/**/*.js"
 			],
 			"preLaunchTask": "${defaultBuildTask}"
-		}
+		},
     ]
 }
 

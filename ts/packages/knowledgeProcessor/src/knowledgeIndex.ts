@@ -709,7 +709,6 @@ export async function createKnowledgeStore<T>(
     async function addNext(
         items: T[],
         timestamp?: Date | undefined,
-        label?: string | undefined,
     ): Promise<TId[]> {
         const itemIds = await asyncArray.mapAsync(items, 1, (e) =>
             entries.put(e),

@@ -787,7 +787,7 @@ export class RequestCommandHandler implements CommandHandler {
                 requestAction !== undefined &&
                 systemContext.conversationManager
             ) {
-                systemContext.conversationManager.addMessage(
+                systemContext.conversationManager.queueAddMessage(
                     request,
                     [],
                     new Date(),
