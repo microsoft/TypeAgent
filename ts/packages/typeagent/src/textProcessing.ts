@@ -735,12 +735,14 @@ export async function answerQueryFromLargeText(
     progress?: ProcessProgress<string, AnswerResponse>,
 ): Promise<AnswerResponse> {
     const chunks = getTextChunks(text, maxCharsPerChunk);
+    console.log(`Anser Query processing ${chunks.length} text chunks.`);
     const chunkAnswers = await mapAsync(
         chunks,
         concurrency,
         (chunk) => runChunk(model, query, chunk),
         chunkProgress,
     );
+    console.log(`Processed ${chunkAnswers.length} chunk answers.`);
     // First, see if we got a full answer
     let answer = emptyAnswer();
     for (const chunkAnswer of chunkAnswers) {
@@ -752,6 +754,7 @@ export async function answerQueryFromLargeText(
             answer = accumulateAnswer(answer, chunkAnswer, "PartialAnswer");
         }
     }
+
     if (rewriteForReadability && answer.type !== "NoAnswer" && answer.answer) {
         const rewritten = await rewriteText(
             model,
@@ -764,6 +767,8 @@ export async function answerQueryFromLargeText(
             answer.type = "FullAnswer";
         }
     }
+
+    console.log(`Answer Type: ${answer.type}`);
 
     return answer;
 
