@@ -31,6 +31,17 @@ import { SetOp, unionArrays } from "../setOperations.js";
 import { ConcreteEntity } from "./knowledgeSchema.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TopicMerger } from "./topics.js";
+import { logError } from "../diagnostics.js";
+
+export type AddMessageTask = {
+    type: "addMessage";
+    messageText: string;
+    knownEntities?: ConcreteEntity[] | undefined;
+    timestamp?: Date | undefined;
+    callback?: ((error?: any | undefined) => void) | undefined;
+};
+
+export type ConversationManagerTask = AddMessageTask;
 
 /**
  * A conversation manager lets you dynamically:
@@ -41,19 +52,30 @@ export interface ConversationManager {
     readonly conversationName: string;
     readonly conversation: Conversation<string, string, string, string>;
     readonly searchProcessor: ConversationSearchProcessor;
+    readonly updateTaskQueue: collections.TaskQueue<ConversationManagerTask>;
     /**
-     *
+     * Add a message to the conversation
      * @param message
      * @param entities If entities is NOT supplied, then will extract knowledge from message
      * @param timestamp message timestamp
-     * @param label optional label for this message
      */
     addMessage(
         messageText: string,
         entities?: ConcreteEntity[] | undefined,
         timestamp?: Date | undefined,
-        label?: string | undefined,
-    ): Promise<any>;
+    ): Promise<void>;
+    /**
+     * Queue the message for adding to the conversation memory in the background
+     * @param message
+     * @param entities If entities is NOT supplied, then will extract knowledge from message
+     * @param timestamp message timestamp
+     * @returns true if queued. False if queue is full
+     */
+    queueAddMessage(
+        messageText: string,
+        entities?: ConcreteEntity[] | undefined,
+        timestamp?: Date | undefined,
+    ): boolean;
     /**
      * Search the conversation and return an answer
      * @param query
@@ -101,12 +123,14 @@ export interface ConversationManager {
 
 /**
  * Creates a conversation manager with standard defaults.
- * @param conversationOrPath either a path to a root folder for this conversation. Or a conversation object
+ * @param conversationPath path to a root folder for this conversation.
+ * @param existingConversation If using an existing conversation
  */
 export async function createConversationManager(
     conversationName: string,
-    conversationOrPath: string | Conversation,
+    conversationPath: string,
     createNew: boolean,
+    existingConversation?: Conversation | undefined,
 ): Promise<ConversationManager> {
     const embeddingModel = createEmbeddingCache(
         openai.createEmbeddingModel(),
@@ -121,13 +145,13 @@ export async function createConversationManager(
     const maxCharsPerChunk = 2048;
 
     const conversation =
-        typeof conversationOrPath === "string"
+        existingConversation === undefined
             ? await createConversation(
                   conversationSettings,
-                  path.join(conversationOrPath, conversationName),
+                  path.join(conversationPath, conversationName),
                   folderSettings,
               )
-            : conversationOrPath;
+            : existingConversation;
     if (createNew) {
         await conversation.clear(true);
     }
@@ -150,14 +174,18 @@ export async function createConversationManager(
         answerModel,
         KnowledgeSearchMode.WithActions,
     );
-
+    const updateTaskQueue = collections.createTaskQueue(async (task) => {
+        await handleUpdateTask(task);
+    }, 64);
     await conversation.getMessageIndex();
 
     return {
         conversationName,
         conversation,
         searchProcessor,
+        updateTaskQueue,
         addMessage,
+        queueAddMessage,
         search,
         getSearchResponse,
         generateAnswerForSearchResponse,
@@ -167,8 +195,7 @@ export async function createConversationManager(
         messageText: string,
         knownEntities?: ConcreteEntity[] | undefined,
         timestamp?: Date | undefined,
-        label?: string | undefined,
-    ): Promise<any> {
+    ): Promise<void> {
         return addMessageToConversation(
             conversation,
             knowledgeExtractor,
@@ -176,8 +203,52 @@ export async function createConversationManager(
             messageText,
             knownEntities,
             timestamp,
-            label,
         );
+    }
+
+    function queueAddMessage(
+        messageText: string,
+        knownEntities?: ConcreteEntity[] | undefined,
+        timestamp?: Date | undefined,
+    ): boolean {
+        return updateTaskQueue.push({
+            type: "addMessage",
+            messageText,
+            knownEntities,
+            timestamp,
+        });
+    }
+
+    async function handleUpdateTask(
+        task: ConversationManagerTask,
+    ): Promise<void> {
+        let callback: ((error?: any | undefined) => void) | undefined;
+        try {
+            switch (task.type) {
+                default:
+                    break;
+                case "addMessage":
+                    const addTask: AddMessageTask = task;
+                    callback = addTask.callback;
+                    await addMessageToConversation(
+                        conversation,
+                        knowledgeExtractor,
+                        topicMerger,
+                        addTask.messageText,
+                        addTask.knownEntities,
+                        addTask.timestamp,
+                    );
+                    break;
+            }
+            if (callback) {
+                callback();
+            }
+        } catch (error: any) {
+            logError(`${conversationName}:writeMessage\n${error}`);
+            if (callback) {
+                callback(error);
+            }
+        }
     }
 
     async function search(
@@ -283,7 +354,6 @@ export async function createConversationManager(
  * @param messageText
  * @param knownEntities
  * @param timestamp
- * @param label optional label for the message
  */
 export async function addMessageToConversation(
     conversation: Conversation,
@@ -292,8 +362,7 @@ export async function addMessageToConversation(
     messageText: string,
     knownEntities?: ConcreteEntity[] | undefined,
     timestamp?: Date | undefined,
-    label?: string | undefined,
-): Promise<any> {
+): Promise<void> {
     const block = await conversation.addMessage(messageText, timestamp);
     await extractKnowledgeAndIndex(
         conversation,
@@ -301,7 +370,6 @@ export async function addMessageToConversation(
         topicMerger,
         block,
         knownEntities,
-        label,
     );
 }
 
@@ -311,7 +379,6 @@ async function extractKnowledgeAndIndex(
     topicMerger: TopicMerger | undefined,
     message: SourceTextBlock,
     knownEntities?: ConcreteEntity[] | undefined,
-    label?: string | undefined,
 ) {
     const messageIndex = await conversation.getMessageIndex();
     await messageIndex.put(message.value, message.blockId);
@@ -343,7 +410,6 @@ async function extractKnowledgeAndIndex(
             topicMerger,
             message,
             extractedKnowledge,
-            label,
         );
     }
 }
@@ -351,10 +417,8 @@ async function extractKnowledgeAndIndex(
 function entitiesToKnowledge(
     sourceId: any,
     entities: ConcreteEntity[],
-    timestamp?: Date,
 ): ExtractedKnowledge | undefined {
     if (entities && entities.length > 0) {
-        timestamp ??= new Date();
         const sourceIds = [sourceId];
         const knowledge: ExtractedKnowledge = {
             entities: entities.map((value) => {
@@ -371,13 +435,11 @@ async function indexKnowledge(
     topicMerger: TopicMerger | undefined,
     message: SourceTextBlock,
     knowledge: ExtractedKnowledge,
-    label?: string | undefined,
 ): Promise<void> {
     // Add next message... this updates the "sequence"
     const knowledgeIds = await conversation.addKnowledgeForMessage(
         message,
         knowledge,
-        label,
     );
     if (topicMerger) {
         await topicMerger.next(true, true);
