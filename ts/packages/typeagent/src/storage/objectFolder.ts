@@ -168,7 +168,7 @@ export async function createObjectFolder<T>(
             if (fileSystem.exists(fPath)) {
                 await fileSystem.removeFile(fPath);
                 const names = fileNames.value;
-                if (names) {
+                if (names && names.length > 0) {
                     const i = names.indexOf(name);
                     if (i >= 0) {
                         names.splice(i, 1);

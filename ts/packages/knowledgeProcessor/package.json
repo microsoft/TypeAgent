@@ -28,10 +28,12 @@
   },
   "dependencies": {
     "aiclient": "workspace:*",
+    "debug": "^4.3.4",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1"
   },
   "devDependencies": {
+    "@types/debug": "^4.1.10",
     "@types/jest": "^29.5.7",
     "@types/node": "^18.18.7",
     "copyfiles": "^2.4.1",

@@ -14,7 +14,7 @@ export type TestContext = {
 let g_context: TestContext | undefined;
 const testTimeout = 120000;
 
-describe("Conversation Manager", () => {
+describe("ConversationManager", () => {
     beforeAll(async () => {
         await getContext();
     });
@@ -55,6 +55,24 @@ describe("Conversation Manager", () => {
               let matches = await context.cm.search(query, filters);
               expect(matches && matches.response && matches.response.answer);
           });
+    shouldSkip()
+        ? skipTest("queueEntities")
+        : test(
+              "queueEntities",
+              async () => {
+                  const context = await getContext();
+                  queueEntities(context.cm);
+                  await context.cm.writeQueue.drain();
+                  expect(context.cm.writeQueue.length()).toBe(0);
+
+                  const entityIndex =
+                      await context.cm.conversation.getEntityIndex();
+                  const postings = await entityIndex.typeIndex.get("writer");
+                  expect(postings).not.toBeUndefined();
+                  expect(postings?.length).toBeGreaterThan(0);
+              },
+              testTimeout * 2,
+          );
 });
 
 async function getContext(): Promise<TestContext> {
@@ -88,4 +106,21 @@ async function addEntities(
         type: ["food"],
     };
     await cm.addMessage(testMessage, [entity1, entity2]);
+}
+
+function queueEntities(cm: conversation.ConversationManager): void {
+    const testMessage = "Shakespeare did pushups while he wrote Macbeth";
+    let entity1: conversation.ConcreteEntity = {
+        name: "Shakespeare",
+        type: ["writer", "person"],
+    };
+    let entity2: conversation.ConcreteEntity = {
+        name: "pushups",
+        type: ["exercise"],
+    };
+    let entity3: conversation.ConcreteEntity = {
+        name: "Macbeth",
+        type: ["play"],
+    };
+    cm.queueAddMessage(testMessage, [entity1, entity2, entity3]);
 }
