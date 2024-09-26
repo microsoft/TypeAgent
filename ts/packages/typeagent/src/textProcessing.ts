@@ -735,14 +735,14 @@ export async function answerQueryFromLargeText(
     progress?: ProcessProgress<string, AnswerResponse>,
 ): Promise<AnswerResponse> {
     const chunks = getTextChunks(text, maxCharsPerChunk);
-    console.log(`Anser Query processing ${chunks.length} text chunks.`)
+    console.log(`Anser Query processing ${chunks.length} text chunks.`);
     const chunkAnswers = await mapAsync(
         chunks,
         concurrency,
         (chunk) => runChunk(model, query, chunk),
         chunkProgress,
     );
-    console.log(`Processed ${chunkAnswers.length} chunk answers.`)
+    console.log(`Processed ${chunkAnswers.length} chunk answers.`);
     // First, see if we got a full answer
     let answer = emptyAnswer();
     for (const chunkAnswer of chunkAnswers) {
@@ -752,7 +752,7 @@ export async function answerQueryFromLargeText(
         // Accumulate any partial answers
         for (const chunkAnswer of chunkAnswers) {
             answer = accumulateAnswer(answer, chunkAnswer, "PartialAnswer");
-        }        
+        }
     }
 
     if (rewriteForReadability && answer.type !== "NoAnswer" && answer.answer) {
@@ -1022,7 +1022,7 @@ export async function extractEntitiesFromLargeText(
     maxCharsPerChunk: number,
     concurrency: number,
 ): Promise<Entity[]> {
-    const chunks = await getTextChunks(text, maxCharsPerChunk);    
+    const chunks = await getTextChunks(text, maxCharsPerChunk);
     const entityChunks = await mapAsync(chunks, concurrency, (chunk) =>
         extractEntities(model, chunk),
     );

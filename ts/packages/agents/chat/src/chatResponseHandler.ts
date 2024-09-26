@@ -99,7 +99,11 @@ async function handleChatResponse(
             if (generatedText !== undefined) {
                 logEntities("UR Entities:", parameters.userRequestEntities);
                 logEntities("GT Entities:", parameters.generatedTextEntities);
-                console.log("Got generated text: " + generatedText.substring(0, 100) + "...");
+                console.log(
+                    "Got generated text: " +
+                        generatedText.substring(0, 100) +
+                        "...",
+                );
 
                 const needDisplay = context.streamingContext !== generatedText;
                 const result = needDisplay
@@ -121,7 +125,7 @@ async function handleChatResponse(
                         let name = file;
                         if (file.lastIndexOf("\\") > -1) {
                             name = file.substring(file.lastIndexOf("\\") + 1);
-                        }                        
+                        }
                         fileEntities.push({
                             name,
                             type: ["file", "image", "data"],
@@ -161,8 +165,11 @@ async function handleChatResponse(
                             lookupAction.parameters.conversationLookupFilters,
                         );
                     if (searchResponse) {
-
-                        searchResponse.response?.hasHits() ? console.log(`Search response has ${searchResponse.response?.messages?.length} hits`) : console.log("No search hits");
+                        searchResponse.response?.hasHits()
+                            ? console.log(
+                                  `Search response has ${searchResponse.response?.messages?.length} hits`,
+                              )
+                            : console.log("No search hits");
 
                         const matches =
                             await conversationManager.generateAnswerForSearchResponse(
@@ -174,7 +181,6 @@ async function handleChatResponse(
                             matches.response &&
                             matches.response.answer
                         ) {
-
                             console.log("Matches:");
                             console.log(matches);
 
@@ -188,7 +194,13 @@ async function handleChatResponse(
                                     `<div>${matches.response.answer.answer !== undefined ? matches.response.answer.answer : ""} ${await rehydrateImages(context, lookupAction.parameters.relatedFiles)}</div>`,
                                 );
                             } else {
-                                console.log("Anwser: " + matches.response.answer.answer?.replace("\n", "").substring(0, 100) + "...");
+                                console.log(
+                                    "Anwser: " +
+                                        matches.response.answer.answer
+                                            ?.replace("\n", "")
+                                            .substring(0, 100) +
+                                        "...",
+                                );
                                 return createActionResult(
                                     matches.response.answer.answer!,
                                 );
