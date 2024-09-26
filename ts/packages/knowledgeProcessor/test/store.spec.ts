@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import { createFileNameGenerator, generateTimestampString } from "typeagent";
 
 describe("Storage", () => {
