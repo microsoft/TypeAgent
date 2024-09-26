@@ -25,6 +25,8 @@ import { IAgentMessage } from "agent-dispatcher";
 import DOMPurify from "dompurify";
 import { PhaseTiming, RequestMetrics } from "agent-dispatcher";
 
+import { PartialCompletion } from "./partial";
+
 export interface InputChoice {
     element: HTMLElement;
     text: string;
@@ -1065,7 +1067,7 @@ export class ChatView {
     searchMenuAnswerHandler: ((item: SearchMenuItem) => void) | undefined =
         undefined;
     keyboardListener: undefined | ((event: KeyboardEvent) => void) = undefined;
-    partialInputEnabled = false;
+    private partialCompletion: PartialCompletion | undefined;
     choicePanel: ChoicePanel | undefined = undefined;
     choicePanelOnly = false;
     commandBackStackIndex = -1;
@@ -1082,7 +1084,6 @@ export class ChatView {
         this.topDiv.className = "chat-container";
         this.messageDiv = document.createElement("div");
         this.messageDiv.className = "chat scroll_enabled";
-
         this.chatInput = new ChatInput(
             "phraseDiv",
             "reco",
@@ -1097,15 +1098,18 @@ export class ChatView {
                 }
             },
             (eta: ExpandableTextarea) => {
-                if (this.partialInputEnabled) {
-                    this.placeSearchMenu();
-                    // TODO: NYI
-                } else if (this.searchMenu) {
+                if (this.partialCompletion) {
+                    this.partialCompletion.update();
+                }
+                if (this.searchMenu) {
                     this.placeSearchMenu();
                     this.searchMenu.completePrefix(eta.getEditedText());
                 }
             },
             (eta: ExpandableTextarea, ev: KeyboardEvent) => {
+                if (this.partialCompletion?.handleSpecialKeys(ev) === true) {
+                    return false;
+                }
                 if (this.choicePanel) {
                     if (
                         !this.choicePanelInputHandler(ev) ||
@@ -1372,9 +1376,18 @@ export class ChatView {
         this.searchMenu.completePrefix(prefix);
     }
 
-    enablePartialInputHandler(_enabled: boolean) {
-        // this.partialInputEnabled = enabled;
-        // console.log(`Partial input handler enabled: ${enabled}`);
+    enablePartialInput(enabled: boolean) {
+        if (enabled) {
+            if (this.partialCompletion === undefined) {
+                this.partialCompletion = new PartialCompletion(
+                    this.inputContainer,
+                    this.chatInput.textarea,
+                );
+            }
+        } else {
+            this.partialCompletion?.close();
+            this.partialCompletion = undefined;
+        }
     }
 
     private dynamicDisplays: {

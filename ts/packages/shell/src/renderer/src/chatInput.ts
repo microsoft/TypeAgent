@@ -22,9 +22,8 @@ export interface ExpandableTextareaHandlers {
 }
 
 export class ExpandableTextarea {
-    preText: HTMLSpanElement | undefined = undefined;
-    textEntry: HTMLSpanElement;
-    entryHandlers: ExpandableTextareaHandlers;
+    private textEntry: HTMLSpanElement;
+    private entryHandlers: ExpandableTextareaHandlers;
 
     constructor(
         id: string,
@@ -84,24 +83,55 @@ export class ExpandableTextarea {
         }
 
         // Set the cursor to the end of the text
-        setTimeout(() => {
-            const r = document.createRange();
-            r.selectNodeContents(this.textEntry);
-            r.collapse(false);
-            const s = document.getSelection();
-            if (s) {
-                s.removeAllRanges();
-                s.addRange(r);
-            }
-        }, 0);
+        const r = document.createRange();
+        r.setEnd(this.textEntry.childNodes[0], content?.length ?? 0);
+        r.collapse(false);
+        const s = document.getSelection();
+        if (s) {
+            s.removeAllRanges();
+            s.addRange(r);
+        }
     }
 
+    appendTextAtCursor(text: string) {
+        const s = document.getSelection();
+        if (s) {
+            if (s.rangeCount > 1) {
+                return;
+            }
+            const currentRange = s.getRangeAt(0);
+            if (!currentRange.collapsed) {
+                return;
+            }
+            if (currentRange.startContainer === this.textEntry.childNodes[0]) {
+                const prefix = this.textEntry.innerText.substring(
+                    0,
+                    currentRange.startOffset,
+                );
+                const suffix = this.textEntry.innerText.substring(
+                    currentRange.startOffset,
+                );
+                this.textEntry.innerText = prefix + text + suffix;
+
+                const newRange = document.createRange();
+                newRange.setEnd(
+                    this.textEntry.childNodes[0],
+                    prefix.length + text.length,
+                );
+                newRange.collapse(false);
+                const s = document.getSelection();
+                if (s) {
+                    s.removeAllRanges();
+                    s.addRange(newRange);
+                }
+            }
+        }
+    }
     send(sendButton?: HTMLButtonElement) {
         const text = this.getTextEntry().innerHTML;
         if (text.length > 0) {
             this.entryHandlers.onSend(text);
             this.textEntry.innerText = "";
-            this.preText = undefined;
             if (sendButton) {
                 sendButton.disabled = true;
             }
@@ -343,7 +373,7 @@ export class ChatInput {
 
         if (this.sendButton !== undefined) {
             this.sendButton.disabled =
-                this.textarea.textEntry.innerHTML.length == 0;
+                this.textarea.getTextEntry().innerHTML.length == 0;
         }
 
         this.textarea.getTextEntry().focus();
