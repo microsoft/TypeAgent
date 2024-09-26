@@ -33,6 +33,16 @@ import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TopicMerger } from "./topics.js";
 import { logError } from "../diagnostics.js";
 
+export type AddMessageTask = {
+    type: "addMessage";
+    messageText: string;
+    knownEntities?: ConcreteEntity[] | undefined;
+    timestamp?: Date | undefined;
+    callback?: ((error?: any | undefined) => void) | undefined;
+};
+
+export type ConversationManagerTask = AddMessageTask;
+
 /**
  * A conversation manager lets you dynamically:
  *  - add and index messages and entities to a conversation
@@ -42,7 +52,7 @@ export interface ConversationManager {
     readonly conversationName: string;
     readonly conversation: Conversation<string, string, string, string>;
     readonly searchProcessor: ConversationSearchProcessor;
-    readonly writeQueue: collections.TaskQueue;
+    readonly updateTaskQueue: collections.TaskQueue<ConversationManagerTask>;
     /**
      * Add a message to the conversation
      * @param message
@@ -55,18 +65,16 @@ export interface ConversationManager {
         timestamp?: Date | undefined,
     ): Promise<void>;
     /**
-     * Queues a message for asynchronous adding to the conversation.
-     * Messages are added in the order they are queued.
+     * Queue the message for adding to the conversation memory in the background
      * @param message
      * @param entities If entities is NOT supplied, then will extract knowledge from message
      * @param timestamp message timestamp
-     * @returns true if queued, false if queue is full.
+     * @returns true if queued. False if queue is full
      */
     queueAddMessage(
         messageText: string,
         entities?: ConcreteEntity[] | undefined,
         timestamp?: Date | undefined,
-        callback?: (error: any | undefined) => void,
     ): boolean;
     /**
      * Search the conversation and return an answer
@@ -166,8 +174,8 @@ export async function createConversationManager(
         answerModel,
         KnowledgeSearchMode.WithActions,
     );
-    const writeQueue = collections.createTaskQueue(async (task) => {
-        await writeMessage(task);
+    const updateTaskQueue = collections.createTaskQueue(async (task) => {
+        await handleUpdateTask(task);
     }, 64);
     await conversation.getMessageIndex();
 
@@ -175,7 +183,7 @@ export async function createConversationManager(
         conversationName,
         conversation,
         searchProcessor,
-        writeQueue,
+        updateTaskQueue,
         addMessage,
         queueAddMessage,
         search,
@@ -202,31 +210,43 @@ export async function createConversationManager(
         messageText: string,
         knownEntities?: ConcreteEntity[] | undefined,
         timestamp?: Date | undefined,
-        callback?: (error: any | undefined) => void | undefined,
     ): boolean {
-        const task: WriteMessageTask = {
+        return updateTaskQueue.push({
+            type: "addMessage",
             messageText,
             knownEntities,
             timestamp,
-            callback,
-        };
-        return writeQueue.push(task);
+        });
     }
 
-    async function writeMessage(task: WriteMessageTask): Promise<void> {
+    async function handleUpdateTask(
+        task: ConversationManagerTask,
+    ): Promise<void> {
+        let callback: ((error?: any | undefined) => void) | undefined;
         try {
-            await addMessageToConversation(
-                conversation,
-                knowledgeExtractor,
-                topicMerger,
-                task.messageText,
-                task.knownEntities,
-                task.timestamp,
-            );
+            switch (task.type) {
+                default:
+                    break;
+                case "addMessage":
+                    const addTask: AddMessageTask = task;
+                    callback = addTask.callback;
+                    await addMessageToConversation(
+                        conversation,
+                        knowledgeExtractor,
+                        topicMerger,
+                        addTask.messageText,
+                        addTask.knownEntities,
+                        addTask.timestamp,
+                    );
+                    break;
+            }
+            if (callback) {
+                callback();
+            }
         } catch (error: any) {
             logError(`${conversationName}:writeMessage\n${error}`);
-            if (task.callback) {
-                task.callback(error);
+            if (callback) {
+                callback(error);
             }
         }
     }
@@ -324,13 +344,6 @@ export async function createConversationManager(
             fallbackSearch: { maxMatches: maxMessages },
         };
     }
-
-    type WriteMessageTask = {
-        messageText: string;
-        knownEntities?: ConcreteEntity[] | undefined;
-        timestamp?: Date | undefined;
-        callback?: ((error: any | undefined) => void) | undefined;
-    };
 }
 
 /**

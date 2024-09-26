@@ -62,8 +62,8 @@ describe("ConversationManager", () => {
               async () => {
                   const context = await getContext();
                   queueEntities(context.cm);
-                  await context.cm.writeQueue.drain();
-                  expect(context.cm.writeQueue.length()).toBe(0);
+                  await context.cm.updateTaskQueue.drain();
+                  expect(context.cm.updateTaskQueue.length()).toBe(0);
 
                   const entityIndex =
                       await context.cm.conversation.getEntityIndex();
