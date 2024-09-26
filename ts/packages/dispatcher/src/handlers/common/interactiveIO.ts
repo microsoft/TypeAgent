@@ -12,7 +12,6 @@ import {
     DisplayAppendMode,
 } from "@typeagent/agent-sdk";
 import { RequestMetrics } from "../../utils/metrics.js";
-import { access } from "node:fs";
 
 export const DispatcherName = "dispatcher";
 export type RequestId = string | undefined;

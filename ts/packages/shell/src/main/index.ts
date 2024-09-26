@@ -569,6 +569,9 @@ app.whenReady().then(async () => {
                 });
         },
     );
+    ipcMain.handle("get-partial-completion", async (_event, prefix: string) => {
+        return dispatcher.getPartialCompletion(prefix);
+    });
     ipcMain.handle(
         "get-dynamic-display",
         async (_event, appAgentName: string, id: string) =>
@@ -598,19 +601,13 @@ app.whenReady().then(async () => {
         ShellSettings.getinstance().tts = settings.tts;
         ShellSettings.getinstance().ttsSettings = settings.ttsSettings;
         ShellSettings.getinstance().agentGreeting = settings.agentGreeting;
+        ShellSettings.getinstance().partialCompletion =
+            settings.partialCompletion;
         ShellSettings.getinstance().save();
     });
 
     globalShortcut.register("Alt+Right", () => {
         mainWindow?.webContents.send("send-demo-event", "Alt+Right");
-    });
-
-    globalShortcut.register("F1", () => {
-        mainWindow?.webContents.send("help-requested", "F1");
-    });
-
-    globalShortcut.register("F2", () => {
-        mainWindow?.webContents.send("random-message-requested", "F2");
     });
 
     // Default open or close DevTools by F12 in development
@@ -698,6 +695,3 @@ function setupZoomHandlers(mainWindow: BrowserWindow) {
         }
     });
 }
-
-// In this file you can include the rest of your app"s specific main process
-// code. You can also put them in separate files and require them here.

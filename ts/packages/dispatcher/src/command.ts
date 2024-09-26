@@ -23,6 +23,8 @@ import {
 import { executeCommand } from "./action/actionHandlers.js";
 import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/command";
 import { RequestMetrics } from "./utils/metrics.js";
+import { PartialCompletionResult } from "./dispatcher/dispatcher.js";
+import { intersectUnionMultiple } from "../../knowledgeProcessor/dist/setOperations.js";
 
 const debugInteractive = registerDebug("typeagent:cli:interactive");
 
@@ -272,4 +274,70 @@ export function getTranslatorNameToEmojiMap(context: CommandHandlerContext) {
 
 export function getPrompt(context: CommandHandlerContext) {
     return `${getSettingSummary(context)}> `;
+}
+
+const debugPartialError = registerDebug("typeagent:dispatcher:partial:error");
+
+// Determine the command to resolve for partial completion
+// If there is a trailing space, then it will just be the input (minus the @)
+// If there is a space, then it will the input without the last word
+function getPartialResolveCommand(input: string) {
+    const trimmed = input.trimEnd();
+    if (trimmed !== input) {
+        // There is trailing space, just resolve the whole command
+        return input.substring(1);
+    }
+
+    const suffix = input.match(/\s+\S+$/);
+    if (suffix === null) {
+        return "";
+    }
+    return input.substring(1, input.length - suffix[0].length);
+}
+
+export async function getPartialCompletion(
+    originalInput: string,
+    context: CommandHandlerContext,
+): Promise<PartialCompletionResult | undefined> {
+    const input = originalInput.trimStart();
+    if (!input.startsWith("@")) {
+        // TODO: request completions
+        return undefined;
+    }
+
+    const result = await resolveCommand(
+        getPartialResolveCommand(input),
+        context,
+    );
+    if (result.descriptor !== undefined) {
+        // TODO: flags
+        return undefined;
+    }
+
+    if (result.table === undefined) {
+        return undefined;
+    }
+
+    if (result.args.length !== 0) {
+        return undefined;
+    }
+
+    const agent = `@${result.appAgentName === "system" ? "(system\\s+)?" : `${result.appAgentName}\\s+`}`;
+
+    const regexp = new RegExp(
+        `^\\s*${agent}${result.command.join("\\s+")}\\s*`,
+    );
+
+    const p = input.match(regexp);
+    if (p === null) {
+        debugPartialError(`Failed to match original input: ${input} ${regexp}`);
+        return undefined;
+    }
+    const partial = p[0].trim();
+    return {
+        partial,
+        space: partial.trimStart() !== "@",
+        prefix: input.substring(p[0].length),
+        completions: Object.keys(result.table.commands),
+    };
 }

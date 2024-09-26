@@ -34,6 +34,7 @@ export class ShellSettings
     public agentGreeting: boolean;
     public multiModalContent: boolean;
     public devUI: boolean;
+    public partialCompletion: boolean;
     public onSettingsChanged: EmptyFunction | null;
     public onShowSettingsDialog: ((dialogName: string) => void) | null;
     public onRunDemo: ((interactive: boolean) => void) | null;
@@ -75,6 +76,7 @@ export class ShellSettings
         this.agentGreeting = settings.agentGreeting;
         this.multiModalContent = settings.multiModalContent;
         this.devUI = settings.devUI;
+        this.partialCompletion = settings.partialCompletion;
 
         this.onSettingsChanged = null;
         this.onShowSettingsDialog = null;
