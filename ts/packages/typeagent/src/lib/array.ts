@@ -117,7 +117,7 @@ export function getInRange(
         return values.slice(startIndex);  
     }  
 
-    const stopIndex = binarySearchLast(values, stopAt, compareFn, startAt);
+    const stopIndex = binarySearchLast(values, stopAt, compareFn, startIndex);
     // If the stopIndex has a value that matches the range, use it..
     if (stopIndex < values.length && compareFn(values[stopIndex], stopAt) === 0) {  
         return values.slice(startIndex, stopIndex + 1);  
