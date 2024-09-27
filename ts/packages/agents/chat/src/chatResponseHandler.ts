@@ -147,7 +147,7 @@ async function handleChatResponse(
             ) {
                 console.log("Running lookups");
                 return handleLookup(
-                    lookupAction,
+                    lookupAction.parameters.internetLookups,
                     context,
                     await getLookupSettings(true),
                 );
@@ -221,7 +221,7 @@ async function handleChatResponse(
     return createActionResult("No information found");
 }
 
-function logEntities(label: string, entities?: Entity[]): void {
+export function logEntities(label: string, entities?: Entity[]): void {
     if (entities && entities.length > 0) {
         console.log(label);
         for (const entity of entities) {
@@ -326,7 +326,7 @@ async function getLookupConfig() {
     return config.lookup;
 }
 
-type LookupContext = {
+export type LookupContext = {
     lookups: string[]; // Lookups we are running
     answers: Map<string, ChunkChatResponse>; // lookup -> final answer for lookup
     inProgress: Map<string, LookupProgress>; // lookup -> progress for lookup
@@ -338,7 +338,7 @@ type LookupProgress = {
     answerSoFar?: ChunkChatResponse | undefined;
 };
 
-type LookupSettings = {
+export type LookupSettings = {
     fastMode: boolean;
     answerGenModel: ChatModel;
     entityGenModel?: ChatModel;
@@ -347,14 +347,13 @@ type LookupSettings = {
     lookupOptions: LookupOptions;
 };
 
-async function handleLookup(
-    chatAction: LookupAndGenerateResponseAction,
+export async function handleLookup(
+    lookups: string[] | undefined,
     context: ActionContext,
     settings: LookupSettings,
 ): Promise<ActionResult> {
     let literalResponse = createActionResult("No information found");
 
-    let lookups = chatAction.parameters.internetLookups;
     if (!lookups || lookups.length === 0) {
         return literalResponse;
     }
@@ -399,7 +398,7 @@ async function handleLookup(
     return literalResponse;
 }
 
-async function getLookupSettings(
+export async function getLookupSettings(
     fastMode: boolean = true,
 ): Promise<LookupSettings> {
     const lookupConfig = await getLookupConfig();
@@ -440,7 +439,7 @@ async function getLookupSettings(
     };
 }
 
-function getLookupInstructions(): PromptSection[] {
+export function getLookupInstructions(): PromptSection[] {
     return [promptLib.dateTimePromptSection()];
 }
 
@@ -520,7 +519,7 @@ async function runLookup(
     }
 }
 
-async function runEntityExtraction(
+export async function runEntityExtraction(
     context: LookupContext,
     settings: LookupSettings,
 ): Promise<Entity[]> {
@@ -551,7 +550,7 @@ async function runEntityExtraction(
  * @param query
  * @returns urls of relevant web pages
  */
-async function searchWeb(
+export async function searchWeb(
     query: string,
     maxSearchResults: number = 3,
 ): Promise<string[] | undefined> {
