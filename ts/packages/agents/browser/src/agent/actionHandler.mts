@@ -107,7 +107,10 @@ async function updateBrowserContext(
               break;
             }
             case "debugBrowserAction": {
-              await executeBrowserAction(data.body, context as unknown as ActionContext<BrowserActionContext>);
+              await executeBrowserAction(
+                data.body,
+                context as unknown as ActionContext<BrowserActionContext>,
+              );
 
               break;
             }

@@ -689,12 +689,12 @@ window.addEventListener(
             event.data.target == "contentScript" &&
             event.data.messageType == "scriptActionRequest"
         ) {
-            await handleScriptAction(event.data.body, (response)=>{
+            await handleScriptAction(event.data.body, (response) => {
                 window.postMessage({
                     source: "contentScript",
                     target: "preload",
                     messageType: "scriptActionResponse",
-                    id:  event.data.id,
+                    id: event.data.id,
                     body: response,
                 });
             });

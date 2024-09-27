@@ -137,7 +137,8 @@ class ShellOpenWebContentView implements CommandHandler {
         }
 
         if (targetUrl) {
-            if (!context.sessionContext.agentContext.inlineWindow || 
+            if (
+                !context.sessionContext.agentContext.inlineWindow ||
                 context.sessionContext.agentContext.inlineWindow.isDestroyed()
             ) {
                 const win = new BrowserWindow({
@@ -155,12 +156,11 @@ class ShellOpenWebContentView implements CommandHandler {
                 context.sessionContext.agentContext.inlineWindow = win;
             }
 
-            const inlineWindow = context.sessionContext.agentContext.inlineWindow;
-            inlineWindow.loadURL(
-                targetUrl.toString(),
-            );
+            const inlineWindow =
+                context.sessionContext.agentContext.inlineWindow;
+            inlineWindow.loadURL(targetUrl.toString());
 
-            inlineWindow.webContents.on('did-finish-load',()=>{
+            inlineWindow.webContents.on("did-finish-load", () => {
                 inlineWindow.webContents.send("setupSiteAgent");
             });
         }
