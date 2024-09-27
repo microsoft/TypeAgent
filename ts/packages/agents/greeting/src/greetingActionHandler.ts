@@ -13,15 +13,31 @@ import {
 
 import {GreetingAction, PersonalizedGreetingAction} from "./greetingActionSchema.js";
 import { randomInt } from "node:crypto";
-import { getLookupInstructions, getLookupSettings, LookupSettings, searchWeb } from "chat-agent/agent/handlers";
-import { StopWatch } from "common-utils";
-import { generateAnswerFromWebPages } from "typeagent";
+//import { getLookupInstructions, getLookupSettings, LookupSettings, searchWeb } from "chat-agent/agent/handlers";
+//import { StopWatch } from "common-utils";
+//import { generateAnswerFromWebPages } from "typeagent";
+import { CommandHandler, CommandHandlerTable, getCommandInterface } from "@typeagent/agent-sdk/helpers/command";
 
 export function instantiate(): AppAgent {
     return {
         executeAction: executeGreetingAction,
+        ...getCommandInterface(handlers),
     };
 }
+
+export class GreetingCommandHandler implements CommandHandler {
+    public readonly description = "Have the agent generate a personalized greeting.";
+    public async run(_input: string, context: ActionContext) {
+        // TODO: implement
+    }
+}
+
+const handlers: CommandHandlerTable = {
+    description: "Generate agent greeting.",
+    defaultSubCommand: new GreetingCommandHandler(),
+    commands: {
+    },
+};
 
 async function executeGreetingAction(
     action: AppAction,
@@ -83,30 +99,30 @@ async function handleGreetingAction(
     return result;
 }
 
-async function runLookup(
-    lookup: string,
-    actionContext: ActionContext,
-    settings: LookupSettings,
-): Promise<string | undefined> {
-    const stopWatch = new StopWatch();
-    stopWatch.start("WEB SEARCH: " + lookup);
-    const urls = await searchWeb(lookup, settings.maxSearchResults);
-    stopWatch.stop("WEB SEARCH: " + lookup);
-    if (!urls) {
-        return undefined;
-    }
-    const answer = await generateAnswerFromWebPages(
-        settings.fastMode ? "Speed" : "Quality",
-        settings.answerGenModel,
-        urls,
-        lookup,
-        settings.lookupOptions,
-        1,
-        getLookupInstructions(), 
-    );
+// async function runLookup(
+//     lookup: string,
+//     actionContext: ActionContext,
+//     settings: LookupSettings,
+// ): Promise<string | undefined> {
+//     const stopWatch = new StopWatch();
+//     stopWatch.start("WEB SEARCH: " + lookup);
+//     const urls = await searchWeb(lookup, settings.maxSearchResults);
+//     stopWatch.stop("WEB SEARCH: " + lookup);
+//     if (!urls) {
+//         return undefined;
+//     }
+//     const answer = await generateAnswerFromWebPages(
+//         settings.fastMode ? "Speed" : "Quality",
+//         settings.answerGenModel,
+//         urls,
+//         lookup,
+//         settings.lookupOptions,
+//         1,
+//         getLookupInstructions(), 
+//     );
 
-    return answer?.generatedText;
-}
+//     return answer?.generatedText;
+// }
 
 // function streamPartialGreetingAction(
 //     actionName: string,

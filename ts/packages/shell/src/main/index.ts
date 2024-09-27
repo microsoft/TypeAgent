@@ -587,6 +587,10 @@ app.whenReady().then(async () => {
 
         // Send settings asap
         ShellSettings.getinstance().onSettingsChanged!();
+
+        if (ShellSettings.getinstance().agentGreeting) {
+            processShellRequest("@greeting", "sldfjsdlfj", []);
+        }
     });
 
     await initializeSpeech(dispatcher);
