@@ -236,7 +236,7 @@ async function runBrowserAction(action: any) {
                 window.location.href = response.url;
                 confirmationMessage = `Navigated to the  ${action.parameters.keywords} link`;
             }
-
+*/
             break;
         }
 

@@ -64,6 +64,7 @@ async function rehydrateImages(context: ActionContext, files: string[]) {
 
     for (let i = 0; i < files.length; i++) {
         let name = files[i];
+        console.log(`Rehydrating Image ${name}`);
         if (files[i].lastIndexOf("\\") > -1) {
             name = files[i].substring(files[i].lastIndexOf("\\") + 1);
         }
@@ -98,7 +99,11 @@ async function handleChatResponse(
             if (generatedText !== undefined) {
                 logEntities("UR Entities:", parameters.userRequestEntities);
                 logEntities("GT Entities:", parameters.generatedTextEntities);
-                console.log("Got generated text");
+                console.log(
+                    "Got generated text: " +
+                        generatedText.substring(0, 100) +
+                        "...",
+                );
 
                 const needDisplay = context.streamingContext !== generatedText;
                 const result = needDisplay
@@ -111,22 +116,24 @@ async function handleChatResponse(
                 }
                 result.entities = entities;
 
-                // TODO: cleanup
-                // turn related files into entities
                 if (
                     generateResponseAction.parameters.relatedFiles !== undefined
                 ) {
+                    const fileEntities: Entity[] = new Array<Entity>();
                     for (const file of generateResponseAction.parameters
                         .relatedFiles) {
                         let name = file;
                         if (file.lastIndexOf("\\") > -1) {
                             name = file.substring(file.lastIndexOf("\\") + 1);
                         }
-                        result.entities.push({
+                        fileEntities.push({
                             name,
                             type: ["file", "image", "data"],
                         });
                     }
+
+                    logEntities("File Entities:", fileEntities);
+                    result.entities.concat(fileEntities);
                 }
 
                 return result;
@@ -158,9 +165,12 @@ async function handleChatResponse(
                             lookupAction.parameters.conversationLookupFilters,
                         );
                     if (searchResponse) {
-                        if (searchResponse.response?.hasHits()) {
-                            console.log("Has hits");
-                        }
+                        searchResponse.response?.hasHits()
+                            ? console.log(
+                                  `Search response has ${searchResponse.response?.messages?.length} hits`,
+                              )
+                            : console.log("No search hits");
+
                         const matches =
                             await conversationManager.generateAnswerForSearchResponse(
                                 lookupAction.parameters.originalRequest,
@@ -171,6 +181,9 @@ async function handleChatResponse(
                             matches.response &&
                             matches.response.answer
                         ) {
+                            console.log("Matches:");
+                            console.log(matches);
+
                             if (
                                 lookupAction.parameters
                                     .retrieveRelatedFilesFromStorage &&
@@ -178,20 +191,29 @@ async function handleChatResponse(
                                     undefined
                             ) {
                                 return createActionResultFromHtmlDisplay(
-                                    `<div>${matches.response.answer.answer} ${await rehydrateImages(context, lookupAction.parameters.relatedFiles)}</div>`,
+                                    `<div>${matches.response.answer.answer !== undefined ? matches.response.answer.answer : ""} ${await rehydrateImages(context, lookupAction.parameters.relatedFiles)}</div>`,
                                 );
                             } else {
+                                console.log(
+                                    "Anwser: " +
+                                        matches.response.answer.answer
+                                            ?.replace("\n", "")
+                                            .substring(0, 100) +
+                                        "...",
+                                );
                                 return createActionResult(
                                     matches.response.answer.answer!,
                                 );
                             }
                         } else {
-                            console.log("bug");
+                            console.log("bug bug");
                             return createActionResult(
                                 "I don't know anything about that.",
                             );
                         }
                     }
+                } else {
+                    console.log("Conversation manager is undefined!");
                 }
             }
         }
