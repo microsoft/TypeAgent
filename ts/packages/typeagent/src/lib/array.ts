@@ -38,8 +38,9 @@ export function binarySearchFirst(
     array: any[],
     value: any,
     compareFn: (x: any, y: any) => number,
+    startAt: number = 0
 ) {
-    let lo: number = 0;
+    let lo: number = startAt;
     let hi: number = array.length - 1;
     while (lo <= hi) {
         const mid = (lo + hi) >> 1;
@@ -61,8 +62,9 @@ export function binarySearchLast(
     array: any[],
     value: any,
     compareFn: (x: any, y: any) => number,
+    startAt: number = 0
 ) {
-    let lo: number = 0;
+    let lo: number = startAt;
     let hi: number = array.length - 1;
     while (lo <= hi) {
         const mid = (lo + hi) >> 1;
@@ -115,7 +117,7 @@ export function getInRange(
         return values.slice(startIndex);  
     }  
 
-    const stopIndex = binarySearchFirst(values, stopAt, compareFn);
+    const stopIndex = binarySearchLast(values, stopAt, compareFn, startAt);
     // If the stopIndex has a value that matches the range, use it..
     if (stopIndex < values.length && compareFn(values[stopIndex], stopAt) === 0) {  
         return values.slice(startIndex, stopIndex + 1);  
