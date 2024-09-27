@@ -107,7 +107,7 @@ export function reconnectWebSocket() {
 export async function getLatLongForLocation(locationName: string) {
     const mapsApiKey = process.env["BING_MAPS_API_KEY"];
     const response = await fetch(
-        `http://dev.virtualearth.net/REST/v1/Locations/${locationName}?key=${mapsApiKey}`,
+        `https://dev.virtualearth.net/REST/v1/Locations/${locationName}?key=${mapsApiKey}`,
         {
             method: "GET",
             headers: {
@@ -231,12 +231,12 @@ async function runBrowserAction(action: any) {
                 5000,
             );
             console.log("We should navigate to " + JSON.stringify(response));
-            /*
+            
             if (response && response.url) {
                 window.location.href = response.url;
                 confirmationMessage = `Navigated to the  ${action.parameters.keywords} link`;
             }
-*/
+
             break;
         }
 
@@ -313,6 +313,33 @@ async function runBrowserAction(action: any) {
             sendScriptAction({
                 type: "run_ui_event",
                 action: action,
+            });
+            break;
+        }
+        case "getPageUrl": {            
+            responseObject = window.location.href;
+            break;
+        }
+        case "getPageSchema": {
+            responseObject = await sendScriptAction(
+                {
+                    type: "get_page_schema",
+                },
+                1000,
+            );
+
+            break;
+        }
+        case "setPageSchema": {
+            sendScriptAction({
+                type: "set_page_schema",
+                action: action,
+            });
+            break;
+        }
+        case "clearPageSchema": {
+            sendScriptAction({
+                type: "clear_page_schema",
             });
             break;
         }

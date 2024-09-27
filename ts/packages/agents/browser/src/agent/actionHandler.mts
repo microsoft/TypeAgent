@@ -106,6 +106,11 @@ async function updateBrowserContext(
               */
               break;
             }
+            case "debugBrowserAction": {
+              await executeBrowserAction(data.body, context as unknown as ActionContext<BrowserActionContext>);
+
+              break;
+            }
             case "tabIndexRequest": {
               await handleTabIndexActions(data.body, context, data.id);
               break;

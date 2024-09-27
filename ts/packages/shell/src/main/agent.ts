@@ -18,6 +18,7 @@ import { BrowserWindow } from "electron";
 
 type ShellContext = {
     settings: ShellSettings;
+    inlineWindow: BrowserWindow | undefined;
 };
 
 const config: AppAgentManifest = {
@@ -120,7 +121,7 @@ class ShellSetTopMostCommandHandler implements CommandHandler {
 
 class ShellOpenWebContentView implements CommandHandler {
     public readonly description = "Show a new Web Content view";
-    public async run(_input: string) {
+    public async run(_input: string, context: ActionContext<ShellContext>) {
         let targetUrl: URL;
         switch (_input) {
             case "paleoBioDb":
@@ -136,18 +137,32 @@ class ShellOpenWebContentView implements CommandHandler {
         }
 
         if (targetUrl) {
-            const win = new BrowserWindow({
-                width: 800,
-                height: 1500,
-                autoHideMenuBar: true,
+            if (!context.sessionContext.agentContext.inlineWindow || 
+                context.sessionContext.agentContext.inlineWindow.isDestroyed()
+            ) {
+                const win = new BrowserWindow({
+                    width: 800,
+                    height: 1500,
+                    autoHideMenuBar: true,
 
-                webPreferences: {
-                    preload: path.join(__dirname, "../preload/webview.mjs"),
-                    sandbox: false,
-                },
+                    webPreferences: {
+                        preload: path.join(__dirname, "../preload/webview.mjs"),
+                        sandbox: false,
+                    },
+                });
+                win.removeMenu();
+
+                context.sessionContext.agentContext.inlineWindow = win;
+            }
+
+            const inlineWindow = context.sessionContext.agentContext.inlineWindow;
+            inlineWindow.loadURL(
+                targetUrl.toString(),
+            );
+
+            inlineWindow.webContents.on('did-finish-load',()=>{
+                inlineWindow.webContents.send("setupSiteAgent");
             });
-            win.removeMenu();
-            win.loadURL(targetUrl.toString());
         }
     }
 }
@@ -182,6 +197,7 @@ const agent: AppAgent = {
     async initializeAgentContext() {
         return {
             settings: ShellSettings.getinstance(),
+            inlineWindow: undefined,
         };
     },
     ...getCommandInterface(handlers),

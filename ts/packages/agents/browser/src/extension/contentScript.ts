@@ -640,6 +640,34 @@ async function handleScriptAction(
             sendResponse({});
             break;
         }
+
+        case "clearCrosswordPageCache": {
+            const value = await localStorage.getItem("pageSchema");
+            if (value) {
+                localStorage.removeItem("pageSchema");
+            }
+            sendResponse({});
+            break;
+        }
+        case "get_page_schema": {
+            const value = localStorage.getItem("pageSchema");
+            sendResponse(value);
+            break;
+        }
+        case "set_page_schema": {
+            let updatedSchema = message.action.parameters.schema;
+            localStorage.setItem("pageSchema", updatedSchema);
+            sendResponse({});
+            break;
+        }
+        case "clear_page_schema": {
+            const value = localStorage.getItem("pageSchema");
+            if (value) {
+                localStorage.removeItem("pageSchema");
+            }
+            sendResponse({});
+            break;
+        }
     }
 }
 
@@ -661,7 +689,15 @@ window.addEventListener(
             event.data.target == "contentScript" &&
             event.data.messageType == "scriptActionRequest"
         ) {
-            await handleScriptAction(event.data.body, console.log);
+            await handleScriptAction(event.data.body, (response)=>{
+                window.postMessage({
+                    source: "contentScript",
+                    target: "preload",
+                    messageType: "scriptActionResponse",
+                    id:  event.data.id,
+                    body: response,
+                });
+            });
         }
     },
     false,
