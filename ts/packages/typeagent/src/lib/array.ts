@@ -30,7 +30,10 @@ export function binarySearch(
     return ~lo;
 }
 
-// Finds the first location of value... i.e. handles duplicates in the array
+/** 
+ * Finds the first location of value... i.e. handles duplicates in the array 
+ * If value is not found, returns the location of the first value >= to value 
+ */
 export function binarySearchFirst(
     array: any[],
     value: any,
@@ -51,7 +54,9 @@ export function binarySearchFirst(
     return lo;
 }
 
-// Finds the last location of value... i.e. handles duplicates in the array
+/** 
+ * Returns the position of the last item <= to value 
+ */
 export function binarySearchLast(
     array: any[],
     value: any,
@@ -88,6 +93,35 @@ export function insertIntoSorted(
     }
     sorted.splice(pos, 0, value);
     return sorted;
+}
+
+export function getInRange(
+    values: any[], 
+    startAt: any, 
+    stopAt: any | undefined, 
+    compareFn: (x: any, y: any) => number): any[] 
+{
+    let startIndex = binarySearchFirst(
+        values,
+        startAt,
+        compareFn,
+    );
+    if (startIndex === values.length) {
+        // No such value
+        return [];
+    }
+
+    if (stopAt === undefined) {  
+        return values.slice(startIndex);  
+    }  
+
+    const stopIndex = binarySearchFirst(values, stopAt, compareFn);
+    // If the stopIndex has a value that matches the range, use it..
+    if (stopIndex < values.length && compareFn(values[stopIndex], stopAt) === 0) {  
+        return values.slice(startIndex, stopIndex + 1);  
+    }  
+  
+    return values.slice(startIndex, stopIndex); 
 }
 
 /**

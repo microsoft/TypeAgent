@@ -148,7 +148,7 @@ export async function createTemporalLog<T>(
             dateTime.timestampString(startAt),
             strCmp,
         );
-        if (startIndex < 0) {
+        if (startIndex < 0 || startIndex === allIds.length) {
             // No such date
             return [];
         }
