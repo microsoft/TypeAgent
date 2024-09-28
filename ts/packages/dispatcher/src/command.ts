@@ -24,7 +24,6 @@ import { executeCommand } from "./action/actionHandlers.js";
 import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/command";
 import { RequestMetrics } from "./utils/metrics.js";
 import { PartialCompletionResult } from "./dispatcher/dispatcher.js";
-import { intersectUnionMultiple } from "../../knowledgeProcessor/dist/setOperations.js";
 
 const debugInteractive = registerDebug("typeagent:cli:interactive");
 

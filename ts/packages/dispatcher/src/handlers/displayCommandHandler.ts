@@ -8,13 +8,17 @@ import { parseCommandArgs } from "../utils/args.js";
 
 export class DisplayCommandHandler implements CommandHandler {
     public readonly description = "Send text to display";
+    public readonly parameters = {
+        flags: {
+            speak: false,
+        },
+        args: true,
+    } as const;
     public async run(
         input: string,
         context: ActionContext<CommandHandlerContext>,
     ) {
-        const { flags, args } = parseCommandArgs(input, {
-            speak: false,
-        });
+        const { flags, args } = parseCommandArgs(input, this.parameters);
 
         for (const arg of args) {
             context.actionIO.appendDisplay(
