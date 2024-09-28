@@ -32,7 +32,6 @@ export type GetAnswerWithTermsAction = {
     actionName: "getAnswer";
     parameters: {
         filters: TermFilter[];
-        answerType?: "List_Entities";
     };
 };
 

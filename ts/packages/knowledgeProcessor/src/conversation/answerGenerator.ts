@@ -98,6 +98,8 @@ export function createAnswerGenerator(
         }
         if (answerStyle) {
             prompt += answerStyleToHint(answerStyle);
+        } else {
+            prompt += "List ALL entities if query intent implies that.\n";
         }
         prompt += `Your answer is readable and complete, with suitable formatting (line breaks, bullet points etc).`;
         let contextSection: PromptSection = {

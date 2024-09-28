@@ -293,7 +293,7 @@ export function createSearchProcessor(
                 query,
                 response,
                 options,
-                action.parameters.answerType,
+                //action.parameters.answerType,
             );
         }
         return response;
