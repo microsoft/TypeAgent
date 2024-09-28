@@ -58,19 +58,66 @@ export type InteractiveAppSettings = {
     /**
      * Handler table for this app
      */
-    handlers?: Record<string, CommandHandler>;
+    handlers?: Record<string, CommandHandler> | undefined;
 };
 
 /**
  * Run batch file app
  * @param settings app settings
  */
-export async function runBatch(
-    settings: InteractiveAppSettings,
-    batchFilePath: string,
-) {
+export async function runBatch(settings: InteractiveAppSettings) {
     const app = new InteractiveApp(createInteractiveIO(), settings);
-    await app.runBatch(batchFilePath);
+    settings.handlers ??= {};
+    settings.handlers.batch = batch;
+    settings.handlers.batch.metadata = batchDef();
+
+    process.argv[2] = `${settings.commandPrefix}batch`;
+    await app.runApp();
+
+    function batchDef(): CommandMetadata {
+        return {
+            description: "Run a batch file",
+            args: {
+                filePath: {
+                    description: "Batch file path.",
+                    type: "path",
+                },
+            },
+            options: {
+                echo: {
+                    description: "Echo on or off",
+                    defaultValue: true,
+                    type: "boolean",
+                },
+                commentPrefix: {
+                    description: "Comments are prefix by this string",
+                    defaultValue: "#",
+                },
+                logFilePath: {
+                    description: "Write commands and results to this file.",
+                    type: "path",
+                },
+            },
+        };
+    }
+    settings.handlers.batch.metadata = batchDef();
+    async function batch(args: string[], io: InteractiveIo): Promise<void> {
+        const namedArgs = parseNamedArguments(args, batchDef());
+        const lines = (
+            await fs.promises.readFile(namedArgs.filePath, "utf-8")
+        ).split(/\r?\n/);
+        for (const line of lines) {
+            if (line && !line.startsWith(namedArgs.commentPrefix)) {
+                if (namedArgs.echo) {
+                    io.writer.writeLine(line);
+                }
+                if (!(await app.processInput(line))) {
+                    break;
+                }
+                io.writer.writeLine();
+            }
+        }
+    }
 }
 
 /**
@@ -82,12 +129,7 @@ export async function runConsole(
 ): Promise<void> {
     const args = process.argv;
     if (getArg(args, 2, "") === "batch") {
-        const batchFilePath = getArg(args, 3, "");
-        if (!batchFilePath) {
-            console.log("No batch file provided for batch mode");
-            return;
-        }
-        await runBatch(settings, batchFilePath);
+        await runBatch(settings);
         exit();
     } else {
         const app = new InteractiveApp(createInteractiveIO(), settings);
@@ -113,15 +155,17 @@ class InteractiveApp {
 
     public async runApp(): Promise<void> {
         const commandLine = this.getCommandLine();
-        if (commandLine && commandLine.length > 0) {
+        const hasCommandLine = commandLine && commandLine.length > 0;
+        if (!hasCommandLine) {
+            this.writeWelcome();
+        }
+        if (this._settings.onStart) {
+            this._settings.onStart(this._stdio);
+        }
+        if (hasCommandLine) {
             await this.processInput(commandLine);
             exit();
             return;
-        }
-
-        this.writeWelcome();
-        if (this._settings.onStart) {
-            this._settings.onStart(this._stdio);
         }
 
         const lineReader = this._stdio.readline;
@@ -151,32 +195,7 @@ class InteractiveApp {
             });
     }
 
-    public async runBatch(
-        batchFilePath: string,
-        echoOn: boolean = true,
-        commentPrefix: string = "#",
-    ): Promise<void> {
-        if (this._settings.onStart) {
-            this._settings.onStart(this._stdio);
-        }
-
-        const lines = (
-            await fs.promises.readFile(batchFilePath, "utf-8")
-        ).split(/\r?\n/);
-        for (const line of lines) {
-            if (line && !line.startsWith(commentPrefix)) {
-                if (echoOn) {
-                    this._stdio.writer.writeLine(line);
-                }
-                if (!(await this.processInput(line))) {
-                    break;
-                }
-                this.stdio.writer.writeLine();
-            }
-        }
-    }
-
-    private async processInput(line: string): Promise<boolean> {
+    public async processInput(line: string): Promise<boolean> {
         line = line.trim();
         if (line.length == 0) {
             return true;
