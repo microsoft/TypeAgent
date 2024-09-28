@@ -142,7 +142,7 @@ export async function getTabHTML(fullSize: boolean) {
         type: "get_reduced_html",
         fullSize: fullSize,
         frameId: 0,
-    });
+    }, 1000);
 
     return outerHTML;
 }
@@ -163,7 +163,7 @@ export async function getTabHTMLFragments(fullSize: boolean) {
         type: "get_page_text",
         inputHtml: frameHTML,
         frameId: 0,
-    });
+    },1000);
 
     htmlFragments.push({
         frameId: 0,
