@@ -17,13 +17,16 @@ import {
     asyncArray,
     dateTime,
     getFileName,
+    readAllLines,
     readAllText,
+    writeJsonFile,
 } from "typeagent";
 import chalk from "chalk";
 import { PlayPrinter } from "./chatMemoryPrinter.js";
 import { timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
+import { argDestFile, argSourceFile } from "./common.js";
 
 export type ChatContext = {
     storePath: string;
@@ -190,6 +193,7 @@ export async function runChatMemory(): Promise<void> {
         actions,
         searchQuery,
         search,
+        makeTestSet,
     };
     addStandardHandlers(handlers);
 
@@ -1094,6 +1098,47 @@ export async function runChatMemory(): Promise<void> {
             await context.searcher.buildContext(searchOptions),
         );
         printer.writeJson(searchResult);
+    }
+
+    function makeTestSetDef(): CommandMetadata {
+        return {
+            description: "Make a test set from the query batch file",
+            args: {
+                filePath: argSourceFile(),
+            },
+            options: {
+                destPath: argDestFile(),
+            },
+        };
+    }
+    handlers.makeTestSet.metadata = makeTestSetDef();
+    async function makeTestSet(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, makeTestSetDef());
+        let destPath = namedArgs.destPath;
+        if (!destPath) {
+            destPath = path.join(
+                path.dirname(namedArgs.filePath),
+                `${getFileName(namedArgs.filePath)}_result.json`,
+            );
+        }
+        const lines = await readAllLines(namedArgs.filePath);
+
+        type ResultLog = {
+            query: string;
+            answer?: conversation.AnswerResponse | undefined;
+        };
+        let results: ResultLog[] = [];
+        for (let i = 0; i < lines.length; ++i) {
+            let query = lines[i].trim();
+            printer.writeLine(`${i + 1}/${lines.length} ${query}`);
+            if (!query) {
+                continue;
+            }
+            const rr = await context.conversationManager.search(query);
+            const answer = rr?.response?.answer;
+            results.push({ query, answer });
+        }
+        await writeJsonFile(destPath, results);
     }
 
     //--------------------
