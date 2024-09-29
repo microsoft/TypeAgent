@@ -1333,9 +1333,6 @@ importers:
       ansi_up:
         specifier: ^6.0.2
         version: 6.0.2
-      d3:
-        specifier: ^7.9.0
-        version: 7.9.0
       debug:
         specifier: 4.3.4
         version: 4.3.4(supports-color@8.1.1)
