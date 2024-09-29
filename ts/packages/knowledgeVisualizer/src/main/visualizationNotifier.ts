@@ -324,9 +324,9 @@ export class VisualizationNotifier {
             if (kk.entities?.length > 0) {
                 kk.entities.map((e) => {
 
-                    let newE: KnowledgeHierarchy = {name: `knowledge.entities.${e.value.name.replace(".", ",")}`, imports: ["knowledge.entity"]};
+                    let newE: KnowledgeHierarchy = {name: `knowledge.entities.${e.value.name.replace(".", ",")}`, imports: ["knowledge.entity", `knowledge.messages.${f}`]};
                     e.value.type.map((t) => {
-                        retValue2.push({name: `knowledge.types.${t}`, imports: ["knowledge.type"] });
+                        retValue2.push({name: `knowledge.types.${t}`, imports: ["knowledge.type", `knowledge.messages.${f}`] });
                         newE.imports.push(`knowledge.types.${t}`)
                     });
 
@@ -337,14 +337,14 @@ export class VisualizationNotifier {
 
             if (kk.topics?.length > 0) {
                 kk.topics.map((t) => {
-                    retValue2.push({name: `knowledge.topics.${t.value}`, imports: ["knowledge.topic"]});
+                    retValue2.push({name: `knowledge.topics.${t.value}`, imports: ["knowledge.topic", `knowledge.messages.${f}`]});
                 });
             }     
             
             if (kk.actions?.length > 0) {
                 kk.actions.map((a) => {
                     a.value.verbs.map((v) => {
-                        retValue2.push({name: `knowledge.actions.${v}`, imports: ["knowledge.action"]});
+                        retValue2.push({name: `knowledge.actions.${v}`, imports: ["knowledge.action", `knowledge.messages.${f}`]});
                     })
 
                     if (a.value.subjectEntityName != "none") {
@@ -361,7 +361,7 @@ export class VisualizationNotifier {
                     
                     a.value.params?.map((p) => {
                         if (typeof p === "string") {
-                            retValue2.push({name: `knowledge.params.${p}`, imports: ["knowledge.param"]});
+                            retValue2.push({name: `knowledge.params.${p}`, imports: ["knowledge.param", ]});
                         }
                     })
                 });
