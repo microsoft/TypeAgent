@@ -19,3 +19,5 @@ export * from "./actions.js";
 
 export * from "./searchProcessor.js";
 export * from "./answerSchema.js";
+
+export * as testData from "./testData.js";

@@ -17,16 +17,14 @@ import {
     asyncArray,
     dateTime,
     getFileName,
-    readAllLines,
     readAllText,
-    writeJsonFile,
 } from "typeagent";
 import chalk from "chalk";
 import { PlayPrinter } from "./chatMemoryPrinter.js";
 import { timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
-import { argDestFile, argSourceFile } from "./common.js";
+import { argConcurrency, argDestFile, argSourceFile } from "./common.js";
 
 export type ChatContext = {
     storePath: string;
@@ -1108,37 +1106,22 @@ export async function runChatMemory(): Promise<void> {
             },
             options: {
                 destPath: argDestFile(),
+                concurrency: argConcurrency(2),
             },
         };
     }
     handlers.makeTestSet.metadata = makeTestSetDef();
     async function makeTestSet(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, makeTestSetDef());
-        let destPath = namedArgs.destPath;
-        if (!destPath) {
-            destPath = path.join(
-                path.dirname(namedArgs.filePath),
-                `${getFileName(namedArgs.filePath)}_result.json`,
-            );
-        }
-        const lines = await readAllLines(namedArgs.filePath);
-
-        type ResultLog = {
-            query: string;
-            answer?: conversation.AnswerResponse | undefined;
-        };
-        let results: ResultLog[] = [];
-        for (let i = 0; i < lines.length; ++i) {
-            let query = lines[i].trim();
-            printer.writeLine(`${i + 1}/${lines.length} ${query}`);
-            if (!query) {
-                continue;
-            }
-            const rr = await context.conversationManager.search(query);
-            const answer = rr?.response?.answer;
-            results.push({ query, answer });
-        }
-        await writeJsonFile(destPath, results);
+        await conversation.testData.searchBatch(
+            context.conversationManager,
+            namedArgs.filePath,
+            namedArgs.destPath,
+            namedArgs.concurrency,
+            (query: string, i: number, total: number) => {
+                printer.writeLine(`${i + 1}/${total} ${query}`);
+            },
+        );
     }
 
     //--------------------

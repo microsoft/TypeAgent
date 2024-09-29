@@ -14,3 +14,11 @@ export function argDestFile(defaultValue?: string | undefined): ArgDef {
         defaultValue,
     };
 }
+
+export function argConcurrency(value: number): ArgDef {
+    return {
+        description: "Concurrency",
+        type: "number",
+        defaultValue: value,
+    };
+}

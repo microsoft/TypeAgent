@@ -219,7 +219,7 @@ export function getAbsolutePath(
 }
 
 /**
- * Get the name of the file referenced by filePath
+ * Get the name of the file referenced by filePath, without extension
  * @param filePath
  * @returns
  */
@@ -243,11 +243,24 @@ export async function readAllText(
     return fs.promises.readFile(filePath, "utf-8");
 }
 
+/**
+ * Read all lines from the given filePath
+ * @param filePath
+ * @param basePath (optional) If filePath is a relative path
+ * @param removeEmpty
+ * @param trim
+ * @returns
+ */
 export async function readAllLines(
     filePath: string,
-    basePath?: string,
+    basePath?: string | undefined,
+    removeEmpty: boolean = false,
+    trim: boolean = false,
 ): Promise<string[]> {
-    return (await readAllText(filePath, basePath)).split(/\r?\n/);
+    let lines = (await readAllText(filePath, basePath)).split(/\r?\n/);
+    lines = trim ? lines.map((l) => l.trim()) : lines;
+    lines = removeEmpty ? lines.filter((l) => l.length > 0) : lines;
+    return lines;
 }
 
 export async function writeAllLines(
