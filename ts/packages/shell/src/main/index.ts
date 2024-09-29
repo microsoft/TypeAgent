@@ -39,6 +39,7 @@ import { AppAgentEvent, DisplayAppendMode } from "@typeagent/agent-sdk";
 import { shellAgentProvider } from "./agent.js";
 import {
     KnowledgeGraph,
+    KnowledgeHierarchy,
     TypeAgentList,
     VisualizationNotifier,
 } from "./visualizationNotifier.js";
@@ -189,6 +190,12 @@ function createWindow(): void {
         graph: KnowledgeGraph[][],
     ) => {
         vizWindow?.webContents.send("update-knowledge-visualization", graph);
+    };
+
+    VisualizationNotifier.getinstance().onHierarchyUpdated = (
+        hierarchy: KnowledgeHierarchy[],
+    ) => {
+        vizWindow?.webContents.send("update-hierarchy-visualization", hierarchy);
     };
 }
 

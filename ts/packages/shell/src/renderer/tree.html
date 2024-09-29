@@ -13,9 +13,10 @@
 
 <body>
   <script type="module" src="./src/visualizer.ts"></script>
-  <div id="wrapper" class="wrapper"></div>
-  <div id="wrapper3" class="wrapper"></div>
-  <div id="wrapper2" class="wrapper"></div>
+  <div id="wrapper" class="wrapper" style="display: none;"></div>
+  <div id="wrapper3" class="wrapper" style="display: none;"></div>
+  <div id="wrapper2" class="wrapper" style="display: none;"></div>
+  <div id="wrapper5" class="wrapper"></div>
 
   <div id="wrapper4" class="wrapper"></div>
   <script type="text/javascript">
@@ -80,7 +81,7 @@
         .attr("text-anchor", d => d.x < Math.PI ? "start" : "end")
         .attr("transform", d => d.x >= Math.PI ? "rotate(180)" : null)
         .text(d => d.data.name)
-        .each(function (d) { d.text = this; })
+        .each(function (d) { d.text = this; console.log(this); })
         .on("mouseover", overed)
         .on("mouseout", outed)
         .call(text => text.append("title").text(d => `${id(d)}
@@ -345,348 +346,40 @@ ${d.incoming.length} incoming`));
     {"name":"flare.vis.operator.SortOperator","size":2023,"imports":["flare.vis.operator.Operator","flare.animate.Transitioner","flare.util.Arrays","flare.vis.data.Data"]},
     {"name":"flare.vis.Visualization","size":16540,"imports":["flare.animate.Transitioner","flare.vis.operator.IOperator","flare.animate.Scheduler","flare.vis.events.VisualizationEvent","flare.vis.data.Tree","flare.vis.events.DataEvent","flare.vis.axis.Axes","flare.vis.axis.CartesianAxes","flare.util.Displays","flare.vis.operator.OperatorList","flare.vis.controls.ControlList","flare.animate.ISchedulable","flare.vis.data.Data"]}
     ];
-    var data_orig2 = [
+
+var data3 = 
+[
     {
-    "name": "session.knowledge.message.2024_09_23_09_48_26_122",
-    "imports": ["session.knowledge.message"]
-  },
+        "name": "knowledge.entity",
+        "imports": []
+    },
+    {
+        "name": "knowledge.action",
+        "imports": []
+    },
+    {
+        "name": "knowledge.topic",
+        "imports": []
+    },
+    {
+        "name": "knowledge.message",
+        "imports": []
+    },
+    {
+        "name": "knowledge.type",
+        "imports": []
+    },
+    {
+        "name": "knowledge.param",
+        "imports": []
+    },
+ ];
 
+  var data = hierarchy(data_orig);
+  document.getElementById("wrapper4").append(makeChart());
 
-  {
-    "name": "session.knowledge.message.2024_09_23_09_48_26_125",
-    "imports": ["session.knowledge.message"]
-  },
-  { "name": "session.knowledge.type.team", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.club", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.football", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.Manchester United",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.team",
-      "session.knowledge.type.club",
-      "session.knowledge.type.football"
-    ]
-  },
-  { "name": "session.knowledge.type.time", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.period", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.weekend",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.time",
-      "session.knowledge.type.period"
-    ]
-  },
-  { "name": "session.knowledge.topic.football", "imports": ["session.knowledge.topic"] },
-  { "name": "session.knowledge.topic.sports", "imports": ["session.knowledge.topic"] },
-  {
-    "name": "session.knowledge.topic.Manchester United",
-    "imports": ["session.knowledge.topic"]
-  },
-  { "name": "session.knowledge.topic.results", "imports": ["session.knowledge.topic"] },
-  { "name": "session.knowledge.action.win", "imports": ["session.knowledge.action"] },
-  {
-    "name": "session.knowledge.entity.Manchester United",
-    "imports": ["session.knowledge.entity"]
-  },
-  { "name": "session.knowledge.param.this weekend", "imports": ["session.knowledge.param"] },
-  {
-    "name": "session.knowledge.message.2024_09_23_09_48_41_791",
-    "imports": ["session.knowledge.message"]
-  },
-  { "name": "session.knowledge.type.football", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.sports team", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.team", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.manchester united",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.football",
-      "session.knowledge.type.sports team",
-      "session.knowledge.type.team"
-    ]
-  },
-  { "name": "session.knowledge.type.football", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.sports team", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.team", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.crystal palace",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.football",
-      "session.knowledge.type.sports team",
-      "session.knowledge.type.team"
-    ]
-  },
-  { "name": "session.knowledge.type.location", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.stadium", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.selhurst park",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.location",
-      "session.knowledge.type.stadium"
-    ]
-  },
-  { "name": "session.knowledge.type.football", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.league", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.sports league", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.premier league",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.football",
-      "session.knowledge.type.league",
-      "session.knowledge.type.sports league"
-    ]
-  },
-  { "name": "session.knowledge.type.score", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.0-0",
-    "imports": ["session.knowledge.entity", "session.knowledge.type.score"]
-  },
-  { "name": "session.knowledge.type.date", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.saturday, september 21, 2024",
-    "imports": ["session.knowledge.entity", "session.knowledge.type.date"]
-  },
-  { "name": "session.knowledge.topic.football", "imports": ["session.knowledge.topic"] },
-  { "name": "session.knowledge.topic.Premier League", "imports": ["session.knowledge.topic"] },
-  { "name": "session.knowledge.topic.match result", "imports": ["session.knowledge.topic"] },
-  {
-    "name": "session.knowledge.topic.Manchester United",
-    "imports": ["session.knowledge.topic"]
-  },
-  { "name": "session.knowledge.topic.Crystal Palace", "imports": ["session.knowledge.topic"] },
-  { "name": "session.knowledge.action.draw", "imports": ["session.knowledge.action"] },
-  {
-    "name": "session.knowledge.entity.Manchester United",
-    "imports": ["session.knowledge.entity"]
-  },
-  {
-    "name": "session.knowledge.entity.Crystal Palace",
-    "imports": ["session.knowledge.entity"]
-  },
-  {
-    "name": "session.knowledge.message.2024_09_23_09_48_45_137",
-    "imports": ["session.knowledge.message"]
-  },
-  { "name": "session.knowledge.type.list", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.object", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.grocery list",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.list",
-      "session.knowledge.type.object"
-    ]
-  },
-  { "name": "session.knowledge.topic.grocery", "imports": ["session.knowledge.topic"] },
-  { "name": "session.knowledge.topic.list", "imports": ["session.knowledge.topic"] },
-  {
-    "name": "session.knowledge.message.2024_09_23_10_03_01_936",
-    "imports": ["session.knowledge.message"]
-  },
-  { "name": "session.knowledge.type.food", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.item", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.lasagne noodles",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.food",
-      "session.knowledge.type.item"
-    ]
-  },
-  { "name": "session.knowledge.type.food", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.item", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.ground beef",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.food",
-      "session.knowledge.type.item"
-    ]
-  },
-  { "name": "session.knowledge.type.food", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.item", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.tomato sauce",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.food",
-      "session.knowledge.type.item"
-    ]
-  },
-  { "name": "session.knowledge.type.food", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.item", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.ricotta cheese",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.food",
-      "session.knowledge.type.item"
-    ]
-  },
-  { "name": "session.knowledge.type.food", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.item", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.mozzarella cheese",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.food",
-      "session.knowledge.type.item"
-    ]
-  },
-  { "name": "session.knowledge.type.food", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.item", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.parmesan cheese",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.food",
-      "session.knowledge.type.item"
-    ]
-  },
-  { "name": "session.knowledge.type.food", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.item", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.onion",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.food",
-      "session.knowledge.type.item"
-    ]
-  },
-  { "name": "session.knowledge.type.food", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.item", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.garlic",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.food",
-      "session.knowledge.type.item"
-    ]
-  },
-  { "name": "session.knowledge.type.food", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.item", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.olive oil",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.food",
-      "session.knowledge.type.item"
-    ]
-  },
-  { "name": "session.knowledge.type.food", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.item", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.basil",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.food",
-      "session.knowledge.type.item"
-    ]
-  },
-  { "name": "session.knowledge.type.food", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.item", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.oregano",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.food",
-      "session.knowledge.type.item"
-    ]
-  },
-  { "name": "session.knowledge.type.food", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.item", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.salt",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.food",
-      "session.knowledge.type.item"
-    ]
-  },
-  { "name": "session.knowledge.type.food", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.item", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.pepper",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.food",
-      "session.knowledge.type.item"
-    ]
-  },
-  { "name": "session.knowledge.type.list", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.grocery",
-    "imports": ["session.knowledge.entity", "session.knowledge.type.list"]
-  },
-  { "name": "session.knowledge.topic.grocery", "imports": ["session.knowledge.topic"] },
-  { "name": "session.knowledge.topic.food", "imports": ["session.knowledge.topic"] },
-  { "name": "session.knowledge.topic.ingredients", "imports": ["session.knowledge.topic"] },
-  { "name": "session.knowledge.action.list", "imports": ["session.knowledge.action"] },
-  { "name": "session.knowledge.entity.grocery", "imports": ["session.knowledge.entity"] },
-  {
-    "name": "session.knowledge.message.2024_09_23_10_03_01_943",
-    "imports": ["session.knowledge.message"]
-  },
-  { "name": "session.knowledge.type.city", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.Porto Alegre",
-    "imports": ["session.knowledge.entity", "session.knowledge.type.city"]
-  },
-  { "name": "session.knowledge.topic.elevation", "imports": ["session.knowledge.topic"] },
-  { "name": "session.knowledge.topic.Porto Alegre", "imports": ["session.knowledge.topic"] },
-  { "name": "session.knowledge.topic.geography", "imports": ["session.knowledge.topic"] },
-  {
-    "name": "session.knowledge.message.2024_09_23_11_59_03_722",
-    "imports": ["session.knowledge.message"]
-  },
-  { "name": "session.knowledge.type.city", "imports": ["session.knowledge.type"] },
-  { "name": "session.knowledge.type.location", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.porto alegre",
-    "imports": [
-      "session.knowledge.entity",
-      "session.knowledge.type.city",
-      "session.knowledge.type.location"
-    ]
-  },
-  { "name": "session.knowledge.type.measurement", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.10 meters",
-    "imports": ["session.knowledge.entity", "session.knowledge.type.measurement"]
-  },
-  { "name": "session.knowledge.type.measurement", "imports": ["session.knowledge.type"] },
-  {
-    "name": "session.knowledge.entity.33 feet",
-    "imports": ["session.knowledge.entity", "session.knowledge.type.measurement"]
-  },
-  { "name": "session.knowledge.topic.elevation", "imports": ["session.knowledge.topic"] },
-  { "name": "session.knowledge.topic.geography", "imports": ["session.knowledge.topic"] },
-  {
-    "name": "session.knowledge.message.2024_09_23_11_59_18_423",
-    "imports": ["session.knowledge.message"]
-  },
-  { "name": "session.knowledge.entity", "imports": ["session.knowledge"] },
-  { "name": "session.knowledge.action", "imports": ["session.knowledge"] },
-  { "name": "session.knowledge.topic", "imports": ["session.knowledge"] },
-  { "name": "session.knowledge.message", "imports": ["session.knowledge"] },
-  { "name": "session.knowledge.type", "imports": ["session.knowledge"] },
-  { "name": "session.knowledge.param", "imports": ["session.knowledge"] },
-  { "name": "session.knowledge", "imports": [] },
-]
-
-
-;
-
-//var dd = hierarchy(data_orig);
-
-  //var data = hierarchy(data_orig)
-    var data = hierarchy(data_orig2)
-    document.getElementById("wrapper4").append(makeChart());
+  data = hierarchy(data3)
+  document.getElementById("wrapper5").append(makeChart());
 
   </script>
 </body>

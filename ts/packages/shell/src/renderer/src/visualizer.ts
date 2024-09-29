@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { ClientAPI } from "../../preload/electronTypes";
+import { HierarchicalEdgeBundling } from "./visualizations/hierarchicalEdgeBundling";
 import { TangledTree } from "./visualizations/tangledTree";
 import {
     defaultTidyTreeConfig,
@@ -16,8 +17,10 @@ function getClientAPI(): ClientAPI {
 function addEvents(
     wrapper: HTMLElement,
     wrapper2: HTMLElement,
+    wrapper5: HTMLElement,
     tidyTree: TidyTree,
     tangledTree: TangledTree,
+    hierarchy: HierarchicalEdgeBundling
 ) {
     const api = getClientAPI();
     api.onUpdateListVisualization((_, data: any) => {
@@ -30,12 +33,18 @@ function addEvents(
         tangledTree.update(data);
         wrapper2.append(tangledTree.tree!);
     });
+    api.onUpdateKnowledgeHierarchyVisualization((_, data: any) => {
+        wrapper5.innerHTML = "";
+        hierarchy.update(data);
+        wrapper5.append(hierarchy.chart!);
+    });
 }
 
 document.addEventListener("DOMContentLoaded", function () {
     const wrapper = document.getElementById("wrapper")!;
     const wrapper2 = document.getElementById("wrapper2")!;
     const wrapper3 = document.getElementById("wrapper3")!;
+    const wrapper5 = document.getElementById("wrapper5")!;
 
     const treeConfig: TidyTreeConfigType = defaultTidyTreeConfig;
 
@@ -178,10 +187,45 @@ document.addEventListener("DOMContentLoaded", function () {
         ],
     ];
 
+    let data2 =
+    [
+        {
+            "name": "knowledge.entity",
+            "imports": []
+        },
+        {
+            "name": "knowledge.action",
+            "imports": []
+        },
+        {
+            "name": "knowledge.topic",
+            "imports": []
+        },
+        {
+            "name": "knowledge.message",
+            "imports": []
+        },
+        {
+            "name": "knowledge.type",
+            "imports": []
+        },
+        {
+            "name": "knowledge.param",
+            "imports": []
+        },
+     ];
+
     const tangledTree: TangledTree = new TangledTree(data);
     wrapper3.append(tangledTree.tree!);
 
-    addEvents(wrapper, wrapper2, tidyTree, tangledTree);
+    const hierarchy: HierarchicalEdgeBundling = new HierarchicalEdgeBundling(data2);
+    if (hierarchy.chart) {
+        wrapper5.append(hierarchy.chart);
+    } else {
+        wrapper5.innerHTML = "";
+    }
+
+    addEvents(wrapper, wrapper2, wrapper5, tidyTree, tangledTree, hierarchy);
 
     //(window as any).electron.ipcRenderer.send("dom ready");
 });

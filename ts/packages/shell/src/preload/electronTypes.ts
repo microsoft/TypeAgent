@@ -245,6 +245,9 @@ export interface ClientAPI {
     onUpdateKnowledgeVisualization(
         callback: (e: Electron.IpcRendererEvent, data) => void,
     ): void;
+    onUpdateKnowledgeHierarchyVisualization(
+        callback: (e: Electron.IpcRendererEvent, data) => void,
+    ): void;    
 }
 
 export interface ElectronWindowFields {

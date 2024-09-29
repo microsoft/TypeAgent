@@ -139,6 +139,9 @@ const api: ClientAPI = {
     onUpdateKnowledgeVisualization(callback) {
         ipcRenderer.on("update-knowledge-visualization", callback);
     },
+    onUpdateKnowledgeHierarchyVisualization(callback) {
+        ipcRenderer.on("update-hierarchy-visualization", callback);
+    },
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to
