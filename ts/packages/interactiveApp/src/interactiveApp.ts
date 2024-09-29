@@ -560,7 +560,14 @@ export async function dispatchCommand(
                 io.stdout.write(result + "\n");
             }
         } else {
-            io.stdout.write(`${commandName} not found.\n`);
+            io.stdout.write(`${commandName} not found.\n\n`);
+            const [matches, matchCount] = filterCommandsByName(
+                commandName + "*",
+                handlers,
+            );
+            if (matchCount > 0) {
+                displayCommands(matches, io, "Closest matches:");
+            }
         }
     }
 
@@ -628,28 +635,7 @@ export function searchCommands(
     if (!name) {
         return false;
     }
-    name = name.toLowerCase();
-    const prefixMatch = name.endsWith("*");
-    if (prefixMatch) {
-        name = name.slice(0, name.length - 1);
-    }
-    const suffixMatch = name.startsWith("*");
-    if (suffixMatch) {
-        name = name.slice(1);
-    }
-    let matches: Record<string, CommandHandler> = {};
-    let matchCount = 0;
-    for (const key in handlers) {
-        const handlerName = key.toLowerCase();
-        if (
-            name === handlerName ||
-            (prefixMatch && handlerName.startsWith(name)) ||
-            (suffixMatch && handlerName.endsWith(name))
-        ) {
-            matches[key] = handlers[key];
-            ++matchCount;
-        }
-    }
+    const [matches, matchCount] = filterCommandsByName(name, handlers);
     if (matchCount > 0) {
         displayCommands(matches, io);
     }
@@ -699,9 +685,15 @@ function getDescription(handler: CommandHandler): string | undefined {
 export function displayCommands(
     handlers: Record<string, CommandHandler>,
     io: InteractiveIo,
+    title?: string,
 ): void {
     const indent = "  ";
-    io.writer.writeLine("COMMANDS");
+    if (title === undefined) {
+        title = "COMMANDS";
+    }
+    if (title) {
+        io.writer.writeLine(title);
+    }
     io.writer.writeRecord(
         handlers,
         true,
@@ -835,4 +827,33 @@ export function getBooleanArg(
         throw new Error(`No argument at position ${position}`);
     }
     return typeof value === "boolean" ? value : value.toLowerCase() === "true";
+}
+
+function filterCommandsByName(
+    name: string,
+    handlers: Record<string, CommandHandler>,
+): [Record<string, CommandHandler>, number] {
+    name = name.toLowerCase();
+    const prefixMatch = name.endsWith("*");
+    if (prefixMatch) {
+        name = name.slice(0, name.length - 1);
+    }
+    const suffixMatch = name.startsWith("*");
+    if (suffixMatch) {
+        name = name.slice(1);
+    }
+    let matchCount = 0;
+    let matches: Record<string, CommandHandler> = {};
+    for (const key in handlers) {
+        const handlerName = key.toLowerCase();
+        if (
+            name === handlerName ||
+            (prefixMatch && handlerName.startsWith(name)) ||
+            (suffixMatch && handlerName.endsWith(name))
+        ) {
+            matches[key] = handlers[key];
+            ++matchCount;
+        }
+    }
+    return [matches, matchCount];
 }
