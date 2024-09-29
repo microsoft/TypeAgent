@@ -35,7 +35,6 @@
     "agent-dispatcher": "workspace:*",
     "aiclient": "workspace:*",
     "ansi_up": "^6.0.2",
-    "d3": "^7.9.0",
     "debug": "4.3.4",
     "dompurify": "^3.1.6",
     "dotenv": "^16.3.1",

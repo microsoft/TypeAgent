@@ -229,7 +229,7 @@ export interface ClientAPI {
             requestId: string,
             command: string,
         ) => void,
-    );
+    ): void;
     onNotify(
         callback: (
             e: Electron.IpcRendererEvent,
@@ -239,15 +239,6 @@ export interface ClientAPI {
             data: any,
         ) => void,
     ): void;
-    onUpdateListVisualization(
-        callback: (e: Electron.IpcRendererEvent, data) => void,
-    ): void;
-    onUpdateKnowledgeVisualization(
-        callback: (e: Electron.IpcRendererEvent, data) => void,
-    ): void;
-    onUpdateKnowledgeHierarchyVisualization(
-        callback: (e: Electron.IpcRendererEvent, data) => void,
-    ): void;    
 }
 
 export interface ElectronWindowFields {
