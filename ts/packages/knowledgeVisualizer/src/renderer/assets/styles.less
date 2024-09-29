@@ -12,3 +12,57 @@ body {
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   font-size: 14px;
 }
+
+.mainContainer {
+  display: flex;
+  flex-wrap: auto;
+}
+
+.chartContainer {
+  display: inline;
+  border-color: #BBBBBB;
+  border-width: 2px;
+  border-radius: 5px;
+  border-style: solid;
+  margin: 5px;
+  overflow: hidden;
+}
+
+.chartContainer-collapsed {
+  .chartContainer;
+  width: 200px;
+  height: 200px;
+}
+
+.chartContainer-expanded {
+  .chartContainer;
+  width: auto;
+  height: auto;
+}
+
+.chart-title {
+  background-color: #BBBBBB;
+  color: white;
+  font-weight: 400;
+  height: 28px;
+}
+
+.sizeButton {
+  padding: 0px;
+  float: right;
+  margin-right: 2px;
+  width: 24px;
+  height: 24px;
+  background-color: transparent;
+  border-width: 0px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.sizeButton:hover {
+  background-color: #555555AA;
+}
+
+.hidden {
+  display: none;
+}
