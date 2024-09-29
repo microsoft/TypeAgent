@@ -13,6 +13,11 @@ export class TidyTree {
     }
 
     public update(data: any): void {
+
+        if (data.length == 0) {
+            return create("svg");
+        }
+
         const root =
             this.config.path != null
                 ? stratify().path(this.config.path)(data)

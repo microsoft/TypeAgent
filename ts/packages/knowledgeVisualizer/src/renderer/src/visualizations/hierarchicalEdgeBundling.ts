@@ -110,7 +110,11 @@ export class HierarchicalEdgeBundling {
       }
 
     public update(data: any): void {
+      if (data.length > 0) {
         const h = this.buildNodeHierarchy(data);
         this.chart = this.makeChart(h);
+      } else {
+        this.chart = create("svg").node();
+      }
     }
 }

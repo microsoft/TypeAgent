@@ -268,12 +268,17 @@ export class TangledTree {
     }
 
     public update(data: any): void {
+        
         console.log(data);
         let options = { c: 0, bigc: 0, color: (_, i) => this.color(i) };
         try {
-            //let svg = create("svg");
             let div = document.createElement("div");
-            div.innerHTML = this.renderChart(data, options);
+
+            if (data.length > 0) {
+                div.innerHTML = this.renderChart(data, options);
+            } else {
+                div.innerHTML = "<svg />";
+            }
 
             this.tree = div.firstChild as SVGElement;
         } catch (e) {
