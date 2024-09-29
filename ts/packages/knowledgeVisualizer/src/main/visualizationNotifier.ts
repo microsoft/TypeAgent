@@ -290,14 +290,14 @@ export class VisualizationNotifier {
     }
 
     public async enumerateKnowledgeForHierarchy(): Promise<KnowledgeHierarchy[]> {
-        let retValue2: KnowledgeHierarchy[] = new Array<KnowledgeHierarchy>();
+        let retValue: KnowledgeHierarchy[] = new Array<KnowledgeHierarchy>();
         
-        retValue2.push({ name: "knowledge.entity", imports: []});
-        retValue2.push({ name: "knowledge.action", imports: []});
-        retValue2.push({ name: "knowledge.topic", imports: []});
-        retValue2.push({ name: "knowledge.message", imports: []});
-        retValue2.push({ name: "knowledge.type", imports: []});
-        retValue2.push({ name: "knowledge.param", imports: []});
+        retValue.push({ name: "knowledge.entity", imports: []});
+        retValue.push({ name: "knowledge.action", imports: []});
+        retValue.push({ name: "knowledge.topic", imports: []});
+        retValue.push({ name: "knowledge.message", imports: []});
+        retValue.push({ name: "knowledge.type", imports: []});
+        retValue.push({ name: "knowledge.param", imports: []});
 
         const sessions: string[] = await getSessionNames();
         const lastSession: string = sessions[sessions.length - 1];
@@ -326,42 +326,57 @@ export class VisualizationNotifier {
 
                     let newE: KnowledgeHierarchy = {name: `knowledge.entities.${e.value.name.replace(".", ",")}`, imports: ["knowledge.entity", `knowledge.messages.${f}`]};
                     e.value.type.map((t) => {
-                        retValue2.push({name: `knowledge.types.${t}`, imports: ["knowledge.type", `knowledge.messages.${f}`] });
+                        retValue.push({name: `knowledge.types.${t}`, imports: ["knowledge.type", `knowledge.messages.${f}`] });
                         newE.imports.push(`knowledge.types.${t}`)
                     });
 
-                    retValue2.push(newE);
+                    retValue.push(newE);
                     
                 });
             }
 
             if (kk.topics?.length > 0) {
                 kk.topics.map((t) => {
-                    retValue2.push({name: `knowledge.topics.${t.value}`, imports: ["knowledge.topic", `knowledge.messages.${f}`]});
+                    retValue.push({name: `knowledge.topics.${t.value}`, imports: ["knowledge.topic", `knowledge.messages.${f}`]});
                 });
             }     
             
             if (kk.actions?.length > 0) {
                 kk.actions.map((a) => {
                     a.value.verbs.map((v) => {
-                        retValue2.push({name: `knowledge.actions.${v}`, imports: ["knowledge.action", `knowledge.messages.${f}`]});
+                        retValue.push({name: `knowledge.actions.${v}`, imports: ["knowledge.action", `knowledge.messages.${f}`]});
                     })
 
                     if (a.value.subjectEntityName != "none") {
-                        retValue2.push({name: `knowledge.entities.${a.value.subjectEntityName.replace(".", "_")}`, imports: ["knowledge.entity"]})
+                        retValue.push({name: `knowledge.entities.${a.value.subjectEntityName.replace(".", "_")}`, imports: ["knowledge.entity"]})
                     }
 
                     if (a.value.objectEntityName != "none") {
-                        retValue2.push({name: `knowledge.tntities.${a.value.objectEntityName}`, imports: ["knowledge.entity"]})
+                        retValue.push({name: `knowledge.entities.${a.value.objectEntityName}`, imports: ["knowledge.entity"]})
                     }
 
                     if (a.value.indirectObjectEntityName != "none") {
-                        retValue2.push({name: `knowledge.entities.${a.value.indirectObjectEntityName}`, imports: ["knowledge.entity"]})
+                        retValue.push({name: `knowledge.entities.${a.value.indirectObjectEntityName}`, imports: ["knowledge.entity"]})
                     }
                     
                     a.value.params?.map((p) => {
                         if (typeof p === "string") {
-                            retValue2.push({name: `knowledge.params.${p}`, imports: ["knowledge.param", ]});
+                            let valueImports = ["knowledge.param", `knowledge.messages.${f}`,];
+
+                            if (a.value.subjectEntityName != "none") {
+                                valueImports.push(`knowledge.entities.${a.value.subjectEntityName.replace(".", "_")}`);
+                            }
+        
+                            if (a.value.objectEntityName != "none") {
+                                valueImports.push(`knowledge.entities.${a.value.objectEntityName}`);
+                            }
+        
+                            if (a.value.indirectObjectEntityName != "none") {
+                                valueImports.push(`knowledge.entities.${a.value.indirectObjectEntityName}`);
+                            }
+
+                            retValue.push({name: `knowledge.params.${p}`, imports: valueImports});
+    
                         }
                     })
                 });
@@ -369,10 +384,10 @@ export class VisualizationNotifier {
 
             // the original message that has the aforementioned EATs
             let hh: KnowledgeHierarchy = { name: `knowledge.messages.${f}`, imports: new Array<string>("knowledge.message")};
-            retValue2.push(hh);
+            retValue.push(hh);
         });
 
-        return retValue2;
+        return retValue;
     }
 
 }
