@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import DOMPurify from "dompurify";
 
 export class HTMLReducer {
     linkSelectors: string[] = [
@@ -111,7 +112,10 @@ export class HTMLReducer {
 
     reduce(html: string): string {
         const domParser = new DOMParser();
-        let doc = domParser.parseFromString(html, "text/html");
+        let doc = domParser.parseFromString(
+            DOMPurify.sanitize(html),
+            "text/html",
+        );
 
         this.removeNodes(doc, this.linkSelectors, this.removeLinkTags);
         this.removeNodes(doc, this.metaTagSelectors, this.removeMetaTags);

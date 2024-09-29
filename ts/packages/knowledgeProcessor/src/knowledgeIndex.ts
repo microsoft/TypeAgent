@@ -10,6 +10,7 @@ import {
     SearchOptions,
     SemanticIndex,
     asyncArray,
+    collections,
     createEmbeddingFolder,
     createObjectFolder,
     createSemanticIndex,
@@ -34,6 +35,7 @@ export interface KeyValueIndex<TKeyId, TValueId> {
     getMultiple(ids: TKeyId[], concurrency?: number): Promise<TValueId[][]>;
     put(postings: TValueId[], id?: TKeyId): Promise<TKeyId>;
     replace(postings: TValueId[], id: TKeyId): Promise<TKeyId>;
+    remove(id: TKeyId): Promise<void>;
 }
 
 export async function createIndexFolder<TValueId>(
@@ -52,6 +54,7 @@ export async function createIndexFolder<TValueId>(
         getMultiple,
         put,
         replace,
+        remove,
     };
 
     async function get(id: TKeyId): Promise<TValueId[] | undefined> {
@@ -80,6 +83,10 @@ export async function createIndexFolder<TValueId>(
 
     function replace(postings: TValueId[], id: TKeyId): Promise<TKeyId> {
         return indexFolder.put(postings, id);
+    }
+
+    function remove(id: TKeyId): Promise<void> {
+        return indexFolder.remove(id);
     }
 
     function preparePostings(postings?: TValueId[]): TValueId[] {
@@ -143,6 +150,7 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         maxMatches: number,
         minScore?: number,
     ): Promise<ScoredItem<TTextId>[]>;
+    remove(textId: TTextId, postings: TSourceId | TSourceId[]): Promise<void>;
 }
 
 export type TextIndexSettings = {
@@ -173,12 +181,15 @@ export async function createTextIndex<TSourceId = any>(
         folderSettings,
         fSys,
     );
-    const semanticIndex = await createSemanticIndexFolder(
-        folderPath,
-        folderSettings,
-        settings.embeddingModel,
-        fSys,
-    );
+    const semanticIndex =
+        settings.semanticIndex !== undefined && settings.semanticIndex
+            ? await createSemanticIndexFolder(
+                  folderPath,
+                  folderSettings,
+                  settings.embeddingModel,
+                  fSys,
+              )
+            : undefined;
 
     return {
         text: () => textIdMap.keys(),
@@ -201,6 +212,7 @@ export async function createTextIndex<TSourceId = any>(
         getNearestTextMultiple,
         nearestNeighbors,
         nearestNeighborsText,
+        remove,
     };
 
     async function* ids(): AsyncIterableIterator<TextId> {
@@ -294,7 +306,9 @@ export async function createTextIndex<TSourceId = any>(
         if (postings && postings.length > 0) {
             tasks.push(postingFolder.put(postings, textId));
         }
-        tasks.push(semanticIndex.put(text, textId));
+        if (semanticIndex) {
+            tasks.push(semanticIndex.put(text, textId));
+        }
         await Promise.all(tasks);
         return textId;
     }
@@ -309,6 +323,25 @@ export async function createTextIndex<TSourceId = any>(
                 existingPostings && existingPostings.length > 0
                     ? [...union(existingPostings.values(), postings.values())]
                     : postings;
+            await postingFolder.replace(updatedPostings, textId);
+        }
+    }
+
+    async function remove(
+        textId: TextId,
+        postings: TSourceId | TSourceId[],
+    ): Promise<void> {
+        const existingPostings = await postingFolder.get(textId);
+        if (!existingPostings || existingPostings.length === 0) {
+            return;
+        }
+        let updatedPostings = collections.removeItemFromArray(
+            existingPostings,
+            postings,
+        );
+        if (updatedPostings.length === 0) {
+            await postingFolder.remove(textId);
+        } else {
             await postingFolder.replace(updatedPostings, textId);
         }
     }
@@ -329,7 +362,7 @@ export async function createTextIndex<TSourceId = any>(
                 minScore,
             );
             postingsNearest = [...unionMultiple(...nearestPostings)];
-        } else if (!postings || postings.length === 0) {
+        } else if (semanticIndex && (!postings || postings.length === 0)) {
             const textId = await semanticIndex.nearestNeighbor(value, minScore);
             if (textId) {
                 postingsNearest = await postingFolder.get(textId.item);
@@ -359,7 +392,7 @@ export async function createTextIndex<TSourceId = any>(
                 minScore,
             );
             postingsNearest = unionMultiple(...nearestPostings);
-        } else if (!postings || postings.length === 0) {
+        } else if (semanticIndex && (!postings || postings.length === 0)) {
             const textId = await semanticIndex.nearestNeighbor(value, minScore);
             if (textId) {
                 postingsNearest = await postingFolder.get(textId.item);
@@ -430,7 +463,7 @@ export async function createTextIndex<TSourceId = any>(
         if (exactMatchId) {
             matchedIds.push(exactMatchId);
         }
-        if (maxMatches > 1) {
+        if (semanticIndex && maxMatches > 1) {
             const nearestMatches = await semanticIndex.nearestNeighbors(
                 value,
                 maxMatches,
@@ -480,6 +513,9 @@ export async function createTextIndex<TSourceId = any>(
         maxMatches: number,
         minScore?: number,
     ): Promise<ScoredItem<TextId>[]> {
+        if (!semanticIndex) {
+            return [];
+        }
         let matches = await semanticIndex.nearestNeighbors(
             value,
             maxMatches,
@@ -527,6 +563,9 @@ export async function createTextIndex<TSourceId = any>(
         maxMatches?: number,
         minScore?: number,
     ) {
+        if (!semanticIndex) {
+            return [];
+        }
         maxMatches ??= 1;
         const nearestText = await semanticIndex.nearestNeighbors(
             value,
@@ -617,12 +656,13 @@ export async function removeSemanticIndexFolder(
 
 export interface KnowledgeStore<T, TId = any> {
     readonly settings: TextIndexSettings;
+    readonly store: ObjectFolder<T>;
     readonly sequence: TemporalLog<TId, TId[]>;
     entries(): AsyncIterableIterator<T>;
     get(id: TId): Promise<T | undefined>;
     getMultiple(ids: TId[]): Promise<T[]>;
     add(item: T, id?: TId): Promise<TId>;
-    addNext(items: T[], timestamp?: Date): Promise<TId[]>;
+    addNext(items: T[], timestamp?: Date | undefined): Promise<TId[]>;
 }
 
 export async function createKnowledgeStore<T>(
@@ -632,20 +672,23 @@ export async function createKnowledgeStore<T>(
     fSys?: FileSystem,
 ): Promise<KnowledgeStore<T, string>> {
     type TId = string;
-    const sequence = await createTemporalLog<TId[]>(
-        { concurrency: settings.concurrency },
-        path.join(rootPath, "sequence"),
-        folderSettings,
-        fSys,
-    );
-    const entries = await createObjectFolder<T>(
-        path.join(rootPath, "entries"),
-        folderSettings,
-        fSys,
-    );
+    const [sequence, entries] = await Promise.all([
+        createTemporalLog<TId[]>(
+            { concurrency: settings.concurrency },
+            path.join(rootPath, "sequence"),
+            folderSettings,
+            fSys,
+        ),
+        createObjectFolder<T>(
+            path.join(rootPath, "entries"),
+            folderSettings,
+            fSys,
+        ),
+    ]);
 
     return {
         settings,
+        store: entries,
         sequence,
         entries: entries.allObjects,
         get: entries.get,
@@ -663,7 +706,10 @@ export async function createKnowledgeStore<T>(
         return removeUndefined(items);
     }
 
-    async function addNext(items: T[], timestamp?: Date): Promise<TId[]> {
+    async function addNext(
+        items: T[],
+        timestamp?: Date | undefined,
+    ): Promise<TId[]> {
         const itemIds = await asyncArray.mapAsync(items, 1, (e) =>
             entries.put(e),
         );

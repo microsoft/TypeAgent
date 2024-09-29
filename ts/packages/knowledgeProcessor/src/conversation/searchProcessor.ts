@@ -13,7 +13,6 @@ import {
 import {
     Filter,
     GetAnswerAction,
-    SearchAction,
     WebLookupAction,
     ResponseStyle,
 } from "./knowledgeSearchWebSchema.js";
@@ -484,7 +483,7 @@ export function createSearchProcessor(
     }
 
     function responseHasTopics(response: SearchResponse): boolean {
-        for (const topic of response.allTopics()) {
+        for (const _ of response.allTopics()) {
             return true;
         }
         return false;

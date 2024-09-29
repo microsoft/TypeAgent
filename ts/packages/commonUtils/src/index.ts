@@ -43,3 +43,7 @@ export * from "./profiler/profileLogger.js";
 export * from "./profiler/profileReader.js";
 
 export { createRpc } from "./rpc.js";
+
+export { CachedImageWithDetails, getImageElement } from "./image.js";
+
+export { getFileExtensionForMimeType, getMimeType } from "./mimeTypes.js";

@@ -27,7 +27,7 @@ body {
   resize: none;
   outline: 0px solid transparent;
   min-height: 30px;
-  line-height: 20px;
+  line-height: 30px;
   font-family: inherit;
   font-size: inherit;
   align-self: flex-start;
@@ -171,7 +171,7 @@ body {
 
 .chat-input {
   display: flex;
-  padding: 10px;
+  padding: 5px;
   background-color: @chat-input-bg;
   align-self: flex-end;
   margin: 10px 10px 10px 20px;
@@ -383,11 +383,15 @@ body {
   align-self: flex-end;
   border: none;
   background-color: transparent;
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   padding: 0px;
-  margin: 0px 5px;
+  margin: 6px 3.5px;
   cursor: pointer;
+}
+
+.chat-input-button:disabled svg {
+  fill: lightslategray;
 }
 
 .chat-input-micSelector {
@@ -398,8 +402,32 @@ body {
   max-width: 85%;
 }
 
-.chat-inpput-dropImage {
-  width: 96px;
+.chat-input-dropImage {
+  max-width: 96px;
+  max-height: 96px;
+  width: auto;
+  height: auto;
+}
+
+.chat-input-image {
+  max-width: 320px;
+  max-height: 320px;
+  width: auto;
+  height: auto;
+}
+
+.chat-input-separator-container {
+  width: 4px;
+  margin-bottom: 7px;
+}
+
+.chat-input-separator {
+  width: 0.5px;
+  height: 24px;
+  background-color: #bbbbbb;
+  position: absolute;
+  margin-bottom: 14px;
+  vertical-align: bottom;
 }
 
 .chat-timestamp {

@@ -331,6 +331,9 @@ importers:
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
+      dompurify:
+        specifier: ^3.1.6
+        version: 3.1.6
       html-to-text:
         specifier: ^9.0.5
         version: 9.0.5
@@ -356,6 +359,9 @@ importers:
       '@types/chrome':
         specifier: ^0.0.256
         version: 0.0.256
+      '@types/dompurify':
+        specifier: ^3.0.5
+        version: 3.0.5
       '@types/html-to-text':
         specifier: ^9.0.4
         version: 9.0.4
@@ -942,6 +948,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
+      knowledge-processor:
+        specifier: workspace:*
+        version: link:../knowledgeProcessor
       typeagent:
         specifier: workspace:*
         version: link:../typeagent
@@ -1043,7 +1052,7 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
-      browser-automation:
+      browser-typeagent:
         specifier: workspace:*
         version: link:../agents/browser
       calendar:
@@ -1155,6 +1164,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
+      debug:
+        specifier: ^4.3.4
+        version: 4.3.4(supports-color@8.1.1)
       typeagent:
         specifier: workspace:*
         version: link:../typeagent
@@ -1162,12 +1174,24 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.3)
     devDependencies:
+      '@types/debug':
+        specifier: ^4.1.10
+        version: 4.1.10
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.7
       '@types/node':
         specifier: ^18.18.7
         version: 18.18.7
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.3.1
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@18.18.7)(ts-node@10.9.1(@types/node@18.18.7)(typescript@5.4.3))
       prettier:
         specifier: ^3.2.5
         version: 3.2.5
@@ -1333,6 +1357,9 @@ importers:
       ansi_up:
         specifier: ^6.0.2
         version: 6.0.2
+      common-utils:
+        specifier: workspace:*
+        version: link:../commonUtils
       debug:
         specifier: 4.3.4
         version: 4.3.4(supports-color@8.1.1)
@@ -1400,12 +1427,18 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
+      async:
+        specifier: ^3.2.5
+        version: 3.2.5
       cheerio:
         specifier: 1.0.0-rc.12
         version: 1.0.0-rc.12
       common-utils:
         specifier: workspace:*
         version: link:../commonUtils
+      debug:
+        specifier: ^4.3.4
+        version: 4.3.4(supports-color@8.1.1)
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.3)
@@ -1413,6 +1446,12 @@ importers:
         specifier: ^5.4.2
         version: 5.4.3
     devDependencies:
+      '@types/async':
+        specifier: ^3.2.24
+        version: 3.2.24
+      '@types/debug':
+        specifier: ^4.1.10
+        version: 4.1.10
       '@types/node':
         specifier: ^18.18.7
         version: 18.18.7

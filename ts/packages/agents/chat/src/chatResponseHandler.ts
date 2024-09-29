@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import fs from "node:fs";
-import { StopWatch } from "common-utils";
+import { getMimeType, StopWatch } from "common-utils";
 import {
     ChatResponseAction,
     GenerateResponseAction,
@@ -27,10 +27,12 @@ import {
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
+    createActionResultFromHtmlDisplay,
     createActionResultNoDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
 import { fileURLToPath } from "node:url";
 import { conversation as Conversation } from "knowledge-processor";
+import { getImageElement } from "../../../commonUtils/dist/image.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -57,6 +59,33 @@ export async function executeChatResponseAction(
     return handleChatResponse(chatAction, context);
 }
 
+async function rehydrateImages(context: ActionContext, files: string[]) {
+    let html = "<div>";
+
+    for (let i = 0; i < files.length; i++) {
+        let name = files[i];
+        console.log(`Rehydrating Image ${name}`);
+        if (files[i].lastIndexOf("\\") > -1) {
+            name = files[i].substring(files[i].lastIndexOf("\\") + 1);
+        }
+
+        let a = await context.sessionContext.sessionStorage?.read(
+            `\\..\\user_files\\${name}`,
+            "base64",
+        );
+
+        if (a) {
+            html += getImageElement(
+                `data:image/${getMimeType(name.substring(name.indexOf(".")))};base64,${a}`,
+            );
+        }
+    }
+
+    html += "</div>";
+
+    return html;
+}
+
 async function handleChatResponse(
     chatAction: ChatResponseAction,
     context: ActionContext,
@@ -70,7 +99,11 @@ async function handleChatResponse(
             if (generatedText !== undefined) {
                 logEntities("UR Entities:", parameters.userRequestEntities);
                 logEntities("GT Entities:", parameters.generatedTextEntities);
-                console.log("Got generated text");
+                console.log(
+                    "Got generated text: " +
+                        generatedText.substring(0, 100) +
+                        "...",
+                );
 
                 const needDisplay = context.streamingContext !== generatedText;
                 const result = needDisplay
@@ -82,6 +115,27 @@ async function handleChatResponse(
                     entities = parameters.userRequestEntities.concat(entities);
                 }
                 result.entities = entities;
+
+                if (
+                    generateResponseAction.parameters.relatedFiles !== undefined
+                ) {
+                    const fileEntities: Entity[] = new Array<Entity>();
+                    for (const file of generateResponseAction.parameters
+                        .relatedFiles) {
+                        let name = file;
+                        if (file.lastIndexOf("\\") > -1) {
+                            name = file.substring(file.lastIndexOf("\\") + 1);
+                        }
+                        fileEntities.push({
+                            name,
+                            type: ["file", "image", "data"],
+                        });
+                    }
+
+                    logEntities("File Entities:", fileEntities);
+                    result.entities.concat(fileEntities);
+                }
+
                 return result;
             }
         }
@@ -111,9 +165,12 @@ async function handleChatResponse(
                             lookupAction.parameters.conversationLookupFilters,
                         );
                     if (searchResponse) {
-                        if (searchResponse.response?.hasHits()) {
-                            console.log("Has hits");
-                        }
+                        searchResponse.response?.hasHits()
+                            ? console.log(
+                                  `Search response has ${searchResponse.response?.messages?.length} hits`,
+                              )
+                            : console.log("No search hits");
+
                         const matches =
                             await conversationManager.generateAnswerForSearchResponse(
                                 lookupAction.parameters.originalRequest,
@@ -124,13 +181,39 @@ async function handleChatResponse(
                             matches.response &&
                             matches.response.answer
                         ) {
-                            return createActionResult(
-                                matches.response.answer.answer!,
-                            );
+                            console.log("Matches:");
+                            console.log(matches);
+
+                            if (
+                                lookupAction.parameters
+                                    .retrieveRelatedFilesFromStorage &&
+                                lookupAction.parameters.relatedFiles !==
+                                    undefined
+                            ) {
+                                return createActionResultFromHtmlDisplay(
+                                    `<div>${matches.response.answer.answer !== undefined ? matches.response.answer.answer : ""} ${await rehydrateImages(context, lookupAction.parameters.relatedFiles)}</div>`,
+                                );
+                            } else {
+                                console.log(
+                                    "Anwser: " +
+                                        matches.response.answer.answer
+                                            ?.replace("\n", "")
+                                            .substring(0, 100) +
+                                        "...",
+                                );
+                                return createActionResult(
+                                    matches.response.answer.answer!,
+                                );
+                            }
                         } else {
-                            console.log("bug");
+                            console.log("bug bug");
+                            return createActionResult(
+                                "I don't know anything about that.",
+                            );
                         }
                     }
+                } else {
+                    console.log("Conversation manager is undefined!");
                 }
             }
         }

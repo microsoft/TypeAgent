@@ -22,7 +22,7 @@
     },
     "browser": {
       "type": "module",
-      "name": "browser-automation"      
+      "name": "browser-typeagent"      
     },
     "desktop": {
       "type": "module",
@@ -61,7 +61,8 @@
     },
     "photo": {
       "type": "module",
-      "name": "photos-agent"
+      "name": "photos-agent",
+      "execMode": "separate"
     }
   },
   "explainers": {

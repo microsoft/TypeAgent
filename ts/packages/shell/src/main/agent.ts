@@ -14,10 +14,11 @@ import {
 import { AppAgentProvider } from "agent-dispatcher";
 import { ShellSettings } from "./shellSettings.js";
 import path from "path";
-import { app, BrowserWindow } from "electron";
+import { BrowserWindow } from "electron";
 
 type ShellContext = {
     settings: ShellSettings;
+    inlineWindow: BrowserWindow | undefined;
 };
 
 const config: AppAgentManifest = {
@@ -118,26 +119,51 @@ class ShellSetTopMostCommandHandler implements CommandHandler {
     }
 }
 
-class ShellShowWebContentView implements CommandHandler {
+class ShellOpenWebContentView implements CommandHandler {
     public readonly description = "Show a new Web Content view";
     public async run(_input: string, context: ActionContext<ShellContext>) {
-        // context.sessionContext.agentContext.settings.toggleTopMost();
-        const browserExtensionPath = path.join(
-            app.getAppPath(),
-            "../agents/browser/dist/electron",
-        );
-        console.log(context.sessionContext.agentContext.settings);
+        let targetUrl: URL;
+        switch (_input) {
+            case "paleoBioDb":
+                targetUrl = new URL("https://paleobiodb.org/navigator/");
 
-        const win = new BrowserWindow({
-            width: 800,
-            height: 1500,
-            autoHideMenuBar: true,
-        });
-        win.removeMenu();
-        win.loadURL("https://paleobiodb.org/navigator/");
-        await win.webContents.session.loadExtension(browserExtensionPath);
-        // Get all service workers.
-        console.log(win.webContents.session.serviceWorkers.getAllRunning());
+                break;
+            case "crossword":
+                targetUrl = new URL("https://nytsyn.pzzl.com/cwd_seattle");
+
+                break;
+            default:
+                targetUrl = new URL(_input);
+        }
+
+        if (targetUrl) {
+            if (
+                !context.sessionContext.agentContext.inlineWindow ||
+                context.sessionContext.agentContext.inlineWindow.isDestroyed()
+            ) {
+                const win = new BrowserWindow({
+                    width: 800,
+                    height: 1500,
+                    autoHideMenuBar: true,
+
+                    webPreferences: {
+                        preload: path.join(__dirname, "../preload/webview.mjs"),
+                        sandbox: false,
+                    },
+                });
+                win.removeMenu();
+
+                context.sessionContext.agentContext.inlineWindow = win;
+            }
+
+            const inlineWindow =
+                context.sessionContext.agentContext.inlineWindow;
+            inlineWindow.loadURL(targetUrl.toString());
+
+            inlineWindow.webContents.on("did-finish-load", () => {
+                inlineWindow.webContents.send("setupSiteAgent");
+            });
+        }
     }
 }
 
@@ -163,7 +189,7 @@ const handlers: CommandHandlerTable = {
             },
         },
         topmost: new ShellSetTopMostCommandHandler(),
-        showWindow: new ShellShowWebContentView(),
+        open: new ShellOpenWebContentView(),
     },
 };
 
@@ -171,6 +197,7 @@ const agent: AppAgent = {
     async initializeAgentContext() {
         return {
             settings: ShellSettings.getinstance(),
+            inlineWindow: undefined,
         };
     },
     ...getCommandInterface(handlers),

@@ -7,7 +7,7 @@ import {
     ShellSettingsType,
 } from "../../main/shellSettingsType.js";
 import { ChatView } from "./chatView.js";
-import { getTTS, getTTSProviders, getTTSVoices } from "./tts.js";
+import { getTTS, getTTSProviders, getTTSVoices } from "./tts/tts.js";
 
 function addOption(
     select: HTMLSelectElement,
@@ -83,6 +83,7 @@ export class SettingsView {
     private ttsCheckBox: HTMLInputElement;
     private ttsProvider: HTMLSelectElement;
     private ttsVoice: HTMLSelectElement;
+    private intellisenseCheckBox: HTMLInputElement;
     private _shellSettings: ShellSettingsType = defaultSettings;
     private updateFromSettings: () => Promise<void>;
     public get shellSettings(): Readonly<ShellSettingsType> {
@@ -93,6 +94,7 @@ export class SettingsView {
         this._shellSettings = value;
         this.ttsCheckBox.checked = value.tts;
         this.microphoneSources.value = value.microphoneId ?? "";
+        this.intellisenseCheckBox.checked = value.partialCompletion;
         this.updateFromSettings();
     }
 
@@ -161,6 +163,7 @@ export class SettingsView {
                   )
                 : undefined;
 
+            chatView.enablePartialInput(this.shellSettings.partialCompletion);
             chatView.setMetricsVisible(this.shellSettings.devUI);
         };
 
@@ -169,14 +172,14 @@ export class SettingsView {
                 chatView.chatInput.camButton.classList.remove(
                     "chat-message-hidden",
                 );
-                chatView.chatInput.picButton.classList.remove(
+                chatView.chatInput.attachButton.classList.remove(
                     "chat-message-hidden",
                 );
             } else {
                 chatView.chatInput.camButton.classList.add(
                     "chat-message-hidden",
                 );
-                chatView.chatInput.picButton.classList.add(
+                chatView.chatInput.attachButton.classList.add(
                     "chat-message-hidden",
                 );
             }
@@ -240,6 +243,12 @@ export class SettingsView {
         speechSynthesis.onvoiceschanged = () => {
             updateTTSSelections();
         };
+
+        this.intellisenseCheckBox = this.addCheckbox("Intellisense", () => {
+            this._shellSettings.partialCompletion =
+                this.intellisenseCheckBox.checked;
+            chatView.enablePartialInput(this.intellisenseCheckBox.checked);
+        });
     }
 
     getContainer() {

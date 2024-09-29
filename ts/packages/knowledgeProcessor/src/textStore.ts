@@ -22,8 +22,6 @@ export async function createTextStore<TSourceId = string>(
     folderSettings?: ObjectFolderSettings,
     fSys?: FileSystem,
 ): Promise<TextStore<string, TSourceId>> {
-    type TextId = string;
-    const defaultConcurrency = 2;
     const corpus = await createTemporalLog<TextBlock<TSourceId>>(
         settings,
         rootPath,

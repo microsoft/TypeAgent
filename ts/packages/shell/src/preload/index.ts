@@ -61,6 +61,9 @@ const api: ClientAPI = {
     ) => ipcRenderer.on("listen-event", callback),
 
     processShellRequest: getProcessShellRequest(),
+    getPartialCompletion: (prefix: string) => {
+        return ipcRenderer.invoke("get-partial-completion", prefix);
+    },
     getDynamicDisplay(source: string, id: string) {
         return ipcRenderer.invoke("get-dynamic-display", source, id);
     },
@@ -78,9 +81,6 @@ const api: ClientAPI = {
     },
     onClear(callback) {
         ipcRenderer.on("clear", callback);
-    },
-    onSetPartialInputHandler(callback) {
-        ipcRenderer.on("set-partial-input-handler", callback);
     },
     onSettingSummaryChanged(callback) {
         ipcRenderer.on("setting-summary-changed", callback);
@@ -132,6 +132,9 @@ const api: ClientAPI = {
     },
     onNotify(callback) {
         ipcRenderer.on("notification-arrived", callback);
+    },
+    onTakeAction(callback) {
+        ipcRenderer.on("take-action", callback);
     },
 };
 

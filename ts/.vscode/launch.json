@@ -54,7 +54,7 @@
           "program": "./bin/run.js",
           "args": [ "interactive" ],
           "console": "externalTerminal",
-          "preLaunchTask": "pnpm: build",
+          //"preLaunchTask": "pnpm: build",
           "outFiles": [
               "${workspaceFolder}/**/*.js"
           ]
@@ -120,6 +120,7 @@
             "outFiles": [
                 "${workspaceFolder}/**/*.js"
             ],
+            //"args": ["codeMemory"]
             //"args": ["code"]
         },
         {

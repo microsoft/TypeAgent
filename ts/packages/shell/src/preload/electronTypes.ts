@@ -8,7 +8,7 @@ import {
     DynamicDisplay,
 } from "@typeagent/agent-sdk";
 import { ShellSettings } from "../main/shellSettings.js";
-import { IAgentMessage } from "agent-dispatcher";
+import { IAgentMessage, PartialCompletionResult } from "agent-dispatcher";
 import { RequestMetrics } from "agent-dispatcher";
 
 export type SpeechToken = {
@@ -112,6 +112,9 @@ export interface ClientAPI {
         id: string,
         images: string[],
     ) => Promise<RequestMetrics | undefined>;
+    getPartialCompletion: (
+        input: string,
+    ) => Promise<PartialCompletionResult | undefined>;
     getDynamicDisplay: (source: string, id: string) => Promise<DynamicDisplay>;
     onUpdateDisplay(
         callback: (
@@ -129,9 +132,6 @@ export interface ClientAPI {
             displayId: string,
             nextRefreshMs: number,
         ) => void,
-    ): void;
-    onSetPartialInputHandler(
-        callback: (e: Electron.IpcRendererEvent, enabled: boolean) => void,
     ): void;
     onClear(
         callback: (
@@ -239,6 +239,9 @@ export interface ClientAPI {
             data: any,
         ) => void,
     ): void;
+    onTakeAction(
+        callback: (e: Electron.IpcRendererEvent, action: string) => void,
+    );
 }
 
 export interface ElectronWindowFields {

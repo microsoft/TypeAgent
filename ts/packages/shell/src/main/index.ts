@@ -77,7 +77,7 @@ function createWindow(): void {
         y: ShellSettings.getinstance().y,
     });
 
-    setupDevicePermissinos(mainWindow);
+    setupDevicePermissions(mainWindow);
 
     mainWindow.on("ready-to-show", () => {
         mainWindow!.show();
@@ -145,7 +145,7 @@ function createWindow(): void {
         runDemo(mainWindow!, interactive);
     };
 
-    ShellSettings.getinstance().toggleToopMost = () => {
+    ShellSettings.getinstance().onToggleTopMost = () => {
         mainWindow?.setAlwaysOnTop(!mainWindow?.isAlwaysOnTop());
     };
 }
@@ -154,7 +154,7 @@ function createWindow(): void {
  * Allows the application to gain access to camea devices
  * @param mainWindow the main browser window
  */
-function setupDevicePermissinos(mainWindow: BrowserWindow) {
+function setupDevicePermissions(mainWindow: BrowserWindow) {
     let grantedDeviceThroughPermHandler;
 
     mainWindow.webContents.session.on(
@@ -447,6 +447,9 @@ const clientIO: ClientIO = {
     exit: () => {
         app.quit();
     },
+    takeAction: (action: string) => {
+        mainWindow?.webContents.send("take-action", action);
+    },
 };
 
 async function setDynamicDisplay(
@@ -566,6 +569,9 @@ app.whenReady().then(async () => {
                 });
         },
     );
+    ipcMain.handle("get-partial-completion", async (_event, prefix: string) => {
+        return dispatcher.getPartialCompletion(prefix);
+    });
     ipcMain.handle(
         "get-dynamic-display",
         async (_event, appAgentName: string, id: string) =>
@@ -595,6 +601,8 @@ app.whenReady().then(async () => {
         ShellSettings.getinstance().tts = settings.tts;
         ShellSettings.getinstance().ttsSettings = settings.ttsSettings;
         ShellSettings.getinstance().agentGreeting = settings.agentGreeting;
+        ShellSettings.getinstance().partialCompletion =
+            settings.partialCompletion;
         ShellSettings.getinstance().save();
     });
 
@@ -602,19 +610,18 @@ app.whenReady().then(async () => {
         mainWindow?.webContents.send("send-demo-event", "Alt+Right");
     });
 
-    globalShortcut.register("F1", () => {
-        mainWindow?.webContents.send("help-requested", "F1");
-    });
-
-    globalShortcut.register("F2", () => {
-        mainWindow?.webContents.send("random-message-requested", "F2");
-    });
-
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.
     // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
-    app.on("browser-window-created", (_, window) => {
+    app.on("browser-window-created", async (_, window) => {
         optimizer.watchWindowShortcuts(window);
+        const browserExtensionPath = join(
+            app.getAppPath(),
+            "../agents/browser/dist/electron",
+        );
+        await window.webContents.session.loadExtension(browserExtensionPath, {
+            allowFileAccess: true,
+        });
     });
 
     createWindow();
@@ -688,6 +695,3 @@ function setupZoomHandlers(mainWindow: BrowserWindow) {
         }
     });
 }
-
-// In this file you can include the rest of your app"s specific main process
-// code. You can also put them in separate files and require them here.

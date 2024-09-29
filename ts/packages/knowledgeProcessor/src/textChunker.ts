@@ -133,7 +133,6 @@ export function splitLargeTextIntoChunks(
     maxCharsPerChunk: number,
     autoTruncate: boolean = true,
 ): IterableIterator<string> {
-    const separator = " ";
     let textBlocks: TextBlock[];
     if (typeof text === "string") {
         textBlocks = [];

@@ -13,10 +13,10 @@ import {
 import { JSONAction } from "agent-cache";
 
 const dataFiles = [
-    "test/data/player/v5/simpleV1.json",
-    "test/data/player/v5/fullV1.json",
-    "test/data/calendar/v5/simpleV1.json",
-    "test/data/calendar/v5/complexV1.json",
+    "test/data/player/v5/simple.json",
+    "test/data/player/v5/full.json",
+    "test/data/calendar/v5/simple.json",
+    "test/data/calendar/v5/complex.json",
 ];
 
 const inputs = await Promise.all(

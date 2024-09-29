@@ -9,7 +9,7 @@ import {
     ActionResult,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
-import { AnswerImageQuestionAction, PhotoAction } from "./photoSchema.js";
+import { PhotoAction } from "./photoSchema.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -36,9 +36,6 @@ async function photoValidateWildcardMatch(
     action: AppAction,
     context: SessionContext<PhotoActionContext>,
 ) {
-    if (action.actionName === "describePhoto") {
-        // TODO: implement?
-    }
     return true;
 }
 
@@ -49,16 +46,7 @@ async function initializePhotoContext() {
 async function updatePhotoContext(
     enable: boolean,
     context: SessionContext<PhotoActionContext>,
-): Promise<void> {
-    if (enable && context.sessionStorage) {
-        // context.context.store = await createListStoreForSession(
-        //     context.sessionStorage,
-        //     "lists.json",
-        // );
-    } else {
-        //context.context.store = undefined;
-    }
-}
+): Promise<void> {}
 
 async function handlePhotoAction(
     action: PhotoAction,
@@ -66,10 +54,14 @@ async function handlePhotoAction(
 ) {
     let result: ActionResult | undefined = undefined;
     switch (action.actionName) {
-        case "answerImageQuestion": {
-            const answerAction = action as AnswerImageQuestionAction;
-            const literalText = `Can't yet answer question: ${answerAction.parameters.questionText}`;
-            result = createActionResult(literalText);
+        case "takePhoto": {
+            result = createActionResult("Showing camera...");
+            photoContext.actionIO.takeAction("show-camera");
+            break;
+        }
+        case "uploadImage": {
+            result = createActionResult("Showing open file dialog...");
+            photoContext.actionIO.takeAction("upload-file");
             break;
         }
         default:

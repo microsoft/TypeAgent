@@ -12,7 +12,13 @@ import {
     parseNamedArguments,
     runConsole,
 } from "interactive-app";
-import { SemanticIndex, asyncArray, dateTime, readAllText } from "typeagent";
+import {
+    SemanticIndex,
+    asyncArray,
+    dateTime,
+    getFileName,
+    readAllText,
+} from "typeagent";
 import chalk from "chalk";
 import { PlayPrinter } from "./chatMemoryPrinter.js";
 import { timestampBlocks } from "./importer.js";
@@ -48,9 +54,9 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
     const conversationName = "transcript";
     const conversationSettings = createConversationSettings(embeddingModel);
 
-    //const conversationName = "play";
+    const conversationPath = path.join(storePath, conversationName);
     const conversation = await createConversation(
-        path.join(storePath, conversationName),
+        conversationPath,
         conversationSettings,
     );
     const context: ChatContext = {
@@ -66,8 +72,9 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         conversationManager:
             await knowLib.conversation.createConversationManager(
                 conversationName,
-                conversation,
+                conversationPath,
                 false,
+                conversation,
             ),
         conversationSettings,
         conversation,
@@ -86,6 +93,7 @@ function createConversationSettings(
             caseSensitive: false,
             concurrency: 2,
             embeddingModel,
+            semanticIndex: true,
         },
     };
 }
@@ -138,10 +146,10 @@ export async function loadConversation(
     includeActions = true,
 ): Promise<boolean> {
     rootPath ??= context.storePath;
-    const storePath = path.join(rootPath, name);
-    const exists = fs.existsSync(storePath);
+    const conversationPath = path.join(rootPath, name);
+    const exists = fs.existsSync(conversationPath);
     context.conversation = await createConversation(
-        storePath,
+        conversationPath,
         createConversationSettings(context.embeddingModel),
     );
     context.conversationName = name;
@@ -155,8 +163,9 @@ export async function loadConversation(
     );
     context.conversationManager = await conversation.createConversationManager(
         name,
-        context.conversation,
+        conversationPath,
         false,
+        context.conversation,
     );
     if (name !== "search") {
         context.searchMemory = await createSearchMemory(context);
@@ -199,7 +208,13 @@ export async function runChatMemory(): Promise<void> {
         io: InteractiveIo,
     ): Promise<void> {
         if (context.searchMemory) {
-            const results = await context.searchMemory.search(line);
+            const results = await context.searchMemory.search(
+                line,
+                undefined,
+                undefined,
+                undefined,
+                (q) => printer.writeJson(q),
+            );
             if (results) {
                 await writeSearchTermsResult(results, true);
             } else {
@@ -389,12 +404,10 @@ export async function runChatMemory(): Promise<void> {
     function loadDef(): CommandMetadata {
         return {
             description: "Load the named conversation memory",
-            args: {
+            options: {
                 name: {
                     description: "Conversation name",
                 },
-            },
-            options: {
                 actions: {
                     description: "Use actions in search",
                     type: "boolean",
@@ -411,23 +424,31 @@ export async function runChatMemory(): Promise<void> {
     async function load(args: string[], io: InteractiveIo) {
         if (args.length > 0) {
             const namedArgs = parseNamedArguments(args, loadDef());
-            if (
-                await loadConversation(
-                    context,
-                    namedArgs.name,
-                    namedArgs.rootPath,
-                    namedArgs.actions,
-                )
-            ) {
-                printer.writeLine(`Loaded ${namedArgs.name}`);
-            } else {
-                printer.writeLine(
-                    `Created ${chalk.green("NEW")} conversation: ${namedArgs.name}`,
-                );
+            let name = namedArgs.name;
+            let storePath = namedArgs.rootPath;
+            if (!name && storePath) {
+                name = getFileName(namedArgs.rootPath);
+                storePath = path.dirname(storePath);
             }
-        } else {
-            printer.writeLine(context.conversationName);
+            if (name) {
+                if (
+                    await loadConversation(
+                        context,
+                        name,
+                        storePath,
+                        namedArgs.actions,
+                    )
+                ) {
+                    printer.writeLine(`Loaded ${name}`);
+                } else {
+                    printer.writeLine(
+                        `Created ${chalk.green("NEW")} conversation: ${name}`,
+                    );
+                }
+                return;
+            }
         }
+        printer.writeLine(context.conversationName);
     }
 
     function knowledgeDef(): CommandMetadata {
@@ -642,7 +663,7 @@ export async function runChatMemory(): Promise<void> {
                             const [message, knowledge] = knowledgeResult;
                             await writeKnowledgeResult(message, knowledge);
                             const knowledgeIds =
-                                await context.conversation.putNext(
+                                await context.conversation.addKnowledgeForMessage(
                                     message,
                                     knowledge,
                                 );
@@ -659,7 +680,7 @@ export async function runChatMemory(): Promise<void> {
                                     );
                                 }
                             }
-                            await context.conversation.putIndex(
+                            await context.conversation.addKnowledgeToIndex(
                                 knowledge,
                                 knowledgeIds,
                             );
@@ -1169,27 +1190,25 @@ export async function runChatMemory(): Promise<void> {
         timestampA: Date,
     ) {
         // Don't record questions about the search history
-        return context.searchMemory &&
+        if (
+            context.searchMemory &&
             context.searchMemory.conversationName !== context.conversationName
-            ? new Promise(async (resolve) => {
-                  if (context.searchMemory) {
-                      try {
-                          await context.searchMemory.addMessage(
-                              `USER:\n${question}`,
-                              undefined,
-                              timestampQ,
-                          );
-                          await context.searchMemory.addMessage(
-                              `ASSISTANT:\n${answer}`,
-                              undefined,
-                              timestampA,
-                          );
-                      } catch (e) {
-                          printer.writeError(`Error updating history\n${e}`);
-                      }
-                  }
-              })
-            : undefined;
+        ) {
+            try {
+                context.searchMemory.queueAddMessage(
+                    `USER:\n${question}`,
+                    undefined,
+                    timestampQ,
+                );
+                context.searchMemory.queueAddMessage(
+                    `ASSISTANT:\n${answer}`,
+                    undefined,
+                    timestampA,
+                );
+            } catch (e) {
+                printer.writeError(`Error updating history\n${e}`);
+            }
+        }
     }
 
     async function writeSearchResults(
@@ -1198,6 +1217,7 @@ export async function runChatMemory(): Promise<void> {
         query: string,
         rr: conversation.SearchActionResponse,
         debugInfo: boolean,
+        showLinks: boolean = false,
     ) {
         writeResultStats(rr.response);
         if (rr.response) {
@@ -1216,7 +1236,7 @@ export async function runChatMemory(): Promise<void> {
                             answer.answer
                         ) {
                             printer.writeInColor(chalk.green, answer.answer);
-                            if (debugInfo) {
+                            if (debugInfo && showLinks) {
                                 writeResultLinks(rr.response);
                             }
                             return;

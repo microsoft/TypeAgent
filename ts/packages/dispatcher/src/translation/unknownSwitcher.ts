@@ -17,7 +17,8 @@ function createSelectionSchema(
     provider: TranslatorConfigProvider,
 ): InlineTranslatorSchemaDef | undefined {
     const translatorConfig = provider.getTranslatorConfig(translatorName);
-    if (translatorConfig.injected) {
+    // Skip injected schemas except for chat; investigate whether we can get chat always on first pass
+    if (translatorConfig.injected && translatorName !== "chat") {
         // No need to select for injected schemas
         selectSchemaCache.set(translatorName, undefined);
         return undefined;

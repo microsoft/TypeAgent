@@ -34,10 +34,11 @@ export class ShellSettings
     public agentGreeting: boolean;
     public multiModalContent: boolean;
     public devUI: boolean;
+    public partialCompletion: boolean;
     public onSettingsChanged: EmptyFunction | null;
     public onShowSettingsDialog: ((dialogName: string) => void) | null;
     public onRunDemo: ((interactive: boolean) => void) | null;
-    public toggleToopMost: EmptyFunction | null;
+    public onToggleTopMost: EmptyFunction | null;
 
     public get width(): number | undefined {
         return this.size[0];
@@ -75,11 +76,12 @@ export class ShellSettings
         this.agentGreeting = settings.agentGreeting;
         this.multiModalContent = settings.multiModalContent;
         this.devUI = settings.devUI;
+        this.partialCompletion = settings.partialCompletion;
 
         this.onSettingsChanged = null;
         this.onShowSettingsDialog = null;
         this.onRunDemo = null;
-        this.toggleToopMost = null;
+        this.onToggleTopMost = null;
     }
 
     public static get filePath(): string {
@@ -163,8 +165,8 @@ export class ShellSettings
     }
 
     public toggleTopMost() {
-        if (ShellSettings.getinstance().toggleToopMost != null) {
-            ShellSettings.getinstance().toggleToopMost!();
+        if (ShellSettings.getinstance().onToggleTopMost != null) {
+            ShellSettings.getinstance().onToggleTopMost!();
         }
     }
 }

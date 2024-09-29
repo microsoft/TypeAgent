@@ -19,6 +19,7 @@ export type ShellSettingsType = {
     agentGreeting: boolean;
     multiModalContent: boolean;
     devUI: boolean;
+    partialCompletion: boolean;
 };
 
 export const defaultSettings: ShellSettingsType = {
@@ -29,6 +30,7 @@ export const defaultSettings: ShellSettingsType = {
     tts: false,
     ttsSettings: {},
     agentGreeting: false,
-    multiModalContent: false,
+    multiModalContent: true,
     devUI: false,
+    partialCompletion: true,
 };
