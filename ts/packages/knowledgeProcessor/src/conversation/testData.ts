@@ -91,25 +91,6 @@ export async function compareQueryBatch(
     concurrency: number,
     progress?: BatchProgress,
 ): Promise<QueryAnswerCompare[]> {
-    /*
-    const comparisons: QueryAnswerCompare[] = [];
-    for (let i = 0; i < baseLine.length; ++i) {
-        const similarity = await compareAnswers(
-            model,
-            baseLine[i].answer,
-            results[i].answer,
-        );
-        if (progress) {
-            progress(baseLine[i].query, i, baseLine.length, results[i]);
-        }
-        comparisons.push({
-            baseLine: baseLine[i],
-            answer: results[i].answer,
-            similarity,
-        });
-    }
-    return comparisons;
-    */
     let comparisons = await asyncArray.mapAsync(
         baseLine,
         concurrency,
