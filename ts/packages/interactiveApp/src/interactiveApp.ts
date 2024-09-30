@@ -58,19 +58,66 @@ export type InteractiveAppSettings = {
     /**
      * Handler table for this app
      */
-    handlers?: Record<string, CommandHandler>;
+    handlers?: Record<string, CommandHandler> | undefined;
 };
 
 /**
  * Run batch file app
  * @param settings app settings
  */
-export async function runBatch(
-    settings: InteractiveAppSettings,
-    batchFilePath: string,
-) {
+export async function runBatch(settings: InteractiveAppSettings) {
     const app = new InteractiveApp(createInteractiveIO(), settings);
-    await app.runBatch(batchFilePath);
+    settings.handlers ??= {};
+    settings.handlers.batch = batch;
+    settings.handlers.batch.metadata = batchDef();
+
+    process.argv[2] = `${settings.commandPrefix}batch`;
+    await app.runApp();
+
+    function batchDef(): CommandMetadata {
+        return {
+            description: "Run a batch file",
+            args: {
+                filePath: {
+                    description: "Batch file path.",
+                    type: "path",
+                },
+            },
+            options: {
+                echo: {
+                    description: "Echo on or off",
+                    defaultValue: true,
+                    type: "boolean",
+                },
+                commentPrefix: {
+                    description: "Comments are prefix by this string",
+                    defaultValue: "#",
+                },
+                logFilePath: {
+                    description: "Write commands and results to this file.",
+                    type: "path",
+                },
+            },
+        };
+    }
+    settings.handlers.batch.metadata = batchDef();
+    async function batch(args: string[], io: InteractiveIo): Promise<void> {
+        const namedArgs = parseNamedArguments(args, batchDef());
+        const lines = (
+            await fs.promises.readFile(namedArgs.filePath, "utf-8")
+        ).split(/\r?\n/);
+        for (const line of lines) {
+            if (line && !line.startsWith(namedArgs.commentPrefix)) {
+                if (namedArgs.echo) {
+                    io.writer.writeLine(line);
+                }
+                if (!(await app.processInput(line))) {
+                    break;
+                }
+                io.writer.writeLine();
+            }
+        }
+    }
 }
 
 /**
@@ -82,12 +129,7 @@ export async function runConsole(
 ): Promise<void> {
     const args = process.argv;
     if (getArg(args, 2, "") === "batch") {
-        const batchFilePath = getArg(args, 3, "");
-        if (!batchFilePath) {
-            console.log("No batch file provided for batch mode");
-            return;
-        }
-        await runBatch(settings, batchFilePath);
+        await runBatch(settings);
         exit();
     } else {
         const app = new InteractiveApp(createInteractiveIO(), settings);
@@ -113,15 +155,17 @@ class InteractiveApp {
 
     public async runApp(): Promise<void> {
         const commandLine = this.getCommandLine();
-        if (commandLine && commandLine.length > 0) {
+        const hasCommandLine = commandLine && commandLine.length > 0;
+        if (!hasCommandLine) {
+            this.writeWelcome();
+        }
+        if (this._settings.onStart) {
+            this._settings.onStart(this._stdio);
+        }
+        if (hasCommandLine) {
             await this.processInput(commandLine);
             exit();
             return;
-        }
-
-        this.writeWelcome();
-        if (this._settings.onStart) {
-            this._settings.onStart(this._stdio);
         }
 
         const lineReader = this._stdio.readline;
@@ -151,32 +195,7 @@ class InteractiveApp {
             });
     }
 
-    public async runBatch(
-        batchFilePath: string,
-        echoOn: boolean = true,
-        commentPrefix: string = "#",
-    ): Promise<void> {
-        if (this._settings.onStart) {
-            this._settings.onStart(this._stdio);
-        }
-
-        const lines = (
-            await fs.promises.readFile(batchFilePath, "utf-8")
-        ).split(/\r?\n/);
-        for (const line of lines) {
-            if (line && !line.startsWith(commentPrefix)) {
-                if (echoOn) {
-                    this._stdio.writer.writeLine(line);
-                }
-                if (!(await this.processInput(line))) {
-                    break;
-                }
-                this.stdio.writer.writeLine();
-            }
-        }
-    }
-
-    private async processInput(line: string): Promise<boolean> {
+    public async processInput(line: string): Promise<boolean> {
         line = line.trim();
         if (line.length == 0) {
             return true;
@@ -541,7 +560,14 @@ export async function dispatchCommand(
                 io.stdout.write(result + "\n");
             }
         } else {
-            io.stdout.write(`${commandName} not found.\n`);
+            io.stdout.write(`${commandName} not found.\n\n`);
+            const [matches, matchCount] = filterCommandsByName(
+                commandName + "*",
+                handlers,
+            );
+            if (matchCount > 0) {
+                displayCommands(matches, io, "Closest matches:");
+            }
         }
     }
 
@@ -609,28 +635,7 @@ export function searchCommands(
     if (!name) {
         return false;
     }
-    name = name.toLowerCase();
-    const prefixMatch = name.endsWith("*");
-    if (prefixMatch) {
-        name = name.slice(0, name.length - 1);
-    }
-    const suffixMatch = name.startsWith("*");
-    if (suffixMatch) {
-        name = name.slice(1);
-    }
-    let matches: Record<string, CommandHandler> = {};
-    let matchCount = 0;
-    for (const key in handlers) {
-        const handlerName = key.toLowerCase();
-        if (
-            name === handlerName ||
-            (prefixMatch && handlerName.startsWith(name)) ||
-            (suffixMatch && handlerName.endsWith(name))
-        ) {
-            matches[key] = handlers[key];
-            ++matchCount;
-        }
-    }
+    const [matches, matchCount] = filterCommandsByName(name, handlers);
     if (matchCount > 0) {
         displayCommands(matches, io);
     }
@@ -680,9 +685,15 @@ function getDescription(handler: CommandHandler): string | undefined {
 export function displayCommands(
     handlers: Record<string, CommandHandler>,
     io: InteractiveIo,
+    title?: string,
 ): void {
     const indent = "  ";
-    io.writer.writeLine("COMMANDS");
+    if (title === undefined) {
+        title = "COMMANDS";
+    }
+    if (title) {
+        io.writer.writeLine(title);
+    }
     io.writer.writeRecord(
         handlers,
         true,
@@ -816,4 +827,33 @@ export function getBooleanArg(
         throw new Error(`No argument at position ${position}`);
     }
     return typeof value === "boolean" ? value : value.toLowerCase() === "true";
+}
+
+function filterCommandsByName(
+    name: string,
+    handlers: Record<string, CommandHandler>,
+): [Record<string, CommandHandler>, number] {
+    name = name.toLowerCase();
+    const prefixMatch = name.endsWith("*");
+    if (prefixMatch) {
+        name = name.slice(0, name.length - 1);
+    }
+    const suffixMatch = name.startsWith("*");
+    if (suffixMatch) {
+        name = name.slice(1);
+    }
+    let matchCount = 0;
+    let matches: Record<string, CommandHandler> = {};
+    for (const key in handlers) {
+        const handlerName = key.toLowerCase();
+        if (
+            name === handlerName ||
+            (prefixMatch && handlerName.startsWith(name)) ||
+            (suffixMatch && handlerName.endsWith(name))
+        ) {
+            matches[key] = handlers[key];
+            ++matchCount;
+        }
+    }
+    return [matches, matchCount];
 }
