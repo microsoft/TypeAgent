@@ -105,6 +105,12 @@ function createWindow(): void {
     ) => {
         mainWindow?.webContents.send("update-hierarchy-visualization", hierarchy);
     };
+
+    VisualizationNotifier.getinstance().onWordsUpdated = (
+        words: string[],
+    ) => {
+        mainWindow?.webContents.send("update-wordcloud", words);
+    }; 
 }
 
 // This method will be called when Electron has finished

@@ -83,12 +83,15 @@ export class VisualizationNotifier {
 
     public onHierarchyUpdated: ((hierarchy: KnowledgeHierarchy[]) => void) | null;
 
+    public onWordsUpdated: ((words: string[]) => void) | null;
+
     private knowledgeFileDebounce: number = 0;
 
     private constructor() {
         this.onListChanged = null;
         this.onKnowledgeUpdated = null;
         this.onHierarchyUpdated = null;
+        this.onWordsUpdated = null;
 
         // file watchers
         fs.watch(
@@ -104,14 +107,13 @@ export class VisualizationNotifier {
             },
         );
 
-        //TODO: implement knowledge
         const kDir: string = path.join("conversation", "knowledge");
         fs.watch(
             getSessionsDirPath(),
             { recursive: true },
             async (_, fileName) => {
-                if (fileName!.indexOf(kDir) > -1) {
-                    // TODO: debounce
+                if (fileName && fileName?.indexOf(kDir) > -1) {
+
                     ++this.knowledgeFileDebounce;
 
                     setTimeout(async () => {
@@ -121,13 +123,16 @@ export class VisualizationNotifier {
                             const k = await this.enumerateKnowledge();
                             if (this.onKnowledgeUpdated != null) {
                                 this.onKnowledgeUpdated!(k);
-                                this.onKnowledgeUpdated!(k);
-                                this.onKnowledgeUpdated!(k);
                             }
 
                             const h = await this.enumerateKnowledgeForHierarchy();
                             if (this.onHierarchyUpdated != null) {
                                 this.onHierarchyUpdated!(h);
+                            }
+
+                            const w = await this.enumerateKnowledgeForWordCloud();
+                            if (this.onWordsUpdated != null) {
+                                this.onWordsUpdated!(w);
                             }
                         }
                     }, 1000);
@@ -141,14 +146,14 @@ export class VisualizationNotifier {
             if (this.onListChanged != null) {
                 this.onListChanged!(l);
             }
-        }, 3000);
+        }, 2000);
 
         setTimeout(async () => {
             const know = await this.enumerateKnowledge();
             if (this.onKnowledgeUpdated != null) {
                 this.onKnowledgeUpdated!(know);
             }
-        }, 3500);
+        }, 2750);
 
         setTimeout(async () => {
             const h = await this.enumerateKnowledgeForHierarchy();
@@ -156,6 +161,13 @@ export class VisualizationNotifier {
                 this.onHierarchyUpdated!(h);
             }
         }, 3500);
+
+        setTimeout(async () => {
+            const w = await this.enumerateKnowledgeForWordCloud();
+            if (this.onWordsUpdated != null) {
+                this.onWordsUpdated!(w);
+            }
+        }, 4250);
     }
 
     public static getinstance = (): VisualizationNotifier => {
@@ -369,6 +381,8 @@ export class VisualizationNotifier {
                     });
 
                     retValue.push(newE);
+
+                    // TODO: enumerate facets
                     
                 });
             }
@@ -423,6 +437,107 @@ export class VisualizationNotifier {
             // the original message that has the aforementioned EATs
             let hh: KnowledgeHierarchy = { name: `knowledge.messages.${f}`, imports: new Array<string>("knowledge.message")};
             retValue.push(hh);
+        });
+
+        return retValue;
+    }
+
+    public async enumerateKnowledgeForWordCloud(): Promise<string[]> {
+        // let retValue: KnowledgeGraph[][] = new Array<KnowledgeGraph[]>();
+        let retValue: string[] = new Array<string>();
+        
+        // // create levels
+        // for (let i = 0; i < 6; i++) {
+        //     retValue.push(new Array<KnowledgeGraph>());
+        // }
+
+        const sessions: string[] = await getSessionNames();
+        const lastSession: string = sessions[sessions.length - 1];
+
+        // // level 0
+        // retValue[0].push(new KnowledgeGraph(`${lastSession} - Knowledge`));
+
+        // get the knowledge for this session
+        const knowledgeMap: Map<string, Knowledge> = new Map<
+            string,
+            Knowledge
+        >();
+        const knowledgeDir: string = path.join(
+            getSessionsDirPath(),
+            lastSession,
+            "conversation",
+            "knowledge",
+        );
+        const files: string[] = fs.readdirSync(knowledgeDir);
+        files.map((f) => {
+            const s: Buffer = fs.readFileSync(path.join(knowledgeDir, f));
+            const kk: Knowledge = JSON.parse(s.toString()); //todo: finish
+
+            knowledgeMap.set(f, kk);
+        });
+
+        // // level 2 - categories
+        // const entities: KnowledgeGraph = new KnowledgeGraph("entities", []);
+        // const topics: KnowledgeGraph = new KnowledgeGraph("topics", []);
+        // const actions: KnowledgeGraph = new KnowledgeGraph("actions", []);
+        // retValue[2].push(entities);
+        // retValue[2].push(topics);
+        // retValue[2].push(actions);
+
+        // // level 3 objects
+        // const level3: Map<string, Set<string>> = new Map<string, Set<string>>();
+        // const level4: Map<string, Set<string>> = new Map<string, Set<string>>();
+
+        knowledgeMap.forEach((k: Knowledge, _) => {
+            if (k.entities?.length > 0) {
+                k.entities.map((n: Entity) => {
+                    
+                    // entity name
+                    retValue.push(n.value.name);
+
+                    // entity types
+                    n.value.type.map((t: string) => {
+                        retValue.push(t);
+                    });
+
+                    // facets
+                    if (n.value.facets) {
+                        n.value.facets.map((f) => {
+
+                            // facet name
+                            retValue.push(f.name);
+
+                            // facet value
+                            if (typeof f.value === "string") {
+                                retValue.push(f.value);
+                            } else if (typeof f.value === "object") {
+                                retValue.push(f.value.amount.toString());
+                                retValue.push(f.value.units);
+                            }
+                        });
+                    }
+                });
+            }
+
+            if (k.topics?.length > 0) {
+                
+                k.topics.map((n: Topic) => {
+                    retValue.push(n.value);
+                });
+            }
+
+            if (k.actions?.length > 0) {
+                k.actions.map((a: Action) => {
+                    a.value.verbs.map((v: string) => {
+
+                        retValue.push(v);
+                    });
+
+                    retValue.push(a.value.subjectEntityName);
+                    retValue.push(a.value.objectEntityName);
+                    retValue.push(a.value.indirectObjectEntityName);
+                });
+            }
         });
 
         return retValue;

@@ -19,7 +19,7 @@ export class CollapsableContainer {
         this.title.innerText = chartName;
         
         this.expandButton = document.createElement("button");
-        this.expandButton.appendChild(iconExpand());
+        this.expandButton.appendChild(iconExpand("white"));
         this.expandButton.className = "sizeButton";
         this.expandButton.onclick = () => {
             this.div.classList.remove("chartContainer-collapsed");
@@ -29,7 +29,7 @@ export class CollapsableContainer {
         }
 
         this.collapseButton = document.createElement("button");
-        this.collapseButton.appendChild(iconCollapse());
+        this.collapseButton.appendChild(iconCollapse("white"));
         this.collapseButton.className = "sizeButton hidden";
         this.collapseButton.onclick = () => {
             this.div.classList.add("chartContainer-collapsed");

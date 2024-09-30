@@ -142,6 +142,9 @@ const api: ClientAPI = {
     onUpdateKnowledgeHierarchyVisualization(callback) {
         ipcRenderer.on("update-hierarchy-visualization", callback);
     },
+    onUpdateWordCloud(callback) {
+        ipcRenderer.on("update-wordcloud", callback);
+    },
 };
 
 // Use `contextBridge` APIs to expose Electron APIs to

@@ -36,6 +36,7 @@
     "aiclient": "workspace:*",
     "ansi_up": "^6.0.2",
     "d3": "^7.9.0",
+    "d3-cloud": "^1.2.7",
     "debug": "4.3.4",
     "dompurify": "^3.1.6",
     "dotenv": "^16.3.1",
