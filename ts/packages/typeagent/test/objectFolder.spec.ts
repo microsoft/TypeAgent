@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import { removeDir } from "../src/objStream.js";
 import {
     createObjectFolder,

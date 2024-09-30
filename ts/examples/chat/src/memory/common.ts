@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import { ArgDef } from "interactive-app";
 
 export function argSourceFile(defaultValue?: string | undefined): ArgDef {
@@ -10,7 +13,7 @@ export function argSourceFile(defaultValue?: string | undefined): ArgDef {
 export function argDestFile(defaultValue?: string | undefined): ArgDef {
     return {
         description: "Path to output file",
-        type: "path",
+        type: "string",
         defaultValue,
     };
 }

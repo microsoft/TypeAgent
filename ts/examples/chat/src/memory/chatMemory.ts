@@ -19,7 +19,7 @@ import {
     getFileName,
     readAllText,
 } from "typeagent";
-import chalk from "chalk";
+import chalk, { ChalkInstance } from "chalk";
 import { PlayPrinter } from "./chatMemoryPrinter.js";
 import { timestampBlocks } from "./importer.js";
 import path from "path";
@@ -1135,7 +1135,7 @@ export async function runChatMemory(): Promise<void> {
                 filePath: argSourceFile(),
             },
             options: {
-                concurrency: argConcurrency(4),
+                concurrency: argConcurrency(2),
                 minScore: argMinScore(0.8),
             },
         };
@@ -1150,13 +1150,22 @@ export async function runChatMemory(): Promise<void> {
             namedArgs.concurrency,
             writeProgress,
         );
+        printer.writeLine();
         // Sort in order of least similar
         comparisons.sort((x, y) => x.similarity - y.similarity);
         for (const c of comparisons) {
+            const hasIssue = c.similarity < namedArgs.minScore;
+            const color = hasIssue ? chalk.redBright : chalk.green;
             printer.writeInColor(
-                c.similarity < namedArgs.minScore ? chalk.red : chalk.green,
-                `${c.similarity}\n${c.baseLine.query}`,
+                color,
+                `[${c.similarity}]\n${c.baseLine.query}`,
             );
+            if (hasIssue) {
+                printer.writeLine("#Answer#");
+                await writeSearchResponse(c.baseLine.answer, chalk.green);
+                await writeSearchResponse(c.answer, chalk.redBright);
+            }
+            printer.writeLine();
         }
     }
 
@@ -1244,6 +1253,19 @@ export async function runChatMemory(): Promise<void> {
                 printer.writeInColor(chalk.red, answer);
             }
             printer.writeLine();
+        }
+    }
+
+    async function writeSearchResponse(
+        answerResponse: conversation.AnswerResponse | undefined,
+        color: ChalkInstance,
+    ) {
+        if (answerResponse) {
+            if (answerResponse.answer) {
+                printer.writeInColor(color, answerResponse.answer);
+            } else if (answerResponse.whyNoAnswer) {
+                printer.writeInColor(color, answerResponse.whyNoAnswer);
+            }
         }
     }
 
