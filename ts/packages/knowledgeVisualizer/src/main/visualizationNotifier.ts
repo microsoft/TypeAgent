@@ -24,7 +24,7 @@ type EntityFacet = {
     value: {
         amount: number;
         units: string;
-    };
+    } | string;
 };
 
 type EntityValue = {
@@ -229,7 +229,7 @@ export class VisualizationNotifier {
         );
         const files: string[] = fs.readdirSync(knowledgeDir);
         files.map((f) => {
-            // level 1
+            // level 1 - current session
             retValue[1].push(
                 new KnowledgeGraph(f, [`${lastSession} - Knowledge`]),
             );
@@ -240,7 +240,7 @@ export class VisualizationNotifier {
             knowledgeMap.set(f, kk);
         });
 
-        // level 2
+        // level 2 - categories
         const entities: KnowledgeGraph = new KnowledgeGraph("entities", []);
         const topics: KnowledgeGraph = new KnowledgeGraph("topics", []);
         const actions: KnowledgeGraph = new KnowledgeGraph("actions", []);
@@ -248,17 +248,37 @@ export class VisualizationNotifier {
         retValue[2].push(topics);
         retValue[2].push(actions);
 
+        // level 3 objects
+        const level3: Map<string, Set<string>> = new Map<string, Set<string>>();
+        const level4: Map<string, Set<string>> = new Map<string, Set<string>>();
+
         knowledgeMap.forEach((k: Knowledge, s: string) => {
             // level 2 - parents
             if (k.entities?.length > 0) {
                 entities.parents?.push(s);
 
-                // level 3
+                // level 3 - entities
                 k.entities.map((n: Entity) => {
                     n.value.type.map((t: string) => {
-                        retValue[3].push(new KnowledgeGraph(t, ["entities"]));
+                        if (!level3.get(t)) {
+                            level3.set(t, new Set<string>().add("entities"));
+                        } else {
+                            level3.get(t)!.add("entities");
+                        }
                     });
-                    //retValue[3].push(new KnowledgeGraph(, ["entities"]))
+                    if (n.value.facets) {
+                        n.value.facets.map((f) => {
+                            if (!level4.get(f.value as string)) {
+                                if (typeof f.value === "string") {
+                                    level4.set(f.value as string, new Set<string>().add(n.value.name));
+                                }
+                            } else {
+                                if (typeof f.value === "string") {
+                                    level4.get(f.value as string)!.add(n.value.name);
+                                }
+                            }
+                        });
+                    }
                 });
             }
 
@@ -266,9 +286,13 @@ export class VisualizationNotifier {
             if (k.topics?.length > 0) {
                 topics.parents?.push(s);
 
-                // level 3
+                // level 3 - topics
                 k.topics.map((n: Topic) => {
-                    retValue[3].push(new KnowledgeGraph(n.value, ["topics"]));
+                    if (!level3.get(n.value)) {
+                        level3.set(n.value, new Set<string>().add("topics"));
+                    } else {
+                        level3.get(n.value)!.add("topics");
+                    }                    
                 });
             }
 
@@ -276,16 +300,30 @@ export class VisualizationNotifier {
             if (k.actions?.length > 0) {
                 actions.parents?.push(s);
 
-                // level 3
+                // level 3 - actions
                 k.actions.map((a: Action) => {
                     a.value.verbs.map((v: string) => {
-                        retValue[3].push(new KnowledgeGraph(v, ["actions"]));
+                        if (!level3.get(v)) {
+                            level3.set(v, new Set<string>().add("actions"));
+                        } else {
+                            level3.get(v)!.add("actions");
+                        }                          
                     });
-                    //retValue[3].push(new KnowledgeGraph(n.value.name, ["entities"]))
                 });
             }
         });
 
+
+        const leve3_sorted = new Map([...level3].sort((a, b) => String(a[0]).localeCompare(b[0])));
+        leve3_sorted.forEach((value: Set<string>, key: string) => {
+            retValue[3].push(new KnowledgeGraph(key, Array.from(value)));
+        });
+
+        // TOOO: evaluate and complete L4, 5, & 6
+        // level4.forEach((value: Set<string>, key: string) => {
+        //     retValue[4].push(new KnowledgeGraph(key, Array.from(value)));
+        // });      
+        
         return retValue;
     }
 
