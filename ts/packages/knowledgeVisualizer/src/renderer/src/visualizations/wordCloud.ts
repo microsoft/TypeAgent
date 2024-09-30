@@ -20,13 +20,14 @@ export class WordCloud {
         marginLeft: 0, // left margin, in pixels
         width: 800, // outer width, in pixels
         height: 600, // outer height, in pixels
-        maxWords: 250, // maximum number of words to extract from the text
+        maxWords: 500, // maximum number of words to extract from the text
         fontFamily: "sans-serif", // font family
         fontScale: 15, // base font size
         fill: null, // text color, can be a constant or a function of the word
         padding: 0, // amount of padding between the words (in pixels)
         rotate: 0, // a constant or function to rotate the words
-        invalidation: null // when this promise resolves, stop the simulation
+        invalidation: null, // when this promise resolves, stop the simulation
+        ignoredWords: new Set(["none"]),
     }): void {
 
         if (text.length == 0) {
@@ -34,7 +35,8 @@ export class WordCloud {
             return;
         }
 
-        const words = typeof text === "string" ? text.split(/\W+/g) : Array.from(text);
+        let words = typeof text === "string" ? text.split(/\W+/g) : Array.from(text);
+        words = words.filter(w => w && !options.ignoredWords.has(w))
             
         const data = rollups(words, options.size, w => w)
             .sort(([, a], [, b]) => descending(a, b))

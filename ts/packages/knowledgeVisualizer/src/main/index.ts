@@ -121,31 +121,8 @@ app.whenReady().then(async () => {
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.electron");
 
-    // ipcMain.handle(
-    //     "get-dynamic-display",
-    //     async (_event, appAgentName: string, id: string) =>
-    //         dispatcher.getDynamicDisplay(appAgentName, "html", id),
-    // );
-
     ipcMain.on("dom ready", async () => {
-        // settingSummary = dispatcher.getSettingSummary();
-        // mainWindow?.webContents.send(
-        //     "setting-summary-changed",
-        //     settingSummary,
-        //     dispatcher.getTranslatorNameToEmojiMap(),
-        // );
-
-        // // Send settings asap
-        // ShellSettings.getinstance().onSettingsChanged!();
     });
-
-    // globalShortcut.register("F1", () => {
-    //     mainWindow?.webContents.send("help-requested", "F1");
-    // });
-
-    // globalShortcut.register("F2", () => {
-    //     mainWindow?.webContents.send("random-message-requested", "F2");
-    // });
 
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.
