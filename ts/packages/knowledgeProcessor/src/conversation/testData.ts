@@ -68,7 +68,7 @@ export type QueryAnswerCompare = {
     similarity: number;
 };
 
-export async function compareQueryBatch(
+export async function compareQueryBatchFile(
     cm: ConversationManager,
     model: TextEmbeddingModel,
     filePath: string,
@@ -81,6 +81,17 @@ export async function compareQueryBatch(
     }
     const queries = baseLine.map((qa) => qa.query);
     const results = await searchBatch(cm, queries, concurrency, progress);
+    return compareQueryBatch(model, baseLine, results, concurrency, progress);
+}
+
+export async function compareQueryBatch(
+    model: TextEmbeddingModel,
+    baseLine: QueryAnswer[],
+    results: QueryAnswer[],
+    concurrency: number,
+    progress?: BatchProgress,
+): Promise<QueryAnswerCompare[]> {
+    /*
     const comparisons: QueryAnswerCompare[] = [];
     for (let i = 0; i < baseLine.length; ++i) {
         const similarity = await compareAnswers(
@@ -88,12 +99,41 @@ export async function compareQueryBatch(
             baseLine[i].answer,
             results[i].answer,
         );
+        if (progress) {
+            progress(baseLine[i].query, i, baseLine.length, results[i]);
+        }
         comparisons.push({
             baseLine: baseLine[i],
             answer: results[i].answer,
             similarity,
         });
     }
+    return comparisons;
+    */
+    let comparisons = await asyncArray.mapAsync(
+        baseLine,
+        concurrency,
+        async (item, index) => {
+            const similarity = await compareAnswers(
+                model,
+                item.answer,
+                results[index].answer,
+            );
+            if (progress) {
+                progress(
+                    baseLine[index].query,
+                    index,
+                    baseLine.length,
+                    results[index],
+                );
+            }
+            return {
+                baseLine: item,
+                answer: results[index].answer,
+                similarity,
+            };
+        },
+    );
     return comparisons;
 }
 

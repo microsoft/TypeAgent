@@ -22,3 +22,11 @@ export function argConcurrency(value: number): ArgDef {
         defaultValue: value,
     };
 }
+
+export function argMinScore(value: number): ArgDef {
+    return {
+        description: "Minimum score",
+        type: "number",
+        defaultValue: value,
+    };
+}

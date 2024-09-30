@@ -24,7 +24,12 @@ import { PlayPrinter } from "./chatMemoryPrinter.js";
 import { timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
-import { argConcurrency, argDestFile, argSourceFile } from "./common.js";
+import {
+    argConcurrency,
+    argDestFile,
+    argMinScore,
+    argSourceFile,
+} from "./common.js";
 
 export type ChatContext = {
     storePath: string;
@@ -192,6 +197,7 @@ export async function runChatMemory(): Promise<void> {
         searchQuery,
         search,
         makeTestSet,
+        runTestSet,
     };
     addStandardHandlers(handlers);
 
@@ -1118,10 +1124,40 @@ export async function runChatMemory(): Promise<void> {
             namedArgs.filePath,
             namedArgs.destPath,
             namedArgs.concurrency,
-            (query: string, i: number, total: number) => {
-                printer.writeLine(`${i + 1}/${total} ${query}`);
-            },
+            writeProgress,
         );
+    }
+
+    function runTestSetDef(): CommandMetadata {
+        return {
+            description: "Run a test set",
+            args: {
+                filePath: argSourceFile(),
+            },
+            options: {
+                concurrency: argConcurrency(4),
+                minScore: argMinScore(0.8),
+            },
+        };
+    }
+    handlers.runTestSet.metadata = runTestSetDef();
+    async function runTestSet(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, runTestSetDef());
+        const comparisons = await conversation.testData.compareQueryBatchFile(
+            context.conversationManager,
+            context.embeddingModel,
+            namedArgs.filePath,
+            namedArgs.concurrency,
+            writeProgress,
+        );
+        // Sort in order of least similar
+        comparisons.sort((x, y) => x.similarity - y.similarity);
+        for (const c of comparisons) {
+            printer.writeInColor(
+                c.similarity < namedArgs.minScore ? chalk.red : chalk.green,
+                `${c.similarity}\n${c.baseLine.query}`,
+            );
+        }
     }
 
     //--------------------
@@ -1720,5 +1756,9 @@ export async function runChatMemory(): Promise<void> {
             context.conversationName === "play" ||
             context.conversationName === "search"
         );
+    }
+
+    function writeProgress(value: string, i: number, total: number) {
+        printer.writeLine(`${i + 1}/${total} ${value}`);
     }
 }
