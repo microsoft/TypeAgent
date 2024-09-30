@@ -239,6 +239,11 @@ export class VisualizationNotifier {
             "conversation",
             "knowledge",
         );
+
+        if (!fs.existsSync(knowledgeDir)) {
+            return retValue;
+        }
+
         const files: string[] = fs.readdirSync(knowledgeDir);
         files.map((f) => {
             // level 1 - current session
@@ -363,6 +368,11 @@ export class VisualizationNotifier {
             "conversation",
             "knowledge",
         );
+
+        if (!fs.existsSync(knowledgeDir)) {
+            return retValue;
+        }
+
         const files: string[] = fs.readdirSync(knowledgeDir);
         files.map((f) => {
 
@@ -443,19 +453,10 @@ export class VisualizationNotifier {
     }
 
     public async enumerateKnowledgeForWordCloud(): Promise<string[]> {
-        // let retValue: KnowledgeGraph[][] = new Array<KnowledgeGraph[]>();
         let retValue: string[] = new Array<string>();
-        
-        // // create levels
-        // for (let i = 0; i < 6; i++) {
-        //     retValue.push(new Array<KnowledgeGraph>());
-        // }
 
         const sessions: string[] = await getSessionNames();
         const lastSession: string = sessions[sessions.length - 1];
-
-        // // level 0
-        // retValue[0].push(new KnowledgeGraph(`${lastSession} - Knowledge`));
 
         // get the knowledge for this session
         const knowledgeMap: Map<string, Knowledge> = new Map<
@@ -468,6 +469,11 @@ export class VisualizationNotifier {
             "conversation",
             "knowledge",
         );
+
+        if (!fs.existsSync(knowledgeDir)) {
+            return retValue;
+        }
+
         const files: string[] = fs.readdirSync(knowledgeDir);
         files.map((f) => {
             const s: Buffer = fs.readFileSync(path.join(knowledgeDir, f));
@@ -475,18 +481,6 @@ export class VisualizationNotifier {
 
             knowledgeMap.set(f, kk);
         });
-
-        // // level 2 - categories
-        // const entities: KnowledgeGraph = new KnowledgeGraph("entities", []);
-        // const topics: KnowledgeGraph = new KnowledgeGraph("topics", []);
-        // const actions: KnowledgeGraph = new KnowledgeGraph("actions", []);
-        // retValue[2].push(entities);
-        // retValue[2].push(topics);
-        // retValue[2].push(actions);
-
-        // // level 3 objects
-        // const level3: Map<string, Set<string>> = new Map<string, Set<string>>();
-        // const level4: Map<string, Set<string>> = new Map<string, Set<string>>();
 
         knowledgeMap.forEach((k: Knowledge, _) => {
             if (k.entities?.length > 0) {
@@ -542,5 +536,4 @@ export class VisualizationNotifier {
 
         return retValue;
     }
-
 }
