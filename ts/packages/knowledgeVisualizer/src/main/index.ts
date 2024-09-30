@@ -87,30 +87,6 @@ function createWindow(): void {
     mainWindow.removeMenu();
 
     setupZoomHandlers(mainWindow);
-
-    VisualizationNotifier.getinstance().onListChanged = (
-        lists: TypeAgentList,
-    ) => {
-        mainWindow?.webContents.send("update-list-visualization", lists);
-    };
-
-    VisualizationNotifier.getinstance().onKnowledgeUpdated = (
-        graph: KnowledgeGraph[][],
-    ) => {
-        mainWindow?.webContents.send("update-knowledge-visualization", graph);
-    };
-
-    VisualizationNotifier.getinstance().onHierarchyUpdated = (
-        hierarchy: KnowledgeHierarchy[],
-    ) => {
-        mainWindow?.webContents.send("update-hierarchy-visualization", hierarchy);
-    };
-
-    VisualizationNotifier.getinstance().onWordsUpdated = (
-        words: string[],
-    ) => {
-        mainWindow?.webContents.send("update-wordcloud", words);
-    }; 
 }
 
 // This method will be called when Electron has finished
@@ -122,6 +98,29 @@ app.whenReady().then(async () => {
     electronApp.setAppUserModelId("com.electron");
 
     ipcMain.on("dom ready", async () => {
+        VisualizationNotifier.getinstance().onListChanged = (
+            lists: TypeAgentList,
+        ) => {
+            mainWindow?.webContents.send("update-list-visualization", lists);
+        };
+    
+        VisualizationNotifier.getinstance().onKnowledgeUpdated = (
+            graph: KnowledgeGraph[][],
+        ) => {
+            mainWindow?.webContents.send("update-knowledge-visualization", graph);
+        };
+    
+        VisualizationNotifier.getinstance().onHierarchyUpdated = (
+            hierarchy: KnowledgeHierarchy[],
+        ) => {
+            mainWindow?.webContents.send("update-hierarchy-visualization", hierarchy);
+        };
+    
+        VisualizationNotifier.getinstance().onWordsUpdated = (
+            words: string[],
+        ) => {
+            mainWindow?.webContents.send("update-wordcloud", words);
+        };         
     });
 
     // Default open or close DevTools by F12 in development

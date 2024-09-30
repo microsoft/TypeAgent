@@ -87,6 +87,8 @@ export class VisualizationNotifier {
 
     private knowledgeFileDebounce: number = 0;
 
+    private listFileDebounce: number = 0;
+
     private constructor() {
         this.onListChanged = null;
         this.onKnowledgeUpdated = null;
@@ -99,10 +101,17 @@ export class VisualizationNotifier {
             { recursive: true },
             async (_, fileName) => {
                 if (fileName?.endsWith("lists.json")) {
-                    const l = await this.enumerateLists();
-                    if (this.onListChanged != null) {
-                        this.onListChanged!(l);
-                    }
+
+                    ++this.listFileDebounce;
+
+                    setTimeout(async () => {
+                        --this.listFileDebounce;
+                        
+                        const l = await this.enumerateLists();
+                        if (this.onListChanged != null) {
+                            this.onListChanged!(l);
+                        }
+                    }, 1000);
                 }
             },
         );
@@ -146,28 +155,28 @@ export class VisualizationNotifier {
             if (this.onListChanged != null) {
                 this.onListChanged!(l);
             }
-        }, 2000);
+        }, 100);
 
         setTimeout(async () => {
             const know = await this.enumerateKnowledge();
             if (this.onKnowledgeUpdated != null) {
                 this.onKnowledgeUpdated!(know);
             }
-        }, 2750);
+        }, 750);
 
         setTimeout(async () => {
             const h = await this.enumerateKnowledgeForHierarchy();
             if (this.onHierarchyUpdated != null) {
                 this.onHierarchyUpdated!(h);
             }
-        }, 3500);
+        }, 1500);
 
         setTimeout(async () => {
             const w = await this.enumerateKnowledgeForWordCloud();
             if (this.onWordsUpdated != null) {
                 this.onWordsUpdated!(w);
             }
-        }, 4250);
+        }, 2250);
     }
 
     public static getinstance = (): VisualizationNotifier => {
@@ -188,9 +197,8 @@ export class VisualizationNotifier {
 
         // get all the sessions
         sessions.map((n) => {
-            // TODO: remove after testing
             if (n.startsWith(".")) {
-                return;
+                return; // skip sessions starting with '.'
             }
 
             let newList = new TypeAgentList(n, new Array<TypeAgentList>());
