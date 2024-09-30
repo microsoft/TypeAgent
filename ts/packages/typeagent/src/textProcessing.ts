@@ -17,7 +17,7 @@ import {
     success,
 } from "typechat";
 import * as cheerio from "cheerio";
-import { getHtml, bing, ChatModel } from "aiclient";
+import { getHtml, bing, ChatModel, TextEmbeddingModel } from "aiclient";
 import { createChatTranslator } from "./chat";
 import { MessageSourceRole } from "./message";
 import { TypeSchema } from "./schema";
@@ -25,6 +25,7 @@ import { readAllLines, readAllText, writeAllLines } from "./objStream";
 import fs from "fs";
 import { textToProcessSection } from "./promptLib";
 import { ProcessProgress, mapAsync } from "./arrayAsync";
+import { generateEmbeddings, similarity, SimilarityType } from ".";
 
 function splitIntoSentences(text: string): string[] {
     return text.split(/(?<=[.!?;\r\n])\s+/);
@@ -1369,4 +1370,22 @@ export async function generateVariationsRecursive(
         }
     }
     return [...uniqueVariations.values()];
+}
+
+export async function stringSimilarity(
+    model: TextEmbeddingModel,
+    x: string | undefined,
+    y: string | undefined,
+): Promise<number> {
+    if (x && y) {
+        if (x === y) {
+            return 1.0;
+        }
+        const embeddings = await generateEmbeddings(model, [x, y]);
+        return similarity(embeddings[0], embeddings[1], SimilarityType.Dot); // Embeddings are normalized
+    } else if (x === undefined && y === undefined) {
+        return 1.0;
+    }
+
+    return 0.0;
 }

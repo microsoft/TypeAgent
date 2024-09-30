@@ -1113,7 +1113,7 @@ export async function runChatMemory(): Promise<void> {
     handlers.makeTestSet.metadata = makeTestSetDef();
     async function makeTestSet(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, makeTestSetDef());
-        await conversation.testData.searchBatch(
+        await conversation.testData.searchBatchFile(
             context.conversationManager,
             namedArgs.filePath,
             namedArgs.destPath,
