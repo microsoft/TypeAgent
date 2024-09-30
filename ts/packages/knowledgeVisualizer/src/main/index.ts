@@ -2,13 +2,7 @@
 // Licensed under the MIT License.
 
 import dotenv from "dotenv";
-import {
-    ipcMain,
-    app,
-    shell,
-    BrowserWindow,
-    globalShortcut,
-} from "electron";
+import { ipcMain, app, shell, BrowserWindow, globalShortcut } from "electron";
 import { join } from "node:path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import registerDebug from "debug";
@@ -64,17 +58,13 @@ function createWindow(): void {
         return { action: "deny" };
     });
 
-    mainWindow.on("close", () => {
-    });
+    mainWindow.on("close", () => {});
 
-    mainWindow.on("closed", () => {
-    });
+    mainWindow.on("closed", () => {});
 
-    mainWindow.on("moved", () => {
-    });
+    mainWindow.on("moved", () => {});
 
-    mainWindow.on("resized", () => {
-    });
+    mainWindow.on("resized", () => {});
 
     // HMR for renderer base on electron-vite cli.
     // Load the remote URL for development or the local html file for production.
@@ -103,24 +93,30 @@ app.whenReady().then(async () => {
         ) => {
             mainWindow?.webContents.send("update-list-visualization", lists);
         };
-    
+
         VisualizationNotifier.getinstance().onKnowledgeUpdated = (
             graph: KnowledgeGraph[][],
         ) => {
-            mainWindow?.webContents.send("update-knowledge-visualization", graph);
+            mainWindow?.webContents.send(
+                "update-knowledge-visualization",
+                graph,
+            );
         };
-    
+
         VisualizationNotifier.getinstance().onHierarchyUpdated = (
             hierarchy: KnowledgeHierarchy[],
         ) => {
-            mainWindow?.webContents.send("update-hierarchy-visualization", hierarchy);
+            mainWindow?.webContents.send(
+                "update-hierarchy-visualization",
+                hierarchy,
+            );
         };
-    
+
         VisualizationNotifier.getinstance().onWordsUpdated = (
             words: string[],
         ) => {
             mainWindow?.webContents.send("update-wordcloud", words);
-        };         
+        };
     });
 
     // Default open or close DevTools by F12 in development

@@ -17,7 +17,7 @@ export class CollapsableContainer {
         this.title = document.createElement("div");
         this.title.className = "chart-title";
         this.title.innerText = chartName;
-        
+
         this.expandButton = document.createElement("button");
         this.expandButton.appendChild(iconExpand("white"));
         this.expandButton.className = "sizeButton";
@@ -26,7 +26,7 @@ export class CollapsableContainer {
             this.div.classList.add("chartContainer-expanded");
             this.expandButton.classList.add("hidden");
             this.collapseButton.classList.remove("hidden");
-        }
+        };
 
         this.collapseButton = document.createElement("button");
         this.collapseButton.appendChild(iconCollapse("white"));
@@ -36,7 +36,7 @@ export class CollapsableContainer {
             this.div.classList.remove("chartContainer-expanded");
             this.collapseButton.classList.add("hidden");
             this.expandButton.classList.remove("hidden");
-        }
+        };
 
         this.div.appendChild(this.expandButton);
         this.div.appendChild(this.collapseButton);

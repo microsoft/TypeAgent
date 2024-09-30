@@ -4,7 +4,6 @@
 import { ElectronAPI } from "@electron-toolkit/preload";
 
 export interface ClientAPI {
-
     onUpdateListVisualization(
         callback: (e: Electron.IpcRendererEvent, data) => void,
     ): void;
@@ -13,7 +12,7 @@ export interface ClientAPI {
     ): void;
     onUpdateKnowledgeHierarchyVisualization(
         callback: (e: Electron.IpcRendererEvent, data) => void,
-    ): void;    
+    ): void;
     onUpdateWordCloud(
         callback: (e: Electron.IpcRendererEvent, data) => void,
     ): void;

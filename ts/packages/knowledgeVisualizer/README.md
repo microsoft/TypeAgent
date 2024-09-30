@@ -2,7 +2,7 @@
 
 ## Overview
 
-The knowledge visualizer tool is an experimental application that may be useful browsing the stored knowledge.  This tool's primary purpose is as a debugging mechanism. 
+The knowledge visualizer tool is an experimental application that may be useful browsing the stored knowledge. This tool's primary purpose is as a debugging mechanism.
 
 ## Prerequisites
 

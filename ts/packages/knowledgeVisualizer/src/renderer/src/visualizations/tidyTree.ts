@@ -13,7 +13,6 @@ export class TidyTree {
     }
 
     public update(data: any): void {
-
         if (data.length == 0) {
             return create("svg").node();
         }

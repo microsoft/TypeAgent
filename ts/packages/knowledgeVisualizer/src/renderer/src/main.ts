@@ -24,7 +24,7 @@ function addEvents(
     tidyTree: TidyTree,
     tangledTree: TangledTree,
     hierarchy: HierarchicalEdgeBundling,
-    words: WordCloud
+    words: WordCloud,
 ) {
     const api = getClientAPI();
     api.onUpdateListVisualization((_, data: any) => {
@@ -51,10 +51,18 @@ function addEvents(
 
 document.addEventListener("DOMContentLoaded", function () {
     const mainContainer = document.getElementById("mainContainer");
-    const listsContainer: CollapsableContainer = new CollapsableContainer("Lists");
-    const tangledTreeContainer: CollapsableContainer = new CollapsableContainer("Tangled Tree");
-    const hierarchyContainer: CollapsableContainer = new CollapsableContainer("Knowledge Network");
-    const wordCloudContainer: CollapsableContainer = new CollapsableContainer("Word Cloud");
+    const listsContainer: CollapsableContainer = new CollapsableContainer(
+        "Lists",
+    );
+    const tangledTreeContainer: CollapsableContainer = new CollapsableContainer(
+        "Tangled Tree",
+    );
+    const hierarchyContainer: CollapsableContainer = new CollapsableContainer(
+        "Knowledge Network",
+    );
+    const wordCloudContainer: CollapsableContainer = new CollapsableContainer(
+        "Word Cloud",
+    );
     const treeConfig: TidyTreeConfigType = defaultTidyTreeConfig;
 
     treeConfig.label = (d) => (d.name ? d.name : d);
@@ -73,20 +81,31 @@ document.addEventListener("DOMContentLoaded", function () {
     );
 
     const tangledTree: TangledTree = new TangledTree([]);
-    const hierarchy: HierarchicalEdgeBundling = new HierarchicalEdgeBundling([]);
+    const hierarchy: HierarchicalEdgeBundling = new HierarchicalEdgeBundling(
+        [],
+    );
     const wordCloud: WordCloud = new WordCloud("");
 
     mainContainer!.appendChild(listsContainer.div);
     mainContainer!.appendChild(tangledTreeContainer.div);
     mainContainer!.appendChild(hierarchyContainer.div);
     mainContainer!.appendChild(wordCloudContainer.div);
-        
+
     listsContainer.chartContainer.append(tidyTree.tree!);
     tangledTreeContainer.chartContainer.append(tangledTree.tree!);
     hierarchyContainer.chartContainer.append(hierarchy.chart!);
     wordCloudContainer.chartContainer.append(wordCloud.chart!);
 
-    addEvents(listsContainer, tangledTreeContainer, hierarchyContainer, wordCloudContainer, tidyTree, tangledTree, hierarchy, wordCloud);
+    addEvents(
+        listsContainer,
+        tangledTreeContainer,
+        hierarchyContainer,
+        wordCloudContainer,
+        tidyTree,
+        tangledTree,
+        hierarchy,
+        wordCloud,
+    );
 
     (window as any).electron.ipcRenderer.send("dom ready");
 });

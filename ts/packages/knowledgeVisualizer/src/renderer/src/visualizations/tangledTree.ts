@@ -268,7 +268,6 @@ export class TangledTree {
     }
 
     public update(data: any): void {
-        
         console.log(data);
         let options = { c: 0, bigc: 0, color: (_, i) => this.color(i) };
         try {
