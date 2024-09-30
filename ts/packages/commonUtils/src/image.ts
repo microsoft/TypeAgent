@@ -27,6 +27,6 @@ export function extractRelevantExifTags(exifTags: ExifReader.Tags) {
     ${exifTags.GPSAltitudeRef ? "GPS Altitude Reference: " + exifTags.GPSAltitudeRef.value : ""}
     ${exifTags.GPSAltitude ? "GPS Altitude: " + exifTags.GPSAltitude.description : ""}
     `;
-    console.log(tags);
+    console.log(tags.replace("\n\n", "\n"));
     return tags;
 }
