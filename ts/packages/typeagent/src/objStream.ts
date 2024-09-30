@@ -319,6 +319,12 @@ export async function writeJsonFile(
         : fs.promises.writeFile(filePath, json);
 }
 
+/**
+ * Remove file from given file system
+ * @param filePath
+ * @param fSys
+ * @returns true if success, else false
+ */
 export async function removeFile(
     filePath: string,
     fSys?: FileSystem,
@@ -334,6 +340,12 @@ export async function removeFile(
     return false;
 }
 
+/**
+ * Remove directory from given file system
+ * @param folderPath
+ * @param fSys
+ * @returns true if success. False if folder does not exist
+ */
 export async function removeDir(
     folderPath: string,
     fSys?: FileSystem,
@@ -345,7 +357,30 @@ export async function removeDir(
             await fs.promises.rm(folderPath, { recursive: true, force: true });
         }
         return true;
-    } catch {}
+    } catch (err: any) {
+        if (err.code !== "ENOENT") {
+            throw err;
+        }
+    }
+    return false;
+}
+
+/**
+ * Remove file from given file system
+ * @param oldPath
+ * @param newPath
+ * @param fSys
+ * @returns true if success. False if it does not exist
+ */
+export function renameFileSync(oldPath: string, newPath: string): boolean {
+    try {
+        fs.renameSync(oldPath, newPath);
+        return true;
+    } catch (err: any) {
+        if (err.code !== "ENOENT") {
+            throw err;
+        }
+    }
     return false;
 }
 
