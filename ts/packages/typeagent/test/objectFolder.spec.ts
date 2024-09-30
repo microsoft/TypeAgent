@@ -7,6 +7,7 @@ import {
     ObjectFolder,
     ObjectFolderSettings,
 } from "../src/storage/objectFolder.js";
+import { testDirectoryPath } from "./common.js";
 
 type TestObject = {
     key: string;
@@ -27,7 +28,7 @@ async function ensureStore<T>(
 
 describe("storage.objectFolder", () => {
     let folder: ObjectFolder<TestObject> | undefined;
-    const folderPath = "/data/test/testStore";
+    const folderPath = testDirectoryPath("./data/test/testStore");
     beforeAll(async () => {
         folder = await ensureStore(folderPath, true);
     });
@@ -44,7 +45,7 @@ describe("storage.objectFolder", () => {
 
 describe("storage.objectFolder.safeWrites", () => {
     let folder: ObjectFolder<TestObject> | undefined;
-    const folderPath = "/data/test/testStoreSafe";
+    const folderPath = testDirectoryPath("./data/test/testStoreSafe");
     beforeAll(async () => {
         folder = await ensureStore(folderPath, true, true);
     });
