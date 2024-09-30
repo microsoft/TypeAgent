@@ -6,7 +6,7 @@ import {
     TranslatorDefinition,
     AppAgentManifest,
 } from "@typeagent/agent-sdk";
-import { getDispatcherConfig } from "../utils/config.js";
+import { getDispatcherConfig, getExternalAgentsConfig } from "../utils/config.js";
 import { createRequire } from "module";
 import path from "node:path";
 
@@ -75,6 +75,27 @@ export async function getBuiltinAppAgentConfigs() {
     return appAgentConfigs;
 }
 
+async function loadExternalAgentConfigs() {
+    const infos = getExternalAgentsConfig().agents;
+    const externalAgents: Map<string, AppAgentManifest> = new Map();
+    for (const [name, info] of Object.entries(infos)) {
+        externalAgents.set(
+            name,
+            info.type === "module" ? await loadModuleConfig(info) : info,
+        );
+    }
+    return externalAgents;
+}
+
+let externalAgentConfigs: Map<string, AppAgentManifest> | undefined;
+export async function getExternalAppAgentConfigs() {
+    if (externalAgentConfigs === undefined) {
+        externalAgentConfigs = await loadExternalAgentConfigs();
+    }
+    return externalAgentConfigs;
+}
+
+
 function enableExecutionMode() {
     return process.env.TYPEAGENT_EXECMODE !== "0";
 }
@@ -106,6 +127,31 @@ async function getModuleAgent(appAgentName: string) {
     const agent = await loadModuleAgent(config);
     moduleAgents.set(appAgentName, agent);
     return agent;
+}
+
+const externalAgents = new Map<string, AppAgent>();
+export function getExternalAppAgentProvider(
+    context: CommandHandlerContext,
+): AppAgentProvider {
+    return {
+        getAppAgentNames() {
+            return Object.keys(getExternalAgentsConfig().agents);
+        },
+        async getAppAgentManifest(appAgentName: string) {
+            const configs = await getExternalAppAgentConfigs();
+            const config = configs.get(appAgentName);
+            if (config === undefined) {
+                throw new Error(`Invalid app agent: ${appAgentName}`);
+            }
+            return config;
+        },
+        async loadAppAgent(appAgentName: string) {
+            const type = getExternalAgentsConfig().agents[appAgentName].type;
+            return type === "module"
+                ? await getModuleAgent(appAgentName)
+                : loadInlineAgent(appAgentName, context);
+        },
+    };
 }
 
 export function getBuiltinAppAgentProvider(
