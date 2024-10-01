@@ -23,6 +23,7 @@ export type LookupAtStoreAction = {
   };
 };
 
+// IMPORTANT: Use this action when the user query involves search for products on an e-commerce store, such as "aaa batteries"
 export type SearchForProductAction = {
   actionName: "searchForProductAction";
   parameters: {
