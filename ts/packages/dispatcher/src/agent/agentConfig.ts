@@ -14,6 +14,7 @@ import { createAgentProcessShim } from "./agentProcessShim.js";
 import { AppAgentProvider } from "./agentProvider.js";
 import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
 import { loadInlineAgent } from "./inlineAgentHandlers.js";
+import { fileURLToPath } from "node:url";
 
 export type InlineAppAgentInfo = {
     type?: undefined;
@@ -27,6 +28,7 @@ const enum ExecutionMode {
 export type ModuleAppAgentInfo = {
     type: "module";
     name: string;
+    path?: string
     execMode?: ExecutionMode;
 };
 
@@ -49,7 +51,13 @@ async function loadModuleConfig(
     info: ModuleAppAgentInfo,
 ): Promise<AppAgentManifest> {
     const require = createRequire(import.meta.url);
-    const manifestPath = require.resolve(`${info.name}/agent/manifest`);
+    let modulePath = `${info.name}/agent/manifest`;
+    if(info.path != undefined){
+        modulePath = info.path.replace("file:", "");
+        modulePath = path.join(modulePath, `/agent/manifest`);
+    }
+
+    const manifestPath = require.resolve(modulePath);
     const config = require(manifestPath) as AppAgentManifest;
     patchPaths(config, path.dirname(manifestPath));
     return config;
@@ -102,11 +110,16 @@ function enableExecutionMode() {
 
 async function loadModuleAgent(info: ModuleAppAgentInfo): Promise<AppAgent> {
     const execMode = info.execMode ?? ExecutionMode.SeparateProcess;
+
+    let agentHandlerPath = info.path ? info.path.replace("file:", "") : "";
+    agentHandlerPath = path.join(agentHandlerPath, `${info.name}/agent/handlers`);
+
+
     if (enableExecutionMode() && execMode === ExecutionMode.SeparateProcess) {
-        return createAgentProcessShim(`${info.name}/agent/handlers`);
+        return createAgentProcessShim(agentHandlerPath);
     }
 
-    const module = await import(`${info.name}/agent/handlers`);
+    const module = await import(agentHandlerPath);
     if (typeof module.instantiate !== "function") {
         throw new Error(
             `Failed to load module agent ${info.name}: missing 'instantiate' function.`,
