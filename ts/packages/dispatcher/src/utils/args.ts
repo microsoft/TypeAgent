@@ -72,7 +72,7 @@ function getTypeFromValue(key: string, value?: FlagDefaultValueType) {
 }
 
 function isFullFlagDefinition(def: FlagDefinition): def is FullFlagDefinition {
-    return typeof def === "object" || !Array.isArray(def);
+    return typeof def === "object" && !Array.isArray(def);
 }
 
 export function expandFlagDefinition(key: string, def: FlagDefinition) {
@@ -107,13 +107,13 @@ export function resolveFlag(
 
 export function parseCommandArgs<T extends ParameterDefinitions>(
     request: string,
-    config?: T,
+    parameters?: T,
 ): ParsedCommandArgs<T> {
     const flags: any = {};
     const aliases = new Map<string, string>();
     const valueTypes = new Map<string, "string" | "number" | "boolean">();
     const allowMultiple = new Map<string, boolean>();
-    const defaultFlags = config?.flags;
+    const defaultFlags = parameters?.flags;
     if (defaultFlags) {
         for (const [key, value] of Object.entries(defaultFlags)) {
             if (isFullFlagDefinition(value)) {
@@ -164,7 +164,7 @@ export function parseCommandArgs<T extends ParameterDefinitions>(
         }
 
         if (flag === undefined) {
-            if (config?.args === false) {
+            if (parameters !== undefined && parameters.args !== true) {
                 throw new Error(`Invalid argument: ${arg}`);
             }
             args.push(arg);
