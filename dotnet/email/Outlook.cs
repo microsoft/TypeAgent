@@ -1,5 +1,7 @@
 ﻿// Copyright (c) Microsoft. All rights reserved.
-namespace TypeAgent.Email;
+using TypeAgent.Core;
+
+namespace TypeAgent;
 
 public class Outlook : COMObject
 {
@@ -14,6 +16,8 @@ public class Outlook : COMObject
 
     public Email LoadEmail(string filePath)
     {
+        Verify.FileExists(filePath);
+
         MailItem mail = (MailItem)_session.OpenSharedItem(filePath);
         try
         {

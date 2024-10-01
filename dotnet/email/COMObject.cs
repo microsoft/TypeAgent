@@ -3,7 +3,7 @@
 
 using System.Runtime.InteropServices;
 
-namespace TypeAgent.Email;
+namespace TypeAgent;
 
 public class COMObject : IDisposable
 {

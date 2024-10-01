@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Microsoft. All rights reserved.
 // Licensed under the MIT License.
 
-namespace TypeAgent.Email;
+namespace TypeAgent.Core;
 
 /// <summary>
 /// Json makes the idiomatic Javascript Json.Stringify and Json.Parse APIs available to .NET by
@@ -59,7 +59,7 @@ public class Json
     {
         return indented ?
                s_indented.Serialize(value) :
-               s_default.Serialize<T>(value);
+               s_default.Serialize(value);
     }
 
     /// <summary>
@@ -97,7 +97,7 @@ public class Json
 
     string Serialize<T>(T value)
     {
-        return JsonSerializer.Serialize<T>(value, _options);
+        return JsonSerializer.Serialize(value, _options);
     }
 
     object? Deserialize(string json, Type type)

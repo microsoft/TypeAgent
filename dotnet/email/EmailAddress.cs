@@ -1,6 +1,6 @@
 ﻿// Copyright (c) Microsoft. All rights reserved.
 
-namespace TypeAgent.Email;
+namespace TypeAgent;
 
 public class EmailAddress
 {
@@ -26,5 +26,23 @@ public class EmailAddress
         {
             return string.IsNullOrEmpty(Address) ? DisplayName : $"\"{DisplayName}\" <{Address}>";
         }
+    }
+}
+
+public static class EmailAddressEx
+{
+    public static string Join(this List<EmailAddress> list)
+    {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < list.Count; ++i)
+        {
+            var item = list[i];
+            if (i > 0)
+            {
+                sb.Append(", ");
+            }
+            sb.Append(item.ToString());
+        }
+        return sb.ToString();
     }
 }

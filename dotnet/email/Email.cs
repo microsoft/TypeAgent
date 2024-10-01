@@ -1,9 +1,8 @@
 ﻿// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Text;
-
-namespace TypeAgent.Email;
+using TypeAgent.Core;
+namespace TypeAgent;
 
 public class Email
 {
@@ -27,6 +26,17 @@ public class Email
     public string ToJson()
     {
         return Json.Stringify(this);
+    }
+
+    public void Save(string filePath)
+    {
+        File.WriteAllText(filePath, ToJson());
+    }
+
+    public static Email Load(string filePath)
+    {
+        string json = File.ReadAllText(filePath);
+        return Json.Parse<Email>(json);
     }
 
     public override string ToString()
