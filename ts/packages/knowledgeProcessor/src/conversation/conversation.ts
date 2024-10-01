@@ -201,6 +201,7 @@ export interface SearchResponse<
     messageIds?: TMessageId[] | undefined;
     messages?: dateTime.Timestamped<TextBlock<TMessageId>>[] | undefined;
     answer?: AnswerResponse | undefined;
+    responseStyle?: string;
 
     allTopics(): IterableIterator<string>;
     allTopicIds(): IterableIterator<TTopicId>;

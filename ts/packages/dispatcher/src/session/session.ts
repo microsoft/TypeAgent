@@ -31,11 +31,11 @@ function getSessionsFilePath() {
     return path.join(getUserProfileDir(), "sessions.json");
 }
 
-function getSessionsDirPath() {
+export function getSessionsDirPath() {
     return path.join(getUserProfileDir(), "sessions");
 }
 
-function getSessionDirPath(dir: string) {
+export function getSessionDirPath(dir: string) {
     return path.join(getSessionsDirPath(), dir);
 }
 

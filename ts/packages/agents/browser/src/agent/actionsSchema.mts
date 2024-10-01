@@ -6,6 +6,7 @@ export type BrowserActions =
   | CloseTabAction
   | SwitchToTabAction
   | SwitchToTabByPositionAction
+  | CloseWindowAction
   | GoBackAction
   | GoForwardAction
   | ScrollDownAction
@@ -22,6 +23,7 @@ export type BrowserActions =
   | ZoomOut
   | ZoomReset
   | CaptureScreenshot
+  | ReloadPage
   | UnknownAction;
 
 export type UnknownAction = {
@@ -46,6 +48,13 @@ export type OpenTabAction = {
 // IMPORTANT: This does NOT close browser programs.
 export type CloseTabAction = {
   actionName: "closeTab";
+  parameters: {
+    title?: string;
+  };
+};
+
+export type CloseWindowAction = {
+  actionName: "closeWindow";
   parameters: {
     title?: string;
   };
@@ -176,6 +185,11 @@ export type StopReadPageContent = {
 
 export type CaptureScreenshot = {
   actionName: "captureScreenshot";
+  parameters: {};
+};
+
+export type ReloadPage = {
+  actionName: "reloadPage";
   parameters: {};
 };
 

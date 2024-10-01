@@ -143,29 +143,13 @@ export async function createTemporalLog<T>(
 
     async function getIdsInRange(startAt: Date, stopAt?: Date): Promise<TId[]> {
         const allIds = await sequence.allNames();
-        let startIndex = collections.binarySearchFirst(
+        const range = collections.getInRange(
             allIds,
             dateTime.timestampString(startAt),
+            stopAt ? dateTime.timestampString(stopAt) : undefined,
             strCmp,
         );
-        if (startIndex < 0) {
-            // No such date
-            return [];
-        }
-
-        let endIndex = startIndex;
-        if (stopAt) {
-            let endId = dateTime.timestampString(stopAt);
-            let i = endIndex + 1;
-            for (; i < allIds.length; ++i) {
-                if (allIds[i] > endId) {
-                    break;
-                }
-            }
-            endIndex = i - 1;
-        }
-        const count = endIndex - startIndex + 1;
-        return allIds.slice(startIndex, startIndex + count);
+        return range;
     }
 
     async function getEntriesInRange(

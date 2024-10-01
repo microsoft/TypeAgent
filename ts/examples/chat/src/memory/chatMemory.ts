@@ -19,11 +19,17 @@ import {
     getFileName,
     readAllText,
 } from "typeagent";
-import chalk from "chalk";
+import chalk, { ChalkInstance } from "chalk";
 import { PlayPrinter } from "./chatMemoryPrinter.js";
 import { timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
+import {
+    argConcurrency,
+    argDestFile,
+    argMinScore,
+    argSourceFile,
+} from "./common.js";
 
 export type ChatContext = {
     storePath: string;
@@ -190,6 +196,8 @@ export async function runChatMemory(): Promise<void> {
         actions,
         searchQuery,
         search,
+        makeTestSet,
+        runTestSet,
     };
     addStandardHandlers(handlers);
 
@@ -1096,6 +1104,71 @@ export async function runChatMemory(): Promise<void> {
         printer.writeJson(searchResult);
     }
 
+    function makeTestSetDef(): CommandMetadata {
+        return {
+            description: "Make a test set from the query batch file",
+            args: {
+                filePath: argSourceFile(),
+            },
+            options: {
+                destPath: argDestFile(),
+                concurrency: argConcurrency(2),
+            },
+        };
+    }
+    handlers.makeTestSet.metadata = makeTestSetDef();
+    async function makeTestSet(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, makeTestSetDef());
+        await conversation.testData.searchBatchFile(
+            context.conversationManager,
+            namedArgs.filePath,
+            namedArgs.destPath,
+            namedArgs.concurrency,
+            writeProgress,
+        );
+    }
+
+    function runTestSetDef(): CommandMetadata {
+        return {
+            description: "Run a test set",
+            args: {
+                filePath: argSourceFile(),
+            },
+            options: {
+                concurrency: argConcurrency(2),
+                minScore: argMinScore(0.8),
+            },
+        };
+    }
+    handlers.runTestSet.metadata = runTestSetDef();
+    async function runTestSet(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, runTestSetDef());
+        const comparisons = await conversation.testData.compareQueryBatchFile(
+            context.conversationManager,
+            context.embeddingModel,
+            namedArgs.filePath,
+            namedArgs.concurrency,
+            writeProgress,
+        );
+        printer.writeLine();
+        // Sort in order of least similar
+        comparisons.sort((x, y) => x.similarity - y.similarity);
+        for (const c of comparisons) {
+            const hasIssue = c.similarity < namedArgs.minScore;
+            const color = hasIssue ? chalk.redBright : chalk.green;
+            printer.writeInColor(
+                color,
+                `[${c.similarity}]\n${c.baseLine.query}`,
+            );
+            if (hasIssue) {
+                printer.writeLine("#Answer#");
+                await writeSearchResponse(c.baseLine.answer, chalk.green);
+                await writeSearchResponse(c.answer, chalk.redBright);
+            }
+            printer.writeLine();
+        }
+    }
+
     //--------------------
     // END COMMANDS
     //--------------------
@@ -1180,6 +1253,19 @@ export async function runChatMemory(): Promise<void> {
                 printer.writeInColor(chalk.red, answer);
             }
             printer.writeLine();
+        }
+    }
+
+    async function writeSearchResponse(
+        answerResponse: conversation.AnswerResponse | undefined,
+        color: ChalkInstance,
+    ) {
+        if (answerResponse) {
+            if (answerResponse.answer) {
+                printer.writeInColor(color, answerResponse.answer);
+            } else if (answerResponse.whyNoAnswer) {
+                printer.writeInColor(color, answerResponse.whyNoAnswer);
+            }
         }
     }
 
@@ -1692,5 +1778,9 @@ export async function runChatMemory(): Promise<void> {
             context.conversationName === "play" ||
             context.conversationName === "search"
         );
+    }
+
+    function writeProgress(value: string, i: number, total: number) {
+        printer.writeLine(`${i + 1}/${total} ${value}`);
     }
 }

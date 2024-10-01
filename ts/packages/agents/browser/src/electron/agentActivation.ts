@@ -9,6 +9,7 @@ declare global {
     }
 }
 
+let siteAgent: string = "";
 window.addEventListener("message", async (event) => {
     if (event.data === "setupSiteAgent") {
         if (window.browserConnect) {
@@ -16,6 +17,7 @@ window.addEventListener("message", async (event) => {
             const host = new URL(pageUrl).host;
 
             if (host === "paleobiodb.org" || host === "www.paleobiodb.org") {
+                siteAgent = "browser.paleoBioDb";
                 window.browserConnect.enableSiteAgent("browser.paleoBioDb");
             }
 
@@ -34,6 +36,7 @@ window.addEventListener("message", async (event) => {
                     "https://www.bestcrosswords.com/bestcrosswords/guestconstructor",
                 )
             ) {
+                siteAgent = "browser.crossword";
                 window.browserConnect.enableSiteAgent("browser.crossword");
             }
 
@@ -44,10 +47,18 @@ window.addEventListener("message", async (event) => {
             ];
 
             if (commerceHosts.includes(host)) {
+                siteAgent = "browser.commerce";
                 window.browserConnect.enableSiteAgent("browser.commerce");
             }
         } else {
             console.log("browserconnect not found by UI events script");
         }
+    }
+    if (
+        event.data === "disableSiteAgent" &&
+        siteAgent &&
+        window.browserConnect
+    ) {
+        window.browserConnect.disableSiteAgent(siteAgent);
     }
 });

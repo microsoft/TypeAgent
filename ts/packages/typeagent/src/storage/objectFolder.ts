@@ -3,7 +3,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { Path } from "../objStream";
+import { Path, removeFile, renameFileSync } from "../objStream";
 import { NameValue, ScoredItem } from "../memory";
 import { createTopNList } from "../vector/embeddings";
 import { createLazy, insertIntoSorted } from "../lib";
@@ -22,6 +22,7 @@ export interface ObjectFolderSettings {
     fileNameType?: FileNameType;
     cacheNames?: boolean | undefined; // Default is true
     useWeakRefs?: boolean | undefined; // Default is false
+    safeWrites?: boolean | undefined;
 }
 
 /**
@@ -139,16 +140,17 @@ export async function createObjectFolder<T>(
             fileName = objFileName;
             isNewName = true;
         } else {
+            validateName(name);
             fileName = name;
             isNewName = !exists(name);
         }
 
         const filePath = fullPath(fileName);
-        if (settings?.serializer) {
-            const buffer = settings.serializer(obj);
-            await fileSystem.write(filePath, buffer);
+        const data = serializeObject(obj);
+        if (folderSettings.safeWrites) {
+            await safeWrite(filePath, data);
         } else {
-            await fileSystem.write(filePath, JSON.stringify(obj));
+            await fileSystem.write(filePath, data);
         }
         if (isNewName) {
             pushName(fileName);
@@ -183,14 +185,15 @@ export async function createObjectFolder<T>(
     }
 
     async function get(name: string): Promise<T | undefined> {
+        validateName(name);
         const filePath = fullPath(name);
         try {
-            if (settings?.deserializer) {
+            if (folderSettings.deserializer) {
                 const buffer = await fileSystem.readBuffer(filePath);
                 if (buffer.length == 0) {
                     return undefined;
                 }
-                return <T>settings.deserializer(buffer);
+                return <T>folderSettings.deserializer(buffer);
             } else {
                 const json = await fileSystem.read(filePath);
                 if (json.length === 0) {
@@ -243,7 +246,10 @@ export async function createObjectFolder<T>(
 
     async function loadFileNames(): Promise<string[]> {
         let names = await fileSystem.readdir(folderPath);
-        if (settings?.allowSubFolders) {
+        if (folderSettings.safeWrites) {
+            names = removeHidden(names);
+        }
+        if (folderSettings.allowSubFolders) {
             names = removeDirNames(names);
         }
         names.sort();
@@ -371,6 +377,56 @@ export async function createObjectFolder<T>(
             },
         );
     }
+
+    function serializeObject(obj: any) {
+        if (folderSettings.serializer) {
+            return folderSettings.serializer(obj);
+        }
+        return JSON.stringify(obj);
+    }
+
+    /**
+     * Write to a temp file, then rename the file synchronously
+     * @param filePath
+     * @param data
+     */
+    async function safeWrite(
+        filePath: string,
+        data: string | Buffer,
+    ): Promise<void> {
+        let tempFilePath: string | undefined = toTempPath(filePath);
+        let backupFilePath: string | undefined;
+        try {
+            await fileSystem.write(tempFilePath, data);
+            backupFilePath = toBackupPath(filePath);
+            // These renames need to be synchronous to ensure atomicity
+            if (!fileSystem.renameFile(filePath, backupFilePath)) {
+                backupFilePath = undefined; // No backup file created because no filePath exists
+            }
+            try {
+                fileSystem.renameFile(tempFilePath, filePath);
+                tempFilePath = undefined;
+            } catch (error: any) {
+                // Try to name the file back to what it was
+                if (backupFilePath) {
+                    fileSystem.renameFile(backupFilePath, filePath);
+                    backupFilePath = undefined;
+                }
+                throw error;
+            }
+        } catch (error: any) {
+            logError("fileSystem.write", filePath, error);
+            throw error;
+        } finally {
+            // Remove all temp files
+            if (tempFilePath) {
+                await fileSystem.removeFile(tempFilePath);
+            }
+            if (backupFilePath) {
+                await fileSystem.removeFile(backupFilePath);
+            }
+        }
+    }
 }
 
 /**
@@ -391,6 +447,9 @@ function generateTickString(timestamp?: Date): string {
 }
 
 const DIR_PREFIX = ".";
+const TEMP_SUFFIX = "~";
+const BACKUP_SUFFIX = "^";
+
 export function makeSubDirPath(basePath: string, name: string): string {
     return path.join(basePath, ensureDirName(name));
 }
@@ -406,25 +465,17 @@ function isDir(name: string): boolean {
     return name[0] == DIR_PREFIX;
 }
 
+function isHidden(name: string): boolean {
+    const lastChar = name[name.length - 1];
+    return lastChar === TEMP_SUFFIX || lastChar === BACKUP_SUFFIX;
+}
+
 function removeDirNames(names: string[]): string[] {
-    let dirCount = 0;
-    // Remove dir names from the file list
-    for (let i = 0; i < names.length; ++i) {
-        if (isDir(names[i])) {
-            dirCount++;
-            names[i] = "";
-        }
-    }
-    if (dirCount > 0) {
-        let filesOnly: string[] = [];
-        for (let i = 0; i < names.length; ++i) {
-            if (names[i].length > 0) {
-                filesOnly.push(names[i]);
-            }
-        }
-        names = filesOnly;
-    }
-    return names;
+    return names.filter((d) => !isDir(d));
+}
+
+function removeHidden(names: string[]): string[] {
+    return names.filter((n) => !isHidden(n));
 }
 
 function getDirNames(names: string[]): string[] {
@@ -440,6 +491,20 @@ function getDirNames(names: string[]): string[] {
     return dirNames;
 }
 
+function toTempPath(filePath: string) {
+    return filePath + TEMP_SUFFIX;
+}
+function toBackupPath(filePath: string) {
+    return filePath + BACKUP_SUFFIX;
+}
+
+function validateName(name: string) {
+    if (isHidden(name)) {
+        throw new Error(
+            `Object names cannot end with $${TEMP_SUFFIX} or ${BACKUP_SUFFIX} `,
+        );
+    }
+}
 function generateMonotonicName(
     counterStartAt: number,
     baseName: string,
@@ -486,7 +551,6 @@ export function* createFileNameGenerator(
         prevName = nextName;
     }
 }
-
 /**
  * An Abstract File System
  */
@@ -500,9 +564,10 @@ export interface FileSystem {
     readBuffer(path: string): Promise<Buffer>;
     read(path: string): Promise<string>;
     write(path: string, data: string | Buffer): Promise<void>;
-    removeFile(path: string): Promise<void>;
+    removeFile(path: string): Promise<boolean>;
     copyFile(fromPath: string, toPath: string): Promise<void>;
     copyDir(fromPath: string, toPath: string): Promise<void>;
+    renameFile(fromPath: string, toPath: string): boolean;
 }
 
 const g_fsDefault = createFileSystem();
@@ -522,9 +587,10 @@ function createFileSystem(): FileSystem {
         write,
         readBuffer: (path) => fs.promises.readFile(path),
         read: (path) => fs.promises.readFile(path, "utf-8"),
-        removeFile: (path) => fs.promises.unlink(path),
+        removeFile: (path) => removeFile(path),
         copyFile,
         copyDir,
+        renameFile: (from, to) => renameFileSync(from, to),
     };
 
     async function ensureDir(folderPath: Path): Promise<void> {
@@ -551,11 +617,14 @@ function createFileSystem(): FileSystem {
         );
     }
 
-    async function write(path: string, data: string | Buffer): Promise<void> {
+    async function write(
+        filePath: string,
+        data: string | Buffer,
+    ): Promise<void> {
         try {
-            await fs.promises.writeFile(path, data);
+            await fs.promises.writeFile(filePath, data);
         } catch (error: any) {
-            logError("fileSystem.write", path, error);
+            logError("fileSystem.write", filePath, error);
             throw error;
         }
     }
