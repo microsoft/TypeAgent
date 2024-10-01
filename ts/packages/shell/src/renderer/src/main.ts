@@ -177,9 +177,6 @@ function addEvents(
                 cameraView.show();
                 return;
             }
-            case "upload-file": {
-                chatView.chatInput.attachClickButton.click();
-            }
         }
     });
 }

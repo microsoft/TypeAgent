@@ -59,11 +59,6 @@ async function handlePhotoAction(
             photoContext.actionIO.takeAction("show-camera");
             break;
         }
-        case "uploadImage": {
-            result = createActionResult("Showing open file dialog...");
-            photoContext.actionIO.takeAction("upload-file");
-            break;
-        }
         default:
             throw new Error(`Unknown action: ${action.actionName}`);
     }

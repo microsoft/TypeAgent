@@ -179,7 +179,6 @@ export class ChatInput {
     textarea: ExpandableTextarea;
     micButton: HTMLButtonElement;
     attachButton: HTMLLabelElement;
-    attachClickButton: HTMLButtonElement; // used to activate open file dialog
     camButton: HTMLButtonElement;
     dragTemp: string | undefined = undefined;
     fileInput: HTMLInputElement;
@@ -326,10 +325,6 @@ export class ChatInput {
         this.attachButton.appendChild(iconAttach());
         this.attachButton.className = "chat-input-button";
 
-        this.attachClickButton = document.createElement("button");
-        this.attachClickButton.className = "chat-message-hidden";
-        this.attachClickButton.onclick = () => { this.attachButton.click(); }
-
         getSpeechToken().then((result) => {
             if (result == undefined) {
                 const button = document.querySelector<HTMLButtonElement>(
@@ -351,7 +346,6 @@ export class ChatInput {
 
         this.inputContainer.appendChild(this.textarea.getTextEntry());
         this.inputContainer.appendChild(this.attachButton);
-        this.inputContainer.appendChild(this.attachClickButton);
         this.inputContainer.appendChild(this.camButton);
         this.inputContainer.appendChild(this.micButton);
         this.inputContainer.appendChild(this.separatorContainer);
