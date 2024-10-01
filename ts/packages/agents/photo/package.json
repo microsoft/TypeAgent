@@ -1,5 +1,5 @@
 {
-  "name": "photos-agent",
+  "name": "photo-agent",
   "version": "0.0.1",
   "description": "Photos dispatcher agent",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",

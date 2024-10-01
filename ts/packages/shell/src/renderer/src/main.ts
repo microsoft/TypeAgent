@@ -178,7 +178,7 @@ function addEvents(
                 return;
             }
             case "upload-file": {
-                chatView.chatInput.attachButton.click();
+                chatView.chatInput.attachClickButton.click();
             }
         }
     });

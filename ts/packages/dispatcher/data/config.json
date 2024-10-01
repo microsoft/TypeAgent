@@ -61,7 +61,7 @@
     },
     "photo": {
       "type": "module",
-      "name": "photos-agent",
+      "name": "photo-agent",
       "execMode": "separate"
     },
     "greeting": {

@@ -643,7 +643,7 @@ importers:
         specifier: ^5.4.2
         version: 5.4.3
 
-  packages/agents/photos:
+  packages/agents/photo:
     dependencies:
       '@typeagent/agent-sdk':
         specifier: workspace:*
@@ -1134,9 +1134,9 @@ importers:
       music:
         specifier: workspace:*
         version: link:../agents/player
-      photos-agent:
+      photo-agent:
         specifier: workspace:*
-        version: link:../agents/photos
+        version: link:../agents/photo
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2
