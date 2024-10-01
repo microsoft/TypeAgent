@@ -24,6 +24,7 @@ import { executeCommand } from "./action/actionHandlers.js";
 import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/command";
 import { RequestMetrics } from "./utils/metrics.js";
 import { PartialCompletionResult } from "./dispatcher/dispatcher.js";
+import { resolveFlag } from "./utils/args.js";
 
 const debugInteractive = registerDebug("typeagent:cli:interactive");
 
@@ -77,19 +78,19 @@ export async function resolveCommand(
             break;
         }
 
-        const currentTable = table.commands[subCommand];
-        if (currentTable === undefined) {
+        const current = table.commands[subCommand];
+        if (current === undefined) {
             // Unknown command
             args.unshift(subCommand);
             break;
         }
 
         commandPrefix.push(subCommand);
-        if (!isCommandDescriptorTable(currentTable)) {
-            descriptor = currentTable;
+        if (!isCommandDescriptorTable(current)) {
+            descriptor = current;
             break;
         }
-        table = currentTable;
+        table = current;
     }
 
     return {
@@ -279,64 +280,104 @@ const debugPartialError = registerDebug("typeagent:dispatcher:partial:error");
 
 // Determine the command to resolve for partial completion
 // If there is a trailing space, then it will just be the input (minus the @)
-// If there is a space, then it will the input without the last word
-function getPartialResolveCommand(input: string) {
-    const trimmed = input.trimEnd();
-    if (trimmed !== input) {
-        // There is trailing space, just resolve the whole command
-        return input.substring(1);
+// If there is no space, then it will the input without the last word
+function getPartialCompletedCommand(input: string) {
+    if (!/^\s*@/.test(input)) {
+        return undefined;
     }
 
+    if (/\s+$/.test(input)) {
+        // There is trailing space, just resolve the whole command
+        return { partial: input.trimEnd(), prefix: "" };
+    }
     const suffix = input.match(/\s+\S+$/);
     if (suffix === null) {
-        return "";
+        // No suffix, resolve the whole command
+        return { partial: input.trimEnd(), prefix: "" };
     }
-    return input.substring(1, input.length - suffix[0].length);
+    const split = input.length - suffix[0].length;
+    return {
+        partial: input.substring(0, split).trimEnd(),
+        prefix: input.substring(split).trimStart(),
+    };
 }
 
 export async function getPartialCompletion(
-    originalInput: string,
+    input: string,
     context: CommandHandlerContext,
 ): Promise<PartialCompletionResult | undefined> {
-    const input = originalInput.trimStart();
-    if (!input.startsWith("@")) {
+    const partialCompletedCommand = getPartialCompletedCommand(input);
+
+    if (partialCompletedCommand === undefined) {
         // TODO: request completions
         return undefined;
     }
 
-    const result = await resolveCommand(
-        getPartialResolveCommand(input),
-        context,
-    );
-    if (result.descriptor !== undefined) {
-        // TODO: flags
+    // Trim spaces and remove leading '@'
+    const partialCommand = partialCompletedCommand.partial.trim().substring(1);
+
+    const result = await resolveCommand(partialCommand, context);
+
+    const table = result.table;
+    if (table === undefined) {
+        // Unknown app agent, or appAgent doesn't support commands
         return undefined;
     }
 
-    if (result.table === undefined) {
-        return undefined;
+    let completions: string[] = [];
+    const descriptor = result.descriptor;
+    if (descriptor !== undefined) {
+        if (
+            result.args.length === 0 &&
+            table?.defaultSubCommand === result.descriptor
+        ) {
+            // Match the default sub command.  Includes additiona subcommand names
+            completions.push(...Object.keys(table.commands));
+        }
+
+        const flags = descriptor.parameters?.flags;
+        if (flags === undefined) {
+            return undefined;
+        }
+
+        let flagsNeedsValue = false;
+        if (result.args.length !== 0) {
+            const lastArg = result.args[result.args.length - 1];
+            if (lastArg.startsWith("-")) {
+                const def = resolveFlag(flags, lastArg);
+                if (def?.type !== "boolean") {
+                    flagsNeedsValue = true;
+                }
+            }
+        }
+        if (!flagsNeedsValue) {
+            for (const [key, value] of Object.entries(flags)) {
+                completions.push(`--${key}`);
+                if (
+                    typeof value === "object" &&
+                    !Array.isArray(value) &&
+                    value.char !== undefined
+                ) {
+                    completions.push(`-${value.char}`);
+                }
+            }
+        }
+    } else {
+        if (result.args.length !== 0) {
+            // Unknown command
+            return undefined;
+        }
+        completions.push(...Object.keys(table.commands));
+
+        if (completions.length === 0) {
+            // No more completion from the table.
+            return undefined;
+        }
     }
 
-    if (result.args.length !== 0) {
-        return undefined;
-    }
-
-    const agent = `@${result.appAgentName === "system" ? "(system\\s+)?" : `${result.appAgentName}\\s+`}`;
-
-    const regexp = new RegExp(
-        `^\\s*${agent}${result.command.join("\\s+")}\\s*`,
-    );
-
-    const p = input.match(regexp);
-    if (p === null) {
-        debugPartialError(`Failed to match original input: ${input} ${regexp}`);
-        return undefined;
-    }
-    const partial = p[0].trim();
     return {
-        partial,
-        space: partial.trimStart() !== "@",
-        prefix: input.substring(p[0].length),
-        completions: Object.keys(result.table.commands),
+        ...partialCompletedCommand,
+        space: partialCommand !== "",
+        completions,
     };
 }

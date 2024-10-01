@@ -1,52 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-type FlagValuePrimitiveTypes = string | number | boolean;
-type FlagValueLiteral<T extends FlagValuePrimitiveTypes> = T extends number
-    ? "number"
-    : T extends boolean
-      ? "boolean"
-      : "string";
+import {
+    DefaultValueDefinition,
+    FlagDefinition,
+    FlagDefinitions,
+    FlagValuePrimitiveTypes,
+    FullFlagDefinition,
+    ParameterDefinitions,
+} from "@typeagent/agent-sdk";
 
-type SingleFlagDefinition<T extends FlagValuePrimitiveTypes> = {
-    multiple?: false;
-    char?: string;
-    type?: FlagValueLiteral<T>;
-    default?: T;
-};
-
-type MultipleFlagDefinition<T extends FlagValuePrimitiveTypes> = {
-    multiple: true;
-    char?: string;
-    type?: FlagValueLiteral<T>;
-    default?: readonly T[];
-};
-
-type FlagDefinitionT<T extends FlagValuePrimitiveTypes> = T extends boolean
-    ? SingleFlagDefinition<T>
-    : SingleFlagDefinition<T> | MultipleFlagDefinition<T>;
-
-type FullFlagDefinition = FlagDefinitionT<FlagValuePrimitiveTypes>;
-
-// shorthand by only providing the default value, type and multiple is inferred.
-type DefaultValueDefinition<T extends FlagValuePrimitiveTypes> =
-    T extends boolean ? T : T | T[];
-
-type FlagDefinition =
-    | undefined // short hand for "string" flag without a default value
-    | DefaultValueDefinition<FlagValuePrimitiveTypes>
-    | FullFlagDefinition;
-
-type FlagDefinitions = {
-    [key: string]: FlagDefinition;
-};
-
-type ParameterDefinitions = {
-    flags: FlagDefinitions;
-    args?: boolean; // TODO: add more capabilities
-};
-
-// Output
+// Output Types
 type FlagDefaultValueType =
     | string
     | number
@@ -107,6 +71,40 @@ function getTypeFromValue(key: string, value?: FlagDefaultValueType) {
     return typeof value as "string" | "number" | "boolean";
 }
 
+function isFullFlagDefinition(def: FlagDefinition): def is FullFlagDefinition {
+    return typeof def === "object" || !Array.isArray(def);
+}
+
+export function expandFlagDefinition(key: string, def: FlagDefinition) {
+    const full = isFullFlagDefinition(def) ? def : undefined;
+    const value = full?.default ?? (def as DefaultValueDefinition);
+    return {
+        multiple: full?.multiple ?? Array.isArray(value),
+        type: full?.type ?? getTypeFromValue(key, value),
+        default: value,
+    } as FullFlagDefinition;
+}
+
+export function resolveFlag(
+    definitions: FlagDefinitions,
+    flag: string,
+): FullFlagDefinition | undefined {
+    if (flag.startsWith("--")) {
+        const key = flag.substring(2);
+        const def = definitions[key];
+        if (def === undefined) {
+            return def;
+        }
+        return expandFlagDefinition(key, def);
+    }
+    const alias = flag.substring(1);
+    for (const [key, def] of Object.entries(definitions)) {
+        if (isFullFlagDefinition(def) && def?.char === alias) {
+            return expandFlagDefinition(key, def);
+        }
+    }
+}
+
 export function parseCommandArgs<T extends ParameterDefinitions>(
     request: string,
     config?: T,
@@ -118,7 +116,7 @@ export function parseCommandArgs<T extends ParameterDefinitions>(
     const defaultFlags = config?.flags;
     if (defaultFlags) {
         for (const [key, value] of Object.entries(defaultFlags)) {
-            if (typeof value === "object" && !Array.isArray(value)) {
+            if (isFullFlagDefinition(value)) {
                 if (value.char !== undefined) {
                     if (aliases.has(value.char)) {
                         throw new Error(`Duplicate alias: ${value.char}`);

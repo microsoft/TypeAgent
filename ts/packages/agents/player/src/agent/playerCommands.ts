@@ -1,14 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionContext } from "@typeagent/agent-sdk";
+import { ActionContext, AppAgentCommandInterface } from "@typeagent/agent-sdk";
 import {
     getCommandInterface,
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
 import { PlayerActionContext } from "./playerHandlers.js";
 import { loadHistoryFile } from "../client.js";
-import { AppAgentCommandInterface } from "../../../../agentSdk/dist/agentInterface.js";
 
 const handlers: CommandHandlerTable = {
     description: "Player App Agent Commands",
