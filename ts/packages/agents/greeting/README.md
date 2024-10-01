@@ -1,12 +1,12 @@
-# Chat Agent
+# Greeting Agent
 
-Chat Agent is **sample code** that explores how to build a typed Chat agent with **TypeChat**.
+Greeting Agent is **sample code** that explores how to build a typed Greeting agent with **TypeChat**.
 
 The sample demonstrates:
 
-- How to use schema to get a **structured** [Chat Response](./src/chatResponseActionSchema.ts) from the LLM.
-- How the Chat Response schema allows the LLM to include one more **_lookups_** for additional information.
-- How the [Chat Response Handler](./src/chatResponseHandler.ts) may use a web search engine to perform the lookups and produce a typed response.
+- How to use schema to get a **structured** [Greeting Response](./src/greetingActionSchema.ts) from the LLM.
+- How the Chat Response schema allows the LLM to generate several resposnes and select one at random from the generated options.
+- How the [Greeting Action Handler](./src/greetingActionHandler.ts) may use a web search engine to augment the generated responses with personalized infomraiton.
 
 The sample includes an example implementation of lookups with Bing. To experiment with lookups, please add your Bing API key to the root **.env** file with the following key:  
 **BING_API_KEY**
