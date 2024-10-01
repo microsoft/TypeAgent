@@ -549,6 +549,10 @@ app.whenReady().then(async () => {
         return metrics;
     }
 
+    if (ShellSettings.getinstance().agentGreeting) {
+        processShellRequest("@greeting", "agent-0", []);
+    }
+
     ipcMain.on(
         "process-shell-request",
         (_event, text: string, id: string, images: string[]) => {
@@ -578,6 +582,7 @@ app.whenReady().then(async () => {
             dispatcher.getDynamicDisplay(appAgentName, "html", id),
     );
     ipcMain.on("dom ready", async () => {
+
         settingSummary = dispatcher.getSettingSummary();
         mainWindow?.webContents.send(
             "setting-summary-changed",
@@ -587,10 +592,6 @@ app.whenReady().then(async () => {
 
         // Send settings asap
         ShellSettings.getinstance().onSettingsChanged!();
-
-        if (ShellSettings.getinstance().agentGreeting) {
-            processShellRequest("@greeting", "sldfjsdlfj", []);
-        }
     });
 
     await initializeSpeech(dispatcher);
