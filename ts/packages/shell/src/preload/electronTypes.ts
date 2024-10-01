@@ -222,14 +222,14 @@ export interface ClientAPI {
             e: Electron.IpcRendererEvent,
             settings: ShellSettings,
         ) => void,
-    );
+    ): void;
     onNotificationCommand(
         callback: (
             e: Electron.IpcRendererEvent,
             requestId: string,
             command: string,
         ) => void,
-    );
+    ): void;
     onNotify(
         callback: (
             e: Electron.IpcRendererEvent,
@@ -238,7 +238,7 @@ export interface ClientAPI {
             source: string,
             data: any,
         ) => void,
-    );
+    ): void;
     onTakeAction(
         callback: (e: Electron.IpcRendererEvent, action: string) => void,
     );
