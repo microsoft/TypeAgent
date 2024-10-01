@@ -343,6 +343,20 @@ async function runBrowserAction(action: any) {
             });
             break;
         }
+        case "reloadPage": {
+            sendScriptAction({
+                type: "clear_page_schema",
+            });
+            location.reload();
+            break;
+        }
+        case "closeWindow": {
+            window.close();
+            // todo: call method on IPC process to close the window/view
+
+            break;
+        }
+        
 
         case "unknown": {
             confirmationMessage = `Did not understand the request "${action.parameters.text}"`;
@@ -440,14 +454,8 @@ contextBridge.exposeInMainWorld("browserConnect", {
 
 await ensureWebsocketConnected();
 
-window.addEventListener(
-    "message",
-    async (event) => {
-        if (event.data === "page-to-bridge") {
-            console.log("Message from page to bridge");
-        }
-    },
-    false,
-);
+window.onbeforeunload = () => {
+    window.postMessage("disableSiteAgent");
+};
 
 window.postMessage("setupSiteAgent");
