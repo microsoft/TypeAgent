@@ -9,7 +9,7 @@ declare global {
     }
 }
 
-let siteAgent:string = "";
+let siteAgent: string = "";
 window.addEventListener("message", async (event) => {
     if (event.data === "setupSiteAgent") {
         if (window.browserConnect) {
@@ -54,7 +54,11 @@ window.addEventListener("message", async (event) => {
             console.log("browserconnect not found by UI events script");
         }
     }
-    if ((event.data === "disableSiteAgent") && siteAgent && (window.browserConnect)) {
+    if (
+        event.data === "disableSiteAgent" &&
+        siteAgent &&
+        window.browserConnect
+    ) {
         window.browserConnect.disableSiteAgent(siteAgent);
     }
 });

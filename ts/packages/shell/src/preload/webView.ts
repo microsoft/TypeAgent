@@ -138,11 +138,14 @@ export async function awaitPageLoad() {
 }
 
 export async function getTabHTML(fullSize: boolean) {
-    let outerHTML = await sendScriptAction({
-        type: "get_reduced_html",
-        fullSize: fullSize,
-        frameId: 0,
-    }, 1000);
+    let outerHTML = await sendScriptAction(
+        {
+            type: "get_reduced_html",
+            fullSize: fullSize,
+            frameId: 0,
+        },
+        1000,
+    );
 
     return outerHTML;
 }
@@ -159,11 +162,14 @@ export async function getTabHTMLFragments(fullSize: boolean) {
         5000,
     );
 
-    const frameText = await sendScriptAction({
-        type: "get_page_text",
-        inputHtml: frameHTML,
-        frameId: 0,
-    },1000);
+    const frameText = await sendScriptAction(
+        {
+            type: "get_page_text",
+            inputHtml: frameHTML,
+            frameId: 0,
+        },
+        1000,
+    );
 
     htmlFragments.push({
         frameId: 0,
@@ -356,7 +362,6 @@ async function runBrowserAction(action: any) {
 
             break;
         }
-        
 
         case "unknown": {
             confirmationMessage = `Did not understand the request "${action.parameters.text}"`;
