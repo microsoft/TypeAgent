@@ -194,4 +194,3 @@ describe("Argument parsing", () => {
         expect(str).toStrictEqual(["world", "!"]);
     });
 });
-
