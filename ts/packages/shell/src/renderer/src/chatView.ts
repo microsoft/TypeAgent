@@ -1520,7 +1520,6 @@ export class ChatView {
     private getMessageGroup(id: string) {
         const messageGroup = this.idToMessageGroup.get(id);
         if (messageGroup === undefined) {
-
             // for agent initiated messages we need to create an associated message group
             if (id.startsWith("agent-")) {
                 const mg: MessageGroup = new MessageGroup(

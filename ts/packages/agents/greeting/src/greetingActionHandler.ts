@@ -9,16 +9,21 @@ import {
     ActionResultSuccess,
 } from "@typeagent/agent-sdk";
 import { createTypeChat, promptLib } from "typeagent";
-import {
-    createActionResult,
-} from "@typeagent/agent-sdk/helpers/action";
+import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 
-import {GreetingAction, PersonalizedGreetingAction} from "./greetingActionSchema.js";
+import {
+    GreetingAction,
+    PersonalizedGreetingAction,
+} from "./greetingActionSchema.js";
 import { randomInt } from "node:crypto";
 //import { getLookupInstructions, getLookupSettings, LookupSettings, searchWeb } from "chat-agent/agent/handlers";
 //import { StopWatch } from "common-utils";
 //import { generateAnswerFromWebPages } from "typeagent";
-import { CommandHandler, CommandHandlerTable, getCommandInterface } from "@typeagent/agent-sdk/helpers/command";
+import {
+    CommandHandler,
+    CommandHandlerTable,
+    getCommandInterface,
+} from "@typeagent/agent-sdk/helpers/command";
 import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
 import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";
 
@@ -56,7 +61,8 @@ export interface GenericGreeting {
 }`;
 
 export class GreetingCommandHandler implements CommandHandler {
-    public readonly description = "Have the agent generate a personalized greeting.";
+    public readonly description =
+        "Have the agent generate a personalized greeting.";
     private instructions = `You are a breezy greeting generator. Greetings should NOT end with questions.`;
     public async run(_input: string, context: ActionContext) {
         //
@@ -80,13 +86,12 @@ export class GreetingCommandHandler implements CommandHandler {
             maxWindowLength,
         );
 
-        const response = await this.getTypeChatResponse(
-            "Hi!",
-            chat,
-        );
+        const response = await this.getTypeChatResponse("Hi!", chat);
 
         if (response.success) {
-            let result: ActionResultSuccess = handlePersonalizedGreetingAction(response.data as PersonalizedGreetingAction) as ActionResultSuccess;
+            let result: ActionResultSuccess = handlePersonalizedGreetingAction(
+                response.data as PersonalizedGreetingAction,
+            ) as ActionResultSuccess;
             context.actionIO.setDisplay(result.literalText!);
         } else {
             context.actionIO.appendDisplay("Unale to generate greeting.");
@@ -97,7 +102,11 @@ export class GreetingCommandHandler implements CommandHandler {
         let apiSettings: openai.ApiSettings | undefined;
         if (!apiSettings) {
             if (fastModel) {
-                apiSettings = openai.localOpenAIApiSettingsFromEnv(openai.ModelType.Chat, undefined, "GPT_35_TURBO"); 
+                apiSettings = openai.localOpenAIApiSettingsFromEnv(
+                    openai.ModelType.Chat,
+                    undefined,
+                    "GPT_35_TURBO",
+                );
             } else {
                 // Create default model
                 apiSettings = openai.apiSettingsFromEnv();
@@ -134,8 +143,7 @@ export class GreetingCommandHandler implements CommandHandler {
 const handlers: CommandHandlerTable = {
     description: "Generate agent greeting.",
     defaultSubCommand: new GreetingCommandHandler(),
-    commands: {
-    },
+    commands: {},
 };
 
 async function executeGreetingAction(
@@ -152,18 +160,21 @@ async function handleGreetingAction(
 ) {
     switch (action.actionName) {
         case "personalizedGreetingResponse": {
-            return handlePersonalizedGreetingAction(action as PersonalizedGreetingAction);
+            return handlePersonalizedGreetingAction(
+                action as PersonalizedGreetingAction,
+            );
         }
         default:
             throw new Error(`Unknown action: ${action.actionName}`);
     }
 }
 
-function handlePersonalizedGreetingAction(greetingAction: PersonalizedGreetingAction): ActionResult {
+function handlePersonalizedGreetingAction(
+    greetingAction: PersonalizedGreetingAction,
+): ActionResult {
     let result = createActionResult("Hi!");
     if (greetingAction.parameters !== undefined) {
-        const count =
-            greetingAction.parameters.possibleGreetings.length;
+        const count = greetingAction.parameters.possibleGreetings.length;
         console.log(`Received ${count} generated greetings`);
 
         // randomly decide on a conversation starter (or not)
@@ -174,7 +185,7 @@ function handlePersonalizedGreetingAction(greetingAction: PersonalizedGreetingAc
         // if (index > 0 && index < intiatorTopic.length) {
         //     let lookupSettings: LookupSettings = await getLookupSettings(true);
         //     lookupSettings.lookupOptions.rewriteFocus = `Use the greeting '${greetingAction.parameters.possibleGreetings[randomInt(0, count)].generatedGreeting}' and the supplied initiator topic to make a better conversation starter. Keep the mood LIGHT.`
-        //     //return await handleLookup([intiatorTopic[index]], context, lookupSettings);    
+        //     //return await handleLookup([intiatorTopic[index]], context, lookupSettings);
         //     let greeting: string | undefined = await runLookup(intiatorTopic[index], context, lookupSettings);
 
         //     if (greeting) {
@@ -189,11 +200,10 @@ function handlePersonalizedGreetingAction(greetingAction: PersonalizedGreetingAc
         //         ].generatedGreeting,
         //     );
         // } else {
-            result = createActionResult(
-                greetingAction.parameters.possibleGreetings[
-                    randomInt(0, count)
-                ].generatedGreeting,
-            );
+        result = createActionResult(
+            greetingAction.parameters.possibleGreetings[randomInt(0, count)]
+                .generatedGreeting,
+        );
         // }
     }
     return result;
@@ -218,7 +228,7 @@ function handlePersonalizedGreetingAction(greetingAction: PersonalizedGreetingAc
 //         lookup,
 //         settings.lookupOptions,
 //         1,
-//         getLookupInstructions(), 
+//         getLookupInstructions(),
 //     );
 
 //     return answer?.generatedText;

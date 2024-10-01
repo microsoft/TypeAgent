@@ -582,7 +582,6 @@ app.whenReady().then(async () => {
             dispatcher.getDynamicDisplay(appAgentName, "html", id),
     );
     ipcMain.on("dom ready", async () => {
-
         settingSummary = dispatcher.getSettingSummary();
         mainWindow?.webContents.send(
             "setting-summary-changed",

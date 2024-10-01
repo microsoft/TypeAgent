@@ -253,7 +253,8 @@ export class SettingsView {
         });
 
         this.agentGreetingCheckBox = this.addCheckbox("Agent greeting", () => {
-            this._shellSettings.agentGreeting = this.agentGreetingCheckBox.checked;
+            this._shellSettings.agentGreeting =
+                this.agentGreetingCheckBox.checked;
         });
     }
 
