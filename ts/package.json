@@ -21,6 +21,8 @@
     "cli": "pnpm -C packages/cli exec npx --no .",
     "elevate": "node tools/scripts/elevate.js",
     "getKeys": "node tools/scripts/getKeys.mjs",
+    "knowledgeVisualizer": "pnpm -C packages/knowledgeVisualizer exec npm run dev",
+    "kv": "pnpm -C packages/knowledgeVisualizer exec npm run dev",
     "lint": "fluid-build . -t prettier",
     "lint:fix": "pnpm run prettier:fix",
     "prettier": "prettier --check .",
