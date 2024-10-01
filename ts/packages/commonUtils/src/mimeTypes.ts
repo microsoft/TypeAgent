@@ -28,14 +28,13 @@ export function getMimeTypeFromFileExtension(fileExtension: string): string {
     throw "Unsupported file extension.";
 }
 
-
 export function isMimeTypeSupported(mime: string): boolean {
-    switch(mime) {
+    switch (mime) {
         case "image/png":
         case "image/jpg":
         case "image/jpeg":
             return true;
-        default: 
+        default:
             return false;
     }
 }

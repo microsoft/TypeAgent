@@ -360,7 +360,11 @@ export class ChatInput {
             .toLowerCase()
             .substring(file.name.lastIndexOf(".") + 1, file.name.length);
 
-        const supportedFileTypes: Set<string> = new Set<string>([ ".jpg", ".jpeg", ".png" ]);
+        const supportedFileTypes: Set<string> = new Set<string>([
+            ".jpg",
+            ".jpeg",
+            ".png",
+        ]);
         if (!supportedFileTypes.has(`.${mimeType}`)) {
             console.log(`Unsupported MIME type for '${file.name}'`);
             this.textarea.getTextEntry().innerText = `Unsupported file type '${mimeType}'. Supported types: ${Array.from(supportedFileTypes).toString()}`;
