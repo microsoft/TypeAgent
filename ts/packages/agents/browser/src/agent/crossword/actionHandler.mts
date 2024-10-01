@@ -31,6 +31,7 @@ export async function getBoardSchema(
     for (let i = 0; i < htmlFragments.length; i++) {
       // skip html fragments that are too short to contain crossword
       if (
+        !htmlFragments[i].content ||
         htmlFragments[i].content.length < 500 ||
         !htmlFragments[i].text ||
         htmlFragments[i].text.length < 200

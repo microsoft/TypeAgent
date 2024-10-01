@@ -129,7 +129,9 @@ class ShellOpenWebContentView implements CommandHandler {
 
                 break;
             case "crossword":
-                targetUrl = new URL("https://nytsyn.pzzl.com/cwd_seattle");
+                targetUrl = new URL(
+                    "https://www.seattletimes.com/games-nytimes-crossword/",
+                );
 
                 break;
             default:

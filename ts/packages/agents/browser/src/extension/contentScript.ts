@@ -694,13 +694,16 @@ window.addEventListener(
             event.data.messageType == "scriptActionRequest"
         ) {
             await handleScriptAction(event.data.body, (response) => {
-                window.postMessage({
-                    source: "contentScript",
-                    target: "preload",
-                    messageType: "scriptActionResponse",
-                    id: event.data.id,
-                    body: response,
-                });
+                window.top?.postMessage(
+                    {
+                        source: "contentScript",
+                        target: "preload",
+                        messageType: "scriptActionResponse",
+                        id: event.data.id,
+                        body: response,
+                    },
+                    "*",
+                );
             });
         }
     },
