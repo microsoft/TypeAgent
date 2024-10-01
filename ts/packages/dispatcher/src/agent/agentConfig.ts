@@ -9,6 +9,7 @@ import {
 import { getDispatcherConfig, getExternalAgentsConfig } from "../utils/config.js";
 import { createRequire } from "module";
 import path from "node:path";
+import { promises as fs } from "node:fs";
 
 import { createAgentProcessShim } from "./agentProcessShim.js";
 import { AppAgentProvider } from "./agentProvider.js";
@@ -53,7 +54,7 @@ async function loadModuleConfig(
     const require = createRequire(import.meta.url);
     let modulePath = `${info.name}/agent/manifest`;
     if(info.path != undefined){
-        modulePath = info.path.replace("file:", "");
+        modulePath = info.path.replace("file:/", "");
         modulePath = path.join(modulePath, `/agent/manifest`);
     }
 
