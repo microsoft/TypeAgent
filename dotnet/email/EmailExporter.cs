@@ -63,6 +63,24 @@ public class EmailExporter
 
     public void PrintEmail(string sourcePath)
     {
+        if (PathEx.IsDirectory(sourcePath))
+        {
+            int count = 0;
+            foreach (string sourceFilePath in Directory.EnumerateFiles(sourcePath))
+            {
+                ++count;
+                Console.WriteLine($"{count}: {Path.GetFileName(sourceFilePath)}");
+                PrintFile(sourceFilePath);
+            }
+        }
+        else
+        {
+            PrintFile(sourcePath);
+        }
+    }
+
+    void PrintFile(string sourcePath)
+    {
         Email email = _outlook.LoadEmail(sourcePath);
         Console.WriteLine(email.ToString());
     }
@@ -76,24 +94,60 @@ public class EmailExporter
 
     static void Main(string[] args)
     {
-        string path = @"C:\data\testEmail\msg\Weekly T&R Security Compliance Status Report (September 30) .msg";
+        args = EnsureArgs(args);
+        if (args == null || args.Length == 0)
+        {
+            return;
+        }
+        bool print = args[0] == "--print";
         try
         {
             using Outlook outlook = new Outlook();
             var exporter = new EmailExporter(outlook);
-            switch (args.Length)
+            if (print)
             {
-                default:
-                    exporter.Export(args.ElementAtOrDefault(0), args.ElementAtOrDefault(1));
-                    break;
-                case 0:
-                    exporter.PrintEmail(path);
-                    break;
+                if (args.Length < 1)
+                {
+                    return;
+                }
+                exporter.PrintEmail(args[1]);
+                Console.ReadLine();
+                return;
+            }
+
+            if (args.Length >= 2)
+            {
+                exporter.Export(args.ElementAtOrDefault(0), args.ElementAtOrDefault(1));
+                return;
             }
         }
         finally
         {
             COMObject.ReleaseAll();
         }
+    }
+
+    static string[]? EnsureArgs(string[] args)
+    {
+        if (args != null && args.Length > 0)
+        {
+            return args;
+        }
+        return GetInput();
+    }
+
+    static string[] GetInput()
+    {
+        Console.Write(">");
+        string line = Console.ReadLine();
+        if (line != null)
+        {
+            line = line.Trim();
+        }
+        if (string.IsNullOrEmpty(line))
+        {
+            return null;
+        }
+        return line.ParseCommandLine();
     }
 }
