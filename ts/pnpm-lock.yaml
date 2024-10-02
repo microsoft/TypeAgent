@@ -226,14 +226,7 @@ importers:
         version: 5.0.4(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.90.0)
 
   packages/agentSdk:
-    dependencies:
-      typechat:
-        specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.3)
     devDependencies:
-      '@types/debug':
-        specifier: ^4.1.10
-        version: 4.1.10
       prettier:
         specifier: ^3.2.5
         version: 3.2.5
@@ -580,6 +573,43 @@ importers:
         specifier: workspace:*
         version: link:../../typeagent
     devDependencies:
+      prettier:
+        specifier: ^3.2.5
+        version: 3.2.5
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+
+  packages/agents/greeting:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+      aiclient:
+        specifier: workspace:*
+        version: link:../../aiclient
+      chat-agent:
+        specifier: workspace:*
+        version: link:../chat
+      common-utils:
+        specifier: workspace:*
+        version: link:../../commonUtils
+      knowledge-processor:
+        specifier: workspace:*
+        version: link:../../knowledgeProcessor
+      typeagent:
+        specifier: workspace:*
+        version: link:../../typeagent
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.3)
+    devDependencies:
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
       prettier:
         specifier: ^3.2.5
         version: 3.2.5
@@ -1085,6 +1115,9 @@ importers:
       glob:
         specifier: ^10.3.12
         version: 10.3.12
+      greeting-agent:
+        specifier: workspace:*
+        version: link:../agents/greeting
       knowledge-processor:
         specifier: workspace:*
         version: link:../knowledgeProcessor

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { AppAction, ActionResult } from "./action.js";
+import { AppAgentCommandInterface } from "./command.js";
 import { ActionIO, DisplayType, DynamicDisplay } from "./display.js";
 import { Profiler } from "./profiler.js";
 
@@ -35,30 +36,6 @@ export type TranslatorDefinition = {
 //==============================================================================
 // App Agent
 //==============================================================================
-export type CommandDescriptor = {
-    description: string;
-    help?: string;
-};
-
-export type CommandDescriptorTable = {
-    description: string;
-    commands: Record<string, CommandDescriptors>;
-    defaultSubCommand?: CommandDescriptor | undefined;
-};
-
-export type CommandDescriptors = CommandDescriptor | CommandDescriptorTable;
-
-export interface AppAgentCommandInterface {
-    // Commands
-    getCommands(context: SessionContext): Promise<CommandDescriptors>;
-
-    executeCommand(
-        commands: string[],
-        args: string,
-        context: ActionContext<unknown>,
-        attachments?: string[],
-    ): Promise<void>;
-}
 
 export interface AppAgent extends Partial<AppAgentCommandInterface> {
     // Setup

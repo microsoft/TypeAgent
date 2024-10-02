@@ -30,25 +30,24 @@ import {
 
 class SessionNewCommandHandler implements CommandHandler {
     public readonly description = "Create a new empty session";
+    public readonly parameters = {
+        flags: {
+            keep: false,
+            memory: false,
+            persist: { type: "boolean" },
+        },
+    } as const;
     public async run(
         request: string,
         context: ActionContext<CommandHandlerContext>,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        const { flags } = parseCommandArgs(
-            request,
-            {
-                keep: false,
-                memory: false,
-                persist: systemContext.session.dir !== undefined,
-            },
-            true,
-        );
+        const { flags } = parseCommandArgs(request, this.parameters);
         await setSessionOnCommandHandlerContext(
             systemContext,
             await Session.create(
                 flags.keep ? systemContext.session.getConfig() : undefined,
-                flags.persist,
+                flags.persist ?? systemContext.session.dir !== undefined,
             ),
         );
 

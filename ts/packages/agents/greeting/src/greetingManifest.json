@@ -1,0 +1,10 @@
+{
+  "emojiChar": "🖐",
+  "schema": {
+    "description": "Greeting agent that created personalized welcome messages.",
+    "schemaFile": "./greetingActionSchema.ts",
+    "schemaType": "GreetingAction",
+    "injected": true,
+    "cached": false
+  }
+}

@@ -83,6 +83,7 @@ export class SettingsView {
     private ttsCheckBox: HTMLInputElement;
     private ttsProvider: HTMLSelectElement;
     private ttsVoice: HTMLSelectElement;
+    private agentGreetingCheckBox: HTMLInputElement;
     private intellisenseCheckBox: HTMLInputElement;
     private _shellSettings: ShellSettingsType = defaultSettings;
     private updateFromSettings: () => Promise<void>;
@@ -95,6 +96,7 @@ export class SettingsView {
         this.ttsCheckBox.checked = value.tts;
         this.microphoneSources.value = value.microphoneId ?? "";
         this.intellisenseCheckBox.checked = value.partialCompletion;
+        this.agentGreetingCheckBox.checked = value.agentGreeting;
         this.updateFromSettings();
     }
 
@@ -248,6 +250,11 @@ export class SettingsView {
             this._shellSettings.partialCompletion =
                 this.intellisenseCheckBox.checked;
             chatView.enablePartialInput(this.intellisenseCheckBox.checked);
+        });
+
+        this.agentGreetingCheckBox = this.addCheckbox("Agent greeting", () => {
+            this._shellSettings.agentGreeting =
+                this.agentGreetingCheckBox.checked;
         });
     }
 

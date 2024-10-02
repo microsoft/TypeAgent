@@ -1,13 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { ActionContext } from "../agentInterface.js";
 import {
-    ActionContext,
     AppAgentCommandInterface,
     CommandDescriptor,
     CommandDescriptors,
     CommandDescriptorTable,
-} from "../agentInterface.js";
+} from "../command.js";
 
 export interface CommandHandler extends CommandDescriptor {
     run(

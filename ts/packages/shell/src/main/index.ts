@@ -549,6 +549,10 @@ app.whenReady().then(async () => {
         return metrics;
     }
 
+    if (ShellSettings.getinstance().agentGreeting) {
+        processShellRequest("@greeting", "agent-0", []);
+    }
+
     ipcMain.on(
         "process-shell-request",
         (_event, text: string, id: string, images: string[]) => {

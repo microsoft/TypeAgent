@@ -651,12 +651,16 @@ async function handleScriptAction(
         }
         case "get_page_schema": {
             const value = localStorage.getItem("pageSchema");
-            sendResponse(value);
+            if (value) {
+                sendResponse(JSON.parse(value));
+            } else {
+                sendResponse(null);
+            }
             break;
         }
         case "set_page_schema": {
             let updatedSchema = message.action.parameters.schema;
-            localStorage.setItem("pageSchema", updatedSchema);
+            localStorage.setItem("pageSchema", JSON.stringify(updatedSchema));
             sendResponse({});
             break;
         }
@@ -690,13 +694,16 @@ window.addEventListener(
             event.data.messageType == "scriptActionRequest"
         ) {
             await handleScriptAction(event.data.body, (response) => {
-                window.postMessage({
-                    source: "contentScript",
-                    target: "preload",
-                    messageType: "scriptActionResponse",
-                    id: event.data.id,
-                    body: response,
-                });
+                window.top?.postMessage(
+                    {
+                        source: "contentScript",
+                        target: "preload",
+                        messageType: "scriptActionResponse",
+                        id: event.data.id,
+                        body: response,
+                    },
+                    "*",
+                );
             });
         }
     },

@@ -13,11 +13,20 @@ export {
     StorageEncoding,
     TokenCachePersistence,
     ActionContext,
+} from "./agentInterface.js";
+
+export {
+    FlagValuePrimitiveTypes,
+    DefaultValueDefinition,
+    FullFlagDefinition,
+    FlagDefinition,
+    FlagDefinitions,
+    ParameterDefinitions,
     CommandDescriptor,
     CommandDescriptors,
     CommandDescriptorTable,
-} from "./agentInterface.js";
-
+    AppAgentCommandInterface,
+} from "./command.js";
 export {
     ActionIO,
     DisplayType,

@@ -42,6 +42,7 @@
     "email": "workspace:*",
     "exifreader": "4.23.5",
     "glob": "^10.3.12",
+    "greeting-agent": "workspace:*",
     "knowledge-processor": "workspace:*",
     "list-agent": "workspace:*",
     "music": "workspace:*",
