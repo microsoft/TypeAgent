@@ -35,12 +35,18 @@ export function getDispatcherConfig(): Config {
 let externalAppAgentsConfig: Config | undefined;
 export function getExternalAgentsConfig(): Config {
     if (externalAppAgentsConfig === undefined) {
-        if(fs.existsSync(path.join(getUserProfileDir(), "externalAgentsConfig.json"))){
+        if (
+            fs.existsSync(
+                path.join(getUserProfileDir(), "externalAgentsConfig.json"),
+            )
+        ) {
             externalAppAgentsConfig = JSON.parse(
-                fs.readFileSync(path.join(getUserProfileDir(), "externalAgentsConfig.json"), "utf8"),
+                fs.readFileSync(
+                    path.join(getUserProfileDir(), "externalAgentsConfig.json"),
+                    "utf8",
+                ),
             ) as Config;
-        }
-        else {
+        } else {
             externalAppAgentsConfig = { agents: {}, explainers: {}, tests: [] };
         }
     }
