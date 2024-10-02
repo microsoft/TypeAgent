@@ -31,6 +31,7 @@ import {
     argMinScore,
     argSourceFile,
     argSourceFileOrFolder,
+    argUniqueMessage,
 } from "./common.js";
 
 export type ChatContext = {
@@ -357,20 +358,11 @@ export async function runChatMemory(): Promise<void> {
                     description: "Raw message text to add",
                     type: "string",
                 },
-                filePath: {
-                    description: "Path to the message file",
-                    type: "path",
-                },
-                ensureUnique: {
-                    description:
-                        "Ensure that this message was not already imported",
-                    type: "boolean",
-                    defaultValue: false,
-                },
+                sourcePath: argSourceFile(),
+                ensureUnique: argUniqueMessage(),
             },
         };
     }
-
     handlers.importMessage.metadata = importMessageDef();
     async function importMessage(
         args: string[],
@@ -412,6 +404,7 @@ export async function runChatMemory(): Promise<void> {
             },
             options: {
                 concurrency: argConcurrency(2),
+                ensureUnique: argUniqueMessage(true),
             },
         };
     }
@@ -426,10 +419,12 @@ export async function runChatMemory(): Promise<void> {
             );
             for (const email of emails) {
                 const block = knowLib.email.emailToTextBlock(email);
-                printer.writeLine(block.value);
-                if (block.sourceIds) {
-                    printer.writeList(block.sourceIds);
-                }
+                await importMessageIntoConversation(
+                    context.emailMemory,
+                    block,
+                    namedArgs.ensureUnique,
+                    printer,
+                );
             }
         }
     }

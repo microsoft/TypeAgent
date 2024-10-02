@@ -44,3 +44,11 @@ export function argMinScore(value: number): ArgDef {
         defaultValue: value,
     };
 }
+
+export function argUniqueMessage(defaultValue = false): ArgDef {
+    return {
+        description: "Ensure that this message was not already imported",
+        type: "boolean",
+        defaultValue,
+    };
+}

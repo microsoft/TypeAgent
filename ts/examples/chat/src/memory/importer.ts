@@ -28,10 +28,11 @@ export function* timestampBlocks(
 
 export async function importMessageIntoConversation(
     cm: conversation.ConversationManager,
-    messageText: string,
+    message: string | TextBlock,
     ensureUnique: boolean,
     printer: ChatPrinter,
 ) {
+    const messageText = typeof message === "string" ? message : message.value;
     if (ensureUnique) {
         if ((await cm.conversation.findMessage(messageText)) !== undefined) {
             printer.writeError("Message already in index");
@@ -39,5 +40,5 @@ export async function importMessageIntoConversation(
         }
     }
     printer.writeLine("Importing...");
-    await cm.addMessage(messageText);
+    await cm.addMessage(message);
 }
