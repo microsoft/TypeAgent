@@ -934,18 +934,15 @@ export function createTimestampDiv(timestamp: Date, className: string) {
     const timeStampDiv = document.createElement("div");
     timeStampDiv.classList.add(className);
 
-    const nameDiv = document.createElement("div");
-    nameDiv.className = "agent-name";
-    timeStampDiv.appendChild(nameDiv); // name placeholder
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "agent-name";
+    timeStampDiv.appendChild(nameSpan); // name placeholder
 
-    const dateDiv = document.createElement("div");
-    dateDiv.className = "timestring";
-    timeStampDiv.appendChild(dateDiv); // time string
+    const dateSpan = document.createElement("span");
+    dateSpan.className = "timestring";
+    timeStampDiv.appendChild(dateSpan); // time string
 
-    setContent(
-        timeStampDiv.lastChild as HTMLElement,
-        timestamp.toLocaleTimeString(),
-    );
+    dateSpan.innerText = timestamp.toLocaleTimeString();
 
     return timeStampDiv;
 }
