@@ -25,11 +25,8 @@
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "tsc": "tsc -b"
   },
-  "dependencies": {
-    "typechat": "^0.1.1"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "@types/debug": "^4.1.10",
     "prettier": "^3.2.5",
     "rimraf": "^5.0.5",
     "typescript": "^5.4.2"

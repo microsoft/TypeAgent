@@ -226,14 +226,7 @@ importers:
         version: 5.0.4(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.90.0)
 
   packages/agentSdk:
-    dependencies:
-      typechat:
-        specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.3)
     devDependencies:
-      '@types/debug':
-        specifier: ^4.1.10
-        version: 4.1.10
       prettier:
         specifier: ^3.2.5
         version: 3.2.5
