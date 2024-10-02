@@ -115,11 +115,7 @@ public class EmailExporter
                 return;
             }
 
-            if (args.Length >= 2)
-            {
-                exporter.Export(args.ElementAtOrDefault(0), args.ElementAtOrDefault(1));
-                return;
-            }
+            exporter.Export(args.ElementAtOrDefault(0), args.ElementAtOrDefault(1));
         }
         finally
         {

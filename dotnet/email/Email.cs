@@ -106,7 +106,7 @@ public class Email
         SentOn = item.SentOn;
         ReceivedOn = item.ReceivedTime;
         Importance = GetImportance(item);
-        Body = item.Body;
+        LoadBody(item);
     }
 
     void LoadRecipients(MailItem mail)
@@ -159,6 +159,13 @@ public class Email
                 break;
         }
         return true;
+    }
+
+    void LoadBody(MailItem item)
+    {
+        string body = item.Body;
+        body = BodyParser.Default.GetLatest(body);
+        Body = body;
     }
 
     string GetImportance(MailItem item)
