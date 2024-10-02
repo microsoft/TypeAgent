@@ -1206,7 +1206,7 @@ export class ChatView {
             panelDiv.appendChild(choiceDiv);
         }
         this.choicePanelOnly = disableOtherInput;
-        this.inputContainer.after(panelDiv);
+        this.inputContainer.before(panelDiv);
     }
 
     removeChoicePanel() {
