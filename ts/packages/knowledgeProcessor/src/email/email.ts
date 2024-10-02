@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { asyncArray, dateTime, readJsonFile } from "typeagent";
-import { entitiesFromObject } from "../conversation/entities.js";
+import { entityFromRecord } from "../conversation/entities.js";
 import { ConcreteEntity } from "../conversation/knowledgeSchema.js";
 import { Email, EmailAddress } from "./emailSchema.js";
 import fs from "fs";
@@ -10,6 +10,8 @@ import path from "path";
 import { removeUndefined } from "../setOperations.js";
 import { TextBlock, TextBlockType } from "../text.js";
 import { ConversationManager } from "../conversation/conversationManager.js";
+
+const emailNs = "email";
 
 export function emailAddressToString(address: EmailAddress): string {
     if (address.displayName) {
@@ -29,6 +31,13 @@ export function emailAddressListToString(
     return addresses
         ? addresses.map((a) => emailAddressToString(a)).join(", ")
         : "";
+}
+
+export function emailAddressToEntity(
+    name: string,
+    address: EmailAddress,
+): ConcreteEntity {
+    return entityFromRecord(emailNs, name, "address", address);
 }
 
 export function emailToString(
@@ -80,8 +89,18 @@ export function emailToTextBlock(email: Email): TextBlock<string> {
 }
 
 export function emailToEntities(email: Email): ConcreteEntity[] | undefined {
-    const emailNs = "email";
-    return entitiesFromObject(emailNs, email);
+    const entities: ConcreteEntity[] = [];
+    entities.push(emailAddressToEntity("from", email.from));
+    if (email.to) {
+        entities.push(...email.to.map((e) => emailAddressToEntity("to", e)));
+    }
+    if (email.cc) {
+        entities.push(...email.cc.map((e) => emailAddressToEntity("cc", e)));
+    }
+    if (email.bcc) {
+        entities.push(...email.bcc.map((e) => emailAddressToEntity("bcc", e)));
+    }
+    return entities;
 }
 
 export async function loadEmail(filePath: string): Promise<Email | undefined> {
@@ -109,7 +128,8 @@ export async function addEmailToConversation(
     email: Email,
 ): Promise<void> {
     const block = emailToTextBlock(email);
-    await cm.addMessage(block, undefined, dateTime.stringToDate(email.sentOn));
+    const entities = emailToEntities(email);
+    await cm.addMessage(block, entities, dateTime.stringToDate(email.sentOn));
 }
 
 function makeHeader(name: string, text: string | undefined): string {

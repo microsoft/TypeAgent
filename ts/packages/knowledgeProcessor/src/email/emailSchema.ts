@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 export type Email = {
-    type: "email";
     from: EmailAddress;
     to: EmailAddress[] | undefined;
     cc?: EmailAddress[] | undefined;
@@ -16,7 +15,6 @@ export type Email = {
 };
 
 export type EmailAddress = {
-    type: "address";
     address?: string | undefined;
     displayName?: string | undefined;
 };

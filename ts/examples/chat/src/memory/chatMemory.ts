@@ -26,6 +26,7 @@ import { timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
 import {
+    argClean,
     argConcurrency,
     argDestFile,
     argMinScore,
@@ -443,6 +444,7 @@ export async function runChatMemory(): Promise<void> {
             },
             options: {
                 concurrency: argConcurrency(2),
+                clean: argClean(),
             },
         };
     }
@@ -454,6 +456,9 @@ export async function runChatMemory(): Promise<void> {
             sourcePath = path.join(sourcePath, "json");
         }
         if (isDirectoryPath(sourcePath)) {
+            if (namedArgs.clean) {
+                await context.emailMemory.clear();
+            }
             const emails = await knowLib.email.loadEmailFolder(
                 sourcePath,
                 namedArgs.concurrency,
@@ -1655,11 +1660,7 @@ export async function runChatMemory(): Promise<void> {
             const messages = await loadMessages(entity.sourceIds);
             printer.writeTemporalBlocks(chalk.greenBright, messages);
         }
-        printer.writeLine(
-            conversation.entityToString(
-                conversation.toCompositeEntity(entity.value),
-            ),
-        );
+        writeCompositeEntity(conversation.toCompositeEntity(entity.value));
         if (showTopics) {
             for (const id of entity.sourceIds) {
                 const k = await context.conversation.knowledge.get(id);

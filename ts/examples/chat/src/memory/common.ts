@@ -52,3 +52,11 @@ export function argUniqueMessage(defaultValue = false): ArgDef {
         defaultValue,
     };
 }
+
+export function argClean(defaultValue = false): ArgDef {
+    return {
+        description: "Clean",
+        type: "boolean",
+        defaultValue,
+    };
+}

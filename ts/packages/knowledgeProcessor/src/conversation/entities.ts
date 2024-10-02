@@ -513,24 +513,6 @@ export function pushFacet(entity: ConcreteEntity, name: string, value: string) {
     entity.facets.push({ name, value });
 }
 
-export function entitiesFromObject(
-    ns: string,
-    obj: any,
-): ConcreteEntity[] | undefined {
-    let entities: ConcreteEntity[] | undefined;
-    for (const name in obj) {
-        const value: any = obj[name];
-        if (typeof value !== "object") {
-            continue;
-        }
-        const type = value.type ?? "object";
-        const entity = entityFromRecord(ns, name, type, value);
-        entities ??= [];
-        entities.push(entity);
-    }
-    return entities;
-}
-
 export function entityFromRecord(
     ns: string,
     name: string,

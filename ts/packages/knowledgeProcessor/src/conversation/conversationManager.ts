@@ -119,6 +119,11 @@ export interface ConversationManager {
         fuzzySearchOptions?: SearchOptions | undefined,
         maxMessages?: number | undefined,
     ): Promise<SearchTermsActionResponse>;
+    /**
+     * Clear everything.
+     * Note: While this is happening, it is up to you to ensure you are not searching or reading the conversation
+     */
+    clear(): Promise<void>;
 }
 
 /**
@@ -161,7 +166,7 @@ export async function createConversationManager(
         knowledgeExtractorSettings,
     );
 
-    const topicMerger = await createConversationTopicMerger(
+    let topicMerger = await createConversationTopicMerger(
         knowledgeModel,
         conversation,
         1, // Merge base topic level 1 into a higher level
@@ -189,6 +194,7 @@ export async function createConversationManager(
         search,
         getSearchResponse,
         generateAnswerForSearchResponse,
+        clear,
     };
 
     function addMessage(
@@ -296,6 +302,16 @@ export async function createConversationManager(
             maxMessages,
         );
         return searchProcessor.generateAnswer(query, searchResponse, options);
+    }
+
+    async function clear(): Promise<void> {
+        await conversation.clear(true);
+        topicMerger = await createConversationTopicMerger(
+            knowledgeModel,
+            conversation,
+            1, // Merge base topic level 1 into a higher level
+            topicMergeWindowSize,
+        );
     }
 
     function defaultConversationSettings(): ConversationSettings {
