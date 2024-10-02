@@ -54,7 +54,7 @@ export type TermFilter = {
     timeRange?: DateTimeRange | undefined; // in this time range
 };
 
-// this action is used to lookup information and stored images from past conversations or the internet and generate a response based on the lookup results, for example "what did we say about the project last week?" or "what is the current price of Microsoft stock?"
+// this action is used to lookup information and stored attachments from past conversations or the internet and generate a response based on the lookup results, for example "what did we say about the project last week?" or "what is the current price of Microsoft stock?"
 export interface LookupAndGenerateResponseAction {
     actionName: "lookupAndGenerateResponse";
     parameters: {

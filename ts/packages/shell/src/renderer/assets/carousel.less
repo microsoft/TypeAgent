@@ -1,18 +1,22 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-* {box-sizing:border-box}
-
 /* Slideshow container */
 .slideshow-container {
-  max-width: 1000px;
+  max-width: 320px;
+  max-height: 320px;
   position: relative;
-  margin: auto;
+  background-color: #00000055;
+}
+
+.slideshow-hidden {
+  display: none;
 }
 
 /* Hide the images by default */
 .mySlides {
-  display: none;
+  color: white;
+  border-radius: 2px;
 }
 
 /* Next & previous buttons */
@@ -43,8 +47,9 @@
 }
 
 /* Caption text */
-.text {
+.image-search-caption {
   color: #f2f2f2;
+  text-shadow: #00000088;
   font-size: 15px;
   padding: 8px 12px;
   position: absolute;
@@ -57,9 +62,11 @@
 .numbertext {
   color: #f2f2f2;
   font-size: 12px;
-  padding: 8px 12px;
+  font-weight: 400;
+  padding: 4px 6px;
   position: absolute;
   top: 0;
+  background-color: #00000088;
 }
 
 /* The dots/bullets/indicators */
@@ -67,7 +74,7 @@
   cursor: pointer;
   height: 15px;
   width: 15px;
-  margin: 0 2px;
+  margin: 0px 4px;
   background-color: #bbb;
   border-radius: 50%;
   display: inline-block;

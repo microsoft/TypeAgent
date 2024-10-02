@@ -60,6 +60,23 @@ export function createActionResultFromHtmlDisplay(
     };
 }
 
+export function createActionResultFromHtmlDisplayWithScript(
+    displayText: string,
+    scriptText: string,
+    literalText?: string,
+): ActionResultSuccess {
+    return {
+        literalText,
+        entities: [],
+        displayContent: {
+            type: "html",
+            content: displayText,
+            script: scriptText
+        },
+    };
+}
+
+
 export function createActionResultFromError(error: string): ActionResultError {
     return {
         error,
