@@ -71,11 +71,10 @@ export function createActionResultFromHtmlDisplayWithScript(
         displayContent: {
             type: "html",
             content: displayText,
-            script: scriptText
+            script: scriptText,
         },
     };
 }
-
 
 export function createActionResultFromError(error: string): ActionResultError {
     return {

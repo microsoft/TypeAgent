@@ -1,6 +1,6 @@
 # phot
 
-Photo dispatcher agent.  Used to launch the camera functionality within the shell. 
+Photo dispatcher agent. Used to launch the camera functionality within the shell.
 
 ## Trademarks
 

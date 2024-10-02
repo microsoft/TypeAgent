@@ -9,11 +9,19 @@ import {
     ActionResultSuccess,
 } from "@typeagent/agent-sdk";
 import { StopWatch } from "common-utils";
-import { createActionResult, createActionResultFromHtmlDisplay, createActionResultFromHtmlDisplayWithScript } from "@typeagent/agent-sdk/helpers/action";
+import {
+    createActionResult,
+    createActionResultFromHtmlDisplay,
+    createActionResultFromHtmlDisplayWithScript,
+} from "@typeagent/agent-sdk/helpers/action";
 import { bing } from "aiclient";
 import { Image } from "../../../aiclient/dist/bing.js";
 import { randomBytes } from "crypto";
-import { CreateImageAction, FindImageAction, ImageAction } from "./imageActionSchema.js";
+import {
+    CreateImageAction,
+    FindImageAction,
+    ImageAction,
+} from "./imageActionSchema.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -43,31 +51,51 @@ async function handlePhotoAction(
     let result: ActionResult | undefined = undefined;
     switch (action.actionName) {
         case "findImageAction": {
-            const findImageAction: FindImageAction = action as FindImageAction; 
-            photoContext.actionIO.setDisplay(`Searching for '${findImageAction.parameters.searchTerm}'`);
+            const findImageAction: FindImageAction = action as FindImageAction;
+            photoContext.actionIO.setDisplay(
+                `Searching for '${findImageAction.parameters.searchTerm}'`,
+            );
 
             const stopWatch = new StopWatch();
-            stopWatch.start("IMAGE SEARCH: " + findImageAction.parameters.searchTerm);
-            const searchResults: Image[] = await bing.searchImages(findImageAction.parameters.searchTerm, findImageAction.parameters.numImages);
+            stopWatch.start(
+                "IMAGE SEARCH: " + findImageAction.parameters.searchTerm,
+            );
+            const searchResults: Image[] = await bing.searchImages(
+                findImageAction.parameters.searchTerm,
+                findImageAction.parameters.numImages,
+            );
             stopWatch.stop("IMAGE SEARCH");
 
-            photoContext.actionIO.setDisplay(`Found '${findImageAction.parameters.numImages}' results...`);
+            photoContext.actionIO.setDisplay(
+                `Found '${findImageAction.parameters.numImages}' results...`,
+            );
 
             console.log(`Found ${searchResults.length} images`);
 
             if (searchResults.length == 0) {
-                result = createActionResult(`Unable to find any images for ${findImageAction.parameters.searchTerm}`);
+                result = createActionResult(
+                    `Unable to find any images for ${findImageAction.parameters.searchTerm}`,
+                );
             } else if (searchResults.length == 1) {
-                result = createActionResultFromHtmlDisplay(`<img class="chat-input-image" src="${searchResults[0].contentUrl}" />`, "Found 1 image.");
+                result = createActionResultFromHtmlDisplay(
+                    `<img class="chat-input-image" src="${searchResults[0].contentUrl}" />`,
+                    "Found 1 image.",
+                );
             } else {
-                result = createCarouselForImages(searchResults, findImageAction.parameters.searchTerm)
+                result = createCarouselForImages(
+                    searchResults,
+                    findImageAction.parameters.searchTerm,
+                );
             }
             break;
         }
         case "createImageAction":
-            const creeateImageAction: CreateImageAction = action as CreateImageAction; 
+            const creeateImageAction: CreateImageAction =
+                action as CreateImageAction;
             console.log(creeateImageAction);
-            photoContext.actionIO.setDisplay(`Searching for '${creeateImageAction.parameters.originalRequest}'`)
+            photoContext.actionIO.setDisplay(
+                `Searching for '${creeateImageAction.parameters.originalRequest}'`,
+            );
             // TODO: implement
             result = createActionResult("generating image");
             break;
@@ -77,8 +105,10 @@ async function handlePhotoAction(
     return result;
 }
 
-function createCarouselForImages(images: Image[], searchTerm: string): ActionResultSuccess {
-
+function createCarouselForImages(
+    images: Image[],
+    searchTerm: string,
+): ActionResultSuccess {
     const hash: string = randomBytes(4).readUInt32LE(0).toString();
     const jScript: string = `
     
@@ -114,11 +144,10 @@ function createCarouselForImages(images: Image[], searchTerm: string): ActionRes
     };
     `;
 
-
-        const carousel_start: string = `
+    const carousel_start: string = `
         <!-- Slideshow container -->
     <div class="slideshow-container">`;
-        let carouselDots: string = "";
+    let carouselDots: string = "";
 
     let carousel: string = "";
 
@@ -134,7 +163,7 @@ function createCarouselForImages(images: Image[], searchTerm: string): ActionRes
         carouselDots += `<span class="dot ${hash}" onclick="slideShow_${hash}.currentSlide(${index + 1})"></span>`;
     });
 
-    const carousel_end:string = `
+    const carousel_end: string = `
     <!-- Next and previous buttons -->
     <a class="prev" onclick="slideShow_${hash}.plusSlides(-1)">&#10094;</a>
     <a class="next" onclick="slideShow_${hash}.plusSlides(1)">&#10095;</a>
@@ -146,5 +175,9 @@ function createCarouselForImages(images: Image[], searchTerm: string): ActionRes
     ${carouselDots}
     </div>`;
 
-    return createActionResultFromHtmlDisplayWithScript(carousel_start + carousel + carousel_end, jScript, `Found ${images.length} images for ${searchTerm}.`);
+    return createActionResultFromHtmlDisplayWithScript(
+        carousel_start + carousel + carousel_end,
+        jScript,
+        `Found ${images.length} images for ${searchTerm}.`,
+    );
 }
