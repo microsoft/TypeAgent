@@ -3,8 +3,6 @@
 
 import { TextBlock } from "knowledge-processor";
 import { dateTime } from "typeagent";
-import { conversation } from "knowledge-processor";
-import { ChatPrinter } from "../chatPrinter.js";
 
 export function* timestampBlocks(
     blocks: Iterable<TextBlock>,
@@ -24,21 +22,4 @@ export function* timestampBlocks(
             value,
         };
     }
-}
-
-export async function importMessageIntoConversation(
-    cm: conversation.ConversationManager,
-    message: string | TextBlock,
-    ensureUnique: boolean,
-    printer: ChatPrinter,
-) {
-    const messageText = typeof message === "string" ? message : message.value;
-    if (ensureUnique) {
-        if ((await cm.conversation.findMessage(messageText)) !== undefined) {
-            printer.writeError("Message already in index");
-            return;
-        }
-    }
-    printer.writeLine("Importing...");
-    await cm.addMessage(message);
 }

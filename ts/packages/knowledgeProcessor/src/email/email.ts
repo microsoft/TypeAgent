@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { asyncArray, readJsonFile } from "typeagent";
+import { asyncArray, dateTime, readJsonFile } from "typeagent";
 import { entitiesFromObject } from "../conversation/entities.js";
 import { ConcreteEntity } from "../conversation/knowledgeSchema.js";
 import { Email, EmailAddress } from "./emailSchema.js";
@@ -9,6 +9,7 @@ import fs from "fs";
 import path from "path";
 import { removeUndefined } from "../setOperations.js";
 import { TextBlock, TextBlockType } from "../text.js";
+import { ConversationManager } from "../conversation/conversationManager.js";
 
 export function emailAddressToString(address: EmailAddress): string {
     if (address.displayName) {
@@ -101,6 +102,14 @@ export async function loadEmailFolder(
         progress,
     );
     return removeUndefined(emails);
+}
+
+export async function addEmailToConversation(
+    cm: ConversationManager,
+    email: Email,
+): Promise<void> {
+    const block = emailToTextBlock(email);
+    await cm.addMessage(block, undefined, dateTime.stringToDate(email.sentOn));
 }
 
 function makeHeader(name: string, text: string | undefined): string {

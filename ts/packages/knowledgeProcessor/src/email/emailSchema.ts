@@ -8,8 +8,8 @@ export type Email = {
     cc?: EmailAddress[] | undefined;
     bcc?: EmailAddress[] | undefined;
     subject?: string | undefined;
-    sentOn?: Date | undefined;
-    receivedOn?: Date | undefined;
+    sentOn?: string | undefined;
+    receivedOn?: string | undefined;
     importance?: string | undefined;
     sourcePath?: string | undefined;
     body: string;
