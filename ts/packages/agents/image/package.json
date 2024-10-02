@@ -23,7 +23,9 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@typeagent/agent-sdk": "workspace:*"
+    "@typeagent/agent-sdk": "workspace:*",
+    "aiclient": "workspace:*",
+    "common-utils": "workspace:*" 
   },
   "devDependencies": {
     "prettier": "^3.2.5",

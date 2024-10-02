@@ -905,7 +905,7 @@ export function setContent(
     const contentHtml =
         type === "html"
             ? DOMPurify.sanitize(text, {
-                  ADD_ATTR: ["target"],
+                  ADD_ATTR: ["target", "onclick"],
                   ADD_DATA_URI_TAGS: ["img"],
                   ADD_URI_SAFE_ATTR: ["src"],
               })

@@ -2,7 +2,7 @@
   "emojiChar": "🖼️",
   "schema": {
     "description": "Image agent that finds images online or creates them using AI image modes.",
-    "schemaFile": "./imageSchema.ts",
+    "schemaFile": "./imageActionSchema.ts",
     "schemaType": "ImageAction"
   }
 }

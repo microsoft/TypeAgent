@@ -627,6 +627,28 @@ importers:
         specifier: ^5.4.2
         version: 5.4.3
 
+  packages/agents/image:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+      aiclient:
+        specifier: workspace:*
+        version: link:../../aiclient
+      common-utils:
+        specifier: workspace:*
+        version: link:../../commonUtils
+    devDependencies:
+      prettier:
+        specifier: ^3.2.5
+        version: 3.2.5
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+
   packages/agents/list:
     dependencies:
       '@typeagent/agent-sdk':
@@ -1125,6 +1147,9 @@ importers:
       greeting-agent:
         specifier: workspace:*
         version: link:../agents/greeting
+      image-agent:
+        specifier: workspace:*
+        version: link:../agents/image
       knowledge-processor:
         specifier: workspace:*
         version: link:../knowledgeProcessor

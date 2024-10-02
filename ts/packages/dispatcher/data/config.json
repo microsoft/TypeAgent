@@ -68,6 +68,11 @@
         "type": "module",
         "name": "greeting-agent",
         "execMode": "separate"
+    },
+    "image": {
+      "type": "module",
+      "name": "image-agent",
+      "execMode": "dispatcher"
     }
   },
   "explainers": {

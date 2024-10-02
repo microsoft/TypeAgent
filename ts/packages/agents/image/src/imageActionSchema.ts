@@ -3,15 +3,17 @@
 
 export type ImageAction = FindImageAction | CreateImageAction | UnknownAction;
 
-// finds an image or images on the internet
+// Choose this action if the requests to "see," "show," or implicitly desires visual output
+// Finds images on the internet to show the user
+// if the user asks for "some", randomly select anywere betwee 3 and 10 images
 export type FindImageAction = {
     actionName: "findImageAction";
     parameters: {
         // the original request of the user
         originalRequest: string;
         // the search term for the image(s) to find
-        searchTerms: string[];
-        // the number of images to find
+        searchTerm: string;
+        // the number of images to show the user
         numImages: number;
     };
 };
