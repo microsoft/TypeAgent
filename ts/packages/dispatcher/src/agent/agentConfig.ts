@@ -6,7 +6,10 @@ import {
     TranslatorDefinition,
     AppAgentManifest,
 } from "@typeagent/agent-sdk";
-import { getDispatcherConfig, getExternalAgentsConfig } from "../utils/config.js";
+import {
+    getDispatcherConfig,
+    getExternalAgentsConfig,
+} from "../utils/config.js";
 import { createRequire } from "module";
 import path from "node:path";
 import { promises as fs } from "node:fs";
@@ -29,7 +32,7 @@ const enum ExecutionMode {
 export type ModuleAppAgentInfo = {
     type: "module";
     name: string;
-    path?: string
+    path?: string;
     execMode?: ExecutionMode;
 };
 
@@ -53,10 +56,6 @@ async function loadModuleConfig(
 ): Promise<AppAgentManifest> {
     const require = createRequire(import.meta.url);
     let modulePath = `${info.name}/agent/manifest`;
-    if(info.path != undefined){
-        modulePath = info.path.replace("file:/", "");
-        modulePath = path.join(modulePath, `/agent/manifest`);
-    }
 
     const manifestPath = require.resolve(modulePath);
     const config = require(manifestPath) as AppAgentManifest;
@@ -104,23 +103,17 @@ export async function getExternalAppAgentConfigs() {
     return externalAgentConfigs;
 }
 
-
 function enableExecutionMode() {
     return process.env.TYPEAGENT_EXECMODE !== "0";
 }
 
 async function loadModuleAgent(info: ModuleAppAgentInfo): Promise<AppAgent> {
     const execMode = info.execMode ?? ExecutionMode.SeparateProcess;
-
-    let agentHandlerPath = info.path ? info.path.replace("file:", "") : "";
-    agentHandlerPath = path.join(agentHandlerPath, `${info.name}/agent/handlers`);
-
-
     if (enableExecutionMode() && execMode === ExecutionMode.SeparateProcess) {
-        return createAgentProcessShim(agentHandlerPath);
+        return createAgentProcessShim(`${info.name}/agent/handlers`);
     }
 
-    const module = await import(agentHandlerPath);
+    const module = await import(`${info.name}/agent/handlers`);
     if (typeof module.instantiate !== "function") {
         throw new Error(
             `Failed to load module agent ${info.name}: missing 'instantiate' function.`,
@@ -162,10 +155,22 @@ export function getExternalAppAgentProvider(
         async loadAppAgent(appAgentName: string) {
             const type = getExternalAgentsConfig().agents[appAgentName].type;
             return type === "module"
-                ? await getModuleAgent(appAgentName)
+                ? await getExternalModuleAgent(appAgentName)
                 : loadInlineAgent(appAgentName, context);
         },
     };
+}
+
+async function getExternalModuleAgent(appAgentName: string) {
+    const existing = moduleAgents.get(appAgentName);
+    if (existing) return existing;
+    const config = getExternalAgentsConfig().agents[appAgentName];
+    if (config === undefined || config.type !== "module") {
+        throw new Error(`Unable to load app agent name: ${appAgentName}`);
+    }
+    const agent = await loadModuleAgent(config);
+    moduleAgents.set(appAgentName, agent);
+    return agent;
 }
 
 export function getBuiltinAppAgentProvider(
