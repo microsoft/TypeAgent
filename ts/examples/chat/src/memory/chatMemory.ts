@@ -22,7 +22,7 @@ import {
 } from "typeagent";
 import chalk, { ChalkInstance } from "chalk";
 import { PlayPrinter } from "./chatMemoryPrinter.js";
-import { timestampBlocks } from "./importer.js";
+import { importMessageIntoConversation, timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
 import {
@@ -36,7 +36,6 @@ import {
 export type ChatContext = {
     storePath: string;
     chatModel: ChatModel;
-    chatModelFast: ChatModel;
     embeddingModel: TextEmbeddingModel;
     maxCharsPerChunk: number;
     topicWindowSize: number;
@@ -49,12 +48,12 @@ export type ChatContext = {
     conversationManager: knowLib.conversation.ConversationManager;
     searcher: knowLib.conversation.ConversationSearchProcessor;
     searchMemory?: knowLib.conversation.ConversationManager;
+    emailMemory: knowLib.conversation.ConversationManager;
 };
 
 export async function createChatMemoryContext(): Promise<ChatContext> {
     const storePath = "/data/testChat";
     const chatModel = openai.createStandardAzureChatModel("GPT_4");
-    const chatModelFast = openai.createStandardAzureChatModel("GPT_35_TURBO");
     const embeddingModel = knowLib.createEmbeddingCache(
         openai.createEmbeddingModel(),
         64,
@@ -67,10 +66,12 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         conversationPath,
         conversationSettings,
     );
+
+    const emailStorePath = "/data/testEmail";
+    const emailConversationName = "outlook";
     const context: ChatContext = {
         storePath,
         chatModel,
-        chatModelFast,
         embeddingModel,
         maxCharsPerChunk: 2048,
         topicWindowSize: 8,
@@ -88,6 +89,11 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         conversation,
         entityTopK: 16,
         searcher: createSearchProcessor(conversation, chatModel, true, 16),
+        emailMemory: await knowLib.conversation.createConversationManager(
+            emailConversationName,
+            emailStorePath,
+            false,
+        ),
     };
     context.searchMemory = await createSearchMemory(context);
     return context;
@@ -389,19 +395,12 @@ export async function runChatMemory(): Promise<void> {
             messageText = await readAllText(namedArgs.filePath);
         }
         if (messageText) {
-            if (namedArgs.ensureUnique) {
-                if (
-                    await conversation.isMessageInConversation(
-                        context.conversation,
-                        messageText,
-                    )
-                ) {
-                    printer.writeError("Message already in index");
-                    return;
-                }
-            }
-            printer.writeLine("Importing...");
-            await context.conversationManager.addMessage(messageText);
+            await importMessageIntoConversation(
+                context.conversationManager,
+                messageText,
+                namedArgs.ensureUnique,
+                printer,
+            );
         }
     }
 
@@ -426,7 +425,11 @@ export async function runChatMemory(): Promise<void> {
                 namedArgs.concurrency,
             );
             for (const email of emails) {
-                printer.writeLine(knowLib.email.emailToString(email));
+                const block = knowLib.email.emailToTextBlock(email);
+                printer.writeLine(block.value);
+                if (block.sourceIds) {
+                    printer.writeList(block.sourceIds);
+                }
             }
         }
     }

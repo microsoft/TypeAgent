@@ -10,6 +10,8 @@ export type Email = {
     subject?: string | undefined;
     sentOn?: Date | undefined;
     receivedOn?: Date | undefined;
+    importance?: string | undefined;
+    sourcePath?: string | undefined;
     body: string;
 };
 

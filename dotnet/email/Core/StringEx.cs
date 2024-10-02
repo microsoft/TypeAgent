@@ -11,10 +11,14 @@ namespace TypeAgent.Core;
 
 public static class StringEx
 {
-    public static void AppendHeader(this StringBuilder sb, string name, string value)
+    public static StringBuilder AppendHeader(this StringBuilder sb, string name, string? value)
     {
-        sb.Append(name);
-        sb.Append(": ");
-        sb.AppendLine(value);
+        if (!string.IsNullOrEmpty(value))
+        {
+            sb.Append(name);
+            sb.Append(": ");
+            sb.AppendLine(value);
+        }
+        return sb;
     }
 }

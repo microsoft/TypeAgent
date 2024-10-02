@@ -373,25 +373,6 @@ export async function addMessageToConversation(
     );
 }
 
-/**
- * Is the supplied message text already in this conversation?
- * @param conversation
- * @param messageText
- * @returns true or false
- */
-export async function isMessageInConversation(
-    conversation: Conversation,
-    messageText: string,
-): Promise<boolean> {
-    const existing = await conversation.searchMessages(messageText, {
-        maxMatches: 1,
-    });
-    if (existing && existing.messages && existing.messages.length > 0) {
-        return messageText === existing.messages[0].value.value;
-    }
-    return false;
-}
-
 async function extractKnowledgeAndIndex(
     conversation: Conversation,
     knowledgeExtractor: KnowledgeExtractor,

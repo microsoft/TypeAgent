@@ -8,6 +8,7 @@ import { Email, EmailAddress } from "./emailSchema.js";
 import fs from "fs";
 import path from "path";
 import { removeUndefined } from "../setOperations.js";
+import { TextBlock, TextBlockType } from "../text.js";
 
 export function emailAddressToString(address: EmailAddress): string {
     if (address.displayName) {
@@ -55,11 +56,26 @@ export function emailToString(
     if (email.receivedOn) {
         text += makeHeader("Received", email.receivedOn.toString());
     }
+    if (email.importance) {
+        text += makeHeader("Importance", email.importance);
+    }
     if (includeBody && email.body) {
         text += "\n";
         text += email.body;
     }
     return text;
+}
+
+export function emailToTextBlock(email: Email): TextBlock<string> {
+    const value = emailToString(email);
+    const block: TextBlock<string> = {
+        type: TextBlockType.Raw,
+        value,
+    };
+    if (email.sourcePath) {
+        block.sourceIds = [email.sourcePath];
+    }
+    return block;
 }
 
 export function emailToEntities(email: Email): ConcreteEntity[] | undefined {

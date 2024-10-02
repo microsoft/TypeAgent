@@ -10,9 +10,10 @@ public class Email
     {
     }
 
-    public Email(MailItem mail)
+    public Email(MailItem mail, string? sourcePath = null)
     {
-       Load(mail);
+        Load(mail);
+        SourcePath = sourcePath;
     }
 
     /*
@@ -32,6 +33,11 @@ public class Email
     public DateTime SentOn { get; set; }
     [JsonPropertyName("receivedOn")]
     public DateTime ReceivedOn { get; set; }
+    [JsonPropertyName("importance")]
+    public string Importance { get; set; }
+
+    [JsonPropertyName("sourcePath")]
+    public string SourcePath { get; set; }
 
     /*
      * BODY
@@ -79,13 +85,11 @@ public class Email
         {
             sb.AppendHeader("Bcc", Bcc.Join());
         }
-        if (!string.IsNullOrEmpty(Subject))
-        {
-            sb.AppendHeader("Subject", Subject);
-        }
+        sb.AppendHeader("Subject", Subject);
         sb.AppendHeader("Sent", SentOn.ToString());
         sb.AppendHeader("Received", ReceivedOn.ToString());
-
+        sb.AppendHeader("Importance", Importance);
+        sb.AppendHeader("SourcePath", SourcePath);
         if (includeBody && !string.IsNullOrEmpty(Body))
         {
             sb.AppendLine();
@@ -101,6 +105,7 @@ public class Email
         Subject = item.Subject;
         SentOn = item.SentOn;
         ReceivedOn = item.ReceivedTime;
+        Importance = GetImportance(item);
         Body = item.Body;
     }
 
@@ -154,6 +159,22 @@ public class Email
                 break;
         }
         return true;
+    }
+
+    string GetImportance(MailItem item)
+    {
+        switch (item.Importance)
+        {
+            default:
+                break;
+            case OlImportance.olImportanceNormal:
+                return "Normal";
+            case OlImportance.olImportanceHigh:
+                return "High";
+            case OlImportance.olImportanceLow:
+                return "Low";
+        }
+        return null;
     }
 
     string SmtpAddressOf(Recipient recipient)

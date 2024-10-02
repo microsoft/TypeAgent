@@ -21,7 +21,7 @@ public class Outlook : COMObject
         MailItem mail = (MailItem)_session.OpenSharedItem(filePath);
         try
         {
-            return new Email(mail);
+            return new Email(mail, filePath);
         }
         finally
         {
