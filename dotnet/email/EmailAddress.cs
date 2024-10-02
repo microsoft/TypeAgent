@@ -7,13 +7,16 @@ public class EmailAddress
     public EmailAddress()
     {
     }
+
     public EmailAddress(string address, string displayName = null)
     {
         Address = address;
         DisplayName = displayName;
     }
 
+    [JsonPropertyName("address")]
     public string Address { get; set; }
+    [JsonPropertyName("displayName")]
     public string DisplayName { get; set; }
 
     public override string ToString()

@@ -482,7 +482,7 @@ export function facetToString(facet: Facet): string {
     return `${facet.name}="${knowledgeValueToString(facet.value)}"`;
 }
 
-export function matchFacet(x: Facet, y: Facet): boolean {
+export function facetMatch(x: Facet, y: Facet): boolean {
     if (x.name !== y.name) {
         return false;
     }
@@ -506,4 +506,59 @@ export function mergeEntityFacet(entity: ConcreteEntity, facet: Facet) {
     if (!entity.facets.find((f) => f.name.toLowerCase() === name)) {
         entity.facets.push(facet);
     }
+}
+
+export function pushFacet(entity: ConcreteEntity, name: string, value: string) {
+    entity.facets ??= [];
+    entity.facets.push({ name, value });
+}
+
+export function entitiesFromObject(
+    ns: string,
+    obj: any,
+): ConcreteEntity[] | undefined {
+    let entities: ConcreteEntity[] | undefined;
+    for (const name in obj) {
+        const value: any = obj[name];
+        if (typeof value !== "object") {
+            continue;
+        }
+        const type = value.type ?? "object";
+        const entity = entityFromRecord(ns, name, type, value);
+        entities ??= [];
+        entities.push(entity);
+    }
+    return entities;
+}
+
+export function entityFromRecord(
+    ns: string,
+    name: string,
+    type: string,
+    record: Record<string, any>,
+): ConcreteEntity {
+    let entity: ConcreteEntity = {
+        name: `${ns}:${name}`,
+        type: [`${ns}:${type}`],
+    };
+    const facets = facetsFromRecord(record);
+    if (facets) {
+        entity.facets = facets;
+    }
+    return entity;
+}
+
+export function facetsFromRecord(
+    record: Record<string, any>,
+): Facet[] | undefined {
+    let facets: Facet[] | undefined;
+    for (const name in record) {
+        const value = record[name];
+        if (value) {
+            facets ??= [];
+            facets.push({ name, value });
+        }
+    }
+
+    return facets;
 }

@@ -15,12 +15,28 @@ public class Email
        Load(mail);
     }
 
+    /*
+     * HEADERS
+     */
+    [JsonPropertyName("from")]
     public EmailAddress From { get; set; }
+    [JsonPropertyName("to")]
     public List<EmailAddress> To { get; set; }
+    [JsonPropertyName("cc")]
     public List<EmailAddress> Cc { get; set; }
+    [JsonPropertyName("bcc")]
     public List<EmailAddress> Bcc { get; set; }
-
+    [JsonPropertyName("subject")]
     public string Subject { get; set; }
+    [JsonPropertyName("sentOn")]
+    public DateTime SentOn { get; set; }
+    [JsonPropertyName("receivedOn")]
+    public DateTime ReceivedOn { get; set; }
+
+    /*
+     * BODY
+     */
+    [JsonPropertyName("body")]
     public string Body { get; set; }
 
     public string ToJson()
@@ -41,10 +57,15 @@ public class Email
 
     public override string ToString()
     {
+        return ToString(true);
+    }
+
+    public string ToString(bool includeBody)
+    {
         StringBuilder sb = new StringBuilder();
         if (From != null)
         {
-            sb.AppendLine(From.ToString());
+            sb.AppendHeader("From", From.ToString());
         }
         if (To != null)
         {
@@ -58,15 +79,14 @@ public class Email
         {
             sb.AppendHeader("Bcc", Bcc.Join());
         }
-        if (From != null)
-        {
-            sb.AppendHeader("From", From.ToString());
-        }
         if (!string.IsNullOrEmpty(Subject))
         {
             sb.AppendHeader("Subject", Subject);
         }
-        if (!string.IsNullOrEmpty(Body))
+        sb.AppendHeader("Sent", SentOn.ToString());
+        sb.AppendHeader("Received", ReceivedOn.ToString());
+
+        if (includeBody && !string.IsNullOrEmpty(Body))
         {
             sb.AppendLine();
             sb.AppendLine(Body);
@@ -77,7 +97,10 @@ public class Email
     void Load(MailItem item)
     {
         LoadRecipients(item);
+        From = item.Sender != null ? new EmailAddress(SmtpAddressOf(item.Sender), item.Sender.Name) : null;
         Subject = item.Subject;
+        SentOn = item.SentOn;
+        ReceivedOn = item.ReceivedTime;
         Body = item.Body;
     }
 
@@ -135,23 +158,23 @@ public class Email
 
     string SmtpAddressOf(Recipient recipient)
     {
-        string smtpAddress = null;
         AddressEntry addrEntry = recipient.AddressEntry;
-        if (addrEntry != null)
-        {
-            try
-            {
-                smtpAddress = addrEntry.AddressEntryUserType != OlAddressEntryUserType.olSmtpAddressEntry
-                    ? SmtpAddressOfExchangeUser(addrEntry)
-                    : addrEntry.Address;
-            }
-            finally
-            {
-                COMObject.Release(addrEntry);
-            }
-        }
+        return addrEntry != null ? SmtpAddressOf(addrEntry) : null;
+    }
 
-        return smtpAddress;
+
+    string SmtpAddressOf(AddressEntry addrEntry)
+    {
+        try
+        {
+            return addrEntry.AddressEntryUserType != OlAddressEntryUserType.olSmtpAddressEntry
+                ? SmtpAddressOfExchangeUser(addrEntry)
+                : addrEntry.Address;
+        }
+        finally
+        {
+            COMObject.Release(addrEntry);
+        }
     }
 
     string SmtpAddressOfExchangeUser(AddressEntry addrEntry)

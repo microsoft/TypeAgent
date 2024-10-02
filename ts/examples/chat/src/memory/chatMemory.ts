@@ -17,6 +17,7 @@ import {
     asyncArray,
     dateTime,
     getFileName,
+    isDirectoryPath,
     readAllText,
 } from "typeagent";
 import chalk, { ChalkInstance } from "chalk";
@@ -29,6 +30,7 @@ import {
     argDestFile,
     argMinScore,
     argSourceFile,
+    argSourceFileOrFolder,
 } from "./common.js";
 
 export type ChatContext = {
@@ -186,6 +188,7 @@ export async function runChatMemory(): Promise<void> {
         importPlay,
         importTranscript,
         importMessage,
+        importEmail,
         load,
         history,
         replay,
@@ -262,9 +265,10 @@ export async function runChatMemory(): Promise<void> {
         printer.writeLine(`Importing ${chatPath}`);
 
         const chatText = await readAllText(chatPath);
-        // Split full play text into paragraphs
+        // Split full transcript text into paragraphs
         const blocks = knowLib.conversation.splitTranscriptIntoBlocks(chatText);
-        const lengthMs = 1000 * 60 * 60; // 60 minutes
+        const lengthMinutes = namedArgs.lengthMinutes ?? 60;
+        let lengthMs = lengthMinutes * 60 * 60;
         const baseLineMs = lengthMs / blocks.length; // Average, these many minutes per block
         const chatDate = new Date(2023, 4, 1, 9);
         if (!addToCurrent) {
@@ -298,6 +302,10 @@ export async function runChatMemory(): Promise<void> {
                     description: "Add to current conversation",
                     type: "boolean",
                     defaultValue: false,
+                },
+                lengthMinutes: {
+                    description: "Length of the conversation in minutes",
+                    type: "number",
                 },
             },
         };
@@ -382,25 +390,44 @@ export async function runChatMemory(): Promise<void> {
         }
         if (messageText) {
             if (namedArgs.ensureUnique) {
-                const existing = await context.conversation.searchMessages(
-                    messageText,
-                    {
-                        maxMatches: 1,
-                    },
-                );
                 if (
-                    existing &&
-                    existing.messages &&
-                    existing.messages.length > 0
+                    await conversation.isMessageInConversation(
+                        context.conversation,
+                        messageText,
+                    )
                 ) {
-                    if (messageText === existing.messages[0].value.value) {
-                        printer.writeError("Message already in index");
-                        return;
-                    }
+                    printer.writeError("Message already in index");
+                    return;
                 }
             }
             printer.writeLine("Importing...");
             await context.conversationManager.addMessage(messageText);
+        }
+    }
+
+    function importEmailDef(): CommandMetadata {
+        return {
+            description: "Import emails in a folder",
+            args: {
+                sourcePath: argSourceFileOrFolder(),
+            },
+            options: {
+                concurrency: argConcurrency(2),
+            },
+        };
+    }
+    handlers.importEmail.metadata = importEmailDef();
+    async function importEmail(args: string[]) {
+        const namedArgs = parseNamedArguments(args, importEmailDef());
+        const sourcePath = namedArgs.sourcePath;
+        if (isDirectoryPath(sourcePath)) {
+            const emails = await knowLib.email.loadEmailFolder(
+                sourcePath,
+                namedArgs.concurrency,
+            );
+            for (const email of emails) {
+                printer.writeLine(knowLib.email.emailToString(email));
+            }
         }
     }
 

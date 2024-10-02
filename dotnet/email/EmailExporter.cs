@@ -76,7 +76,7 @@ public class EmailExporter
 
     static void Main(string[] args)
     {
-        string path = @"C:\data\testEmail\Weekly T&R Security Compliance Status Report (September 30) .msg";
+        string path = @"C:\data\testEmail\msg\Weekly T&R Security Compliance Status Report (September 30) .msg";
         try
         {
             using Outlook outlook = new Outlook();

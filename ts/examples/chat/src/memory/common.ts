@@ -10,6 +10,17 @@ export function argSourceFile(defaultValue?: string | undefined): ArgDef {
         defaultValue,
     };
 }
+
+export function argSourceFileOrFolder(
+    defaultValue?: string | undefined,
+): ArgDef {
+    return {
+        description: "Path to source file or folder",
+        type: "path",
+        defaultValue,
+    };
+}
+
 export function argDestFile(defaultValue?: string | undefined): ArgDef {
     return {
         description: "Path to output file",
