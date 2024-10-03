@@ -124,6 +124,7 @@ class ShellOpenWebContentView implements CommandHandler {
     public async run(_input: string, context: ActionContext<ShellContext>) {
         let targetUrl: URL;
         switch (_input) {
+            case "paleobiodb":
             case "paleoBioDb":
                 targetUrl = new URL("https://paleobiodb.org/navigator/");
 
@@ -134,8 +135,18 @@ class ShellOpenWebContentView implements CommandHandler {
                 );
 
                 break;
+            case "commerce":
+                targetUrl = new URL("https://www.target.com/");
+
+                break;
             default:
-                targetUrl = new URL(_input);
+                if (URL.canParse(_input)) {
+                    targetUrl = new URL(_input);
+                } else {
+                    targetUrl = new URL(
+                        `https://www.bing.com/search?q=${_input}`,
+                    );
+                }
         }
 
         if (targetUrl) {
