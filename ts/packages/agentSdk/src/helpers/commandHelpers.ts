@@ -9,6 +9,8 @@ import {
     CommandDescriptorTable,
 } from "../command.js";
 
+export { parseCommandArgs, resolveFlag } from "./parameterHelpers.js";
+
 export interface CommandHandler extends CommandDescriptor {
     run(
         context: ActionContext<unknown>,

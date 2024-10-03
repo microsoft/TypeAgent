@@ -19,12 +19,13 @@ import {
     CommandDescriptor,
     CommandDescriptorTable,
 } from "@typeagent/agent-sdk";
-
 import { executeCommand } from "./action/actionHandlers.js";
-import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/command";
+import {
+    isCommandDescriptorTable,
+    resolveFlag,
+} from "@typeagent/agent-sdk/helpers/command";
 import { RequestMetrics } from "./utils/metrics.js";
 import { PartialCompletionResult } from "./dispatcher/dispatcher.js";
-import { resolveFlag } from "./utils/args.js";
 
 const debugInteractive = registerDebug("typeagent:cli:interactive");
 

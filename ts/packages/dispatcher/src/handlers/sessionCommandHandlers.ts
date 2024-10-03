@@ -16,10 +16,10 @@ import {
     getSessionCaches,
 } from "../session/session.js";
 import chalk from "chalk";
-import { parseCommandArgs } from "../utils/args.js";
 import {
     CommandHandler,
     CommandHandlerTable,
+    parseCommandArgs,
 } from "@typeagent/agent-sdk/helpers/command";
 import { ActionContext } from "@typeagent/agent-sdk";
 import {

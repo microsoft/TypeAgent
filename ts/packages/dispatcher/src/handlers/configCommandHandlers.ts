@@ -17,7 +17,6 @@ import { getCacheFactory } from "../utils/cacheFactory.js";
 import { getServiceHostCommandHandlers } from "./serviceHost/serviceHostCommandHandler.js";
 import { getLocalWhisperCommandHandlers } from "./serviceHost/localWhisperCommandHandler.js";
 
-import { parseCommandArgs } from "../utils/args.js";
 import { getChatModelNames, simpleStarRegex } from "common-utils";
 import { openai as ai } from "aiclient";
 import { SessionConfig } from "../session/session.js";
@@ -26,6 +25,7 @@ import { ActionContext } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
     CommandHandlerTable,
+    parseCommandArgs,
 } from "@typeagent/agent-sdk/helpers/command";
 import {
     displayResult,
