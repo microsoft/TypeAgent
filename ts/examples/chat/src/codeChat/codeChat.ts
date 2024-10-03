@@ -19,7 +19,6 @@ import {
     tsCode,
     createSemanticCodeIndex,
     StoredCodeBlock,
-    createCodeGenerator,
 } from "code-processor";
 import { CodePrinter } from "./codePrinter.js";
 import path from "path";
@@ -36,7 +35,6 @@ import {
 export async function runCodeChat(): Promise<void> {
     const model = openai.createChatModel();
     const codeReviewer = createCodeReviewer(model);
-    const codeGenerator = createCodeGenerator(model);
     // For answer/code indexing examples
     const folderPath = "/data/code";
     const vectorModel = openai.createEmbeddingModel();
@@ -50,7 +48,6 @@ export async function runCodeChat(): Promise<void> {
         codeBreakpoints,
         codeAnswer,
         codeDocument,
-        codeGen,
         indexCode,
         findCode,
         clearCodeIndex,
@@ -276,38 +273,6 @@ export async function runCodeChat(): Promise<void> {
                 printer.writeLine();
             },
         );
-    }
-
-    function codeGenDef(): CommandMetadata {
-        return {
-            description: "Generate code",
-            args: {
-                def: { description: "What the code should do", type: "string" },
-            },
-            options: {
-                type: { description: "Code type", defaultValue: "Function" },
-                language: {
-                    defaultValue: "typescript",
-                },
-            },
-        };
-    }
-    handlers.codeGen.metadata = codeGenDef();
-    async function codeGen(args: string[]): Promise<void> {
-        const namedArgs = parseNamedArguments(args, codeGenDef());
-        const response = await codeGenerator.generate({
-            description: namedArgs.def,
-            codeType: namedArgs.type,
-            language: namedArgs.language,
-        });
-        if (response.type == "notGenerated") {
-            printer.writeError(response.reason ?? "Not generated");
-        } else {
-            printer.writeCodeLines(response.code.linesOfCode);
-            printer.writeInColor(chalk.cyan, "===TEST CODE===");
-            printer.writeLine();
-            printer.writeCodeLines(response.code.testCode);
-        }
     }
 
     function indexDef(): CommandMetadata {
