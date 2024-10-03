@@ -34,8 +34,9 @@ export type KnowledgeExtractorSettings = {
 
 export function createKnowledgeExtractor(
     model: TypeChatLanguageModel,
-    settings: KnowledgeExtractorSettings,
+    extractorSettings?: KnowledgeExtractorSettings | undefined,
 ): KnowledgeExtractor {
+    const settings = extractorSettings ?? createKnowledgeExtractorSettings();
     const translator = createTranslator(model);
     const topics = createRecentItemsWindow<string>(settings.windowSize);
     return {
@@ -129,6 +130,22 @@ export function createKnowledgeExtractor(
             }
         }
     }
+}
+
+/**
+ * Return default settings
+ * @param maxCharsPerChunk (optional)
+ * @returns
+ */
+export function createKnowledgeExtractorSettings(
+    maxCharsPerChunk: number = 2048,
+): KnowledgeExtractorSettings {
+    return {
+        windowSize: 8,
+        maxContextLength: maxCharsPerChunk,
+        includeSuggestedTopics: false,
+        includeActions: true,
+    };
 }
 
 export type ExtractedEntity<TSourceId = any> = {

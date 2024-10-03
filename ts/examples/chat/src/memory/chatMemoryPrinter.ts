@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as knowLib from "knowledge-processor";
+import { conversation } from "knowledge-processor";
 import { InteractiveIo } from "interactive-app";
 import { dateTime } from "typeagent";
 import { ChatPrinter } from "../chatPrinter.js";
@@ -64,6 +65,77 @@ export class PlayPrinter extends ChatPrinter {
                     this.writeLine();
                 }
             });
+        }
+    }
+
+    public writeTopics(topics: string[] | undefined): void {
+        if (topics && topics.length > 0) {
+            this.writeTitle("Topics");
+            this.writeList(topics, { type: "ul" });
+            this.writeLine();
+        }
+    }
+
+    public writeEntities(
+        entities: conversation.ConcreteEntity[] | undefined,
+    ): void {
+        if (entities && entities.length > 0) {
+            this.writeTitle("Entities");
+            for (const entity of entities) {
+                this.writeCompositeEntity(
+                    conversation.toCompositeEntity(entity),
+                );
+                this.writeLine();
+            }
+        }
+    }
+
+    public writeCompositeEntity(
+        entity: conversation.CompositeEntity | undefined,
+    ): void {
+        if (entity) {
+            this.writeLine(entity.name.toUpperCase());
+            this.writeList(entity.type, { type: "csv" });
+            this.writeList(entity.facets, { type: "ul" });
+        }
+    }
+
+    public writeExtractedEntities(
+        entities?: (conversation.ExtractedEntity | undefined)[],
+    ): void {
+        if (entities && entities.length > 0) {
+            this.writeTitle("Entities");
+            for (const entity of entities) {
+                if (entity) {
+                    this.writeCompositeEntity(
+                        conversation.toCompositeEntity(entity.value),
+                    );
+                    this.writeLine();
+                }
+            }
+        }
+    }
+
+    public writeActions(actions: conversation.Action[] | undefined): void {
+        if (actions && actions.length > 0) {
+            this.writeTitle("Actions");
+            this.writeList(actions.map((a) => conversation.actionToString(a)));
+        }
+    }
+
+    public writeExtractedActions(
+        actions?:
+            | (knowLib.conversation.ExtractedAction | undefined)[]
+            | undefined,
+    ) {
+        if (actions && actions.length > 0) {
+            this.writeTitle("Actions");
+            this.writeList(
+                actions.map((a) =>
+                    a ? conversation.actionToString(a.value) : "",
+                ),
+            );
+            this.writeLine();
         }
     }
 }

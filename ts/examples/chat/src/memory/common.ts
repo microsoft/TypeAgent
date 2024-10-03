@@ -60,3 +60,11 @@ export function argClean(defaultValue = false): ArgDef {
         defaultValue,
     };
 }
+
+export function argPause(): ArgDef {
+    return {
+        type: "number",
+        defaultValue: 0,
+        description: "Throttle calls to model",
+    };
+}

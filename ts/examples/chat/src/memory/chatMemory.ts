@@ -30,6 +30,7 @@ import {
     argConcurrency,
     argDestFile,
     argMinScore,
+    argPause,
     argSourceFile,
     argSourceFileOrFolder,
 } from "./common.js";
@@ -544,16 +545,8 @@ export async function runChatMemory(): Promise<void> {
                     defaultValue: 10,
                     description: "Number of turns to run",
                 },
-                concurrency: {
-                    type: "number",
-                    defaultValue: 4,
-                    description: "Extraction concurrency",
-                },
-                pause: {
-                    type: "number",
-                    defaultValue: 0,
-                    description: "Throttle calls to model",
-                },
+                concurrency: argConcurrency(4),
+                pause: argPause(),
             },
         };
     }
@@ -602,28 +595,9 @@ export async function runChatMemory(): Promise<void> {
                     `[${count} / ${messages.length}]`,
                 );
                 printer.writeListInColor(chalk.cyan, slice[k].value);
-                if (knowledge.topics && knowledge.topics.length > 0) {
-                    printer.writeTitle("Topics");
-                    printer.writeList(knowledge.topics, { type: "ul" });
-                    printer.writeLine();
-                }
-                if (knowledge.entities && knowledge.entities.length > 0) {
-                    printer.writeTitle("Entities");
-                    for (const entity of knowledge.entities) {
-                        writeCompositeEntity(
-                            conversation.toCompositeEntity(entity),
-                        );
-                        printer.writeLine();
-                    }
-                }
-                if (knowledge.actions && knowledge.actions.length > 0) {
-                    printer.writeTitle("Actions");
-                    printer.writeList(
-                        knowledge.actions.map((a) =>
-                            conversation.actionToString(a),
-                        ),
-                    );
-                }
+                printer.writeTopics(knowledge.topics);
+                printer.writeEntities(knowledge.entities);
+                printer.writeActions(knowledge.actions);
                 printer.writeLine();
             }
         }
@@ -633,11 +607,7 @@ export async function runChatMemory(): Promise<void> {
         return {
             description: "Index knowledge",
             options: {
-                concurrency: {
-                    type: "number",
-                    defaultValue: 4,
-                    description: "Indexing concurrency",
-                },
+                concurrency: argConcurrency(4),
                 mergeWindow: {
                     type: "number",
                     defaultValue: 8,
@@ -647,11 +617,7 @@ export async function runChatMemory(): Promise<void> {
                     defaultValue: 10,
                     description: "Number of turns to run",
                 },
-                pause: {
-                    type: "number",
-                    defaultValue: 0,
-                    description: "Throttle calls to model",
-                },
+                pause: argPause(),
                 messages: {
                     type: "boolean",
                     defaultValue: true,
@@ -779,14 +745,8 @@ export async function runChatMemory(): Promise<void> {
     ) {
         printer.writeInColor(chalk.cyan, message.value);
         await writeExtractedTopics(knowledge.topics, false);
-        await writeExtractedEntities(knowledge.entities);
-        await writeExtractedActions(knowledge.actions);
-    }
-
-    function writeCompositeEntity(entity: conversation.CompositeEntity) {
-        printer.writeLine(entity.name.toUpperCase());
-        printer.writeList(entity.type, { type: "csv" });
-        printer.writeList(entity.facets, { type: "ul" });
+        printer.writeExtractedEntities(knowledge.entities);
+        printer.writeExtractedActions(knowledge.actions);
     }
 
     function topicsDef(): CommandMetadata {
@@ -1615,36 +1575,6 @@ export async function runChatMemory(): Promise<void> {
         printer.writeLine();
     }
 
-    async function writeExtractedEntities(
-        entities?: (knowLib.conversation.ExtractedEntity | undefined)[],
-    ) {
-        if (entities && entities.length > 0) {
-            printer.writeTitle("Entities");
-            for (const entity of entities) {
-                if (entity) {
-                    writeCompositeEntity(
-                        conversation.toCompositeEntity(entity.value),
-                    );
-                    printer.writeLine();
-                }
-            }
-        }
-    }
-
-    async function writeExtractedActions(
-        actions?: (knowLib.conversation.ExtractedAction | undefined)[],
-    ) {
-        if (actions && actions.length > 0) {
-            printer.writeTitle("Actions");
-            printer.writeList(
-                actions.map((a) =>
-                    a ? conversation.actionToString(a.value) : "",
-                ),
-            );
-            printer.writeLine();
-        }
-    }
-
     function writeExtractedAction(
         action: knowLib.conversation.ExtractedAction,
     ) {
@@ -1660,7 +1590,9 @@ export async function runChatMemory(): Promise<void> {
             const messages = await loadMessages(entity.sourceIds);
             printer.writeTemporalBlocks(chalk.greenBright, messages);
         }
-        writeCompositeEntity(conversation.toCompositeEntity(entity.value));
+        printer.writeCompositeEntity(
+            conversation.toCompositeEntity(entity.value),
+        );
         if (showTopics) {
             for (const id of entity.sourceIds) {
                 const k = await context.conversation.knowledge.get(id);
@@ -1694,7 +1626,7 @@ export async function runChatMemory(): Promise<void> {
                 knowLib.sets.removeUndefined(entities.map((e) => e?.value)),
             );
             for (const value of composite.values()) {
-                await writeCompositeEntity(value.value);
+                printer.writeCompositeEntity(value.value);
                 printer.writeLine();
             }
         }
@@ -1781,14 +1713,14 @@ export async function runChatMemory(): Promise<void> {
                     const entities = await entityIndex.getMultiple(entry.value);
                     printer.writeLine();
                     printer.writeTimestamp(entry.timestamp);
-                    await writeExtractedEntities(entities);
+                    printer.writeExtractedEntities(entities);
                     entityIds.push(...entry.value);
                 }
             } else if (result.entityIds) {
                 const entities = await entityIndex.getMultiple(
                     result.entityIds,
                 );
-                await writeExtractedEntities(entities);
+                printer.writeExtractedEntities(entities);
                 entityIds.push(...result.entityIds);
             }
             if (showMessages && entityIds.length > 0) {
