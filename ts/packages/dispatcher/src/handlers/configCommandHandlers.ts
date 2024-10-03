@@ -17,15 +17,15 @@ import { getCacheFactory } from "../utils/cacheFactory.js";
 import { getServiceHostCommandHandlers } from "./serviceHost/serviceHostCommandHandler.js";
 import { getLocalWhisperCommandHandlers } from "./serviceHost/localWhisperCommandHandler.js";
 
-import { parseCommandArgs } from "../utils/args.js";
 import { getChatModelNames, simpleStarRegex } from "common-utils";
 import { openai as ai } from "aiclient";
 import { SessionConfig } from "../session/session.js";
 import chalk from "chalk";
 import { ActionContext } from "@typeagent/agent-sdk";
 import {
-    CommandHandler,
+    CommandHandlerNoParse,
     CommandHandlerTable,
+    parseCommandArgs,
 } from "@typeagent/agent-sdk/helpers/command";
 import {
     displayResult,
@@ -118,16 +118,17 @@ function getAgentToggleOptions(
     }
 }
 
-class AgentToggleCommandHandler implements CommandHandler {
-    public description = `Toggle ${AgentToggleDescription[this.toggle]}`;
+class AgentToggleCommandHandler implements CommandHandlerNoParse {
+    public readonly description = `Toggle ${AgentToggleDescription[this.toggle]}`;
+    public readonly parameters = true;
     constructor(private toggle: AgentToggle) {}
 
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        input: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        const { args } = parseCommandArgs(request);
+        const { args } = parseCommandArgs(input);
         if (args.length < 1) {
             displayWarn((log) => {
                 log(
@@ -169,11 +170,12 @@ class AgentToggleCommandHandler implements CommandHandler {
     }
 }
 
-class ExplainerCommandHandler implements CommandHandler {
-    public description = "Set explainer";
+class ExplainerCommandHandler implements CommandHandlerNoParse {
+    public readonly description = "Set explainer";
+    public readonly parameters = true;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const { args } = parseCommandArgs(request);
         if (args.length < 1) {
@@ -205,11 +207,12 @@ function getConfigModel(models: SessionConfig["models"], kind: string) {
     return `Current ${chalk.cyan(kind)} model: ${model ? model : "(default)"}\nURL:${settings.endpoint}`;
 }
 
-class ConfigModelShowCommandHandler implements CommandHandler {
+class ConfigModelShowCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Show current model";
+    public readonly parameters = true;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const models = systemContext.session.getConfig().models;
@@ -230,11 +233,12 @@ class ConfigModelShowCommandHandler implements CommandHandler {
     }
 }
 
-class ConfigModelSetCommandHandler implements CommandHandler {
+class ConfigModelSetCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Set model";
+    public readonly parameters = true;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const { args } = parseCommandArgs(request);

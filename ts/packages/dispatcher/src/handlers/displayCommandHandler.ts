@@ -1,10 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
+import {
+    CommandHandler,
+    ParsedCommandParams,
+} from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../internal.js";
 import { ActionContext } from "@typeagent/agent-sdk";
-import { parseCommandArgs } from "../utils/args.js";
 
 export class DisplayCommandHandler implements CommandHandler {
     public readonly description = "Send text to display";
@@ -15,10 +17,10 @@ export class DisplayCommandHandler implements CommandHandler {
         args: true,
     } as const;
     public async run(
-        input: string,
         context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const { flags, args } = parseCommandArgs(input, this.parameters);
+        const { flags, args } = params;
 
         for (const arg of args) {
             context.actionIO.appendDisplay(

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { parseCommandArgs } from "../src/utils/args.js";
+import { parseCommandArgs } from "../src/helpers/parameterHelpers.js";
 
 describe("Argument parsing", () => {
     const explicitConfig = {

@@ -10,7 +10,7 @@ import {
     CommandDescriptorTable,
 } from "@typeagent/agent-sdk";
 import {
-    CommandHandler,
+    CommandHandlerNoParse,
     CommandHandlerTable,
     getCommandInterface,
     isCommandDescriptorTable,
@@ -50,11 +50,12 @@ function executeSystemAction(
     throw new Error(`Invalid system sub-translator: ${action.translatorName}`);
 }
 
-class HelpCommandHandler implements CommandHandler {
+class HelpCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Show help";
+    public readonly parameters = true;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const printHandleTable = (
             table: CommandDescriptorTable,
@@ -124,11 +125,12 @@ class HelpCommandHandler implements CommandHandler {
     }
 }
 
-class RunCommandScriptHandler implements CommandHandler {
+class RunCommandScriptHandler implements CommandHandlerNoParse {
     public readonly description = "Run a command script file";
+    public readonly parameters = true;
     public async run(
-        input: string,
         context: ActionContext<CommandHandlerContext>,
+        input: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const prevScriptDir = systemContext.currentScriptDir;
@@ -181,20 +183,14 @@ const systemHandlers: CommandHandlerTable = {
         debug: new DebugCommandHandler(),
         clear: {
             description: "Clear the console",
-            async run(
-                request: string,
-                context: ActionContext<CommandHandlerContext>,
-            ) {
+            async run(context: ActionContext<CommandHandlerContext>) {
                 context.sessionContext.agentContext.requestIO.clear();
             },
         },
         run: new RunCommandScriptHandler(),
         exit: {
             description: "Exit the program",
-            async run(
-                request: string,
-                context: ActionContext<CommandHandlerContext>,
-            ) {
+            async run(context: ActionContext<CommandHandlerContext>) {
                 const systemContext = context.sessionContext.agentContext;
                 systemContext.clientIO
                     ? systemContext.clientIO.exit()

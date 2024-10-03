@@ -8,7 +8,7 @@ import {
     FlagValuePrimitiveTypes,
     FullFlagDefinition,
     ParameterDefinitions,
-} from "@typeagent/agent-sdk";
+} from "../command.js";
 
 // Output Types
 type FlagDefaultValueType =
@@ -51,7 +51,7 @@ type FlagsOutput<T extends FlagDefinitions> = {
     [P in keyof T]: FlagOutputType<T[P]>;
 };
 
-type ParsedCommandArgs<T extends ParameterDefinitions> = {
+export type ParsedCommandParams<T extends ParameterDefinitions> = {
     args: string[];
     flags: FlagsOutput<T["flags"]>;
 };
@@ -75,7 +75,7 @@ function isFullFlagDefinition(def: FlagDefinition): def is FullFlagDefinition {
     return typeof def === "object" && !Array.isArray(def);
 }
 
-export function expandFlagDefinition(key: string, def: FlagDefinition) {
+function expandFlagDefinition(key: string, def: FlagDefinition) {
     const full = isFullFlagDefinition(def) ? def : undefined;
     const value = full?.default ?? (def as DefaultValueDefinition);
     return {
@@ -108,7 +108,7 @@ export function resolveFlag(
 export function parseCommandArgs<T extends ParameterDefinitions>(
     request: string,
     parameters?: T,
-): ParsedCommandArgs<T> {
+): ParsedCommandParams<T> {
     const flags: any = {};
     const aliases = new Map<string, string>();
     const valueTypes = new Map<string, "string" | "number" | "boolean">();

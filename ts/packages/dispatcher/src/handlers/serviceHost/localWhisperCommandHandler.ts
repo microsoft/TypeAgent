@@ -81,10 +81,7 @@ export function getLocalWhisperCommandHandlers(): CommandHandlerTable {
         commands: {
             off: {
                 description: "Turn off Local Whisper integration",
-                run: async (
-                    request: string,
-                    context: ActionContext<CommandHandlerContext>,
-                ) => {
+                run: async (context: ActionContext<CommandHandlerContext>) => {
                     const systemContext = context.sessionContext.agentContext;
                     if (systemContext.localWhisper) {
                         systemContext.localWhisper?.kill();
@@ -99,10 +96,7 @@ export function getLocalWhisperCommandHandlers(): CommandHandlerTable {
             },
             on: {
                 description: "Turn on Local Whisper integration.",
-                run: async (
-                    request: string,
-                    context: ActionContext<CommandHandlerContext>,
-                ) => {
+                run: async (context: ActionContext<CommandHandlerContext>) => {
                     const systemContext = context.sessionContext.agentContext;
                     if (systemContext.localWhisper) {
                         return;

@@ -16,12 +16,6 @@ export {
 } from "./agentInterface.js";
 
 export {
-    FlagValuePrimitiveTypes,
-    DefaultValueDefinition,
-    FullFlagDefinition,
-    FlagDefinition,
-    FlagDefinitions,
-    ParameterDefinitions,
     CommandDescriptor,
     CommandDescriptors,
     CommandDescriptorTable,
