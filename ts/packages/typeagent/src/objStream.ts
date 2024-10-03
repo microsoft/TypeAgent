@@ -463,6 +463,30 @@ export function getDistinctValues<T>(
     return [...distinct.values()];
 }
 
+/**
+ * Returns true if the path is to a directory
+ * @param path
+ * @returns true or false
+ */
+export function isDirectoryPath(path: string): boolean {
+    try {
+        return fs.statSync(path).isDirectory();
+    } catch {}
+    return false;
+}
+
+/**
+ * Returns true if the path is to a file
+ * @param path
+ * @returns true or false
+ */
+export function isFilePath(path: string): boolean {
+    try {
+        return fs.statSync(path).isFile();
+    } catch {}
+    return false;
+}
+
 function isWritable(writer: any): writer is Writable {
     return typeof writer === "function" && writer instanceof Writable;
 }

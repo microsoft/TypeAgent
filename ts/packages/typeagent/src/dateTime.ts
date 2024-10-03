@@ -72,3 +72,12 @@ export function* generateRandomDates(
         yield new Date(ticks);
     }
 }
+
+export function stringToDate(value: string | undefined): Date | undefined {
+    if (value) {
+        try {
+            return new Date(value);
+        } catch {}
+    }
+    return undefined;
+}

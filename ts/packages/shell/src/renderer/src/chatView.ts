@@ -607,7 +607,7 @@ class MessageGroup {
         private readonly chatView: ChatView,
         request: DisplayContent,
         container: HTMLDivElement,
-        requestPromise: Promise<RequestMetrics | undefined>,
+        requestPromise: Promise<RequestMetrics | undefined> | undefined,
         timeStamp: Date,
         public agents: Map<string, string>,
         private hideMetrics: boolean,
@@ -648,9 +648,11 @@ class MessageGroup {
 
         this.chatView.tts?.stop();
 
-        requestPromise
-            .then((metrics) => this.requestCompleted(metrics))
-            .catch((error) => this.requestException(error));
+        if (requestPromise) {
+            requestPromise
+                .then((metrics) => this.requestCompleted(metrics))
+                .catch((error) => this.requestException(error));
+        }
     }
 
     public setMetricsVisible(visible: boolean) {
@@ -932,18 +934,15 @@ export function createTimestampDiv(timestamp: Date, className: string) {
     const timeStampDiv = document.createElement("div");
     timeStampDiv.classList.add(className);
 
-    const nameDiv = document.createElement("div");
-    nameDiv.className = "agent-name";
-    timeStampDiv.appendChild(nameDiv); // name placeholder
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "agent-name";
+    timeStampDiv.appendChild(nameSpan); // name placeholder
 
-    const dateDiv = document.createElement("div");
-    dateDiv.className = "timestring";
-    timeStampDiv.appendChild(dateDiv); // time string
+    const dateSpan = document.createElement("span");
+    dateSpan.className = "timestring";
+    timeStampDiv.appendChild(dateSpan); // time string
 
-    setContent(
-        timeStampDiv.lastChild as HTMLElement,
-        timestamp.toLocaleTimeString(),
-    );
+    dateSpan.innerText = timestamp.toLocaleTimeString();
 
     return timeStampDiv;
 }
@@ -1204,7 +1203,7 @@ export class ChatView {
             panelDiv.appendChild(choiceDiv);
         }
         this.choicePanelOnly = disableOtherInput;
-        this.inputContainer.after(panelDiv);
+        this.inputContainer.before(panelDiv);
     }
 
     removeChoicePanel() {
@@ -1518,6 +1517,25 @@ export class ChatView {
     private getMessageGroup(id: string) {
         const messageGroup = this.idToMessageGroup.get(id);
         if (messageGroup === undefined) {
+            // for agent initiated messages we need to create an associated message group
+            if (id.startsWith("agent-")) {
+                const mg: MessageGroup = new MessageGroup(
+                    this,
+                    "",
+                    this.messageDiv,
+                    undefined,
+                    new Date(),
+                    this.agents,
+                    this.hideMetrics,
+                );
+
+                this.idToMessageGroup.set(id, mg);
+
+                mg.userMessageContainer.classList.add("chat-message-hidden");
+
+                return mg;
+            }
+
             console.error(`Invalid requestId ${id}`);
         }
         return messageGroup;

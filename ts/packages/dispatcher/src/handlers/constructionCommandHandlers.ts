@@ -230,24 +230,23 @@ class ConstructionOffCommandHandler implements CommandHandler {
 
 class ConstructionListCommandHandler implements CommandHandler {
     public readonly description = "List constructions";
+    public readonly parameters = {
+        flags: {
+            verbose: { char: "v", default: false },
+            all: { char: "a", default: false },
+            builtin: { char: "b", default: false },
+            match: { char: "m", multiple: true },
+            part: { char: "p", multiple: true },
+            id: { multiple: true, type: "number" },
+        },
+    } as const;
     public async run(
         request: string,
         context: ActionContext<CommandHandlerContext>,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
-        const { flags } = parseCommandArgs(
-            request,
-            {
-                verbose: { char: "v", default: false },
-                all: { char: "a", default: false },
-                builtin: { char: "b", default: false },
-                match: { char: "m", multiple: true },
-                part: { char: "p", multiple: true },
-                id: { multiple: true, type: "number" },
-            },
-            true,
-        );
+        const { flags } = parseCommandArgs(request, this.parameters);
         constructionStore.print(flags);
     }
 }
@@ -288,14 +287,18 @@ async function expandPaths(paths: string[]) {
 
 class ConstructionImportCommandHandler implements CommandHandler {
     public readonly description = "Import constructions from test data";
+    public readonly parameters = {
+        flags: {
+            test: { char: "t", default: false },
+        },
+        args: true,
+    };
     public async run(
         request: string,
         context: ActionContext<CommandHandlerContext>,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        const { args, flags } = parseCommandArgs(request, {
-            test: { char: "t", default: false },
-        });
+        const { args, flags } = parseCommandArgs(request, this.parameters);
 
         const inputs =
             args.length !== 0

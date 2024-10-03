@@ -8,6 +8,7 @@
     {
       "matches": ["https://*/*"],
       "js": ["contentScript.js"],
+      "all_frames": true,
       "runAt": "document_start"
     },
     {

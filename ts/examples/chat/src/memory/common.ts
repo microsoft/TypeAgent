@@ -10,6 +10,17 @@ export function argSourceFile(defaultValue?: string | undefined): ArgDef {
         defaultValue,
     };
 }
+
+export function argSourceFileOrFolder(
+    defaultValue?: string | undefined,
+): ArgDef {
+    return {
+        description: "Path to source file or folder",
+        type: "path",
+        defaultValue,
+    };
+}
+
 export function argDestFile(defaultValue?: string | undefined): ArgDef {
     return {
         description: "Path to output file",
@@ -31,5 +42,21 @@ export function argMinScore(value: number): ArgDef {
         description: "Minimum score",
         type: "number",
         defaultValue: value,
+    };
+}
+
+export function argUniqueMessage(defaultValue = false): ArgDef {
+    return {
+        description: "Ensure that this message was not already imported",
+        type: "boolean",
+        defaultValue,
+    };
+}
+
+export function argClean(defaultValue = false): ArgDef {
+    return {
+        description: "Clean",
+        type: "boolean",
+        defaultValue,
     };
 }

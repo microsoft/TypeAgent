@@ -137,56 +137,77 @@ export async function awaitPageLoad() {
     */
 }
 
-export async function getTabHTML(fullSize: boolean) {
-    let outerHTML = await sendScriptAction({
-        type: "get_reduced_html",
-        fullSize: fullSize,
-        frameId: 0,
-    });
-
-    return outerHTML;
-}
-
 export async function getTabHTMLFragments(fullSize: boolean) {
     let htmlFragments: any[] = [];
+    const frames = [window.top, ...Array.from(window.frames)];
 
-    const frameHTML = await sendScriptAction(
-        {
-            type: "get_reduced_html",
-            fullSize: fullSize,
-            frameId: 0,
-        },
-        5000,
-    );
-
-    const frameText = await sendScriptAction({
-        type: "get_page_text",
-        inputHtml: frameHTML,
-        frameId: 0,
+    let htmlPromises: Promise<any>[] = [];
+    frames.forEach((frame, index) => {
+        htmlPromises.push(
+            sendScriptAction(
+                {
+                    type: "get_reduced_html",
+                    fullSize: fullSize,
+                    frameId: index,
+                },
+                50000,
+                frame,
+                index.toString(),
+            ),
+        );
     });
 
-    htmlFragments.push({
-        frameId: 0,
-        content: frameHTML,
-        text: frameText,
-    });
+    const htmlResults = await Promise.all(htmlPromises);
+    for (let i = 0; i < htmlResults.length; i++) {
+        const frameHTML = htmlResults[i];
+        if (frameHTML) {
+            const frameText = await sendScriptAction(
+                {
+                    type: "get_page_text",
+                    inputHtml: frameHTML,
+                    frameId: i,
+                },
+                1000,
+                frames[i],
+            );
+
+            htmlFragments.push({
+                frameId: i,
+                content: frameHTML,
+                text: frameText,
+            });
+        }
+    }
 
     return htmlFragments;
 }
 
-export async function sendScriptAction(body: any, timeout?: number) {
+export async function sendScriptAction(
+    body: any,
+    timeout?: number,
+    frameWindow?: Window | null,
+    idPrefix?: string,
+) {
     const timeoutPromise = new Promise((f) => setTimeout(f, timeout));
 
-    const actionPromise = new Promise<any | undefined>((resolve) => {
-        const callId = new Date().getTime().toString();
+    const targetWindow = frameWindow ?? window;
 
-        window.postMessage({
-            source: "preload",
-            target: "contentScript",
-            messageType: "scriptActionRequest",
-            id: callId,
-            body: body,
-        });
+    const actionPromise = new Promise<any | undefined>((resolve) => {
+        let callId = new Date().getTime().toString();
+        if (idPrefix) {
+            callId = idPrefix + "_" + callId;
+        }
+
+        targetWindow.postMessage(
+            {
+                source: "preload",
+                target: "contentScript",
+                messageType: "scriptActionRequest",
+                id: callId,
+                body: body,
+            },
+            "*",
+        );
 
         // if timeout is provided, wait for a response - otherwise fire and forget
         if (timeout) {
@@ -214,6 +235,19 @@ export async function sendScriptAction(body: any, timeout?: number) {
     } else {
         return actionPromise;
     }
+}
+
+export async function sendScriptActionToAllFrames(body: any, timeout?: number) {
+    const frames = [window.top, ...Array.from(window.frames)];
+
+    let htmlPromises: Promise<any>[] = [];
+    frames.forEach((frame, index) => {
+        htmlPromises.push(
+            sendScriptAction(body, timeout, frame, index.toString()),
+        );
+    });
+
+    return await Promise.all(htmlPromises);
 }
 
 async function runBrowserAction(action: any) {
@@ -310,7 +344,7 @@ async function runBrowserAction(action: any) {
         case "clickOnElement":
         case "enterTextInElement":
         case "enterTextOnPage": {
-            sendScriptAction({
+            sendScriptActionToAllFrames({
                 type: "run_ui_event",
                 action: action,
             });
@@ -341,6 +375,19 @@ async function runBrowserAction(action: any) {
             sendScriptAction({
                 type: "clear_page_schema",
             });
+            break;
+        }
+        case "reloadPage": {
+            sendScriptAction({
+                type: "clear_page_schema",
+            });
+            location.reload();
+            break;
+        }
+        case "closeWindow": {
+            window.close();
+            // todo: call method on IPC process to close the window/view
+
             break;
         }
 
@@ -440,14 +487,8 @@ contextBridge.exposeInMainWorld("browserConnect", {
 
 await ensureWebsocketConnected();
 
-window.addEventListener(
-    "message",
-    async (event) => {
-        if (event.data === "page-to-bridge") {
-            console.log("Message from page to bridge");
-        }
-    },
-    false,
-);
+window.onbeforeunload = () => {
+    window.postMessage("disableSiteAgent");
+};
 
 window.postMessage("setupSiteAgent");

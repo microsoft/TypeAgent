@@ -75,7 +75,7 @@ export class BrowserConnector {
   }
 
   async getHtmlFragments() {
-    const timeoutPromise = new Promise((f) => setTimeout(f, 5000));
+    const timeoutPromise = new Promise((f) => setTimeout(f, 120000));
     const htmlAction = {
       actionName: "getHTML",
       parameters: {
