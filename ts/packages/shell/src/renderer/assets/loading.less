@@ -1,0 +1,79 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+.loading-container {
+  width: 320px;
+  height: 320px;
+}
+
+.loading {
+  position: absolute;
+  top: calc(50% - 32px);
+  left: calc(50% - 32px);
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  perspective: 800px;
+}
+
+.generating {
+  text-wrap: nowrap;
+  text-align: center;
+  margin-top: 80%;
+}
+
+.loading-inner {
+  position: absolute;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+
+.loading-inner.first {
+  left: 0%;
+  top: 0%;
+  animation: rotate-first 1s linear infinite;
+  border-bottom: 3px solid #303030;
+}
+
+.loading-inner.second {
+  right: 0%;
+  top: 0%;
+  animation: rotate-second 1s linear infinite;
+  border-right: 3px solid #303030;
+}
+
+.loading-inner.third {
+  right: 0%;
+  bottom: 0%;
+  animation: rotate-third 1s linear infinite;
+  border-top: 3px solid #303030;
+}
+
+@keyframes rotate-first {
+  0% {
+    transform: rotateX(35deg) rotateY(-45deg) rotateZ(0deg);
+  }
+  100% {
+    transform: rotateX(35deg) rotateY(-45deg) rotateZ(360deg);
+  }
+}
+
+@keyframes rotate-second {
+  0% {
+    transform: rotateX(50deg) rotateY(10deg) rotateZ(0deg);
+  }
+  100% {
+    transform: rotateX(50deg) rotateY(10deg) rotateZ(360deg);
+  }
+}
+
+@keyframes rotate-third {
+  0% {
+    transform: rotateX(35deg) rotateY(55deg) rotateZ(0deg);
+  }
+  100% {
+    transform: rotateX(35deg) rotateY(55deg) rotateZ(360deg);
+  }
+}

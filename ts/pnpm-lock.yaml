@@ -626,6 +626,28 @@ importers:
         specifier: ^5.4.2
         version: 5.4.3
 
+  packages/agents/image:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+      aiclient:
+        specifier: workspace:*
+        version: link:../../aiclient
+      common-utils:
+        specifier: workspace:*
+        version: link:../../commonUtils
+    devDependencies:
+      prettier:
+        specifier: ^3.2.5
+        version: 3.2.5
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+
   packages/agents/list:
     dependencies:
       '@typeagent/agent-sdk':
@@ -642,7 +664,7 @@ importers:
         specifier: ^5.4.2
         version: 5.4.3
 
-  packages/agents/photos:
+  packages/agents/photo:
     dependencies:
       '@typeagent/agent-sdk':
         specifier: workspace:*
@@ -1124,6 +1146,9 @@ importers:
       greeting-agent:
         specifier: workspace:*
         version: link:../agents/greeting
+      image-agent:
+        specifier: workspace:*
+        version: link:../agents/image
       knowledge-processor:
         specifier: workspace:*
         version: link:../knowledgeProcessor
@@ -1133,9 +1158,9 @@ importers:
       music:
         specifier: workspace:*
         version: link:../agents/player
-      photos-agent:
+      photo-agent:
         specifier: workspace:*
-        version: link:../agents/photos
+        version: link:../agents/photo
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2

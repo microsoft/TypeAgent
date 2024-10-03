@@ -61,13 +61,18 @@
     },
     "photo": {
       "type": "module",
-      "name": "photos-agent",
+      "name": "photo-agent",
       "execMode": "separate"
     },
     "greeting": {
         "type": "module",
         "name": "greeting-agent",
         "execMode": "separate"
+    },
+    "image": {
+      "type": "module",
+      "name": "image-agent",
+      "execMode": "dispatcher"
     }
   },
   "explainers": {
