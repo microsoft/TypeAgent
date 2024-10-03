@@ -4,6 +4,8 @@
 import dotenv from "dotenv";
 dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 
+import path from "node:path";
+import os from "node:os";
 import { conversation } from "../src/index.js";
 import { shouldSkip, skipTest } from "./testCore.js";
 
@@ -85,7 +87,7 @@ async function getContext(): Promise<TestContext> {
 async function createTestContext(): Promise<TestContext> {
     const cm = await conversation.createConversationManager(
         "testConversation",
-        "/data/tests",
+        path.join(os.tmpdir(), "/data/tests"),
         true,
     );
     return {
