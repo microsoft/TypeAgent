@@ -75,19 +75,19 @@ async function handlePhotoAction(
                 result = createActionResult(
                     `Unable to find any images for ${findImageAction.parameters.searchTerm}`,
                 );
-            // } else if (searchResults.length == 1) {
-            //     result = createActionResultFromHtmlDisplay(
-            //         `<img class="chat-input-image" src="${searchResults[0].contentUrl}" />`,
-            //         "Found 1 image.",
-            //     );
+                // } else if (searchResults.length == 1) {
+                //     result = createActionResultFromHtmlDisplay(
+                //         `<img class="chat-input-image" src="${searchResults[0].contentUrl}" />`,
+                //         "Found 1 image.",
+                //     );
             } else {
                 const urls: string[] = [];
                 const captions: string[] = [];
-                searchResults.map((i) => { urls.push(i.contentUrl); captions.push(findImageAction.parameters.searchTerm)});
-                result = createCarouselForImages(
-                    urls,
-                    captions,
-                );
+                searchResults.map((i) => {
+                    urls.push(i.contentUrl);
+                    captions.push(findImageAction.parameters.searchTerm);
+                });
+                result = createCarouselForImages(urls, captions);
             }
             break;
         }
@@ -95,46 +95,58 @@ async function handlePhotoAction(
             const createImageAction: CreateImageAction =
                 action as CreateImageAction;
             console.log(createImageAction);
-            photoContext.actionIO.setDisplay({ type: "html", content: `
+            photoContext.actionIO.setDisplay({
+                type: "html",
+                content: `
                 <div style="loading-container">
                 <div class="loading"><div class="loading-inner first"></div><div class="loading-inner second"></div><div class="loading-inner third"></div></div>
                 <div class="generating">Generating</div>
-                </div>`});
+                </div>`,
+            });
 
-             const imageModel = openai.createImageModel();
-             const images: GeneratedImage[] = [];
-             // limit image creation
-             const imageCount: number = createImageAction.parameters.numImages > 5 ? 5 : createImageAction.parameters.numImages;
-            
-             for(let i = 0; i < imageCount; i++) {
-                 const r = await imageModel.generateImage(createImageAction.parameters.caption, 1, 1024, 1024);
+            const imageModel = openai.createImageModel();
+            const images: GeneratedImage[] = [];
+            // limit image creation
+            const imageCount: number =
+                createImageAction.parameters.numImages > 5
+                    ? 5
+                    : createImageAction.parameters.numImages;
 
-                 if (r.
-                     success) {
-                     r.data.images.map((image) => {
-                         images.push(image);
-                     })
-                 } else {
-                     console.log(r.message);
-                 }
-             }
+            for (let i = 0; i < imageCount; i++) {
+                const r = await imageModel.generateImage(
+                    createImageAction.parameters.caption,
+                    1,
+                    1024,
+                    1024,
+                );
 
-             if (images.length == 0) {
-                 result = createActionResult("Failed to generate the requested image.");
-            //  } else if (images.length == 1) {
-            //      result = createActionResultFromHtmlDisplay(
-            //          `<img class="chat-input-image" src="${images[0].image_url}" alt="${images[0].revised_prompt}" />`,
-            //          "Generated 1 image.",
-            //      );
-             } else {
-                 const urls: string[] = [];
-                 const captions: string[] = [];
-                 images.map((i) => { urls.push(i.image_url); captions.push(i.revised_prompt); });    
-                 result = createCarouselForImages(
-                     urls,
-                     captions,
-                 );
-             } 
+                if (r.success) {
+                    r.data.images.map((image) => {
+                        images.push(image);
+                    });
+                } else {
+                    console.log(r.message);
+                }
+            }
+
+            if (images.length == 0) {
+                result = createActionResult(
+                    "Failed to generate the requested image.",
+                );
+                //  } else if (images.length == 1) {
+                //      result = createActionResultFromHtmlDisplay(
+                //          `<img class="chat-input-image" src="${images[0].image_url}" alt="${images[0].revised_prompt}" />`,
+                //          "Generated 1 image.",
+                //      );
+            } else {
+                const urls: string[] = [];
+                const captions: string[] = [];
+                images.map((i) => {
+                    urls.push(i.image_url);
+                    captions.push(i.revised_prompt);
+                });
+                result = createCarouselForImages(urls, captions);
+            }
             break;
         default:
             throw new Error(`Unknown action: ${action.actionName}`);

@@ -32,7 +32,7 @@ const IdentityApiKey = "identity";
 export enum ModelType {
     Chat = "chat",
     Embedding = "embedding",
-    Image = "image"
+    Image = "image",
 }
 
 export type ModelInfo<T> = {
@@ -183,9 +183,9 @@ export function azureApiSettingsFromEnv(
     const settings =
         modelType == ModelType.Chat
             ? azureChatApiSettingsFromEnv(env, endpointName)
-            : modelType == ModelType.Image 
-                ? azureImageApiSettingsFromEnv(env, endpointName)
-                : azureEmbeddingApiSettingsFromEnv(env, endpointName);
+            : modelType == ModelType.Image
+              ? azureImageApiSettingsFromEnv(env, endpointName)
+              : azureEmbeddingApiSettingsFromEnv(env, endpointName);
 
     if (settings.apiKey.toLowerCase() === IdentityApiKey) {
         settings.azureSettings = {
@@ -484,14 +484,14 @@ type ChatContent = {
 type ImageCompletion = {
     created: number;
     data: ImageData[];
-}
+};
 
 type ImageData = {
     content_filter_results: FilterResult | FilterError;
     prompt_filter_results: FilterResult | FilterError;
     revised_prompt: string;
     url: string;
-}
+};
 
 /**
  * Create a client for an Open AI chat model
@@ -636,7 +636,7 @@ export function createChatModel(
         // Stream chunks back
     }
 
-    function verifyContentSafety(data: ChatCompletionChunk): boolean {        
+    function verifyContentSafety(data: ChatCompletionChunk): boolean {
         data.choices.map((c: ChatCompletionDelta) => {
             if (c.finish_reason == "content_filter_error") {
                 const err = c.content_filter_results as FilterError;
@@ -645,7 +645,7 @@ export function createChatModel(
                 );
             }
 
-            verifyFilterResults(c.content_filter_results as FilterResult)
+            verifyFilterResults(c.content_filter_results as FilterResult);
         });
 
         return true;
@@ -769,34 +769,36 @@ export function createEmbeddingModel(
  * Create a client for the OpenAI image/DallE service
  * @param apiSettings: settings to use to create the client
  */
-export function createImageModel(
-    apiSettings?: ApiSettings,
-): ImageModel {
+export function createImageModel(apiSettings?: ApiSettings): ImageModel {
     const settings = apiSettings ?? apiSettingsFromEnv(ModelType.Image);
     const defaultParams = settings.isAzure
         ? {}
         : {
               model: settings.modelName,
-
           };
     const model: ImageModel = {
         generateImage,
     };
     return model;
 
-    async function generateImage(prompt: string, imageCount: number, width: number, height: number): Promise<Result<ImageGeneration>> {
+    async function generateImage(
+        prompt: string,
+        imageCount: number,
+        width: number,
+        height: number,
+    ): Promise<Result<ImageGeneration>> {
         const headerResult = await createApiHeaders(settings);
         if (!headerResult.success) {
             return headerResult;
         }
         if (imageCount != 1) {
-            throw Error('n MUST equal 1'); // as of 10.03.2024 API will only accept n=1
+            throw Error("n MUST equal 1"); // as of 10.03.2024 API will only accept n=1
         }
         const params = {
             ...defaultParams,
             prompt,
             n: imageCount,
-            size: `${width}x${height}`
+            size: `${width}x${height}`,
         };
 
         const result = await callJsonApi(
@@ -806,24 +808,26 @@ export function createImageModel(
             settings.maxRetryAttempts,
             settings.retryPauseMs,
         );
-        
+
         if (!result.success) {
             return result;
         }
 
         const data = result.data as ImageCompletion;
-        const retValue: ImageGeneration = {images: []};
+        const retValue: ImageGeneration = { images: [] };
 
         data.data.map((i) => {
             verifyContentSafety(i);
-            retValue.images.push({ revised_prompt: i.revised_prompt, image_url: i.url });
+            retValue.images.push({
+                revised_prompt: i.revised_prompt,
+                image_url: i.url,
+            });
         });
 
         return success(retValue);
     }
 
     function verifyContentSafety(data: ImageData): boolean {
-
         verifyFilterResults(data.content_filter_results as FilterResult);
         verifyFilterResults(data.prompt_filter_results as FilterResult);
 
