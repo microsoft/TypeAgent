@@ -15,6 +15,7 @@ import {
 import {
     SemanticIndex,
     asyncArray,
+    collections,
     dateTime,
     getFileName,
     isDirectoryPath,
@@ -569,19 +570,13 @@ export async function runChatMemory(): Promise<void> {
         );
         messages = messages.slice(0, namedArgs.maxTurns);
         const concurrency = namedArgs.concurrency;
-        for (let i = 0; i < messages.length; i += concurrency) {
-            const slice = messages.slice(i, i + concurrency);
-            if (slice.length === 0) {
-                break;
-            }
+        for (let slice of collections.slices(messages, concurrency)) {
             printer.writeInColor(
                 chalk.gray,
-                `Extracting ${i + 1} to ${i + slice.length}`,
+                `Extracting ${slice.startAt + 1} to ${slice.startAt + slice.value.length}`,
             );
-            const knowledgeResults = await asyncArray.mapAsync(
-                slice,
-                namedArgs.concurrency,
-                (message) => extractor.extract(message.value),
+            let knowledgeResults = await Promise.all(
+                slice.value.map((message) => extractor.extract(message.value)),
             );
             for (let k = 0; k < knowledgeResults.length; ++k) {
                 ++count;
@@ -593,7 +588,7 @@ export async function runChatMemory(): Promise<void> {
                     chalk.green,
                     `[${count} / ${messages.length}]`,
                 );
-                printer.writeListInColor(chalk.cyan, slice[k].value);
+                printer.writeListInColor(chalk.cyan, slice.value[k].value);
                 printer.writeTopics(knowledge.topics);
                 printer.writeEntities(knowledge.entities);
                 printer.writeActions(knowledge.actions);
