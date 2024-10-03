@@ -51,7 +51,7 @@ type FlagsOutput<T extends FlagDefinitions> = {
     [P in keyof T]: FlagOutputType<T[P]>;
 };
 
-type ParsedCommandArgs<T extends ParameterDefinitions> = {
+export type ParsedCommandParams<T extends ParameterDefinitions> = {
     args: string[];
     flags: FlagsOutput<T["flags"]>;
 };
@@ -108,7 +108,7 @@ export function resolveFlag(
 export function parseCommandArgs<T extends ParameterDefinitions>(
     request: string,
     parameters?: T,
-): ParsedCommandArgs<T> {
+): ParsedCommandParams<T> {
     const flags: any = {};
     const aliases = new Map<string, string>();
     const valueTypes = new Map<string, "string" | "number" | "boolean">();

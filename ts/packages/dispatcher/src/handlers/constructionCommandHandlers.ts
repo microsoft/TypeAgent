@@ -29,6 +29,7 @@ import {
     CommandHandlerNoParse,
     CommandHandlerTable,
     parseCommandArgs,
+    ParsedCommandParams,
 } from "@typeagent/agent-sdk/helpers/command";
 import { ActionContext } from "@typeagent/agent-sdk";
 
@@ -225,12 +226,11 @@ class ConstructionListCommandHandler implements CommandHandler {
     } as const;
     public async run(
         context: ActionContext<CommandHandlerContext>,
-        request: string,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
-        const { flags } = parseCommandArgs(request, this.parameters);
-        constructionStore.print(flags);
+        constructionStore.print(params.flags);
     }
 }
 
@@ -278,10 +278,10 @@ class ConstructionImportCommandHandler implements CommandHandler {
     };
     public async run(
         context: ActionContext<CommandHandlerContext>,
-        request: string,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        const { args, flags } = parseCommandArgs(request, this.parameters);
+        const { args, flags } = params;
 
         const inputs =
             args.length !== 0

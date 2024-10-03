@@ -9,14 +9,19 @@ import {
     CommandDescriptorTable,
     ParameterDefinitions,
 } from "../command.js";
+import { parseCommandArgs, ParsedCommandParams } from "./parameterHelpers.js";
 
-export { parseCommandArgs, resolveFlag } from "./parameterHelpers.js";
+export {
+    parseCommandArgs,
+    ParsedCommandParams,
+    resolveFlag,
+} from "./parameterHelpers.js";
 
 export type CommandHandlerNoParams = CommandDescriptor & {
-    parameters?: undefined;
+    parameters?: undefined | false;
     run(
         context: ActionContext<unknown>,
-        input: undefined,
+        params: undefined,
         attachments?: string[],
     ): Promise<void>;
 };
@@ -25,7 +30,7 @@ export type CommandHandlerNoParse = CommandDescriptor & {
     parameters: true;
     run(
         context: ActionContext<unknown>,
-        input: string,
+        params: string,
         attachments?: string[],
     ): Promise<void>;
 };
@@ -34,7 +39,7 @@ export type CommandHandler = CommandDescriptor & {
     parameters: ParameterDefinitions;
     run(
         context: ActionContext<unknown>,
-        input: string,
+        params: ParsedCommandParams<ParameterDefinitions>,
         attachments?: string[],
     ): Promise<void>;
 };
@@ -44,11 +49,23 @@ type CommandHandlerTypes =
     | CommandHandlerNoParse
     | CommandHandler;
 
-type CommandTypes = CommandHandlerTypes | CommandHandlerTable;
+function isCommandHandlerNoParams(
+    handler: CommandHandlerTypes,
+): handler is CommandHandlerNoParams {
+    return handler.parameters === undefined || handler.parameters === false;
+}
+
+function isCommandHandlerNoParse(
+    handler: CommandHandlerTypes,
+): handler is CommandHandlerNoParse {
+    return handler.parameters === true;
+}
+
+type CommandDefinitions = CommandHandlerTypes | CommandHandlerTable;
 
 export interface CommandHandlerTable extends CommandDescriptorTable {
     description: string;
-    commands: Record<string, CommandTypes>;
+    commands: Record<string, CommandDefinitions>;
     defaultSubCommand?: CommandHandlerTypes | undefined;
 }
 
@@ -59,7 +76,7 @@ export function isCommandDescriptorTable(
 }
 
 export function getCommandInterface(
-    handlers: CommandTypes,
+    handlers: CommandDefinitions,
 ): AppAgentCommandInterface {
     return {
         getCommands: async () => handlers,
@@ -69,7 +86,7 @@ export function getCommandInterface(
             context: ActionContext<unknown>,
             attachments?: string[],
         ) => {
-            let curr: CommandTypes = handlers;
+            let curr: CommandDefinitions = handlers;
             const commandPrefix: string[] = [];
 
             while (true) {
@@ -81,7 +98,7 @@ export function getCommandInterface(
                 if (!isCommandDescriptorTable(curr)) {
                     break;
                 }
-                const next: CommandTypes | undefined =
+                const next: CommandDefinitions | undefined =
                     curr.commands[currCommand];
                 if (next === undefined) {
                     throw new Error(
@@ -99,15 +116,21 @@ export function getCommandInterface(
                 }
                 curr = curr.defaultSubCommand;
             }
-            if (curr.parameters === undefined) {
+            if (isCommandHandlerNoParams(curr)) {
                 if (args.trim() !== "") {
                     throw new Error(
                         `No parameters expected for command '@${commandPrefix.join(" ")}'`,
                     );
                 }
                 await curr.run(context, undefined, attachments);
-            } else {
+            } else if (isCommandHandlerNoParse(curr)) {
                 await curr.run(context, args, attachments);
+            } else {
+                await curr.run(
+                    context,
+                    parseCommandArgs(args, curr.parameters),
+                    attachments,
+                );
             }
         },
     };

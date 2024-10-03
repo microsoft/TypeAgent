@@ -21,7 +21,7 @@ import {
     CommandHandlerNoParams,
     CommandHandlerNoParse,
     CommandHandlerTable,
-    parseCommandArgs,
+    ParsedCommandParams,
 } from "@typeagent/agent-sdk/helpers/command";
 import { ActionContext } from "@typeagent/agent-sdk";
 import {
@@ -41,10 +41,10 @@ class SessionNewCommandHandler implements CommandHandler {
     } as const;
     public async run(
         context: ActionContext<CommandHandlerContext>,
-        request: string,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        const { flags } = parseCommandArgs(request, this.parameters);
+        const { flags } = params;
         await setSessionOnCommandHandlerContext(
             systemContext,
             await Session.create(
