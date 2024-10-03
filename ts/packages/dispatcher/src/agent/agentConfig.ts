@@ -150,16 +150,13 @@ async function loadExternalModuleAgent(
         "externalagents/package.json",
     );
     const require = createRequire(pkgpath);
-
     const handlerPath = require.resolve(`${info.name}/agent/handlers`);
 
     const execMode = info.execMode ?? ExecutionMode.SeparateProcess;
     if (enableExecutionMode() && execMode === ExecutionMode.SeparateProcess) {
-        //return createAgentProcessShim(`${info.name}/agent/handlers`);
         return createAgentProcessShim(`file://${handlerPath}`);
     }
 
-    //const module = await import(`${info.name}/agent/handlers`);
     const module = await import(`${handlerPath}`);
     if (typeof module.instantiate !== "function") {
         throw new Error(
