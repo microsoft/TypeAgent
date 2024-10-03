@@ -72,7 +72,7 @@ export function createAnswerGenerator(
                 values: response.mergeAllTopics(),
             },
             messages:
-                response.messages && response.messages.length < 0
+                response.messages && response.messages.length > 0
                     ? flatten(response.messages, (m) => {
                           return {
                               timestamp: m.timestamp,
