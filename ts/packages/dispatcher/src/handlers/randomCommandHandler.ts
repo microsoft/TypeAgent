@@ -39,10 +39,7 @@ class RandomOfflineCommandHandler implements CommandHandler {
     public readonly description =
         "Issues a random request from a dataset of pre-generated requests.";
 
-    public async run(
-        request: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         displayStatus(`Selecting random request...`, context);
 
         if (this.list == undefined) {
@@ -86,10 +83,7 @@ class RandomOnlineCommandHandler implements CommandHandler {
 
     public readonly description = "Uses the LLM to generate random requests.";
 
-    public async run(
-        request: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         displayStatus(`Generating random request using LLM...`, context);
 
         //

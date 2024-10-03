@@ -711,8 +711,8 @@ async function requestExplain(
 export class RequestCommandHandler implements CommandHandler {
     public readonly description = "Translate and explain a request";
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
         attachments?: string[],
     ) {
         const systemContext = context.sessionContext.agentContext;

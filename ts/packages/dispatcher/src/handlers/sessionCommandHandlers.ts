@@ -38,8 +38,8 @@ class SessionNewCommandHandler implements CommandHandler {
         },
     } as const;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const { flags } = parseCommandArgs(request, this.parameters);
@@ -67,8 +67,8 @@ class SessionNewCommandHandler implements CommandHandler {
 class SessionOpenCommandHandler implements CommandHandler {
     public readonly description = "Open an existing session";
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const session = await Session.load(request);
         const systemContext = context.sessionContext.agentContext;
@@ -79,10 +79,7 @@ class SessionOpenCommandHandler implements CommandHandler {
 
 class SessionResetCommandHandler implements CommandHandler {
     public readonly description = "Reset config on session and keep the data";
-    public async run(
-        request: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         await changeContextConfig(getDefaultSessionConfig(), context);
         await changeContextConfig(
             {
@@ -99,8 +96,8 @@ class SessionResetCommandHandler implements CommandHandler {
 class SessionToggleHistoryCommandHandler implements CommandHandler {
     public readonly description = "Update the history on the session config";
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         systemContext.session.setConfig({ history: request === "on" });
@@ -111,10 +108,7 @@ class SessionToggleHistoryCommandHandler implements CommandHandler {
 class SessionClearCommandHandler implements CommandHandler {
     public readonly description =
         "Delete all data on the current sessions, keeping current settings";
-    public async run(
-        request: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         if (systemContext.session.dir === undefined) {
             throw new Error("Session is not persisted. Nothing to clear.");
@@ -143,8 +137,8 @@ class SessionDeleteCommandHandler implements CommandHandler {
     public readonly description =
         "Delete a session. If no session is specified, delete the current session and start a new session.\n-a to delete all sessions";
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const persist = systemContext.session.dir !== undefined;
@@ -185,10 +179,7 @@ class SessionDeleteCommandHandler implements CommandHandler {
 class SessionListCommandHandler implements CommandHandler {
     public readonly description =
         "List all sessions. The current session is marked green.";
-    public async run(
-        request: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const names = await getSessionNames();
         displayResult(
@@ -204,10 +195,7 @@ class SessionListCommandHandler implements CommandHandler {
 
 class SessionInfoCommandHandler implements CommandHandler {
     public readonly description = "Show info about the current session";
-    public async run(
-        request: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const constructionFiles = systemContext.session.dir
             ? await getSessionCaches(systemContext.session.dir)

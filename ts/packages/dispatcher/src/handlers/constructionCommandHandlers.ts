@@ -86,8 +86,8 @@ function resolvePathWithSession(
 class ConstructionNewCommandHandler implements CommandHandler {
     public readonly description = "Create a new construction store";
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
@@ -115,8 +115,8 @@ class ConstructionNewCommandHandler implements CommandHandler {
 class ConstructionLoadCommandHandler implements CommandHandler {
     public readonly description = "Load a construction store from disk";
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
@@ -145,8 +145,8 @@ class ConstructionLoadCommandHandler implements CommandHandler {
 class ConstructionSaveCommandHandler implements CommandHandler {
     public readonly description = "Save construction store to disk";
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
@@ -167,10 +167,7 @@ class ConstructionSaveCommandHandler implements CommandHandler {
 
 class ConstructionInfoCommandHandler implements CommandHandler {
     public readonly description = "Show current construction store info";
-    public async run(
-        request: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
         const info = constructionStore.getInfo();
@@ -201,8 +198,8 @@ class ConstructionInfoCommandHandler implements CommandHandler {
 class ConstructionAutoCommandHandler implements CommandHandler {
     public readonly description = "Toggle construction auto save";
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const state = request === "" || request === "on";
@@ -216,10 +213,7 @@ class ConstructionAutoCommandHandler implements CommandHandler {
 
 class ConstructionOffCommandHandler implements CommandHandler {
     public readonly description = "Disable construction store";
-    public async run(
-        request: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
         await checkRecreateStore(constructionStore, systemContext.requestIO);
@@ -241,8 +235,8 @@ class ConstructionListCommandHandler implements CommandHandler {
         },
     } as const;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
@@ -294,8 +288,8 @@ class ConstructionImportCommandHandler implements CommandHandler {
         args: true,
     };
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const { args, flags } = parseCommandArgs(request, this.parameters);
@@ -347,8 +341,8 @@ class ConstructionDeleteCommandHandler implements CommandHandler {
     public readonly description = "Delete a construction by id";
 
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const { args } = parseCommandArgs(request);
         if (args.length !== 2) {

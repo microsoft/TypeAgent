@@ -9,8 +9,8 @@ import { ActionContext } from "@typeagent/agent-sdk";
 export class CorrectCommandHandler implements CommandHandler {
     public readonly description = "Correct the last explanation";
     public async run(
-        input: string,
         context: ActionContext<CommandHandlerContext>,
+        input: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         if (systemContext.lastRequestAction === undefined) {

@@ -26,8 +26,8 @@ function getCurrentTraceSettings() {
 export class TraceCommandHandler implements CommandHandler {
     public readonly description = "Enable or disable trace namespaces";
     public async run(
-        input: string,
         context: ActionContext<CommandHandlerContext>,
+        input: string,
     ) {
         if (input !== "") {
             if (input === "-" || input === "-*") {

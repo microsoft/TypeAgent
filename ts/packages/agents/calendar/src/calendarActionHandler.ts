@@ -40,10 +40,7 @@ import {
 
 export class CalendarClientLoginCommandHandler implements CommandHandler {
     public readonly description = "Log into the MS Graph to access calendar";
-    public async run(
-        _input: string,
-        context: ActionContext<CalendarActionContext>,
-    ) {
+    public async run(context: ActionContext<CalendarActionContext>) {
         const calendarClient: CalendarClient | undefined =
             context.sessionContext.agentContext.calendarClient;
         if (!calendarClient?.isGraphClientInitialized()) {

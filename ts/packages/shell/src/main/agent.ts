@@ -27,7 +27,7 @@ const config: AppAgentManifest = {
 
 class ShellShowSettingsCommandHandler implements CommandHandler {
     public readonly description = "Show shell settings";
-    public async run(_input: string, context: ActionContext<ShellContext>) {
+    public async run(context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
         agentContext.settings.show("settings");
     }
@@ -35,7 +35,7 @@ class ShellShowSettingsCommandHandler implements CommandHandler {
 
 class ShellShowHelpCommandHandler implements CommandHandler {
     public readonly description = "Show shell help";
-    public async run(_input: string, context: ActionContext<ShellContext>) {
+    public async run(context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
         agentContext.settings.show("help");
     }
@@ -43,7 +43,7 @@ class ShellShowHelpCommandHandler implements CommandHandler {
 
 class ShellShowMetricsCommandHandler implements CommandHandler {
     public readonly description = "Show shell metrics";
-    public async run(_input: string, context: ActionContext<ShellContext>) {
+    public async run(context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
         agentContext.settings.show("Metrics");
     }
@@ -51,7 +51,7 @@ class ShellShowMetricsCommandHandler implements CommandHandler {
 
 class ShellShowRawSettingsCommandHandler implements CommandHandler {
     public readonly description = "Shows raw JSON shell settings";
-    public async run(_input: string, context: ActionContext<ShellContext>) {
+    public async run(context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
         const message: string[] = [];
         const printConfig = (options: any, prefix: number = 2) => {
@@ -74,7 +74,7 @@ class ShellShowRawSettingsCommandHandler implements CommandHandler {
 class ShellSetSettingCommandHandler implements CommandHandler {
     public readonly description: string =
         "Sets a specific setting with the supplied value";
-    public async run(input: string, context: ActionContext<ShellContext>) {
+    public async run(context: ActionContext<ShellContext>, input: string) {
         const agentContext = context.sessionContext.agentContext;
         const name = input.substring(0, input.indexOf(" "));
         const newValue = input.substring(input.indexOf(" ") + 1);
@@ -99,14 +99,14 @@ class ShellSetSettingCommandHandler implements CommandHandler {
 
 class ShellRunDemoCommandHandler implements CommandHandler {
     public readonly description = "Run Demo";
-    public async run(_input: string, context: ActionContext<ShellContext>) {
+    public async run(context: ActionContext<ShellContext>) {
         context.sessionContext.agentContext.settings.runDemo();
     }
 }
 
 class ShellRunDemoInteractiveCommandHandler implements CommandHandler {
     public readonly description = "Run Demo Interactive";
-    public async run(_input: string, context: ActionContext<ShellContext>) {
+    public async run(context: ActionContext<ShellContext>) {
         context.sessionContext.agentContext.settings.runDemo(true);
     }
 }
@@ -114,17 +114,16 @@ class ShellRunDemoInteractiveCommandHandler implements CommandHandler {
 class ShellSetTopMostCommandHandler implements CommandHandler {
     public readonly description =
         "Always keep the shell window on top of other windows";
-    public async run(_input: string, context: ActionContext<ShellContext>) {
+    public async run(context: ActionContext<ShellContext>) {
         context.sessionContext.agentContext.settings.toggleTopMost();
     }
 }
 
 class ShellOpenWebContentView implements CommandHandler {
     public readonly description = "Show a new Web Content view";
-    public async run(_input: string, context: ActionContext<ShellContext>) {
+    public async run(context: ActionContext<ShellContext>, input: string) {
         let targetUrl: URL;
-        switch (_input) {
-            case "paleobiodb":
+        switch (input.toLowerCase()) {
             case "paleoBioDb":
                 targetUrl = new URL("https://paleobiodb.org/navigator/");
 
@@ -140,13 +139,7 @@ class ShellOpenWebContentView implements CommandHandler {
 
                 break;
             default:
-                if (URL.canParse(_input)) {
-                    targetUrl = new URL(_input);
-                } else {
-                    targetUrl = new URL(
-                        `https://www.bing.com/search?q=${_input}`,
-                    );
-                }
+                targetUrl = new URL(input);
         }
 
         if (targetUrl) {

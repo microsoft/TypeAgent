@@ -15,8 +15,8 @@ import {
 export class ExplainCommandHandler implements CommandHandler {
     public readonly description = "Explain a translated request with action";
     public async run(
-        input: string,
         context: ActionContext<CommandHandlerContext>,
+        input: string,
     ) {
         const requestAction = RequestAction.fromString(input);
         displayStatus(`Generating explanation for '${requestAction}'`, context);

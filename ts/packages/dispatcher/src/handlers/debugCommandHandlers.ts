@@ -14,10 +14,7 @@ import {
 export class DebugCommandHandler implements CommandHandler {
     public readonly description = "Start node inspector";
     private debugging = false;
-    public async run(
-        input: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         if (this.debugging) {
             displayWarn("Node inspector already started.", context);
             return;

@@ -53,8 +53,8 @@ function executeSystemAction(
 class HelpCommandHandler implements CommandHandler {
     public readonly description = "Show help";
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const printHandleTable = (
             table: CommandDescriptorTable,
@@ -127,8 +127,8 @@ class HelpCommandHandler implements CommandHandler {
 class RunCommandScriptHandler implements CommandHandler {
     public readonly description = "Run a command script file";
     public async run(
-        input: string,
         context: ActionContext<CommandHandlerContext>,
+        input: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const prevScriptDir = systemContext.currentScriptDir;
@@ -181,20 +181,14 @@ const systemHandlers: CommandHandlerTable = {
         debug: new DebugCommandHandler(),
         clear: {
             description: "Clear the console",
-            async run(
-                request: string,
-                context: ActionContext<CommandHandlerContext>,
-            ) {
+            async run(context: ActionContext<CommandHandlerContext>) {
                 context.sessionContext.agentContext.requestIO.clear();
             },
         },
         run: new RunCommandScriptHandler(),
         exit: {
             description: "Exit the program",
-            async run(
-                request: string,
-                context: ActionContext<CommandHandlerContext>,
-            ) {
+            async run(context: ActionContext<CommandHandlerContext>) {
                 const systemContext = context.sessionContext.agentContext;
                 systemContext.clientIO
                     ? systemContext.clientIO.exit()

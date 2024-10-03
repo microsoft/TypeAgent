@@ -64,7 +64,7 @@ export class GreetingCommandHandler implements CommandHandler {
     public readonly description =
         "Have the agent generate a personalized greeting.";
     private instructions = `You are a breezy greeting generator. Greetings should NOT end with questions.`;
-    public async run(_input: string, context: ActionContext) {
+    public async run(context: ActionContext) {
         //
         // Create Model
         //

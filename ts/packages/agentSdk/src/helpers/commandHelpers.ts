@@ -11,8 +11,8 @@ import {
 
 export interface CommandHandler extends CommandDescriptor {
     run(
-        request: string,
         context: ActionContext<unknown>,
+        request: string,
         attachments?: string[],
     ): Promise<void>;
 }
@@ -70,7 +70,7 @@ export function getCommandInterface(
                 }
                 curr = curr.defaultSubCommand;
             }
-            await curr.run(args, context, attachments);
+            await curr.run(context, args, attachments);
         },
     };
 }

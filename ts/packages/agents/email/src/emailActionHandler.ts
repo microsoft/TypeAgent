@@ -28,10 +28,7 @@ import {
 
 export class MailClientLoginCommandHandler implements CommandHandler {
     public readonly description = "Log into the MS Graph to access email";
-    public async run(
-        _input: string,
-        context: ActionContext<EmailActionContext>,
-    ) {
+    public async run(context: ActionContext<EmailActionContext>) {
         const mailClient: MailClient | undefined =
             context.sessionContext.agentContext.mailClient;
         if (!mailClient?.isGraphClientInitialized()) {

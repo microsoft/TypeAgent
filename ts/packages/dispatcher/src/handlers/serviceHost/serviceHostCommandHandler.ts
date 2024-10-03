@@ -32,10 +32,7 @@ export function getServiceHostCommandHandlers(): CommandHandlerTable {
         commands: {
             off: {
                 description: "Turn off Service hosting integration",
-                run: async (
-                    request: string,
-                    context: ActionContext<CommandHandlerContext>,
-                ) => {
+                run: async (context: ActionContext<CommandHandlerContext>) => {
                     const systemContext = context.sessionContext.agentContext;
                     if (systemContext.serviceHost) {
                         systemContext.serviceHost?.kill();
@@ -45,10 +42,7 @@ export function getServiceHostCommandHandlers(): CommandHandlerTable {
             },
             on: {
                 description: "Turn on Service hosting integration.",
-                run: async (
-                    request: string,
-                    context: ActionContext<CommandHandlerContext>,
-                ) => {
+                run: async (context: ActionContext<CommandHandlerContext>) => {
                     const systemContext = context.sessionContext.agentContext;
                     if (systemContext.serviceHost) {
                         return;

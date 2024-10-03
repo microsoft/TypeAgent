@@ -13,7 +13,6 @@ class NotifyInfoCommandHandler implements CommandHandler {
     description: string = "Shows the number of notifications available";
     help?: string;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
     ): Promise<void> {
         const systemContext = context.sessionContext.agentContext;
@@ -29,7 +28,6 @@ class NotifyClearCommandHandler implements CommandHandler {
     description: string = "Clears notifications";
     help?: string;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
     ): Promise<void> {
         const systemContext = context.sessionContext.agentContext;
@@ -45,7 +43,6 @@ class NotifyShowUnreadCommandHandler implements CommandHandler {
     description: string = "Shows unread notifications";
     help?: string;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
     ): Promise<void> {
         const systemContext = context.sessionContext.agentContext;
@@ -61,7 +58,6 @@ class NotifyShowAllCommandHandler implements CommandHandler {
     description: string = "Shows all notifications";
     help?: string;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
     ): Promise<void> {
         const systemContext = context.sessionContext.agentContext;

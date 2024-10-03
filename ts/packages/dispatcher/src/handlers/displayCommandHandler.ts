@@ -15,8 +15,8 @@ export class DisplayCommandHandler implements CommandHandler {
         args: true,
     } as const;
     public async run(
-        input: string,
         context: ActionContext<CommandHandlerContext>,
+        input: string,
     ) {
         const { flags, args } = parseCommandArgs(input, this.parameters);
 

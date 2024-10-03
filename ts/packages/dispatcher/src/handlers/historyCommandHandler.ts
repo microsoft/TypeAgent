@@ -12,10 +12,7 @@ import { parseCommandArgs } from "../utils/args.js";
 
 export class HistoryListCommandHandler implements CommandHandler {
     public readonly description = "List history";
-    public async run(
-        input: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const history = systemContext.chatHistory;
 
@@ -32,10 +29,7 @@ export class HistoryListCommandHandler implements CommandHandler {
 
 export class HistoryClearCommandHandler implements CommandHandler {
     public readonly description = "Clear the history";
-    public async run(
-        input: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const history = systemContext.chatHistory;
 
@@ -49,8 +43,8 @@ export class HistoryDeleteCommandHandler implements CommandHandler {
     public readonly description =
         "Delete a specific message from the chat history";
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const { args } = parseCommandArgs(request);

@@ -123,8 +123,8 @@ class AgentToggleCommandHandler implements CommandHandler {
     constructor(private toggle: AgentToggle) {}
 
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const { args } = parseCommandArgs(request);
@@ -172,8 +172,8 @@ class AgentToggleCommandHandler implements CommandHandler {
 class ExplainerCommandHandler implements CommandHandler {
     public description = "Set explainer";
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const { args } = parseCommandArgs(request);
         if (args.length < 1) {
@@ -208,8 +208,8 @@ function getConfigModel(models: SessionConfig["models"], kind: string) {
 class ConfigModelShowCommandHandler implements CommandHandler {
     public readonly description = "Show current model";
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const models = systemContext.session.getConfig().models;
@@ -233,8 +233,8 @@ class ConfigModelShowCommandHandler implements CommandHandler {
 class ConfigModelSetCommandHandler implements CommandHandler {
     public readonly description = "Set model";
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const { args } = parseCommandArgs(request);
