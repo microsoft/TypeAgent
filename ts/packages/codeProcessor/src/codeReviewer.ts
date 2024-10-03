@@ -23,6 +23,9 @@ import {
 import { CodeAnswer } from "./codeAnswerSchema.js";
 import { CodeDocumentation } from "./codeDocSchema.js";
 
+/**
+ * A code reviewer
+ */
 export interface CodeReviewer {
     readonly model: ChatModel;
     review(
