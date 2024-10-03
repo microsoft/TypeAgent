@@ -12,7 +12,7 @@ import {
 
 export { parseCommandArgs, resolveFlag } from "./parameterHelpers.js";
 
-export type CommandHandlerNoParameters = CommandDescriptor & {
+export type CommandHandlerNoParams = CommandDescriptor & {
     parameters?: undefined;
     run(
         context: ActionContext<unknown>,
@@ -40,7 +40,7 @@ export type CommandHandler = CommandDescriptor & {
 };
 
 type CommandHandlerTypes =
-    | CommandHandlerNoParameters
+    | CommandHandlerNoParams
     | CommandHandlerNoParse
     | CommandHandler;
 
@@ -85,7 +85,7 @@ export function getCommandInterface(
                     curr.commands[currCommand];
                 if (next === undefined) {
                     throw new Error(
-                        `Unknown command '${currCommand}' in '${commandPrefix.join(" ")}'`,
+                        `Unknown command '${currCommand}' in '@${commandPrefix.join(" ")}'`,
                     );
                 }
                 curr = next;
@@ -94,12 +94,17 @@ export function getCommandInterface(
             if (isCommandDescriptorTable(curr)) {
                 if (curr.defaultSubCommand === undefined) {
                     throw new Error(
-                        `Command '${commandPrefix.join(" ")}' requires a subcommand`,
+                        `Command '@${commandPrefix.join(" ")}' requires a subcommand`,
                     );
                 }
                 curr = curr.defaultSubCommand;
             }
             if (curr.parameters === undefined) {
+                if (args.trim() !== "") {
+                    throw new Error(
+                        `No parameters expected for command '@${commandPrefix.join(" ")}'`,
+                    );
+                }
                 await curr.run(context, undefined, attachments);
             } else {
                 await curr.run(context, args, attachments);

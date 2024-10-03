@@ -25,7 +25,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import {
     CommandHandler,
-    CommandHandlerNoParameters,
+    CommandHandlerNoParams,
     CommandHandlerNoParse,
     CommandHandlerTable,
     parseCommandArgs,
@@ -170,7 +170,7 @@ class ConstructionSaveCommandHandler implements CommandHandlerNoParse {
     }
 }
 
-class ConstructionInfoCommandHandler implements CommandHandlerNoParameters {
+class ConstructionInfoCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show current construction store info";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
@@ -200,23 +200,7 @@ class ConstructionInfoCommandHandler implements CommandHandlerNoParameters {
     }
 }
 
-class ConstructionAutoCommandHandler implements CommandHandlerNoParse {
-    public readonly description = "Toggle construction auto save";
-    public readonly parameters = true;
-    public async run(
-        context: ActionContext<CommandHandlerContext>,
-        request: string,
-    ) {
-        const state = request === "" || request === "on";
-        await changeContextConfig({ autoSave: state }, context);
-        displaySuccess(
-            `Construction auto save ${state ? "on" : "off"}`,
-            context,
-        );
-    }
-}
-
-class ConstructionOffCommandHandler implements CommandHandlerNoParameters {
+class ConstructionOffCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Disable construction store";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
@@ -374,7 +358,12 @@ export function getConstructionCommandHandlers(): CommandHandlerTable {
             new: new ConstructionNewCommandHandler(),
             load: new ConstructionLoadCommandHandler(),
             save: new ConstructionSaveCommandHandler(),
-            auto: new ConstructionAutoCommandHandler(),
+            auto: getToggleHandlerTable(
+                "construction auto save",
+                async (context, enable) => {
+                    await changeContextConfig({ autoSave: enable }, context);
+                },
+            ),
             off: new ConstructionOffCommandHandler(),
             info: new ConstructionInfoCommandHandler(),
             list: new ConstructionListCommandHandler(),

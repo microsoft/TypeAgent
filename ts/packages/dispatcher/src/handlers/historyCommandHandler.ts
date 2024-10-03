@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import {
-    CommandHandlerNoParameters,
+    CommandHandlerNoParams,
     CommandHandlerNoParse,
     CommandHandlerTable,
     parseCommandArgs,
@@ -11,7 +11,7 @@ import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 
-export class HistoryListCommandHandler implements CommandHandlerNoParameters {
+export class HistoryListCommandHandler implements CommandHandlerNoParams {
     public readonly description = "List history";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
@@ -28,7 +28,7 @@ export class HistoryListCommandHandler implements CommandHandlerNoParameters {
     }
 }
 
-export class HistoryClearCommandHandler implements CommandHandlerNoParameters {
+export class HistoryClearCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Clear the history";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;

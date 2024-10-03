@@ -7,7 +7,7 @@ import {
     AppAgentManifest,
 } from "@typeagent/agent-sdk";
 import {
-    CommandHandlerNoParameters,
+    CommandHandlerNoParams,
     CommandHandlerNoParse,
     CommandHandlerTable,
     getCommandInterface,
@@ -26,7 +26,7 @@ const config: AppAgentManifest = {
     emojiChar: "🐚",
 };
 
-class ShellShowSettingsCommandHandler implements CommandHandlerNoParameters {
+class ShellShowSettingsCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show shell settings";
     public async run(context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
@@ -34,7 +34,7 @@ class ShellShowSettingsCommandHandler implements CommandHandlerNoParameters {
     }
 }
 
-class ShellShowHelpCommandHandler implements CommandHandlerNoParameters {
+class ShellShowHelpCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show shell help";
     public async run(context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
@@ -42,7 +42,7 @@ class ShellShowHelpCommandHandler implements CommandHandlerNoParameters {
     }
 }
 
-class ShellShowMetricsCommandHandler implements CommandHandlerNoParameters {
+class ShellShowMetricsCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show shell metrics";
     public async run(context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
@@ -50,7 +50,7 @@ class ShellShowMetricsCommandHandler implements CommandHandlerNoParameters {
     }
 }
 
-class ShellShowRawSettingsCommandHandler implements CommandHandlerNoParameters {
+class ShellShowRawSettingsCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Shows raw JSON shell settings";
     public async run(context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
@@ -99,23 +99,21 @@ class ShellSetSettingCommandHandler implements CommandHandlerNoParse {
     }
 }
 
-class ShellRunDemoCommandHandler implements CommandHandlerNoParameters {
+class ShellRunDemoCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Run Demo";
     public async run(context: ActionContext<ShellContext>) {
         context.sessionContext.agentContext.settings.runDemo();
     }
 }
 
-class ShellRunDemoInteractiveCommandHandler
-    implements CommandHandlerNoParameters
-{
+class ShellRunDemoInteractiveCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Run Demo Interactive";
     public async run(context: ActionContext<ShellContext>) {
         context.sessionContext.agentContext.settings.runDemo(true);
     }
 }
 
-class ShellSetTopMostCommandHandler implements CommandHandlerNoParameters {
+class ShellSetTopMostCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Always keep the shell window on top of other windows";
     public async run(context: ActionContext<ShellContext>) {

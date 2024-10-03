@@ -18,7 +18,7 @@ import {
 import chalk from "chalk";
 import {
     CommandHandler,
-    CommandHandlerNoParameters,
+    CommandHandlerNoParams,
     CommandHandlerNoParse,
     CommandHandlerTable,
     parseCommandArgs,
@@ -80,7 +80,7 @@ class SessionOpenCommandHandler implements CommandHandlerNoParse {
     }
 }
 
-class SessionResetCommandHandler implements CommandHandlerNoParameters {
+class SessionResetCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Reset config on session and keep the data";
     public async run(context: ActionContext<CommandHandlerContext>) {
         await changeContextConfig(getDefaultSessionConfig(), context);
@@ -109,7 +109,7 @@ class SessionToggleHistoryCommandHandler implements CommandHandlerNoParse {
     }
 }
 
-class SessionClearCommandHandler implements CommandHandlerNoParameters {
+class SessionClearCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Delete all data on the current sessions, keeping current settings";
     public async run(context: ActionContext<CommandHandlerContext>) {
@@ -181,7 +181,7 @@ class SessionDeleteCommandHandler implements CommandHandlerNoParse {
     }
 }
 
-class SessionListCommandHandler implements CommandHandlerNoParameters {
+class SessionListCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "List all sessions. The current session is marked green.";
     public async run(context: ActionContext<CommandHandlerContext>) {
@@ -198,7 +198,7 @@ class SessionListCommandHandler implements CommandHandlerNoParameters {
     }
 }
 
-class SessionInfoCommandHandler implements CommandHandlerNoParameters {
+class SessionInfoCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show info about the current session";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
