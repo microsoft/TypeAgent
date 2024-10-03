@@ -167,6 +167,9 @@ export interface Conversation<
           }
         | undefined
     >;
+    findMessage(
+        messageText: string,
+    ): Promise<dateTime.Timestamped<TextBlock<MessageId>> | undefined>;
     addNextEntities(
         knowledge: ExtractedKnowledge<MessageId>,
         knowledgeIds: ExtractedKnowledgeIds<TTopicId, TEntityId, TActionId>,
@@ -470,6 +473,7 @@ export async function createConversation(
         search,
         searchTerms,
         searchMessages,
+        findMessage,
 
         addNextEntities,
         indexEntities,
@@ -910,6 +914,21 @@ export async function createConversation(
     function topicsName(level?: number): string {
         level ??= 1;
         return `topics_${level}`;
+    }
+
+    async function findMessage(
+        messageText: string,
+    ): Promise<dateTime.Timestamped<TextBlock<MessageId>> | undefined> {
+        const existing = await searchMessages(messageText, {
+            maxMatches: 1,
+        });
+        if (existing && existing.messages && existing.messages.length > 0) {
+            const messageBlock = existing.messages[0];
+            if (messageText === messageBlock.value.value) {
+                return messageBlock;
+            }
+        }
+        return undefined;
     }
 }
 

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import readline from "readline/promises";
+import { pathToFileURL } from "url";
 
 /**
  * Standard IO streams
@@ -145,6 +146,10 @@ export class ConsoleWriter {
                 this.writeNameValue(key, strValues, maxLength, indent);
             }
         }
+    }
+
+    public writeLink(url: string): void {
+        this.writeLine(pathToFileURL(url).toString());
     }
 
     private listItemToString(
