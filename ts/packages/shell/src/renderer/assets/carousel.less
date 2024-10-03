@@ -56,8 +56,21 @@
   padding: 8px 12px;
   position: absolute;
   bottom: 8px;
-  width: 100%;
+  width: 80%;
   text-align: center;
+  text-overflow: ellipsis;
+  max-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.image-search-caption:hover {
+  background-color: #00000055;
+  overflow:visible;
+  max-height: 320px;
+  white-space: wrap;
+  text-align: left;
+  width: auto;
 }
 
 /* Number text (1/3 etc) */

@@ -42,6 +42,13 @@ export interface EmbeddingModel<K> {
  */
 export interface TextEmbeddingModel extends EmbeddingModel<string> {}
 
+/**
+ * A model that generates images given the image prompt/description
+ */
+export interface ImageModel {
+    generateImage(prompt: string, imageCount: number, width: number, height: number): Promise<Result<ImageGeneration>>;
+}
+
 export type ChatMessage = {
     role: "system" | "user" | "assistant";
     content: ChatMessageContent[];
@@ -66,3 +73,13 @@ export type ImageUrl = {
     url: string;
     detail?: "auto" | "low" | "high";
 };
+
+export type ImageGeneration = {
+    images: GeneratedImage[];
+}
+
+export type GeneratedImage = {
+    revised_prompt: string;
+    image_url: string;
+}
+

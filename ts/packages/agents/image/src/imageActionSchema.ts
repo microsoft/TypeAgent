@@ -24,6 +24,10 @@ export type CreateImageAction = {
     parameters: {
         // the original request of the user
         originalRequest: string;
+        // the image caption
+        caption: string;
+        // the number of images to generate
+        numImages: number;
     };
 };
 
