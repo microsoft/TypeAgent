@@ -15,6 +15,7 @@ import {
     getPreambleLength,
 } from "./prompt";
 import { MessageSourceRole } from "./message";
+import { loadSchema } from "./schema";
 
 /**
  * Simplest possible TypeChat with RAG.
@@ -123,4 +124,37 @@ export function createChatTranslator<T extends object>(
             `The following is your JSON response with 2 spaces of indentation and no properties with the value undefined:\n`
         );
     }
+}
+
+/**
+ * Create a Json translator
+ * @param model language model to use
+ * @param schemaPaths schema files to use
+ * @param baseUrl base Url from where to load schema files
+ * @param typeName type name of the model response
+ * @param createRequestPrompt (optional) customize the prompt
+ * @returns
+ */
+export function createTranslator<T extends object>(
+    model: TypeChatLanguageModel,
+    schemaPaths: string[],
+    baseUrl: string,
+    typeName: string,
+    createRequestPrompt?:
+        | ((request: string, schema: string, typeName: string) => string)
+        | undefined,
+): TypeChatJsonTranslator<T> {
+    const schema = loadSchema(schemaPaths, baseUrl);
+    const validator = createTypeScriptJsonValidator<T>(schema, typeName);
+    const translator = createJsonTranslator<T>(model, validator);
+    if (createRequestPrompt) {
+        translator.createRequestPrompt = (request) => {
+            return createRequestPrompt(
+                request,
+                validator.getSchemaText(),
+                validator.getTypeName(),
+            );
+        };
+    }
+    return translator;
 }

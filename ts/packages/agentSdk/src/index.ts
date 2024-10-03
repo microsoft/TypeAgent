@@ -13,11 +13,14 @@ export {
     StorageEncoding,
     TokenCachePersistence,
     ActionContext,
+} from "./agentInterface.js";
+
+export {
     CommandDescriptor,
     CommandDescriptors,
     CommandDescriptorTable,
-} from "./agentInterface.js";
-
+    AppAgentCommandInterface,
+} from "./command.js";
 export {
     ActionIO,
     DisplayType,

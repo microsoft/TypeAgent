@@ -935,11 +935,11 @@ export async function handleCall(
         case "selectDevice": {
             const selectDeviceAction = action as SelectDeviceAction;
             const keyword = selectDeviceAction.parameters.keyword;
-            const html = await selectDevice(keyword, clientContext);
-
-            return html
-                ? createActionResultFromTextDisplay(html)
-                : createErrorActionResult("No devices found");
+            const result = await selectDevice(keyword, clientContext);
+            if (result) {
+                const { html, text } = result;
+                return createActionResultFromHtmlDisplay(html, text);
+            } else return createErrorActionResult("No devices found");
         }
         case "setVolume": {
             const setVolumeAction = action as SetVolumeAction;

@@ -1,54 +1,22 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-type FlagValueBaseType = string | number | boolean;
-type FlagValueLiteral<T extends FlagValueBaseType> = T extends number
-    ? "number"
-    : T extends boolean
-      ? "boolean"
-      : "string";
+import {
+    DefaultValueDefinition,
+    FlagDefinition,
+    FlagDefinitions,
+    FlagValuePrimitiveTypes,
+    FullFlagDefinition,
+    ParameterDefinitions,
+} from "../command.js";
 
-type BaseConfig = {
-    multiple?: boolean;
-    char?: string;
-    type?: "string" | "number" | "boolean";
-    default?: any;
-};
-interface Config<T extends FlagValueBaseType> extends BaseConfig {
-    multiple?: false;
-    type?: FlagValueLiteral<T>;
-    default?: T;
-}
-
-interface MultiConfig<T extends FlagValueBaseType> extends BaseConfig {
-    multiple?: true;
-    type?: FlagValueLiteral<T>;
-    default?: T[];
-}
-
-type FlagValueConfigT<T extends FlagValueBaseType> =
-    | T
-    | T[]
-    | Config<T>
-    | MultiConfig<T>;
-
-type FlagValueConfig =
-    | undefined // default to "string"
-    | FlagValueConfigT<string>
-    | FlagValueConfigT<number>
-    | FlagValueConfigT<boolean>;
-
-type FlagInput = {
-    [key: string]: FlagValueConfig;
-};
-
-type FlagValueType =
+// Output Types
+type FlagDefaultValueType =
     | string
     | number
     | boolean
-    | string[]
-    | number[]
-    | boolean[];
+    | readonly string[]
+    | readonly number[];
 
 type FlagValueTypeFromLiteral<
     T extends "string" | "number" | "boolean" | undefined,
@@ -56,34 +24,39 @@ type FlagValueTypeFromLiteral<
 
 type FlagValueTypeFromValue<T> = T extends never[]
     ? string[]
-    : T extends any[]
-      ? FlagValueTypeFromValue<T[0]>[]
+    : T extends Array<infer Item extends FlagValuePrimitiveTypes>
+      ? FlagValueTypeFromValue<Item>[]
       : T extends number
         ? number
         : T extends boolean
           ? boolean
           : T extends string
             ? string
-            : string | undefined;
+            : T extends undefined
+              ? string | undefined
+              : never;
 
-type FlagOutputType<T extends FlagValueConfig> = T extends BaseConfig
-    ? T["default"] extends FlagValueType | undefined
-        ? FlagValueTypeFromValue<T["default"]>
-        : T["multiple"] extends true
+type Writeable<T> = { -readonly [P in keyof T]: T[P] };
+type FlagOutputType<T extends FlagDefinition> = T extends FullFlagDefinition
+    ? // Base the type of the value on the default values if available.
+      T["default"] extends FlagDefaultValueType
+        ? FlagValueTypeFromValue<Writeable<T["default"]>>
+        : // Base the value on the type name literal, and value is undefined not flag is not specified
+          T["multiple"] extends true
           ? FlagValueTypeFromLiteral<T["type"]>[] | undefined
           : FlagValueTypeFromLiteral<T["type"]> | undefined
     : FlagValueTypeFromValue<T>;
 
-type FlagsOutput<T extends FlagInput> = {
+type FlagsOutput<T extends FlagDefinitions> = {
     [P in keyof T]: FlagOutputType<T[P]>;
 };
 
-type ParseOutput<T extends FlagInput> = {
+export type ParsedCommandParams<T extends ParameterDefinitions> = {
     args: string[];
-    flags: FlagsOutput<T>;
+    flags: FlagsOutput<T["flags"]>;
 };
 
-function getTypeFromValue(key: string, value?: FlagValueType) {
+function getTypeFromValue(key: string, value?: FlagDefaultValueType) {
     if (value === undefined) {
         return "string";
     }
@@ -97,18 +70,53 @@ function getTypeFromValue(key: string, value?: FlagValueType) {
 
     return typeof value as "string" | "number" | "boolean";
 }
-export function parseCommandArgs<T extends FlagInput>(
+
+function isFullFlagDefinition(def: FlagDefinition): def is FullFlagDefinition {
+    return typeof def === "object" && !Array.isArray(def);
+}
+
+function expandFlagDefinition(key: string, def: FlagDefinition) {
+    const full = isFullFlagDefinition(def) ? def : undefined;
+    const value = full?.default ?? (def as DefaultValueDefinition);
+    return {
+        multiple: full?.multiple ?? Array.isArray(value),
+        type: full?.type ?? getTypeFromValue(key, value),
+        default: value,
+    } as FullFlagDefinition;
+}
+
+export function resolveFlag(
+    definitions: FlagDefinitions,
+    flag: string,
+): FullFlagDefinition | undefined {
+    if (flag.startsWith("--")) {
+        const key = flag.substring(2);
+        const def = definitions[key];
+        if (def === undefined) {
+            return def;
+        }
+        return expandFlagDefinition(key, def);
+    }
+    const alias = flag.substring(1);
+    for (const [key, def] of Object.entries(definitions)) {
+        if (isFullFlagDefinition(def) && def?.char === alias) {
+            return expandFlagDefinition(key, def);
+        }
+    }
+}
+
+export function parseCommandArgs<T extends ParameterDefinitions>(
     request: string,
-    defaultFlags?: T,
-    noArgs: boolean = false,
-): ParseOutput<T> {
+    parameters?: T,
+): ParsedCommandParams<T> {
     const flags: any = {};
     const aliases = new Map<string, string>();
     const valueTypes = new Map<string, "string" | "number" | "boolean">();
     const allowMultiple = new Map<string, boolean>();
+    const defaultFlags = parameters?.flags;
     if (defaultFlags) {
         for (const [key, value] of Object.entries(defaultFlags)) {
-            if (typeof value === "object" && !Array.isArray(value)) {
+            if (isFullFlagDefinition(value)) {
                 if (value.char !== undefined) {
                     if (aliases.has(value.char)) {
                         throw new Error(`Duplicate alias: ${value.char}`);
@@ -131,6 +139,7 @@ export function parseCommandArgs<T extends FlagInput>(
             }
         }
     }
+
     // split the command line arguments by spaces respecting quotes
     const split = request.match(/"[^"]+"|\S+/g) ?? [];
     const strip = split.map((s) => s.replace(/^"|"$/g, ""));
@@ -155,7 +164,7 @@ export function parseCommandArgs<T extends FlagInput>(
         }
 
         if (flag === undefined) {
-            if (noArgs) {
+            if (parameters !== undefined && parameters.args !== true) {
                 throw new Error(`Invalid argument: ${arg}`);
             }
             args.push(arg);
@@ -163,7 +172,7 @@ export function parseCommandArgs<T extends FlagInput>(
         }
 
         const valueType = valueTypes.get(flag);
-        let value: FlagValueType;
+        let value: FlagDefaultValueType;
         if (valueType === "boolean") {
             value = true;
         } else {
@@ -191,5 +200,6 @@ export function parseCommandArgs<T extends FlagInput>(
             flags[flag] = value;
         }
     }
-    return { args, flags: flags as FlagsOutput<T> };
+
+    return { args, flags };
 }

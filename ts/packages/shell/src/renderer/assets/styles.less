@@ -138,13 +138,14 @@ body {
   font-family: inherit;
   font-size: inherit;
   background-color: @chat-bg;
-  padding: 20px 10px 10px 20px;
+  padding: 25px 10px 25px 10px;
 }
 
 .track-list {
   max-height: 300px;
   overflow-y: auto;
   border-radius: 8px;
+  padding-right: 8px;
 }
 
 .track-artist {
@@ -212,8 +213,7 @@ body {
 /* Body */
 .chat-message-body {
   border-radius: 8px;
-  margin-top: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .chat-message-user {
@@ -329,14 +329,30 @@ body {
   visibility: hidden;
 }
 
+.chat-timestamp {
+  font-size: 10px;
+  font-style: normal;
+  color: darkgray;
+  position: relative;
+  margin: 4px;
+}
+
+.chat-timestamp-left {
+  .chat-timestamp;
+  margin-left: 34px;
+}
+
+.chat-timestamp-right {
+  .chat-timestamp;
+  text-align: end;
+}
+
 .agent-icon {
   width: 30px;
   height: 30px;
   border-radius: 15px;
-  float: left;
   position: absolute;
   left: 0px;
-  margin-top: 8px;
   font-size: 20px;
   font-style: normal;
   text-align: center;
@@ -429,30 +445,6 @@ body {
   position: absolute;
   margin-bottom: 14px;
   vertical-align: bottom;
-}
-
-.chat-timestamp {
-  font-size: 10px;
-  font-style: normal;
-  color: darkgray;
-  position: relative;
-}
-
-.chat-timestamp-left {
-  .chat-timestamp;
-  text-align: start;
-  float: left;
-  top: -8px;
-  margin-left: 31px;
-  display: flex;
-}
-
-.chat-timestamp-right {
-  .chat-timestamp;
-  bottom: 10px;
-  margin-right: 3px;
-  text-align: end;
-  float: right;
 }
 
 @keyframes message {
@@ -595,9 +587,6 @@ span.ansi-bright-white-fg {
   color: rgb(255, 255, 255);
 }
 
-.scroll_enabled {
-  padding-right: 20px;
-}
 .scroll_enabled::-webkit-scrollbar {
   width: 10px;
 }

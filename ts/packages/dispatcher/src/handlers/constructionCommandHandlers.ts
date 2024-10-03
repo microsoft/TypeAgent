@@ -16,7 +16,6 @@ import { ConstructionStore, printImportConstructionResult } from "agent-cache";
 import { getSessionCacheDirPath } from "../explorer.js";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import { RequestIO } from "./common/interactiveIO.js";
-import { parseCommandArgs } from "../utils/args.js";
 import { glob } from "glob";
 import { getDispatcherConfig } from "../utils/config.js";
 import {
@@ -26,7 +25,11 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import {
     CommandHandler,
+    CommandHandlerNoParams,
+    CommandHandlerNoParse,
     CommandHandlerTable,
+    parseCommandArgs,
+    ParsedCommandParams,
 } from "@typeagent/agent-sdk/helpers/command";
 import { ActionContext } from "@typeagent/agent-sdk";
 
@@ -83,11 +86,12 @@ function resolvePathWithSession(
     return path.resolve(request);
 }
 
-class ConstructionNewCommandHandler implements CommandHandler {
+class ConstructionNewCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Create a new construction store";
+    public readonly parameters = true;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
@@ -112,11 +116,12 @@ class ConstructionNewCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionLoadCommandHandler implements CommandHandler {
+class ConstructionLoadCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Load a construction store from disk";
+    public readonly parameters = true;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
@@ -142,11 +147,12 @@ class ConstructionLoadCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionSaveCommandHandler implements CommandHandler {
+class ConstructionSaveCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Save construction store to disk";
+    public readonly parameters = true;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
@@ -165,12 +171,9 @@ class ConstructionSaveCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionInfoCommandHandler implements CommandHandler {
+class ConstructionInfoCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show current construction store info";
-    public async run(
-        request: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
         const info = constructionStore.getInfo();
@@ -198,28 +201,9 @@ class ConstructionInfoCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionAutoCommandHandler implements CommandHandler {
-    public readonly description = "Toggle construction auto save";
-    public async run(
-        request: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
-        const systemContext = context.sessionContext.agentContext;
-        const state = request === "" || request === "on";
-        await changeContextConfig({ autoSave: state }, context);
-        displaySuccess(
-            `Construction auto save ${state ? "on" : "off"}`,
-            context,
-        );
-    }
-}
-
-class ConstructionOffCommandHandler implements CommandHandler {
+class ConstructionOffCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Disable construction store";
-    public async run(
-        request: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
         await checkRecreateStore(constructionStore, systemContext.requestIO);
@@ -230,25 +214,23 @@ class ConstructionOffCommandHandler implements CommandHandler {
 
 class ConstructionListCommandHandler implements CommandHandler {
     public readonly description = "List constructions";
+    public readonly parameters = {
+        flags: {
+            verbose: { char: "v", default: false },
+            all: { char: "a", default: false },
+            builtin: { char: "b", default: false },
+            match: { char: "m", multiple: true },
+            part: { char: "p", multiple: true },
+            id: { multiple: true, type: "number" },
+        },
+    } as const;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
-        const { flags } = parseCommandArgs(
-            request,
-            {
-                verbose: { char: "v", default: false },
-                all: { char: "a", default: false },
-                builtin: { char: "b", default: false },
-                match: { char: "m", multiple: true },
-                part: { char: "p", multiple: true },
-                id: { multiple: true, type: "number" },
-            },
-            true,
-        );
-        constructionStore.print(flags);
+        constructionStore.print(params.flags);
     }
 }
 
@@ -288,14 +270,18 @@ async function expandPaths(paths: string[]) {
 
 class ConstructionImportCommandHandler implements CommandHandler {
     public readonly description = "Import constructions from test data";
+    public readonly parameters = {
+        flags: {
+            test: { char: "t", default: false },
+        },
+        args: true,
+    };
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        const { args, flags } = parseCommandArgs(request, {
-            test: { char: "t", default: false },
-        });
+        const { args, flags } = params;
 
         const inputs =
             args.length !== 0
@@ -340,12 +326,12 @@ class ConstructionImportCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionDeleteCommandHandler implements CommandHandler {
+class ConstructionDeleteCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Delete a construction by id";
-
+    public readonly parameters = true;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const { args } = parseCommandArgs(request);
         if (args.length !== 2) {
@@ -372,7 +358,12 @@ export function getConstructionCommandHandlers(): CommandHandlerTable {
             new: new ConstructionNewCommandHandler(),
             load: new ConstructionLoadCommandHandler(),
             save: new ConstructionSaveCommandHandler(),
-            auto: new ConstructionAutoCommandHandler(),
+            auto: getToggleHandlerTable(
+                "construction auto save",
+                async (context, enable) => {
+                    await changeContextConfig({ autoSave: enable }, context);
+                },
+            ),
             off: new ConstructionOffCommandHandler(),
             info: new ConstructionInfoCommandHandler(),
             list: new ConstructionListCommandHandler(),

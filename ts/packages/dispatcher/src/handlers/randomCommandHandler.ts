@@ -10,7 +10,7 @@ import { createTypeChat, promptLib } from "typeagent";
 import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";
 import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";
 import {
-    CommandHandler,
+    CommandHandlerNoParams,
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
 import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
@@ -33,16 +33,13 @@ export type UserRequest = {
     message: string;
 };`;
 
-class RandomOfflineCommandHandler implements CommandHandler {
+class RandomOfflineCommandHandler implements CommandHandlerNoParams {
     private list: string[] | undefined;
 
     public readonly description =
         "Issues a random request from a dataset of pre-generated requests.";
 
-    public async run(
-        request: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         displayStatus(`Selecting random request...`, context);
 
         if (this.list == undefined) {
@@ -81,15 +78,12 @@ class RandomOfflineCommandHandler implements CommandHandler {
     }
 }
 
-class RandomOnlineCommandHandler implements CommandHandler {
+class RandomOnlineCommandHandler implements CommandHandlerNoParams {
     private instructions = `You are an Siri/Alexa/Cortana prompt generator. You create user prompts that are both supported and unsupported.`;
 
     public readonly description = "Uses the LLM to generate random requests.";
 
-    public async run(
-        request: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         displayStatus(`Generating random request using LLM...`, context);
 
         //

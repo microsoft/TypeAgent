@@ -16,6 +16,7 @@ export class PartialCompletion {
     private readonly searchMenu: SearchMenu;
     private current: string = "";
     private space: boolean = false;
+    private noCompletion: boolean = false;
     private completionP:
         | Promise<PartialCompletionResult | undefined>
         | undefined;
@@ -105,7 +106,7 @@ export class PartialCompletion {
             return true;
         }
 
-        if (this.searchMenu.numChoices === 0) {
+        if (this.noCompletion) {
             debug(
                 `Partial completion skipped: No completions for '${this.current}'`,
             );
@@ -128,6 +129,10 @@ export class PartialCompletion {
     }
 
     private updateSearchMenuPrefix(prefix: string) {
+        if (this.searchMenu.numChoices === 0) {
+            // No need to update if there is no choices.
+            return;
+        }
         const items = this.searchMenu.completePrefix(prefix);
         if (
             items.length !== 0 &&
@@ -140,7 +145,7 @@ export class PartialCompletion {
         } else {
             debug(
                 items.length === 0
-                    ? `Partial completion skipped: No completions match for '${prefix}'`
+                    ? `Partial completion skipped: No current completions match for '${prefix}'`
                     : `Partial completion skipped: Completion already matched uniquely for '${prefix}'`,
             );
             this.cancelCompletionMenu();
@@ -151,6 +156,7 @@ export class PartialCompletion {
         debug(`Partial completion start: ${input}`);
         this.cancelCompletionMenu();
         this.current = input;
+        this.noCompletion = false;
         // Clear the choices
         this.searchMenu.setChoices([]);
         const completionP = getClientAPI().getPartialCompletion(input);
@@ -165,8 +171,9 @@ export class PartialCompletion {
             debug(`Partial completion result: `, result);
             if (result === undefined) {
                 debug(
-                    `Partial completion skipped: no completions for '${this.current}'`,
+                    `Partial completion skipped: No completions for '${this.current}'`,
                 );
+                this.noCompletion = true;
                 return;
             }
 
@@ -175,7 +182,7 @@ export class PartialCompletion {
 
             if (result.completions.length === 0) {
                 debug(
-                    `Partial completion skipped: no completions for '${this.current}'`,
+                    `Partial completion skipped: No current completions for '${this.current}'`,
                 );
                 return;
             }

@@ -1,14 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionContext } from "@typeagent/agent-sdk";
+import { ActionContext, AppAgentCommandInterface } from "@typeagent/agent-sdk";
 import {
     getCommandInterface,
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
 import { PlayerActionContext } from "./playerHandlers.js";
 import { loadHistoryFile } from "../client.js";
-import { AppAgentCommandInterface } from "../../../../agentSdk/dist/agentInterface.js";
 
 const handlers: CommandHandlerTable = {
     description: "Player App Agent Commands",
@@ -19,9 +18,10 @@ const handlers: CommandHandlerTable = {
             commands: {
                 load: {
                     description: "Load spotify user data",
+                    parameters: true,
                     run: async (
-                        request: string,
                         context: ActionContext<PlayerActionContext>,
+                        request: string,
                     ) => {
                         if (request === "") {
                             throw new Error("No file specified.");

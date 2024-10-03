@@ -4,7 +4,7 @@
 import path from "path";
 import { openai } from "aiclient";
 import { ObjectFolderSettings, SearchOptions, collections } from "typeagent";
-import { SourceTextBlock } from "../text.js";
+import { SourceTextBlock, TextBlock } from "../text.js";
 import {
     Conversation,
     ConversationSettings,
@@ -35,7 +35,7 @@ import { logError } from "../diagnostics.js";
 
 export type AddMessageTask = {
     type: "addMessage";
-    messageText: string;
+    message: string | TextBlock;
     knownEntities?: ConcreteEntity[] | undefined;
     timestamp?: Date | undefined;
     callback?: ((error?: any | undefined) => void) | undefined;
@@ -60,7 +60,7 @@ export interface ConversationManager {
      * @param timestamp message timestamp
      */
     addMessage(
-        messageText: string,
+        message: string | TextBlock,
         entities?: ConcreteEntity[] | undefined,
         timestamp?: Date | undefined,
     ): Promise<void>;
@@ -72,7 +72,7 @@ export interface ConversationManager {
      * @returns true if queued. False if queue is full
      */
     queueAddMessage(
-        messageText: string,
+        message: string | TextBlock,
         entities?: ConcreteEntity[] | undefined,
         timestamp?: Date | undefined,
     ): boolean;
@@ -119,6 +119,11 @@ export interface ConversationManager {
         fuzzySearchOptions?: SearchOptions | undefined,
         maxMessages?: number | undefined,
     ): Promise<SearchTermsActionResponse>;
+    /**
+     * Clear everything.
+     * Note: While this is happening, it is up to you to ensure you are not searching or reading the conversation
+     */
+    clear(): Promise<void>;
 }
 
 /**
@@ -161,7 +166,7 @@ export async function createConversationManager(
         knowledgeExtractorSettings,
     );
 
-    const topicMerger = await createConversationTopicMerger(
+    let topicMerger = await createConversationTopicMerger(
         knowledgeModel,
         conversation,
         1, // Merge base topic level 1 into a higher level
@@ -189,10 +194,11 @@ export async function createConversationManager(
         search,
         getSearchResponse,
         generateAnswerForSearchResponse,
+        clear,
     };
 
     function addMessage(
-        messageText: string,
+        message: string | TextBlock,
         knownEntities?: ConcreteEntity[] | undefined,
         timestamp?: Date | undefined,
     ): Promise<void> {
@@ -200,20 +206,20 @@ export async function createConversationManager(
             conversation,
             knowledgeExtractor,
             topicMerger,
-            messageText,
+            message,
             knownEntities,
             timestamp,
         );
     }
 
     function queueAddMessage(
-        messageText: string,
+        message: string | TextBlock,
         knownEntities?: ConcreteEntity[] | undefined,
         timestamp?: Date | undefined,
     ): boolean {
         return updateTaskQueue.push({
             type: "addMessage",
-            messageText,
+            message,
             knownEntities,
             timestamp,
         });
@@ -234,7 +240,7 @@ export async function createConversationManager(
                         conversation,
                         knowledgeExtractor,
                         topicMerger,
-                        addTask.messageText,
+                        addTask.message,
                         addTask.knownEntities,
                         addTask.timestamp,
                     );
@@ -298,6 +304,16 @@ export async function createConversationManager(
         return searchProcessor.generateAnswer(query, searchResponse, options);
     }
 
+    async function clear(): Promise<void> {
+        await conversation.clear(true);
+        topicMerger = await createConversationTopicMerger(
+            knowledgeModel,
+            conversation,
+            1, // Merge base topic level 1 into a higher level
+            topicMergeWindowSize,
+        );
+    }
+
     function defaultConversationSettings(): ConversationSettings {
         return {
             indexSettings: {
@@ -351,7 +367,7 @@ export async function createConversationManager(
  * @param conversation
  * @param knowledgeExtractor
  * @param topicMerger (Optional)
- * @param messageText
+ * @param message message text or message text block to add
  * @param knownEntities
  * @param timestamp
  */
@@ -359,11 +375,11 @@ export async function addMessageToConversation(
     conversation: Conversation,
     knowledgeExtractor: KnowledgeExtractor,
     topicMerger: TopicMerger | undefined,
-    messageText: string,
+    message: string | TextBlock,
     knownEntities?: ConcreteEntity[] | undefined,
     timestamp?: Date | undefined,
 ): Promise<void> {
-    const block = await conversation.addMessage(messageText, timestamp);
+    const block = await conversation.addMessage(message, timestamp);
     await extractKnowledgeAndIndex(
         conversation,
         knowledgeExtractor,

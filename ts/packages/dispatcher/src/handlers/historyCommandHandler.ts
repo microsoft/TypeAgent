@@ -2,20 +2,18 @@
 // Licensed under the MIT License.
 
 import {
-    CommandHandler,
+    CommandHandlerNoParams,
+    CommandHandlerNoParse,
     CommandHandlerTable,
+    parseCommandArgs,
 } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
-import { parseCommandArgs } from "../utils/args.js";
 
-export class HistoryListCommandHandler implements CommandHandler {
+export class HistoryListCommandHandler implements CommandHandlerNoParams {
     public readonly description = "List history";
-    public async run(
-        input: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const history = systemContext.chatHistory;
 
@@ -30,12 +28,9 @@ export class HistoryListCommandHandler implements CommandHandler {
     }
 }
 
-export class HistoryClearCommandHandler implements CommandHandler {
+export class HistoryClearCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Clear the history";
-    public async run(
-        input: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const history = systemContext.chatHistory;
 
@@ -45,12 +40,13 @@ export class HistoryClearCommandHandler implements CommandHandler {
     }
 }
 
-export class HistoryDeleteCommandHandler implements CommandHandler {
+export class HistoryDeleteCommandHandler implements CommandHandlerNoParse {
     public readonly description =
         "Delete a specific message from the chat history";
+    public readonly parameters = true;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const { args } = parseCommandArgs(request);
