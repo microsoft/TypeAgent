@@ -15,10 +15,10 @@ import {
 import {
     extractKnowledgeFromBlock,
     KnowledgeExtractor,
-    KnowledgeExtractorSettings,
     createKnowledgeExtractor,
     ExtractedKnowledge,
     ExtractedEntity,
+    createKnowledgeExtractorSettings,
 } from "./knowledge.js";
 import {
     ConversationSearchProcessor,
@@ -160,10 +160,9 @@ export async function createConversationManager(
     if (createNew) {
         await conversation.clear(true);
     }
-    const knowledgeExtractorSettings = defaultKnowledgeExtractorSettings();
     const knowledgeExtractor = createKnowledgeExtractor(
         knowledgeModel,
-        knowledgeExtractorSettings,
+        createKnowledgeExtractorSettings(maxCharsPerChunk),
     );
 
     let topicMerger = await createConversationTopicMerger(
@@ -322,15 +321,6 @@ export async function createConversationManager(
                 embeddingModel,
                 semanticIndex: true,
             },
-        };
-    }
-
-    function defaultKnowledgeExtractorSettings(): KnowledgeExtractorSettings {
-        return {
-            windowSize: 8,
-            maxContextLength: maxCharsPerChunk,
-            includeSuggestedTopics: false,
-            includeActions: true,
         };
     }
 

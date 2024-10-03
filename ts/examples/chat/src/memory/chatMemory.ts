@@ -560,7 +560,6 @@ export async function runChatMemory(): Promise<void> {
             {
                 windowSize: 8,
                 maxContextLength: context.maxCharsPerChunk,
-                includeSuggestedTopics: false,
                 includeActions: namedArgs.actions,
                 mergeActionKnowledge: false,
             },
@@ -582,7 +581,7 @@ export async function runChatMemory(): Promise<void> {
             const knowledgeResults = await asyncArray.mapAsync(
                 slice,
                 namedArgs.concurrency,
-                (message) => extractor.next(message.value),
+                (message) => extractor.extract(message.value),
             );
             for (let k = 0; k < knowledgeResults.length; ++k) {
                 ++count;
@@ -662,7 +661,6 @@ export async function runChatMemory(): Promise<void> {
             {
                 windowSize: 8,
                 maxContextLength: context.maxCharsPerChunk,
-                includeSuggestedTopics: false,
                 includeActions: namedArgs.actions,
                 mergeActionKnowledge: true,
             },

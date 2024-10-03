@@ -35,7 +35,7 @@ describe("KnowledgeExtractor", () => {
                   const knowledge = await asyncArray.mapAsync(
                       blocks,
                       4,
-                      (block) => extractor.next(block.value),
+                      (block) => extractor.extract(block.value),
                   );
                   expect(knowledge).not.toBeUndefined();
                   expect(knowledge.length).toBeGreaterThan(0);
