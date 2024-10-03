@@ -10,7 +10,7 @@ import {
     CommandDescriptorTable,
 } from "@typeagent/agent-sdk";
 import {
-    CommandHandler,
+    CommandHandlerNoParse,
     CommandHandlerTable,
     getCommandInterface,
     isCommandDescriptorTable,
@@ -50,8 +50,9 @@ function executeSystemAction(
     throw new Error(`Invalid system sub-translator: ${action.translatorName}`);
 }
 
-class HelpCommandHandler implements CommandHandler {
+class HelpCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Show help";
+    public readonly parameters = true;
     public async run(
         context: ActionContext<CommandHandlerContext>,
         request: string,
@@ -124,8 +125,9 @@ class HelpCommandHandler implements CommandHandler {
     }
 }
 
-class RunCommandScriptHandler implements CommandHandler {
+class RunCommandScriptHandler implements CommandHandlerNoParse {
     public readonly description = "Run a command script file";
+    public readonly parameters = true;
     public async run(
         context: ActionContext<CommandHandlerContext>,
         input: string,

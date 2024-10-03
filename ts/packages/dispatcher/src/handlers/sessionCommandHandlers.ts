@@ -18,6 +18,8 @@ import {
 import chalk from "chalk";
 import {
     CommandHandler,
+    CommandHandlerNoParameters,
+    CommandHandlerNoParse,
     CommandHandlerTable,
     parseCommandArgs,
 } from "@typeagent/agent-sdk/helpers/command";
@@ -64,8 +66,9 @@ class SessionNewCommandHandler implements CommandHandler {
     }
 }
 
-class SessionOpenCommandHandler implements CommandHandler {
+class SessionOpenCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Open an existing session";
+    public readonly parameters = true;
     public async run(
         context: ActionContext<CommandHandlerContext>,
         request: string,
@@ -77,7 +80,7 @@ class SessionOpenCommandHandler implements CommandHandler {
     }
 }
 
-class SessionResetCommandHandler implements CommandHandler {
+class SessionResetCommandHandler implements CommandHandlerNoParameters {
     public readonly description = "Reset config on session and keep the data";
     public async run(context: ActionContext<CommandHandlerContext>) {
         await changeContextConfig(getDefaultSessionConfig(), context);
@@ -93,8 +96,9 @@ class SessionResetCommandHandler implements CommandHandler {
     }
 }
 
-class SessionToggleHistoryCommandHandler implements CommandHandler {
+class SessionToggleHistoryCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Update the history on the session config";
+    public readonly parameters = true;
     public async run(
         context: ActionContext<CommandHandlerContext>,
         request: string,
@@ -105,7 +109,7 @@ class SessionToggleHistoryCommandHandler implements CommandHandler {
     }
 }
 
-class SessionClearCommandHandler implements CommandHandler {
+class SessionClearCommandHandler implements CommandHandlerNoParameters {
     public readonly description =
         "Delete all data on the current sessions, keeping current settings";
     public async run(context: ActionContext<CommandHandlerContext>) {
@@ -133,9 +137,10 @@ class SessionClearCommandHandler implements CommandHandler {
     }
 }
 
-class SessionDeleteCommandHandler implements CommandHandler {
+class SessionDeleteCommandHandler implements CommandHandlerNoParse {
     public readonly description =
         "Delete a session. If no session is specified, delete the current session and start a new session.\n-a to delete all sessions";
+    public readonly parameters = true;
     public async run(
         context: ActionContext<CommandHandlerContext>,
         request: string,
@@ -176,7 +181,7 @@ class SessionDeleteCommandHandler implements CommandHandler {
     }
 }
 
-class SessionListCommandHandler implements CommandHandler {
+class SessionListCommandHandler implements CommandHandlerNoParameters {
     public readonly description =
         "List all sessions. The current session is marked green.";
     public async run(context: ActionContext<CommandHandlerContext>) {
@@ -193,7 +198,7 @@ class SessionListCommandHandler implements CommandHandler {
     }
 }
 
-class SessionInfoCommandHandler implements CommandHandler {
+class SessionInfoCommandHandler implements CommandHandlerNoParameters {
     public readonly description = "Show info about the current session";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;

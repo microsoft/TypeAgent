@@ -54,7 +54,7 @@ export type ParameterDefinitions = {
 export type CommandDescriptor = {
     description: string;
     help?: string;
-    parameters?: ParameterDefinitions;
+    parameters?: ParameterDefinitions | boolean | undefined;
 };
 
 export type CommandDescriptorTable = {

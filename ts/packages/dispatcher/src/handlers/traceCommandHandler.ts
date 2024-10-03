@@ -4,7 +4,7 @@
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import registerDebug from "debug";
 import { ActionContext } from "@typeagent/agent-sdk";
-import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
+import { CommandHandlerNoParse } from "@typeagent/agent-sdk/helpers/command";
 import { displaySuccess } from "@typeagent/agent-sdk/helpers/display";
 
 function toNamespace(regexp: RegExp) {
@@ -23,8 +23,9 @@ function getCurrentTraceSettings() {
     ];
 }
 
-export class TraceCommandHandler implements CommandHandler {
+export class TraceCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Enable or disable trace namespaces";
+    public readonly parameters = true;
     public async run(
         context: ActionContext<CommandHandlerContext>,
         input: string,

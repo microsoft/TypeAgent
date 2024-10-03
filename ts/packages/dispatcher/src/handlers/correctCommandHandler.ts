@@ -3,11 +3,12 @@
 
 import { printProcessExplanationResult } from "agent-cache";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
-import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
+import { CommandHandlerNoParse } from "@typeagent/agent-sdk/helpers/command";
 import { ActionContext } from "@typeagent/agent-sdk";
 
-export class CorrectCommandHandler implements CommandHandler {
+export class CorrectCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Correct the last explanation";
+    public readonly parameters = true;
     public async run(
         context: ActionContext<CommandHandlerContext>,
         input: string,

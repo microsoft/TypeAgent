@@ -41,7 +41,7 @@ import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incremen
 import ExifReader from "exifreader";
 import { Result } from "typechat";
 import { ProfileNames } from "../utils/profileNames.js";
-import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
+import { CommandHandlerNoParse } from "@typeagent/agent-sdk/helpers/command";
 import { ActionContext } from "@typeagent/agent-sdk";
 import {
     displayError,
@@ -708,8 +708,9 @@ async function requestExplain(
     }
 }
 
-export class RequestCommandHandler implements CommandHandler {
+export class RequestCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Translate and explain a request";
+    public readonly parameters = true;
     public async run(
         context: ActionContext<CommandHandlerContext>,
         request: string,

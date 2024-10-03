@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import {
-    CommandHandler,
+    CommandHandlerNoParameters,
+    CommandHandlerNoParse,
     CommandHandlerTable,
     parseCommandArgs,
 } from "@typeagent/agent-sdk/helpers/command";
@@ -10,7 +11,7 @@ import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 
-export class HistoryListCommandHandler implements CommandHandler {
+export class HistoryListCommandHandler implements CommandHandlerNoParameters {
     public readonly description = "List history";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
@@ -27,7 +28,7 @@ export class HistoryListCommandHandler implements CommandHandler {
     }
 }
 
-export class HistoryClearCommandHandler implements CommandHandler {
+export class HistoryClearCommandHandler implements CommandHandlerNoParameters {
     public readonly description = "Clear the history";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
@@ -39,9 +40,10 @@ export class HistoryClearCommandHandler implements CommandHandler {
     }
 }
 
-export class HistoryDeleteCommandHandler implements CommandHandler {
+export class HistoryDeleteCommandHandler implements CommandHandlerNoParse {
     public readonly description =
         "Delete a specific message from the chat history";
+    public readonly parameters = true;
     public async run(
         context: ActionContext<CommandHandlerContext>,
         request: string,

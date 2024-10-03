@@ -2,14 +2,14 @@
 // Licensed under the MIT License.
 
 import {
-    CommandHandler,
+    CommandHandlerNoParameters,
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import { NotifyCommands } from "./common/interactiveIO.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 
-class NotifyInfoCommandHandler implements CommandHandler {
+class NotifyInfoCommandHandler implements CommandHandlerNoParameters {
     description: string = "Shows the number of notifications available";
     help?: string;
     public async run(
@@ -24,7 +24,7 @@ class NotifyInfoCommandHandler implements CommandHandler {
     }
 }
 
-class NotifyClearCommandHandler implements CommandHandler {
+class NotifyClearCommandHandler implements CommandHandlerNoParameters {
     description: string = "Clears notifications";
     help?: string;
     public async run(
@@ -39,7 +39,7 @@ class NotifyClearCommandHandler implements CommandHandler {
     }
 }
 
-class NotifyShowUnreadCommandHandler implements CommandHandler {
+class NotifyShowUnreadCommandHandler implements CommandHandlerNoParameters {
     description: string = "Shows unread notifications";
     help?: string;
     public async run(
@@ -54,9 +54,10 @@ class NotifyShowUnreadCommandHandler implements CommandHandler {
     }
 }
 
-class NotifyShowAllCommandHandler implements CommandHandler {
+class NotifyShowAllCommandHandler implements CommandHandlerNoParameters {
     description: string = "Shows all notifications";
     help?: string;
+
     public async run(
         context: ActionContext<CommandHandlerContext>,
     ): Promise<void> {

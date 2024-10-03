@@ -7,7 +7,8 @@ import {
     AppAgentManifest,
 } from "@typeagent/agent-sdk";
 import {
-    CommandHandler,
+    CommandHandlerNoParameters,
+    CommandHandlerNoParse,
     CommandHandlerTable,
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
@@ -25,7 +26,7 @@ const config: AppAgentManifest = {
     emojiChar: "🐚",
 };
 
-class ShellShowSettingsCommandHandler implements CommandHandler {
+class ShellShowSettingsCommandHandler implements CommandHandlerNoParameters {
     public readonly description = "Show shell settings";
     public async run(context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
@@ -33,7 +34,7 @@ class ShellShowSettingsCommandHandler implements CommandHandler {
     }
 }
 
-class ShellShowHelpCommandHandler implements CommandHandler {
+class ShellShowHelpCommandHandler implements CommandHandlerNoParameters {
     public readonly description = "Show shell help";
     public async run(context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
@@ -41,7 +42,7 @@ class ShellShowHelpCommandHandler implements CommandHandler {
     }
 }
 
-class ShellShowMetricsCommandHandler implements CommandHandler {
+class ShellShowMetricsCommandHandler implements CommandHandlerNoParameters {
     public readonly description = "Show shell metrics";
     public async run(context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
@@ -49,7 +50,7 @@ class ShellShowMetricsCommandHandler implements CommandHandler {
     }
 }
 
-class ShellShowRawSettingsCommandHandler implements CommandHandler {
+class ShellShowRawSettingsCommandHandler implements CommandHandlerNoParameters {
     public readonly description = "Shows raw JSON shell settings";
     public async run(context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
@@ -71,9 +72,10 @@ class ShellShowRawSettingsCommandHandler implements CommandHandler {
     }
 }
 
-class ShellSetSettingCommandHandler implements CommandHandler {
+class ShellSetSettingCommandHandler implements CommandHandlerNoParse {
     public readonly description: string =
         "Sets a specific setting with the supplied value";
+    public readonly parameters = true;
     public async run(context: ActionContext<ShellContext>, input: string) {
         const agentContext = context.sessionContext.agentContext;
         const name = input.substring(0, input.indexOf(" "));
@@ -97,21 +99,23 @@ class ShellSetSettingCommandHandler implements CommandHandler {
     }
 }
 
-class ShellRunDemoCommandHandler implements CommandHandler {
+class ShellRunDemoCommandHandler implements CommandHandlerNoParameters {
     public readonly description = "Run Demo";
     public async run(context: ActionContext<ShellContext>) {
         context.sessionContext.agentContext.settings.runDemo();
     }
 }
 
-class ShellRunDemoInteractiveCommandHandler implements CommandHandler {
+class ShellRunDemoInteractiveCommandHandler
+    implements CommandHandlerNoParameters
+{
     public readonly description = "Run Demo Interactive";
     public async run(context: ActionContext<ShellContext>) {
         context.sessionContext.agentContext.settings.runDemo(true);
     }
 }
 
-class ShellSetTopMostCommandHandler implements CommandHandler {
+class ShellSetTopMostCommandHandler implements CommandHandlerNoParameters {
     public readonly description =
         "Always keep the shell window on top of other windows";
     public async run(context: ActionContext<ShellContext>) {
@@ -119,8 +123,9 @@ class ShellSetTopMostCommandHandler implements CommandHandler {
     }
 }
 
-class ShellOpenWebContentView implements CommandHandler {
+class ShellOpenWebContentView implements CommandHandlerNoParse {
     public readonly description = "Show a new Web Content view";
+    public readonly parameters = true;
     public async run(context: ActionContext<ShellContext>, input: string) {
         let targetUrl: URL;
         switch (input.toLowerCase()) {

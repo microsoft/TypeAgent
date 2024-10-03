@@ -25,6 +25,8 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import {
     CommandHandler,
+    CommandHandlerNoParameters,
+    CommandHandlerNoParse,
     CommandHandlerTable,
     parseCommandArgs,
 } from "@typeagent/agent-sdk/helpers/command";
@@ -83,8 +85,9 @@ function resolvePathWithSession(
     return path.resolve(request);
 }
 
-class ConstructionNewCommandHandler implements CommandHandler {
+class ConstructionNewCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Create a new construction store";
+    public readonly parameters = true;
     public async run(
         context: ActionContext<CommandHandlerContext>,
         request: string,
@@ -112,8 +115,9 @@ class ConstructionNewCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionLoadCommandHandler implements CommandHandler {
+class ConstructionLoadCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Load a construction store from disk";
+    public readonly parameters = true;
     public async run(
         context: ActionContext<CommandHandlerContext>,
         request: string,
@@ -142,8 +146,9 @@ class ConstructionLoadCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionSaveCommandHandler implements CommandHandler {
+class ConstructionSaveCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Save construction store to disk";
+    public readonly parameters = true;
     public async run(
         context: ActionContext<CommandHandlerContext>,
         request: string,
@@ -165,7 +170,7 @@ class ConstructionSaveCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionInfoCommandHandler implements CommandHandler {
+class ConstructionInfoCommandHandler implements CommandHandlerNoParameters {
     public readonly description = "Show current construction store info";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
@@ -195,13 +200,13 @@ class ConstructionInfoCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionAutoCommandHandler implements CommandHandler {
+class ConstructionAutoCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Toggle construction auto save";
+    public readonly parameters = true;
     public async run(
         context: ActionContext<CommandHandlerContext>,
         request: string,
     ) {
-        const systemContext = context.sessionContext.agentContext;
         const state = request === "" || request === "on";
         await changeContextConfig({ autoSave: state }, context);
         displaySuccess(
@@ -211,7 +216,7 @@ class ConstructionAutoCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionOffCommandHandler implements CommandHandler {
+class ConstructionOffCommandHandler implements CommandHandlerNoParameters {
     public readonly description = "Disable construction store";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
@@ -337,9 +342,9 @@ class ConstructionImportCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionDeleteCommandHandler implements CommandHandler {
+class ConstructionDeleteCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Delete a construction by id";
-
+    public readonly parameters = true;
     public async run(
         context: ActionContext<CommandHandlerContext>,
         request: string,

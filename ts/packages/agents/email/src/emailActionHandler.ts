@@ -21,12 +21,14 @@ import {
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
 import {
-    CommandHandler,
+    CommandHandlerNoParameters,
     CommandHandlerTable,
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
 
-export class MailClientLoginCommandHandler implements CommandHandler {
+export class MailClientLoginCommandHandler
+    implements CommandHandlerNoParameters
+{
     public readonly description = "Log into the MS Graph to access email";
     public async run(context: ActionContext<EmailActionContext>) {
         const mailClient: MailClient | undefined =

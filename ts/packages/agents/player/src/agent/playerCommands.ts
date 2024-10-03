@@ -18,6 +18,7 @@ const handlers: CommandHandlerTable = {
             commands: {
                 load: {
                     description: "Load spotify user data",
+                    parameters: true,
                     run: async (
                         context: ActionContext<PlayerActionContext>,
                         request: string,

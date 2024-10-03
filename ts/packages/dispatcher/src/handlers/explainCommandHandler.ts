@@ -1,6 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
+import { CommandHandlerNoParse } from "@typeagent/agent-sdk/helpers/command";
 import {
     CommandHandlerContext,
     updateCorrectionContext,
@@ -12,8 +12,9 @@ import {
     displayStatus,
 } from "@typeagent/agent-sdk/helpers/display";
 
-export class ExplainCommandHandler implements CommandHandler {
+export class ExplainCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Explain a translated request with action";
+    public readonly parameters = true;
     public async run(
         context: ActionContext<CommandHandlerContext>,
         input: string,

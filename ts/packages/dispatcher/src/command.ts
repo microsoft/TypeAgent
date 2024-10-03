@@ -336,7 +336,10 @@ export async function getPartialCompletion(
             completions.push(...Object.keys(table.commands));
         }
 
-        const flags = descriptor.parameters?.flags;
+        if (typeof descriptor.parameters !== "object") {
+            return undefined;
+        }
+        const flags = descriptor.parameters.flags;
         if (flags === undefined) {
             return undefined;
         }

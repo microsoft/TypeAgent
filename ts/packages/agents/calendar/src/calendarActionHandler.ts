@@ -33,12 +33,14 @@ import {
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
 import {
-    CommandHandler,
+    CommandHandlerNoParameters,
     CommandHandlerTable,
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
 
-export class CalendarClientLoginCommandHandler implements CommandHandler {
+export class CalendarClientLoginCommandHandler
+    implements CommandHandlerNoParameters
+{
     public readonly description = "Log into the MS Graph to access calendar";
     public async run(context: ActionContext<CalendarActionContext>) {
         const calendarClient: CalendarClient | undefined =
