@@ -24,7 +24,7 @@ import {
 } from "typeagent";
 import chalk, { ChalkInstance } from "chalk";
 import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
-import { timestampBlocks } from "./importer.js";
+import { importMsgFiles, timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
 import {
@@ -450,13 +450,16 @@ export async function runChatMemory(): Promise<void> {
         };
     }
     handlers.importEmail.metadata = importEmailDef();
-    async function importEmail(args: string[]) {
+    async function importEmail(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, importEmailDef());
         let sourcePath: string = namedArgs.sourcePath;
         if (!sourcePath.endsWith("json")) {
+            printer.writeInColor(chalk.cyan, "Converting message files");
+            await importMsgFiles(sourcePath, io);
             sourcePath = path.join(sourcePath, "json");
         }
         if (isDirectoryPath(sourcePath)) {
+            printer.writeInColor(chalk.cyan, "Adding emails to memory");
             if (namedArgs.clean) {
                 await context.emailMemory.clear(true);
             }
