@@ -91,7 +91,7 @@ class ConstructionNewCommandHandler implements CommandHandler {
         args: {
             file: {
                 description:
-                    "Construction file name in the session directory or path to construction file",
+                    "File name to be created in the session directory or path to the file to be created.",
                 optional: true,
             },
         },
@@ -129,7 +129,7 @@ class ConstructionLoadCommandHandler implements CommandHandler {
         args: {
             file: {
                 description:
-                    "Construction file name in the session directory or path to construction file",
+                    "Construction file in the session directory or path to file",
                 optional: true,
             },
         },
@@ -171,7 +171,7 @@ class ConstructionSaveCommandHandler implements CommandHandler {
         args: {
             file: {
                 description:
-                    "Construction file name in the session directory or path to construction file",
+                    "Construction file in the session directory or path to file",
                 optional: true,
             },
         },
@@ -242,12 +242,39 @@ class ConstructionListCommandHandler implements CommandHandler {
     public readonly description = "List constructions";
     public readonly parameters = {
         flags: {
-            verbose: { char: "v", default: false },
-            all: { char: "a", default: false },
-            builtin: { char: "b", default: false },
-            match: { char: "m", multiple: true },
-            part: { char: "p", multiple: true },
-            id: { multiple: true, type: "number" },
+            verbose: {
+                description:
+                    "Verbose only.  Includes part index, and list all string in match set",
+                char: "v",
+                default: false,
+            },
+            all: {
+                description: "List all string in match set",
+                char: "a",
+                default: false,
+            },
+            builtin: {
+                description: "List the construction in the built-in cache",
+                char: "b",
+                default: false,
+            },
+            match: {
+                description:
+                    "Filter to constructions that has the string in the match set",
+                char: "m",
+                multiple: true,
+            },
+            part: {
+                description:
+                    "Filter to constructions that has the string match in the part name",
+                char: "p",
+                multiple: true,
+            },
+            id: {
+                description: "Construction id to list",
+                multiple: true,
+                type: "number",
+            },
         },
     } as const;
     public async run(
@@ -298,11 +325,17 @@ class ConstructionImportCommandHandler implements CommandHandler {
     public readonly description = "Import constructions from test data";
     public readonly parameters = {
         flags: {
-            test: { char: "t", default: false },
+            test: {
+                description:
+                    "Load from the file specifed in the test section of the config if no file argument is specified, ",
+                char: "t",
+                default: false,
+            },
         },
         args: {
             file: {
-                description: "Path to the construction file to import from",
+                description:
+                    "Path to the construction file to import from. Load from agent config if not specified.",
                 multiple: true,
                 optional: true,
             },

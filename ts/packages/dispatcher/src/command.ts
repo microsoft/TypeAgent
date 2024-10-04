@@ -21,6 +21,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { executeCommand } from "./action/actionHandlers.js";
 import {
+    getFlagType,
     isCommandDescriptorTable,
     resolveFlag,
 } from "@typeagent/agent-sdk/helpers/command";
@@ -349,7 +350,7 @@ export async function getPartialCompletion(
             const lastArg = result.args[result.args.length - 1];
             if (lastArg.startsWith("-")) {
                 const def = resolveFlag(flags, lastArg);
-                if (def?.type !== "boolean") {
+                if (def !== undefined && getFlagType(def) !== "boolean") {
                     flagsNeedsValue = true;
                 }
             }

@@ -2,18 +2,22 @@
 // Licensed under the MIT License.
 
 import fs from "node:fs";
-import path from "node:path";
+import path, { toNamespacedPath } from "node:path";
 import {
     AppAgent,
     AppAction,
     ActionContext,
     CommandDescriptorTable,
+    CommandDescriptor,
 } from "@typeagent/agent-sdk";
 import {
+    CommandHandler,
     CommandHandlerNoParse,
     CommandHandlerTable,
     getCommandInterface,
+    getFlagType,
     isCommandDescriptorTable,
+    ParsedCommandParams,
 } from "@typeagent/agent-sdk/helpers/command";
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 import { executeSessionAction } from "../action/system/sessionActionHandler.js";
@@ -35,6 +39,7 @@ import { getConsoleRequestIO } from "../handlers/common/interactiveIO.js";
 import { getPrompt, processCommandNoLock, resolveCommand } from "../command.js";
 import { RequestCommandHandler } from "../handlers/requestCommandHandler.js";
 import { DisplayCommandHandler } from "../handlers/displayCommandHandler.js";
+import chalk from "chalk";
 
 function executeSystemAction(
     action: AppAction,
@@ -48,6 +53,65 @@ function executeSystemAction(
     }
 
     throw new Error(`Invalid system sub-translator: ${action.translatorName}`);
+}
+
+function printUsage(
+    command: string[] | undefined,
+    descriptor: CommandDescriptor,
+    context: ActionContext<CommandHandlerContext>,
+) {
+    if (descriptor.help) {
+        displayResult(descriptor.help, context);
+        return;
+    }
+
+    const commandUsage = `@${command?.join(" ") ?? ""}`;
+    const paramUsage: string[] = [];
+    const paramUsageFull: string[] = [];
+    if (typeof descriptor.parameters === "object") {
+        if (descriptor.parameters.args) {
+            const args = Object.entries(descriptor.parameters.args);
+            if (args.length !== 0) {
+                paramUsageFull.push(chalk.bold(`Arguments:`));
+                const maxNameLength = Math.max(
+                    ...args.map(([name]) => name.length),
+                );
+                for (const [name, def] of args) {
+                    const usage = `<${name}>${def.multiple === true ? "..." : ""}`;
+                    paramUsage.push(def.optional ? `[${usage}]` : usage);
+                    paramUsageFull.push(
+                        `  ${`<${name}>`.padStart(maxNameLength)} - ${def.optional ? "(optional) " : ""}${def.description} (type: ${def.type ?? "string"})`,
+                    );
+                }
+            }
+        }
+        if (descriptor.parameters.flags) {
+            const flags = Object.entries(descriptor.parameters.flags);
+            if (flags.length !== 0) {
+                paramUsageFull.push(chalk.bold(`Flags:`));
+                const maxNameLength = Math.max(
+                    ...flags.map(([name]) => name.length),
+                );
+                for (const [name, def] of flags) {
+                    const type = getFlagType(def);
+                    const usage = `[${def.char ? `-${def.char}|` : ""}--${name}${type === "boolean" ? "" : ` <${type}>`}]`;
+                    paramUsage.unshift(usage);
+                    paramUsageFull.push(
+                        `  ${`--${name}`.padStart(maxNameLength)} ${def.char !== undefined ? `-${def.char}` : "  "} : ${def.description}${def.default !== undefined ? ` (default: ${def.default})` : ""}`,
+                    );
+                }
+            }
+        }
+    }
+    displayResult((log: (message?: string) => void) => {
+        log(`${commandUsage} - ${descriptor.description}`);
+        log();
+        log(`${chalk.bold("Usage")}: ${commandUsage} ${paramUsage.join(" ")}`);
+        if (paramUsageFull.length !== 0) {
+            log();
+            log(paramUsageFull.join("\n"));
+        }
+    }, context);
 }
 
 class HelpCommandHandler implements CommandHandlerNoParse {
@@ -96,14 +160,7 @@ class HelpCommandHandler implements CommandHandlerNoParse {
             );
 
             if (result.descriptor !== undefined) {
-                if (result.descriptor.help) {
-                    displayResult(result.descriptor.help, context);
-                } else {
-                    displayResult(
-                        `${result.command?.join(" ") ?? ""} - ${result.descriptor.description}`,
-                        context,
-                    );
-                }
+                printUsage(result.command, result.descriptor, context);
             } else {
                 if (result.table === undefined) {
                     throw new Error(`Unknown command '${request}'`);
@@ -125,16 +182,22 @@ class HelpCommandHandler implements CommandHandlerNoParse {
     }
 }
 
-class RunCommandScriptHandler implements CommandHandlerNoParse {
+class RunCommandScriptHandler implements CommandHandler {
     public readonly description = "Run a command script file";
-    public readonly parameters = true;
+    public readonly parameters = {
+        args: {
+            input: {
+                description: "command script file path",
+            },
+        },
+    } as const;
     public async run(
         context: ActionContext<CommandHandlerContext>,
-        input: string,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const prevScriptDir = systemContext.currentScriptDir;
-        const inputFile = path.resolve(prevScriptDir, input);
+        const inputFile = path.resolve(prevScriptDir, params.args.input);
         const content = await fs.promises.readFile(inputFile, "utf8");
         const inputs = content.split(/\r?\n/);
         const prevRequestIO = systemContext.requestIO;

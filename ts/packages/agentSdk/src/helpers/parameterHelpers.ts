@@ -4,11 +4,9 @@
 import {
     ArgDefinition,
     ArgDefinitions,
-    DefaultValueDefinition,
     FlagDefinition,
     FlagDefinitions,
     FlagValuePrimitiveTypes,
-    FullFlagDefinition,
     ParameterDefinitions,
 } from "../command.js";
 
@@ -43,15 +41,13 @@ type FlagValueTypeFromValue<T> = T extends never[]
               : never;
 
 type Writeable<T> = { -readonly [P in keyof T]: T[P] };
-type FlagOutputType<T extends FlagDefinition> = T extends FullFlagDefinition
-    ? // Base the type of the value on the default values if available.
-      T["default"] extends FlagDefaultValueType
+type FlagOutputType<T extends FlagDefinition> =
+    T["default"] extends FlagDefaultValueType
         ? FlagValueTypeFromValue<Writeable<T["default"]>>
         : // Base the value on the type name literal, and value is undefined not flag is not specified
           T["multiple"] extends true
           ? FlagValueTypeFromLiteral<T["type"]>[] | undefined
-          : FlagValueTypeFromLiteral<T["type"]> | undefined
-    : FlagValueTypeFromValue<T>;
+          : FlagValueTypeFromLiteral<T["type"]> | undefined;
 
 type FlagsOutput<T extends FlagDefinitions | undefined> =
     T extends FlagDefinitions
@@ -85,51 +81,46 @@ export type ParsedCommandParams<T extends ParameterDefinitions> = {
     flags: FlagsOutput<T["flags"]>;
 };
 
-function getTypeFromValue(key: string, value?: FlagDefaultValueType) {
+function getTypeFromValue(value?: FlagDefaultValueType) {
     if (value === undefined) {
         return "string";
     }
     if (Array.isArray(value)) {
         const element = value[0];
         if (Array.isArray(element)) {
-            throw new Error(`Invalid nested array value for ${key}`);
+            throw new Error(
+                `Invalid nested array default value for flag definition`,
+            );
         }
-        return getTypeFromValue(key, element);
+        return getTypeFromValue(element);
     }
 
     return typeof value as "string" | "number" | "boolean";
 }
 
-function isFullFlagDefinition(def: FlagDefinition): def is FullFlagDefinition {
-    return typeof def === "object" && !Array.isArray(def);
+export function getFlagMultiple(def: FlagDefinition) {
+    return def.multiple ?? Array.isArray(def.default);
 }
-
-function expandFlagDefinition(key: string, def: FlagDefinition) {
-    const full = isFullFlagDefinition(def) ? def : undefined;
-    const value = full?.default ?? (def as DefaultValueDefinition);
-    return {
-        multiple: full?.multiple ?? Array.isArray(value),
-        type: full?.type ?? getTypeFromValue(key, value),
-        default: value,
-    } as FullFlagDefinition;
+export function getFlagType(def: FlagDefinition) {
+    return def.type ?? getTypeFromValue(def.default);
 }
 
 export function resolveFlag(
     definitions: FlagDefinitions,
     flag: string,
-): FullFlagDefinition | undefined {
+): FlagDefinition | undefined {
     if (flag.startsWith("--")) {
         const key = flag.substring(2);
         const def = definitions[key];
         if (def === undefined) {
             return def;
         }
-        return expandFlagDefinition(key, def);
+        return def;
     }
     const alias = flag.substring(1);
-    for (const [key, def] of Object.entries(definitions)) {
-        if (isFullFlagDefinition(def) && def?.char === alias) {
-            return expandFlagDefinition(key, def);
+    for (const def of Object.values(definitions)) {
+        if (def?.char === alias) {
+            return def;
         }
     }
 }
@@ -164,27 +155,18 @@ export function parseParams<T extends ParameterDefinitions>(
     const flagDefs = parameters.flags;
     if (flagDefs) {
         for (const [key, value] of Object.entries(flagDefs)) {
-            if (isFullFlagDefinition(value)) {
-                if (value.char !== undefined) {
-                    if (aliases.has(value.char)) {
-                        throw new Error(`Duplicate alias: ${value.char}`);
-                    }
-                    aliases.set(value.char, key);
+            if (value.char !== undefined) {
+                if (aliases.has(value.char)) {
+                    throw new Error(`Duplicate alias: ${value.char}`);
                 }
-                parsedFlags[key] = value.default;
-                allowMultiple.set(
-                    key,
-                    value.multiple ?? Array.isArray(value.default),
-                );
-                valueTypes.set(
-                    key,
-                    value.type ?? getTypeFromValue(key, value.default),
-                );
-            } else {
-                parsedFlags[key] = value;
-                allowMultiple.set(key, Array.isArray(value));
-                valueTypes.set(key, getTypeFromValue(key, value));
+                aliases.set(value.char, key);
             }
+            parsedFlags[key] = value.default;
+            allowMultiple.set(
+                key,
+                value.multiple ?? Array.isArray(value.default),
+            );
+            valueTypes.set(key, value.type ?? getTypeFromValue(value.default));
         }
     }
 
