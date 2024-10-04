@@ -60,43 +60,51 @@ async function checkOverwriteFile(
 }
 
 function resolvePathWithSession(
-    request: string,
+    param: string | undefined,
     sessionDir: string | undefined,
     exists: boolean = false,
 ) {
-    if (request === "") {
+    if (param === undefined) {
         return undefined;
     }
     // Try the session cache dir first
     if (
         sessionDir !== undefined &&
-        !path.isAbsolute(request) &&
-        !request.startsWith(".")
+        !path.isAbsolute(param) &&
+        !param.startsWith(".")
     ) {
         const sessionConstructionPath = path.join(
             getSessionCacheDirPath(sessionDir),
-            request,
+            param,
         );
         if (!exists || fs.existsSync(sessionConstructionPath)) {
             return sessionConstructionPath;
         }
     }
 
-    return path.resolve(request);
+    return path.resolve(param);
 }
 
-class ConstructionNewCommandHandler implements CommandHandlerNoParse {
+class ConstructionNewCommandHandler implements CommandHandler {
     public readonly description = "Create a new construction store";
-    public readonly parameters = true;
+    public readonly parameters = {
+        args: {
+            file: {
+                description:
+                    "Construction file name in the session directory or path to construction file",
+                optional: true,
+            },
+        },
+    } as const;
     public async run(
         context: ActionContext<CommandHandlerContext>,
-        request: string,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
         await checkRecreateStore(constructionStore, systemContext.requestIO);
         const constructionPath = resolvePathWithSession(
-            request,
+            params.args.file,
             systemContext.session.dir,
         );
         await checkOverwriteFile(constructionPath, systemContext.requestIO);
@@ -115,19 +123,30 @@ class ConstructionNewCommandHandler implements CommandHandlerNoParse {
     }
 }
 
-class ConstructionLoadCommandHandler implements CommandHandlerNoParse {
+class ConstructionLoadCommandHandler implements CommandHandler {
     public readonly description = "Load a construction store from disk";
-    public readonly parameters = true;
+    public readonly parameters = {
+        args: {
+            file: {
+                description:
+                    "Construction file name in the session directory or path to construction file",
+                optional: true,
+            },
+        },
+    } as const;
     public async run(
         context: ActionContext<CommandHandlerContext>,
-        request: string,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
         await checkRecreateStore(constructionStore, systemContext.requestIO);
         const constructionPath =
-            resolvePathWithSession(request, systemContext.session.dir, true) ??
-            systemContext.session.getCacheDataFilePath();
+            resolvePathWithSession(
+                params.args.file,
+                systemContext.session.dir,
+                true,
+            ) ?? systemContext.session.getCacheDataFilePath();
         if (constructionPath === undefined) {
             throw new Error(
                 `No construction file specified and no existing construction file in session to load.`,
@@ -146,17 +165,25 @@ class ConstructionLoadCommandHandler implements CommandHandlerNoParse {
     }
 }
 
-class ConstructionSaveCommandHandler implements CommandHandlerNoParse {
+class ConstructionSaveCommandHandler implements CommandHandler {
     public readonly description = "Save construction store to disk";
-    public readonly parameters = true;
+    public readonly parameters = {
+        args: {
+            file: {
+                description:
+                    "Construction file name in the session directory or path to construction file",
+                optional: true,
+            },
+        },
+    } as const;
     public async run(
         context: ActionContext<CommandHandlerContext>,
-        request: string,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
         const constructionPath = resolvePathWithSession(
-            request,
+            params.args.file,
             systemContext.session.dir,
         );
         await checkOverwriteFile(constructionPath, systemContext.requestIO);
