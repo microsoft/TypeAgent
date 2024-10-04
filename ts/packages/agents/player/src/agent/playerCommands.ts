@@ -18,9 +18,10 @@ const handlers: CommandHandlerTable = {
             commands: {
                 load: {
                     description: "Load spotify user data",
+                    parameters: true,
                     run: async (
-                        request: string,
                         context: ActionContext<PlayerActionContext>,
+                        request: string,
                     ) => {
                         if (request === "") {
                             throw new Error("No file specified.");

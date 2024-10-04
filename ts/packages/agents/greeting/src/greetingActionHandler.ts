@@ -20,7 +20,7 @@ import { randomInt } from "node:crypto";
 //import { StopWatch } from "common-utils";
 //import { generateAnswerFromWebPages } from "typeagent";
 import {
-    CommandHandler,
+    CommandHandlerNoParams,
     CommandHandlerTable,
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
@@ -60,11 +60,11 @@ export interface GenericGreeting {
     generatedGreeting: string;
 }`;
 
-export class GreetingCommandHandler implements CommandHandler {
+export class GreetingCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Have the agent generate a personalized greeting.";
     private instructions = `You are a breezy greeting generator. Greetings should NOT end with questions.`;
-    public async run(_input: string, context: ActionContext) {
+    public async run(context: ActionContext) {
         //
         // Create Model
         //

@@ -15,25 +15,13 @@ export function getToggleCommandHandlers(
     return {
         on: {
             description: `Turn on ${name}`,
-            run: async (
-                request: string,
-                context: ActionContext<CommandHandlerContext>,
-            ) => {
-                if (request !== "") {
-                    throw new Error(`Invalid extra arguments: ${request}`);
-                }
+            run: async (context: ActionContext<CommandHandlerContext>) => {
                 await toggle(context, true);
             },
         },
         off: {
             description: `Turn off ${name}`,
-            run: async (
-                request: string,
-                context: ActionContext<CommandHandlerContext>,
-            ) => {
-                if (request !== "") {
-                    throw new Error(`Invalid extra arguments: ${request}`);
-                }
+            run: async (context: ActionContext<CommandHandlerContext>) => {
                 await toggle(context, false);
             },
         },

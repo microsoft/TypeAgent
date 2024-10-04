@@ -3,19 +3,17 @@
 
 import {
     CommandHandler,
+    CommandHandlerNoParams,
     CommandHandlerTable,
+    ParsedCommandParams,
 } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
-import { parseCommandArgs } from "../utils/args.js";
 
-export class HistoryListCommandHandler implements CommandHandler {
+export class HistoryListCommandHandler implements CommandHandlerNoParams {
     public readonly description = "List history";
-    public async run(
-        input: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const history = systemContext.chatHistory;
 
@@ -30,12 +28,9 @@ export class HistoryListCommandHandler implements CommandHandler {
     }
 }
 
-export class HistoryClearCommandHandler implements CommandHandler {
+export class HistoryClearCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Clear the history";
-    public async run(
-        input: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const history = systemContext.chatHistory;
 
@@ -48,16 +43,21 @@ export class HistoryClearCommandHandler implements CommandHandler {
 export class HistoryDeleteCommandHandler implements CommandHandler {
     public readonly description =
         "Delete a specific message from the chat history";
+    public readonly parameters = {
+        args: {
+            index: {
+                description: "Chat history index to delete.",
+                type: "number",
+            },
+        },
+    } as const;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        param: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        const { args } = parseCommandArgs(request);
-        if (args.length > 1) {
-            throw new Error("Too many arguments.");
-        }
-        const index: number = parseInt(args[0]);
+        const { index } = param.args;
+
         if (index < 0 || index >= systemContext.chatHistory.entries.length) {
             throw new Error(
                 `The supplied index (${index}) is outside the range of available indicies (0, ${systemContext.chatHistory.entries.length})`,
@@ -66,17 +66,13 @@ export class HistoryDeleteCommandHandler implements CommandHandler {
             throw new Error(
                 `The supplied value '${index}' is not a valid index.`,
             );
-        } else if (args.length === 1) {
-            systemContext.chatHistory.entries.splice(index, 1);
-            displayResult(
-                `Message ${index} deleted. ${systemContext.chatHistory.entries.length} messages remain in the chat history.`,
-                context,
-            );
-        } else {
-            throw new Error(
-                "You must supply an index number of the message to delete.",
-            );
         }
+
+        systemContext.chatHistory.entries.splice(index, 1);
+        displayResult(
+            `Message ${index} deleted. ${systemContext.chatHistory.entries.length} messages remain in the chat history.`,
+            context,
+        );
     }
 }
 

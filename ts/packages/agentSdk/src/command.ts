@@ -3,6 +3,7 @@
 
 import { ActionContext, SessionContext } from "./agentInterface.js";
 
+// Flags
 export type FlagValuePrimitiveTypes = string | number | boolean;
 type FlagValueLiteral<T extends FlagValuePrimitiveTypes> = T extends number
     ? "number"
@@ -42,19 +43,27 @@ export type FlagDefinition =
     | DefaultValueDefinition
     | FullFlagDefinition;
 
-export type FlagDefinitions = {
-    [key: string]: FlagDefinition;
+export type FlagDefinitions = Record<string, FlagDefinition>;
+
+// Arguments
+export type ArgDefinition = {
+    description: string;
+    type?: "string" | "number";
+    optional?: boolean;
+    multiple?: boolean;
 };
 
+export type ArgDefinitions = Record<string, ArgDefinition>;
+
 export type ParameterDefinitions = {
-    flags: FlagDefinitions;
-    args?: boolean; // TODO: add more capabilities
+    flags?: FlagDefinitions;
+    args?: ArgDefinitions;
 };
 
 export type CommandDescriptor = {
     description: string;
     help?: string;
-    parameters?: ParameterDefinitions;
+    parameters?: ParameterDefinitions | boolean | undefined;
 };
 
 export type CommandDescriptorTable = {

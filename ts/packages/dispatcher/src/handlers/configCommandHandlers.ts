@@ -17,7 +17,6 @@ import { getCacheFactory } from "../utils/cacheFactory.js";
 import { getServiceHostCommandHandlers } from "./serviceHost/serviceHostCommandHandler.js";
 import { getLocalWhisperCommandHandlers } from "./serviceHost/localWhisperCommandHandler.js";
 
-import { parseCommandArgs } from "../utils/args.js";
 import { getChatModelNames, simpleStarRegex } from "common-utils";
 import { openai as ai } from "aiclient";
 import { SessionConfig } from "../session/session.js";
@@ -25,7 +24,10 @@ import chalk from "chalk";
 import { ActionContext } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
+    CommandHandlerNoParse,
     CommandHandlerTable,
+    ParsedCommandParams,
+    splitParams,
 } from "@typeagent/agent-sdk/helpers/command";
 import {
     displayResult,
@@ -118,16 +120,17 @@ function getAgentToggleOptions(
     }
 }
 
-class AgentToggleCommandHandler implements CommandHandler {
-    public description = `Toggle ${AgentToggleDescription[this.toggle]}`;
+class AgentToggleCommandHandler implements CommandHandlerNoParse {
+    public readonly description = `Toggle ${AgentToggleDescription[this.toggle]}`;
+    public readonly parameters = true;
     constructor(private toggle: AgentToggle) {}
 
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        input: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        const { args } = parseCommandArgs(request);
+        const args = splitParams(input);
         if (args.length < 1) {
             displayWarn((log) => {
                 log(
@@ -170,27 +173,22 @@ class AgentToggleCommandHandler implements CommandHandler {
 }
 
 class ExplainerCommandHandler implements CommandHandler {
-    public description = "Set explainer";
+    public readonly description = "Set explainer";
+    public readonly parameters = {
+        args: {
+            explainerName: {
+                description: "name of the explainer",
+            },
+        },
+    };
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const { args } = parseCommandArgs(request);
-        if (args.length < 1) {
-            displayWarn((log) => {
-                log("Usage: @config explainer <explainer>");
-                const explainers = getCacheFactory()
-                    .getExplainerNames()
-                    .join(", ");
-                log(`   <explainer>: ${explainers}`);
-            }, context);
-            return;
-        }
-        if (args.length > 2) {
-            throw new Error("Too many arguments.");
-        }
-
-        await changeContextConfig({ explainerName: args[0] }, context);
+        await changeContextConfig(
+            { explainerName: params.args.explainerName },
+            context,
+        );
     }
 }
 
@@ -205,15 +203,16 @@ function getConfigModel(models: SessionConfig["models"], kind: string) {
     return `Current ${chalk.cyan(kind)} model: ${model ? model : "(default)"}\nURL:${settings.endpoint}`;
 }
 
-class ConfigModelShowCommandHandler implements CommandHandler {
+class ConfigModelShowCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Show current model";
+    public readonly parameters = true;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const models = systemContext.session.getConfig().models;
-        const { args } = parseCommandArgs(request);
+        const args = splitParams(request);
         if (args.length > 1) {
             throw new Error("Too many arguments.");
         }
@@ -230,14 +229,15 @@ class ConfigModelShowCommandHandler implements CommandHandler {
     }
 }
 
-class ConfigModelSetCommandHandler implements CommandHandler {
+class ConfigModelSetCommandHandler implements CommandHandlerNoParse {
     public readonly description = "Set model";
+    public readonly parameters = true;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        const { args } = parseCommandArgs(request);
+        const args = splitParams(request);
         const models = systemContext.session.getConfig().models;
         if (args.length === 0) {
             const newConfig = {

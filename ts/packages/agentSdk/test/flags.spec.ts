@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { parseCommandArgs } from "../src/utils/args.js";
+import { parseParams } from "../src/helpers/parameterHelpers.js";
 
-describe("Argument parsing", () => {
+describe("Flag parsing", () => {
     const explicitConfig = {
         flags: {
             bool: {
@@ -18,8 +18,11 @@ describe("Argument parsing", () => {
         },
     } as const;
     it("explicit", () => {
-        const { args, flags } = parseCommandArgs("", explicitConfig);
-        expect(args.length).toEqual(0);
+        const params = parseParams("", explicitConfig);
+        const args: undefined = params.args;
+        expect(args).toStrictEqual(undefined);
+
+        const flags = params.flags;
         const bool: boolean = flags.bool!; // Use ! to make sure the type is correct
         const num: number = flags.num!; // Use ! to make sure the type is correct
         const str: string = flags.str!; // Use ! to make sure the type is correct
@@ -29,11 +32,14 @@ describe("Argument parsing", () => {
         expect(str).toBe(undefined);
     });
     it("explicit - with flags", () => {
-        const { args, flags } = parseCommandArgs(
+        const params = parseParams(
             "--bool --num 11 --str world",
             explicitConfig,
         );
-        expect(args.length).toEqual(0);
+        const args: undefined = params.args;
+        expect(args).toStrictEqual(undefined);
+
+        const flags = params.flags;
         const bool: boolean = flags.bool!;
         const num: number = flags.num!;
         const str: string = flags.str!;
@@ -56,8 +62,11 @@ describe("Argument parsing", () => {
         },
     } as const;
     it("explicit multiple", () => {
-        const { args, flags } = parseCommandArgs("", explicitMultipleConfig);
-        expect(args.length).toEqual(0);
+        const params = parseParams("", explicitMultipleConfig);
+        const args: undefined = params.args;
+        expect(args).toStrictEqual(undefined);
+
+        const flags = params.flags;
         const num: number[] = flags.num!; // Use ! to make sure the type is correct
         const str: string[] = flags.str!; // Use ! to make sure the type is correct
 
@@ -65,12 +74,14 @@ describe("Argument parsing", () => {
         expect(str).toBe(undefined);
     });
     it("explicit multiple - with flags", () => {
-        const { args, flags } = parseCommandArgs(
+        const params = parseParams(
             "--num 11 --str world --num 12 --str !",
             explicitMultipleConfig,
         );
-        expect(args.length).toEqual(0);
+        const args: undefined = params.args;
+        expect(args).toStrictEqual(undefined);
 
+        const flags = params.flags;
         const num: number[] = flags.num!;
         const str: string[] = flags.str!;
 
@@ -95,8 +106,11 @@ describe("Argument parsing", () => {
         },
     } as const;
     it("explicit default", () => {
-        const { args, flags } = parseCommandArgs("", explicitTypeWithDefault);
-        expect(args.length).toEqual(0);
+        const params = parseParams("", explicitTypeWithDefault);
+        const args: undefined = params.args;
+        expect(args).toStrictEqual(undefined);
+
+        const flags = params.flags;
         const bool: boolean = flags.bool!; // Use ! to make sure the type is correct
         const num: number = flags.num!; // Use ! to make sure the type is correct
         const str: string = flags.str!; // Use ! to make sure the type is correct
@@ -106,11 +120,14 @@ describe("Argument parsing", () => {
         expect(str).toBe(explicitTypeWithDefault.flags.str.default);
     });
     it("explicit default - with flags", () => {
-        const { args, flags } = parseCommandArgs(
+        const params = parseParams(
             "--bool --num 11 --str world",
             explicitTypeWithDefault,
         );
-        expect(args.length).toEqual(0);
+        const args: undefined = params.args;
+        expect(args).toStrictEqual(undefined);
+
+        const flags = params.flags;
         const bool: boolean = flags.bool!;
         const num: number = flags.num!;
         const str: string = flags.str!;
@@ -129,8 +146,11 @@ describe("Argument parsing", () => {
         },
     };
     it("default value", () => {
-        const { args, flags } = parseCommandArgs("", defaultValueFlags);
-        expect(args.length).toEqual(0);
+        const params = parseParams("", defaultValueFlags);
+        const args: undefined = params.args;
+        expect(args).toStrictEqual(undefined);
+
+        const flags = params.flags;
         const bool: boolean = flags.bool;
         const num: number = flags.num;
         const str: string = flags.str;
@@ -143,11 +163,14 @@ describe("Argument parsing", () => {
     });
 
     it("default value - with flags", () => {
-        const { args, flags } = parseCommandArgs(
+        const params = parseParams(
             "--bool --num 11 --str world --defStr default",
             defaultValueFlags,
         );
-        expect(args.length).toEqual(0);
+        const args: undefined = params.args;
+        expect(args).toStrictEqual(undefined);
+
+        const flags = params.flags;
         const bool: boolean = flags.bool;
         const num: number = flags.num;
         const str: string = flags.str;
@@ -172,8 +195,11 @@ describe("Argument parsing", () => {
         },
     } as const;
     it("default multiple", () => {
-        const { args, flags } = parseCommandArgs("", defaultMultipleConfig);
-        expect(args.length).toEqual(0);
+        const params = parseParams("", defaultMultipleConfig);
+        const args: undefined = params.args;
+        expect(args).toStrictEqual(undefined);
+
+        const flags = params.flags;
         const num: readonly number[] = flags.num!; // Use ! to make sure the type is correct
         const str: readonly string[] = flags.str!; // Use ! to make sure the type is correct
 
@@ -181,16 +207,49 @@ describe("Argument parsing", () => {
         expect(str).toStrictEqual(defaultMultipleConfig.flags.str.default);
     });
     it("default multiple - with flags", () => {
-        const { args, flags } = parseCommandArgs(
+        const params = parseParams(
             "--num 11 --str world --num 12 --str !",
             explicitMultipleConfig,
         );
-        expect(args.length).toEqual(0);
+        const args: undefined = params.args;
+        expect(args).toStrictEqual(undefined);
 
+        const flags = params.flags;
         const num: number[] = flags.num!;
         const str: string[] = flags.str!;
 
         expect(num).toStrictEqual([11, 12]);
         expect(str).toStrictEqual(["world", "!"]);
+    });
+
+    it("Invalid flag", () => {
+        try {
+            parseParams("--invalid", explicitConfig);
+        } catch (e: any) {
+            expect(e.message).toStrictEqual("Invalid flag '--invalid'");
+        }
+    });
+    it("Missing value", () => {
+        try {
+            parseParams("--num", explicitConfig);
+        } catch (e: any) {
+            expect(e.message).toStrictEqual("Missing value for flag '--num'");
+        }
+    });
+    it("Invalid value", () => {
+        try {
+            parseParams("--num abc", explicitConfig);
+        } catch (e: any) {
+            expect(e.message).toStrictEqual(
+                "Invalid number value 'abc' for flag '--num'",
+            );
+        }
+    });
+    it("Invalid alias", () => {
+        try {
+            parseParams("-n abc", explicitConfig);
+        } catch (e: any) {
+            expect(e.message).toStrictEqual("Invalid flag '-n'");
+        }
     });
 });

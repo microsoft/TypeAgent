@@ -1,19 +1,19 @@
 {
-  "name": "photos-agent",
+  "name": "image-agent",
   "version": "0.0.1",
-  "description": "Photos dispatcher agent",
+  "description": "Image dispatcher agent",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/packages/agents/photos"
+    "directory": "ts/packages/agents/image"
   },
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    "./agent/manifest": "./src/photoManifest.json",
-    "./agent/handlers": "./dist/photoActionHandler.js"
+    "./agent/manifest": "./src/imageManifest.json",
+    "./agent/handlers": "./dist/imageActionHandler.js"
   },
   "scripts": {
     "build": "npm run tsc",
@@ -23,7 +23,9 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@typeagent/agent-sdk": "workspace:*"
+    "@typeagent/agent-sdk": "workspace:*",
+    "aiclient": "workspace:*",
+    "common-utils": "workspace:*"
   },
   "devDependencies": {
     "prettier": "^3.2.5",

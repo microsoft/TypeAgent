@@ -2,15 +2,21 @@
 // Licensed under the MIT License.
 
 import {
+    ArgDefinition,
+    ArgDefinitions,
     DefaultValueDefinition,
     FlagDefinition,
     FlagDefinitions,
     FlagValuePrimitiveTypes,
     FullFlagDefinition,
     ParameterDefinitions,
-} from "@typeagent/agent-sdk";
+} from "../command.js";
 
 // Output Types
+
+// ===============================
+// Flags output types
+// ===============================
 type FlagDefaultValueType =
     | string
     | number
@@ -47,12 +53,35 @@ type FlagOutputType<T extends FlagDefinition> = T extends FullFlagDefinition
           : FlagValueTypeFromLiteral<T["type"]> | undefined
     : FlagValueTypeFromValue<T>;
 
-type FlagsOutput<T extends FlagDefinitions> = {
-    [P in keyof T]: FlagOutputType<T[P]>;
-};
+type FlagsOutput<T extends FlagDefinitions | undefined> =
+    T extends FlagDefinitions
+        ? {
+              [P in keyof T]: FlagOutputType<T[P]>;
+          }
+        : undefined;
 
-type ParsedCommandArgs<T extends ParameterDefinitions> = {
-    args: string[];
+// ===============================
+// Arg output types
+// ===============================
+type ArgTypeFromLiteral<T extends "number" | "string" | undefined> =
+    T extends "number" ? number : string;
+
+type ArgOutputType<T extends ArgDefinition> = T["multiple"] extends true
+    ? T["optional"] extends true
+        ? ArgTypeFromLiteral<T["type"]>[] | undefined
+        : ArgTypeFromLiteral<T["type"]>[]
+    : T["optional"] extends true
+      ? ArgTypeFromLiteral<T["type"]> | undefined
+      : ArgTypeFromLiteral<T["type"]>;
+
+type ArgsOutput<T extends ArgDefinitions | undefined> = T extends ArgDefinitions
+    ? {
+          [P in keyof T]: ArgOutputType<T[P]>;
+      }
+    : undefined;
+
+export type ParsedCommandParams<T extends ParameterDefinitions> = {
+    args: ArgsOutput<T["args"]>;
     flags: FlagsOutput<T["flags"]>;
 };
 
@@ -75,7 +104,7 @@ function isFullFlagDefinition(def: FlagDefinition): def is FullFlagDefinition {
     return typeof def === "object" && !Array.isArray(def);
 }
 
-export function expandFlagDefinition(key: string, def: FlagDefinition) {
+function expandFlagDefinition(key: string, def: FlagDefinition) {
     const full = isFullFlagDefinition(def) ? def : undefined;
     const value = full?.default ?? (def as DefaultValueDefinition);
     return {
@@ -105,17 +134,36 @@ export function resolveFlag(
     }
 }
 
-export function parseCommandArgs<T extends ParameterDefinitions>(
+function parseIntParameter(
+    valueStr: string,
+    kind: "flag" | "argument",
+    name: string,
+) {
+    const value = parseInt(valueStr);
+    if (value.toString() !== valueStr) {
+        throw new Error(
+            `Invalid number value '${valueStr}' for ${kind} '${name}'`,
+        );
+    }
+    return value;
+}
+
+export function splitParams(params: string) {
+    const split = params.match(/"[^"]+"|\S+/g) ?? [];
+    return split.map((s) => s.replace(/^"|"$/g, ""));
+}
+
+export function parseParams<T extends ParameterDefinitions>(
     request: string,
-    parameters?: T,
-): ParsedCommandArgs<T> {
-    const flags: any = {};
+    parameters: T,
+): ParsedCommandParams<T> {
+    const parsedFlags: any = {};
     const aliases = new Map<string, string>();
     const valueTypes = new Map<string, "string" | "number" | "boolean">();
     const allowMultiple = new Map<string, boolean>();
-    const defaultFlags = parameters?.flags;
-    if (defaultFlags) {
-        for (const [key, value] of Object.entries(defaultFlags)) {
+    const flagDefs = parameters.flags;
+    if (flagDefs) {
+        for (const [key, value] of Object.entries(flagDefs)) {
             if (isFullFlagDefinition(value)) {
                 if (value.char !== undefined) {
                     if (aliases.has(value.char)) {
@@ -123,7 +171,7 @@ export function parseCommandArgs<T extends ParameterDefinitions>(
                     }
                     aliases.set(value.char, key);
                 }
-                flags[key] = value.default;
+                parsedFlags[key] = value.default;
                 allowMultiple.set(
                     key,
                     value.multiple ?? Array.isArray(value.default),
@@ -133,7 +181,7 @@ export function parseCommandArgs<T extends ParameterDefinitions>(
                     value.type ?? getTypeFromValue(key, value.default),
                 );
             } else {
-                flags[key] = value;
+                parsedFlags[key] = value;
                 allowMultiple.set(key, Array.isArray(value));
                 valueTypes.set(key, getTypeFromValue(key, value));
             }
@@ -141,9 +189,13 @@ export function parseCommandArgs<T extends ParameterDefinitions>(
     }
 
     // split the command line arguments by spaces respecting quotes
-    const split = request.match(/"[^"]+"|\S+/g) ?? [];
-    const strip = split.map((s) => s.replace(/^"|"$/g, ""));
-    const args: string[] = [];
+    const strip = splitParams(request);
+    let argDefIndex = 0;
+    const argDefs =
+        parameters.args !== undefined
+            ? Object.entries(parameters.args)
+            : undefined;
+    const parsedArgs: any = {};
     for (let i = 0; i < strip.length; i++) {
         const arg = strip[i];
         let flag: string | undefined;
@@ -152,22 +204,37 @@ export function parseCommandArgs<T extends ParameterDefinitions>(
             if (flag.endsWith("-")) {
                 flag = flag.substring(0, flag.length - 1);
             }
-            if (!flags.hasOwnProperty(flag)) {
-                throw new Error(`Invalid flag: ${flag}`);
+            if (!parsedFlags.hasOwnProperty(flag)) {
+                throw new Error(`Invalid flag '${arg}'`);
             }
-        } else if (aliases.size !== 0 && arg.startsWith("-")) {
+        } else if (arg.startsWith("-")) {
             const alias = arg.substring(1);
             flag = aliases.get(alias);
             if (flag === undefined) {
-                throw new Error(`Invalid flag: ${alias}`);
+                throw new Error(`Invalid flag '${arg}'`);
             }
         }
 
         if (flag === undefined) {
-            if (parameters !== undefined && parameters.args !== true) {
-                throw new Error(`Invalid argument: ${arg}`);
+            if (argDefs === undefined || argDefIndex >= argDefs.length) {
+                throw new Error(`Too many arguments '${arg}'`);
             }
-            args.push(arg);
+            const [name, argDef] = argDefs[argDefIndex];
+            const argValue =
+                argDef.type === "number"
+                    ? parseIntParameter(arg, "argument", name)
+                    : arg;
+            if (argDef.multiple !== true) {
+                argDefIndex++;
+                parsedArgs[name] = argValue;
+            } else {
+                // TODO: currently only support multiple for the last argument. Define have a way to terminate multiple
+                if (parsedArgs[name] === undefined) {
+                    parsedArgs[name] = [argValue];
+                } else {
+                    parsedArgs[name].push(argValue);
+                }
+            }
             continue;
         }
 
@@ -178,28 +245,45 @@ export function parseCommandArgs<T extends ParameterDefinitions>(
         } else {
             const valueStr = i === strip.length - 1 ? undefined : strip[++i];
             if (valueStr === undefined || valueStr.startsWith("--")) {
-                throw new Error(`Missing value for flag: ${flag}`);
+                throw new Error(`Missing value for flag '${arg}'`);
             }
             if (valueType === "number") {
-                value = parseInt(valueStr);
-                if (value.toString() !== valueStr) {
-                    throw new Error(`Invalid number value for flag: ${flag}`);
-                }
+                value = parseIntParameter(valueStr, "flag", arg);
             } else {
                 value = valueStr;
             }
         }
         const multiple = allowMultiple.get(flag);
         if (multiple) {
-            if (flags[flag] === undefined) {
-                flags[flag] = [value];
+            if (parsedFlags[flag] === undefined) {
+                parsedFlags[flag] = [value];
             } else {
-                flags[flag].push(value);
+                parsedFlags[flag].push(value);
             }
         } else {
-            flags[flag] = value;
+            parsedFlags[flag] = value;
         }
     }
 
-    return { args, flags };
+    if (argDefs !== undefined) {
+        if (argDefIndex !== argDefs.length) {
+            for (let i = argDefIndex; i < argDefs.length; i++) {
+                const [name, argDef] = argDefs[i];
+                if (argDef.optional === true) {
+                    continue;
+                }
+                if (
+                    argDef.multiple === true &&
+                    parsedArgs[name] !== undefined
+                ) {
+                    continue;
+                }
+                throw new Error(`Missing argument '${name}'`);
+            }
+        }
+    }
+    return {
+        args: argDefs !== undefined ? parsedArgs : undefined,
+        flags: flagDefs !== undefined ? parsedFlags : undefined,
+    };
 }

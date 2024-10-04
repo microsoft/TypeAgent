@@ -1,12 +1,11 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
   },
   "include": [],
   "references": [
-    { "path": "./src" },
-    { "path": "./test" }
+    { "path": "./src" }
   ],
   "ts-node": {
     "esm": true

@@ -181,7 +181,7 @@ export class ChatInput {
     attachButton: HTMLLabelElement;
     camButton: HTMLButtonElement;
     dragTemp: string | undefined = undefined;
-    input: HTMLInputElement;
+    fileInput: HTMLInputElement;
     public dragEnabled: boolean = true;
     sendButton: HTMLButtonElement;
     separator: HTMLDivElement;
@@ -271,15 +271,15 @@ export class ChatInput {
             e.preventDefault();
         };
 
-        this.input = document.createElement("input");
-        this.input.type = "file";
-        this.input.classList.add("chat-message-hidden");
-        this.input.id = "image_upload";
-        this.inputContainer.append(this.input);
-        this.input.accept = "image/*,.jpg,.png,.gif";
-        this.input.onchange = () => {
-            if (this.input.files && this.input.files?.length > 0) {
-                this.loadImageFile(this.input.files[0]);
+        this.fileInput = document.createElement("input");
+        this.fileInput.type = "file";
+        this.fileInput.classList.add("chat-message-hidden");
+        this.fileInput.id = "image_upload";
+        this.inputContainer.append(this.fileInput);
+        this.fileInput.accept = "image/*,.jpg,.png,.gif";
+        this.fileInput.onchange = () => {
+            if (this.fileInput.files && this.fileInput.files?.length > 0) {
+                this.loadImageFile(this.fileInput.files[0]);
             }
         };
 
@@ -321,7 +321,7 @@ export class ChatInput {
         this.camButton.className = "chat-input-button";
 
         this.attachButton = document.createElement("label");
-        this.attachButton.htmlFor = this.input.id;
+        this.attachButton.htmlFor = this.fileInput.id;
         this.attachButton.appendChild(iconAttach());
         this.attachButton.className = "chat-input-button";
 
