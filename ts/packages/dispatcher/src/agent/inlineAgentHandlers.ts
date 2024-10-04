@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import fs from "node:fs";
-import path from "node:path";
+import path, { toNamespacedPath } from "node:path";
 import {
     AppAgent,
     AppAction,
@@ -15,6 +15,7 @@ import {
     CommandHandlerNoParse,
     CommandHandlerTable,
     getCommandInterface,
+    getFlagType,
     isCommandDescriptorTable,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk/helpers/command";
@@ -71,12 +72,15 @@ function printUsage(
         if (descriptor.parameters.args) {
             const args = Object.entries(descriptor.parameters.args);
             if (args.length !== 0) {
-                paramUsageFull.push(`Arguments:`);
+                paramUsageFull.push(chalk.bold(`Arguments:`));
+                const maxNameLength = Math.max(
+                    ...args.map(([name]) => name.length),
+                );
                 for (const [name, def] of args) {
                     const usage = `<${name}>${def.multiple === true ? "..." : ""}`;
                     paramUsage.push(def.optional ? `[${usage}]` : usage);
                     paramUsageFull.push(
-                        `  ${`<${name}>`.padEnd(10)}: ${def.optional ? "(optional) " : ""}${def.description} (type: ${def.type ?? "string"})`,
+                        `  ${`<${name}>`.padStart(maxNameLength)} - ${def.optional ? "(optional) " : ""}${def.description} (type: ${def.type ?? "string"})`,
                     );
                 }
             }
@@ -84,10 +88,17 @@ function printUsage(
         if (descriptor.parameters.flags) {
             const flags = Object.entries(descriptor.parameters.flags);
             if (flags.length !== 0) {
-                paramUsageFull.push(`Flags:`);
+                paramUsageFull.push(chalk.bold(`Flags:`));
+                const maxNameLength = Math.max(
+                    ...flags.map(([name]) => name.length),
+                );
                 for (const [name, def] of flags) {
-                    const usage = `--${name}`;
-                    paramUsageFull.push(`  ${usage}`);
+                    const type = getFlagType(def);
+                    const usage = `[${def.char ? `-${def.char}|` : ""}--${name}${type === "boolean" ? "" : ` <${type}>`}]`;
+                    paramUsage.unshift(usage);
+                    paramUsageFull.push(
+                        `  ${`--${name}`.padStart(maxNameLength)} ${def.char !== undefined ? `-${def.char}` : "  "} : ${def.description}${def.default !== undefined ? ` (default: ${def.default})` : ""}`,
+                    );
                 }
             }
         }
@@ -95,7 +106,7 @@ function printUsage(
     displayResult((log: (message?: string) => void) => {
         log(`${commandUsage} - ${descriptor.description}`);
         log();
-        log(`Usage: ${commandUsage} ${paramUsage.join(" ")}`);
+        log(`${chalk.bold("Usage")}: ${commandUsage} ${paramUsage.join(" ")}`);
         if (paramUsageFull.length !== 0) {
             log();
             log(paramUsageFull.join("\n"));

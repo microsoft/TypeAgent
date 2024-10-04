@@ -81,28 +81,28 @@ export type ParsedCommandParams<T extends ParameterDefinitions> = {
     flags: FlagsOutput<T["flags"]>;
 };
 
-function getTypeFromValue(key: string, value?: FlagDefaultValueType) {
+function getTypeFromValue(value?: FlagDefaultValueType) {
     if (value === undefined) {
         return "string";
     }
     if (Array.isArray(value)) {
         const element = value[0];
         if (Array.isArray(element)) {
-            throw new Error(`Invalid nested array value for ${key}`);
+            throw new Error(
+                `Invalid nested array default value for flag definition`,
+            );
         }
-        return getTypeFromValue(key, element);
+        return getTypeFromValue(element);
     }
 
     return typeof value as "string" | "number" | "boolean";
 }
 
-function expandFlagDefinition(key: string, def: FlagDefinition) {
-    const value = def.default;
-    return {
-        multiple: def?.multiple ?? Array.isArray(value),
-        type: def?.type ?? getTypeFromValue(key, value),
-        default: value,
-    } as FlagDefinition;
+export function getFlagMultiple(def: FlagDefinition) {
+    return def.multiple ?? Array.isArray(def.default);
+}
+export function getFlagType(def: FlagDefinition) {
+    return def.type ?? getTypeFromValue(def.default);
 }
 
 export function resolveFlag(
@@ -115,12 +115,12 @@ export function resolveFlag(
         if (def === undefined) {
             return def;
         }
-        return expandFlagDefinition(key, def);
+        return def;
     }
     const alias = flag.substring(1);
-    for (const [key, def] of Object.entries(definitions)) {
+    for (const def of Object.values(definitions)) {
         if (def?.char === alias) {
-            return expandFlagDefinition(key, def);
+            return def;
         }
     }
 }
@@ -166,10 +166,7 @@ export function parseParams<T extends ParameterDefinitions>(
                 key,
                 value.multiple ?? Array.isArray(value.default),
             );
-            valueTypes.set(
-                key,
-                value.type ?? getTypeFromValue(key, value.default),
-            );
+            valueTypes.set(key, value.type ?? getTypeFromValue(value.default));
         }
     }
 

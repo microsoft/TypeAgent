@@ -15,6 +15,8 @@ export {
     splitParams,
     ParsedCommandParams,
     resolveFlag,
+    getFlagMultiple,
+    getFlagType,
 } from "./parameterHelpers.js";
 
 export type CommandHandlerNoParams = CommandDescriptor & {
