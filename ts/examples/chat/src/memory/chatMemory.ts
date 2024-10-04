@@ -9,6 +9,7 @@ import {
     CommandMetadata,
     InteractiveIo,
     addStandardHandlers,
+    arg,
     argBool,
     argNum,
     parseNamedArguments,
@@ -403,10 +404,7 @@ export async function runChatMemory(): Promise<void> {
         return {
             description: "Imports a text message into the current conversation",
             options: {
-                message: {
-                    description: "Raw message text to add",
-                    type: "string",
-                },
+                message: arg("Raw message text to add"),
                 sourcePath: argSourceFile(),
             },
         };
@@ -487,14 +485,8 @@ export async function runChatMemory(): Promise<void> {
         return {
             description: "Load the named conversation memory",
             options: {
-                name: {
-                    description: "Conversation name",
-                },
-                actions: {
-                    description: "Use actions in search",
-                    type: "boolean",
-                    defaultValue: true,
-                },
+                name: arg("Conversation name"),
+                actions: argBool("Use actions in search", true),
                 rootPath: {
                     description: "Root path for the conversation",
                     type: "string",
@@ -671,34 +663,12 @@ export async function runChatMemory(): Promise<void> {
         return {
             description: "Search for or display topics",
             options: {
-                query: {
-                    description: "value to search for",
-                },
-                exact: {
-                    description: "Exact match?",
-                    defaultValue: false,
-                    type: "boolean",
-                },
-                count: {
-                    description: "Num matches",
-                    defaultValue: 3,
-                    type: "number",
-                },
-                minScore: {
-                    description: "Min score",
-                    defaultValue: 0,
-                    type: "number",
-                },
-                showMessages: {
-                    description: "Search messages",
-                    type: "boolean",
-                    defaultValue: false,
-                },
-                level: {
-                    description: "Topics at this level",
-                    type: "number",
-                    defaultValue: 1,
-                },
+                query: arg("value to search for"),
+                exact: argBool("Exact match?"),
+                count: argNum("Num matches", 3),
+                minScore: argMinScore(0),
+                showMessages: argBool(),
+                level: argNum("Topics at this level", 1),
             },
         };
     }
@@ -739,39 +709,14 @@ export async function runChatMemory(): Promise<void> {
         return {
             description: "Search for entities",
             options: {
-                name: {
-                    description: "Names to search for",
-                },
-                type: {
-                    description: "Type to search for",
-                },
-                facet: {
-                    description: "Facet to search for",
-                },
-                exact: {
-                    description: "Exact match?",
-                    defaultValue: false,
-                    type: "boolean",
-                },
-                count: {
-                    description: "Num matches",
-                    defaultValue: 1,
-                    type: "number",
-                },
-                facetCount: {
-                    description: "Num facet matches",
-                    defaultValue: 10,
-                    type: "number",
-                },
-                minScore: {
-                    description: "Min score",
-                    defaultValue: 0,
-                    type: "number",
-                },
-                showMessages: {
-                    defaultValue: false,
-                    type: "boolean",
-                },
+                name: arg("Names to search for"),
+                type: arg("Type to search for"),
+                facet: arg("Facet to search for"),
+                exact: argBool("Exact match?"),
+                count: argNum("Num matches", 1),
+                facetCount: argNum("Num facet matches", 10),
+                minScore: argNum("Min score", 0),
+                showMessages: argBool(),
             },
         };
     }
@@ -817,40 +762,19 @@ export async function runChatMemory(): Promise<void> {
         return {
             description: "Search for actions",
             options: {
-                subject: {
-                    description: "Action to search for",
-                    defaultValue: conversation.NoEntityName,
-                },
-                object: {
-                    description: "Object to search for",
-                },
-                verb: {
-                    description:
-                        "Verb to search for. Compound verbs are comma separated",
-                },
-                tense: {
-                    description: "Verb tense: past | present | future",
-                    defaultValue: "past",
-                },
-                count: {
-                    description: "Num action matches",
-                    defaultValue: 1,
-                    type: "number",
-                },
-                verbCount: {
-                    description: "Num verb matches",
-                    defaultValue: 1,
-                    type: "number",
-                },
-                nameCount: {
-                    description: "Num name matches",
-                    defaultValue: 2,
-                    type: "number",
-                },
-                showMessages: {
-                    defaultValue: false,
-                    type: "boolean",
-                },
+                subject: arg(
+                    "Subject to search for",
+                    conversation.NoEntityName,
+                ),
+                object: arg("Object to search for"),
+                verb: arg(
+                    "Verb to search for. Compound verbs are comma separated",
+                ),
+                tense: arg("Verb tense: past | present | future", "past"),
+                count: argNum("Num action matches", 1),
+                verbCount: argNum("Num verb matches", 1),
+                nameCount: argNum("Num name matches", 2),
+                showMessages: argBool("display messages", false),
             },
         };
     }
@@ -921,45 +845,16 @@ export async function runChatMemory(): Promise<void> {
         return {
             description: "Natural language search on conversation",
             args: {
-                query: {
-                    description: "Search query",
-                },
+                query: arg("Search query"),
             },
             options: {
-                maxMatches: {
-                    description: "Maximum fuzzy matches",
-                    type: "number",
-                    defaultValue: 2,
-                },
-                minScore: {
-                    description: "Minimum similarity score",
-                    type: "number",
-                    defaultValue: 0.8,
-                },
-                fallback: {
-                    description: "Fallback to message search",
-                    type: "boolean",
-                    defaultValue: true,
-                },
-                action: {
-                    description: "Include actions",
-                    type: "boolean",
-                },
-                eval: {
-                    description: "Evaluate search query",
-                    type: "boolean",
-                    defaultValue: true,
-                },
-                debug: {
-                    description: "Show debug info",
-                    type: "boolean",
-                    defaultValue: true,
-                },
-                save: {
-                    description: "Save the search",
-                    type: "boolean",
-                    defaultValue: true,
-                },
+                maxMatches: argNum("Maximum fuzzy matches", 2),
+                minScore: argNum("Minimum similarity score", 0.8),
+                fallback: argBool("Fallback to message search", true),
+                action: argBool("Include actions"),
+                eval: argBool("Evaluate search query", true),
+                debug: argBool("Show debug info", true),
+                save: argBool("Save the search", true),
             },
         };
     }

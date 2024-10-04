@@ -320,15 +320,17 @@ export interface ArgDef {
 }
 
 function makeArg(
-    description: string,
+    description: string | undefined,
     type: ArgType,
     defaultValue?: any | undefined,
 ): ArgDef {
     let arg: ArgDef = {
-        description,
         type,
     };
-    if (defaultValue) {
+    if (description) {
+        arg.description = description;
+    }
+    if (defaultValue !== undefined) {
         arg.defaultValue = defaultValue;
     }
     return arg;
@@ -342,10 +344,14 @@ export function arg(
 }
 
 export function argBool(
-    description: string,
+    description?: string | undefined,
     defaultValue?: boolean | undefined,
 ): ArgDef {
-    return makeArg(description, "boolean", defaultValue);
+    return makeArg(
+        description,
+        "boolean",
+        defaultValue == undefined ? false : defaultValue,
+    );
 }
 
 export function argNum(
@@ -794,11 +800,12 @@ function displayArgs(
         args,
         true,
         (v) => {
-            let text = v.description ?? "";
+            let text = v.description;
             if (v.defaultValue !== undefined) {
-                return [text, `(default): ${v.defaultValue}`];
+                const defText = `(default): ${v.defaultValue}`;
+                return text ? [text, defText] : defText;
             }
-            return text;
+            return text ?? "";
         },
         indent,
     );
