@@ -1,10 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { getEnvSetting } from "../src/common.js";
 import { openai } from "../src/index.js";
 
 export function hasEmbeddingModel(endpoint?: string | undefined) {
-    return hasApiSettings(openai.ModelType.Embedding, endpoint);
+    return hasApiSettings(
+        openai.EnvVars.AZURE_OPENAI_ENDPOINT_EMBEDDING,
+        endpoint,
+    );
 }
 
 export function createEmbeddingModel(
@@ -19,17 +23,16 @@ export function createEmbeddingModel(
     return openai.createEmbeddingModel(settings, dimensions);
 }
 
-export function hasApiSettings(
-    modelType: openai.ModelType,
-    endpoint?: string | undefined,
-) {
+export function hasApiSettings(key: string, endpoint?: string | undefined) {
     try {
-        const settings = openai.apiSettingsFromEnv(
-            modelType,
+        const setting = getEnvSetting(
             process.env,
+            key,
             endpoint,
+            undefined,
+            true,
         );
-        return settings !== undefined;
+        return setting !== undefined && setting.length > 0;
     } catch {}
     return false;
 }
