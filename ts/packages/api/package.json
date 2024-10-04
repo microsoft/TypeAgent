@@ -1,0 +1,53 @@
+{
+  "name": "agent-api",
+  "version": "0.0.1",
+  "description": "TypeAgent Dispatcher API",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/api"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "main": "",
+  "bin": {
+    "agent-api": "./bin/index.ts",
+    "agent-api-dev": "./bin/index.ts"
+  },
+  "scripts": {
+    "build": "npm run tsc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "regen": "./bin/dev.js data regenerate -f ../dispatcher/test/data/**/**/*.json ../dispatcher/test/repo/explanations/**/**/*.json",
+    "regen:builtin": "./bin/dev.js data regenerate --builtin player",
+    "start": "npx --no .",
+    "start:dev": "npx --no agent-api-dev",
+    "stat": "./bin/dev.js data stat -f ../dispatcher/test/data/**/**/*.json ../dispatcher/test/repo/explanations/**/**/*.json",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "agent-cache": "workspace:*",
+    "agent-dispatcher": "workspace:*",
+    "aiclient": "workspace:*",
+    "chalk": "^5.3.0",
+    "common-utils": "workspace:*",
+    "debug": "^4.3.4",
+    "dotenv": "^16.3.1",
+    "node-http": "0.0.5",
+    "rimraf": "^5.0.5",
+    "ts-node": "^10.9.1",
+    "typechat": "^0.1.1",
+    "typescript": "^5.4.3"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.10",
+    "@types/jest": "^29.5.7",
+    "@types/node": "^18.18.7",
+    "jest": "^29.7.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.3"
+  }
+}
