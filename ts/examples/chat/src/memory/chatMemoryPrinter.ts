@@ -2,12 +2,13 @@
 // Licensed under the MIT License.
 
 import * as knowLib from "knowledge-processor";
+import { conversation } from "knowledge-processor";
 import { InteractiveIo } from "interactive-app";
-import { dateTime } from "typeagent";
+import { collections, dateTime } from "typeagent";
 import { ChatPrinter } from "../chatPrinter.js";
 import chalk, { ChalkInstance } from "chalk";
 
-export class PlayPrinter extends ChatPrinter {
+export class ChatMemoryPrinter extends ChatPrinter {
     constructor(io: InteractiveIo) {
         super(io);
     }
@@ -45,6 +46,30 @@ export class PlayPrinter extends ChatPrinter {
         }
     }
 
+    public writeProgress(
+        curCount: number,
+        total: number,
+        label?: string | undefined,
+    ): void {
+        label = label ? label + " " : "";
+        const text = `[${label}${curCount + 1} / ${total}]`;
+        this.writeInColor(chalk.green, text);
+    }
+
+    public writeBatchProgress(
+        batch: collections.Slice,
+        label?: string | undefined,
+        total?: number | undefined,
+    ): void {
+        label = label ? label + " " : "";
+        let text =
+            total !== undefined && total > 0
+                ? `[${label}(${batch.startAt + 1} to ${batch.startAt + batch.value.length}) / ${total}]`
+                : `[${label}${batch.startAt + 1} to ${batch.startAt + batch.value.length}]`;
+
+        this.writeInColor(chalk.gray, text);
+    }
+
     public writeTemporalBlock(
         color: ChalkInstance,
         block: dateTime.Timestamped<knowLib.TextBlock>,
@@ -64,6 +89,83 @@ export class PlayPrinter extends ChatPrinter {
                     this.writeLine();
                 }
             });
+        }
+    }
+
+    public writeKnowledge(knowledge: conversation.KnowledgeResponse) {
+        this.writeTopics(knowledge.topics);
+        this.writeEntities(knowledge.entities);
+        this.writeActions(knowledge.actions);
+    }
+
+    public writeTopics(topics: string[] | undefined): void {
+        if (topics && topics.length > 0) {
+            this.writeTitle("Topics");
+            this.writeList(topics, { type: "ul" });
+            this.writeLine();
+        }
+    }
+
+    public writeEntities(
+        entities: conversation.ConcreteEntity[] | undefined,
+    ): void {
+        if (entities && entities.length > 0) {
+            this.writeTitle("Entities");
+            for (const entity of entities) {
+                this.writeCompositeEntity(
+                    conversation.toCompositeEntity(entity),
+                );
+                this.writeLine();
+            }
+        }
+    }
+
+    public writeCompositeEntity(
+        entity: conversation.CompositeEntity | undefined,
+    ): void {
+        if (entity) {
+            this.writeLine(entity.name.toUpperCase());
+            this.writeList(entity.type, { type: "csv" });
+            this.writeList(entity.facets, { type: "ul" });
+        }
+    }
+
+    public writeExtractedEntities(
+        entities?: (conversation.ExtractedEntity | undefined)[],
+    ): void {
+        if (entities && entities.length > 0) {
+            this.writeTitle("Entities");
+            for (const entity of entities) {
+                if (entity) {
+                    this.writeCompositeEntity(
+                        conversation.toCompositeEntity(entity.value),
+                    );
+                    this.writeLine();
+                }
+            }
+        }
+    }
+
+    public writeActions(actions: conversation.Action[] | undefined): void {
+        if (actions && actions.length > 0) {
+            this.writeTitle("Actions");
+            this.writeList(actions.map((a) => conversation.actionToString(a)));
+        }
+    }
+
+    public writeExtractedActions(
+        actions?:
+            | (knowLib.conversation.ExtractedAction | undefined)[]
+            | undefined,
+    ) {
+        if (actions && actions.length > 0) {
+            this.writeTitle("Actions");
+            this.writeList(
+                actions.map((a) =>
+                    a ? conversation.actionToString(a.value) : "",
+                ),
+            );
+            this.writeLine();
         }
     }
 }

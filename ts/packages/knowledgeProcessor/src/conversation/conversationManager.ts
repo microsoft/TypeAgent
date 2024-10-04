@@ -15,10 +15,10 @@ import {
 import {
     extractKnowledgeFromBlock,
     KnowledgeExtractor,
-    KnowledgeExtractorSettings,
     createKnowledgeExtractor,
     ExtractedKnowledge,
     ExtractedEntity,
+    createKnowledgeExtractorSettings,
 } from "./knowledge.js";
 import {
     ConversationSearchProcessor,
@@ -48,9 +48,11 @@ export type ConversationManagerTask = AddMessageTask;
  *  - add and index messages and entities to a conversation
  *  - search the conversation
  */
-export interface ConversationManager {
+export interface ConversationManager<TMessageId = any, TTopicId = any> {
     readonly conversationName: string;
-    readonly conversation: Conversation<string, string, string, string>;
+    readonly conversation: Conversation<TMessageId, TTopicId, string, string>;
+    readonly topicMerger: TopicMerger<TTopicId>;
+    readonly knowledgeExtractor: KnowledgeExtractor;
     readonly searchProcessor: ConversationSearchProcessor;
     readonly updateTaskQueue: collections.TaskQueue<ConversationManagerTask>;
     /**
@@ -123,7 +125,7 @@ export interface ConversationManager {
      * Clear everything.
      * Note: While this is happening, it is up to you to ensure you are not searching or reading the conversation
      */
-    clear(): Promise<void>;
+    clear(removeMessages: boolean): Promise<void>;
 }
 
 /**
@@ -136,7 +138,7 @@ export async function createConversationManager(
     conversationPath: string,
     createNew: boolean,
     existingConversation?: Conversation | undefined,
-): Promise<ConversationManager> {
+): Promise<ConversationManager<string, string>> {
     const embeddingModel = createEmbeddingCache(
         openai.createEmbeddingModel(),
         64,
@@ -160,18 +162,12 @@ export async function createConversationManager(
     if (createNew) {
         await conversation.clear(true);
     }
-    const knowledgeExtractorSettings = defaultKnowledgeExtractorSettings();
     const knowledgeExtractor = createKnowledgeExtractor(
         knowledgeModel,
-        knowledgeExtractorSettings,
+        createKnowledgeExtractorSettings(maxCharsPerChunk),
     );
 
-    let topicMerger = await createConversationTopicMerger(
-        knowledgeModel,
-        conversation,
-        1, // Merge base topic level 1 into a higher level
-        topicMergeWindowSize,
-    );
+    let topicMerger = await createMerger();
 
     const searchProcessor = createSearchProcessor(
         conversation,
@@ -187,6 +183,10 @@ export async function createConversationManager(
     return {
         conversationName,
         conversation,
+        get topicMerger() {
+            return topicMerger;
+        },
+        knowledgeExtractor,
         searchProcessor,
         updateTaskQueue,
         addMessage,
@@ -304,9 +304,13 @@ export async function createConversationManager(
         return searchProcessor.generateAnswer(query, searchResponse, options);
     }
 
-    async function clear(): Promise<void> {
-        await conversation.clear(true);
-        topicMerger = await createConversationTopicMerger(
+    async function clear(removeMessages: boolean): Promise<void> {
+        await conversation.clear(removeMessages);
+        topicMerger = await createMerger();
+    }
+
+    async function createMerger(): Promise<TopicMerger> {
+        return await createConversationTopicMerger(
             knowledgeModel,
             conversation,
             1, // Merge base topic level 1 into a higher level
@@ -322,15 +326,6 @@ export async function createConversationManager(
                 embeddingModel,
                 semanticIndex: true,
             },
-        };
-    }
-
-    function defaultKnowledgeExtractorSettings(): KnowledgeExtractorSettings {
-        return {
-            windowSize: 8,
-            maxContextLength: maxCharsPerChunk,
-            includeSuggestedTopics: false,
-            includeActions: true,
         };
     }
 

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { collections, loadSchema } from "typeagent";
+import { asyncArray, collections, loadSchema } from "typeagent";
 import {
     Action,
     ActionParam,
@@ -16,58 +16,40 @@ import {
     createJsonTranslator,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import { createRecentItemsWindow } from "./conversation.js";
 import { SourceTextBlock, TextBlock, TextBlockType } from "../text.js";
 import { facetToString, mergeEntityFacet } from "./entities.js";
 
 export interface KnowledgeExtractor {
-    next(message: string): Promise<KnowledgeResponse | undefined>;
+    extract(message: string): Promise<KnowledgeResponse | undefined>;
 }
 
 export type KnowledgeExtractorSettings = {
-    windowSize: number;
     maxContextLength: number;
-    includeSuggestedTopics?: boolean | undefined;
     includeActions: boolean;
     mergeActionKnowledge?: boolean;
 };
 
 export function createKnowledgeExtractor(
     model: TypeChatLanguageModel,
-    settings: KnowledgeExtractorSettings,
+    extractorSettings?: KnowledgeExtractorSettings | undefined,
 ): KnowledgeExtractor {
+    const settings = extractorSettings ?? createKnowledgeExtractorSettings();
     const translator = createTranslator(model);
-    const topics = createRecentItemsWindow<string>(settings.windowSize);
     return {
-        next,
+        extract,
     };
 
-    async function next(
+    async function extract(
         message: string,
     ): Promise<KnowledgeResponse | undefined> {
-        const result = await translator.translate(
-            message,
-            settings.includeSuggestedTopics
-                ? getContext(topics.getUnique())
-                : undefined,
-        );
+        const result = await translator.translate(message);
         if (!result.success) {
             return undefined;
         }
         if (settings.mergeActionKnowledge) {
             mergeActionKnowledge(result.data);
         }
-        topics.push(result.data.topics);
         return result.data;
-    }
-
-    function getContext(pastTopics?: string[]): string {
-        const context = {
-            context: {
-                possibleTopics: pastTopics ? pastTopics : [],
-            },
-        };
-        return JSON.stringify(context, null, 2);
     }
 
     function createTranslator(
@@ -131,6 +113,21 @@ export function createKnowledgeExtractor(
     }
 }
 
+/**
+ * Return default settings
+ * @param maxCharsPerChunk (optional)
+ * @returns
+ */
+export function createKnowledgeExtractorSettings(
+    maxCharsPerChunk: number = 2048,
+): KnowledgeExtractorSettings {
+    return {
+        maxContextLength: maxCharsPerChunk,
+        includeActions: true,
+        mergeActionKnowledge: true,
+    };
+}
+
 export type ExtractedEntity<TSourceId = any> = {
     value: ConcreteEntity;
     sourceIds: TSourceId[];
@@ -155,7 +152,7 @@ export async function extractKnowledgeFromBlock(
     if (message.value.length === 0) {
         return undefined;
     }
-    let knowledgeResponse = await extractor.next(messageText);
+    let knowledgeResponse = await extractor.extract(messageText);
     if (!knowledgeResponse) {
         return undefined;
     }
@@ -187,18 +184,14 @@ export async function extractKnowledgeFromBlock(
     return [message, { entities, topics, actions }];
 }
 
-export async function* extractKnowledge(
-    model: TypeChatLanguageModel,
-    messages: AsyncIterableIterator<SourceTextBlock>,
-    settings: KnowledgeExtractorSettings,
-): AsyncIterableIterator<[SourceTextBlock, ExtractedKnowledge]> {
-    const extractor = createKnowledgeExtractor(model, settings);
-    for await (const message of messages) {
-        const result = await extractKnowledgeFromBlock(extractor, message);
-        if (result) {
-            yield result;
-        }
-    }
+export async function extractKnowledge(
+    extractor: KnowledgeExtractor,
+    blocks: SourceTextBlock[],
+    concurrency: number,
+) {
+    return asyncArray.mapAsync(blocks, concurrency, (message) =>
+        extractKnowledgeFromBlock(extractor, message),
+    );
 }
 
 export const NoEntityName = "none";
