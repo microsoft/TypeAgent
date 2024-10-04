@@ -158,7 +158,12 @@ export function removeItemFromArray<T>(array: T[], items: T | T[]): T[] {
     return array;
 }
 
-export function* slices<T=any>(array: T[], size: number): IterableIterator<{startAt: number, value: T[]}> {
+export type Slice<T> = {
+    startAt: number;
+    value: T[];
+}
+
+export function* slices<T=any>(array: T[], size: number): IterableIterator<Slice<T>> {
     for (let i = 0; i < array.length; i += size) {        
         const slice = array.slice(i, i + size);
         if (slice.length === 0) {

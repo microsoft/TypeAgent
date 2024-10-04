@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { Slice, slices } from "./lib";
+
 export type ProcessAsync<T, TResult> = (
     item: T,
     index: number,
@@ -131,6 +133,29 @@ export async function forEachAsync<T>(
                 if (stop) {
                     return;
                 }
+            }
+        }
+    }
+}
+
+export type ProcessBatch<T, TResult> = (slice: Slice<T>) => Promise<TResult>[];
+export type ProgressBatch<T, TResult> = (
+    slice: Slice<T>,
+    results: TResult[],
+) => void | boolean;
+
+export async function forEachBatch<T = any, TResult = any>(
+    array: T[],
+    sliceSize: number,
+    processor: ProcessBatch<T, TResult>,
+    progress?: (slice: Slice<T>, results: TResult[]) => void,
+): Promise<void> {
+    for (const batch of slices(array, sliceSize)) {
+        const results = await Promise.all(processor(batch));
+        if (progress) {
+            const stop = progress(batch, results);
+            if (shouldStop(stop)) {
+                break;
             }
         }
     }

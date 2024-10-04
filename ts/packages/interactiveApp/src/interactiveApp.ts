@@ -319,6 +319,35 @@ export interface ArgDef {
     defaultValue?: any | undefined;
 }
 
+function makeArg(
+    description: string,
+    type: ArgType,
+    defaultValue?: any | undefined,
+): ArgDef {
+    let arg: ArgDef = {
+        description,
+        type,
+    };
+    if (defaultValue) {
+        arg.defaultValue = defaultValue;
+    }
+    return arg;
+}
+
+export function argBool(
+    description: string,
+    defaultValue?: boolean | undefined,
+): ArgDef {
+    return makeArg(description, "boolean", defaultValue);
+}
+
+export function argNum(
+    description: string,
+    defaultValue?: number | undefined,
+): ArgDef {
+    return makeArg(description, "number", defaultValue);
+}
+
 /**
  * Named command line arguments
  */

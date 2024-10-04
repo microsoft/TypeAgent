@@ -68,6 +68,12 @@ export class PlayPrinter extends ChatPrinter {
         }
     }
 
+    public writeKnowledge(knowledge: conversation.KnowledgeResponse) {
+        this.writeTopics(knowledge.topics);
+        this.writeEntities(knowledge.entities);
+        this.writeActions(knowledge.actions);
+    }
+
     public writeTopics(topics: string[] | undefined): void {
         if (topics && topics.length > 0) {
             this.writeTitle("Topics");

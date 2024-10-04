@@ -9,13 +9,14 @@ import {
     CommandMetadata,
     InteractiveIo,
     addStandardHandlers,
+    argBool,
+    argNum,
     parseNamedArguments,
     runConsole,
 } from "interactive-app";
 import {
     SemanticIndex,
     asyncArray,
-    collections,
     dateTime,
     getFileName,
     isDirectoryPath,
@@ -536,22 +537,13 @@ export async function runChatMemory(): Promise<void> {
         return {
             description: "Extract knowledge",
             options: {
-                actions: {
-                    description: "Extract actions",
-                    type: "boolean",
-                    defaultValue: true,
-                },
-                maxTurns: {
-                    type: "number",
-                    defaultValue: 10,
-                    description: "Number of turns to run",
-                },
+                actions: argBool("Extract actions", true),
+                maxTurns: argNum("Number of turns to run", 10),
                 concurrency: argConcurrency(4),
                 pause: argPause(),
             },
         };
     }
-
     handlers.knowledge.metadata = knowledgeDef();
     async function knowledge(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, knowledgeDef());
@@ -565,36 +557,42 @@ export async function runChatMemory(): Promise<void> {
                 mergeActionKnowledge: false,
             },
         );
-        let messages: knowLib.SourceTextBlock[] = await asyncArray.toArray(
+        let messages = await asyncArray.toArray(
             context.conversation.messages.entries(),
         );
         messages = messages.slice(0, namedArgs.maxTurns);
         const concurrency = namedArgs.concurrency;
-        for (let slice of collections.slices(messages, concurrency)) {
-            printer.writeInColor(
-                chalk.gray,
-                `Extracting ${slice.startAt + 1} to ${slice.startAt + slice.value.length}`,
-            );
-            let knowledgeResults = await Promise.all(
-                slice.value.map((message) => extractor.extract(message.value)),
-            );
-            for (let k = 0; k < knowledgeResults.length; ++k) {
-                ++count;
-                const knowledge = knowledgeResults[k];
-                if (!knowledge) {
-                    continue;
-                }
+        await asyncArray.forEachBatch(
+            messages,
+            concurrency,
+            (batch) => {
                 printer.writeInColor(
-                    chalk.green,
-                    `[${count} / ${messages.length}]`,
+                    chalk.gray,
+                    `Extracting ${batch.startAt + 1} to ${batch.startAt + batch.value.length}`,
                 );
-                printer.writeListInColor(chalk.cyan, slice.value[k].value);
-                printer.writeTopics(knowledge.topics);
-                printer.writeEntities(knowledge.entities);
-                printer.writeActions(knowledge.actions);
-                printer.writeLine();
-            }
-        }
+                return batch.value.map((message) =>
+                    extractor.extract(message.value),
+                );
+            },
+            (batch, knowledgeResults) => {
+                for (let k = 0; k < knowledgeResults.length; ++k) {
+                    ++count;
+                    const knowledge = knowledgeResults[k];
+                    if (knowledge) {
+                        printer.writeInColor(
+                            chalk.green,
+                            `[${count} / ${messages.length}]`,
+                        );
+                        printer.writeListInColor(
+                            chalk.cyan,
+                            batch.value[k].value,
+                        );
+                        printer.writeKnowledge(knowledge);
+                        printer.writeLine();
+                    }
+                }
+            },
+        );
     }
 
     function buildIndexDef(): CommandMetadata {
