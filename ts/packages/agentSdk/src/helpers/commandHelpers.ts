@@ -9,10 +9,10 @@ import {
     CommandDescriptorTable,
     ParameterDefinitions,
 } from "../command.js";
-import { parseCommandArgs, ParsedCommandParams } from "./parameterHelpers.js";
+import { parseParams, ParsedCommandParams } from "./parameterHelpers.js";
 
 export {
-    parseCommandArgs,
+    splitParams,
     ParsedCommandParams,
     resolveFlag,
 } from "./parameterHelpers.js";
@@ -128,7 +128,7 @@ export function getCommandInterface(
             } else {
                 await curr.run(
                     context,
-                    parseCommandArgs(args, curr.parameters),
+                    parseParams(args, curr.parameters),
                     attachments,
                 );
             }

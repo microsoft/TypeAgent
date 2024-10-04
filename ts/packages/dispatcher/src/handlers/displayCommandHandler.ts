@@ -14,7 +14,12 @@ export class DisplayCommandHandler implements CommandHandler {
         flags: {
             speak: false,
         },
-        args: true,
+        args: {
+            text: {
+                description: "text to display",
+                multiple: true,
+            },
+        },
     } as const;
     public async run(
         context: ActionContext<CommandHandlerContext>,
@@ -22,11 +27,11 @@ export class DisplayCommandHandler implements CommandHandler {
     ) {
         const { flags, args } = params;
 
-        for (const arg of args) {
+        for (const content of args.text) {
             context.actionIO.appendDisplay(
                 {
                     type: "text",
-                    content: arg,
+                    content,
                     speak: flags.speak,
                 },
                 "block",
