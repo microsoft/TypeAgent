@@ -23,9 +23,11 @@ import { SessionConfig } from "../session/session.js";
 import chalk from "chalk";
 import { ActionContext } from "@typeagent/agent-sdk";
 import {
+    CommandHandler,
     CommandHandlerNoParse,
     CommandHandlerTable,
-    parseCommandArgs,
+    ParsedCommandParams,
+    splitParams,
 } from "@typeagent/agent-sdk/helpers/command";
 import {
     displayResult,
@@ -128,7 +130,7 @@ class AgentToggleCommandHandler implements CommandHandlerNoParse {
         input: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        const { args } = parseCommandArgs(input);
+        const args = splitParams(input);
         if (args.length < 1) {
             displayWarn((log) => {
                 log(
@@ -170,29 +172,23 @@ class AgentToggleCommandHandler implements CommandHandlerNoParse {
     }
 }
 
-class ExplainerCommandHandler implements CommandHandlerNoParse {
+class ExplainerCommandHandler implements CommandHandler {
     public readonly description = "Set explainer";
-    public readonly parameters = true;
+    public readonly parameters = {
+        args: {
+            explainerName: {
+                description: "name of the explainer",
+            },
+        },
+    };
     public async run(
         context: ActionContext<CommandHandlerContext>,
-        request: string,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const { args } = parseCommandArgs(request);
-        if (args.length < 1) {
-            displayWarn((log) => {
-                log("Usage: @config explainer <explainer>");
-                const explainers = getCacheFactory()
-                    .getExplainerNames()
-                    .join(", ");
-                log(`   <explainer>: ${explainers}`);
-            }, context);
-            return;
-        }
-        if (args.length > 2) {
-            throw new Error("Too many arguments.");
-        }
-
-        await changeContextConfig({ explainerName: args[0] }, context);
+        await changeContextConfig(
+            { explainerName: params.args.explainerName },
+            context,
+        );
     }
 }
 
@@ -216,7 +212,7 @@ class ConfigModelShowCommandHandler implements CommandHandlerNoParse {
     ) {
         const systemContext = context.sessionContext.agentContext;
         const models = systemContext.session.getConfig().models;
-        const { args } = parseCommandArgs(request);
+        const args = splitParams(request);
         if (args.length > 1) {
             throw new Error("Too many arguments.");
         }
@@ -241,7 +237,7 @@ class ConfigModelSetCommandHandler implements CommandHandlerNoParse {
         request: string,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        const { args } = parseCommandArgs(request);
+        const args = splitParams(request);
         const models = systemContext.session.getConfig().models;
         if (args.length === 0) {
             const newConfig = {

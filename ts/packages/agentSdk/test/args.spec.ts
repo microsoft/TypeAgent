@@ -1,196 +1,139 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { parseCommandArgs } from "../src/helpers/parameterHelpers.js";
+import { parseParams } from "../src/helpers/parameterHelpers.js";
 
 describe("Argument parsing", () => {
-    const explicitConfig = {
-        flags: {
-            bool: {
-                type: "boolean",
-            },
+    const parameters = {
+        args: {
             num: {
+                description: "number",
                 type: "number",
             },
             str: {
+                description: "string",
                 type: "string",
             },
-        },
-    } as const;
-    it("explicit", () => {
-        const { args, flags } = parseCommandArgs("", explicitConfig);
-        expect(args.length).toEqual(0);
-        const bool: boolean = flags.bool!; // Use ! to make sure the type is correct
-        const num: number = flags.num!; // Use ! to make sure the type is correct
-        const str: string = flags.str!; // Use ! to make sure the type is correct
-
-        expect(bool).toBe(undefined);
-        expect(num).toBe(undefined);
-        expect(str).toBe(undefined);
-    });
-    it("explicit - with flags", () => {
-        const { args, flags } = parseCommandArgs(
-            "--bool --num 11 --str world",
-            explicitConfig,
-        );
-        expect(args.length).toEqual(0);
-        const bool: boolean = flags.bool!;
-        const num: number = flags.num!;
-        const str: string = flags.str!;
-
-        expect(bool).toBe(true);
-        expect(num).toBe(11);
-        expect(str).toBe("world");
-    });
-
-    const explicitMultipleConfig = {
-        flags: {
-            num: {
-                multiple: true,
-                type: "number",
+            defStr: {
+                description: "default string",
             },
-            str: {
-                multiple: true,
-                type: "string",
+            optional: {
+                description: "optional",
+                optional: true,
+            },
+            optional2: {
+                description: "optional2",
+                optional: true,
             },
         },
     } as const;
-    it("explicit multiple", () => {
-        const { args, flags } = parseCommandArgs("", explicitMultipleConfig);
-        expect(args.length).toEqual(0);
-        const num: number[] = flags.num!; // Use ! to make sure the type is correct
-        const str: string[] = flags.str!; // Use ! to make sure the type is correct
+    it("arguments", () => {
+        const params = parseParams("10 \t hello   world !", parameters);
+        const flags: undefined = params.flags;
+        expect(flags).toBe(undefined);
 
-        expect(num).toBe(undefined);
-        expect(str).toBe(undefined);
+        const args = params.args;
+        const num: number = args.num;
+        const str: string = args.str;
+        const defStr: string = args.defStr;
+        const optional: string = args.optional!; // Use ! to make sure the type is correct
+        const optional2: string = args.optional2!; // Use ! to make sure the type is correct
+        expect(num).toBe(10);
+        expect(str).toBe("hello");
+        expect(defStr).toBe("world");
+        expect(optional).toBe("!");
+        expect(optional2).toBe(undefined);
     });
-    it("explicit multiple - with flags", () => {
-        const { args, flags } = parseCommandArgs(
-            "--num 11 --str world --num 12 --str !",
-            explicitMultipleConfig,
-        );
-        expect(args.length).toEqual(0);
-
-        const num: number[] = flags.num!;
-        const str: string[] = flags.str!;
-
-        expect(num).toStrictEqual([11, 12]);
-        expect(str).toStrictEqual(["world", "!"]);
-    });
-
-    const explicitTypeWithDefault = {
-        flags: {
-            bool: {
-                type: "boolean",
-                default: false,
+    const multipleArgs = {
+        args: {
+            single: {
+                description: "single",
             },
-            num: {
-                type: "number",
-                default: 10,
-            },
-            str: {
-                type: "string",
-                default: "hello",
+            multiple: {
+                description: "multiple",
+                multiple: true,
             },
         },
     } as const;
-    it("explicit default", () => {
-        const { args, flags } = parseCommandArgs("", explicitTypeWithDefault);
-        expect(args.length).toEqual(0);
-        const bool: boolean = flags.bool!; // Use ! to make sure the type is correct
-        const num: number = flags.num!; // Use ! to make sure the type is correct
-        const str: string = flags.str!; // Use ! to make sure the type is correct
+    it("arguments - multiple", () => {
+        const params = parseParams("hello world again !", multipleArgs);
+        const flags: undefined = params.flags;
+        expect(flags).toBe(undefined);
 
-        expect(bool).toBe(explicitTypeWithDefault.flags.bool.default);
-        expect(num).toBe(explicitTypeWithDefault.flags.num.default);
-        expect(str).toBe(explicitTypeWithDefault.flags.str.default);
-    });
-    it("explicit default - with flags", () => {
-        const { args, flags } = parseCommandArgs(
-            "--bool --num 11 --str world",
-            explicitTypeWithDefault,
-        );
-        expect(args.length).toEqual(0);
-        const bool: boolean = flags.bool!;
-        const num: number = flags.num!;
-        const str: string = flags.str!;
-
-        expect(bool).toBe(true);
-        expect(num).toBe(11);
-        expect(str).toBe("world");
+        const args = params.args;
+        const single: string = args.single;
+        const multiple: string[] = args.multiple;
+        expect(single).toBe("hello");
+        expect(multiple).toStrictEqual(["world", "again", "!"]);
     });
 
-    const defaultValueFlags = {
-        flags: {
-            bool: false,
-            num: 10,
-            str: "hello",
-            defStr: undefined,
-        },
-    };
-    it("default value", () => {
-        const { args, flags } = parseCommandArgs("", defaultValueFlags);
-        expect(args.length).toEqual(0);
-        const bool: boolean = flags.bool;
-        const num: number = flags.num;
-        const str: string = flags.str;
-        const defStr: string = flags.defStr!; // Use ! to make sure the type is correct
-
-        expect(bool).toBe(defaultValueFlags.flags.bool);
-        expect(num).toBe(defaultValueFlags.flags.num);
-        expect(str).toBe(defaultValueFlags.flags.str);
-        expect(defStr).toBe(defaultValueFlags.flags.defStr);
-    });
-
-    it("default value - with flags", () => {
-        const { args, flags } = parseCommandArgs(
-            "--bool --num 11 --str world --defStr default",
-            defaultValueFlags,
-        );
-        expect(args.length).toEqual(0);
-        const bool: boolean = flags.bool;
-        const num: number = flags.num;
-        const str: string = flags.str;
-        const defStr: string = flags.defStr!; // Use ! to make sure the type is correct
-
-        expect(bool).toBe(true);
-        expect(num).toBe(11);
-        expect(str).toBe("world");
-        expect(defStr).toBe("default");
-    });
-
-    const defaultMultipleConfig = {
-        flags: {
-            num: {
-                multiple: true,
-                default: [10, 11],
+    const optionalMultipleArgs = {
+        args: {
+            single: {
+                description: "single",
+                optional: true,
             },
-            str: {
+            multiple: {
+                description: "multiple",
                 multiple: true,
-                default: ["hello", "world"],
+                optional: true,
             },
         },
     } as const;
-    it("default multiple", () => {
-        const { args, flags } = parseCommandArgs("", defaultMultipleConfig);
-        expect(args.length).toEqual(0);
-        const num: readonly number[] = flags.num!; // Use ! to make sure the type is correct
-        const str: readonly string[] = flags.str!; // Use ! to make sure the type is correct
+    it("arguments - optional multiple - no args", () => {
+        const params = parseParams("", optionalMultipleArgs);
+        const flags: undefined = params.flags;
+        expect(flags).toBe(undefined);
 
-        expect(num).toStrictEqual(defaultMultipleConfig.flags.num.default);
-        expect(str).toStrictEqual(defaultMultipleConfig.flags.str.default);
+        const args = params.args;
+        const single: string = args.single!; // Use ! to make sure the type is correct
+        const multiple: string[] = args.multiple!; // Use ! to make sure the type is correct
+        expect(single).toBe(undefined);
+        expect(multiple).toBe(undefined);
     });
-    it("default multiple - with flags", () => {
-        const { args, flags } = parseCommandArgs(
-            "--num 11 --str world --num 12 --str !",
-            explicitMultipleConfig,
-        );
-        expect(args.length).toEqual(0);
+    it("arguments - optional multiple - single args", () => {
+        const params = parseParams(" hello", optionalMultipleArgs);
+        const flags: undefined = params.flags;
+        expect(flags).toBe(undefined);
 
-        const num: number[] = flags.num!;
-        const str: string[] = flags.str!;
+        const args = params.args;
+        const single: string = args.single!; // Use ! to make sure the type is correct
+        const multiple: string[] = args.multiple!; // Use ! to make sure the type is correct
+        expect(single).toBe("hello");
+        expect(multiple).toBe(undefined);
+    });
+    it("arguments - optional multiple - multiple args", () => {
+        const params = parseParams(" hello   world", optionalMultipleArgs);
+        const flags: undefined = params.flags;
+        expect(flags).toBe(undefined);
 
-        expect(num).toStrictEqual([11, 12]);
-        expect(str).toStrictEqual(["world", "!"]);
+        const args = params.args;
+        const single: string = args.single!; // Use ! to make sure the type is correct
+        const multiple: string[] = args.multiple!; // Use ! to make sure the type is correct
+        expect(single).toBe("hello");
+        expect(multiple).toStrictEqual(["world"]);
+    });
+    it("Too many args", () => {
+        try {
+            parseParams("10 \t hello   world invalid", parameters);
+        } catch (e: any) {
+            expect(e.message).toBe("Too many arguments 'invalid'");
+        }
+    });
+    it("Missing args", () => {
+        try {
+            parseParams("10", parameters);
+        } catch (e: any) {
+            expect(e.message).toBe("Missing argument 'str'");
+        }
+    });
+    it("Invalid value", () => {
+        try {
+            parseParams("abc hello world", parameters);
+        } catch (e: any) {
+            expect(e.message).toBe(
+                "Invalid number value 'abc' for argument 'num'",
+            );
+        }
     });
 });

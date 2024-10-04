@@ -28,7 +28,6 @@ import {
     CommandHandlerNoParams,
     CommandHandlerNoParse,
     CommandHandlerTable,
-    parseCommandArgs,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk/helpers/command";
 import { ActionContext } from "@typeagent/agent-sdk";
@@ -274,8 +273,14 @@ class ConstructionImportCommandHandler implements CommandHandler {
         flags: {
             test: { char: "t", default: false },
         },
-        args: true,
-    };
+        args: {
+            file: {
+                description: "Path to the construction file to import from",
+                multiple: true,
+                optional: true,
+            },
+        },
+    } as const;
     public async run(
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
@@ -284,15 +289,17 @@ class ConstructionImportCommandHandler implements CommandHandler {
         const { args, flags } = params;
 
         const inputs =
-            args.length !== 0
-                ? await expandPaths(args)
+            args.file !== undefined
+                ? await expandPaths(args.file)
                 : await getImportTranslationFiles(systemContext, flags.test);
 
         if (inputs.length === 0) {
-            if (args.length === 0) {
+            if (args.file === undefined) {
                 throw new Error(`No input file specified.`);
             }
-            throw new Error(`No input file found from '${args.join("', '")}'`);
+            throw new Error(
+                `No input file found from '${args.file.join("', '")}'`,
+            );
         }
 
         // Sort by file name to make the result deterministic.
@@ -326,27 +333,27 @@ class ConstructionImportCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionDeleteCommandHandler implements CommandHandlerNoParse {
+class ConstructionDeleteCommandHandler implements CommandHandler {
     public readonly description = "Delete a construction by id";
-    public readonly parameters = true;
+    public readonly parameters = {
+        args: {
+            namespace: {
+                description: "namespace the construction in",
+            },
+            id: {
+                description: "construction id to delete",
+                type: "number",
+            },
+        },
+    } as const;
     public async run(
         context: ActionContext<CommandHandlerContext>,
-        request: string,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const { args } = parseCommandArgs(request);
-        if (args.length !== 2) {
-            throw new Error(
-                "Invalid arguments. '@const delete <namespace> <id>' expected.",
-            );
-        }
-
-        const id = parseInt(args[1]);
-        if (id.toString() !== args[1]) {
-            throw new Error(`Invalid construction id: ${args[1]}`);
-        }
+        const { namespace, id } = params.args;
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
-        await constructionStore.delete(args[0], id);
+        await constructionStore.delete(namespace, id);
     }
 }
 
