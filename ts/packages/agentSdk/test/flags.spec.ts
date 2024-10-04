@@ -132,10 +132,10 @@ describe("Flag parsing", () => {
         const str: string = flags.str;
         const defStr: string = flags.defStr!; // Use ! to make sure the type is correct
 
-        expect(bool).toBe(defaultValueFlags.flags.bool);
-        expect(num).toBe(defaultValueFlags.flags.num);
-        expect(str).toBe(defaultValueFlags.flags.str);
-        expect(defStr).toBe(defaultValueFlags.flags.defStr);
+        expect(bool).toBe(defaultValueFlags.flags.bool.default);
+        expect(num).toBe(defaultValueFlags.flags.num.default);
+        expect(str).toBe(defaultValueFlags.flags.str.default);
+        expect(defStr).toBe(undefined);
     });
 
     it("default - with flag input", () => {
