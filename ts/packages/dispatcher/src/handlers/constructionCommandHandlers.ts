@@ -91,7 +91,7 @@ class ConstructionNewCommandHandler implements CommandHandler {
         args: {
             file: {
                 description:
-                    "Construction file name in the session directory or path to construction file",
+                    "File name to be created in the session directory or path to the file to be created.",
                 optional: true,
             },
         },
@@ -129,7 +129,7 @@ class ConstructionLoadCommandHandler implements CommandHandler {
         args: {
             file: {
                 description:
-                    "Construction file name in the session directory or path to construction file",
+                    "Construction file in the session directory or path to file",
                 optional: true,
             },
         },
@@ -171,7 +171,7 @@ class ConstructionSaveCommandHandler implements CommandHandler {
         args: {
             file: {
                 description:
-                    "Construction file name in the session directory or path to construction file",
+                    "Construction file in the session directory or path to file",
                 optional: true,
             },
         },

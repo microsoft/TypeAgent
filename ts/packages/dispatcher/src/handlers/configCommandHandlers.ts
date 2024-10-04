@@ -203,21 +203,25 @@ function getConfigModel(models: SessionConfig["models"], kind: string) {
     return `Current ${chalk.cyan(kind)} model: ${model ? model : "(default)"}\nURL:${settings.endpoint}`;
 }
 
-class ConfigModelShowCommandHandler implements CommandHandlerNoParse {
+class ConfigModelShowCommandHandler implements CommandHandler {
     public readonly description = "Show current model";
-    public readonly parameters = true;
+    public readonly parameters = {
+        args: {
+            kind: {
+                description: "Model kind to show",
+                optional: true,
+            },
+        },
+    } as const;
     public async run(
         context: ActionContext<CommandHandlerContext>,
-        request: string,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const models = systemContext.session.getConfig().models;
-        const args = splitParams(request);
-        if (args.length > 1) {
-            throw new Error("Too many arguments.");
-        }
-        if (args.length === 1) {
-            displayResult(getConfigModel(models, args[0]), context);
+
+        if (params.args.kind !== undefined) {
+            displayResult(getConfigModel(models, params.args.kind), context);
         } else {
             displayResult(
                 Object.keys(models)

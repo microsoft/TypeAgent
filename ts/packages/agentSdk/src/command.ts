@@ -37,6 +37,7 @@ type FlagValueLiteral<T extends FlagValuePrimitiveTypes> = T extends number
       : "string";
 
 type SingleFlagDefinition<T extends FlagValuePrimitiveTypes> = {
+    description?: string;
     multiple?: false;
     char?: string;
     type?: FlagValueLiteral<T>;
@@ -44,6 +45,7 @@ type SingleFlagDefinition<T extends FlagValuePrimitiveTypes> = {
 };
 
 type MultipleFlagDefinition<T extends FlagValuePrimitiveTypes> = {
+    description?: string;
     multiple: true;
     char?: string;
     type?: FlagValueLiteral<T>;
