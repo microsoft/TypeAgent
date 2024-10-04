@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { collections } from ".";
 import { Slice, slices } from "./lib";
 
 export type ProcessAsync<T, TResult> = (
@@ -175,12 +176,20 @@ export async function forEachBatch<T = any, TResult = any>(
  * @returns
  */
 export async function* readBatches<T = any>(
-    source: AsyncIterableIterator<T>,
+    source: AsyncIterableIterator<T> | Array<T>,
     batchSize: number,
 ): AsyncIterableIterator<Slice<T>> {
     if (batchSize <= 0) {
         return;
     }
+
+    if (Array.isArray(source)) {
+        for (const slice of collections.slices(source, batchSize)) {
+            yield slice;
+        }
+        return;
+    }
+
     let value: T[] | undefined;
     let startAt = 0;
     for await (const item of source) {

@@ -47,21 +47,26 @@ export class ChatMemoryPrinter extends ChatPrinter {
     }
 
     public writeProgress(
-        index: number,
-        count: number,
+        curCount: number,
+        total: number,
         label?: string | undefined,
     ): void {
         label = label ? label + " " : "";
-        const text = `[${label}${index + 1} to ${index + count}]`;
+        const text = `[${label}${curCount + 1} / ${total}]`;
         this.writeInColor(chalk.green, text);
     }
 
     public writeBatchProgress(
         batch: collections.Slice,
         label?: string | undefined,
+        total?: number | undefined,
     ): void {
         label = label ? label + " " : "";
-        const text = `[${label}${batch.startAt + 1} to ${batch.startAt + batch.value.length}]`;
+        let text =
+            total !== undefined && total > 0
+                ? `[${label}(${batch.startAt + 1} to ${batch.startAt + batch.value.length}) / ${total}]`
+                : `[${label}${batch.startAt + 1} to ${batch.startAt + batch.value.length}]`;
+
         this.writeInColor(chalk.gray, text);
     }
 

@@ -16,7 +16,6 @@ import {
 } from "interactive-app";
 import {
     asyncArray,
-    collections,
     dateTime,
     getFileName,
     isDirectoryPath,
@@ -35,7 +34,7 @@ import {
     argPause,
     argSourceFile,
     argSourceFileOrFolder,
-    getMessages,
+    getMessagesAndCount,
 } from "./common.js";
 
 export type ChatContext = {
@@ -541,7 +540,7 @@ export async function runChatMemory(): Promise<void> {
             options: {
                 actions: argBool("Extract actions", true),
                 maxTurns: argNum("Number of turns to run"),
-                concurrency: argConcurrency(4),
+                concurrency: argConcurrency(2),
                 pause: argPause(),
             },
         };
@@ -558,7 +557,7 @@ export async function runChatMemory(): Promise<void> {
             },
         );
 
-        let messages = await getMessages(
+        let [messages, msgCount] = await getMessagesAndCount(
             context.conversationManager,
             namedArgs.maxTurns,
         );
@@ -566,7 +565,7 @@ export async function runChatMemory(): Promise<void> {
             messages,
             namedArgs.concurrency,
             (batch) => {
-                printer.writeBatchProgress(batch, "Messages");
+                printer.writeBatchProgress(batch, "Messages", msgCount);
                 return batch.value.map((message) =>
                     extractor.extract(message.value),
                 );
@@ -591,9 +590,9 @@ export async function runChatMemory(): Promise<void> {
         return {
             description: "Index all messages in the current conversation",
             options: {
-                concurrency: argConcurrency(4),
                 mergeWindow: argNum("Topic merge window size", 8),
                 maxTurns: argNum("Number of turns to run", 10),
+                concurrency: argConcurrency(2),
                 pause: argPause(),
                 actions: argBool("Index actions", true),
             },
@@ -605,26 +604,27 @@ export async function runChatMemory(): Promise<void> {
         io: InteractiveIo,
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, buildIndexDef());
-
-        let messages: knowLib.SourceTextBlock[] = await asyncArray.toArray(
-            context.conversation.messages.entries(),
-            namedArgs.maxTurns,
-        );
-
         const cm = context.conversationManager;
         await cm.clear(false);
 
+        let [messages, msgCount] = await getMessagesAndCount(
+            cm,
+            namedArgs.maxTurns,
+        );
         let messageIndex = await context.conversation.getMessageIndex();
         cm.topicMerger.mergeWindow = namedArgs.mergeWindow;
 
         let count = 0;
         const concurrency = namedArgs.concurrency;
-        for (const slice of collections.slices(messages, concurrency)) {
-            printer.writeBatchProgress(slice, "Indexing messages");
+        for await (const slice of asyncArray.readBatches(
+            messages,
+            concurrency,
+        )) {
+            printer.writeBatchProgress(slice, "Indexing messages", msgCount);
             await asyncArray.mapAsync(slice.value, concurrency, (m) =>
                 messageIndex.put(m.value, m.blockId),
             );
-            printer.writeBatchProgress(slice, "Extracting knowledge");
+            printer.writeBatchProgress(slice, "Extracting knowledge", msgCount);
             const knowledgeResults = await conversation.extractKnowledge(
                 cm.knowledgeExtractor,
                 slice.value,
@@ -632,7 +632,7 @@ export async function runChatMemory(): Promise<void> {
             );
             for (const knowledgeResult of knowledgeResults) {
                 ++count;
-                printer.writeProgress(count, messages.length);
+                printer.writeProgress(count, msgCount);
                 if (!knowledgeResult) {
                     continue;
                 }
