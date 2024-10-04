@@ -142,22 +142,58 @@ export type ProcessBatch<T, TResult> = (slice: Slice<T>) => Promise<TResult>[];
 export type ProgressBatch<T, TResult> = (
     slice: Slice<T>,
     results: TResult[],
-) => void | boolean;
+) => void;
 
 export async function forEachBatch<T = any, TResult = any>(
-    array: T[],
+    array: T[] | AsyncIterableIterator<T>,
     sliceSize: number,
     processor: ProcessBatch<T, TResult>,
-    progress?: (slice: Slice<T>, results: TResult[]) => void,
+    progress?: ProgressBatch<T, TResult>,
+    maxCount?: number | undefined,
 ): Promise<void> {
-    for (const batch of slices(array, sliceSize)) {
-        const results = await Promise.all(processor(batch));
-        if (progress) {
-            const stop = progress(batch, results);
-            if (shouldStop(stop)) {
-                break;
+    if (Array.isArray(array)) {
+        for (const batch of slices(array, sliceSize)) {
+            const results = await Promise.all(processor(batch));
+            if (progress) {
+                progress(batch, results);
             }
         }
+    } else {
+        for await (const batch of readBatches(array, sliceSize)) {
+            const results = await Promise.all(processor(batch));
+            if (progress) {
+                progress(batch, results);
+            }
+        }
+    }
+}
+
+/**
+ * Read items from the given iterable in batches
+ * @param source source of items
+ * @param batchSize batch size
+ * @returns
+ */
+export async function* readBatches<T = any>(
+    source: AsyncIterableIterator<T>,
+    batchSize: number,
+): AsyncIterableIterator<Slice<T>> {
+    if (batchSize <= 0) {
+        return;
+    }
+    let value: T[] | undefined;
+    let startAt = 0;
+    for await (const item of source) {
+        value ??= [];
+        value.push(item);
+        if (value.length === batchSize) {
+            yield { startAt, value };
+            startAt += value.length;
+            value = undefined;
+        }
+    }
+    if (value && value.length > 0) {
+        yield { startAt, value };
     }
 }
 

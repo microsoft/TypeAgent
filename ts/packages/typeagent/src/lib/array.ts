@@ -158,7 +158,7 @@ export function removeItemFromArray<T>(array: T[], items: T | T[]): T[] {
     return array;
 }
 
-export type Slice<T> = {
+export type Slice<T=any> = {
     startAt: number;
     value: T[];
 }

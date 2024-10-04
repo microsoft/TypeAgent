@@ -24,7 +24,6 @@ export interface KnowledgeExtractor {
 }
 
 export type KnowledgeExtractorSettings = {
-    windowSize: number;
     maxContextLength: number;
     includeActions: boolean;
     mergeActionKnowledge?: boolean;
@@ -123,9 +122,9 @@ export function createKnowledgeExtractorSettings(
     maxCharsPerChunk: number = 2048,
 ): KnowledgeExtractorSettings {
     return {
-        windowSize: 8,
         maxContextLength: maxCharsPerChunk,
         includeActions: true,
+        mergeActionKnowledge: true,
     };
 }
 

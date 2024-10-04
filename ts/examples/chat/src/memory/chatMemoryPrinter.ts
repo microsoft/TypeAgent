@@ -4,7 +4,7 @@
 import * as knowLib from "knowledge-processor";
 import { conversation } from "knowledge-processor";
 import { InteractiveIo } from "interactive-app";
-import { dateTime } from "typeagent";
+import { collections, dateTime } from "typeagent";
 import { ChatPrinter } from "../chatPrinter.js";
 import chalk, { ChalkInstance } from "chalk";
 
@@ -44,6 +44,13 @@ export class PlayPrinter extends ChatPrinter {
         if (timestamp) {
             this.writeInColor(chalk.gray, timestamp.toString());
         }
+    }
+
+    public writeBatchProgress(batch: collections.Slice): void {
+        this.writeInColor(
+            chalk.gray,
+            `${batch.startAt + 1} to ${batch.startAt + batch.value.length}`,
+        );
     }
 
     public writeTemporalBlock(

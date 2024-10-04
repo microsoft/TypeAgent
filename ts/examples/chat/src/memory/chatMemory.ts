@@ -535,10 +535,11 @@ export async function runChatMemory(): Promise<void> {
 
     function knowledgeDef(): CommandMetadata {
         return {
-            description: "Extract knowledge",
+            description:
+                "Extract knowledge from the messages in the current conversation",
             options: {
                 actions: argBool("Extract actions", true),
-                maxTurns: argNum("Number of turns to run", 10),
+                maxTurns: argNum("Number of turns to run"),
                 concurrency: argConcurrency(4),
                 pause: argPause(),
             },
@@ -547,29 +548,27 @@ export async function runChatMemory(): Promise<void> {
     handlers.knowledge.metadata = knowledgeDef();
     async function knowledge(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, knowledgeDef());
-        let count = 0;
         const extractor = conversation.createKnowledgeExtractor(
             context.chatModel,
             {
-                windowSize: 8,
                 maxContextLength: context.maxCharsPerChunk,
                 includeActions: namedArgs.actions,
                 mergeActionKnowledge: false,
             },
         );
-        let messages = await asyncArray.toArray(
-            context.conversation.messages.entries(),
-        );
-        messages = messages.slice(0, namedArgs.maxTurns);
-        const concurrency = namedArgs.concurrency;
+
+        let messages = namedArgs.maxTurns
+            ? await asyncArray.toArray(
+                  context.conversation.messages.entries(),
+                  namedArgs.maxTurns,
+              )
+            : context.conversation.messages.entries();
+        let count = 0;
         await asyncArray.forEachBatch(
             messages,
-            concurrency,
+            namedArgs.concurrency,
             (batch) => {
-                printer.writeInColor(
-                    chalk.gray,
-                    `Extracting ${batch.startAt + 1} to ${batch.startAt + batch.value.length}`,
-                );
+                printer.writeBatchProgress(batch);
                 return batch.value.map((message) =>
                     extractor.extract(message.value),
                 );
@@ -579,10 +578,6 @@ export async function runChatMemory(): Promise<void> {
                     ++count;
                     const knowledge = knowledgeResults[k];
                     if (knowledge) {
-                        printer.writeInColor(
-                            chalk.green,
-                            `[${count} / ${messages.length}]`,
-                        );
                         printer.writeListInColor(
                             chalk.cyan,
                             batch.value[k].value,
@@ -652,7 +647,6 @@ export async function runChatMemory(): Promise<void> {
         knowledgeExtractor = conversation.createKnowledgeExtractor(
             context.chatModel,
             {
-                windowSize: 8,
                 maxContextLength: context.maxCharsPerChunk,
                 includeActions: namedArgs.actions,
                 mergeActionKnowledge: true,
