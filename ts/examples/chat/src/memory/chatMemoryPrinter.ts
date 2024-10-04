@@ -52,7 +52,7 @@ export class ChatMemoryPrinter extends ChatPrinter {
         label?: string | undefined,
     ): void {
         label = label ? label + " " : "";
-        const text = `[${label}${curCount + 1} / ${total}]`;
+        const text = `[${label}${curCount} / ${total}]`;
         this.writeInColor(chalk.green, text);
     }
 

@@ -467,7 +467,10 @@ export async function runChatMemory(): Promise<void> {
                 sourcePath,
                 namedArgs.concurrency,
             );
+            let i = 0;
             for (const email of emails) {
+                ++i;
+                printer.writeProgress(i, emails.length);
                 if (email.sourcePath) {
                     printer.writeLine(email.sourcePath);
                 }
