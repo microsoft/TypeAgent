@@ -723,16 +723,21 @@ export function createStandardAzureChatModel(
 /**
  * Create a client for the OpenAI embeddings service
  * @param apiSettings: settings to use to create the client
+ * @param dimensions (optional) text-embedding-03 and later models allow variable length embeddings
  */
 export function createEmbeddingModel(
     apiSettings?: ApiSettings,
+    dimensions?: number | undefined,
 ): TextEmbeddingModel {
     const settings = apiSettings ?? apiSettingsFromEnv(ModelType.Embedding);
-    const defaultParams = settings.isAzure
+    const defaultParams: any = settings.isAzure
         ? {}
         : {
               model: settings.modelName,
           };
+    if (dimensions && dimensions > 0) {
+        defaultParams.dimensions = dimensions;
+    }
     const model: TextEmbeddingModel = {
         generateEmbedding,
     };
