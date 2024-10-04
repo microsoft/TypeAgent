@@ -12,7 +12,10 @@ export class DisplayCommandHandler implements CommandHandler {
     public readonly description = "Send text to display";
     public readonly parameters = {
         flags: {
-            speak: false,
+            speak: {
+                description: "Speak the display for the host that supports TTS",
+                default: false,
+            },
         },
         args: {
             text: {

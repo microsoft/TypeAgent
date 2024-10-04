@@ -35,9 +35,17 @@ class SessionNewCommandHandler implements CommandHandler {
     public readonly description = "Create a new empty session";
     public readonly parameters = {
         flags: {
-            keep: false,
-            memory: false,
-            persist: { type: "boolean" },
+            keep: {
+                description:
+                    "Copy the current session settings in the new session",
+                default: false,
+            },
+
+            persist: {
+                description:
+                    "Persist the new session.  Default to whether the current session is persisted.",
+                type: "boolean",
+            },
         },
     } as const;
     public async run(
@@ -143,6 +151,7 @@ class SessionDeleteCommandHandler implements CommandHandler {
         },
         flags: {
             all: {
+                description: "Delete all sessions",
                 char: "a",
                 type: "boolean",
             },

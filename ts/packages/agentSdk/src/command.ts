@@ -37,7 +37,7 @@ type FlagValueLiteral<T extends FlagValuePrimitiveTypes> = T extends number
       : "string";
 
 type SingleFlagDefinition<T extends FlagValuePrimitiveTypes> = {
-    description?: string;
+    description: string;
     multiple?: false;
     char?: string;
     type?: FlagValueLiteral<T>;
@@ -45,7 +45,7 @@ type SingleFlagDefinition<T extends FlagValuePrimitiveTypes> = {
 };
 
 type MultipleFlagDefinition<T extends FlagValuePrimitiveTypes> = {
-    description?: string;
+    description: string;
     multiple: true;
     char?: string;
     type?: FlagValueLiteral<T>;
@@ -56,19 +56,7 @@ type FlagDefinitionT<T extends FlagValuePrimitiveTypes> = T extends boolean
     ? SingleFlagDefinition<T>
     : SingleFlagDefinition<T> | MultipleFlagDefinition<T>;
 
-export type FullFlagDefinition = FlagDefinitionT<FlagValuePrimitiveTypes>;
-
-// shorthand by only providing the default value, type and multiple is inferred.
-type DefaultValueDefinitionT<T extends FlagValuePrimitiveTypes> =
-    T extends boolean ? T : T | T[];
-
-export type DefaultValueDefinition =
-    DefaultValueDefinitionT<FlagValuePrimitiveTypes>;
-
-export type FlagDefinition =
-    | undefined // short hand for "string" flag without a default value
-    | DefaultValueDefinition
-    | FullFlagDefinition;
+export type FlagDefinition = FlagDefinitionT<FlagValuePrimitiveTypes>;
 
 export type FlagDefinitions = Record<string, FlagDefinition>;
 

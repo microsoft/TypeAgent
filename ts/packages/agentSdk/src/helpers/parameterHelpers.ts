@@ -4,11 +4,9 @@
 import {
     ArgDefinition,
     ArgDefinitions,
-    DefaultValueDefinition,
     FlagDefinition,
     FlagDefinitions,
     FlagValuePrimitiveTypes,
-    FullFlagDefinition,
     ParameterDefinitions,
 } from "../command.js";
 
@@ -43,15 +41,13 @@ type FlagValueTypeFromValue<T> = T extends never[]
               : never;
 
 type Writeable<T> = { -readonly [P in keyof T]: T[P] };
-type FlagOutputType<T extends FlagDefinition> = T extends FullFlagDefinition
-    ? // Base the type of the value on the default values if available.
-      T["default"] extends FlagDefaultValueType
+type FlagOutputType<T extends FlagDefinition> =
+    T["default"] extends FlagDefaultValueType
         ? FlagValueTypeFromValue<Writeable<T["default"]>>
         : // Base the value on the type name literal, and value is undefined not flag is not specified
           T["multiple"] extends true
           ? FlagValueTypeFromLiteral<T["type"]>[] | undefined
-          : FlagValueTypeFromLiteral<T["type"]> | undefined
-    : FlagValueTypeFromValue<T>;
+          : FlagValueTypeFromLiteral<T["type"]> | undefined;
 
 type FlagsOutput<T extends FlagDefinitions | undefined> =
     T extends FlagDefinitions
@@ -100,24 +96,19 @@ function getTypeFromValue(key: string, value?: FlagDefaultValueType) {
     return typeof value as "string" | "number" | "boolean";
 }
 
-function isFullFlagDefinition(def: FlagDefinition): def is FullFlagDefinition {
-    return typeof def === "object" && !Array.isArray(def);
-}
-
 function expandFlagDefinition(key: string, def: FlagDefinition) {
-    const full = isFullFlagDefinition(def) ? def : undefined;
-    const value = full?.default ?? (def as DefaultValueDefinition);
+    const value = def.default;
     return {
-        multiple: full?.multiple ?? Array.isArray(value),
-        type: full?.type ?? getTypeFromValue(key, value),
+        multiple: def?.multiple ?? Array.isArray(value),
+        type: def?.type ?? getTypeFromValue(key, value),
         default: value,
-    } as FullFlagDefinition;
+    } as FlagDefinition;
 }
 
 export function resolveFlag(
     definitions: FlagDefinitions,
     flag: string,
-): FullFlagDefinition | undefined {
+): FlagDefinition | undefined {
     if (flag.startsWith("--")) {
         const key = flag.substring(2);
         const def = definitions[key];
@@ -128,7 +119,7 @@ export function resolveFlag(
     }
     const alias = flag.substring(1);
     for (const [key, def] of Object.entries(definitions)) {
-        if (isFullFlagDefinition(def) && def?.char === alias) {
+        if (def?.char === alias) {
             return expandFlagDefinition(key, def);
         }
     }
@@ -164,27 +155,21 @@ export function parseParams<T extends ParameterDefinitions>(
     const flagDefs = parameters.flags;
     if (flagDefs) {
         for (const [key, value] of Object.entries(flagDefs)) {
-            if (isFullFlagDefinition(value)) {
-                if (value.char !== undefined) {
-                    if (aliases.has(value.char)) {
-                        throw new Error(`Duplicate alias: ${value.char}`);
-                    }
-                    aliases.set(value.char, key);
+            if (value.char !== undefined) {
+                if (aliases.has(value.char)) {
+                    throw new Error(`Duplicate alias: ${value.char}`);
                 }
-                parsedFlags[key] = value.default;
-                allowMultiple.set(
-                    key,
-                    value.multiple ?? Array.isArray(value.default),
-                );
-                valueTypes.set(
-                    key,
-                    value.type ?? getTypeFromValue(key, value.default),
-                );
-            } else {
-                parsedFlags[key] = value;
-                allowMultiple.set(key, Array.isArray(value));
-                valueTypes.set(key, getTypeFromValue(key, value));
+                aliases.set(value.char, key);
             }
+            parsedFlags[key] = value.default;
+            allowMultiple.set(
+                key,
+                value.multiple ?? Array.isArray(value.default),
+            );
+            valueTypes.set(
+                key,
+                value.type ?? getTypeFromValue(key, value.default),
+            );
         }
     }
 

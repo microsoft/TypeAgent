@@ -4,21 +4,15 @@
 import { parseParams } from "../src/helpers/parameterHelpers.js";
 
 describe("Flag parsing", () => {
-    const explicitConfig = {
+    const typeFlags = {
         flags: {
-            bool: {
-                type: "boolean",
-            },
-            num: {
-                type: "number",
-            },
-            str: {
-                type: "string",
-            },
+            bool: { description: "testing", type: "boolean" },
+            num: { description: "testing", type: "number" },
+            str: { description: "testing", type: "string" },
         },
     } as const;
-    it("explicit", () => {
-        const params = parseParams("", explicitConfig);
+    it("type", () => {
+        const params = parseParams("", typeFlags);
         const args: undefined = params.args;
         expect(args).toStrictEqual(undefined);
 
@@ -31,11 +25,8 @@ describe("Flag parsing", () => {
         expect(num).toBe(undefined);
         expect(str).toBe(undefined);
     });
-    it("explicit - with flags", () => {
-        const params = parseParams(
-            "--bool --num 11 --str world",
-            explicitConfig,
-        );
+    it("type - with flags", () => {
+        const params = parseParams("--bool --num 11 --str world", typeFlags);
         const args: undefined = params.args;
         expect(args).toStrictEqual(undefined);
 
@@ -49,20 +40,14 @@ describe("Flag parsing", () => {
         expect(str).toBe("world");
     });
 
-    const explicitMultipleConfig = {
+    const multipleFlags = {
         flags: {
-            num: {
-                multiple: true,
-                type: "number",
-            },
-            str: {
-                multiple: true,
-                type: "string",
-            },
+            num: { description: "testing", multiple: true, type: "number" },
+            str: { description: "testing", multiple: true, type: "string" },
         },
     } as const;
-    it("explicit multiple", () => {
-        const params = parseParams("", explicitMultipleConfig);
+    it("multiple", () => {
+        const params = parseParams("", multipleFlags);
         const args: undefined = params.args;
         expect(args).toStrictEqual(undefined);
 
@@ -73,10 +58,10 @@ describe("Flag parsing", () => {
         expect(num).toBe(undefined);
         expect(str).toBe(undefined);
     });
-    it("explicit multiple - with flags", () => {
+    it("multiple - with flag input", () => {
         const params = parseParams(
             "--num 11 --str world --num 12 --str !",
-            explicitMultipleConfig,
+            multipleFlags,
         );
         const args: undefined = params.args;
         expect(args).toStrictEqual(undefined);
@@ -89,24 +74,15 @@ describe("Flag parsing", () => {
         expect(str).toStrictEqual(["world", "!"]);
     });
 
-    const explicitTypeWithDefault = {
+    const typeWithDefaultFlags = {
         flags: {
-            bool: {
-                type: "boolean",
-                default: false,
-            },
-            num: {
-                type: "number",
-                default: 10,
-            },
-            str: {
-                type: "string",
-                default: "hello",
-            },
+            bool: { description: "testing", type: "boolean", default: false },
+            num: { description: "testing", type: "number", default: 10 },
+            str: { description: "testing", type: "string", default: "hello" },
         },
     } as const;
-    it("explicit default", () => {
-        const params = parseParams("", explicitTypeWithDefault);
+    it("type default", () => {
+        const params = parseParams("", typeWithDefaultFlags);
         const args: undefined = params.args;
         expect(args).toStrictEqual(undefined);
 
@@ -115,14 +91,14 @@ describe("Flag parsing", () => {
         const num: number = flags.num!; // Use ! to make sure the type is correct
         const str: string = flags.str!; // Use ! to make sure the type is correct
 
-        expect(bool).toBe(explicitTypeWithDefault.flags.bool.default);
-        expect(num).toBe(explicitTypeWithDefault.flags.num.default);
-        expect(str).toBe(explicitTypeWithDefault.flags.str.default);
+        expect(bool).toBe(typeWithDefaultFlags.flags.bool.default);
+        expect(num).toBe(typeWithDefaultFlags.flags.num.default);
+        expect(str).toBe(typeWithDefaultFlags.flags.str.default);
     });
-    it("explicit default - with flags", () => {
+    it("type default - with flag input", () => {
         const params = parseParams(
             "--bool --num 11 --str world",
-            explicitTypeWithDefault,
+            typeWithDefaultFlags,
         );
         const args: undefined = params.args;
         expect(args).toStrictEqual(undefined);
@@ -139,13 +115,13 @@ describe("Flag parsing", () => {
 
     const defaultValueFlags = {
         flags: {
-            bool: false,
-            num: 10,
-            str: "hello",
-            defStr: undefined,
+            bool: { description: "testing", default: false },
+            num: { description: "testing", default: 10 },
+            str: { description: "testing", default: "hello" },
+            defStr: { description: "testing" },
         },
-    };
-    it("default value", () => {
+    } as const;
+    it("default", () => {
         const params = parseParams("", defaultValueFlags);
         const args: undefined = params.args;
         expect(args).toStrictEqual(undefined);
@@ -162,7 +138,7 @@ describe("Flag parsing", () => {
         expect(defStr).toBe(defaultValueFlags.flags.defStr);
     });
 
-    it("default value - with flags", () => {
+    it("default - with flag input", () => {
         const params = parseParams(
             "--bool --num 11 --str world --defStr default",
             defaultValueFlags,
@@ -181,14 +157,11 @@ describe("Flag parsing", () => {
         expect(str).toBe("world");
         expect(defStr).toBe("default");
     });
-
     const defaultMultipleConfig = {
         flags: {
-            num: {
-                multiple: true,
-                default: [10, 11],
-            },
+            num: { description: "testing", multiple: true, default: [10, 11] },
             str: {
+                description: "testing",
                 multiple: true,
                 default: ["hello", "world"],
             },
@@ -206,10 +179,10 @@ describe("Flag parsing", () => {
         expect(num).toStrictEqual(defaultMultipleConfig.flags.num.default);
         expect(str).toStrictEqual(defaultMultipleConfig.flags.str.default);
     });
-    it("default multiple - with flags", () => {
+    it("default multiple - with flag input", () => {
         const params = parseParams(
             "--num 11 --str world --num 12 --str !",
-            explicitMultipleConfig,
+            multipleFlags,
         );
         const args: undefined = params.args;
         expect(args).toStrictEqual(undefined);
@@ -224,21 +197,21 @@ describe("Flag parsing", () => {
 
     it("Invalid flag", () => {
         try {
-            parseParams("--invalid", explicitConfig);
+            parseParams("--invalid", typeFlags);
         } catch (e: any) {
             expect(e.message).toStrictEqual("Invalid flag '--invalid'");
         }
     });
     it("Missing value", () => {
         try {
-            parseParams("--num", explicitConfig);
+            parseParams("--num", typeFlags);
         } catch (e: any) {
             expect(e.message).toStrictEqual("Missing value for flag '--num'");
         }
     });
     it("Invalid value", () => {
         try {
-            parseParams("--num abc", explicitConfig);
+            parseParams("--num abc", typeFlags);
         } catch (e: any) {
             expect(e.message).toStrictEqual(
                 "Invalid number value 'abc' for flag '--num'",
@@ -247,7 +220,7 @@ describe("Flag parsing", () => {
     });
     it("Invalid alias", () => {
         try {
-            parseParams("-n abc", explicitConfig);
+            parseParams("-n abc", typeFlags);
         } catch (e: any) {
             expect(e.message).toStrictEqual("Invalid flag '-n'");
         }
