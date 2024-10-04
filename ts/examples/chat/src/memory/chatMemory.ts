@@ -15,15 +15,15 @@ import {
     runConsole,
 } from "interactive-app";
 import {
-    SemanticIndex,
     asyncArray,
+    collections,
     dateTime,
     getFileName,
     isDirectoryPath,
     readAllText,
 } from "typeagent";
 import chalk, { ChalkInstance } from "chalk";
-import { PlayPrinter } from "./chatMemoryPrinter.js";
+import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
 import { timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
@@ -35,6 +35,7 @@ import {
     argPause,
     argSourceFile,
     argSourceFileOrFolder,
+    getMessages,
 } from "./common.js";
 
 export type ChatContext = {
@@ -239,7 +240,7 @@ export async function loadConversation(
 
 export async function runChatMemory(): Promise<void> {
     let context = await createChatMemoryContext();
-    let printer: PlayPrinter;
+    let printer: ChatMemoryPrinter;
     const handlers: Record<string, CommandHandler> = {
         importPlay,
         importTranscript,
@@ -267,7 +268,7 @@ export async function runChatMemory(): Promise<void> {
     });
 
     function onStart(io: InteractiveIo): void {
-        printer = new PlayPrinter(io);
+        printer = new ChatMemoryPrinter(io);
     }
 
     async function inputHandler(
@@ -460,7 +461,7 @@ export async function runChatMemory(): Promise<void> {
         }
         if (isDirectoryPath(sourcePath)) {
             if (namedArgs.clean) {
-                await context.emailMemory.clear();
+                await context.emailMemory.clear(true);
             }
             const emails = await knowLib.email.loadEmailFolder(
                 sourcePath,
@@ -557,25 +558,21 @@ export async function runChatMemory(): Promise<void> {
             },
         );
 
-        let messages = namedArgs.maxTurns
-            ? await asyncArray.toArray(
-                  context.conversation.messages.entries(),
-                  namedArgs.maxTurns,
-              )
-            : context.conversation.messages.entries();
-        let count = 0;
+        let messages = await getMessages(
+            context.conversationManager,
+            namedArgs.maxTurns,
+        );
         await asyncArray.forEachBatch(
             messages,
             namedArgs.concurrency,
             (batch) => {
-                printer.writeBatchProgress(batch);
+                printer.writeBatchProgress(batch, "Messages");
                 return batch.value.map((message) =>
                     extractor.extract(message.value),
                 );
             },
             (batch, knowledgeResults) => {
                 for (let k = 0; k < knowledgeResults.length; ++k) {
-                    ++count;
                     const knowledge = knowledgeResults[k];
                     if (knowledge) {
                         printer.writeListInColor(
@@ -592,29 +589,13 @@ export async function runChatMemory(): Promise<void> {
 
     function buildIndexDef(): CommandMetadata {
         return {
-            description: "Index knowledge",
+            description: "Index all messages in the current conversation",
             options: {
                 concurrency: argConcurrency(4),
-                mergeWindow: {
-                    type: "number",
-                    defaultValue: 8,
-                },
-                maxTurns: {
-                    type: "number",
-                    defaultValue: 10,
-                    description: "Number of turns to run",
-                },
+                mergeWindow: argNum("Topic merge window size", 8),
+                maxTurns: argNum("Number of turns to run", 10),
                 pause: argPause(),
-                messages: {
-                    type: "boolean",
-                    defaultValue: true,
-                    description: "Index messages",
-                },
-                actions: {
-                    type: "boolean",
-                    defaultValue: true,
-                    description: "Index actions",
-                },
+                actions: argBool("Index actions", true),
             },
         };
     }
@@ -627,100 +608,52 @@ export async function runChatMemory(): Promise<void> {
 
         let messages: knowLib.SourceTextBlock[] = await asyncArray.toArray(
             context.conversation.messages.entries(),
+            namedArgs.maxTurns,
         );
-        messages = messages.slice(0, namedArgs.maxTurns);
 
-        let messageIndex: SemanticIndex<any> | undefined;
-        let topicMerger: conversation.TopicMerger | undefined;
-        let knowledgeExtractor: conversation.KnowledgeExtractor | undefined;
-        if (namedArgs.messages) {
-            await context.conversation.removeMessageIndex();
-            messageIndex = await context.conversation.getMessageIndex();
-        }
-        await context.conversation.removeKnowledge();
-        topicMerger = await conversation.createConversationTopicMerger(
-            context.chatModel,
-            context.conversation,
-            1,
-            namedArgs.mergeWindow,
-        );
-        knowledgeExtractor = conversation.createKnowledgeExtractor(
-            context.chatModel,
-            {
-                maxContextLength: context.maxCharsPerChunk,
-                includeActions: namedArgs.actions,
-                mergeActionKnowledge: true,
-            },
-        );
-        context.conversationSettings.indexActions = true; //namedArgs.actions;
+        const cm = context.conversationManager;
+        await cm.clear(false);
+
+        let messageIndex = await context.conversation.getMessageIndex();
+        cm.topicMerger.mergeWindow = namedArgs.mergeWindow;
+
         let count = 0;
         const concurrency = namedArgs.concurrency;
-        try {
-            for (let i = 0; i < messages.length; i += concurrency) {
-                const slice = messages.slice(i, i + concurrency);
-                if (slice.length === 0) {
-                    break;
+        for (const slice of collections.slices(messages, concurrency)) {
+            printer.writeBatchProgress(slice, "Indexing messages");
+            await asyncArray.mapAsync(slice.value, concurrency, (m) =>
+                messageIndex.put(m.value, m.blockId),
+            );
+            printer.writeBatchProgress(slice, "Extracting knowledge");
+            const knowledgeResults = await conversation.extractKnowledge(
+                cm.knowledgeExtractor,
+                slice.value,
+                concurrency,
+            );
+            for (const knowledgeResult of knowledgeResults) {
+                ++count;
+                printer.writeProgress(count, messages.length);
+                if (!knowledgeResult) {
+                    continue;
                 }
-                if (messageIndex) {
-                    printer.writeInColor(
-                        chalk.gray,
-                        `[Indexing messages ${i + 1} to ${i + slice.length}]`,
+                const [message, knowledge] = knowledgeResult;
+                await writeKnowledgeResult(message, knowledge);
+                const knowledgeIds =
+                    await cm.conversation.addKnowledgeForMessage(
+                        message,
+                        knowledge,
                     );
-                    await asyncArray.mapAsync(slice, concurrency, (m) =>
-                        messageIndex.put(m.value, m.blockId),
-                    );
+                const mergedTopic = await cm.topicMerger.next(true, true);
+                if (mergedTopic) {
+                    printer.writeTitle("Merged Topic:");
+                    printer.writeTemporalBlock(chalk.blueBright, mergedTopic);
                 }
-                if (knowledgeExtractor) {
-                    printer.writeInColor(
-                        chalk.gray,
-                        `[Extracting knowledge ${i + 1} to ${i + slice.length}]`,
-                    );
-                    const knowledgeResults = await asyncArray.mapAsync(
-                        slice,
-                        namedArgs.concurrency,
-                        (message) =>
-                            conversation.extractKnowledgeFromBlock(
-                                knowledgeExtractor,
-                                message,
-                            ),
-                    );
-                    for (const knowledgeResult of knowledgeResults) {
-                        ++count;
-                        printer.writeLine(
-                            chalk.green(`[${count} / ${messages.length}]`),
-                        );
-                        if (knowledgeResult) {
-                            const [message, knowledge] = knowledgeResult;
-                            await writeKnowledgeResult(message, knowledge);
-                            const knowledgeIds =
-                                await context.conversation.addKnowledgeForMessage(
-                                    message,
-                                    knowledge,
-                                );
-                            if (topicMerger) {
-                                const mergedTopic = await topicMerger.next(
-                                    true,
-                                    true,
-                                );
-                                if (mergedTopic) {
-                                    printer.writeTitle("Merged Topic:");
-                                    printer.writeTemporalBlock(
-                                        chalk.blueBright,
-                                        mergedTopic,
-                                    );
-                                }
-                            }
-                            await context.conversation.addKnowledgeToIndex(
-                                knowledge,
-                                knowledgeIds,
-                            );
-                            printer.writeLine();
-                        }
-                    }
-                }
+                await cm.conversation.addKnowledgeToIndex(
+                    knowledge,
+                    knowledgeIds,
+                );
+                printer.writeLine();
             }
-        } catch (error) {
-            printer.writeError(`${error}`);
         }
     }
 

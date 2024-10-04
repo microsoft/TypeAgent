@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { collections, loadSchema } from "typeagent";
+import { asyncArray, collections, loadSchema } from "typeagent";
 import {
     Action,
     ActionParam,
@@ -184,18 +184,14 @@ export async function extractKnowledgeFromBlock(
     return [message, { entities, topics, actions }];
 }
 
-export async function* extractKnowledge(
-    model: TypeChatLanguageModel,
-    messages: AsyncIterableIterator<SourceTextBlock>,
-    settings: KnowledgeExtractorSettings,
-): AsyncIterableIterator<[SourceTextBlock, ExtractedKnowledge]> {
-    const extractor = createKnowledgeExtractor(model, settings);
-    for await (const message of messages) {
-        const result = await extractKnowledgeFromBlock(extractor, message);
-        if (result) {
-            yield result;
-        }
-    }
+export async function extractKnowledge(
+    extractor: KnowledgeExtractor,
+    blocks: SourceTextBlock[],
+    concurrency: number,
+) {
+    return asyncArray.mapAsync(blocks, concurrency, (message) =>
+        extractKnowledgeFromBlock(extractor, message),
+    );
 }
 
 export const NoEntityName = "none";

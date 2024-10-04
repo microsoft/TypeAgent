@@ -2,6 +2,17 @@
 // Licensed under the MIT License.
 
 import { ArgDef } from "interactive-app";
+import { conversation } from "knowledge-processor";
+import { asyncArray } from "typeagent";
+
+export async function getMessages(
+    cm: conversation.ConversationManager,
+    maxTurns?: number | undefined,
+) {
+    return maxTurns !== undefined && maxTurns > 0
+        ? await asyncArray.toArray(cm.conversation.messages.entries(), maxTurns)
+        : cm.conversation.messages.entries();
+}
 
 export function argSourceFile(defaultValue?: string | undefined): ArgDef {
     return {

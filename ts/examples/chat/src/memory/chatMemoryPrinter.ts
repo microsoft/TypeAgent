@@ -8,7 +8,7 @@ import { collections, dateTime } from "typeagent";
 import { ChatPrinter } from "../chatPrinter.js";
 import chalk, { ChalkInstance } from "chalk";
 
-export class PlayPrinter extends ChatPrinter {
+export class ChatMemoryPrinter extends ChatPrinter {
     constructor(io: InteractiveIo) {
         super(io);
     }
@@ -46,11 +46,23 @@ export class PlayPrinter extends ChatPrinter {
         }
     }
 
-    public writeBatchProgress(batch: collections.Slice): void {
-        this.writeInColor(
-            chalk.gray,
-            `${batch.startAt + 1} to ${batch.startAt + batch.value.length}`,
-        );
+    public writeProgress(
+        index: number,
+        count: number,
+        label?: string | undefined,
+    ): void {
+        label = label ? label + " " : "";
+        const text = `[${label}${index + 1} to ${index + count}]`;
+        this.writeInColor(chalk.green, text);
+    }
+
+    public writeBatchProgress(
+        batch: collections.Slice,
+        label?: string | undefined,
+    ): void {
+        label = label ? label + " " : "";
+        const text = `[${label}${batch.startAt + 1} to ${batch.startAt + batch.value.length}]`;
+        this.writeInColor(chalk.gray, text);
     }
 
     public writeTemporalBlock(

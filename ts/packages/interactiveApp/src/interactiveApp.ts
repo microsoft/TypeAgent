@@ -334,6 +334,13 @@ function makeArg(
     return arg;
 }
 
+export function arg(
+    description: string,
+    defaultValue?: string | undefined,
+): ArgDef {
+    return makeArg(description, "string", defaultValue);
+}
+
 export function argBool(
     description: string,
     defaultValue?: boolean | undefined,
