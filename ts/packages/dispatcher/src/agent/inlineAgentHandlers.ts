@@ -123,12 +123,20 @@ function printUsage(
     }, context);
 }
 
-class HelpCommandHandler implements CommandHandlerNoParse {
+class HelpCommandHandler implements CommandHandler {
     public readonly description = "Show help";
-    public readonly parameters = true;
+    public readonly parameters = {
+        args: {
+            command: {
+                description: "command to get help for",
+                implicitQuotes: true,
+                optional: true,
+            },
+        },
+    } as const;
     public async run(
         context: ActionContext<CommandHandlerContext>,
-        request: string,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const printHandleTable = (
@@ -172,17 +180,20 @@ class HelpCommandHandler implements CommandHandlerNoParse {
                 }
             }, context);
         };
-        if (request === "") {
+        if (params.args.command === undefined) {
             printHandleTable(systemHandlers, undefined);
         } else {
-            const result = await resolveCommand(request, systemContext);
+            const result = await resolveCommand(
+                params.args.command,
+                systemContext,
+            );
 
             const command = getParsedCommand(result);
             if (result.descriptor !== undefined) {
                 printUsage(command, result.descriptor, context);
             } else {
                 if (result.table === undefined) {
-                    throw new Error(`Unknown command '${request}'`);
+                    throw new Error(`Unknown command '${params.args.command}'`);
                 }
                 if (result.suffix.length !== 0) {
                     displayError(

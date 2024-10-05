@@ -143,6 +143,17 @@ export function splitParams(params: string) {
     return split.map((s) => s.replace(/^"|"$/g, ""));
 }
 
+function stripQuoteFromTerm(term: string) {
+    if (term.length !== 0 && (term[0] === "'" || term[0] === '"')) {
+        const lastChar = term[term.length - 1];
+        if (term.length === 1 || lastChar !== term[0]) {
+            return term.substring(1);
+        }
+        return term.substring(1, term.length - 1);
+    }
+    return term;
+}
+
 export function parseParams<T extends ParameterDefinitions>(
     parameters: string,
     paramDefs: T,
@@ -179,17 +190,6 @@ export function parseParams<T extends ParameterDefinitions>(
         }
         return term;
     };
-    const stripQuoteFromTerm = (term: string) => {
-        if (term.length !== 0 && (term[0] === "'" || term[0] === '"')) {
-            const lastChar = term[term.length - 1];
-            if (term.length === 1 || lastChar !== term[0]) {
-                return term.substring(1);
-            }
-            return term.substring(1, term.length - 1);
-        }
-        return term;
-    };
-
     const flagDefs = paramDefs.flags;
     const argDefs =
         paramDefs.args !== undefined
@@ -199,6 +199,8 @@ export function parseParams<T extends ParameterDefinitions>(
     const parsedArgs: any = {};
     let argDefIndex = 0;
     while (true) {
+        // Save the rest for implicit quote arguments;
+        const rest = curr;
         const next = nextTerm();
         if (next === undefined) {
             break;
@@ -239,20 +241,20 @@ export function parseParams<T extends ParameterDefinitions>(
             if (next.startsWith("-")) {
                 throw new Error(`Invalid flag '${next}'`);
             }
-            const arg = next;
-            if (arg === undefined) {
-                break;
-            }
             if (argDefs === undefined || argDefIndex >= argDefs.length) {
-                throw new Error(`Too many arguments '${arg}'`);
+                throw new Error(`Too many arguments '${next}'`);
             }
             const [name, argDef] = argDefs[argDefIndex];
 
-            const stripped = stripQuoteFromTerm(arg);
+            let arg = stripQuoteFromTerm(next);
+            if (argDef.implicitQuotes === true && arg === next) {
+                arg = rest; // take the rest of the parameters
+                curr = "";
+            }
             const argValue =
                 argDef.type === "number"
-                    ? parseIntParameter(stripped, "argument", name)
-                    : stripped;
+                    ? parseIntParameter(arg, "argument", name)
+                    : arg;
             if (argDef.multiple !== true) {
                 argDefIndex++;
                 parsedArgs[name] = argValue;

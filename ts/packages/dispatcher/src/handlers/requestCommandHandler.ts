@@ -41,7 +41,10 @@ import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incremen
 import ExifReader from "exifreader";
 import { Result } from "typechat";
 import { ProfileNames } from "../utils/profileNames.js";
-import { CommandHandlerNoParse } from "@typeagent/agent-sdk/helpers/command";
+import {
+    CommandHandler,
+    ParsedCommandParams,
+} from "@typeagent/agent-sdk/helpers/command";
 import { ActionContext } from "@typeagent/agent-sdk";
 import {
     displayError,
@@ -708,12 +711,19 @@ async function requestExplain(
     }
 }
 
-export class RequestCommandHandler implements CommandHandlerNoParse {
+export class RequestCommandHandler implements CommandHandler {
     public readonly description = "Translate and explain a request";
-    public readonly parameters = true;
+    public readonly parameters = {
+        args: {
+            request: {
+                description: "Request to translate",
+                implicitQuotes: true,
+            },
+        },
+    } as const;
     public async run(
         context: ActionContext<CommandHandlerContext>,
-        request: string,
+        params: ParsedCommandParams<typeof this.parameters>,
         attachments?: string[],
     ) {
         const systemContext = context.sessionContext.agentContext;
@@ -722,6 +732,7 @@ export class RequestCommandHandler implements CommandHandlerNoParse {
         );
         try {
             // Don't handle the request if it contains the separator
+            const request = params.args.request;
             if (request.includes(RequestAction.Separator)) {
                 throw new Error(
                     `Invalid translation request with translation separator '${RequestAction.Separator}'.  Use @explain if you want to explain a translation.`,
