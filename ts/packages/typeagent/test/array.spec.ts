@@ -74,7 +74,18 @@ describe("collections.array", () => {
         range = collections.getInRange(items, 20, 20, cmp);
         checkRange(range, 1 * dupeCount, 20);
     });
-
+    test("concatArray", () => {
+        const a = [1, 2, 3];
+        const b = [4, 5];
+        const c = undefined;
+        const d = undefined;
+        let concat = collections.concatArrays(a, b);
+        expect(concat).toHaveLength(a.length + b.length);
+        concat = collections.concatArrays(b, c);
+        expect(concat).toHaveLength(b.length);
+        concat = collections.concatArrays(c, d);
+        expect(concat).toHaveLength(0);
+    });
     function cmp(x: number, y: number) {
         return x - y;
     }
