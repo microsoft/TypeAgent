@@ -142,14 +142,10 @@ export async function createConversationManager(
     existingConversation?: Conversation | undefined,
     topicMerger?: TopicMerger | undefined,
 ): Promise<ConversationManager<string, string>> {
-    const embeddingModel = createEmbeddingCache(
-        openai.createEmbeddingModel(),
-        64,
-    );
+    const conversationSettings = createConversationSettings();
     const knowledgeModel = openai.createChatModel();
     const answerModel = openai.createChatModel();
 
-    const conversationSettings = defaultConversationSettings();
     const folderSettings = defaultFolderSettings();
     const topicMergeWindowSize = 4;
     const maxCharsPerChunk = 2048;
@@ -321,7 +317,14 @@ export async function createConversationManager(
         );
     }
 
-    function defaultConversationSettings(): ConversationSettings {
+    function createConversationSettings(): ConversationSettings {
+        if (existingConversation) {
+            return existingConversation.settings;
+        }
+        const embeddingModel = createEmbeddingCache(
+            openai.createEmbeddingModel(),
+            64,
+        );
         return {
             indexSettings: {
                 caseSensitive: false,

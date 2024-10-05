@@ -119,6 +119,7 @@ export interface Conversation<
     TEntityId = any,
     TActionId = any,
 > {
+    readonly settings: ConversationSettings;
     readonly messages: TextStore<MessageId>;
     readonly knowledge: ObjectFolder<ExtractedKnowledge>;
 
@@ -456,6 +457,7 @@ export async function createConversation(
     await load();
 
     return {
+        settings,
         messages,
         knowledge: knowledgeStore,
         getMessageIndex,
@@ -485,6 +487,7 @@ export async function createConversation(
             messageIndex = await createMessageIndex(
                 rootPath,
                 folderSettings,
+                settings.indexSettings.embeddingModel,
                 fSys,
             );
         }
