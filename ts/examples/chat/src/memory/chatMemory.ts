@@ -133,6 +133,7 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
             emailStorePath,
             false,
             emailConversation,
+            knowLib.email.createEmailTopicMerger(),
         ),
     };
     context.searchMemory = await createSearchMemory(context);

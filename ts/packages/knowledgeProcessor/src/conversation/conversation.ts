@@ -22,6 +22,7 @@ import { TextStore, createTextStore } from "../textStore.js";
 import path from "path";
 import {
     TopicIndex,
+    TopicMerger,
     TopicSearchOptions,
     TopicSearchResult,
     createTopicIndex,
@@ -937,7 +938,7 @@ export async function createConversationTopicMerger(
     conversation: Conversation,
     baseTopicLevel: number,
     mergeWindow: number,
-) {
+): Promise<TopicMerger> {
     const baseTopics = await conversation.getTopicsIndex(baseTopicLevel);
     const topLevelTopics = await conversation.getTopicsIndex(
         baseTopicLevel + 1,
