@@ -88,6 +88,15 @@ export class AppAgentManager implements TranslatorConfigProvider {
     >();
     private readonly emojis: Record<string, string> = {};
 
+    public getAppAgentNames(): string[] {
+        return Array.from(this.agents.keys());
+    }
+
+    public getAppAgentDescription(appAgentName: string) {
+        const record = this.getRecord(appAgentName);
+        return record.manifest.description;
+    }
+
     public isTranslatorEnabled(translatorName: string) {
         const appAgentName = getAppAgentName(translatorName);
         const record = this.getRecord(appAgentName);

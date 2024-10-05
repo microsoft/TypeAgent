@@ -19,7 +19,10 @@ import {
     isCommandDescriptorTable,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk/helpers/command";
-import { displayResult } from "@typeagent/agent-sdk/helpers/display";
+import {
+    displayError,
+    displayResult,
+} from "@typeagent/agent-sdk/helpers/display";
 import { executeSessionAction } from "../action/system/sessionActionHandler.js";
 import { executeConfigAction } from "../action/system/configActionHandler.js";
 import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
@@ -36,7 +39,12 @@ import { getRandomCommandHandlers } from "../handlers/randomCommandHandler.js";
 import { getNotifyCommandHandlers } from "../handlers/notifyCommandHandler.js";
 import { processRequests } from "../utils/interactive.js";
 import { getConsoleRequestIO } from "../handlers/common/interactiveIO.js";
-import { getPrompt, processCommandNoLock, resolveCommand } from "../command.js";
+import {
+    getParsedCommand,
+    getPrompt,
+    processCommandNoLock,
+    resolveCommand,
+} from "../command.js";
 import { RequestCommandHandler } from "../handlers/requestCommandHandler.js";
 import { DisplayCommandHandler } from "../handlers/displayCommandHandler.js";
 import chalk from "chalk";
@@ -56,7 +64,7 @@ function executeSystemAction(
 }
 
 function printUsage(
-    command: string[] | undefined,
+    command: string,
     descriptor: CommandDescriptor,
     context: ActionContext<CommandHandlerContext>,
 ) {
@@ -65,7 +73,6 @@ function printUsage(
         return;
     }
 
-    const commandUsage = `@${command?.join(" ") ?? ""}`;
     const paramUsage: string[] = [];
     const paramUsageFull: string[] = [];
     if (typeof descriptor.parameters === "object") {
@@ -102,11 +109,13 @@ function printUsage(
                 }
             }
         }
+    } else if (descriptor.parameters === true) {
+        paramUsage.push("<parameters> ...");
     }
     displayResult((log: (message?: string) => void) => {
-        log(`${commandUsage} - ${descriptor.description}`);
+        log(`@${chalk.bold(command)} - ${descriptor.description}`);
         log();
-        log(`${chalk.bold("Usage")}: ${commandUsage} ${paramUsage.join(" ")}`);
+        log(`${chalk.bold("Usage")}: @${command} ${paramUsage.join(" ")}`);
         if (paramUsageFull.length !== 0) {
             log();
             log(paramUsageFull.join("\n"));
@@ -121,25 +130,37 @@ class HelpCommandHandler implements CommandHandlerNoParse {
         context: ActionContext<CommandHandlerContext>,
         request: string,
     ) {
+        const systemContext = context.sessionContext.agentContext;
         const printHandleTable = (
             table: CommandDescriptorTable,
             command: string | undefined,
         ) => {
             displayResult((log: (message?: string) => void) => {
-                log(`${table.description}`);
+                log(`${chalk.bold(chalk.underline(table.description))}`);
                 log();
                 if (command) {
-                    log(`Usage: @${command} <subcommand> ...`);
-                    log("Subcommands:");
+                    log(`${chalk.bold("Usage")}: @${command} <subcommand> ...`);
+                    log();
+                    log(`${chalk.bold("<subcommand>:")}`);
                 } else {
-                    log("Usage: @<command> ...");
-                    log("Commands:");
-
-                    if (command === undefined) {
-                        log(
-                            `  @<agentName> <subcommand>: command for 'agentName'`,
-                        );
+                    log(
+                        `${chalk.bold("Usage")}: @[<agentName>] <subcommand> ...`,
+                    );
+                    log();
+                    log(`${chalk.bold("<agentNames>:")} (default to 'system')`);
+                    const names = systemContext.agents.getAppAgentNames();
+                    const maxNameLength = Math.max(
+                        ...names.map((name) => name.length),
+                    );
+                    for (const name of systemContext.agents.getAppAgentNames()) {
+                        if (systemContext.agents.isCommandEnabled(name)) {
+                            log(
+                                `  ${name.padEnd(maxNameLength)} : ${systemContext.agents.getAppAgentDescription(name)}`,
+                            );
+                        }
                     }
+                    log();
+                    log(`${chalk.bold("<subcommand>")} ('system')`);
                 }
 
                 for (const name in table.commands) {
@@ -154,29 +175,22 @@ class HelpCommandHandler implements CommandHandlerNoParse {
         if (request === "") {
             printHandleTable(systemHandlers, undefined);
         } else {
-            const result = await resolveCommand(
-                request,
-                context.sessionContext.agentContext,
-            );
+            const result = await resolveCommand(request, systemContext);
 
+            const command = getParsedCommand(result);
             if (result.descriptor !== undefined) {
-                printUsage(result.command, result.descriptor, context);
+                printUsage(command, result.descriptor, context);
             } else {
                 if (result.table === undefined) {
                     throw new Error(`Unknown command '${request}'`);
                 }
-                const command = result.command.join(" ");
-                if (result.args.length === 0) {
-                    printHandleTable(result.table, command);
-                } else {
-                    const subCommand =
-                        command === ""
-                            ? "command of"
-                            : `subcommand of '${result.command.join(" ")}' in`;
-                    throw new Error(
-                        `'${result.args[0]}' is not a ${subCommand} app agent '${result.appAgentName}'`,
+                if (result.suffix.length !== 0) {
+                    displayError(
+                        `ERROR: '${result.suffix}' is not a subcommand for '@${command}'`,
+                        context,
                     );
                 }
+                printHandleTable(result.table, command);
             }
         }
     }

@@ -225,4 +225,12 @@ describe("Flag parsing", () => {
             expect(e.message).toStrictEqual("Invalid flag '-n'");
         }
     });
+
+    it("Duplicate flags", () => {
+        try {
+            parseParams("--num 10 --num 11", typeFlags);
+        } catch (e: any) {
+            expect(e.message).toStrictEqual("Duplicate flag '--num'");
+        }
+    });
 });
