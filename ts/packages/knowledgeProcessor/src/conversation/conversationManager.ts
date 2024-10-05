@@ -33,6 +33,7 @@ import { ConcreteEntity, KnowledgeResponse } from "./knowledgeSchema.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TopicMerger } from "./topics.js";
 import { logError } from "../diagnostics.js";
+import { mergeEntityFacet } from "./entities.js";
 
 export type AddMessageTask = {
     type: "addMessage";
@@ -477,6 +478,11 @@ function mergeEntities(
                 existing.value.type,
                 entity.type,
             )!;
+            if (entity.facets && entity.facets.length > 0) {
+                for (const f of entity.facets) {
+                    mergeEntityFacet(existing.value, f);
+                }
+            }
         } else {
             merged.set(entity.name, ee);
         }
