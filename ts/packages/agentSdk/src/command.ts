@@ -66,6 +66,7 @@ export type ArgDefinition = {
     type?: "string" | "number";
     optional?: boolean;
     multiple?: boolean;
+    implicitQuotes?: boolean; // implicitly assume there are quotes and take the whole string as the argument
 };
 
 export type ArgDefinitions = Record<string, ArgDefinition>;

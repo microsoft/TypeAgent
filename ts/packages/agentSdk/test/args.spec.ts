@@ -113,6 +113,24 @@ describe("Argument parsing", () => {
         expect(single).toBe("hello");
         expect(multiple).toStrictEqual(["world"]);
     });
+
+    const implicitQuoteArgs = {
+        args: {
+            implicit: {
+                description: "implicit",
+                implicitQuotes: true,
+            },
+        },
+    };
+    it("implicit quote arguments", () => {
+        const params = parseParams(" hello   world  ", implicitQuoteArgs);
+        const flags: undefined = params.flags;
+        expect(flags).toBe(undefined);
+
+        const args = params.args;
+        const implicit: string = args.implicit;
+        expect(implicit).toBe("hello   world");
+    });
     it("Too many args", () => {
         try {
             parseParams("10 \t hello   world invalid", parameters);
