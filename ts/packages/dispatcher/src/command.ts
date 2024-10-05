@@ -377,11 +377,12 @@ export async function getPartialCompletion(
         let flagsNeedsValue = false;
         if (result.suffix.length !== 0) {
             const lastArg = result.suffix[result.suffix.length - 1];
-            if (lastArg.startsWith("-")) {
-                const def = resolveFlag(flags, lastArg);
-                if (def !== undefined && getFlagType(def) !== "boolean") {
-                    flagsNeedsValue = true;
-                }
+            const resolvedFlag = resolveFlag(flags, lastArg);
+            if (
+                resolvedFlag !== undefined &&
+                getFlagType(resolvedFlag[1]) !== "boolean"
+            ) {
+                flagsNeedsValue = true;
             }
         }
         if (!flagsNeedsValue) {

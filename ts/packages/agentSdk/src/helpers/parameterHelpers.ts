@@ -108,19 +108,18 @@ export function getFlagType(def: FlagDefinition) {
 export function resolveFlag(
     definitions: FlagDefinitions,
     flag: string,
-): FlagDefinition | undefined {
+): [string, FlagDefinition] | undefined {
     if (flag.startsWith("--")) {
         const key = flag.substring(2);
         const def = definitions[key];
-        if (def === undefined) {
-            return def;
-        }
-        return def;
+        return def !== undefined ? [key, def] : undefined;
     }
-    const alias = flag.substring(1);
-    for (const def of Object.values(definitions)) {
-        if (def?.char === alias) {
-            return def;
+    if (flag.startsWith("-")) {
+        const alias = flag.substring(1);
+        for (const [key, def] of Object.entries(definitions)) {
+            if (def?.char === alias) {
+                return [key, def];
+            }
         }
     }
 }
@@ -145,67 +144,115 @@ export function splitParams(params: string) {
 }
 
 export function parseParams<T extends ParameterDefinitions>(
-    request: string,
-    parameters: T,
+    parameters: string,
+    paramDefs: T,
 ): ParsedCommandParams<T> {
-    const parsedFlags: any = {};
-    const aliases = new Map<string, string>();
-    const valueTypes = new Map<string, "string" | "number" | "boolean">();
-    const allowMultiple = new Map<string, boolean>();
-    const flagDefs = parameters.flags;
-    if (flagDefs) {
-        for (const [key, value] of Object.entries(flagDefs)) {
-            if (value.char !== undefined) {
-                if (aliases.has(value.char)) {
-                    throw new Error(`Duplicate alias: ${value.char}`);
+    let curr = parameters.trim();
+    const nextTerm = () => {
+        if (curr.length === 0) {
+            return undefined;
+        }
+        const quote = curr[0];
+        let term;
+        if (quote === "'" || quote === '"') {
+            let end = 0;
+            while (true) {
+                end = curr.indexOf(quote, end + 1);
+                if (end === -1) {
+                    term = curr;
+                    curr = "";
+                    break;
                 }
-                aliases.set(value.char, key);
+                if (curr[end - 1] !== "\\") {
+                    term = curr.substring(0, end + 1);
+                    curr = curr.substring(end + 1).trim();
+                    break;
+                }
             }
-            parsedFlags[key] = value.default;
-            allowMultiple.set(
-                key,
-                value.multiple ?? Array.isArray(value.default),
-            );
-            valueTypes.set(key, value.type ?? getTypeFromValue(value.default));
+        } else {
+            const result = curr.match(/^\s*\S+/);
+            if (result === null || result.length !== 1) {
+                return undefined;
+            }
+            term = result[0].trim();
+            curr = curr.substring(result[0].length).trim();
         }
-    }
+        return term;
+    };
+    const stripQuoteFromTerm = (term: string) => {
+        if (term.length !== 0 && (term[0] === "'" || term[0] === '"')) {
+            const lastChar = term[term.length - 1];
+            if (term.length === 1 || lastChar !== term[0]) {
+                return term.substring(1);
+            }
+            return term.substring(1, term.length - 1);
+        }
+        return term;
+    };
 
-    // split the command line arguments by spaces respecting quotes
-    const strip = splitParams(request);
-    let argDefIndex = 0;
+    const flagDefs = paramDefs.flags;
     const argDefs =
-        parameters.args !== undefined
-            ? Object.entries(parameters.args)
+        paramDefs.args !== undefined
+            ? Object.entries(paramDefs.args)
             : undefined;
+    const parsedFlags: any = {};
     const parsedArgs: any = {};
-    for (let i = 0; i < strip.length; i++) {
-        const arg = strip[i];
-        let flag: string | undefined;
-        if (arg.startsWith("--")) {
-            flag = arg.substring(2);
-            if (flag.endsWith("-")) {
-                flag = flag.substring(0, flag.length - 1);
-            }
-            if (!parsedFlags.hasOwnProperty(flag)) {
-                throw new Error(`Invalid flag '${arg}'`);
-            }
-        } else if (arg.startsWith("-")) {
-            const alias = arg.substring(1);
-            flag = aliases.get(alias);
-            if (flag === undefined) {
-                throw new Error(`Invalid flag '${arg}'`);
-            }
+    let argDefIndex = 0;
+    while (true) {
+        const next = nextTerm();
+        if (next === undefined) {
+            break;
         }
-
-        if (flag === undefined) {
+        const flagInfo = flagDefs ? resolveFlag(flagDefs, next) : undefined;
+        if (flagInfo !== undefined) {
+            const [name, flag] = flagInfo;
+            const valueType = getFlagType(flag);
+            let value: FlagDefaultValueType;
+            if (valueType === "boolean") {
+                value = true;
+            } else {
+                const valueStr = nextTerm();
+                if (valueStr === undefined || valueStr.startsWith("--")) {
+                    throw new Error(`Missing value for flag '${next}'`);
+                }
+                const stripped = stripQuoteFromTerm(valueStr);
+                if (valueType === "number") {
+                    value = parseIntParameter(stripped, "flag", next);
+                } else {
+                    value = stripped;
+                }
+            }
+            const multiple = getFlagMultiple(flag);
+            if (multiple) {
+                if (parsedFlags[name] === undefined) {
+                    parsedFlags[name] = [value];
+                } else {
+                    parsedFlags[name].push(value);
+                }
+            } else {
+                if (parsedFlags[name] !== undefined) {
+                    throw new Error(`Duplicate flag '${next}'`);
+                }
+                parsedFlags[name] = value;
+            }
+        } else {
+            if (next.startsWith("-")) {
+                throw new Error(`Invalid flag '${next}'`);
+            }
+            const arg = next;
+            if (arg === undefined) {
+                break;
+            }
             if (argDefs === undefined || argDefIndex >= argDefs.length) {
                 throw new Error(`Too many arguments '${arg}'`);
             }
             const [name, argDef] = argDefs[argDefIndex];
+
+            const stripped = stripQuoteFromTerm(arg);
             const argValue =
                 argDef.type === "number"
-                    ? parseIntParameter(arg, "argument", name)
-                    : arg;
+                    ? parseIntParameter(stripped, "argument", name)
+                    : stripped;
             if (argDef.multiple !== true) {
                 argDefIndex++;
                 parsedArgs[name] = argValue;
@@ -217,37 +264,22 @@ export function parseParams<T extends ParameterDefinitions>(
                     parsedArgs[name].push(argValue);
                 }
             }
-            continue;
-        }
-
-        const valueType = valueTypes.get(flag);
-        let value: FlagDefaultValueType;
-        if (valueType === "boolean") {
-            value = true;
-        } else {
-            const valueStr = i === strip.length - 1 ? undefined : strip[++i];
-            if (valueStr === undefined || valueStr.startsWith("--")) {
-                throw new Error(`Missing value for flag '${arg}'`);
-            }
-            if (valueType === "number") {
-                value = parseIntParameter(valueStr, "flag", arg);
-            } else {
-                value = valueStr;
-            }
-        }
-        const multiple = allowMultiple.get(flag);
-        if (multiple) {
-            if (parsedFlags[flag] === undefined) {
-                parsedFlags[flag] = [value];
-            } else {
-                parsedFlags[flag].push(value);
-            }
-        } else {
-            parsedFlags[flag] = value;
         }
     }
 
+    if (flagDefs !== undefined) {
+        // Fill in default values
+        for (const [name, flagDef] of Object.entries(flagDefs)) {
+            if (
+                parsedFlags[name] === undefined &&
+                flagDef.default !== undefined
+            ) {
+                parsedFlags[name] = flagDef.default;
+            }
+        }
+    }
     if (argDefs !== undefined) {
+        // Detect missing arguments
         if (argDefIndex !== argDefs.length) {
             for (let i = argDefIndex; i < argDefs.length; i++) {
                 const [name, argDef] = argDefs[i];
