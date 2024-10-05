@@ -708,7 +708,7 @@ export async function runChatMemory(): Promise<void> {
         }
 
         for await (const topic of index.entries()) {
-            await writeExtractedTopic(topic);
+            await writeExtractedTopic(topic, namedArgs.showMessages);
         }
     }
 
@@ -1388,9 +1388,14 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    async function writeExtractedTopic(topic: knowLib.TextBlock) {
-        const messages = await loadMessages(topic.sourceIds);
-        printer.writeTemporalBlocks(chalk.greenBright, messages);
+    async function writeExtractedTopic(
+        topic: knowLib.TextBlock,
+        showMessages: boolean,
+    ) {
+        if (showMessages) {
+            const messages = await loadMessages(topic.sourceIds);
+            printer.writeTemporalBlocks(chalk.greenBright, messages);
+        }
         printer.writeLine(topic.value);
         printer.writeLine();
     }

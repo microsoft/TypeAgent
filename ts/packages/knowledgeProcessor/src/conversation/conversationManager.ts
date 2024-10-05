@@ -456,7 +456,8 @@ function mergeKnowledge(
     if (y.entities && y.entities.length > 0) {
         mergeEntities(y.entities, merged);
     }
-    let topics = unionArrays(x.topics, y.topics);
+
+    let topics = collections.concatArrays(x.topics, y.topics);
     return {
         entities: [...merged.values()],
         topics,

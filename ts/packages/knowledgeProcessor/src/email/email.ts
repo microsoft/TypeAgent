@@ -43,7 +43,7 @@ export function emailAddressToEntity(
     }
     const entity: ConcreteEntity = {
         name: "",
-        type: ["email_address"],
+        type: ["email", "email_address"],
         facets: [{ name: "role", value: role }],
     };
     if (emailAddress.address && emailAddress.displayName) {

@@ -177,8 +177,8 @@ export function unionArrays<T = any>(
     x: T[] | undefined,
     y: T[] | undefined,
 ): T[] | undefined {
-    if (x && x.length > 0) {
-        if (y && y.length > 0) {
+    if (x) {
+        if (y) {
             return [...union(x.values(), y.values())];
         }
         return x;
