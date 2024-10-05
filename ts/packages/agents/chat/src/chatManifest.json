@@ -1,5 +1,6 @@
 {
   "emojiChar": "💬",
+  "description": "Agent for conversation and information lookup",
   "schema": {
     "description": "Chat agent that helps you with general conversation and answering questions by looking up answers in past conversations or the internet.",
     "schemaFile": "./chatResponseActionSchema.ts",

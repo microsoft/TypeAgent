@@ -11,6 +11,7 @@ import { Profiler } from "./profiler.js";
 //==============================================================================
 export type AppAgentManifest = {
     emojiChar: string;
+    description: string;
     commandDefaultEnabled?: boolean;
 } & TranslatorDefinition;
 

@@ -29,6 +29,7 @@ type ShellContext = {
 
 const config: AppAgentManifest = {
     emojiChar: "🐚",
+    description: "Shell",
 };
 
 class ShellShowSettingsCommandHandler implements CommandHandlerNoParams {
