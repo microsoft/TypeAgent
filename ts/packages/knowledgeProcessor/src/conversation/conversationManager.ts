@@ -409,10 +409,10 @@ async function extractKnowledgeAndIndex(
     }
     if (extractedKnowledge) {
         if (knownKnowledge) {
-            const merged = new Map<string, ExtractedEntity>();
-            mergeEntities(extractedKnowledge.entities, merged);
-            mergeEntities(knownKnowledge.entities, merged);
-            extractedKnowledge.entities = [...merged.values()];
+            extractedKnowledge = mergeKnowledge(
+                extractedKnowledge,
+                knownKnowledge,
+            );
         }
     } else {
         extractedKnowledge = knownKnowledge;
@@ -444,24 +444,41 @@ async function indexKnowledge(
     await conversation.addKnowledgeToIndex(knowledge, knowledgeIds);
 }
 
+function mergeKnowledge(
+    x: ExtractedKnowledge,
+    y: ExtractedKnowledge,
+): ExtractedKnowledge {
+    const merged = new Map<string, ExtractedEntity>();
+    if (x.entities && x.entities.length > 0) {
+        mergeEntities(x.entities, merged);
+    }
+    if (y.entities && y.entities.length > 0) {
+        mergeEntities(y.entities, merged);
+    }
+    let topics = unionArrays(x.topics, y.topics);
+    return {
+        entities: [...merged.values()],
+        topics,
+        actions: x.actions,
+    };
+}
+
 function mergeEntities(
-    entities: ExtractedEntity[] | undefined,
+    entities: ExtractedEntity[],
     merged: Map<string, ExtractedEntity>,
 ): void {
-    if (entities) {
-        for (const ee of entities) {
-            const entity = ee.value;
-            entity.name = entity.name.toLowerCase();
-            collections.lowerAndSort(entity.type);
-            const existing = merged.get(entity.name);
-            if (existing) {
-                existing.value.type = unionArrays(
-                    existing.value.type,
-                    entity.type,
-                )!;
-            } else {
-                merged.set(entity.name, ee);
-            }
+    for (const ee of entities) {
+        const entity = ee.value;
+        entity.name = entity.name.toLowerCase();
+        collections.lowerAndSort(entity.type);
+        const existing = merged.get(entity.name);
+        if (existing) {
+            existing.value.type = unionArrays(
+                existing.value.type,
+                entity.type,
+            )!;
+        } else {
+            merged.set(entity.name, ee);
         }
     }
 }
