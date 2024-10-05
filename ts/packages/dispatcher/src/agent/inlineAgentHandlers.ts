@@ -12,7 +12,6 @@ import {
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
-    CommandHandlerNoParse,
     CommandHandlerTable,
     getCommandInterface,
     getFlagType,
