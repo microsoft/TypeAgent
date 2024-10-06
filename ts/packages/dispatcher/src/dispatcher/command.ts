@@ -28,6 +28,7 @@ import {
 import { RequestMetrics } from "../utils/metrics.js";
 import { PartialCompletionResult } from "./dispatcher.js";
 import { parseParams } from "./parameters.js";
+import { getHandlerTableUsage, getUsage } from "./commandHelp.js";
 
 const debugCommand = registerDebug("typeagent:dispatcher:command");
 
@@ -162,7 +163,10 @@ async function parseCommand(
                 params,
             };
         } catch (e: any) {
-            throw new Error(`Error parsing parameters: ${e.message}. `);
+            const command = getParsedCommand(result);
+            throw new Error(
+                `${e.message}\n\n${chalk.black(getUsage(command, result.descriptor))}`,
+            );
         }
     }
     const command = getParsedCommand(result);
@@ -170,12 +174,14 @@ async function parseCommand(
     if (result.table === undefined) {
         throw new Error(`Unknown command '${input}'`);
     }
-    if (result.suffix.length === 0) {
-        throw new Error(
-            `'@${command}' requires a subcommand. Try '@help ${command}' for the list of sub commands.`,
-        );
-    }
-    throw new Error(`'${result.suffix}' is not a subcommand for '@${command}'`);
+    const message =
+        result.suffix.length === 0
+            ? `@${command}' requires a subcommand.`
+            : `'${result.suffix}' is not a subcommand for '@${command}'`;
+
+    throw new Error(
+        `${message}\n\n${chalk.black(getHandlerTableUsage(result.table, command, context))}`,
+    );
 }
 
 export function getParsedCommand(result: ResolveCommandResult) {
