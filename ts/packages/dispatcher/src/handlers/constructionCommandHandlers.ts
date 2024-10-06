@@ -27,9 +27,8 @@ import {
     CommandHandler,
     CommandHandlerNoParams,
     CommandHandlerTable,
-    ParsedCommandParams,
 } from "@typeagent/agent-sdk/helpers/command";
-import { ActionContext } from "@typeagent/agent-sdk";
+import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 
 async function checkRecreateStore(
     constructionStore: ConstructionStore,

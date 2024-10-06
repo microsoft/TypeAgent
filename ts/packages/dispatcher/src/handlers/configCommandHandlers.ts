@@ -17,11 +17,10 @@ import { getChatModelNames, simpleStarRegex } from "common-utils";
 import { openai as ai } from "aiclient";
 import { SessionConfig } from "../session/session.js";
 import chalk from "chalk";
-import { ActionContext } from "@typeagent/agent-sdk";
+import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
     CommandHandlerTable,
-    ParsedCommandParams,
 } from "@typeagent/agent-sdk/helpers/command";
 import {
     displayResult,
@@ -41,13 +40,6 @@ const AgentToggleDescription = [
     "agent actions",
     "agent commands",
     "agents",
-] as const;
-
-const AgentToggleCommand = [
-    "translator",
-    "action",
-    "command",
-    "agent",
 ] as const;
 
 function getAgentToggleOptions(

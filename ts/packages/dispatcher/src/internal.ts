@@ -13,7 +13,7 @@ export {
     getSettingSummary,
     getPrompt,
     getTranslatorNameToEmojiMap,
-} from "./command.js";
+} from "./dispatcher/command.js";
 export { processRequests } from "./utils/interactive.js";
 export { getCacheFactory } from "./utils/cacheFactory.js";
 export {

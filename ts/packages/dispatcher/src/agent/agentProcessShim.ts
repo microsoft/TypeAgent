@@ -11,6 +11,8 @@ import {
     DisplayContent,
     DisplayAppendMode,
     CommandDescriptors,
+    ParsedCommandParams,
+    ParameterDefinitions,
 } from "@typeagent/agent-sdk";
 import {
     AgentCallFunctions,
@@ -326,14 +328,14 @@ export async function createAgentProcessShim(
         },
         executeCommand(
             commands: string[],
-            args: string,
+            params: ParsedCommandParams<ParameterDefinitions> | undefined,
             context: ActionContext<ShimContext>,
         ) {
             return withActionContextAsync(context, (contextParams) =>
                 rpc.invoke("executeCommand", {
                     ...contextParams,
                     commands,
-                    args,
+                    params,
                 }),
             );
         },

@@ -3,11 +3,8 @@
 
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import registerDebug from "debug";
-import { ActionContext } from "@typeagent/agent-sdk";
-import {
-    CommandHandler,
-    ParsedCommandParams,
-} from "@typeagent/agent-sdk/helpers/command";
+import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { displaySuccess } from "@typeagent/agent-sdk/helpers/display";
 
 function toNamespace(regexp: RegExp) {

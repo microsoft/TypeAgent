@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { parseParams } from "../src/helpers/parameterHelpers.js";
+import { parseParams } from "../src/dispatcher/parameters.js";
 
 describe("Flag parsing", () => {
     const typeFlags = {

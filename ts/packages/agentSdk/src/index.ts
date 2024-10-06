@@ -21,6 +21,12 @@ export {
     CommandDescriptorTable,
     AppAgentCommandInterface,
 } from "./command.js";
+
+export {
+    FlagValueTypes,
+    ParameterDefinitions,
+    ParsedCommandParams,
+} from "./parameters.js";
 export {
     ActionIO,
     DisplayType,

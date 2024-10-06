@@ -1,12 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    CommandHandler,
-    ParsedCommandParams,
-} from "@typeagent/agent-sdk/helpers/command";
+import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../internal.js";
-import { ActionContext } from "@typeagent/agent-sdk";
 
 export class DisplayCommandHandler implements CommandHandler {
     public readonly description = "Send text to display";

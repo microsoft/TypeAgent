@@ -1,15 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
     CommandHandlerNoParams,
     CommandHandlerTable,
-    ParsedCommandParams,
 } from "@typeagent/agent-sdk/helpers/command";
-import { CommandHandlerContext } from "./common/commandHandlerContext.js";
-import { ActionContext } from "@typeagent/agent-sdk";
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
+import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 
 export class HistoryListCommandHandler implements CommandHandlerNoParams {
     public readonly description = "List history";
