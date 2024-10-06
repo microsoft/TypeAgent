@@ -138,11 +138,6 @@ function parseIntParameter(
     return value;
 }
 
-export function splitParams(params: string) {
-    const split = params.match(/"[^"]+"|\S+/g) ?? [];
-    return split.map((s) => s.replace(/^"|"$/g, ""));
-}
-
 function stripQuoteFromTerm(term: string) {
     if (term.length !== 0 && (term[0] === "'" || term[0] === '"')) {
         const lastChar = term[term.length - 1];

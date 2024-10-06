@@ -9,11 +9,7 @@ import {
     CommandHandlerContext,
     changeContextConfig,
 } from "./common/commandHandlerContext.js";
-import {
-    getAppAgentName,
-    TranslatorConfigProvider,
-} from "../translation/agentTranslators.js";
-import { getCacheFactory } from "../utils/cacheFactory.js";
+import { getAppAgentName } from "../translation/agentTranslators.js";
 import { getServiceHostCommandHandlers } from "./serviceHost/serviceHostCommandHandler.js";
 import { getLocalWhisperCommandHandlers } from "./serviceHost/localWhisperCommandHandler.js";
 
@@ -24,10 +20,8 @@ import chalk from "chalk";
 import { ActionContext } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
-    CommandHandlerNoParse,
     CommandHandlerTable,
     ParsedCommandParams,
-    splitParams,
 } from "@typeagent/agent-sdk/helpers/command";
 import {
     displayResult,
@@ -288,17 +282,27 @@ class ConfigModelShowCommandHandler implements CommandHandler {
     }
 }
 
-class ConfigModelSetCommandHandler implements CommandHandlerNoParse {
+class ConfigModelSetCommandHandler implements CommandHandler {
     public readonly description = "Set model";
-    public readonly parameters = true;
+    public readonly parameters = {
+        args: {
+            kindOrModel: {
+                description: "Model kind or name",
+                optional: true,
+            },
+            model: {
+                description: "Model name",
+                optional: true,
+            },
+        },
+    } as const;
     public async run(
         context: ActionContext<CommandHandlerContext>,
-        request: string,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        const args = splitParams(request);
         const models = systemContext.session.getConfig().models;
-        if (args.length === 0) {
+        if (params.args.kindOrModel === undefined) {
             const newConfig = {
                 models: Object.fromEntries(
                     Object.keys(models).map((kind) => [kind, ""]),
@@ -311,15 +315,15 @@ class ConfigModelSetCommandHandler implements CommandHandlerNoParse {
 
         let kind = "translator";
         let model = "";
-        if (args.length === 1) {
-            if (models.hasOwnProperty(args[0])) {
-                kind = args[0];
+        if (params.args.model === undefined) {
+            if (models.hasOwnProperty(params.args.kindOrModel)) {
+                kind = params.args.kindOrModel;
             } else {
-                model = args[0];
+                model = params.args.kindOrModel;
             }
         } else {
-            kind = args[0];
-            model = args[1];
+            kind = params.args.kindOrModel;
+            model = params.args.model;
         }
 
         if (!models.hasOwnProperty(kind)) {
@@ -334,6 +338,8 @@ class ConfigModelSetCommandHandler implements CommandHandlerNoParse {
             throw new Error(
                 `Invalid model name: ${model}\nValid model names: ${modelNames.join(", ")}`,
             );
+        } else {
+            displayResult(`Model for ${kind} is set to ${model}`, context);
         }
         await changeContextConfig(
             {

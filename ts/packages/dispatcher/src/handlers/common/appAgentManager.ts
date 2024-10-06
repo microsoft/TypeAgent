@@ -112,7 +112,7 @@ export class AppAgentManager implements TranslatorConfigProvider {
     public isCommandEnabled(appAgentName: string) {
         const record = this.agents.get(appAgentName);
         return record !== undefined
-            ? record.appAgent?.executeCommand !== undefined
+            ? record.commands && record.appAgent?.executeCommand !== undefined
             : false;
     }
 
