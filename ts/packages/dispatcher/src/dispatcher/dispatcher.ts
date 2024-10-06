@@ -21,7 +21,7 @@ import { RequestMetrics } from "../utils/metrics.js";
 
 export type PartialCompletionResult = {
     partial: string; // The head part of the completion
-    space: boolean; // require space between p
+    space: boolean; // require space between partial and prefix
     prefix: string; // the prefix for completion match
     completions: string[]; // All the partial completions available after partial (and space if true)
 };
