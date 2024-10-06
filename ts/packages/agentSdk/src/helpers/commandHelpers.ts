@@ -12,7 +12,6 @@ import {
 import { parseParams, ParsedCommandParams } from "./parameterHelpers.js";
 
 export {
-    splitParams,
     ParsedCommandParams,
     resolveFlag,
     getFlagMultiple,
@@ -28,15 +27,6 @@ export type CommandHandlerNoParams = CommandDescriptor & {
     ): Promise<void>;
 };
 
-export type CommandHandlerNoParse = CommandDescriptor & {
-    parameters: true;
-    run(
-        context: ActionContext<unknown>,
-        params: string,
-        attachments?: string[],
-    ): Promise<void>;
-};
-
 export type CommandHandler = CommandDescriptor & {
     parameters: ParameterDefinitions;
     run(
@@ -46,21 +36,12 @@ export type CommandHandler = CommandDescriptor & {
     ): Promise<void>;
 };
 
-type CommandHandlerTypes =
-    | CommandHandlerNoParams
-    | CommandHandlerNoParse
-    | CommandHandler;
+type CommandHandlerTypes = CommandHandlerNoParams | CommandHandler;
 
 function isCommandHandlerNoParams(
     handler: CommandHandlerTypes,
 ): handler is CommandHandlerNoParams {
     return handler.parameters === undefined || handler.parameters === false;
-}
-
-function isCommandHandlerNoParse(
-    handler: CommandHandlerTypes,
-): handler is CommandHandlerNoParse {
-    return handler.parameters === true;
 }
 
 type CommandDefinitions = CommandHandlerTypes | CommandHandlerTable;
@@ -125,8 +106,6 @@ export function getCommandInterface(
                     );
                 }
                 await curr.run(context, undefined, attachments);
-            } else if (isCommandHandlerNoParse(curr)) {
-                await curr.run(context, args, attachments);
             } else {
                 await curr.run(
                     context,

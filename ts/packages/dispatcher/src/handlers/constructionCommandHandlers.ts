@@ -26,7 +26,6 @@ import {
 import {
     CommandHandler,
     CommandHandlerNoParams,
-    CommandHandlerNoParse,
     CommandHandlerTable,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk/helpers/command";
