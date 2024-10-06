@@ -338,6 +338,8 @@ class ConfigModelSetCommandHandler implements CommandHandler {
             throw new Error(
                 `Invalid model name: ${model}\nValid model names: ${modelNames.join(", ")}`,
             );
+        } else {
+            displayResult(`Model for ${kind} is set to ${model}`, context);
         }
         await changeContextConfig(
             {
