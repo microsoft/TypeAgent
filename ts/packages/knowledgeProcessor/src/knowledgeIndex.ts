@@ -186,6 +186,7 @@ export async function createTextIndex<TSourceId = any>(
             ? await createSemanticIndexFolder(
                   folderPath,
                   folderSettings,
+                  settings.concurrency,
                   settings.embeddingModel,
                   fSys,
               )
@@ -634,6 +635,7 @@ export async function searchIndexText<TTextId = any, TPostingId = any>(
 export async function createSemanticIndexFolder(
     folderPath: string,
     folderSettings?: ObjectFolderSettings,
+    concurrency?: number,
     model?: TextEmbeddingModel,
     fSys?: FileSystem,
 ): Promise<SemanticIndex> {
@@ -641,6 +643,7 @@ export async function createSemanticIndexFolder(
         await createEmbeddingFolder(
             path.join(folderPath, "embeddings"),
             folderSettings,
+            concurrency,
             fSys,
         ),
         model,

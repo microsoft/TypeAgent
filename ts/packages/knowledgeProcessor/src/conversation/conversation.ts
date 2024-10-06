@@ -485,9 +485,9 @@ export async function createConversation(
     async function getMessageIndex(): Promise<MessageIndex<MessageId>> {
         if (!messageIndex) {
             messageIndex = await createMessageIndex(
+                settings.indexSettings,
                 rootPath,
                 folderSettings,
-                settings.indexSettings.embeddingModel,
                 fSys,
             );
         }

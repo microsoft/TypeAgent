@@ -87,7 +87,8 @@ export async function createDeveloperMemory(
     const codeIndex = await createSemanticIndexFolder(
         rootPath,
         folderSettings,
-        settings.embeddingModel,
+        textIndexSettings.concurrency,
+        textIndexSettings.embeddingModel,
         fSys,
     );
     const bugs = await createCodeReviewIndex<CodeId>(
@@ -245,6 +246,7 @@ export async function createCodeReviewIndex<TSourceId = any>(
     const storeIndex = await createSemanticIndexFolder(
         rootPath,
         folderSettings,
+        settings.concurrency,
         settings.embeddingModel,
         fSys,
     );
