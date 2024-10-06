@@ -1,11 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionContext, AppAgentCommandInterface } from "@typeagent/agent-sdk";
+import {
+    ActionContext,
+    AppAgentCommandInterface,
+    ParsedCommandParams,
+} from "@typeagent/agent-sdk";
 import {
     getCommandInterface,
     CommandHandlerTable,
-    ParsedCommandParams,
     CommandHandler,
 } from "@typeagent/agent-sdk/helpers/command";
 import { PlayerActionContext } from "./playerHandlers.js";

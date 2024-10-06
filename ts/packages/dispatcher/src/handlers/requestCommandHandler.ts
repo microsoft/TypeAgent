@@ -41,11 +41,8 @@ import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incremen
 import ExifReader from "exifreader";
 import { Result } from "typechat";
 import { ProfileNames } from "../utils/profileNames.js";
-import {
-    CommandHandler,
-    ParsedCommandParams,
-} from "@typeagent/agent-sdk/helpers/command";
-import { ActionContext } from "@typeagent/agent-sdk";
+import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import {
     displayError,
     displayInfo,

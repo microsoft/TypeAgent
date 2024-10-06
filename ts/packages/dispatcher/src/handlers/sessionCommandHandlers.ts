@@ -16,13 +16,12 @@ import {
     getSessionCaches,
 } from "../session/session.js";
 import chalk from "chalk";
+import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
     CommandHandlerNoParams,
     CommandHandlerTable,
-    ParsedCommandParams,
 } from "@typeagent/agent-sdk/helpers/command";
-import { ActionContext } from "@typeagent/agent-sdk";
 import {
     displayResult,
     displaySuccess,

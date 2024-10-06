@@ -9,6 +9,7 @@ import {
     ActionContext,
     CommandDescriptorTable,
     CommandDescriptor,
+    ParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
@@ -16,7 +17,6 @@ import {
     getCommandInterface,
     getFlagType,
     isCommandDescriptorTable,
-    ParsedCommandParams,
 } from "@typeagent/agent-sdk/helpers/command";
 import {
     displayError,
@@ -43,7 +43,7 @@ import {
     getPrompt,
     processCommandNoLock,
     resolveCommand,
-} from "../command.js";
+} from "../dispatcher/command.js";
 import { RequestCommandHandler } from "../handlers/requestCommandHandler.js";
 import { DisplayCommandHandler } from "../handlers/displayCommandHandler.js";
 import chalk from "chalk";

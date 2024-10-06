@@ -5,13 +5,13 @@ import {
     ActionContext,
     AppAgent,
     AppAgentManifest,
+    ParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
     CommandHandlerNoParams,
     CommandHandlerTable,
     getCommandInterface,
-    ParsedCommandParams,
 } from "@typeagent/agent-sdk/helpers/command";
 import { AppAgentProvider } from "agent-dispatcher";
 import { ShellSettings } from "./shellSettings.js";

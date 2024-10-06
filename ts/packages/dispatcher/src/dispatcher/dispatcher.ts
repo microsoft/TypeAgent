@@ -8,7 +8,7 @@ import {
     getSettingSummary,
     getTranslatorNameToEmojiMap,
     processCommand,
-} from "../command.js";
+} from "./command.js";
 import {
     closeCommandHandlerContext,
     CommandHandlerContext,

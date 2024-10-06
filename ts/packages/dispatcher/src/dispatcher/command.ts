@@ -7,28 +7,29 @@ import {
     RequestId,
     getRequestIO,
     DispatcherName,
-} from "./handlers/common/interactiveIO.js";
+} from "../handlers/common/interactiveIO.js";
 import { getDefaultExplainerName } from "agent-cache";
 import {
     CommandHandlerContext,
     getActiveTranslatorList,
-} from "./handlers/common/commandHandlerContext.js";
+} from "../handlers/common/commandHandlerContext.js";
 
-import { unicodeChar } from "./utils/interactive.js";
+import { unicodeChar } from "../utils/interactive.js";
 import {
     CommandDescriptor,
     CommandDescriptorTable,
 } from "@typeagent/agent-sdk";
-import { executeCommand } from "./action/actionHandlers.js";
+import { executeCommand } from "../action/actionHandlers.js";
 import {
     getFlagType,
     isCommandDescriptorTable,
     resolveFlag,
 } from "@typeagent/agent-sdk/helpers/command";
-import { RequestMetrics } from "./utils/metrics.js";
-import { PartialCompletionResult } from "./dispatcher/dispatcher.js";
+import { RequestMetrics } from "../utils/metrics.js";
+import { PartialCompletionResult } from "./dispatcher.js";
+import { parseParams } from "./parameters.js";
 
-const debugInteractive = registerDebug("typeagent:cli:interactive");
+const debugCommand = registerDebug("typeagent:dispatcher:command");
 
 type ResolveCommandResult = {
     // The resolved app agent name
@@ -151,7 +152,18 @@ async function parseCommand(
             command: result.command,
             suffix: result.suffix,
         });
-        return result;
+        try {
+            const params = result.descriptor.parameters
+                ? parseParams(result.suffix, result.descriptor.parameters)
+                : undefined;
+            return {
+                appAgentName: result.actualAppAgentName,
+                command: result.command,
+                params,
+            };
+        } catch (e: any) {
+            throw new Error(`Error parsing parameters: ${e.message}. `);
+        }
     }
     const command = getParsedCommand(result);
 
@@ -185,8 +197,8 @@ export async function processCommandNoLock(
         const result = await parseCommand(originalInput, context);
         await executeCommand(
             result.command,
-            result.suffix,
-            result.actualAppAgentName,
+            result.params,
+            result.appAgentName,
             context,
             attachments,
         );
@@ -201,7 +213,7 @@ export async function processCommandNoLock(
             DispatcherName,
             "block",
         );
-        debugInteractive(e.stack);
+        debugCommand(e.stack);
     }
 }
 
@@ -313,14 +325,22 @@ const debugPartialError = registerDebug("typeagent:dispatcher:partial:error");
 // If there is a trailing space, then it will just be the input (minus the @)
 // If there is no space, then it will the input without the last word
 function getPartialCompletedCommand(input: string) {
-    if (!/^\s*@/.test(input)) {
+    const commandPrefix = input.match(/^\s*@/);
+    if (commandPrefix === null) {
         return undefined;
     }
 
-    if (/\s+$/.test(input)) {
+    const command = input.substring(commandPrefix.length);
+    if (!/\s/.test(command)) {
+        // No space no command yet.
+        return { partial: commandPrefix[0], prefix: command };
+    }
+
+    if (/\s+$/.test(command)) {
         // There is trailing space, just resolve the whole command
         return { partial: input.trimEnd(), prefix: "" };
     }
+
     const suffix = input.match(/\s+\S+$/);
     if (suffix === null) {
         // No suffix, resolve the whole command

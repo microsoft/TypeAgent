@@ -9,6 +9,8 @@ import {
     DisplayContent,
     DisplayType,
     DynamicDisplay,
+    ParameterDefinitions,
+    ParsedCommandParams,
     StorageListOptions,
 } from "@typeagent/agent-sdk";
 import { JSONAction } from "agent-cache";
@@ -112,7 +114,7 @@ export type AgentInvokeFunctions = {
     executeCommand(
         param: Partial<ActionContextParams> & {
             commands: string[];
-            args: string;
+            params: ParsedCommandParams<ParameterDefinitions> | undefined;
         },
     ): Promise<void>;
 };

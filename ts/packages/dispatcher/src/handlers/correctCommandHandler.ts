@@ -3,11 +3,8 @@
 
 import { printProcessExplanationResult } from "agent-cache";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
-import {
-    CommandHandler,
-    ParsedCommandParams,
-} from "@typeagent/agent-sdk/helpers/command";
-import { ActionContext } from "@typeagent/agent-sdk";
+import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 
 export class CorrectCommandHandler implements CommandHandler {
     public readonly description = "Correct the last explanation";

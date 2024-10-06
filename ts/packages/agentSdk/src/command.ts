@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { ActionContext, SessionContext } from "./agentInterface.js";
+import { ParameterDefinitions, ParsedCommandParams } from "./parameters.js";
 
 /*============================================================================================================
  * Dispatcher Command Extention
@@ -27,62 +28,12 @@ import { ActionContext, SessionContext } from "./agentInterface.js";
  *============================================================================================================ */
 
 //===========================================
-// Parameter definitions
-//===========================================
-export type FlagValuePrimitiveTypes = string | number | boolean;
-type FlagValueLiteral<T extends FlagValuePrimitiveTypes> = T extends number
-    ? "number"
-    : T extends boolean
-      ? "boolean"
-      : "string";
-
-type SingleFlagDefinition<T extends FlagValuePrimitiveTypes> = {
-    description: string;
-    multiple?: false;
-    char?: string;
-    type?: FlagValueLiteral<T>;
-    default?: T;
-};
-
-type MultipleFlagDefinition<T extends FlagValuePrimitiveTypes> = {
-    description: string;
-    multiple: true;
-    char?: string;
-    type?: FlagValueLiteral<T>;
-    default?: readonly T[];
-};
-
-type FlagDefinitionT<T extends FlagValuePrimitiveTypes> = T extends boolean
-    ? SingleFlagDefinition<T>
-    : SingleFlagDefinition<T> | MultipleFlagDefinition<T>;
-
-export type FlagDefinition = FlagDefinitionT<FlagValuePrimitiveTypes>;
-
-export type FlagDefinitions = Record<string, FlagDefinition>;
-
-// Arguments
-export type ArgDefinition = {
-    description: string;
-    type?: "string" | "number";
-    optional?: boolean;
-    multiple?: boolean;
-    implicitQuotes?: boolean; // implicitly assume there are quotes and take the whole string as the argument
-};
-
-export type ArgDefinitions = Record<string, ArgDefinition>;
-
-export type ParameterDefinitions = {
-    flags?: FlagDefinitions;
-    args?: ArgDefinitions;
-};
-
-//===========================================
 // Command Descriptor
 //===========================================
 export type CommandDescriptor = {
     description: string;
     help?: string;
-    parameters?: ParameterDefinitions | boolean | undefined;
+    parameters?: ParameterDefinitions | undefined;
 };
 
 export type CommandDescriptorTable = {
@@ -105,7 +56,7 @@ export interface AppAgentCommandInterface {
     // Execute a resolved command
     executeCommand(
         commands: string[], // path to the command descriptors
-        args: string,
+        params: ParsedCommandParams<ParameterDefinitions> | undefined,
         context: ActionContext<unknown>,
         attachments?: string[],
     ): Promise<void>;
