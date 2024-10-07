@@ -1,8 +1,0 @@
-{
-  "emojiChar": "📷",
-  "schema": {
-    "description": "Photos agent that helps the user provide images to the system either by taking pictures or uploading existing images.",
-    "schemaFile": "./photoSchema.ts",
-    "schemaType": "PhotoAction"
-  }
-}

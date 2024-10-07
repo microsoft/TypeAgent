@@ -7,6 +7,8 @@ import {
     ChatModel,
     ChatMessage,
     ChatModelWithStreaming,
+    ImageModel,
+    ImageGeneration,
 } from "./models";
 import { FetchThrottler, callApi, callJsonApi } from "./restClient";
 import { getEnvSetting } from "./common";
@@ -30,6 +32,7 @@ const IdentityApiKey = "identity";
 export enum ModelType {
     Chat = "chat",
     Embedding = "embedding",
+    Image = "image",
 }
 
 export type ModelInfo<T> = {
@@ -82,6 +85,9 @@ export enum EnvVars {
 
     AZURE_OPENAI_API_KEY_EMBEDDING = "AZURE_OPENAI_API_KEY_EMBEDDING",
     AZURE_OPENAI_ENDPOINT_EMBEDDING = "AZURE_OPENAI_ENDPOINT_EMBEDDING",
+
+    AZURE_OPENAI_API_KEY_DALLE = "AZURE_OPENAI_API_KEY_DALLE",
+    AZURE_OPENAI_ENDPOINT_DALLE = "AZURE_OPENAI_ENDPOINT_DALLE",
 }
 
 /**
@@ -177,7 +183,9 @@ export function azureApiSettingsFromEnv(
     const settings =
         modelType == ModelType.Chat
             ? azureChatApiSettingsFromEnv(env, endpointName)
-            : azureEmbeddingApiSettingsFromEnv(env, endpointName);
+            : modelType == ModelType.Image
+              ? azureImageApiSettingsFromEnv(env, endpointName)
+              : azureEmbeddingApiSettingsFromEnv(env, endpointName);
 
     if (settings.apiKey.toLowerCase() === IdentityApiKey) {
         settings.azureSettings = {
@@ -260,6 +268,31 @@ function azureEmbeddingApiSettingsFromEnv(
         endpoint: getEnvSetting(
             env,
             EnvVars.AZURE_OPENAI_ENDPOINT_EMBEDDING,
+            endpointName,
+        ),
+    };
+}
+
+/**
+ * Load settings for the Azure OpenAI Image service from env
+ * @param env
+ * @returns
+ */
+function azureImageApiSettingsFromEnv(
+    env: Record<string, string | undefined>,
+    endpointName?: string,
+): ApiSettings {
+    return {
+        isAzure: true,
+        modelType: ModelType.Image,
+        apiKey: getEnvSetting(
+            env,
+            EnvVars.AZURE_OPENAI_API_KEY_DALLE,
+            endpointName,
+        ),
+        endpoint: getEnvSetting(
+            env,
+            EnvVars.AZURE_OPENAI_ENDPOINT_DALLE,
             endpointName,
         ),
     };
@@ -402,11 +435,11 @@ export function supportsStreaming(
     return "completeStream" in model;
 }
 
-type FilterContentResult = {
-    hate?: FilterResult;
-    self_harm?: FilterResult;
-    sexual?: FilterResult;
-    violence?: FilterResult;
+type FilterResult = {
+    hate?: Filter;
+    self_harm?: Filter;
+    sexual?: Filter;
+    violence?: Filter;
     error?: FilterError;
 };
 
@@ -415,7 +448,7 @@ type FilterError = {
     message: string;
 };
 
-type FilterResult = {
+type Filter = {
     filtered: boolean;
     severity: string;
 };
@@ -428,7 +461,7 @@ type ChatCompletion = {
 
 type ChatCompletionChoice = {
     message?: ChatContent;
-    content_filter_results?: FilterContentResult | ContentFilterError;
+    content_filter_results?: FilterResult | FilterError;
     finish_reason?: string;
 };
 
@@ -439,7 +472,7 @@ type ChatCompletionChunk = {
 
 type ChatCompletionDelta = {
     delta: ChatContent;
-    content_filter_results?: FilterContentResult | ContentFilterError;
+    content_filter_results?: FilterResult | FilterError;
     finish_reason?: string;
 };
 
@@ -448,9 +481,16 @@ type ChatContent = {
     role: "assistant";
 };
 
-type ContentFilterError = {
-    code: string;
-    message: string;
+type ImageCompletion = {
+    created: number;
+    data: ImageData[];
+};
+
+type ImageData = {
+    content_filter_results: FilterResult | FilterError;
+    prompt_filter_results: FilterResult | FilterError;
+    revised_prompt: string;
+    url: string;
 };
 
 /**
@@ -582,7 +622,7 @@ export function createChatModel(
                         break;
                     }
                     const data = JSON.parse(evt.data) as ChatCompletionChunk;
-                    if (verifyContentIsSafe(data)) {
+                    if (verifyContentSafety(data)) {
                         if (data.choices && data.choices.length > 0) {
                             const delta = data.choices[0].delta?.content ?? "";
                             if (delta) {
@@ -596,40 +636,42 @@ export function createChatModel(
         // Stream chunks back
     }
 
-    function verifyContentIsSafe(data: ChatCompletionChunk): boolean {
-        let filters: string[] = new Array<string>();
-
+    function verifyContentSafety(data: ChatCompletionChunk): boolean {
         data.choices.map((c: ChatCompletionDelta) => {
             if (c.finish_reason == "content_filter_error") {
-                const err = c.content_filter_results as ContentFilterError;
+                const err = c.content_filter_results as FilterError;
                 throw new Error(
                     `There was a content filter error (${err.code}): ${err.message}`,
                 );
             }
 
-            const cfr = c.content_filter_results as FilterContentResult;
-            if (cfr) {
-                if (cfr.hate?.filtered) {
-                    filters.push("hate");
-                }
-                if (cfr.self_harm?.filtered) {
-                    filters.push("self_harm");
-                }
-                if (cfr.sexual?.filtered) {
-                    filters.push("sexual");
-                }
-                if (cfr.violence?.filtered) {
-                    filters.push("violence");
-                }
-
-                if (filters.length > 0) {
-                    let msg = `A content filter has been triggered by one or more messages. The triggered filters are: ${filters.join(", ")}`;
-                    throw new Error(`${msg}`);
-                }
-            }
+            verifyFilterResults(c.content_filter_results as FilterResult);
         });
 
         return true;
+    }
+}
+
+function verifyFilterResults(filterResult: FilterResult) {
+    let filters: string[] = new Array<string>();
+    if (filterResult) {
+        if (filterResult.hate?.filtered) {
+            filters.push("hate");
+        }
+        if (filterResult.self_harm?.filtered) {
+            filters.push("self_harm");
+        }
+        if (filterResult.sexual?.filtered) {
+            filters.push("sexual");
+        }
+        if (filterResult.violence?.filtered) {
+            filters.push("violence");
+        }
+
+        if (filters.length > 0) {
+            let msg = `A content filter has been triggered by one or more messages. The triggered filters are: ${filters.join(", ")}`;
+            throw new Error(`${msg}`);
+        }
     }
 }
 
@@ -681,16 +723,21 @@ export function createStandardAzureChatModel(
 /**
  * Create a client for the OpenAI embeddings service
  * @param apiSettings: settings to use to create the client
+ * @param dimensions (optional) text-embedding-03 and later models allow variable length embeddings
  */
 export function createEmbeddingModel(
     apiSettings?: ApiSettings,
+    dimensions?: number | undefined,
 ): TextEmbeddingModel {
     const settings = apiSettings ?? apiSettingsFromEnv(ModelType.Embedding);
-    const defaultParams = settings.isAzure
+    const defaultParams: any = settings.isAzure
         ? {}
         : {
               model: settings.modelName,
           };
+    if (dimensions && dimensions > 0) {
+        defaultParams.dimensions = dimensions;
+    }
     const model: TextEmbeddingModel = {
         generateEmbedding,
     };
@@ -720,5 +767,75 @@ export function createEmbeddingModel(
         const data = result.data as { data: { embedding: number[] }[] };
 
         return success(data.data[0].embedding);
+    }
+}
+
+/**
+ * Create a client for the OpenAI image/DallE service
+ * @param apiSettings: settings to use to create the client
+ */
+export function createImageModel(apiSettings?: ApiSettings): ImageModel {
+    const settings = apiSettings ?? apiSettingsFromEnv(ModelType.Image);
+    const defaultParams = settings.isAzure
+        ? {}
+        : {
+              model: settings.modelName,
+          };
+    const model: ImageModel = {
+        generateImage,
+    };
+    return model;
+
+    async function generateImage(
+        prompt: string,
+        imageCount: number,
+        width: number,
+        height: number,
+    ): Promise<Result<ImageGeneration>> {
+        const headerResult = await createApiHeaders(settings);
+        if (!headerResult.success) {
+            return headerResult;
+        }
+        if (imageCount != 1) {
+            throw Error("n MUST equal 1"); // as of 10.03.2024 API will only accept n=1
+        }
+        const params = {
+            ...defaultParams,
+            prompt,
+            n: imageCount,
+            size: `${width}x${height}`,
+        };
+
+        const result = await callJsonApi(
+            headerResult.data,
+            settings.endpoint,
+            params,
+            settings.maxRetryAttempts,
+            settings.retryPauseMs,
+        );
+
+        if (!result.success) {
+            return result;
+        }
+
+        const data = result.data as ImageCompletion;
+        const retValue: ImageGeneration = { images: [] };
+
+        data.data.map((i) => {
+            verifyContentSafety(i);
+            retValue.images.push({
+                revised_prompt: i.revised_prompt,
+                image_url: i.url,
+            });
+        });
+
+        return success(retValue);
+    }
+
+    function verifyContentSafety(data: ImageData): boolean {
+        verifyFilterResults(data.content_filter_results as FilterResult);
+        verifyFilterResults(data.prompt_filter_results as FilterResult);
+
+        return true;
     }
 }

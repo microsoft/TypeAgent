@@ -16,17 +16,17 @@ export {
 } from "./agentInterface.js";
 
 export {
-    FlagValuePrimitiveTypes,
-    DefaultValueDefinition,
-    FullFlagDefinition,
-    FlagDefinition,
-    FlagDefinitions,
-    ParameterDefinitions,
     CommandDescriptor,
     CommandDescriptors,
     CommandDescriptorTable,
     AppAgentCommandInterface,
 } from "./command.js";
+
+export {
+    FlagValueTypes,
+    ParameterDefinitions,
+    ParsedCommandParams,
+} from "./parameters.js";
 export {
     ActionIO,
     DisplayType,

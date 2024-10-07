@@ -38,10 +38,12 @@
       "execMode": "dispatcher"
     },
     "dispatcher": {
-      "emojiChar": "🤖"
+      "emojiChar": "🤖",
+      "description": "Built-in agent to dispatch request"
     },
     "system": {
       "emojiChar": "🔧",
+      "description": "Built-in agent to manage system configuration and sessions",
       "subTranslators": {
         "config": {
           "schema": {
@@ -61,13 +63,18 @@
     },
     "photo": {
       "type": "module",
-      "name": "photos-agent",
+      "name": "photo-agent",
       "execMode": "separate"
     },
     "greeting": {
         "type": "module",
         "name": "greeting-agent",
         "execMode": "separate"
+    },
+    "image": {
+      "type": "module",
+      "name": "image-agent",
+      "execMode": "dispatcher"
     }
   },
   "explainers": {

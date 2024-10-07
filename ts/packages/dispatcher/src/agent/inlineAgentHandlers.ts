@@ -7,15 +7,17 @@ import {
     AppAgent,
     AppAction,
     ActionContext,
-    CommandDescriptorTable,
+    ParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
     CommandHandlerTable,
     getCommandInterface,
-    isCommandDescriptorTable,
 } from "@typeagent/agent-sdk/helpers/command";
-import { displayResult } from "@typeagent/agent-sdk/helpers/display";
+import {
+    displayError,
+    displayResult,
+} from "@typeagent/agent-sdk/helpers/display";
 import { executeSessionAction } from "../action/system/sessionActionHandler.js";
 import { executeConfigAction } from "../action/system/configActionHandler.js";
 import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
@@ -32,9 +34,15 @@ import { getRandomCommandHandlers } from "../handlers/randomCommandHandler.js";
 import { getNotifyCommandHandlers } from "../handlers/notifyCommandHandler.js";
 import { processRequests } from "../utils/interactive.js";
 import { getConsoleRequestIO } from "../handlers/common/interactiveIO.js";
-import { getPrompt, processCommandNoLock, resolveCommand } from "../command.js";
+import {
+    getParsedCommand,
+    getPrompt,
+    processCommandNoLock,
+    resolveCommand,
+} from "../dispatcher/command.js";
 import { RequestCommandHandler } from "../handlers/requestCommandHandler.js";
 import { DisplayCommandHandler } from "../handlers/displayCommandHandler.js";
+import { getHandlerTableUsage, getUsage } from "../dispatcher/commandHelp.js";
 
 function executeSystemAction(
     action: AppAction,
@@ -52,73 +60,48 @@ function executeSystemAction(
 
 class HelpCommandHandler implements CommandHandler {
     public readonly description = "Show help";
+    public readonly parameters = {
+        args: {
+            command: {
+                description: "command to get help for",
+                implicitQuotes: true,
+                optional: true,
+            },
+        },
+    } as const;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const printHandleTable = (
-            table: CommandDescriptorTable,
-            command: string | undefined,
-        ) => {
-            displayResult((log: (message?: string) => void) => {
-                log(`${table.description}`);
-                log();
-                if (command) {
-                    log(`Usage: @${command} <subcommand> ...`);
-                    log("Subcommands:");
-                } else {
-                    log("Usage: @<command> ...");
-                    log("Commands:");
-
-                    if (command === undefined) {
-                        log(
-                            `  @<agentName> <subcommand>: command for 'agentName'`,
-                        );
-                    }
-                }
-
-                for (const name in table.commands) {
-                    const handler = table.commands[name];
-                    const subcommand = isCommandDescriptorTable(handler)
-                        ? `${name} <subcommand>`
-                        : name;
-                    log(`  ${subcommand.padEnd(20)}: ${handler.description}`);
-                }
-            }, context);
-        };
-        if (request === "") {
-            printHandleTable(systemHandlers, undefined);
+        const systemContext = context.sessionContext.agentContext;
+        if (params.args.command === undefined) {
+            displayResult(
+                getHandlerTableUsage(systemHandlers, undefined, systemContext),
+                context,
+            );
         } else {
             const result = await resolveCommand(
-                request,
-                context.sessionContext.agentContext,
+                params.args.command,
+                systemContext,
             );
 
+            const command = getParsedCommand(result);
             if (result.descriptor !== undefined) {
-                if (result.descriptor.help) {
-                    displayResult(result.descriptor.help, context);
-                } else {
-                    displayResult(
-                        `${result.command?.join(" ") ?? ""} - ${result.descriptor.description}`,
+                displayResult(getUsage(command, result.descriptor), context);
+            } else {
+                if (result.table === undefined) {
+                    throw new Error(`Unknown command '${params.args.command}'`);
+                }
+                if (result.suffix.length !== 0) {
+                    displayError(
+                        `ERROR: '${result.suffix}' is not a subcommand for '@${command}'`,
                         context,
                     );
                 }
-            } else {
-                if (result.table === undefined) {
-                    throw new Error(`Unknown command '${request}'`);
-                }
-                const command = result.command.join(" ");
-                if (result.args.length === 0) {
-                    printHandleTable(result.table, command);
-                } else {
-                    const subCommand =
-                        command === ""
-                            ? "command of"
-                            : `subcommand of '${result.command.join(" ")}' in`;
-                    throw new Error(
-                        `'${result.args[0]}' is not a ${subCommand} app agent '${result.appAgentName}'`,
-                    );
-                }
+                displayResult(
+                    getHandlerTableUsage(result.table, command, systemContext),
+                    context,
+                );
             }
         }
     }
@@ -126,13 +109,20 @@ class HelpCommandHandler implements CommandHandler {
 
 class RunCommandScriptHandler implements CommandHandler {
     public readonly description = "Run a command script file";
+    public readonly parameters = {
+        args: {
+            input: {
+                description: "command script file path",
+            },
+        },
+    } as const;
     public async run(
-        input: string,
         context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const prevScriptDir = systemContext.currentScriptDir;
-        const inputFile = path.resolve(prevScriptDir, input);
+        const inputFile = path.resolve(prevScriptDir, params.args.input);
         const content = await fs.promises.readFile(inputFile, "utf8");
         const inputs = content.split(/\r?\n/);
         const prevRequestIO = systemContext.requestIO;
@@ -181,20 +171,14 @@ const systemHandlers: CommandHandlerTable = {
         debug: new DebugCommandHandler(),
         clear: {
             description: "Clear the console",
-            async run(
-                request: string,
-                context: ActionContext<CommandHandlerContext>,
-            ) {
+            async run(context: ActionContext<CommandHandlerContext>) {
                 context.sessionContext.agentContext.requestIO.clear();
             },
         },
         run: new RunCommandScriptHandler(),
         exit: {
             description: "Exit the program",
-            async run(
-                request: string,
-                context: ActionContext<CommandHandlerContext>,
-            ) {
+            async run(context: ActionContext<CommandHandlerContext>) {
                 const systemContext = context.sessionContext.agentContext;
                 systemContext.clientIO
                     ? systemContext.clientIO.exit()

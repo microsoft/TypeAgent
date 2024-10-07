@@ -33,7 +33,8 @@ import {
 } from "./common.js";
 
 export async function runCodeChat(): Promise<void> {
-    const codeReviewer = createCodeReviewer();
+    const model = openai.createChatModel();
+    const codeReviewer = createCodeReviewer(model);
     // For answer/code indexing examples
     const folderPath = "/data/code";
     const vectorModel = openai.createEmbeddingModel();
@@ -46,7 +47,7 @@ export async function runCodeChat(): Promise<void> {
         codeDebug,
         codeBreakpoints,
         codeAnswer,
-        document,
+        codeDocument,
         indexCode,
         findCode,
         clearCodeIndex,
@@ -257,8 +258,8 @@ export async function runCodeChat(): Promise<void> {
             },
         };
     }
-    handlers.document.metadata = documentDef();
-    async function document(args: string[]): Promise<void> {
+    handlers.codeDocument.metadata = documentDef();
+    async function codeDocument(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, documentDef());
         const functions = await loadCodeChunks(namedArgs.sourceFile);
         await asyncArray.mapAsync(

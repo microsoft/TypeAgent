@@ -11,6 +11,7 @@ import {
     createSemanticIndex,
 } from "typeagent";
 import path from "path";
+import { TextIndexSettings } from "../knowledgeIndex.js";
 
 export interface MessageIndex<TMessageId> extends SemanticIndex<TMessageId> {
     nearestNeighborsInSubset(
@@ -22,6 +23,7 @@ export interface MessageIndex<TMessageId> extends SemanticIndex<TMessageId> {
 }
 
 export async function createMessageIndex(
+    settings: TextIndexSettings,
     folderPath: string,
     folderSettings?: ObjectFolderSettings,
     fSys?: FileSystem,
@@ -30,9 +32,13 @@ export async function createMessageIndex(
     const embeddingFolder = await createEmbeddingFolder(
         path.join(folderPath, "embeddings"),
         folderSettings,
+        settings.concurrency,
         fSys,
     );
-    const semanticIndex = createSemanticIndex(embeddingFolder);
+    const semanticIndex = createSemanticIndex(
+        embeddingFolder,
+        settings.embeddingModel,
+    );
     return {
         ...semanticIndex,
         nearestNeighborsInSubset,

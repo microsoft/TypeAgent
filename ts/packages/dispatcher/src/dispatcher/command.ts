@@ -7,36 +7,41 @@ import {
     RequestId,
     getRequestIO,
     DispatcherName,
-} from "./handlers/common/interactiveIO.js";
+} from "../handlers/common/interactiveIO.js";
 import { getDefaultExplainerName } from "agent-cache";
 import {
     CommandHandlerContext,
     getActiveTranslatorList,
-} from "./handlers/common/commandHandlerContext.js";
+} from "../handlers/common/commandHandlerContext.js";
 
-import { unicodeChar } from "./utils/interactive.js";
+import { unicodeChar } from "../utils/interactive.js";
 import {
     CommandDescriptor,
     CommandDescriptorTable,
 } from "@typeagent/agent-sdk";
+import { executeCommand } from "../action/actionHandlers.js";
+import {
+    getFlagType,
+    isCommandDescriptorTable,
+    resolveFlag,
+} from "@typeagent/agent-sdk/helpers/command";
+import { RequestMetrics } from "../utils/metrics.js";
+import { PartialCompletionResult } from "./dispatcher.js";
+import { parseParams } from "./parameters.js";
+import { getHandlerTableUsage, getUsage } from "./commandHelp.js";
 
-import { executeCommand } from "./action/actionHandlers.js";
-import { isCommandDescriptorTable } from "@typeagent/agent-sdk/helpers/command";
-import { RequestMetrics } from "./utils/metrics.js";
-import { PartialCompletionResult } from "./dispatcher/dispatcher.js";
-import { resolveFlag } from "./utils/args.js";
-
-const debugInteractive = registerDebug("typeagent:cli:interactive");
+const debugCommand = registerDebug("typeagent:dispatcher:command");
 
 type ResolveCommandResult = {
     // The resolved app agent name
-    appAgentName: string;
+    parsedAppAgentName: string | undefined;
+    actualAppAgentName: string;
 
     // The resolved commands.
     command: string[];
 
     // The resolve arguments
-    args: string[];
+    suffix: string;
 
     // The table the resolved commands is in.  Undefined if the app agent has no subcommand. (e.g. @<agent> <args>)
     table: CommandDescriptorTable | undefined;
@@ -49,43 +54,69 @@ export async function resolveCommand(
     input: string,
     context: CommandHandlerContext,
 ): Promise<ResolveCommandResult> {
-    const args: string[] = input.match(/"[^"]+"|\S+/g) ?? [];
-    let appAgentName = "system";
-    const arg0 = args[0];
-    if (arg0 !== undefined && context.agents.isCommandEnabled(arg0)) {
-        appAgentName = args.shift()!;
+    let parsedAppAgentName: string | undefined;
+
+    let prev: string | undefined = undefined;
+    let curr = input;
+    const nextTerm = () => {
+        const result = curr.match(/^\s*\S+/);
+        if (result === null || result.length !== 1) {
+            return undefined;
+        }
+
+        prev = curr;
+        curr = curr.substring(result[0].length);
+        return result[0].trim();
+    };
+    const revertTerm = () => {
+        if (prev === undefined) {
+            throw new Error("No previous term to revert to.");
+        }
+        curr = prev;
+        prev = undefined;
+    };
+
+    const first = nextTerm();
+    if (first !== undefined) {
+        if (context.agents.isCommandEnabled(first)) {
+            parsedAppAgentName = first;
+        } else {
+            revertTerm();
+        }
     }
-    const appAgent = context.agents.getAppAgent(appAgentName);
-    const sessionContext = context.agents.getSessionContext(appAgentName);
+    const actualAppAgentName = parsedAppAgentName ?? "system";
+    const appAgent = context.agents.getAppAgent(actualAppAgentName);
+    const sessionContext = context.agents.getSessionContext(actualAppAgentName);
     const commands = await appAgent.getCommands?.(sessionContext);
+    const commandPrefix: string[] = [];
     if (commands === undefined || !isCommandDescriptorTable(commands)) {
         return {
-            command: [],
-            args,
-            appAgentName,
-            descriptor: commands ?? { description: "No description available" },
+            parsedAppAgentName,
+            actualAppAgentName,
+            command: commandPrefix,
+            suffix: curr.trim(),
             table: undefined,
+            descriptor: commands,
         };
     }
 
     let table = commands;
     let descriptor: CommandDescriptor | undefined;
-    const commandPrefix: string[] = [];
     while (true) {
-        const subCommand = args.shift();
-        if (subCommand === undefined) {
+        const subcommand = nextTerm();
+        if (subcommand === undefined) {
             descriptor = table.defaultSubCommand;
             break;
         }
 
-        const current = table.commands[subCommand];
+        const current = table.commands[subcommand];
         if (current === undefined) {
             // Unknown command
-            args.unshift(subCommand);
+            descriptor = table.defaultSubCommand;
+            revertTerm();
             break;
         }
-
-        commandPrefix.push(subCommand);
+        commandPrefix.push(subcommand);
         if (!isCommandDescriptorTable(current)) {
             descriptor = current;
             break;
@@ -94,9 +125,10 @@ export async function resolveCommand(
     }
 
     return {
+        parsedAppAgentName,
+        actualAppAgentName,
         command: commandPrefix,
-        args,
-        appAgentName,
+        suffix: curr.trim(),
         table,
         descriptor,
     };
@@ -117,32 +149,49 @@ async function parseCommand(
     if (result.descriptor !== undefined) {
         context.logger?.logEvent("command", {
             originalInput,
-            appAgentName: result.appAgentName,
+            appAgentName: result.parsedAppAgentName,
             command: result.command,
-            args: result.args,
+            suffix: result.suffix,
         });
-        return result;
+        try {
+            const params = result.descriptor.parameters
+                ? parseParams(result.suffix, result.descriptor.parameters)
+                : undefined;
+            return {
+                appAgentName: result.actualAppAgentName,
+                command: result.command,
+                params,
+            };
+        } catch (e: any) {
+            const command = getParsedCommand(result);
+            throw new Error(
+                `${e.message}\n\n${chalk.black(getUsage(command, result.descriptor))}`,
+            );
+        }
     }
-    if (result.table !== undefined) {
-        throw new Error(
-            `Command '${input}' requires a subcommand. Try '@help ${input}' for the list of sub commands.`,
-        );
+    const command = getParsedCommand(result);
+
+    if (result.table === undefined) {
+        throw new Error(`Unknown command '${input}'`);
     }
-    const subCommand = result.command?.pop();
-    const appAgentName = result.appAgentName;
-    const command = input.startsWith(`@${appAgentName}`)
-        ? `${appAgentName} ${result.command?.join(" ") ?? ""}`
-        : result.command?.join(" ") ?? "";
-    if (subCommand !== undefined) {
-        throw new Error(
-            `Unknown command '${subCommand}' ${
-                command
-                    ? ` for '@${command}'. Try '@help ${command}' for the list of subcommands.`
-                    : "Try '@help' for a list of commands."
-            }`,
-        );
-    }
-    throw new Error(`Unknown command '${input}'`);
+    const message =
+        result.suffix.length === 0
+            ? `@${command}' requires a subcommand.`
+            : `'${result.suffix}' is not a subcommand for '@${command}'`;
+
+    throw new Error(
+        `${message}\n\n${chalk.black(getHandlerTableUsage(result.table, command, context))}`,
+    );
+}
+
+export function getParsedCommand(result: ResolveCommandResult) {
+    const command = result.command?.join(" ") ?? "";
+    const parsedAgentName = result.parsedAppAgentName;
+    return parsedAgentName
+        ? command.length !== 0
+            ? `${parsedAgentName} ${command}`
+            : parsedAgentName
+        : command;
 }
 
 export async function processCommandNoLock(
@@ -154,7 +203,7 @@ export async function processCommandNoLock(
         const result = await parseCommand(originalInput, context);
         await executeCommand(
             result.command,
-            result.args.join(" "),
+            result.params,
             result.appAgentName,
             context,
             attachments,
@@ -170,7 +219,7 @@ export async function processCommandNoLock(
             DispatcherName,
             "block",
         );
-        debugInteractive(e.stack);
+        debugCommand(e.stack);
     }
 }
 
@@ -282,18 +331,27 @@ const debugPartialError = registerDebug("typeagent:dispatcher:partial:error");
 // If there is a trailing space, then it will just be the input (minus the @)
 // If there is no space, then it will the input without the last word
 function getPartialCompletedCommand(input: string) {
-    if (!/^\s*@/.test(input)) {
+    const commandPrefix = input.match(/^\s*@/);
+    if (commandPrefix === null) {
         return undefined;
     }
 
-    if (/\s+$/.test(input)) {
-        // There is trailing space, just resolve the whole command
-        return { partial: input.trimEnd(), prefix: "" };
+    const command = input.substring(commandPrefix.length);
+    if (!/\s/.test(command)) {
+        // No space no command yet.
+        return { partial: commandPrefix[0], prefix: command };
     }
-    const suffix = input.match(/\s+\S+$/);
+
+    const trimmedEnd = input.trimEnd();
+    if (trimmedEnd !== input) {
+        // There is trailing space, just resolve the whole command
+        return { partial: trimmedEnd, prefix: "" };
+    }
+
+    const suffix = input.match(/\s\S+$/);
     if (suffix === null) {
         // No suffix, resolve the whole command
-        return { partial: input.trimEnd(), prefix: "" };
+        return { partial: trimmedEnd, prefix: "" };
     }
     const split = input.length - suffix[0].length;
     return {
@@ -328,47 +386,63 @@ export async function getPartialCompletion(
     const descriptor = result.descriptor;
     if (descriptor !== undefined) {
         if (
-            result.args.length === 0 &&
+            result.suffix.length === 0 &&
             table?.defaultSubCommand === result.descriptor
         ) {
             // Match the default sub command.  Includes additiona subcommand names
             completions.push(...Object.keys(table.commands));
         }
 
-        const flags = descriptor.parameters?.flags;
+        if (typeof descriptor.parameters !== "object") {
+            return undefined;
+        }
+        const flags = descriptor.parameters.flags;
         if (flags === undefined) {
             return undefined;
         }
 
+        const params = parseParams(result.suffix, descriptor.parameters, true);
         let flagsNeedsValue = false;
-        if (result.args.length !== 0) {
-            const lastArg = result.args[result.args.length - 1];
-            if (lastArg.startsWith("-")) {
-                const def = resolveFlag(flags, lastArg);
-                if (def?.type !== "boolean") {
-                    flagsNeedsValue = true;
-                }
+        if (params.tokens.length) {
+            const lastToken = params.tokens[params.tokens.length - 1];
+            const resolvedFlag = resolveFlag(flags, lastToken);
+            if (
+                resolvedFlag !== undefined &&
+                getFlagType(resolvedFlag[1]) !== "boolean"
+            ) {
+                flagsNeedsValue = true;
             }
         }
         if (!flagsNeedsValue) {
+            const parsedFlags = params.flags;
             for (const [key, value] of Object.entries(flags)) {
+                if (!value.multiple && parsedFlags?.[key] !== undefined) {
+                    // filter out non-multiple flags that is already set.
+                    continue;
+                }
                 completions.push(`--${key}`);
-                if (
-                    typeof value === "object" &&
-                    !Array.isArray(value) &&
-                    value.char !== undefined
-                ) {
+                if (value.char !== undefined) {
                     completions.push(`-${value.char}`);
                 }
             }
         }
     } else {
-        if (result.args.length !== 0) {
+        if (result.suffix.length !== 0) {
             // Unknown command
             return undefined;
         }
         completions.push(...Object.keys(table.commands));
-
+        if (
+            result.parsedAppAgentName === undefined &&
+            result.command.length === 0
+        ) {
+            // Include the agent names
+            completions.push(
+                ...context.agents
+                    .getAppAgentNames()
+                    .filter((name) => context.agents.isCommandEnabled(name)),
+            );
+        }
         if (completions.length === 0) {
             // No more completion from the table.
             return undefined;
