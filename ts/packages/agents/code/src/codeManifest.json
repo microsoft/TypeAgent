@@ -1,5 +1,6 @@
 {
   "emojiChar": "⚛️",
+  "description": "Agent for VSCode integration",
   "defaultEnabled": false,
   "schema": {
     "description": "Code agent helps you with productivity in using an editor and performing actions like creating files, editor customization, writing code, intelligent code suggestions, real-time error detection, debugging, and source control tasks etc.",

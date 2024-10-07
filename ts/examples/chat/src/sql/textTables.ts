@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+/*
 import Database from "better-sqlite3";
 import fs from "fs";
 
@@ -111,3 +112,4 @@ export function createTextTables(filePath: string): TextTables {
         return result.lastInsertRowid as bigint;
     }
 }
+*/

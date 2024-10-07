@@ -78,7 +78,7 @@ export type SetStateResult = {
     };
 };
 
-const alwaysEnabledCommandsAgent = ["system"];
+export const alwaysEnabledCommandsAgent = ["system"];
 export class AppAgentManager implements TranslatorConfigProvider {
     private readonly agents = new Map<string, AppAgentRecord>();
     private readonly translatorConfigs = new Map<string, TranslatorConfig>();
@@ -87,6 +87,15 @@ export class AppAgentManager implements TranslatorConfigProvider {
         string
     >();
     private readonly emojis: Record<string, string> = {};
+
+    public getAppAgentNames(): string[] {
+        return Array.from(this.agents.keys());
+    }
+
+    public getAppAgentDescription(appAgentName: string) {
+        const record = this.getRecord(appAgentName);
+        return record.manifest.description;
+    }
 
     public isTranslatorEnabled(translatorName: string) {
         const appAgentName = getAppAgentName(translatorName);
@@ -103,8 +112,7 @@ export class AppAgentManager implements TranslatorConfigProvider {
     public isCommandEnabled(appAgentName: string) {
         const record = this.agents.get(appAgentName);
         return record !== undefined
-            ? (!record.hasTranslators || record.actions.size > 0) &&
-                  record.appAgent!.executeCommand !== undefined
+            ? record.commands && record.appAgent?.executeCommand !== undefined
             : false;
     }
 

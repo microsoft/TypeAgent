@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+/*
 import { ensureDir, removeFile } from "typeagent";
 import {
     createTextTables,
@@ -37,3 +38,5 @@ function testAdd(db: TextTables, tableId: TextTableId, text: string) {
     addedId = db.addText(tableId, text);
     console.log(addedId);
 }
+
+*/
