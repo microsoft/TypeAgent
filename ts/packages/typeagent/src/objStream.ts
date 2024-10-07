@@ -340,6 +340,12 @@ export async function removeFile(
     return false;
 }
 
+export async function ensureDir(folderPath: string): Promise<void> {
+    if (!fs.existsSync(folderPath)) {
+        await fs.promises.mkdir(folderPath, { recursive: true });
+    }
+}
+
 /**
  * Remove directory from given file system
  * @param folderPath
@@ -461,6 +467,30 @@ export function getDistinctValues<T>(
         distinct.set(keyAccessor(item), item);
     }
     return [...distinct.values()];
+}
+
+/**
+ * Returns true if the path is to a directory
+ * @param path
+ * @returns true or false
+ */
+export function isDirectoryPath(path: string): boolean {
+    try {
+        return fs.statSync(path).isDirectory();
+    } catch {}
+    return false;
+}
+
+/**
+ * Returns true if the path is to a file
+ * @param path
+ * @returns true or false
+ */
+export function isFilePath(path: string): boolean {
+    try {
+        return fs.statSync(path).isFile();
+    } catch {}
+    return false;
 }
 
 function isWritable(writer: any): writer is Writable {

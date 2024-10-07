@@ -26,7 +26,7 @@ variables:
   node_version: '18'
   pnpm_version: '9.0.0'
   workingDirectory: 'ts'
-  dist_folder: 'ts/packages/agentSdk/dist'
+  agentsdk_folder: 'ts/packages/agentSdk'
   
 jobs:
 - job: build_ts
@@ -71,7 +71,7 @@ jobs:
       echo "Updated package.json to version $new_version"
       cat package.json
     displayName: 'Update Package Version'
-    workingDirectory: $(workingDirectory)/packages/agentSdk
+    workingDirectory: $(agentsdk_folder)
 
   - script: |
       npm run build
@@ -94,17 +94,15 @@ jobs:
       echo "always-auth=true" >> .npmrc
       cat .npmrc
     displayName: 'Create .npmrc file.'
-    workingDirectory: $(dist_folder)
+    workingDirectory: $(agentsdk_folder)
 
   - task: npmAuthenticate@0
     inputs:
-      workingFile: '$(dist_folder)/.npmrc'
+      workingFile: '$(agentsdk_folder)/.npmrc'
     displayName: 'Authenticate with Azure Artifacts'
 
   - script: |
-      cd $(Build.SourcesDirectory)/$(dist_folder)
-      cp ../package.json .
-      tarball=$(npm pack)
-      npm publish $tarball --registry=$(ADO_REGISTRY)
+      cd $(Build.SourcesDirectory)/$(agentsdk_folder)
+      npm publish --registry=$(ADO_REGISTRY)
     displayName: 'Pack and Publish agent-sdk Module'
     condition: succeeded()

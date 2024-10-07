@@ -15,6 +15,8 @@ import {
     DisplayContent,
     ActionContext,
     DisplayAppendMode,
+    ParsedCommandParams,
+    ParameterDefinitions,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
@@ -364,7 +366,7 @@ export function startStreamPartialAction(
 
 export async function executeCommand(
     commands: string[],
-    args: string,
+    params: ParsedCommandParams<ParameterDefinitions> | undefined,
     appAgentName: string,
     context: CommandHandlerContext,
     attachments?: string[],
@@ -390,7 +392,7 @@ export async function executeCommand(
 
         return await appAgent.executeCommand(
             commands,
-            args,
+            params,
             actionContext,
             attachments,
         );

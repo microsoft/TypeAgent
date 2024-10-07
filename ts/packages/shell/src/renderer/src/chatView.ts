@@ -854,15 +854,18 @@ export function setContent(
     let kind: DisplayMessageKind | undefined;
     let text: string;
     let speak: boolean;
+    let script: string | undefined;
     if (typeof content === "string") {
         type = "text";
         text = content;
         speak = false;
+        script = undefined;
     } else {
         type = content.type;
         text = content.content;
         kind = content.kind;
         speak = content.speak ?? false;
+        script = content.script;
     }
 
     const kindStyle = kind ? `chat-message-kind-${kind}` : undefined;
@@ -905,7 +908,7 @@ export function setContent(
     const contentHtml =
         type === "html"
             ? DOMPurify.sanitize(text, {
-                  ADD_ATTR: ["target"],
+                  ADD_ATTR: ["target", "onclick", "onerror"],
                   ADD_DATA_URI_TAGS: ["img"],
                   ADD_URI_SAFE_ATTR: ["src"],
               })
@@ -914,6 +917,14 @@ export function setContent(
               : stripAnsi(encodeTextToHtml(text));
 
     contentElm.innerHTML += contentHtml;
+
+    if (script) {
+        const scriptBlock: HTMLScriptElement = document.createElement("script");
+        scriptBlock.attributes["type"] = "text/javascript";
+        scriptBlock.innerHTML = script;
+
+        document.body.appendChild(scriptBlock);
+    }
 
     if (!speak) {
         return undefined;
@@ -934,18 +945,15 @@ export function createTimestampDiv(timestamp: Date, className: string) {
     const timeStampDiv = document.createElement("div");
     timeStampDiv.classList.add(className);
 
-    const nameDiv = document.createElement("div");
-    nameDiv.className = "agent-name";
-    timeStampDiv.appendChild(nameDiv); // name placeholder
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "agent-name";
+    timeStampDiv.appendChild(nameSpan); // name placeholder
 
-    const dateDiv = document.createElement("div");
-    dateDiv.className = "timestring";
-    timeStampDiv.appendChild(dateDiv); // time string
+    const dateSpan = document.createElement("span");
+    dateSpan.className = "timestring";
+    timeStampDiv.appendChild(dateSpan); // time string
 
-    setContent(
-        timeStampDiv.lastChild as HTMLElement,
-        timestamp.toLocaleTimeString(),
-    );
+    dateSpan.innerText = timestamp.toLocaleTimeString();
 
     return timeStampDiv;
 }
@@ -1206,7 +1214,7 @@ export class ChatView {
             panelDiv.appendChild(choiceDiv);
         }
         this.choicePanelOnly = disableOtherInput;
-        this.inputContainer.after(panelDiv);
+        this.inputContainer.before(panelDiv);
     }
 
     removeChoicePanel() {

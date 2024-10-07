@@ -158,6 +158,21 @@ export function removeItemFromArray<T>(array: T[], items: T | T[]): T[] {
     return array;
 }
 
+export type Slice<T=any> = {
+    startAt: number;
+    value: T[];
+}
+
+export function* slices<T=any>(array: T[], size: number): IterableIterator<Slice<T>> {
+    for (let i = 0; i < array.length; i += size) {        
+        const slice = array.slice(i, i + size);
+        if (slice.length === 0) {
+            break;
+        }
+        yield {startAt: i, value: slice};
+    }
+}
+
 export class CircularArray<T> implements Iterable<T> {
     private buffer: T[];
     private count: number;

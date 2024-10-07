@@ -9,3 +9,5 @@ export * from "./codeAnswerSchema.js";
 export * from "./codeDocSchema.js";
 export * from "./developerMemory.js";
 export * from "./codeIndex.js";
+export * from "./codeGenerator.js";
+export * from "./codeGenSchema.js";

@@ -22,6 +22,7 @@ import { TextStore, createTextStore } from "../textStore.js";
 import path from "path";
 import {
     TopicIndex,
+    TopicMerger,
     TopicSearchOptions,
     TopicSearchResult,
     createTopicIndex,
@@ -118,6 +119,7 @@ export interface Conversation<
     TEntityId = any,
     TActionId = any,
 > {
+    readonly settings: ConversationSettings;
     readonly messages: TextStore<MessageId>;
     readonly knowledge: ObjectFolder<ExtractedKnowledge>;
 
@@ -167,6 +169,9 @@ export interface Conversation<
           }
         | undefined
     >;
+    findMessage(
+        messageText: string,
+    ): Promise<dateTime.Timestamped<TextBlock<MessageId>> | undefined>;
     addNextEntities(
         knowledge: ExtractedKnowledge<MessageId>,
         knowledgeIds: ExtractedKnowledgeIds<TTopicId, TEntityId, TActionId>,
@@ -452,6 +457,7 @@ export async function createConversation(
     await load();
 
     return {
+        settings,
         messages,
         knowledge: knowledgeStore,
         getMessageIndex,
@@ -470,6 +476,7 @@ export async function createConversation(
         search,
         searchTerms,
         searchMessages,
+        findMessage,
 
         addNextEntities,
         indexEntities,
@@ -478,6 +485,7 @@ export async function createConversation(
     async function getMessageIndex(): Promise<MessageIndex<MessageId>> {
         if (!messageIndex) {
             messageIndex = await createMessageIndex(
+                settings.indexSettings,
                 rootPath,
                 folderSettings,
                 fSys,
@@ -911,6 +919,21 @@ export async function createConversation(
         level ??= 1;
         return `topics_${level}`;
     }
+
+    async function findMessage(
+        messageText: string,
+    ): Promise<dateTime.Timestamped<TextBlock<MessageId>> | undefined> {
+        const existing = await searchMessages(messageText, {
+            maxMatches: 1,
+        });
+        if (existing && existing.messages && existing.messages.length > 0) {
+            const messageBlock = existing.messages[0];
+            if (messageText === messageBlock.value.value) {
+                return messageBlock;
+            }
+        }
+        return undefined;
+    }
 }
 
 export async function createConversationTopicMerger(
@@ -918,7 +941,7 @@ export async function createConversationTopicMerger(
     conversation: Conversation,
     baseTopicLevel: number,
     mergeWindow: number,
-) {
+): Promise<TopicMerger> {
     const baseTopics = await conversation.getTopicsIndex(baseTopicLevel);
     const topLevelTopics = await conversation.getTopicsIndex(
         baseTopicLevel + 1,

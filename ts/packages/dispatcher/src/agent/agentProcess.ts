@@ -14,6 +14,8 @@ import {
     DisplayContent,
     DisplayAppendMode,
     AppAgentEvent,
+    ParsedCommandParams,
+    ParameterDefinitions,
 } from "@typeagent/agent-sdk";
 
 import { createRpc } from "common-utils";
@@ -117,7 +119,7 @@ const agentInvokeHandlers: AgentInvokeFunctions = {
     async executeCommand(
         param: Partial<ActionContextParams> & {
             commands: string[];
-            args: string;
+            params: ParsedCommandParams<ParameterDefinitions> | undefined;
         },
     ) {
         if (agent.executeCommand === undefined) {
@@ -125,7 +127,7 @@ const agentInvokeHandlers: AgentInvokeFunctions = {
         }
         return agent.executeCommand(
             param.commands,
-            param.args,
+            param.params,
             getActionContextShim(param),
         );
     },

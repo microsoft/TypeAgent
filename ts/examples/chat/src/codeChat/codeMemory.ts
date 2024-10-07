@@ -8,9 +8,11 @@ import {
     codeBlockNameToString,
     CodeReviewIndex,
     codeToLines,
+    createCodeGenerator,
     createCodeReviewer,
     createDeveloperMemory,
     ExtractedCodeReview,
+    GeneratedCode,
     LineReview,
     tsCode,
 } from "code-processor";
@@ -26,9 +28,11 @@ import {
 import {
     argConcurrency,
     argCount,
+    argDestFile,
     argMaxMatches,
     argMinScore,
     argQuery,
+    argSave,
     argSourceFile,
     argVerbose,
     createTypescriptBlock,
@@ -37,20 +41,22 @@ import {
     loadTypescriptCode,
     TypeScriptCode,
 } from "./common.js";
-import { asyncArray, removeDir } from "typeagent";
+import { asyncArray, removeDir, writeAllLines } from "typeagent";
 import ts from "typescript";
 import chalk from "chalk";
 
 export async function runCodeMemory(): Promise<void> {
-    const chatModel = openai.createChatModel();
+    const model = openai.createChatModel();
     const memoryFolderPath = "/data/code/memory";
-    const codeReviewer = createCodeReviewer(chatModel);
+    const codeReviewer = createCodeReviewer(model);
+    const codeGenerator = createCodeGenerator(model);
     let developerMemory = await createMemory();
     let printer: CodePrinter;
 
     const handlers: Record<string, CommandHandler> = {
         clearMemory,
         codeReview,
+        codeGen,
         codeDocument,
         codeImport,
         codeSearch,
@@ -85,10 +91,7 @@ export async function runCodeMemory(): Promise<void> {
             options: {
                 sourceFile: argSourceFile(),
                 verbose: argVerbose(),
-                save: {
-                    type: "boolean",
-                    defaultValue: false,
-                },
+                save: argSave(),
             },
         };
     }
@@ -154,6 +157,42 @@ export async function runCodeMemory(): Promise<void> {
                 printer.writeLine();
             }
         }
+    }
+
+    function codeGenDef(): CommandMetadata {
+        return {
+            description: "Generate code",
+            args: {
+                def: { description: "What the code should do", type: "string" },
+            },
+            options: {
+                type: { description: "Code type", defaultValue: "Function" },
+                language: {
+                    defaultValue: "typescript",
+                },
+                destFile: argDestFile(),
+            },
+        };
+    }
+    handlers.codeGen.metadata = codeGenDef();
+    async function codeGen(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, codeGenDef());
+        const response = await codeGenerator.generate({
+            description: namedArgs.def,
+            codeType: namedArgs.type,
+            language: namedArgs.language,
+        });
+        if (response.type == "notGenerated") {
+            printer.writeError(response.reason ?? "Not generated");
+            return;
+        }
+        printer.writeCodeLines(response.code.linesOfCode);
+        if (!namedArgs.destFile) {
+            return;
+        }
+        // And save it
+        printer.writeLine("Saving memory...");
+        await saveGeneratedCode(response.code, namedArgs.destFile);
     }
 
     function codeImportDef(): CommandMetadata {
@@ -288,6 +327,15 @@ export async function runCodeMemory(): Promise<void> {
                 printer.writeComment(l),
             );
         }
+    }
+
+    async function saveGeneratedCode(
+        generatedCode: GeneratedCode,
+        destFilePath: string,
+    ): Promise<void> {
+        await writeAllLines(generatedCode.linesOfCode, destFilePath);
+        const code = await loadTypescriptCode(destFilePath);
+        await importCode(code);
     }
 
     async function importCode(code: TypeScriptCode): Promise<string> {

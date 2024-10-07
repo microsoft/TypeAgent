@@ -9,32 +9,38 @@ import {
     CommandMetadata,
     InteractiveIo,
     addStandardHandlers,
+    arg,
+    argBool,
+    argNum,
     parseNamedArguments,
     runConsole,
 } from "interactive-app";
 import {
-    SemanticIndex,
     asyncArray,
     dateTime,
     getFileName,
+    isDirectoryPath,
     readAllText,
 } from "typeagent";
 import chalk, { ChalkInstance } from "chalk";
-import { PlayPrinter } from "./chatMemoryPrinter.js";
-import { timestampBlocks } from "./importer.js";
+import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
+import { importMsgFiles, timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
 import {
+    argClean,
     argConcurrency,
     argDestFile,
     argMinScore,
+    argPause,
     argSourceFile,
+    argSourceFileOrFolder,
+    getMessagesAndCount,
 } from "./common.js";
 
 export type ChatContext = {
     storePath: string;
     chatModel: ChatModel;
-    chatModelFast: ChatModel;
     embeddingModel: TextEmbeddingModel;
     maxCharsPerChunk: number;
     topicWindowSize: number;
@@ -47,17 +53,46 @@ export type ChatContext = {
     conversationManager: knowLib.conversation.ConversationManager;
     searcher: knowLib.conversation.ConversationSearchProcessor;
     searchMemory?: knowLib.conversation.ConversationManager;
+    emailMemory: knowLib.conversation.ConversationManager;
 };
+
+enum ReservedConversationNames {
+    transcript = "transcript",
+    outlook = "outlook",
+    play = "play",
+    search = "search",
+}
+
+function isReservedConversation(context: ChatContext): boolean {
+    return (
+        context.conversationName === ReservedConversationNames.transcript ||
+        context.conversationName === ReservedConversationNames.play ||
+        context.conversationName === ReservedConversationNames.search ||
+        context.conversationName === ReservedConversationNames.outlook
+    );
+}
+
+function getReservedConversation(
+    context: ChatContext,
+    name: string,
+): conversation.ConversationManager | undefined {
+    switch (name) {
+        default:
+            break;
+        case ReservedConversationNames.outlook:
+            return context.emailMemory;
+    }
+    return undefined;
+}
 
 export async function createChatMemoryContext(): Promise<ChatContext> {
     const storePath = "/data/testChat";
     const chatModel = openai.createStandardAzureChatModel("GPT_4");
-    const chatModelFast = openai.createStandardAzureChatModel("GPT_35_TURBO");
     const embeddingModel = knowLib.createEmbeddingCache(
         openai.createEmbeddingModel(),
         64,
     );
-    const conversationName = "transcript";
+    const conversationName = ReservedConversationNames.transcript;
     const conversationSettings = createConversationSettings(embeddingModel);
 
     const conversationPath = path.join(storePath, conversationName);
@@ -65,10 +100,17 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         conversationPath,
         conversationSettings,
     );
+    const emailStorePath = path.join(
+        storePath,
+        ReservedConversationNames.outlook,
+    );
+    const emailConversation = await createConversation(
+        emailStorePath,
+        conversationSettings,
+    );
     const context: ChatContext = {
         storePath,
         chatModel,
-        chatModelFast,
         embeddingModel,
         maxCharsPerChunk: 2048,
         topicWindowSize: 8,
@@ -86,6 +128,13 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         conversation,
         entityTopK: 16,
         searcher: createSearchProcessor(conversation, chatModel, true, 16),
+        emailMemory: await knowLib.conversation.createConversationManager(
+            ReservedConversationNames.outlook,
+            emailStorePath,
+            false,
+            emailConversation,
+            knowLib.email.createEmailTopicMerger(),
+        ),
     };
     context.searchMemory = await createSearchMemory(context);
     return context;
@@ -151,14 +200,31 @@ export async function loadConversation(
     rootPath?: string,
     includeActions = true,
 ): Promise<boolean> {
-    rootPath ??= context.storePath;
-    const conversationPath = path.join(rootPath, name);
-    const exists = fs.existsSync(conversationPath);
-    context.conversation = await createConversation(
-        conversationPath,
-        createConversationSettings(context.embeddingModel),
-    );
-    context.conversationName = name;
+    const reservedCm = getReservedConversation(context, name);
+    let exists: boolean = false;
+    if (reservedCm === undefined) {
+        rootPath ??= context.storePath;
+        const conversationPath = path.join(rootPath, name);
+        exists = fs.existsSync(conversationPath);
+
+        context.conversation = await createConversation(
+            conversationPath,
+            createConversationSettings(context.embeddingModel),
+        );
+        context.conversationName = name;
+        context.conversationManager =
+            await conversation.createConversationManager(
+                name,
+                conversationPath,
+                false,
+                context.conversation,
+            );
+    } else {
+        context.conversation = reservedCm.conversation;
+        context.conversationName = name;
+        context.conversationManager = reservedCm;
+        exists = true;
+    }
     context.searcher = conversation.createSearchProcessor(
         context.conversation,
         context.chatModel,
@@ -166,12 +232,6 @@ export async function loadConversation(
         includeActions
             ? conversation.KnowledgeSearchMode.WithActions
             : conversation.KnowledgeSearchMode.Default,
-    );
-    context.conversationManager = await conversation.createConversationManager(
-        name,
-        conversationPath,
-        false,
-        context.conversation,
     );
     if (name !== "search") {
         context.searchMemory = await createSearchMemory(context);
@@ -181,11 +241,12 @@ export async function loadConversation(
 
 export async function runChatMemory(): Promise<void> {
     let context = await createChatMemoryContext();
-    let printer: PlayPrinter;
+    let printer: ChatMemoryPrinter;
     const handlers: Record<string, CommandHandler> = {
         importPlay,
         importTranscript,
         importMessage,
+        importEmail,
         load,
         history,
         replay,
@@ -208,7 +269,7 @@ export async function runChatMemory(): Promise<void> {
     });
 
     function onStart(io: InteractiveIo): void {
-        printer = new PlayPrinter(io);
+        printer = new ChatMemoryPrinter(io);
     }
 
     async function inputHandler(
@@ -262,9 +323,10 @@ export async function runChatMemory(): Promise<void> {
         printer.writeLine(`Importing ${chatPath}`);
 
         const chatText = await readAllText(chatPath);
-        // Split full play text into paragraphs
+        // Split full transcript text into paragraphs
         const blocks = knowLib.conversation.splitTranscriptIntoBlocks(chatText);
-        const lengthMs = 1000 * 60 * 60; // 60 minutes
+        const lengthMinutes = namedArgs.lengthMinutes ?? 60;
+        let lengthMs = lengthMinutes * 60 * 60;
         const baseLineMs = lengthMs / blocks.length; // Average, these many minutes per block
         const chatDate = new Date(2023, 4, 1, 9);
         if (!addToCurrent) {
@@ -298,6 +360,10 @@ export async function runChatMemory(): Promise<void> {
                     description: "Add to current conversation",
                     type: "boolean",
                     defaultValue: false,
+                },
+                lengthMinutes: {
+                    description: "Length of the conversation in minutes",
+                    type: "number",
                 },
             },
         };
@@ -339,31 +405,18 @@ export async function runChatMemory(): Promise<void> {
         return {
             description: "Imports a text message into the current conversation",
             options: {
-                message: {
-                    description: "Raw message text to add",
-                    type: "string",
-                },
-                filePath: {
-                    description: "Path to the message file",
-                    type: "path",
-                },
-                ensureUnique: {
-                    description:
-                        "Ensure that this message was not already imported",
-                    type: "boolean",
-                    defaultValue: false,
-                },
+                message: arg("Raw message text to add"),
+                sourcePath: argSourceFile(),
             },
         };
     }
-
     handlers.importMessage.metadata = importMessageDef();
     async function importMessage(
         args: string[],
         io: InteractiveIo,
     ): Promise<void> {
         // Temporary: safeguard here to prevent demo issues
-        if (isTestConversation()) {
+        if (isReservedConversation(context)) {
             printer.writeError(
                 `Directly updating the TEST ${context.conversationName} conversation is not allowed!`,
             );
@@ -381,26 +434,52 @@ export async function runChatMemory(): Promise<void> {
             messageText = await readAllText(namedArgs.filePath);
         }
         if (messageText) {
-            if (namedArgs.ensureUnique) {
-                const existing = await context.conversation.searchMessages(
-                    messageText,
-                    {
-                        maxMatches: 1,
-                    },
-                );
-                if (
-                    existing &&
-                    existing.messages &&
-                    existing.messages.length > 0
-                ) {
-                    if (messageText === existing.messages[0].value.value) {
-                        printer.writeError("Message already in index");
-                        return;
-                    }
-                }
+            context.conversationManager.addMessage(messageText);
+        }
+    }
+
+    function importEmailDef(): CommandMetadata {
+        return {
+            description: "Import emails in a folder",
+            args: {
+                sourcePath: argSourceFileOrFolder(),
+            },
+            options: {
+                concurrency: argConcurrency(2),
+                clean: argClean(),
+            },
+        };
+    }
+    handlers.importEmail.metadata = importEmailDef();
+    async function importEmail(args: string[], io: InteractiveIo) {
+        const namedArgs = parseNamedArguments(args, importEmailDef());
+        let sourcePath: string = namedArgs.sourcePath;
+        if (!sourcePath.endsWith("json")) {
+            printer.writeInColor(chalk.cyan, "Converting message files");
+            await importMsgFiles(sourcePath, io);
+            sourcePath = path.join(sourcePath, "json");
+        }
+        if (isDirectoryPath(sourcePath)) {
+            printer.writeInColor(chalk.cyan, "Adding emails to memory");
+            if (namedArgs.clean) {
+                await context.emailMemory.clear(true);
             }
-            printer.writeLine("Importing...");
-            await context.conversationManager.addMessage(messageText);
+            const emails = await knowLib.email.loadEmailFolder(
+                sourcePath,
+                namedArgs.concurrency,
+            );
+            let i = 0;
+            for (const email of emails) {
+                ++i;
+                printer.writeProgress(i, emails.length);
+                if (email.sourcePath) {
+                    printer.writeLine(email.sourcePath);
+                }
+                await knowLib.email.addEmailToConversation(
+                    context.emailMemory,
+                    email,
+                );
+            }
         }
     }
 
@@ -413,14 +492,8 @@ export async function runChatMemory(): Promise<void> {
         return {
             description: "Load the named conversation memory",
             options: {
-                name: {
-                    description: "Conversation name",
-                },
-                actions: {
-                    description: "Use actions in search",
-                    type: "boolean",
-                    defaultValue: true,
-                },
+                name: arg("Conversation name"),
+                actions: argBool("Use actions in search", true),
                 rootPath: {
                     description: "Root path for the conversation",
                     type: "string",
@@ -461,136 +534,66 @@ export async function runChatMemory(): Promise<void> {
 
     function knowledgeDef(): CommandMetadata {
         return {
-            description: "Extract knowledge",
+            description:
+                "Extract knowledge from the messages in the current conversation",
             options: {
-                actions: {
-                    description: "Extract actions",
-                    type: "boolean",
-                    defaultValue: true,
-                },
-                maxTurns: {
-                    type: "number",
-                    defaultValue: 10,
-                    description: "Number of turns to run",
-                },
-                concurrency: {
-                    type: "number",
-                    defaultValue: 4,
-                    description: "Extraction concurrency",
-                },
-                pause: {
-                    type: "number",
-                    defaultValue: 0,
-                    description: "Throttle calls to model",
-                },
+                actions: argBool("Extract actions", true),
+                maxTurns: argNum("Number of turns to run"),
+                concurrency: argConcurrency(2),
+                pause: argPause(),
             },
         };
     }
-
     handlers.knowledge.metadata = knowledgeDef();
     async function knowledge(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, knowledgeDef());
-        let count = 0;
         const extractor = conversation.createKnowledgeExtractor(
             context.chatModel,
             {
-                windowSize: 8,
                 maxContextLength: context.maxCharsPerChunk,
-                includeSuggestedTopics: false,
                 includeActions: namedArgs.actions,
                 mergeActionKnowledge: false,
             },
         );
-        let messages: knowLib.SourceTextBlock[] = await asyncArray.toArray(
-            context.conversation.messages.entries(),
+
+        let [messages, msgCount] = await getMessagesAndCount(
+            context.conversationManager,
+            namedArgs.maxTurns,
         );
-        messages = messages.slice(0, namedArgs.maxTurns);
-        const concurrency = namedArgs.concurrency;
-        for (let i = 0; i < messages.length; i += concurrency) {
-            const slice = messages.slice(i, i + concurrency);
-            if (slice.length === 0) {
-                break;
-            }
-            printer.writeInColor(
-                chalk.gray,
-                `Extracting ${i + 1} to ${i + slice.length}`,
-            );
-            const knowledgeResults = await asyncArray.mapAsync(
-                slice,
-                namedArgs.concurrency,
-                (message) => extractor.next(message.value),
-            );
-            for (let k = 0; k < knowledgeResults.length; ++k) {
-                ++count;
-                const knowledge = knowledgeResults[k];
-                if (!knowledge) {
-                    continue;
-                }
-                printer.writeInColor(
-                    chalk.green,
-                    `[${count} / ${messages.length}]`,
+        await asyncArray.forEachBatch(
+            messages,
+            namedArgs.concurrency,
+            (batch) => {
+                printer.writeBatchProgress(batch, "Messages", msgCount);
+                return batch.value.map((message) =>
+                    extractor.extract(message.value),
                 );
-                printer.writeListInColor(chalk.cyan, slice[k].value);
-                if (knowledge.topics && knowledge.topics.length > 0) {
-                    printer.writeTitle("Topics");
-                    printer.writeList(knowledge.topics, { type: "ul" });
-                    printer.writeLine();
-                }
-                if (knowledge.entities && knowledge.entities.length > 0) {
-                    printer.writeTitle("Entities");
-                    for (const entity of knowledge.entities) {
-                        writeCompositeEntity(
-                            conversation.toCompositeEntity(entity),
+            },
+            (batch, knowledgeResults) => {
+                for (let k = 0; k < knowledgeResults.length; ++k) {
+                    const knowledge = knowledgeResults[k];
+                    if (knowledge) {
+                        printer.writeListInColor(
+                            chalk.cyan,
+                            batch.value[k].value,
                         );
+                        printer.writeKnowledge(knowledge);
                         printer.writeLine();
                     }
                 }
-                if (knowledge.actions && knowledge.actions.length > 0) {
-                    printer.writeTitle("Actions");
-                    printer.writeList(
-                        knowledge.actions.map((a) =>
-                            conversation.actionToString(a),
-                        ),
-                    );
-                }
-                printer.writeLine();
-            }
-        }
+            },
+        );
     }
 
     function buildIndexDef(): CommandMetadata {
         return {
-            description: "Index knowledge",
+            description: "Index all messages in the current conversation",
             options: {
-                concurrency: {
-                    type: "number",
-                    defaultValue: 4,
-                    description: "Indexing concurrency",
-                },
-                mergeWindow: {
-                    type: "number",
-                    defaultValue: 8,
-                },
-                maxTurns: {
-                    type: "number",
-                    defaultValue: 10,
-                    description: "Number of turns to run",
-                },
-                pause: {
-                    type: "number",
-                    defaultValue: 0,
-                    description: "Throttle calls to model",
-                },
-                messages: {
-                    type: "boolean",
-                    defaultValue: true,
-                    description: "Index messages",
-                },
-                actions: {
-                    type: "boolean",
-                    defaultValue: true,
-                    description: "Index actions",
-                },
+                mergeWindow: argNum("Topic merge window size", 8),
+                maxTurns: argNum("Number of turns to run", 10),
+                concurrency: argConcurrency(2),
+                pause: argPause(),
+                actions: argBool("Index actions", true),
             },
         };
     }
@@ -600,105 +603,56 @@ export async function runChatMemory(): Promise<void> {
         io: InteractiveIo,
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, buildIndexDef());
+        const cm = context.conversationManager;
+        await cm.clear(false);
 
-        let messages: knowLib.SourceTextBlock[] = await asyncArray.toArray(
-            context.conversation.messages.entries(),
+        let [messages, msgCount] = await getMessagesAndCount(
+            cm,
+            namedArgs.maxTurns,
         );
-        messages = messages.slice(0, namedArgs.maxTurns);
+        let messageIndex = await context.conversation.getMessageIndex();
+        cm.topicMerger.mergeWindow = namedArgs.mergeWindow;
 
-        let messageIndex: SemanticIndex<any> | undefined;
-        let topicMerger: conversation.TopicMerger | undefined;
-        let knowledgeExtractor: conversation.KnowledgeExtractor | undefined;
-        if (namedArgs.messages) {
-            await context.conversation.removeMessageIndex();
-            messageIndex = await context.conversation.getMessageIndex();
-        }
-        await context.conversation.removeKnowledge();
-        topicMerger = await conversation.createConversationTopicMerger(
-            context.chatModel,
-            context.conversation,
-            1,
-            namedArgs.mergeWindow,
-        );
-        knowledgeExtractor = conversation.createKnowledgeExtractor(
-            context.chatModel,
-            {
-                windowSize: 8,
-                maxContextLength: context.maxCharsPerChunk,
-                includeSuggestedTopics: false,
-                includeActions: namedArgs.actions,
-                mergeActionKnowledge: true,
-            },
-        );
-        context.conversationSettings.indexActions = true; //namedArgs.actions;
         let count = 0;
         const concurrency = namedArgs.concurrency;
-        try {
-            for (let i = 0; i < messages.length; i += concurrency) {
-                const slice = messages.slice(i, i + concurrency);
-                if (slice.length === 0) {
-                    break;
+        for await (const slice of asyncArray.readBatches(
+            messages,
+            concurrency,
+        )) {
+            printer.writeBatchProgress(slice, "Indexing messages", msgCount);
+            await asyncArray.mapAsync(slice.value, concurrency, (m) =>
+                messageIndex.put(m.value, m.blockId),
+            );
+            printer.writeBatchProgress(slice, "Extracting knowledge", msgCount);
+            const knowledgeResults = await conversation.extractKnowledge(
+                cm.knowledgeExtractor,
+                slice.value,
+                concurrency,
+            );
+            for (const knowledgeResult of knowledgeResults) {
+                ++count;
+                printer.writeProgress(count, msgCount);
+                if (!knowledgeResult) {
+                    continue;
                 }
-                if (messageIndex) {
-                    printer.writeInColor(
-                        chalk.gray,
-                        `[Indexing messages ${i + 1} to ${i + slice.length}]`,
+                const [message, knowledge] = knowledgeResult;
+                await writeKnowledgeResult(message, knowledge);
+                const knowledgeIds =
+                    await cm.conversation.addKnowledgeForMessage(
+                        message,
+                        knowledge,
                     );
-                    await asyncArray.mapAsync(slice, concurrency, (m) =>
-                        messageIndex.put(m.value, m.blockId),
-                    );
+                const mergedTopic = await cm.topicMerger.next(true, true);
+                if (mergedTopic) {
+                    printer.writeTitle("Merged Topic:");
+                    printer.writeTemporalBlock(chalk.blueBright, mergedTopic);
                 }
-                if (knowledgeExtractor) {
-                    printer.writeInColor(
-                        chalk.gray,
-                        `[Extracting knowledge ${i + 1} to ${i + slice.length}]`,
-                    );
-                    const knowledgeResults = await asyncArray.mapAsync(
-                        slice,
-                        namedArgs.concurrency,
-                        (message) =>
-                            conversation.extractKnowledgeFromBlock(
-                                knowledgeExtractor,
-                                message,
-                            ),
-                    );
-                    for (const knowledgeResult of knowledgeResults) {
-                        ++count;
-                        printer.writeLine(
-                            chalk.green(`[${count} / ${messages.length}]`),
-                        );
-                        if (knowledgeResult) {
-                            const [message, knowledge] = knowledgeResult;
-                            await writeKnowledgeResult(message, knowledge);
-                            const knowledgeIds =
-                                await context.conversation.addKnowledgeForMessage(
-                                    message,
-                                    knowledge,
-                                );
-                            if (topicMerger) {
-                                const mergedTopic = await topicMerger.next(
-                                    true,
-                                    true,
-                                );
-                                if (mergedTopic) {
-                                    printer.writeTitle("Merged Topic:");
-                                    printer.writeTemporalBlock(
-                                        chalk.blueBright,
-                                        mergedTopic,
-                                    );
-                                }
-                            }
-                            await context.conversation.addKnowledgeToIndex(
-                                knowledge,
-                                knowledgeIds,
-                            );
-                            printer.writeLine();
-                        }
-                    }
-                }
+                await cm.conversation.addKnowledgeToIndex(
+                    knowledge,
+                    knowledgeIds,
+                );
+                printer.writeLine();
             }
-        } catch (error) {
-            printer.writeError(`${error}`);
         }
     }
 
@@ -708,48 +662,20 @@ export async function runChatMemory(): Promise<void> {
     ) {
         printer.writeInColor(chalk.cyan, message.value);
         await writeExtractedTopics(knowledge.topics, false);
-        await writeExtractedEntities(knowledge.entities);
-        await writeExtractedActions(knowledge.actions);
-    }
-
-    function writeCompositeEntity(entity: conversation.CompositeEntity) {
-        printer.writeLine(entity.name.toUpperCase());
-        printer.writeList(entity.type, { type: "csv" });
-        printer.writeList(entity.facets, { type: "ul" });
+        printer.writeExtractedEntities(knowledge.entities);
+        printer.writeExtractedActions(knowledge.actions);
     }
 
     function topicsDef(): CommandMetadata {
         return {
             description: "Search for or display topics",
             options: {
-                query: {
-                    description: "value to search for",
-                },
-                exact: {
-                    description: "Exact match?",
-                    defaultValue: false,
-                    type: "boolean",
-                },
-                count: {
-                    description: "Num matches",
-                    defaultValue: 3,
-                    type: "number",
-                },
-                minScore: {
-                    description: "Min score",
-                    defaultValue: 0,
-                    type: "number",
-                },
-                showMessages: {
-                    description: "Search messages",
-                    type: "boolean",
-                    defaultValue: false,
-                },
-                level: {
-                    description: "Topics at this level",
-                    type: "number",
-                    defaultValue: 1,
-                },
+                query: arg("value to search for"),
+                exact: argBool("Exact match?"),
+                count: argNum("Num matches", 3),
+                minScore: argMinScore(0),
+                showMessages: argBool(),
+                level: argNum("Topics at this level", 1),
             },
         };
     }
@@ -782,7 +708,7 @@ export async function runChatMemory(): Promise<void> {
         }
 
         for await (const topic of index.entries()) {
-            await writeExtractedTopic(topic);
+            await writeExtractedTopic(topic, namedArgs.showMessages);
         }
     }
 
@@ -790,39 +716,14 @@ export async function runChatMemory(): Promise<void> {
         return {
             description: "Search for entities",
             options: {
-                name: {
-                    description: "Names to search for",
-                },
-                type: {
-                    description: "Type to search for",
-                },
-                facet: {
-                    description: "Facet to search for",
-                },
-                exact: {
-                    description: "Exact match?",
-                    defaultValue: false,
-                    type: "boolean",
-                },
-                count: {
-                    description: "Num matches",
-                    defaultValue: 1,
-                    type: "number",
-                },
-                facetCount: {
-                    description: "Num facet matches",
-                    defaultValue: 10,
-                    type: "number",
-                },
-                minScore: {
-                    description: "Min score",
-                    defaultValue: 0,
-                    type: "number",
-                },
-                showMessages: {
-                    defaultValue: false,
-                    type: "boolean",
-                },
+                name: arg("Names to search for"),
+                type: arg("Type to search for"),
+                facet: arg("Facet to search for"),
+                exact: argBool("Exact match?"),
+                count: argNum("Num matches", 1),
+                facetCount: argNum("Num facet matches", 10),
+                minScore: argNum("Min score", 0),
+                showMessages: argBool(),
             },
         };
     }
@@ -868,40 +769,19 @@ export async function runChatMemory(): Promise<void> {
         return {
             description: "Search for actions",
             options: {
-                subject: {
-                    description: "Action to search for",
-                    defaultValue: conversation.NoEntityName,
-                },
-                object: {
-                    description: "Object to search for",
-                },
-                verb: {
-                    description:
-                        "Verb to search for. Compound verbs are comma separated",
-                },
-                tense: {
-                    description: "Verb tense: past | present | future",
-                    defaultValue: "past",
-                },
-                count: {
-                    description: "Num action matches",
-                    defaultValue: 1,
-                    type: "number",
-                },
-                verbCount: {
-                    description: "Num verb matches",
-                    defaultValue: 1,
-                    type: "number",
-                },
-                nameCount: {
-                    description: "Num name matches",
-                    defaultValue: 2,
-                    type: "number",
-                },
-                showMessages: {
-                    defaultValue: false,
-                    type: "boolean",
-                },
+                subject: arg(
+                    "Subject to search for",
+                    conversation.NoEntityName,
+                ),
+                object: arg("Object to search for"),
+                verb: arg(
+                    "Verb to search for. Compound verbs are comma separated",
+                ),
+                tense: arg("Verb tense: past | present | future", "past"),
+                count: argNum("Num action matches", 1),
+                verbCount: argNum("Num verb matches", 1),
+                nameCount: argNum("Num name matches", 2),
+                showMessages: argBool("display messages", false),
             },
         };
     }
@@ -972,45 +852,16 @@ export async function runChatMemory(): Promise<void> {
         return {
             description: "Natural language search on conversation",
             args: {
-                query: {
-                    description: "Search query",
-                },
+                query: arg("Search query"),
             },
             options: {
-                maxMatches: {
-                    description: "Maximum fuzzy matches",
-                    type: "number",
-                    defaultValue: 2,
-                },
-                minScore: {
-                    description: "Minimum similarity score",
-                    type: "number",
-                    defaultValue: 0.8,
-                },
-                fallback: {
-                    description: "Fallback to message search",
-                    type: "boolean",
-                    defaultValue: true,
-                },
-                action: {
-                    description: "Include actions",
-                    type: "boolean",
-                },
-                eval: {
-                    description: "Evaluate search query",
-                    type: "boolean",
-                    defaultValue: true,
-                },
-                debug: {
-                    description: "Show debug info",
-                    type: "boolean",
-                    defaultValue: true,
-                },
-                save: {
-                    description: "Save the search",
-                    type: "boolean",
-                    defaultValue: true,
-                },
+                maxMatches: argNum("Maximum fuzzy matches", 2),
+                minScore: argNum("Minimum similarity score", 0.8),
+                fallback: argBool("Fallback to message search", true),
+                action: argBool("Include actions"),
+                eval: argBool("Evaluate search query", true),
+                debug: argBool("Show debug info", true),
+                save: argBool("Save the search", true),
             },
         };
     }
@@ -1537,41 +1388,16 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    async function writeExtractedTopic(topic: knowLib.TextBlock) {
-        const messages = await loadMessages(topic.sourceIds);
-        printer.writeTemporalBlocks(chalk.greenBright, messages);
+    async function writeExtractedTopic(
+        topic: knowLib.TextBlock,
+        showMessages: boolean,
+    ) {
+        if (showMessages) {
+            const messages = await loadMessages(topic.sourceIds);
+            printer.writeTemporalBlocks(chalk.greenBright, messages);
+        }
         printer.writeLine(topic.value);
         printer.writeLine();
-    }
-
-    async function writeExtractedEntities(
-        entities?: (knowLib.conversation.ExtractedEntity | undefined)[],
-    ) {
-        if (entities && entities.length > 0) {
-            printer.writeTitle("Entities");
-            for (const entity of entities) {
-                if (entity) {
-                    writeCompositeEntity(
-                        conversation.toCompositeEntity(entity.value),
-                    );
-                    printer.writeLine();
-                }
-            }
-        }
-    }
-
-    async function writeExtractedActions(
-        actions?: (knowLib.conversation.ExtractedAction | undefined)[],
-    ) {
-        if (actions && actions.length > 0) {
-            printer.writeTitle("Actions");
-            printer.writeList(
-                actions.map((a) =>
-                    a ? conversation.actionToString(a.value) : "",
-                ),
-            );
-            printer.writeLine();
-        }
     }
 
     function writeExtractedAction(
@@ -1589,10 +1415,8 @@ export async function runChatMemory(): Promise<void> {
             const messages = await loadMessages(entity.sourceIds);
             printer.writeTemporalBlocks(chalk.greenBright, messages);
         }
-        printer.writeLine(
-            conversation.entityToString(
-                conversation.toCompositeEntity(entity.value),
-            ),
+        printer.writeCompositeEntity(
+            conversation.toCompositeEntity(entity.value),
         );
         if (showTopics) {
             for (const id of entity.sourceIds) {
@@ -1627,40 +1451,11 @@ export async function runChatMemory(): Promise<void> {
                 knowLib.sets.removeUndefined(entities.map((e) => e?.value)),
             );
             for (const value of composite.values()) {
-                await writeCompositeEntity(value.value);
+                printer.writeCompositeEntity(value.value);
                 printer.writeLine();
             }
         }
     }
-    /*
-    async function writeActionsById(
-        index: knowLib.conversation.ActionIndex,
-        actionIds: string[],
-        showMessages: boolean,
-    ): Promise<void> {
-        if (!actionIds || actionIds.length === 0) {
-            return;
-        }
-        if (showMessages) {
-            const messages = await loadMessages(
-                await index.getSourceIds(actionIds),
-            );
-            printer.writeTemporalBlocks(chalk.cyan, messages);
-        } else {
-            const actions = await asyncArray.mapAsync(
-                actionIds,
-                context.searchConcurrency,
-                (id) => index.get(id),
-            );
-            for (const action of actions) {
-                if (action) {
-                    writeExtractedAction(action);
-                    printer.writeLine();
-                }
-            }
-        }
-    }
-    */
 
     function writeList(title: string, list?: string[]): void {
         if (list && list.length > 0) {
@@ -1743,14 +1538,14 @@ export async function runChatMemory(): Promise<void> {
                     const entities = await entityIndex.getMultiple(entry.value);
                     printer.writeLine();
                     printer.writeTimestamp(entry.timestamp);
-                    await writeExtractedEntities(entities);
+                    printer.writeExtractedEntities(entities);
                     entityIds.push(...entry.value);
                 }
             } else if (result.entityIds) {
                 const entities = await entityIndex.getMultiple(
                     result.entityIds,
                 );
-                await writeExtractedEntities(entities);
+                printer.writeExtractedEntities(entities);
                 entityIds.push(...result.entityIds);
             }
             if (showMessages && entityIds.length > 0) {
@@ -1770,14 +1565,6 @@ export async function runChatMemory(): Promise<void> {
             return await context.conversation.messages.getMultiple(ids);
         }
         return [];
-    }
-
-    function isTestConversation(): boolean {
-        return (
-            context.conversationName === "transcript" ||
-            context.conversationName === "play" ||
-            context.conversationName === "search"
-        );
     }
 
     function writeProgress(value: string, i: number, total: number) {

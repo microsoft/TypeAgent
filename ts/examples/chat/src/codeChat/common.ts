@@ -96,6 +96,12 @@ export function argSourceFile(): ArgDef {
     };
 }
 
+export function argDestFile(): ArgDef {
+    return {
+        description: "Path to dest file",
+    };
+}
+
 export function argModule(): ArgDef {
     return {
         description: "Module name",
@@ -146,5 +152,12 @@ export function argCount(count = Number.MAX_SAFE_INTEGER): ArgDef {
         description: "Max items to display",
         type: "number",
         defaultValue: count,
+    };
+}
+
+export function argSave(defaultValue: boolean = false): ArgDef {
+    return {
+        type: "boolean",
+        defaultValue,
     };
 }

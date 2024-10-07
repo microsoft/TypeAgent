@@ -16,7 +16,6 @@ import { ConstructionStore, printImportConstructionResult } from "agent-cache";
 import { getSessionCacheDirPath } from "../explorer.js";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import { RequestIO } from "./common/interactiveIO.js";
-import { parseCommandArgs } from "../utils/args.js";
 import { glob } from "glob";
 import { getDispatcherConfig } from "../utils/config.js";
 import {
@@ -26,9 +25,10 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import {
     CommandHandler,
+    CommandHandlerNoParams,
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
-import { ActionContext } from "@typeagent/agent-sdk";
+import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 
 async function checkRecreateStore(
     constructionStore: ConstructionStore,
@@ -58,42 +58,51 @@ async function checkOverwriteFile(
 }
 
 function resolvePathWithSession(
-    request: string,
+    param: string | undefined,
     sessionDir: string | undefined,
     exists: boolean = false,
 ) {
-    if (request === "") {
+    if (param === undefined) {
         return undefined;
     }
     // Try the session cache dir first
     if (
         sessionDir !== undefined &&
-        !path.isAbsolute(request) &&
-        !request.startsWith(".")
+        !path.isAbsolute(param) &&
+        !param.startsWith(".")
     ) {
         const sessionConstructionPath = path.join(
             getSessionCacheDirPath(sessionDir),
-            request,
+            param,
         );
         if (!exists || fs.existsSync(sessionConstructionPath)) {
             return sessionConstructionPath;
         }
     }
 
-    return path.resolve(request);
+    return path.resolve(param);
 }
 
 class ConstructionNewCommandHandler implements CommandHandler {
     public readonly description = "Create a new construction store";
+    public readonly parameters = {
+        args: {
+            file: {
+                description:
+                    "File name to be created in the session directory or path to the file to be created.",
+                optional: true,
+            },
+        },
+    } as const;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
         await checkRecreateStore(constructionStore, systemContext.requestIO);
         const constructionPath = resolvePathWithSession(
-            request,
+            params.args.file,
             systemContext.session.dir,
         );
         await checkOverwriteFile(constructionPath, systemContext.requestIO);
@@ -114,16 +123,28 @@ class ConstructionNewCommandHandler implements CommandHandler {
 
 class ConstructionLoadCommandHandler implements CommandHandler {
     public readonly description = "Load a construction store from disk";
+    public readonly parameters = {
+        args: {
+            file: {
+                description:
+                    "Construction file in the session directory or path to file",
+                optional: true,
+            },
+        },
+    } as const;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
         await checkRecreateStore(constructionStore, systemContext.requestIO);
         const constructionPath =
-            resolvePathWithSession(request, systemContext.session.dir, true) ??
-            systemContext.session.getCacheDataFilePath();
+            resolvePathWithSession(
+                params.args.file,
+                systemContext.session.dir,
+                true,
+            ) ?? systemContext.session.getCacheDataFilePath();
         if (constructionPath === undefined) {
             throw new Error(
                 `No construction file specified and no existing construction file in session to load.`,
@@ -144,14 +165,23 @@ class ConstructionLoadCommandHandler implements CommandHandler {
 
 class ConstructionSaveCommandHandler implements CommandHandler {
     public readonly description = "Save construction store to disk";
+    public readonly parameters = {
+        args: {
+            file: {
+                description:
+                    "Construction file in the session directory or path to file",
+                optional: true,
+            },
+        },
+    } as const;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
         const constructionPath = resolvePathWithSession(
-            request,
+            params.args.file,
             systemContext.session.dir,
         );
         await checkOverwriteFile(constructionPath, systemContext.requestIO);
@@ -165,12 +195,9 @@ class ConstructionSaveCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionInfoCommandHandler implements CommandHandler {
+class ConstructionInfoCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show current construction store info";
-    public async run(
-        request: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
         const info = constructionStore.getInfo();
@@ -198,28 +225,9 @@ class ConstructionInfoCommandHandler implements CommandHandler {
     }
 }
 
-class ConstructionAutoCommandHandler implements CommandHandler {
-    public readonly description = "Toggle construction auto save";
-    public async run(
-        request: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
-        const systemContext = context.sessionContext.agentContext;
-        const state = request === "" || request === "on";
-        await changeContextConfig({ autoSave: state }, context);
-        displaySuccess(
-            `Construction auto save ${state ? "on" : "off"}`,
-            context,
-        );
-    }
-}
-
-class ConstructionOffCommandHandler implements CommandHandler {
+class ConstructionOffCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Disable construction store";
-    public async run(
-        request: string,
-        context: ActionContext<CommandHandlerContext>,
-    ) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
         await checkRecreateStore(constructionStore, systemContext.requestIO);
@@ -230,25 +238,50 @@ class ConstructionOffCommandHandler implements CommandHandler {
 
 class ConstructionListCommandHandler implements CommandHandler {
     public readonly description = "List constructions";
+    public readonly parameters = {
+        flags: {
+            verbose: {
+                description:
+                    "Verbose only.  Includes part index, and list all string in match set",
+                char: "v",
+                default: false,
+            },
+            all: {
+                description: "List all string in match set",
+                char: "a",
+                default: false,
+            },
+            builtin: {
+                description: "List the construction in the built-in cache",
+                char: "b",
+                default: false,
+            },
+            match: {
+                description:
+                    "Filter to constructions that has the string in the match set",
+                char: "m",
+                multiple: true,
+            },
+            part: {
+                description:
+                    "Filter to constructions that has the string match in the part name",
+                char: "p",
+                multiple: true,
+            },
+            id: {
+                description: "Construction id to list",
+                multiple: true,
+                type: "number",
+            },
+        },
+    } as const;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
-        const { flags } = parseCommandArgs(
-            request,
-            {
-                verbose: { char: "v", default: false },
-                all: { char: "a", default: false },
-                builtin: { char: "b", default: false },
-                match: { char: "m", multiple: true },
-                part: { char: "p", multiple: true },
-                id: { multiple: true, type: "number" },
-            },
-            true,
-        );
-        constructionStore.print(flags);
+        constructionStore.print(params.flags);
     }
 }
 
@@ -288,25 +321,43 @@ async function expandPaths(paths: string[]) {
 
 class ConstructionImportCommandHandler implements CommandHandler {
     public readonly description = "Import constructions from test data";
+    public readonly parameters = {
+        flags: {
+            test: {
+                description:
+                    "Load from the file specifed in the test section of the config if no file argument is specified, ",
+                char: "t",
+                default: false,
+            },
+        },
+        args: {
+            file: {
+                description:
+                    "Path to the construction file to import from. Load from agent config if not specified.",
+                multiple: true,
+                optional: true,
+            },
+        },
+    } as const;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
-        const { args, flags } = parseCommandArgs(request, {
-            test: { char: "t", default: false },
-        });
+        const { args, flags } = params;
 
         const inputs =
-            args.length !== 0
-                ? await expandPaths(args)
+            args.file !== undefined
+                ? await expandPaths(args.file)
                 : await getImportTranslationFiles(systemContext, flags.test);
 
         if (inputs.length === 0) {
-            if (args.length === 0) {
+            if (args.file === undefined) {
                 throw new Error(`No input file specified.`);
             }
-            throw new Error(`No input file found from '${args.join("', '")}'`);
+            throw new Error(
+                `No input file found from '${args.file.join("', '")}'`,
+            );
         }
 
         // Sort by file name to make the result deterministic.
@@ -342,25 +393,25 @@ class ConstructionImportCommandHandler implements CommandHandler {
 
 class ConstructionDeleteCommandHandler implements CommandHandler {
     public readonly description = "Delete a construction by id";
-
+    public readonly parameters = {
+        args: {
+            namespace: {
+                description: "namespace the construction in",
+            },
+            id: {
+                description: "construction id to delete",
+                type: "number",
+            },
+        },
+    } as const;
     public async run(
-        request: string,
         context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const { args } = parseCommandArgs(request);
-        if (args.length !== 2) {
-            throw new Error(
-                "Invalid arguments. '@const delete <namespace> <id>' expected.",
-            );
-        }
-
-        const id = parseInt(args[1]);
-        if (id.toString() !== args[1]) {
-            throw new Error(`Invalid construction id: ${args[1]}`);
-        }
+        const { namespace, id } = params.args;
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
-        await constructionStore.delete(args[0], id);
+        await constructionStore.delete(namespace, id);
     }
 }
 
@@ -372,7 +423,12 @@ export function getConstructionCommandHandlers(): CommandHandlerTable {
             new: new ConstructionNewCommandHandler(),
             load: new ConstructionLoadCommandHandler(),
             save: new ConstructionSaveCommandHandler(),
-            auto: new ConstructionAutoCommandHandler(),
+            auto: getToggleHandlerTable(
+                "construction auto save",
+                async (context, enable) => {
+                    await changeContextConfig({ autoSave: enable }, context);
+                },
+            ),
             off: new ConstructionOffCommandHandler(),
             info: new ConstructionInfoCommandHandler(),
             list: new ConstructionListCommandHandler(),
