@@ -138,12 +138,68 @@ export type ExtractedAction<TSourceId = any> = {
     sourceIds: TSourceId[];
 };
 
+/**
+ * Knowledge extracted from a source text block
+ */
 export type ExtractedKnowledge<TSourceId = any> = {
     entities?: ExtractedEntity<TSourceId>[] | undefined;
     topics?: TextBlock<TSourceId>[] | undefined;
     actions?: ExtractedAction<TSourceId>[] | undefined;
 };
 
+/**
+ * Create knowledge from pre-existing entities, topics and actions
+ * @param source
+ * @returns
+ */
+export function createExtractedKnowledge(
+    source: SourceTextBlock,
+    knowledge: KnowledgeResponse | ConcreteEntity[],
+): ExtractedKnowledge {
+    const sourceIds = [source.blockId];
+    const ek: ExtractedKnowledge = {};
+    if (Array.isArray(knowledge)) {
+        ek.entities =
+            knowledge.length > 0
+                ? knowledge.map((value) => {
+                      return { value, sourceIds };
+                  })
+                : undefined;
+        return ek;
+    }
+
+    ek.topics =
+        knowledge.topics.length > 0
+            ? knowledge.topics.map((value) => {
+                  return {
+                      value,
+                      sourceIds,
+                      type: TextBlockType.Sentence,
+                  };
+              })
+            : undefined;
+    ek.entities =
+        knowledge.entities.length > 0
+            ? knowledge.entities.map((value) => {
+                  return { value, sourceIds };
+              })
+            : undefined;
+
+    ek.actions =
+        knowledge.actions && knowledge.actions.length > 0
+            ? knowledge.actions.map((value) => {
+                  return { value, sourceIds };
+              })
+            : undefined;
+    return ek;
+}
+
+/**
+ * Extract knowledge from source text
+ * @param extractor
+ * @param message
+ * @returns
+ */
 export async function extractKnowledgeFromBlock(
     extractor: KnowledgeExtractor,
     message: SourceTextBlock,
@@ -152,38 +208,21 @@ export async function extractKnowledgeFromBlock(
     if (message.value.length === 0) {
         return undefined;
     }
-    let knowledgeResponse = await extractor.extract(messageText);
-    if (!knowledgeResponse) {
+    let knowledge = await extractor.extract(messageText);
+    if (!knowledge) {
         return undefined;
     }
-    const sourceIds = [message.blockId];
-    const topics: TextBlock[] | undefined =
-        knowledgeResponse.topics.length > 0
-            ? knowledgeResponse.topics.map((value) => {
-                  return {
-                      value,
-                      sourceIds,
-                      type: TextBlockType.Sentence,
-                  };
-              })
-            : undefined;
-    const entities: ExtractedEntity[] | undefined =
-        knowledgeResponse.entities.length > 0
-            ? knowledgeResponse.entities.map((value) => {
-                  return { value, sourceIds };
-              })
-            : undefined;
 
-    const actions: ExtractedAction[] | undefined =
-        knowledgeResponse.actions && knowledgeResponse.actions.length > 0
-            ? knowledgeResponse.actions.map((value) => {
-                  return { value, sourceIds };
-              })
-            : undefined;
-
-    return [message, { entities, topics, actions }];
+    return [message, createExtractedKnowledge(message, knowledge)];
 }
 
+/**
+ * Extract knowledge from the given blocks concurrently
+ * @param extractor
+ * @param blocks
+ * @param concurrency
+ * @returns
+ */
 export async function extractKnowledge(
     extractor: KnowledgeExtractor,
     blocks: SourceTextBlock[],

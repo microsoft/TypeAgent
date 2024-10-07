@@ -22,6 +22,7 @@ import { TextStore, createTextStore } from "../textStore.js";
 import path from "path";
 import {
     TopicIndex,
+    TopicMerger,
     TopicSearchOptions,
     TopicSearchResult,
     createTopicIndex,
@@ -118,6 +119,7 @@ export interface Conversation<
     TEntityId = any,
     TActionId = any,
 > {
+    readonly settings: ConversationSettings;
     readonly messages: TextStore<MessageId>;
     readonly knowledge: ObjectFolder<ExtractedKnowledge>;
 
@@ -455,6 +457,7 @@ export async function createConversation(
     await load();
 
     return {
+        settings,
         messages,
         knowledge: knowledgeStore,
         getMessageIndex,
@@ -482,6 +485,7 @@ export async function createConversation(
     async function getMessageIndex(): Promise<MessageIndex<MessageId>> {
         if (!messageIndex) {
             messageIndex = await createMessageIndex(
+                settings.indexSettings,
                 rootPath,
                 folderSettings,
                 fSys,
@@ -937,7 +941,7 @@ export async function createConversationTopicMerger(
     conversation: Conversation,
     baseTopicLevel: number,
     mergeWindow: number,
-) {
+): Promise<TopicMerger> {
     const baseTopics = await conversation.getTopicsIndex(baseTopicLevel);
     const topLevelTopics = await conversation.getTopicsIndex(
         baseTopicLevel + 1,

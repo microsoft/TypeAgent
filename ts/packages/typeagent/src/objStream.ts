@@ -340,6 +340,12 @@ export async function removeFile(
     return false;
 }
 
+export async function ensureDir(folderPath: string): Promise<void> {
+    if (!fs.existsSync(folderPath)) {
+        await fs.promises.mkdir(folderPath, { recursive: true });
+    }
+}
+
 /**
  * Remove directory from given file system
  * @param folderPath

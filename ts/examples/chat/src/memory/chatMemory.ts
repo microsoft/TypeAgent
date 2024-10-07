@@ -24,7 +24,7 @@ import {
 } from "typeagent";
 import chalk, { ChalkInstance } from "chalk";
 import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
-import { timestampBlocks } from "./importer.js";
+import { importMsgFiles, timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
 import {
@@ -133,6 +133,7 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
             emailStorePath,
             false,
             emailConversation,
+            knowLib.email.createEmailTopicMerger(),
         ),
     };
     context.searchMemory = await createSearchMemory(context);
@@ -450,13 +451,16 @@ export async function runChatMemory(): Promise<void> {
         };
     }
     handlers.importEmail.metadata = importEmailDef();
-    async function importEmail(args: string[]) {
+    async function importEmail(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, importEmailDef());
         let sourcePath: string = namedArgs.sourcePath;
         if (!sourcePath.endsWith("json")) {
+            printer.writeInColor(chalk.cyan, "Converting message files");
+            await importMsgFiles(sourcePath, io);
             sourcePath = path.join(sourcePath, "json");
         }
         if (isDirectoryPath(sourcePath)) {
+            printer.writeInColor(chalk.cyan, "Adding emails to memory");
             if (namedArgs.clean) {
                 await context.emailMemory.clear(true);
             }
@@ -464,7 +468,10 @@ export async function runChatMemory(): Promise<void> {
                 sourcePath,
                 namedArgs.concurrency,
             );
+            let i = 0;
             for (const email of emails) {
+                ++i;
+                printer.writeProgress(i, emails.length);
                 if (email.sourcePath) {
                     printer.writeLine(email.sourcePath);
                 }
@@ -701,7 +708,7 @@ export async function runChatMemory(): Promise<void> {
         }
 
         for await (const topic of index.entries()) {
-            await writeExtractedTopic(topic);
+            await writeExtractedTopic(topic, namedArgs.showMessages);
         }
     }
 
@@ -1381,9 +1388,14 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    async function writeExtractedTopic(topic: knowLib.TextBlock) {
-        const messages = await loadMessages(topic.sourceIds);
-        printer.writeTemporalBlocks(chalk.greenBright, messages);
+    async function writeExtractedTopic(
+        topic: knowLib.TextBlock,
+        showMessages: boolean,
+    ) {
+        if (showMessages) {
+            const messages = await loadMessages(topic.sourceIds);
+            printer.writeTemporalBlocks(chalk.greenBright, messages);
+        }
         printer.writeLine(topic.value);
         printer.writeLine();
     }
