@@ -3,6 +3,7 @@
 
 import { asyncArray, dateTime, readJsonFile } from "typeagent";
 import {
+    Action,
     ConcreteEntity,
     KnowledgeResponse,
 } from "../conversation/knowledgeSchema.js";
@@ -133,6 +134,45 @@ export function emailToEntities(email: Email): ConcreteEntity[] {
     }
 }
 
+function emailToAction(
+    verb: string,
+    sender: EmailAddress | string,
+    recipient: EmailAddress,
+): Action {
+    const action: Action = {
+        verbs: [verb],
+        verbTense: "past",
+        subjectEntityName:
+            typeof sender === "string" ? sender : emailAddressToString(sender),
+        objectEntityName: "email",
+        indirectObjectEntityName: emailAddressToString(recipient),
+    };
+    return action;
+}
+
+export function emailToActions(email: Email): Action[] {
+    const actions: Action[] = [];
+    const sender = emailAddressToString(email.from);
+
+    addActions(actions, sender, email.to);
+    addActions(actions, sender, email.cc);
+    addActions(actions, sender, email.bcc);
+
+    return actions;
+
+    function addActions(
+        actions: Action[],
+        sender: string,
+        recipients: EmailAddress[] | undefined,
+    ) {
+        if (recipients) {
+            for (const recipient of recipients) {
+                actions.push(emailToAction("send", sender, recipient));
+            }
+        }
+    }
+}
+
 export async function loadEmail(filePath: string): Promise<Email | undefined> {
     return readJsonFile<Email>(filePath);
 }
@@ -177,7 +217,7 @@ export async function addEmailToConversation(
     const knowledge: KnowledgeResponse = {
         entities: emailToEntities(email),
         topics: email.subject ? [email.subject] : [],
-        actions: [],
+        actions: emailToActions(email),
         inverseActions: [],
     };
     await cm.addMessage(block, knowledge, dateTime.stringToDate(email.sentOn));
