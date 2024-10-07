@@ -4,6 +4,7 @@
 import { ActionContext } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
 import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/command";
+import { displaySuccess } from "@typeagent/agent-sdk/helpers/display";
 
 export function getToggleCommandHandlers(
     name: string,
@@ -17,12 +18,14 @@ export function getToggleCommandHandlers(
             description: `Turn on ${name}`,
             run: async (context: ActionContext<CommandHandlerContext>) => {
                 await toggle(context, true);
+                displaySuccess(`${name} is enabled.`, context);
             },
         },
         off: {
             description: `Turn off ${name}`,
             run: async (context: ActionContext<CommandHandlerContext>) => {
                 await toggle(context, false);
+                displaySuccess(`${name} is disabled.`, context);
             },
         },
     };

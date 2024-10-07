@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { collections, loadSchema } from "typeagent";
+import { asyncArray, collections, loadSchema } from "typeagent";
 import {
     Action,
     ActionParam,
@@ -16,58 +16,40 @@ import {
     createJsonTranslator,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import { createRecentItemsWindow } from "./conversation.js";
 import { SourceTextBlock, TextBlock, TextBlockType } from "../text.js";
 import { facetToString, mergeEntityFacet } from "./entities.js";
 
 export interface KnowledgeExtractor {
-    next(message: string): Promise<KnowledgeResponse | undefined>;
+    extract(message: string): Promise<KnowledgeResponse | undefined>;
 }
 
 export type KnowledgeExtractorSettings = {
-    windowSize: number;
     maxContextLength: number;
-    includeSuggestedTopics?: boolean | undefined;
     includeActions: boolean;
     mergeActionKnowledge?: boolean;
 };
 
 export function createKnowledgeExtractor(
     model: TypeChatLanguageModel,
-    settings: KnowledgeExtractorSettings,
+    extractorSettings?: KnowledgeExtractorSettings | undefined,
 ): KnowledgeExtractor {
+    const settings = extractorSettings ?? createKnowledgeExtractorSettings();
     const translator = createTranslator(model);
-    const topics = createRecentItemsWindow<string>(settings.windowSize);
     return {
-        next,
+        extract,
     };
 
-    async function next(
+    async function extract(
         message: string,
     ): Promise<KnowledgeResponse | undefined> {
-        const result = await translator.translate(
-            message,
-            settings.includeSuggestedTopics
-                ? getContext(topics.getUnique())
-                : undefined,
-        );
+        const result = await translator.translate(message);
         if (!result.success) {
             return undefined;
         }
         if (settings.mergeActionKnowledge) {
             mergeActionKnowledge(result.data);
         }
-        topics.push(result.data.topics);
         return result.data;
-    }
-
-    function getContext(pastTopics?: string[]): string {
-        const context = {
-            context: {
-                possibleTopics: pastTopics ? pastTopics : [],
-            },
-        };
-        return JSON.stringify(context, null, 2);
     }
 
     function createTranslator(
@@ -131,6 +113,21 @@ export function createKnowledgeExtractor(
     }
 }
 
+/**
+ * Return default settings
+ * @param maxCharsPerChunk (optional)
+ * @returns
+ */
+export function createKnowledgeExtractorSettings(
+    maxCharsPerChunk: number = 2048,
+): KnowledgeExtractorSettings {
+    return {
+        maxContextLength: maxCharsPerChunk,
+        includeActions: true,
+        mergeActionKnowledge: true,
+    };
+}
+
 export type ExtractedEntity<TSourceId = any> = {
     value: ConcreteEntity;
     sourceIds: TSourceId[];
@@ -141,12 +138,68 @@ export type ExtractedAction<TSourceId = any> = {
     sourceIds: TSourceId[];
 };
 
+/**
+ * Knowledge extracted from a source text block
+ */
 export type ExtractedKnowledge<TSourceId = any> = {
     entities?: ExtractedEntity<TSourceId>[] | undefined;
     topics?: TextBlock<TSourceId>[] | undefined;
     actions?: ExtractedAction<TSourceId>[] | undefined;
 };
 
+/**
+ * Create knowledge from pre-existing entities, topics and actions
+ * @param source
+ * @returns
+ */
+export function createExtractedKnowledge(
+    source: SourceTextBlock,
+    knowledge: KnowledgeResponse | ConcreteEntity[],
+): ExtractedKnowledge {
+    const sourceIds = [source.blockId];
+    const ek: ExtractedKnowledge = {};
+    if (Array.isArray(knowledge)) {
+        ek.entities =
+            knowledge.length > 0
+                ? knowledge.map((value) => {
+                      return { value, sourceIds };
+                  })
+                : undefined;
+        return ek;
+    }
+
+    ek.topics =
+        knowledge.topics.length > 0
+            ? knowledge.topics.map((value) => {
+                  return {
+                      value,
+                      sourceIds,
+                      type: TextBlockType.Sentence,
+                  };
+              })
+            : undefined;
+    ek.entities =
+        knowledge.entities.length > 0
+            ? knowledge.entities.map((value) => {
+                  return { value, sourceIds };
+              })
+            : undefined;
+
+    ek.actions =
+        knowledge.actions && knowledge.actions.length > 0
+            ? knowledge.actions.map((value) => {
+                  return { value, sourceIds };
+              })
+            : undefined;
+    return ek;
+}
+
+/**
+ * Extract knowledge from source text
+ * @param extractor
+ * @param message
+ * @returns
+ */
 export async function extractKnowledgeFromBlock(
     extractor: KnowledgeExtractor,
     message: SourceTextBlock,
@@ -155,50 +208,29 @@ export async function extractKnowledgeFromBlock(
     if (message.value.length === 0) {
         return undefined;
     }
-    let knowledgeResponse = await extractor.next(messageText);
-    if (!knowledgeResponse) {
+    let knowledge = await extractor.extract(messageText);
+    if (!knowledge) {
         return undefined;
     }
-    const sourceIds = [message.blockId];
-    const topics: TextBlock[] | undefined =
-        knowledgeResponse.topics.length > 0
-            ? knowledgeResponse.topics.map((value) => {
-                  return {
-                      value,
-                      sourceIds,
-                      type: TextBlockType.Sentence,
-                  };
-              })
-            : undefined;
-    const entities: ExtractedEntity[] | undefined =
-        knowledgeResponse.entities.length > 0
-            ? knowledgeResponse.entities.map((value) => {
-                  return { value, sourceIds };
-              })
-            : undefined;
 
-    const actions: ExtractedAction[] | undefined =
-        knowledgeResponse.actions && knowledgeResponse.actions.length > 0
-            ? knowledgeResponse.actions.map((value) => {
-                  return { value, sourceIds };
-              })
-            : undefined;
-
-    return [message, { entities, topics, actions }];
+    return [message, createExtractedKnowledge(message, knowledge)];
 }
 
-export async function* extractKnowledge(
-    model: TypeChatLanguageModel,
-    messages: AsyncIterableIterator<SourceTextBlock>,
-    settings: KnowledgeExtractorSettings,
-): AsyncIterableIterator<[SourceTextBlock, ExtractedKnowledge]> {
-    const extractor = createKnowledgeExtractor(model, settings);
-    for await (const message of messages) {
-        const result = await extractKnowledgeFromBlock(extractor, message);
-        if (result) {
-            yield result;
-        }
-    }
+/**
+ * Extract knowledge from the given blocks concurrently
+ * @param extractor
+ * @param blocks
+ * @param concurrency
+ * @returns
+ */
+export async function extractKnowledge(
+    extractor: KnowledgeExtractor,
+    blocks: SourceTextBlock[],
+    concurrency: number,
+) {
+    return asyncArray.mapAsync(blocks, concurrency, (message) =>
+        extractKnowledgeFromBlock(extractor, message),
+    );
 }
 
 export const NoEntityName = "none";

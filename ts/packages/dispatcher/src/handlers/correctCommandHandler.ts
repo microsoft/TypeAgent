@@ -3,15 +3,22 @@
 
 import { printProcessExplanationResult } from "agent-cache";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
-import { CommandHandlerNoParse } from "@typeagent/agent-sdk/helpers/command";
-import { ActionContext } from "@typeagent/agent-sdk";
+import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 
-export class CorrectCommandHandler implements CommandHandlerNoParse {
+export class CorrectCommandHandler implements CommandHandler {
     public readonly description = "Correct the last explanation";
-    public readonly parameters = true;
+    public readonly parameters = {
+        args: {
+            correction: {
+                description: "Correction for the last explanation",
+                implicitQuotes: true,
+            },
+        },
+    };
     public async run(
         context: ActionContext<CommandHandlerContext>,
-        input: string,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
         if (systemContext.lastRequestAction === undefined) {
@@ -23,7 +30,7 @@ export class CorrectCommandHandler implements CommandHandlerNoParse {
         const result = await systemContext.agentCache.correctExplanation(
             systemContext.lastRequestAction,
             systemContext.lastExplanation,
-            input,
+            params.args.correction,
         );
         printProcessExplanationResult(result);
     }

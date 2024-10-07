@@ -133,6 +133,7 @@
             ],
             //"args": ["codeMemory"]
             //"args": ["code"]
+            //"args": ["tests"]
         },
         {
             "name": "Launch YOUR Example",

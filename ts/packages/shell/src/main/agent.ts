@@ -5,10 +5,11 @@ import {
     ActionContext,
     AppAgent,
     AppAgentManifest,
+    ParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import {
+    CommandHandler,
     CommandHandlerNoParams,
-    CommandHandlerNoParse,
     CommandHandlerTable,
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
@@ -16,6 +17,10 @@ import { AppAgentProvider } from "agent-dispatcher";
 import { ShellSettings } from "./shellSettings.js";
 import path from "path";
 import { BrowserWindow } from "electron";
+import {
+    displaySuccess,
+    displayWarn,
+} from "@typeagent/agent-sdk/helpers/display";
 
 type ShellContext = {
     settings: ShellSettings;
@@ -24,6 +29,7 @@ type ShellContext = {
 
 const config: AppAgentManifest = {
     emojiChar: "🐚",
+    description: "Shell",
 };
 
 class ShellShowSettingsCommandHandler implements CommandHandlerNoParams {
@@ -72,20 +78,32 @@ class ShellShowRawSettingsCommandHandler implements CommandHandlerNoParams {
     }
 }
 
-class ShellSetSettingCommandHandler implements CommandHandlerNoParse {
+class ShellSetSettingCommandHandler implements CommandHandler {
     public readonly description: string =
         "Sets a specific setting with the supplied value";
-    public readonly parameters = true;
-    public async run(context: ActionContext<ShellContext>, input: string) {
+    public readonly parameters = {
+        args: {
+            name: {
+                description: "Name of the setting to set",
+            },
+            value: {
+                description: "The new value for the setting",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<ShellContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
         const agentContext = context.sessionContext.agentContext;
-        const name = input.substring(0, input.indexOf(" "));
-        const newValue = input.substring(input.indexOf(" ") + 1);
-
+        const { name, value } = params.args;
         let found: boolean = false;
-        for (const [key, _] of Object.entries(agentContext.settings)) {
+        let oldValue: any;
+        for (const [key, v] of Object.entries(agentContext.settings)) {
             if (key === name) {
                 found = true;
-                agentContext.settings.set(name, newValue);
+                agentContext.settings.set(name, value);
+                oldValue = v;
                 break;
             }
         }
@@ -95,7 +113,12 @@ class ShellSetSettingCommandHandler implements CommandHandlerNoParse {
                 `The supplied shell setting '${name}' could not be found.'`,
             );
         }
-        context.actionIO.setDisplay(`${name} was set to ${newValue}`);
+        const currValue = agentContext.settings[name];
+        if (oldValue !== currValue) {
+            displaySuccess(`${name} is changed to ${currValue}`, context);
+        } else {
+            displayWarn(`${name} is unchanged from ${currValue}`, context);
+        }
     }
 }
 
@@ -121,12 +144,21 @@ class ShellSetTopMostCommandHandler implements CommandHandlerNoParams {
     }
 }
 
-class ShellOpenWebContentView implements CommandHandlerNoParse {
+class ShellOpenWebContentView implements CommandHandler {
     public readonly description = "Show a new Web Content view";
-    public readonly parameters = true;
-    public async run(context: ActionContext<ShellContext>, input: string) {
+    public readonly parameters = {
+        args: {
+            site: {
+                description: "Alias or URL for the site of the open.",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<ShellContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
         let targetUrl: URL;
-        switch (input.toLowerCase()) {
+        switch (params.args.site.toLowerCase()) {
             case "paleoBioDb":
                 targetUrl = new URL("https://paleobiodb.org/navigator/");
 
@@ -142,37 +174,34 @@ class ShellOpenWebContentView implements CommandHandlerNoParse {
 
                 break;
             default:
-                targetUrl = new URL(input);
+                targetUrl = new URL(params.args.site);
         }
 
-        if (targetUrl) {
-            if (
-                !context.sessionContext.agentContext.inlineWindow ||
-                context.sessionContext.agentContext.inlineWindow.isDestroyed()
-            ) {
-                const win = new BrowserWindow({
-                    width: 800,
-                    height: 1500,
-                    autoHideMenuBar: true,
+        if (
+            !context.sessionContext.agentContext.inlineWindow ||
+            context.sessionContext.agentContext.inlineWindow.isDestroyed()
+        ) {
+            const win = new BrowserWindow({
+                width: 800,
+                height: 1500,
+                autoHideMenuBar: true,
 
-                    webPreferences: {
-                        preload: path.join(__dirname, "../preload/webview.mjs"),
-                        sandbox: false,
-                    },
-                });
-                win.removeMenu();
-
-                context.sessionContext.agentContext.inlineWindow = win;
-            }
-
-            const inlineWindow =
-                context.sessionContext.agentContext.inlineWindow;
-            inlineWindow.loadURL(targetUrl.toString());
-
-            inlineWindow.webContents.on("did-finish-load", () => {
-                inlineWindow.webContents.send("setupSiteAgent");
+                webPreferences: {
+                    preload: path.join(__dirname, "../preload/webview.mjs"),
+                    sandbox: false,
+                },
             });
+            win.removeMenu();
+
+            context.sessionContext.agentContext.inlineWindow = win;
         }
+
+        const inlineWindow = context.sessionContext.agentContext.inlineWindow;
+        inlineWindow.loadURL(targetUrl.toString());
+
+        inlineWindow.webContents.on("did-finish-load", () => {
+            inlineWindow.webContents.send("setupSiteAgent");
+        });
     }
 }
 

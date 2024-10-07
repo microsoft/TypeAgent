@@ -4,7 +4,7 @@
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import fs from "node:fs";
 import { randomInt } from "crypto";
-import { processCommandNoLock } from "../command.js";
+import { processCommandNoLock } from "../dispatcher/command.js";
 import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
 import { createTypeChat, promptLib } from "typeagent";
 import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";

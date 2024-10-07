@@ -360,21 +360,20 @@ export class ChatInput {
             .toLowerCase()
             .substring(file.name.lastIndexOf(".") + 1, file.name.length);
 
-        const supportedFileTypes: Set<string> = new Set<string>([
-            ".jpg",
-            ".jpeg",
-            ".png",
-        ]);
-        if (!supportedFileTypes.has(`.${mimeType}`)) {
-            console.log(`Unsupported MIME type for '${file.name}'`);
-            this.textarea.getTextEntry().innerText = `Unsupported file type '${mimeType}'. Supported types: ${Array.from(supportedFileTypes).toString()}`;
-            return;
-        }
-
         if (file.name.toLowerCase().endsWith(".jpg")) {
             mimeType = "jpeg";
         }
 
+        const supportedMimeTypes: Set<string> = new Set<string>([
+            "jpg",
+            "jpeg",
+            "png",
+        ]);
+        if (!supportedMimeTypes.has(mimeType)) {
+            console.log(`Unsupported MIME type for '${file.name}'`);
+            this.textarea.getTextEntry().innerText = `Unsupported file type '${mimeType}'. Supported types: ${Array.from(supportedMimeTypes).toString()}`;
+            return;
+        }
         dropImg.src =
             `data:image/${mimeType};base64,` + _arrayBufferToBase64(buffer);
 

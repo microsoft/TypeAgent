@@ -33,3 +33,11 @@ export function lowerAndSort(values: string[] | undefined): void {
         values.sort();    
     }
 }
+
+export function stringCompare(x: string, y: string, caseSensitive: boolean): number {
+    return caseSensitive ? x.localeCompare(y) : x.localeCompare(y, undefined, { sensitivity: 'base' });    
+}
+
+export function stringEquals(x: string, y: string, caseSensitive: boolean): boolean {
+    return caseSensitive ? x === y : stringCompare(x, y, caseSensitive) === 0;    
+}

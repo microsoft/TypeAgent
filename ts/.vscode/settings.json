@@ -2,6 +2,7 @@
     "editor.defaultFormatter": "esbenp.prettier-vscode",
     "cSpell.words": [
         "aiclient",
+        "AUTOINCREMENT",
         "lightgray",
         "oclif",
         "openai",

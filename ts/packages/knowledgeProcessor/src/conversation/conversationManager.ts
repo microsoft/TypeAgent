@@ -15,10 +15,11 @@ import {
 import {
     extractKnowledgeFromBlock,
     KnowledgeExtractor,
-    KnowledgeExtractorSettings,
     createKnowledgeExtractor,
     ExtractedKnowledge,
     ExtractedEntity,
+    createKnowledgeExtractorSettings,
+    createExtractedKnowledge,
 } from "./knowledge.js";
 import {
     ConversationSearchProcessor,
@@ -28,15 +29,16 @@ import {
 import { createEmbeddingCache } from "../modelCache.js";
 import { KnowledgeSearchMode } from "./knowledgeActions.js";
 import { SetOp, unionArrays } from "../setOperations.js";
-import { ConcreteEntity } from "./knowledgeSchema.js";
+import { ConcreteEntity, KnowledgeResponse } from "./knowledgeSchema.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TopicMerger } from "./topics.js";
 import { logError } from "../diagnostics.js";
+import { mergeEntityFacet } from "./entities.js";
 
 export type AddMessageTask = {
     type: "addMessage";
     message: string | TextBlock;
-    knownEntities?: ConcreteEntity[] | undefined;
+    knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined;
     timestamp?: Date | undefined;
     callback?: ((error?: any | undefined) => void) | undefined;
 };
@@ -48,32 +50,34 @@ export type ConversationManagerTask = AddMessageTask;
  *  - add and index messages and entities to a conversation
  *  - search the conversation
  */
-export interface ConversationManager {
+export interface ConversationManager<TMessageId = any, TTopicId = any> {
     readonly conversationName: string;
-    readonly conversation: Conversation<string, string, string, string>;
+    readonly conversation: Conversation<TMessageId, TTopicId, string, string>;
+    readonly topicMerger: TopicMerger<TTopicId>;
+    readonly knowledgeExtractor: KnowledgeExtractor;
     readonly searchProcessor: ConversationSearchProcessor;
     readonly updateTaskQueue: collections.TaskQueue<ConversationManagerTask>;
     /**
      * Add a message to the conversation
      * @param message
-     * @param entities If entities is NOT supplied, then will extract knowledge from message
+     * @param knowledge Any pre-extracted knowledge. Merged with knowledge automatically extracted from message.
      * @param timestamp message timestamp
      */
     addMessage(
         message: string | TextBlock,
-        entities?: ConcreteEntity[] | undefined,
+        knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
         timestamp?: Date | undefined,
     ): Promise<void>;
     /**
      * Queue the message for adding to the conversation memory in the background
      * @param message
-     * @param entities If entities is NOT supplied, then will extract knowledge from message
+     * @param knowledge Any pre-extracted knowledge. Merged with knowledge automatically extracted from message.
      * @param timestamp message timestamp
      * @returns true if queued. False if queue is full
      */
     queueAddMessage(
         message: string | TextBlock,
-        entities?: ConcreteEntity[] | undefined,
+        knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
         timestamp?: Date | undefined,
     ): boolean;
     /**
@@ -123,7 +127,7 @@ export interface ConversationManager {
      * Clear everything.
      * Note: While this is happening, it is up to you to ensure you are not searching or reading the conversation
      */
-    clear(): Promise<void>;
+    clear(removeMessages: boolean): Promise<void>;
 }
 
 /**
@@ -136,15 +140,12 @@ export async function createConversationManager(
     conversationPath: string,
     createNew: boolean,
     existingConversation?: Conversation | undefined,
-): Promise<ConversationManager> {
-    const embeddingModel = createEmbeddingCache(
-        openai.createEmbeddingModel(),
-        64,
-    );
+    topicMerger?: TopicMerger | undefined,
+): Promise<ConversationManager<string, string>> {
+    const conversationSettings = createConversationSettings();
     const knowledgeModel = openai.createChatModel();
     const answerModel = openai.createChatModel();
 
-    const conversationSettings = defaultConversationSettings();
     const folderSettings = defaultFolderSettings();
     const topicMergeWindowSize = 4;
     const maxCharsPerChunk = 2048;
@@ -160,18 +161,12 @@ export async function createConversationManager(
     if (createNew) {
         await conversation.clear(true);
     }
-    const knowledgeExtractorSettings = defaultKnowledgeExtractorSettings();
     const knowledgeExtractor = createKnowledgeExtractor(
         knowledgeModel,
-        knowledgeExtractorSettings,
+        createKnowledgeExtractorSettings(maxCharsPerChunk),
     );
 
-    let topicMerger = await createConversationTopicMerger(
-        knowledgeModel,
-        conversation,
-        1, // Merge base topic level 1 into a higher level
-        topicMergeWindowSize,
-    );
+    topicMerger ??= await createMerger();
 
     const searchProcessor = createSearchProcessor(
         conversation,
@@ -187,6 +182,10 @@ export async function createConversationManager(
     return {
         conversationName,
         conversation,
+        get topicMerger() {
+            return topicMerger!;
+        },
+        knowledgeExtractor,
         searchProcessor,
         updateTaskQueue,
         addMessage,
@@ -199,7 +198,7 @@ export async function createConversationManager(
 
     function addMessage(
         message: string | TextBlock,
-        knownEntities?: ConcreteEntity[] | undefined,
+        knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
         timestamp?: Date | undefined,
     ): Promise<void> {
         return addMessageToConversation(
@@ -207,20 +206,20 @@ export async function createConversationManager(
             knowledgeExtractor,
             topicMerger,
             message,
-            knownEntities,
+            knowledge,
             timestamp,
         );
     }
 
     function queueAddMessage(
         message: string | TextBlock,
-        knownEntities?: ConcreteEntity[] | undefined,
+        knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
         timestamp?: Date | undefined,
     ): boolean {
         return updateTaskQueue.push({
             type: "addMessage",
             message,
-            knownEntities,
+            knowledge,
             timestamp,
         });
     }
@@ -241,7 +240,7 @@ export async function createConversationManager(
                         knowledgeExtractor,
                         topicMerger,
                         addTask.message,
-                        addTask.knownEntities,
+                        addTask.knowledge,
                         addTask.timestamp,
                     );
                     break;
@@ -304,9 +303,13 @@ export async function createConversationManager(
         return searchProcessor.generateAnswer(query, searchResponse, options);
     }
 
-    async function clear(): Promise<void> {
-        await conversation.clear(true);
-        topicMerger = await createConversationTopicMerger(
+    async function clear(removeMessages: boolean): Promise<void> {
+        await conversation.clear(removeMessages);
+        topicMerger = await createMerger();
+    }
+
+    async function createMerger(): Promise<TopicMerger> {
+        return await createConversationTopicMerger(
             knowledgeModel,
             conversation,
             1, // Merge base topic level 1 into a higher level
@@ -314,7 +317,14 @@ export async function createConversationManager(
         );
     }
 
-    function defaultConversationSettings(): ConversationSettings {
+    function createConversationSettings(): ConversationSettings {
+        if (existingConversation) {
+            return existingConversation.settings;
+        }
+        const embeddingModel = createEmbeddingCache(
+            openai.createEmbeddingModel(),
+            64,
+        );
         return {
             indexSettings: {
                 caseSensitive: false,
@@ -322,15 +332,6 @@ export async function createConversationManager(
                 embeddingModel,
                 semanticIndex: true,
             },
-        };
-    }
-
-    function defaultKnowledgeExtractorSettings(): KnowledgeExtractorSettings {
-        return {
-            windowSize: 8,
-            maxContextLength: maxCharsPerChunk,
-            includeSuggestedTopics: false,
-            includeActions: true,
         };
     }
 
@@ -376,7 +377,7 @@ export async function addMessageToConversation(
     knowledgeExtractor: KnowledgeExtractor,
     topicMerger: TopicMerger | undefined,
     message: string | TextBlock,
-    knownEntities?: ConcreteEntity[] | undefined,
+    knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
     timestamp?: Date | undefined,
 ): Promise<void> {
     const block = await conversation.addMessage(message, timestamp);
@@ -385,7 +386,7 @@ export async function addMessageToConversation(
         knowledgeExtractor,
         topicMerger,
         block,
-        knownEntities,
+        knowledge,
     );
 }
 
@@ -394,14 +395,14 @@ async function extractKnowledgeAndIndex(
     knowledgeExtractor: KnowledgeExtractor,
     topicMerger: TopicMerger | undefined,
     message: SourceTextBlock,
-    knownEntities?: ConcreteEntity[] | undefined,
+    knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
 ) {
     const messageIndex = await conversation.getMessageIndex();
     await messageIndex.put(message.value, message.blockId);
     let extractedKnowledge: ExtractedKnowledge | undefined;
     let knownKnowledge: ExtractedKnowledge | undefined;
-    if (knownEntities) {
-        knownKnowledge = entitiesToKnowledge(message.blockId, knownEntities);
+    if (knowledge) {
+        knownKnowledge = createExtractedKnowledge(message.blockId, knowledge);
     }
     const knowledgeResult = await extractKnowledgeFromBlock(
         knowledgeExtractor,
@@ -412,10 +413,10 @@ async function extractKnowledgeAndIndex(
     }
     if (extractedKnowledge) {
         if (knownKnowledge) {
-            const merged = new Map<string, ExtractedEntity>();
-            mergeEntities(extractedKnowledge.entities, merged);
-            mergeEntities(knownKnowledge.entities, merged);
-            extractedKnowledge.entities = [...merged.values()];
+            extractedKnowledge = mergeKnowledge(
+                extractedKnowledge,
+                knownKnowledge,
+            );
         }
     } else {
         extractedKnowledge = knownKnowledge;
@@ -428,22 +429,6 @@ async function extractKnowledgeAndIndex(
             extractedKnowledge,
         );
     }
-}
-
-function entitiesToKnowledge(
-    sourceId: any,
-    entities: ConcreteEntity[],
-): ExtractedKnowledge | undefined {
-    if (entities && entities.length > 0) {
-        const sourceIds = [sourceId];
-        const knowledge: ExtractedKnowledge = {
-            entities: entities.map((value) => {
-                return { value, sourceIds };
-            }),
-        };
-        return knowledge;
-    }
-    return undefined;
 }
 
 async function indexKnowledge(
@@ -463,24 +448,47 @@ async function indexKnowledge(
     await conversation.addKnowledgeToIndex(knowledge, knowledgeIds);
 }
 
+function mergeKnowledge(
+    x: ExtractedKnowledge,
+    y: ExtractedKnowledge,
+): ExtractedKnowledge {
+    const merged = new Map<string, ExtractedEntity>();
+    if (x.entities && x.entities.length > 0) {
+        mergeEntities(x.entities, merged);
+    }
+    if (y.entities && y.entities.length > 0) {
+        mergeEntities(y.entities, merged);
+    }
+
+    let topics = collections.concatArrays(x.topics, y.topics);
+    return {
+        entities: [...merged.values()],
+        topics,
+        actions: x.actions,
+    };
+}
+
 function mergeEntities(
-    entities: ExtractedEntity[] | undefined,
+    entities: ExtractedEntity[],
     merged: Map<string, ExtractedEntity>,
 ): void {
-    if (entities) {
-        for (const ee of entities) {
-            const entity = ee.value;
-            entity.name = entity.name.toLowerCase();
-            collections.lowerAndSort(entity.type);
-            const existing = merged.get(entity.name);
-            if (existing) {
-                existing.value.type = unionArrays(
-                    existing.value.type,
-                    entity.type,
-                )!;
-            } else {
-                merged.set(entity.name, ee);
+    for (const ee of entities) {
+        const entity = ee.value;
+        entity.name = entity.name.toLowerCase();
+        collections.lowerAndSort(entity.type);
+        const existing = merged.get(entity.name);
+        if (existing) {
+            existing.value.type = unionArrays(
+                existing.value.type,
+                entity.type,
+            )!;
+            if (entity.facets && entity.facets.length > 0) {
+                for (const f of entity.facets) {
+                    mergeEntityFacet(existing.value, f);
+                }
             }
+        } else {
+            merged.set(entity.name, ee);
         }
     }
 }

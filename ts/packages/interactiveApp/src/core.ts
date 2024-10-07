@@ -1,7 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { spawn } from "child_process";
 import { InteractiveIo } from "./InteractiveIo";
+import fs from "fs";
 
 /**
  * Timer for perf measurements
@@ -59,4 +61,37 @@ export class StopWatch {
 
 export function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function runExe(
+    exePath: string,
+    args: string[] | undefined,
+    io: InteractiveIo,
+): Promise<boolean> {
+    if (!fs.existsSync(exePath)) {
+        return Promise.resolve(false);
+    }
+    return new Promise((resolve, reject) => {
+        try {
+            const process = spawn(exePath, args);
+            process.stdout.on("data", (text: string) => {
+                io.writer.write(text);
+            });
+            process.stderr.on("data", (text: string) => {
+                io.writer.write(text);
+            });
+            process.on("error", (error) => {
+                reject(error);
+            });
+            process.on("close", (code) => {
+                if (code === 0) {
+                    resolve(true);
+                } else {
+                    reject(`Exit with code ${code}`);
+                }
+            });
+        } catch (error) {
+            reject(error);
+        }
+    });
 }

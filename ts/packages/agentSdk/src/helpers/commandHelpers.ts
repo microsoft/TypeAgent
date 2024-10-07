@@ -7,14 +7,13 @@ import {
     CommandDescriptor,
     CommandDescriptors,
     CommandDescriptorTable,
-    ParameterDefinitions,
 } from "../command.js";
-import { parseParams, ParsedCommandParams } from "./parameterHelpers.js";
+import { ParameterDefinitions, ParsedCommandParams } from "../parameters.js";
 
 export {
-    splitParams,
-    ParsedCommandParams,
     resolveFlag,
+    getFlagMultiple,
+    getFlagType,
 } from "./parameterHelpers.js";
 
 export type CommandHandlerNoParams = CommandDescriptor & {
@@ -22,15 +21,6 @@ export type CommandHandlerNoParams = CommandDescriptor & {
     run(
         context: ActionContext<unknown>,
         params: undefined,
-        attachments?: string[],
-    ): Promise<void>;
-};
-
-export type CommandHandlerNoParse = CommandDescriptor & {
-    parameters: true;
-    run(
-        context: ActionContext<unknown>,
-        params: string,
         attachments?: string[],
     ): Promise<void>;
 };
@@ -44,21 +34,12 @@ export type CommandHandler = CommandDescriptor & {
     ): Promise<void>;
 };
 
-type CommandHandlerTypes =
-    | CommandHandlerNoParams
-    | CommandHandlerNoParse
-    | CommandHandler;
+type CommandHandlerTypes = CommandHandlerNoParams | CommandHandler;
 
 function isCommandHandlerNoParams(
     handler: CommandHandlerTypes,
 ): handler is CommandHandlerNoParams {
     return handler.parameters === undefined || handler.parameters === false;
-}
-
-function isCommandHandlerNoParse(
-    handler: CommandHandlerTypes,
-): handler is CommandHandlerNoParse {
-    return handler.parameters === true;
 }
 
 type CommandDefinitions = CommandHandlerTypes | CommandHandlerTable;
@@ -82,7 +63,7 @@ export function getCommandInterface(
         getCommands: async () => handlers,
         executeCommand: async (
             commands: string[],
-            args: string,
+            params: ParsedCommandParams<ParameterDefinitions> | undefined,
             context: ActionContext<unknown>,
             attachments?: string[],
         ) => {
@@ -116,21 +97,22 @@ export function getCommandInterface(
                 }
                 curr = curr.defaultSubCommand;
             }
+
             if (isCommandHandlerNoParams(curr)) {
-                if (args.trim() !== "") {
+                if (params !== undefined) {
                     throw new Error(
-                        `No parameters expected for command '@${commandPrefix.join(" ")}'`,
+                        `Command '@${commandPrefix.join(" ")}' does not accept parameters`,
                     );
                 }
                 await curr.run(context, undefined, attachments);
-            } else if (isCommandHandlerNoParse(curr)) {
-                await curr.run(context, args, attachments);
+                return;
             } else {
-                await curr.run(
-                    context,
-                    parseParams(args, curr.parameters),
-                    attachments,
-                );
+                if (params === undefined) {
+                    throw new Error(
+                        `Command '@${commandPrefix.join(" ")}' expects parameters`,
+                    );
+                }
+                await curr.run(context, params, attachments);
             }
         },
     };

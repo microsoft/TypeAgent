@@ -37,8 +37,16 @@ public class EmailExporter
             destPath = DestFilePath(sourcePath, destFolderPath);
         }
 
-        Email email = _outlook.LoadEmail(sourcePath);
-        email.Save(destPath);
+        try
+        {
+            Email email = _outlook.LoadEmail(sourcePath);
+            email.Save(destPath);
+        }
+        catch(System.Exception ex)
+        {
+            WriteLineColor(ConsoleColor.Red, $"SKIPPED {sourcePath}");
+            LogError(ex);
+        }
     }
 
     public void ExportDirectory(string sourcePath, string destPath)
@@ -146,5 +154,20 @@ public class EmailExporter
             return null;
         }
         return line.ParseCommandLine();
+    }
+
+    static void LogError(System.Exception ex)
+    {
+        WriteLineColor(ConsoleColor.DarkYellow, $"##Error##\n{ex.Message}\n####");
+        Console.WriteLine();
+    }
+
+    static void WriteLineColor(ConsoleColor color, string message)
+    {
+        var prevColor = Console.ForegroundColor;
+        Console.ForegroundColor = color;
+        Console.WriteLine(message);
+        Console.ForegroundColor = prevColor;
+
     }
 }
