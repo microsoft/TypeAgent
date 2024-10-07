@@ -52,7 +52,10 @@ import {
     AppAgentStateOptions,
     SetStateResult,
 } from "./appAgentManager.js";
-import { getBuiltinAppAgentProvider } from "../../agent/agentConfig.js";
+import {
+    getBuiltinAppAgentProvider,
+    getExternalAppAgentProvider,
+} from "../../agent/agentConfig.js";
 import { loadTranslatorSchemaConfig } from "../../utils/loadSchemaConfig.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 import { RequestMetricsManager } from "../../utils/metrics.js";
@@ -299,6 +302,9 @@ export async function initializeCommandHandlerContext(
             context.transientAgents[name] = false;
         }
     }
+
+    await agents.addProvider(getExternalAppAgentProvider(context), context);
+
     await setAppAgentStates(context, options);
     return context;
 }
