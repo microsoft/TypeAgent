@@ -715,6 +715,7 @@ export class RequestCommandHandler implements CommandHandler {
             request: {
                 description: "Request to translate",
                 implicitQuotes: true,
+                optional: true, // can be optional since the user can supply images and no text // TODO: revisit
             },
         },
     } as const;
@@ -729,7 +730,7 @@ export class RequestCommandHandler implements CommandHandler {
         );
         try {
             // Don't handle the request if it contains the separator
-            const request = params.args.request;
+            const request = params.args.request === undefined ? "" : params.args.request;            
             if (request.includes(RequestAction.Separator)) {
                 throw new Error(
                     `Invalid translation request with translation separator '${RequestAction.Separator}'.  Use @explain if you want to explain a translation.`,

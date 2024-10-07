@@ -534,10 +534,6 @@ app.whenReady().then(async () => {
         }
         debugShell(dispatcher.getPrompt(), text);
 
-        if (text.length == 0 && images.length > 0) {
-            text = `Caption the first image in no less than 150 words without making any assumptions, remain factual.`;
-        }
-
         const metrics = await dispatcher.processCommand(text, id, images);
         mainWindow?.webContents.send("send-demo-event", "CommandProcessed");
         const newSettingSummary = dispatcher.getSettingSummary();
