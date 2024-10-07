@@ -400,10 +400,11 @@ export async function getPartialCompletion(
             return undefined;
         }
 
+        const params = parseParams(result.suffix, descriptor.parameters, true);
         let flagsNeedsValue = false;
-        if (result.suffix.length !== 0) {
-            const lastArg = result.suffix[result.suffix.length - 1];
-            const resolvedFlag = resolveFlag(flags, lastArg);
+        if (params.tokens.length) {
+            const lastToken = params.tokens[params.tokens.length - 1];
+            const resolvedFlag = resolveFlag(flags, lastToken);
             if (
                 resolvedFlag !== undefined &&
                 getFlagType(resolvedFlag[1]) !== "boolean"
@@ -412,13 +413,14 @@ export async function getPartialCompletion(
             }
         }
         if (!flagsNeedsValue) {
+            const parsedFlags = params.flags;
             for (const [key, value] of Object.entries(flags)) {
+                if (!value.multiple && parsedFlags?.[key] !== undefined) {
+                    // filter out non-multiple flags that is already set.
+                    continue;
+                }
                 completions.push(`--${key}`);
-                if (
-                    typeof value === "object" &&
-                    !Array.isArray(value) &&
-                    value.char !== undefined
-                ) {
+                if (value.char !== undefined) {
                     completions.push(`-${value.char}`);
                 }
             }

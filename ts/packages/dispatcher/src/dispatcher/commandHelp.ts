@@ -19,7 +19,7 @@ export function getUsage(command: string, descriptor: CommandDescriptor) {
 
     const paramUsage: string[] = [];
     const paramUsageFull: string[] = [];
-    if (typeof descriptor.parameters === "object") {
+    if (descriptor.parameters !== undefined) {
         if (descriptor.parameters.args) {
             const args = Object.entries(descriptor.parameters.args);
             if (args.length !== 0) {
@@ -45,17 +45,17 @@ export function getUsage(command: string, descriptor: CommandDescriptor) {
                 );
                 for (const [name, def] of flags) {
                     const type = getFlagType(def);
-                    const usage = `[${def.char ? `-${def.char}|` : ""}--${name}${type === "boolean" ? "" : ` <${type}>`}]`;
+                    const typeStr = `${type === "boolean" ? "" : ` <${type}>`}`;
+                    const usage = `[${def.char ? `-${def.char}|` : ""}--${name}${typeStr}]`;
                     paramUsage.unshift(usage);
                     paramUsageFull.push(
-                        `  ${`--${name}`.padStart(maxNameLength)} ${def.char !== undefined ? `-${def.char}` : "  "} : ${def.description}${def.default !== undefined ? ` (default: ${def.default})` : ""}`,
+                        `  ${`--${name}`.padStart(maxNameLength)} ${def.char !== undefined ? `-${def.char}` : "  "}${typeStr.padEnd(8)} : ${def.description}${def.default !== undefined ? ` (default: ${def.default})` : ""}`,
                     );
                 }
             }
         }
-    } else if (descriptor.parameters === true) {
-        paramUsage.push("<parameters> ...");
     }
+
     const output: string[] = [];
 
     output.push(`@${chalk.bold(command)} - ${descriptor.description}`);
