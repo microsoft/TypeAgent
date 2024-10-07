@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "Browser TypeAgent",
+  "version": "1.0",
+  "description": "Automates various browser actions.",
+  "action": {},
+  "content_scripts": [
+    {
+      "matches": ["https://*/*"],
+      "js": ["contentScript.js"],
+      "all_frames": true,
+      "runAt": "document_start"
+    },
+    {
+      "matches": ["https://*/*"],
+      "js": ["agentActivation.js"],
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://*/*"],
+      "js": ["uiEventsDispatcher.js"],
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://paleobiodb.org/*"],
+      "js": ["sites/paleobiodb.js"],
+      "world": "MAIN"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["sites/paleobiodb.js"],
+      "matches": ["https://paleobiodb.org/*"]
+    },
+    {
+      "resources": ["uiEventsDispatcher.js"],
+      "matches": ["https://*/*"]
+    }
+  ],
+  "permissions": ["activeTab", "storage", "scripting", "tabs"],
+  "host_permissions": ["<all_urls>"]
+}

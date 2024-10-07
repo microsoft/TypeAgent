@@ -1,11 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { AppAction, ActionResult } from "./action.js";
+import { AppAgentCommandInterface } from "./command.js";
+import { ActionIO, DisplayType, DynamicDisplay } from "./display.js";
+import { Profiler } from "./profiler.js";
+
 //==============================================================================
 // Manifest
 //==============================================================================
 export type AppAgentManifest = {
     emojiChar: string;
+    description: string;
+    commandDefaultEnabled?: boolean;
 } & TranslatorDefinition;
 
 export type SchemaDefinition = {
@@ -18,6 +25,7 @@ export type SchemaDefinition = {
 };
 
 export type TranslatorDefinition = {
+    defaultEnabled?: boolean;
     translationDefaultEnabled?: boolean;
     actionDefaultEnabled?: boolean;
     transient?: boolean; // whether the translator is transient, default is false
@@ -29,50 +37,10 @@ export type TranslatorDefinition = {
 //==============================================================================
 // App Agent
 //==============================================================================
-export interface AppAction {
-    actionName: string;
-    translatorName?: string | undefined;
-}
-
-export interface AppActionWithParameters extends AppAction {
-    parameters: { [key: string]: any };
-}
-
-export type DisplayType = "html" | "text";
-
-export type DynamicDisplay = {
-    content: DisplayContent;
-    nextRefreshMs: number; // in milliseconds, -1 means no more refresh.
-};
-
-export type CommandDescriptor = {
-    description: string;
-    help?: string;
-};
-
-export type CommandDescriptorTable = {
-    description: string;
-    commands: Record<string, CommandDescriptor | CommandDescriptorTable>;
-    defaultSubCommand?: CommandDescriptor | undefined;
-};
-
-export interface AppAgentCommandInterface {
-    // Commands
-    getCommands(
-        context: SessionContext,
-    ): Promise<CommandDescriptor | CommandDescriptorTable>;
-
-    executeCommand(
-        command: string[] | undefined,
-        args: string,
-        context: ActionContext<unknown>,
-        attachments?: string[],
-    ): Promise<void>;
-}
 
 export interface AppAgent extends Partial<AppAgentCommandInterface> {
     // Setup
-    initializeAgentContext?(): Promise<any>;
+    initializeAgentContext?(): Promise<unknown>;
     updateAgentContext?(
         enable: boolean,
         context: SessionContext,
@@ -91,7 +59,7 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
     executeAction?(
         action: AppAction,
         context: ActionContext<unknown>,
-    ): Promise<any>; // TODO: define return type.
+    ): Promise<ActionResult | undefined>;
 
     // Cache extensions
     validateWildcardMatch?(
@@ -128,8 +96,8 @@ export interface SessionContext<T = unknown> {
     toggleTransientAgent(agentName: string, active: boolean): Promise<void>;
 }
 
-// TODO: only utf8 is supported for now.
-export type StorageEncoding = "utf8";
+// TODO: only utf8 & base64 is supported for now.
+export type StorageEncoding = "utf8" | "base64";
 
 export type StorageListOptions = {
     dirs?: boolean;
@@ -150,22 +118,9 @@ export interface Storage {
     getTokenCachePersistence(): Promise<TokenCachePersistence>;
 }
 
-export type DisplayContent =
-    | string
-    | {
-          type: DisplayType;
-          content: string;
-      };
-
-export interface ActionIO {
-    readonly type: DisplayType;
-    setDisplay(content: DisplayContent): void;
-    appendDisplay(content: DisplayContent): void;
-}
-
 export interface ActionContext<T = void> {
+    profiler?: Profiler | undefined;
     streamingContext: unknown;
     readonly actionIO: ActionIO;
     readonly sessionContext: SessionContext<T>;
-    performanceMark(markName: string): void;
 }

@@ -1,9 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DispatcherCommandHandler } from "./common/commandHandler.js";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import registerDebug from "debug";
+import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
+import { displaySuccess } from "@typeagent/agent-sdk/helpers/display";
 
 function toNamespace(regexp: RegExp) {
     return regexp
@@ -21,21 +23,45 @@ function getCurrentTraceSettings() {
     ];
 }
 
-export class TraceCommandHandler implements DispatcherCommandHandler {
+export class TraceCommandHandler implements CommandHandler {
     public readonly description = "Enable or disable trace namespaces";
-    public async run(input: string, context: CommandHandlerContext) {
-        if (input !== "") {
-            if (input === "-" || input === "-*") {
-                registerDebug.disable();
-            } else {
-                registerDebug.enable(
-                    getCurrentTraceSettings().concat(input).join(","),
-                );
-            }
+    public readonly parameters = {
+        flags: {
+            clear: {
+                char: "*",
+                description: "Clear all trace namespaces",
+                type: "boolean",
+                default: false,
+            },
+        },
+        args: {
+            namespaces: {
+                description: "Namespaces to enable",
+                type: "string",
+                multiple: true,
+                optional: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        if (params.flags.clear) {
+            registerDebug.disable();
+            displaySuccess("All trace namespaces cleared", context);
+        }
+        if (params.args.namespaces !== undefined) {
+            registerDebug.enable(
+                getCurrentTraceSettings()
+                    .concat(params.args.namespaces)
+                    .join(","),
+            );
         }
 
-        context.requestIO.success(
+        displaySuccess(
             `Current trace settings: ${getCurrentTraceSettings().join(",")}`,
+            context,
         );
     }
 }

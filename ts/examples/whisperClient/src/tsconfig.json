@@ -4,7 +4,6 @@
     "composite": false,
     "rootDir": ".",
     "outDir": "../dist",
-    "noUnusedLocals": false,
     "declaration": false,
     "declarationMap": false,
     "moduleResolution": "bundler",

@@ -14,9 +14,12 @@ import {
     getUniqueFileName,
     getYMDPrefix,
 } from "../utils/userData.js";
-import { TranslatorConfigProvider } from "../translation/agentTranslators.js";
 import ExifReader from "exifreader";
-import { AppAgentState } from "../handlers/common/appAgentManager.js";
+import {
+    AppAgentState,
+    AppAgentStateOptions,
+} from "../handlers/common/appAgentManager.js";
+import { cloneConfig, mergeConfig } from "./options.js";
 
 const debugSession = registerDebug("typeagent:session");
 
@@ -28,11 +31,11 @@ function getSessionsFilePath() {
     return path.join(getUserProfileDir(), "sessions.json");
 }
 
-function getSessionsDirPath() {
+export function getSessionsDirPath() {
     return path.join(getUserProfileDir(), "sessions");
 }
 
-function getSessionDirPath(dir: string) {
+export function getSessionDirPath(dir: string) {
     return path.join(getSessionsDirPath(), dir);
 }
 
@@ -45,49 +48,6 @@ export function getSessionCacheDirPath(dir: string) {
 }
 
 let releaseLock: () => Promise<void> | undefined;
-
-type ConfigObject = {
-    [key: string]: any;
-};
-
-function mergeConfig(
-    config: ConfigObject,
-    options: ConfigObject,
-    strict: boolean = true,
-    flexKeys?: string[],
-) {
-    const changed: ConfigObject = {};
-    const keys = strict ? Object.keys(config) : Object.keys(options);
-    for (const key of keys) {
-        if (options.hasOwnProperty(key)) {
-            const value = options[key];
-            if (typeof value === "object") {
-                const strictKey = flexKeys ? !flexKeys.includes(key) : strict;
-                if (config[key] === undefined) {
-                    if (strictKey) {
-                        continue;
-                    }
-                    config[key] = {};
-                }
-
-                const changedValue = mergeConfig(config[key], value, strictKey);
-                if (Object.keys(changedValue).length !== 0) {
-                    changed[key] = changedValue;
-                }
-            } else if (!config.hasOwnProperty(key) || config[key] !== value) {
-                config[key] = value;
-                changed[key] = value;
-            }
-        }
-    }
-    return changed;
-}
-
-function cloneConfig(config: SessionConfig): SessionConfig {
-    const clone: any = {};
-    mergeConfig(clone, config, false);
-    return clone;
-}
 
 async function loadSessions(): Promise<Sessions> {
     // If we ever load the session config, we lock it until the process exits
@@ -163,13 +123,16 @@ type DispatcherConfig = {
     matchWildcard: boolean;
 };
 
-export type SessionConfig = Required<AppAgentState> &
-    DispatcherConfig &
-    CacheConfig;
+export type SessionConfig = AppAgentState & DispatcherConfig & CacheConfig;
+
+export type SessionOptions = AppAgentStateOptions &
+    DeepPartialUndefined<DispatcherConfig> &
+    DeepPartialUndefined<CacheConfig>;
 
 const defaultSessionConfig: SessionConfig = {
     translators: undefined,
     actions: undefined,
+    commands: undefined,
     explainerName: getDefaultExplainerName(),
     models: {
         translator: "",
@@ -205,8 +168,6 @@ type SessionData = {
     config: SessionConfig;
     cacheData: SessionCacheData;
 };
-
-export type SessionOptions = DeepPartialUndefined<SessionConfig>;
 
 // Fill in missing fields when loading sessions from disk
 function ensureSessionData(data: any): SessionData {
@@ -248,7 +209,10 @@ export class Session {
     private config: SessionConfig;
     private cacheData: SessionCacheData;
 
-    public static async create(config: SessionConfig, persist: boolean) {
+    public static async create(
+        config: SessionConfig = defaultSessionConfig,
+        persist: boolean,
+    ) {
         const session = new Session(
             { config: cloneConfig(config), cacheData: {} },
             persist ? await newSessionDir() : undefined,
@@ -260,6 +224,9 @@ export class Session {
     public static async load(dir: string) {
         const sessionData = await readSessionData(dir);
         debugSession(`Loading session: ${dir}`);
+        debugSession(
+            `Config: ${JSON.stringify(sessionData.config, undefined, 2)}`,
+        );
         return new Session(sessionData, dir);
     }
 
@@ -395,6 +362,10 @@ export class Session {
                 config: this.config,
                 cacheData: this.cacheData,
             };
+            debugSession(`Saving session: ${this.dir}`);
+            debugSession(
+                `Config: ${JSON.stringify(data.config, undefined, 2)}`,
+            );
             fs.writeFileSync(
                 sessionDataFilePath,
                 JSON.stringify(data, undefined, 2),
@@ -413,10 +384,12 @@ export class Session {
         const fileExtension: string = this.getFileExtensionForMimeType(
             file.substring(5, file.indexOf(";")),
         );
-        const fileName: string = path.join(
+        const uniqueFileName: string = getUniqueFileName(
             filesDir,
-            getUniqueFileName(filesDir, "attachment_", fileExtension),
+            "attachment_",
+            fileExtension,
         );
+        const fileName: string = path.join(filesDir, uniqueFileName);
         const buffer = Buffer.from(
             file.substring(file.indexOf(";base64,") + ";base64,".length),
             "base64",
@@ -426,7 +399,7 @@ export class Session {
 
         fs.writeFile(fileName, buffer, () => {});
 
-        return [fileName, tags];
+        return [uniqueFileName, tags];
     }
 
     getFileExtensionForMimeType(mime: string): string {

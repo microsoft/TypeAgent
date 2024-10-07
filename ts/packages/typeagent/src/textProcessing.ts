@@ -17,7 +17,7 @@ import {
     success,
 } from "typechat";
 import * as cheerio from "cheerio";
-import { getHtml, bing, ChatModel } from "aiclient";
+import { getHtml, bing, ChatModel, TextEmbeddingModel } from "aiclient";
 import { createChatTranslator } from "./chat";
 import { MessageSourceRole } from "./message";
 import { TypeSchema } from "./schema";
@@ -25,6 +25,7 @@ import { readAllLines, readAllText, writeAllLines } from "./objStream";
 import fs from "fs";
 import { textToProcessSection } from "./promptLib";
 import { ProcessProgress, mapAsync } from "./arrayAsync";
+import { generateEmbeddings, similarity, SimilarityType } from ".";
 
 function splitIntoSentences(text: string): string[] {
     return text.split(/(?<=[.!?;\r\n])\s+/);
@@ -735,12 +736,14 @@ export async function answerQueryFromLargeText(
     progress?: ProcessProgress<string, AnswerResponse>,
 ): Promise<AnswerResponse> {
     const chunks = getTextChunks(text, maxCharsPerChunk);
+    console.log(`Anser Query processing ${chunks.length} text chunks.`);
     const chunkAnswers = await mapAsync(
         chunks,
         concurrency,
         (chunk) => runChunk(model, query, chunk),
         chunkProgress,
     );
+    console.log(`Processed ${chunkAnswers.length} chunk answers.`);
     // First, see if we got a full answer
     let answer = emptyAnswer();
     for (const chunkAnswer of chunkAnswers) {
@@ -752,6 +755,7 @@ export async function answerQueryFromLargeText(
             answer = accumulateAnswer(answer, chunkAnswer, "PartialAnswer");
         }
     }
+
     if (rewriteForReadability && answer.type !== "NoAnswer" && answer.answer) {
         const rewritten = await rewriteText(
             model,
@@ -764,6 +768,8 @@ export async function answerQueryFromLargeText(
             answer.type = "FullAnswer";
         }
     }
+
+    console.log(`Answer Type: ${answer.type}`);
 
     return answer;
 
@@ -1369,4 +1375,22 @@ export async function generateVariationsRecursive(
         }
     }
     return [...uniqueVariations.values()];
+}
+
+export async function stringSimilarity(
+    model: TextEmbeddingModel,
+    x: string | undefined,
+    y: string | undefined,
+): Promise<number> {
+    if (x && y) {
+        if (x === y) {
+            return 1.0;
+        }
+        const embeddings = await generateEmbeddings(model, [x, y]);
+        return similarity(embeddings[0], embeddings[1], SimilarityType.Dot); // Embeddings are normalized
+    } else if (x === undefined && y === undefined) {
+        return 1.0;
+    }
+
+    return 0.0;
 }

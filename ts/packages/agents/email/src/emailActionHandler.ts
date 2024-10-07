@@ -15,14 +15,42 @@ import {
     AppAction,
     AppAgent,
     SessionContext,
-    createActionResultFromHtmlDisplay,
 } from "@typeagent/agent-sdk";
+import {
+    createActionResultFromHtmlDisplay,
+    createActionResultFromError,
+} from "@typeagent/agent-sdk/helpers/action";
+import {
+    CommandHandlerNoParams,
+    CommandHandlerTable,
+    getCommandInterface,
+} from "@typeagent/agent-sdk/helpers/command";
+
+export class MailClientLoginCommandHandler implements CommandHandlerNoParams {
+    public readonly description = "Log into the MS Graph to access email";
+    public async run(context: ActionContext<EmailActionContext>) {
+        const mailClient: MailClient | undefined =
+            context.sessionContext.agentContext.mailClient;
+        if (!mailClient?.isGraphClientInitialized()) {
+            await mailClient?.initGraphClient(true);
+        }
+    }
+}
+
+const handlers: CommandHandlerTable = {
+    description: "Email login commmand",
+    defaultSubCommand: new MailClientLoginCommandHandler(),
+    commands: {
+        login: new MailClientLoginCommandHandler(),
+    },
+};
 
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeEmailContext,
         updateAgentContext: updateEmailContext,
         executeAction: executeEmailAction,
+        ...getCommandInterface(handlers),
     };
 }
 
@@ -51,6 +79,13 @@ async function executeEmailAction(
     action: AppAction,
     context: ActionContext<EmailActionContext>,
 ) {
+    const { mailClient } = context.sessionContext.agentContext;
+    if (!mailClient || !mailClient?.isGraphClientInitialized()) {
+        return createActionResultFromError(
+            "Use @email login to log into MS Graph.",
+        );
+    }
+
     let result = await handleEmailAction(action as EmailAction, context);
     if (result) {
         return createActionResultFromHtmlDisplay(result);
@@ -62,8 +97,8 @@ async function handleEmailAction(
     context: ActionContext<EmailActionContext>,
 ) {
     const { mailClient } = context.sessionContext.agentContext;
-    if (!mailClient || !mailClient?.isGraphClientInitialized()) {
-        return "Not handling email actions ...";
+    if (!mailClient) {
+        return "<div>Mail client not initialized ...</div>";
     }
 
     let res;

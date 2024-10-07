@@ -1,8 +1,0 @@
-{
-  "emojiChar": "📷",
-  "schema": {
-    "description": "Photos agent that looks at your photos and remembers things about them and incorporates them into it's memory.",
-    "schemaFile": "./photoSchema.ts",
-    "schemaType": "PhotoAction"
-  }
-}

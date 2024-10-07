@@ -68,12 +68,14 @@ import {
 import registerDebug from "debug";
 import {
     ActionIO,
-    createActionResultFromHtmlDisplay,
-    createActionResultFromTextDisplay,
     DisplayContent,
     Storage,
     ActionResult,
 } from "@typeagent/agent-sdk";
+import {
+    createActionResultFromHtmlDisplay,
+    createActionResultFromTextDisplay,
+} from "@typeagent/agent-sdk/helpers/action";
 
 const debugSpotify = registerDebug("typeagent:spotify");
 const debugSpotifyError = registerDebug("typeagent:spotify:error");
@@ -925,19 +927,19 @@ export async function handleCall(
             return resumeActionCall(clientContext);
         }
         case "listDevices": {
-            const html = await listAvailableDevices(clientContext);
-            return html
-                ? createActionResultFromTextDisplay(html)
+            const result = await listAvailableDevices(clientContext);
+            return result
+                ? createActionResultFromHtmlDisplay(result.html, result.lit)
                 : createErrorActionResult("No devices found");
         }
         case "selectDevice": {
             const selectDeviceAction = action as SelectDeviceAction;
             const keyword = selectDeviceAction.parameters.keyword;
-            const html = await selectDevice(keyword, clientContext);
-
-            return html
-                ? createActionResultFromTextDisplay(html)
-                : createErrorActionResult("No devices found");
+            const result = await selectDevice(keyword, clientContext);
+            if (result) {
+                const { html, text } = result;
+                return createActionResultFromHtmlDisplay(html, text);
+            } else return createErrorActionResult("No devices found");
         }
         case "setVolume": {
             const setVolumeAction = action as SetVolumeAction;

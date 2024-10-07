@@ -1,32 +1,47 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-
-import { log } from "node:console";
-import { DispatcherCommandHandler } from "./common/commandHandler.js";
+import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
+import {
+    displayResult,
+    displayStatus,
+} from "@typeagent/agent-sdk/helpers/display";
 import {
     CommandHandlerContext,
     updateCorrectionContext,
 } from "./common/commandHandlerContext.js";
 import { RequestAction, printProcessRequestActionResult } from "agent-cache";
 
-export class ExplainCommandHandler implements DispatcherCommandHandler {
+export class ExplainCommandHandler implements CommandHandler {
     public readonly description = "Explain a translated request with action";
-    public async run(input: string, context: CommandHandlerContext) {
-        const requestAction = RequestAction.fromString(input);
-        context.requestIO.status(
-            `Generating explanation for '${requestAction}'`,
+    public readonly parameters = {
+        args: {
+            requestAction: {
+                description: "Request to explain",
+                implicitQuotes: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const requestAction = RequestAction.fromString(
+            params.args.requestAction,
         );
-        const result = await context.agentCache.processRequestAction(
+        displayStatus(`Generating explanation for '${requestAction}'`, context);
+        const systemContext = context.sessionContext.agentContext;
+        const result = await systemContext.agentCache.processRequestAction(
             requestAction,
             false,
         );
         updateCorrectionContext(
-            context,
+            systemContext,
             requestAction,
             result.explanationResult.explanation,
         );
-        context.requestIO.result((log) => {
+        displayResult((log) => {
             printProcessRequestActionResult(result, log);
-        });
+        }, context);
     }
 }

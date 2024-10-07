@@ -1,29 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { log } from "node:console";
-import {
-    DispatcherCommandHandler,
-    DispatcherHandlerTable,
-} from "./common/commandHandler.js";
-import {
-    CommandHandlerContext,
-    updateCorrectionContext,
-} from "./common/commandHandlerContext.js";
-import { RequestAction, printProcessRequestActionResult } from "agent-cache";
+import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import fs from "node:fs";
 import { randomInt } from "crypto";
-import { request } from "node:http";
-import { processCommandNoLock } from "../command.js";
+import { processCommandNoLock } from "../dispatcher/command.js";
 import { ChatModelWithStreaming, CompletionSettings, openai } from "aiclient";
-import {
-    MessageSourceRole,
-    createTypeChat,
-    getContextFromHistory,
-    promptLib,
-} from "typeagent";
+import { createTypeChat, promptLib } from "typeagent";
 import { PromptSection, Result, TypeChatJsonTranslator } from "typechat";
-import { AppAgentEvent } from "@typeagent/agent-sdk";
+import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";
+import {
+    CommandHandlerNoParams,
+    CommandHandlerTable,
+} from "@typeagent/agent-sdk/helpers/command";
+import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
 
 export type UserRequestList = {
     messages: UserRequest[];
@@ -43,14 +33,14 @@ export type UserRequest = {
     message: string;
 };`;
 
-class RandomOfflineCommandHandler implements DispatcherCommandHandler {
+class RandomOfflineCommandHandler implements CommandHandlerNoParams {
     private list: string[] | undefined;
 
     public readonly description =
         "Issues a random request from a dataset of pre-generated requests.";
 
-    public async run(request: string, context: CommandHandlerContext) {
-        context.requestIO.status(`Selecting random request...`);
+    public async run(context: ActionContext<CommandHandlerContext>) {
+        displayStatus(`Selecting random request...`, context);
 
         if (this.list == undefined) {
             this.list = await this.getRequests();
@@ -58,16 +48,21 @@ class RandomOfflineCommandHandler implements DispatcherCommandHandler {
 
         const randomRequest = this.list[randomInt(0, this.list.length)];
 
-        context.requestIO.notify("randomCommandSelected", context.requestId, {
-            message: randomRequest,
-        });
-        context.requestIO.notify(
+        const systemContext = context.sessionContext.agentContext;
+        systemContext.requestIO.notify(
+            "randomCommandSelected",
+            systemContext.requestId,
+            {
+                message: randomRequest,
+            },
+        );
+        systemContext.requestIO.notify(
             AppAgentEvent.Info,
-            context.requestId,
+            systemContext.requestId,
             randomRequest,
         );
 
-        await processCommandNoLock(randomRequest, context, context.requestId);
+        await processCommandNoLock(randomRequest, systemContext);
     }
 
     public async getRequests(): Promise<string[]> {
@@ -83,13 +78,13 @@ class RandomOfflineCommandHandler implements DispatcherCommandHandler {
     }
 }
 
-class RandomOnlineCommandHandler implements DispatcherCommandHandler {
+class RandomOnlineCommandHandler implements CommandHandlerNoParams {
     private instructions = `You are an Siri/Alexa/Cortana prompt generator. You create user prompts that are both supported and unsupported.`;
 
     public readonly description = "Uses the LLM to generate random requests.";
 
-    public async run(request: string, context: CommandHandlerContext) {
-        context.requestIO.status(`Generating random request using LLM...`);
+    public async run(context: ActionContext<CommandHandlerContext>) {
+        displayStatus(`Generating random request using LLM...`, context);
 
         //
         // Create Model
@@ -124,17 +119,18 @@ class RandomOnlineCommandHandler implements DispatcherCommandHandler {
                     randomInt(0, response.data.messages.length)
                 ].message;
 
-            context.requestIO.notify(
+            const systemContext = context.sessionContext.agentContext;
+            systemContext.requestIO.notify(
                 "randomCommandSelected",
-                context.requestId,
+                systemContext.requestId,
                 {
                     message: message,
                 },
             );
 
-            await processCommandNoLock(message, context, context.requestId);
+            await processCommandNoLock(message, systemContext);
         } else {
-            context.requestIO.error(response.message);
+            throw new Error(response.message);
         }
     }
 
@@ -172,7 +168,7 @@ class RandomOnlineCommandHandler implements DispatcherCommandHandler {
     }
 }
 
-export function getRandomCommandHandlers(): DispatcherHandlerTable {
+export function getRandomCommandHandlers(): CommandHandlerTable {
     return {
         description: "Random request commands",
         defaultSubCommand: new RandomOfflineCommandHandler(),

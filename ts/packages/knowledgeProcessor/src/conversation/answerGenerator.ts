@@ -1,19 +1,20 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createChatTranslator, dateTime, loadSchema } from "typeagent";
+import { createChatTranslator, loadSchema } from "typeagent";
 import { PromptSection } from "typechat";
 import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
 import { flatten } from "../setOperations.js";
 import { SearchResponse } from "./conversation.js";
-import { ResponseStyle } from "./knowledgeSearchWebSchema.js";
+
+export type AnswerStyle = "List" | "List_Entities" | "Paragraph";
 
 export interface AnswerGenerator {
     settings: AnswerGeneratorSettings;
     generateAnswer(
         question: string,
-        style: ResponseStyle | undefined,
+        style: AnswerStyle | undefined,
         response: SearchResponse,
         higherPrecision: boolean,
     ): Promise<AnswerResponse | undefined>;
@@ -43,7 +44,7 @@ export function createAnswerGenerator(
 
     async function generateAnswer(
         question: string,
-        style: ResponseStyle | undefined,
+        style: AnswerStyle | undefined,
         response: SearchResponse,
         higherPrecision: boolean,
     ): Promise<AnswerResponse | undefined> {
@@ -57,11 +58,10 @@ export function createAnswerGenerator(
 
     async function generateAnswerWithModel(
         question: string,
-        answerStyle: ResponseStyle | undefined,
+        answerStyle: AnswerStyle | undefined,
         response: SearchResponse,
         higherPrecision: boolean,
     ): Promise<AnswerResponse | undefined> {
-        const hasMessages = response.messages && response.messages.length > 0;
         const context: any = {
             entities: {
                 timeRanges: response.entityTimeRanges(),
@@ -97,17 +97,26 @@ export function createAnswerGenerator(
                 "Don't answer if the topics and entity names/types in the question are not in the conversation history.\n";
         }
         if (answerStyle) {
-            if (answerStyle === "List") {
-                prompt += `Your answer is a readable list that uses bullet points and newlines appropriately.`;
-            }
+            prompt += answerStyleToHint(answerStyle);
         } else {
-            prompt += `Your answer is readable, with suitable formatting (line breaks, bullet points etc).`;
+            prompt += "List ALL entities if query intent implies that.\n";
         }
+        prompt += `Your answer is readable and complete, with suitable formatting (line breaks, bullet points etc).`;
         let contextSection: PromptSection = {
             role: "user",
             content: `[CONVERSATION HISTORY]\n${JSON.stringify(context, undefined, 1)}`,
         };
         const result = await translator.translate(prompt, [contextSection]);
         return result.success ? result.data : undefined;
+    }
+
+    function answerStyleToHint(answerStyle: AnswerStyle): string {
+        switch (answerStyle) {
+            default:
+                return "";
+            case "List":
+            case "List_Entities":
+                return "List ALL relevant entities";
+        }
     }
 }

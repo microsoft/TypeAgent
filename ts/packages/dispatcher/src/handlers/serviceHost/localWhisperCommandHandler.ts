@@ -1,11 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DispatcherHandlerTable } from "../common/commandHandler.js";
 import { CommandHandlerContext } from "../common/commandHandlerContext.js";
 import chalk from "chalk";
 import { ChildProcess, spawn } from "child_process";
 import { getPackageFilePath } from "../../utils/getPackageFilePath.js";
+import { CommandHandlerTable } from "@typeagent/agent-sdk/helpers/command";
+import {
+    displayResult,
+    displayWarn,
+} from "@typeagent/agent-sdk/helpers/display";
+import { ActionContext } from "@typeagent/agent-sdk";
 
 export async function createLocalWhisperHost() {
     let timeoutHandle: NodeJS.Timeout;
@@ -69,48 +74,45 @@ export async function createLocalWhisperHost() {
     );
 }
 
-export function getLocalWhisperCommandHandlers(): DispatcherHandlerTable {
+export function getLocalWhisperCommandHandlers(): CommandHandlerTable {
     return {
         description: "Configure Local Whisper",
         defaultSubCommand: undefined,
         commands: {
             off: {
                 description: "Turn off Local Whisper integration",
-                run: async (
-                    request: string,
-                    context: CommandHandlerContext,
-                ) => {
-                    if (context.localWhisper) {
-                        context.localWhisper?.kill();
-                        context.localWhisper = undefined;
+                run: async (context: ActionContext<CommandHandlerContext>) => {
+                    const systemContext = context.sessionContext.agentContext;
+                    if (systemContext.localWhisper) {
+                        systemContext.localWhisper?.kill();
+                        systemContext.localWhisper = undefined;
 
-                        context.requestIO.result(
+                        displayResult(
                             chalk.blue(`Local Whisper disabled.`),
+                            context,
                         );
                     }
                 },
             },
             on: {
                 description: "Turn on Local Whisper integration.",
-                run: async (
-                    request: string,
-                    context: CommandHandlerContext,
-                ) => {
-                    if (context.localWhisper) {
+                run: async (context: ActionContext<CommandHandlerContext>) => {
+                    const systemContext = context.sessionContext.agentContext;
+                    if (systemContext.localWhisper) {
                         return;
                     }
 
                     try {
-                        context.localWhisper = await createLocalWhisperHost();
-                        if (context.localWhisper) {
-                            context.requestIO.result(
+                        systemContext.localWhisper =
+                            await createLocalWhisperHost();
+                        if (systemContext.localWhisper) {
+                            displayResult(
                                 chalk.blue(`Local Whisper enabled.`),
+                                context,
                             );
                         }
                     } catch {
-                        context.requestIO.warn(
-                            `Local Whisper was not enabled.`,
-                        );
+                        displayWarn(`Local Whisper was not enabled.`, context);
                     }
                 },
             },

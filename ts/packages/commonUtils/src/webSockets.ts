@@ -5,7 +5,7 @@ import WebSocket from "isomorphic-ws";
 import registerDebug from "debug";
 import findConfig from "find-config";
 import dotenv from "dotenv";
-import fs from "fs";
+import fs from "node:fs";
 
 const debug = registerDebug("typeagent:websockets");
 

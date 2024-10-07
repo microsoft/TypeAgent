@@ -1,5 +1,6 @@
 {
   "emojiChar": "📅",
+  "description": "Agent integration with MS Graph's calendar",
   "schema": {
     "description": "Calendar agent that keeps track of important dates and events. Use it to schedule appointments, set reminders, and organize activities.",
     "schemaFile": "./calendarActionsSchema.ts",

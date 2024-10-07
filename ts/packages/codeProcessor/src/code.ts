@@ -1,8 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import ts from "typescript";
-import { MessageSourceRole, PromptBuilder, readAllText } from "typeagent";
+import { MessageSourceRole, readAllText } from "typeagent";
 import { PromptSection } from "typechat";
 
 /**
@@ -51,9 +50,22 @@ export type CodeBlock = {
     language: string;
 };
 
+export function codeBlockToString(code: CodeBlock): string {
+    const text = code.code;
+    return typeof text === "string" ? text : text.join("\n");
+}
+
+export interface StoredCodeBlock {
+    code: CodeBlock;
+    sourcePath?: string | undefined;
+}
+
+/**
+ * The text of a code module
+ */
 export type Module = {
     text: string;
-    moduleName?: string; // if text is from an imported module
+    moduleName?: string | undefined; // if text is from an imported module
 };
 
 //---
@@ -65,7 +77,7 @@ export function createModuleSection(module: Module): PromptSection {
     if (module.moduleName) {
         return {
             role: MessageSourceRole.user,
-            content: `import ${module.moduleName}\n${module.text}`,
+            content: `Module name: ${module.moduleName}\n${module.text}`,
         };
     }
     return {
@@ -90,6 +102,21 @@ export function createCodeSection(
 ): PromptSection {
     code = annotateCodeWithLineNumbers(code);
     let content = `${language} code prefixed with line numbers:\n"""\n${code}\n"""\n`;
+    return {
+        role: MessageSourceRole.user,
+        content,
+    };
+}
+
+export type Api = {
+    callConditions?: string | undefined;
+    apiSignatures: string;
+};
+
+export function createApiSection(api: Api): PromptSection {
+    let content = api.callConditions
+        ? `Call this Api when the following conditions are met:\n${api.callConditions}\n\n${api.apiSignatures}`
+        : api.apiSignatures;
     return {
         role: MessageSourceRole.user,
         content,

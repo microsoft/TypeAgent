@@ -17,7 +17,7 @@ import { createSessionContext } from "../../action/actionHandlers.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 import registerDebug from "debug";
 import { getTranslatorActionInfo } from "../../translation/actionInfo.js";
-import { DeepPartialUndefined } from "common-utils";
+import { DeepPartialUndefinedAndNull } from "common-utils";
 
 const debug = registerDebug("typeagent:agents");
 const debugError = registerDebug("typeagent:agents:error");
@@ -27,6 +27,7 @@ type AppAgentRecord = {
     provider: AppAgentProvider;
     translators: Set<string>;
     actions: Set<string>;
+    commands: boolean;
     hasTranslators: boolean;
     manifest: AppAgentManifest;
     appAgent?: AppAgent | undefined;
@@ -35,14 +36,17 @@ type AppAgentRecord = {
 };
 
 export type AppAgentState = {
-    translators?: Record<string, boolean> | undefined;
-    actions?: Record<string, boolean> | undefined;
+    translators: Record<string, boolean> | undefined;
+    actions: Record<string, boolean> | undefined;
+    commands: Record<string, boolean> | undefined;
 };
 
+export type AppAgentStateOptions = DeepPartialUndefinedAndNull<AppAgentState>;
+
 function getEffectiveValue(
-    force: DeepPartialUndefined<AppAgentState> | undefined,
-    overrides: DeepPartialUndefined<AppAgentState> | undefined,
-    kind: "translators" | "actions",
+    force: AppAgentStateOptions | undefined,
+    overrides: AppAgentStateOptions | undefined,
+    kind: "translators" | "actions" | "commands",
     name: string,
     useDefault: boolean,
     defaultValue: boolean,
@@ -50,29 +54,31 @@ function getEffectiveValue(
 ): boolean {
     const forceState = force?.[kind];
     if (forceState !== undefined) {
-        // false if the value is missing.
-        return forceState[name] ?? false;
+        // false if forceState is null or the value is missing.
+        return forceState?.[name] ?? false;
     }
-    if (overrides !== undefined && overrides.hasOwnProperty(kind)) {
-        const state = overrides[kind];
-        if (state === undefined) {
-            // explicit undefined means to use default;
-            return defaultValue;
-        }
 
-        if (state.hasOwnProperty(name)) {
-            const enabled = state[name];
-            if (enabled === undefined) {
-                // explicit undefined means to use default;
-                return defaultValue;
-            }
-            return enabled;
-        }
+    const enabled = overrides?.[kind]?.[name];
+    if (enabled === undefined) {
+        return useDefault ? defaultValue : currentValue;
     }
-    // no explicit value
-    return useDefault ? defaultValue : currentValue;
+    // null means default value
+    return enabled ?? defaultValue;
 }
 
+export type SetStateResult = {
+    changed: {
+        translators: [string, boolean][];
+        actions: [string, boolean][];
+        commands: [string, boolean][];
+    };
+    failed: {
+        actions: [string, boolean, Error][];
+        commands: [string, boolean, Error][];
+    };
+};
+
+export const alwaysEnabledCommandsAgent = ["system"];
 export class AppAgentManager implements TranslatorConfigProvider {
     private readonly agents = new Map<string, AppAgentRecord>();
     private readonly translatorConfigs = new Map<string, TranslatorConfig>();
@@ -80,6 +86,16 @@ export class AppAgentManager implements TranslatorConfigProvider {
         string,
         string
     >();
+    private readonly emojis: Record<string, string> = {};
+
+    public getAppAgentNames(): string[] {
+        return Array.from(this.agents.keys());
+    }
+
+    public getAppAgentDescription(appAgentName: string) {
+        const record = this.getRecord(appAgentName);
+        return record.manifest.description;
+    }
 
     public isTranslatorEnabled(translatorName: string) {
         const appAgentName = getAppAgentName(translatorName);
@@ -96,9 +112,12 @@ export class AppAgentManager implements TranslatorConfigProvider {
     public isCommandEnabled(appAgentName: string) {
         const record = this.agents.get(appAgentName);
         return record !== undefined
-            ? (!record.hasTranslators || record.actions.size > 0) &&
-                  record.appAgent!.executeCommand !== undefined
+            ? record.commands && record.appAgent?.executeCommand !== undefined
             : false;
+    }
+
+    public getEmojis(): Readonly<Record<string, string>> {
+        return this.emojis;
     }
 
     public async addProvider(
@@ -108,15 +127,19 @@ export class AppAgentManager implements TranslatorConfigProvider {
         for (const name of provider.getAppAgentNames()) {
             // TODO: detect duplicate names
             const manifest = await provider.getAppAgentManifest(name);
+            this.emojis[name] = manifest.emojiChar;
 
             // TODO: detect duplicate names
             const translatorConfigs = convertToTranslatorConfigs(
                 name,
                 manifest,
             );
+
             const entries = Object.entries(translatorConfigs);
             for (const [name, config] of entries) {
                 this.translatorConfigs.set(name, config);
+                this.emojis[name] = config.emojiChar;
+
                 if (config.injected) {
                     for (const info of getTranslatorActionInfo(config, name)) {
                         this.injectedTranslatorForActionName.set(
@@ -127,24 +150,17 @@ export class AppAgentManager implements TranslatorConfigProvider {
                 }
             }
 
-            const hasTranslators = entries.length > 0;
             const record: AppAgentRecord = {
                 name,
                 provider,
                 actions: new Set(),
                 translators: new Set(),
+                commands: false,
                 hasTranslators: entries.length > 0,
                 manifest,
             };
 
             this.agents.set(name, record);
-
-            if (!hasTranslators) {
-                // REVIEW: if the app agent doesn't have a translator, it is assume that
-                // it has command interface. We don't have away to control enable/disable
-                // command interface. So just assume that it is always available.
-                await this.ensureSessionContext(record, context);
-            }
         }
     }
 
@@ -170,7 +186,7 @@ export class AppAgentManager implements TranslatorConfigProvider {
     public getAppAgent(appAgentName: string): AppAgent {
         const record = this.getRecord(appAgentName);
         if (record.appAgent === undefined) {
-            throw new Error("App agent is not initialized");
+            throw new Error(`App agent ${appAgentName} is not initialized`);
         }
         return record.appAgent;
     }
@@ -178,20 +194,24 @@ export class AppAgentManager implements TranslatorConfigProvider {
     public getSessionContext(appAgentName: string): SessionContext {
         const record = this.getRecord(appAgentName);
         if (record.sessionContext === undefined) {
-            throw new Error("Session context is not initialized");
+            throw new Error(
+                `Session context for ${appAgentName} is not initialized`,
+            );
         }
         return record.sessionContext;
     }
 
     public async setState(
         context: CommandHandlerContext,
-        overrides?: DeepPartialUndefined<AppAgentState>,
-        force?: DeepPartialUndefined<AppAgentState>,
+        overrides?: AppAgentStateOptions,
+        force?: AppAgentStateOptions,
         useDefault: boolean = true,
-    ) {
+    ): Promise<SetStateResult> {
         const changedTranslators: [string, boolean][] = [];
         const changedActions: [string, boolean][] = [];
         const failedActions: [string, boolean, Error][] = [];
+        const changedCommands: [string, boolean][] = [];
+        const failedCommands: [string, boolean, Error][] = [];
 
         const p: Promise<void>[] = [];
         for (const [name, config] of this.translatorConfigs) {
@@ -246,14 +266,68 @@ export class AppAgentManager implements TranslatorConfigProvider {
             }
         }
 
+        for (const record of this.agents.values()) {
+            const currentCommandsEnabled = record.commands;
+            const enableCommands = getEffectiveValue(
+                force,
+                overrides,
+                "commands",
+                record.name,
+                useDefault,
+                record.manifest.commandDefaultEnabled ??
+                    record.manifest.defaultEnabled ??
+                    true,
+                currentCommandsEnabled,
+            );
+
+            if (enableCommands !== currentCommandsEnabled) {
+                if (enableCommands) {
+                    p.push(
+                        (async () => {
+                            try {
+                                await this.ensureSessionContext(
+                                    record,
+                                    context,
+                                );
+                                record.commands = true;
+                                changedCommands.push([
+                                    record.name,
+                                    enableCommands,
+                                ]);
+                            } catch (e: any) {
+                                failedCommands.push([
+                                    record.name,
+                                    enableCommands,
+                                    e,
+                                ]);
+                            }
+                        })(),
+                    );
+                } else {
+                    if (alwaysEnabledCommandsAgent.includes(record.name)) {
+                        failedCommands.push([
+                            record.name,
+                            enableCommands,
+                            new Error(`Cannot disable ${record.name} commands`),
+                        ]);
+                    } else {
+                        record.commands = false;
+                        await this.checkCloseSessionContext(record);
+                    }
+                }
+            }
+        }
+
         await Promise.all(p);
         return {
             changed: {
                 translators: changedTranslators,
                 actions: changedActions,
+                commands: changedCommands,
             },
             failed: {
                 actions: failedActions,
+                commands: failedCommands,
             },
         };
     }
@@ -261,6 +335,7 @@ export class AppAgentManager implements TranslatorConfigProvider {
     public async close() {
         for (const record of this.agents.values()) {
             record.actions.clear();
+            record.commands = false;
             await this.closeSessionContext(record);
         }
     }
@@ -348,7 +423,7 @@ export class AppAgentManager implements TranslatorConfigProvider {
     }
 
     private async checkCloseSessionContext(record: AppAgentRecord) {
-        if (record.actions.size === 0) {
+        if (record.actions.size === 0 && !record.commands) {
             await this.closeSessionContext(record);
         }
     }
@@ -363,7 +438,7 @@ export class AppAgentManager implements TranslatorConfigProvider {
                 debug(`Session context closed for ${record.name}`);
             } catch (e) {
                 debugError(
-                    `Failed to close session context for ${record.name}`,
+                    `Failed to close session context for ${record.name}. Error ignored`,
                     e,
                 );
                 // Ignore error

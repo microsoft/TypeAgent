@@ -8,9 +8,11 @@ import {
     SessionContext,
     StorageListOptions,
     AppAgentEvent,
-    CommandDescriptor,
-    CommandDescriptorTable,
     DisplayContent,
+    DisplayAppendMode,
+    CommandDescriptors,
+    ParsedCommandParams,
+    ParameterDefinitions,
 } from "@typeagent/agent-sdk";
 import {
     AgentCallFunctions,
@@ -173,7 +175,7 @@ export async function createAgentProcessShim(
             contextId: number;
             session: boolean;
             storagePath: string;
-            options: StorageListOptions;
+            options?: StorageListOptions | undefined;
         }) => {
             const context = contextMap.get(param.contextId);
             return getStorage(param, context).list(
@@ -226,24 +228,25 @@ export async function createAgentProcessShim(
         },
         setDisplay: (param: {
             actionContextId: number;
-            message: DisplayContent;
+            content: DisplayContent;
         }) => {
             actionContextMap
                 .get(param.actionContextId)
-                .actionIO.setDisplay(param.message);
+                .actionIO.setDisplay(param.content);
         },
         appendDisplay: (param: {
             actionContextId: number;
-            message: DisplayContent;
+            content: DisplayContent;
+            mode: DisplayAppendMode;
         }) => {
             actionContextMap
                 .get(param.actionContextId)
-                .actionIO.appendDisplay(param.message);
+                .actionIO.appendDisplay(param.content, param.mode);
         },
-        performanceMark: (param: { actionContextId: number; name: string }) => {
+        takeAction: (param: { actionContextId: number; action: string }) => {
             actionContextMap
                 .get(param.actionContextId)
-                .performanceMark(param.name);
+                .actionIO.takeAction(param.action);
         },
     };
 
@@ -255,8 +258,8 @@ export async function createAgentProcessShim(
     >(process, agentContextInvokeHandlers, agentContextCallHandlers);
 
     const agent: AppAgent = {
-        initializeAgentContext(): Promise<ShimContext> {
-            return rpc.invoke("initializeAgentContext");
+        initializeAgentContext() {
+            return rpc.invoke("initializeAgentContext", undefined);
         },
         updateAgentContext(
             enable,
@@ -269,7 +272,7 @@ export async function createAgentProcessShim(
                 translatorName,
             });
         },
-        executeAction(action, context: ActionContext<ShimContext>) {
+        executeAction(action: any, context: ActionContext<ShimContext>) {
             return withActionContextAsync(context, (contextParams) =>
                 rpc.invoke("executeAction", {
                     ...contextParams,
@@ -277,7 +280,10 @@ export async function createAgentProcessShim(
                 }),
             );
         },
-        validateWildcardMatch(action, context: SessionContext<ShimContext>) {
+        validateWildcardMatch(
+            action: any,
+            context: SessionContext<ShimContext>,
+        ) {
             return rpc.invoke("validateWildcardMatch", {
                 ...getContextParam(context),
                 action,
@@ -317,19 +323,19 @@ export async function createAgentProcessShim(
 
         getCommands(
             context: SessionContext<ShimContext>,
-        ): Promise<CommandDescriptor | CommandDescriptorTable> {
+        ): Promise<CommandDescriptors> {
             return rpc.invoke("getCommands", getContextParam(context));
         },
         executeCommand(
-            commands: string[] | undefined,
-            args: string,
+            commands: string[],
+            params: ParsedCommandParams<ParameterDefinitions> | undefined,
             context: ActionContext<ShimContext>,
         ) {
             return withActionContextAsync(context, (contextParams) =>
                 rpc.invoke("executeCommand", {
                     ...contextParams,
                     commands,
-                    args,
+                    params,
                 }),
             );
         },

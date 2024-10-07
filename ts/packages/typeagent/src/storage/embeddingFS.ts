@@ -16,6 +16,7 @@ import {
     createObjectFolder,
 } from "./objectFolder";
 import { VectorIndex } from "../vector/vectorIndex";
+import { asyncArray } from "..";
 
 /**
  * EmbeddingFolder stores embeddings in folder, one per file.
@@ -37,8 +38,10 @@ export interface EmbeddingFolder
 export async function createEmbeddingFolder(
     folderPath: Path,
     folderSettings?: ObjectFolderSettings,
+    concurrency?: number,
     fSys?: FileSystem,
 ): Promise<EmbeddingFolder> {
+    concurrency ??= 2;
     const settings: ObjectFolderSettings = {
         serializer: (obj) => obj,
         deserializer: (buffer) => new Float32Array(buffer.buffer),
@@ -136,13 +139,15 @@ export async function createEmbeddingFolder(
         names: string[];
         embeddings: Embedding[];
     }> {
-        // TODO: parallelize
-        let names: string[] = [];
-        let embeddings: Embedding[] = [];
-        for await (let entry of folder.all()) {
-            names.push(entry.name);
-            embeddings.push(entry.value);
-        }
+        const names: string[] = await folder.allNames();
+        let loadedEmbeddings = await asyncArray.mapAsync(
+            names,
+            concurrency!,
+            (name) => folder.get(name),
+        );
+        let embeddings = loadedEmbeddings.filter(
+            (e) => e !== undefined,
+        ) as Embedding[];
         return { names, embeddings };
     }
 

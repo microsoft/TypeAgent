@@ -6,10 +6,6 @@ import {
     CommandHandlerContext,
     reloadSessionOnCommandHandlerContext,
 } from "./common/commandHandlerContext.js";
-import {
-    DispatcherCommandHandler,
-    DispatcherHandlerTable,
-} from "./common/commandHandler.js";
 import { setSessionOnCommandHandlerContext } from "./common/commandHandlerContext.js";
 import {
     Session,
@@ -20,149 +16,222 @@ import {
     getSessionCaches,
 } from "../session/session.js";
 import chalk from "chalk";
-import { parseRequestArgs } from "../utils/args.js";
+import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import {
+    CommandHandler,
+    CommandHandlerNoParams,
+    CommandHandlerTable,
+} from "@typeagent/agent-sdk/helpers/command";
+import {
+    displayResult,
+    displaySuccess,
+    displayWarn,
+} from "@typeagent/agent-sdk/helpers/display";
+import { getToggleHandlerTable } from "./common/commandHandler.js";
 
-class SessionNewCommandHandler implements DispatcherCommandHandler {
+class SessionNewCommandHandler implements CommandHandler {
     public readonly description = "Create a new empty session";
-    public async run(request: string, context: CommandHandlerContext) {
-        const { flags } = parseRequestArgs(
-            request,
-            {
-                keep: false,
-                memory: false,
-                persist: context.session.dir !== undefined,
+    public readonly parameters = {
+        flags: {
+            keep: {
+                description:
+                    "Copy the current session settings in the new session",
+                default: false,
             },
-            true,
-        );
+
+            persist: {
+                description:
+                    "Persist the new session.  Default to whether the current session is persisted.",
+                type: "boolean",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const { flags } = params;
         await setSessionOnCommandHandlerContext(
-            context,
+            systemContext,
             await Session.create(
-                flags.keep
-                    ? context.session.getConfig()
-                    : getDefaultSessionConfig(),
-                flags.persist,
+                flags.keep ? systemContext.session.getConfig() : undefined,
+                flags.persist ?? systemContext.session.dir !== undefined,
             ),
         );
-        context.requestIO.success(
+
+        context.sessionContext.agentContext.chatHistory.entries.length = 0;
+
+        displaySuccess(
             `New session created${
-                context.session.dir ? `: ${context.session.dir}` : ""
+                systemContext.session.dir
+                    ? `: ${systemContext.session.dir}`
+                    : ""
             }`,
+            context,
         );
     }
 }
 
-class SessionOpenCommandHandler implements DispatcherCommandHandler {
+class SessionOpenCommandHandler implements CommandHandler {
     public readonly description = "Open an existing session";
-    public async run(request: string, context: CommandHandlerContext) {
-        const session = await Session.load(request);
-        await setSessionOnCommandHandlerContext(context, session);
-        context.requestIO.success(`Session opened: ${session.dir}`);
+    public readonly parameters = {
+        args: {
+            session: {
+                description: "Name of the session to open.",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const session = await Session.load(params.args.session);
+        const systemContext = context.sessionContext.agentContext;
+        await setSessionOnCommandHandlerContext(systemContext, session);
+        displaySuccess(`Session opened: ${session.dir}`, context);
     }
 }
 
-class SessionResetCommandHandler implements DispatcherCommandHandler {
+class SessionResetCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Reset config on session and keep the data";
-    public async run(request: string, context: CommandHandlerContext) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
         await changeContextConfig(getDefaultSessionConfig(), context);
-        context.requestIO.success(`Session settings revert to default.`);
+        await changeContextConfig(
+            {
+                translators: null,
+                actions: null,
+                commands: null,
+            },
+            context,
+        );
+        displaySuccess(`Session settings revert to default.`, context);
     }
 }
 
-class SessionToggleHistoryCommandHandler implements DispatcherCommandHandler {
-    public readonly description = "Update the history on the session config";
-    public async run(request: string, context: CommandHandlerContext) {
-        context.session.setConfig({ history: request === "on" });
-        context.requestIO.success(`Session history flag updated.`);
-    }
-}
-
-class SessionClearCommandHandler implements DispatcherCommandHandler {
+class SessionClearCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Delete all data on the current sessions, keeping current settings";
-    public async run(request: string, context: CommandHandlerContext) {
-        if (context.session.dir === undefined) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
+        const systemContext = context.sessionContext.agentContext;
+        if (systemContext.session.dir === undefined) {
             throw new Error("Session is not persisted. Nothing to clear.");
         }
 
         if (
-            !(await context.requestIO.askYesNo(
-                `Are you sure you want to clear data for current session '${context.session.dir}'?`,
+            !(await systemContext.requestIO.askYesNo(
+                `Are you sure you want to clear data for current session '${systemContext.session.dir}'?`,
                 false,
             ))
         ) {
-            context.requestIO.error("Cancelled!");
+            displayWarn("Cancelled!", context);
             return;
         }
-        await context.session.clear();
+        await systemContext.session.clear();
         // Force a reinitialize of the context
-        await setSessionOnCommandHandlerContext(context, context.session);
-        context.requestIO.success(`Session cleared.`);
+        await setSessionOnCommandHandlerContext(
+            systemContext,
+            systemContext.session,
+        );
+        displaySuccess(`Session cleared.`, context);
     }
 }
 
-class SessionDeleteCommandHandler implements DispatcherCommandHandler {
+class SessionDeleteCommandHandler implements CommandHandler {
     public readonly description =
         "Delete a session. If no session is specified, delete the current session and start a new session.\n-a to delete all sessions";
-    public async run(request: string, context: CommandHandlerContext) {
-        const persist = context.session.dir !== undefined;
-        if (request === "-a") {
+    public readonly parameters = {
+        args: {
+            session: {
+                description: "Session name to delete",
+                optional: true,
+            },
+        },
+        flags: {
+            all: {
+                description: "Delete all sessions",
+                char: "a",
+                type: "boolean",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const persist = systemContext.session.dir !== undefined;
+        if (params.flags.all === true) {
             if (
-                !(await context.requestIO.askYesNo(
+                !(await systemContext.requestIO.askYesNo(
                     "Are you sure you want to delete all sessions?",
                     false,
                 ))
             ) {
-                context.requestIO.error("Cancelled!");
+                displayWarn("Cancelled!", context);
                 return;
             }
             await deleteAllSessions();
+            displaySuccess("All session deleted.", context);
         } else {
-            const del = request !== "" ? request : context.session.dir;
+            const del = params.args.session ?? systemContext.session.dir;
             if (del === undefined) {
-                throw new Error("Session is not persisted. Nothing to clear.");
+                throw new Error(
+                    "The current session is not persisted. Nothing to clear.",
+                );
+            }
+            const sessionNames = await getSessionNames();
+            if (!sessionNames.includes(del)) {
+                throw new Error(`'${del}' is not a session name`);
             }
             if (
-                !(await context.requestIO.askYesNo(
+                !(await systemContext.requestIO.askYesNo(
                     `Are you sure you want to delete session '${del}'?`,
                     false,
                 ))
             ) {
-                context.requestIO.error("Cancelled!");
+                displayWarn("Cancelled!", context);
                 return;
             }
             await deleteSession(del);
-            if (del !== context.session.dir) {
+            displaySuccess(`Session '${del}' deleted.`, context);
+            if (del !== systemContext.session.dir) {
                 return;
             }
         }
-        await reloadSessionOnCommandHandlerContext(context, persist);
+        await reloadSessionOnCommandHandlerContext(systemContext, persist);
     }
 }
 
-class SessionListCommandHandler implements DispatcherCommandHandler {
+class SessionListCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "List all sessions. The current session is marked green.";
-    public async run(request: string, context: CommandHandlerContext) {
+    public async run(context: ActionContext<CommandHandlerContext>) {
+        const systemContext = context.sessionContext.agentContext;
         const names = await getSessionNames();
-        context.requestIO.result(
+        displayResult(
             names
-                .map((n) => (n === context.session.dir ? chalk.green(n) : n))
+                .map((n) =>
+                    n === systemContext.session.dir ? chalk.green(n) : n,
+                )
                 .join("\n"),
+            context,
         );
     }
 }
 
-class SessionInfoCommandHandler implements DispatcherCommandHandler {
+class SessionInfoCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show info about the current session";
-    public async run(request: string, context: CommandHandlerContext) {
-        const constructionFiles = context.session.dir
-            ? await getSessionCaches(context.session.dir)
+    public async run(context: ActionContext<CommandHandlerContext>) {
+        const systemContext = context.sessionContext.agentContext;
+        const constructionFiles = systemContext.session.dir
+            ? await getSessionCaches(systemContext.session.dir)
             : [];
-        context.requestIO.result((log: (message?: string) => void) => {
+        displayResult((log: (message?: string) => void) => {
             log(
                 `Session settings (${
-                    context.session.dir
-                        ? chalk.green(context.session.dir)
+                    systemContext.session.dir
+                        ? chalk.green(systemContext.session.dir)
                         : "in-memory"
                 }):`,
             );
@@ -179,7 +248,7 @@ class SessionInfoCommandHandler implements DispatcherCommandHandler {
                     }
                 }
             };
-            printConfig(context.session.getConfig());
+            printConfig(systemContext.session.getConfig());
 
             if (constructionFiles.length) {
                 log("\nConstruction Files:");
@@ -191,11 +260,11 @@ class SessionInfoCommandHandler implements DispatcherCommandHandler {
                     );
                 }
             }
-        });
+        }, context);
     }
 }
 
-export function getSessionCommandHandlers(): DispatcherHandlerTable {
+export function getSessionCommandHandlers(): CommandHandlerTable {
     return {
         description: "Session commands",
         defaultSubCommand: undefined,
@@ -207,7 +276,18 @@ export function getSessionCommandHandlers(): DispatcherHandlerTable {
             list: new SessionListCommandHandler(),
             delete: new SessionDeleteCommandHandler(),
             info: new SessionInfoCommandHandler(),
-            history: new SessionToggleHistoryCommandHandler(),
+            history: getToggleHandlerTable(
+                "history",
+                async (
+                    context: ActionContext<CommandHandlerContext>,
+                    enable: boolean,
+                ) => {
+                    const systemContext = context.sessionContext.agentContext;
+                    systemContext.session.setConfig({
+                        history: enable,
+                    });
+                },
+            ),
         },
     };
 }

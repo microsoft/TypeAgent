@@ -8,8 +8,6 @@ import {
     shell,
     BrowserWindow,
     globalShortcut,
-    Menu,
-    MenuItem,
     dialog,
     DevicePermissionHandlerHandlerDetails,
     WebContents,
@@ -37,7 +35,7 @@ import {
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
-import { AppAgentEvent } from "@typeagent/agent-sdk";
+import { AppAgentEvent, DisplayAppendMode } from "@typeagent/agent-sdk";
 import { shellAgentProvider } from "./agent.js";
 
 const debugShell = registerDebug("typeagent:shell");
@@ -68,7 +66,8 @@ function createWindow(): void {
         width: ShellSettings.getinstance().width,
         height: ShellSettings.getinstance().height,
         show: false,
-        autoHideMenuBar: ShellSettings.getinstance().hideMenu,
+        autoHideMenuBar: true,
+
         webPreferences: {
             preload: join(__dirname, "../preload/index.mjs"),
             sandbox: false,
@@ -78,7 +77,7 @@ function createWindow(): void {
         y: ShellSettings.getinstance().y,
     });
 
-    setupDevicePermissinos(mainWindow);
+    setupDevicePermissions(mainWindow);
 
     mainWindow.on("ready-to-show", () => {
         mainWindow!.show();
@@ -124,20 +123,30 @@ function createWindow(): void {
         mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
     }
 
-    setAppMenu(mainWindow);
+    mainWindow.removeMenu();
+
     setupZoomHandlers(mainWindow);
 
     // Notify renderer process whenever settings are modified
     ShellSettings.getinstance().onSettingsChanged = (): void => {
-        const tempFunc = ShellSettings.getinstance().onSettingsChanged;
-        ShellSettings.getinstance().onSettingsChanged = null;
-
         mainWindow?.webContents.send(
             "settings-changed",
-            ShellSettings.getinstance(),
+            ShellSettings.getinstance().getSerializable(),
         );
+    };
 
-        ShellSettings.getinstance().onSettingsChanged = tempFunc;
+    ShellSettings.getinstance().onShowSettingsDialog = (
+        dialogName: string,
+    ): void => {
+        mainWindow?.webContents.send("show-dialog", dialogName);
+    };
+
+    ShellSettings.getinstance().onRunDemo = (interactive: boolean): void => {
+        runDemo(mainWindow!, interactive);
+    };
+
+    ShellSettings.getinstance().onToggleTopMost = () => {
+        mainWindow?.setAlwaysOnTop(!mainWindow?.isAlwaysOnTop());
     };
 }
 
@@ -145,7 +154,7 @@ function createWindow(): void {
  * Allows the application to gain access to camea devices
  * @param mainWindow the main browser window
  */
-function setupDevicePermissinos(mainWindow: BrowserWindow) {
+function setupDevicePermissions(mainWindow: BrowserWindow) {
     let grantedDeviceThroughPermHandler;
 
     mainWindow.webContents.session.on(
@@ -255,24 +264,13 @@ async function triggerRecognitionOnce(dispatcher: Dispatcher) {
     );
 }
 
-function showResult(message: IAgentMessage, append: boolean = false) {
+function updateDisplay(message: IAgentMessage, mode?: DisplayAppendMode) {
     // Ignore message without requestId
     if (message.requestId === undefined) {
-        console.warn("showResult: requestId is undefined");
+        console.warn("updateDisplay: requestId is undefined");
         return;
     }
-    mainWindow?.webContents.send("response", message, append);
-}
-
-function sendStatusMessage(message: IAgentMessage, temporary: boolean = false) {
-    // Ignore message without requestId
-    if (message.requestId === undefined) {
-        console.warn(
-            `sendStatusMessage: requestId is undefined. ${message.message}`,
-        );
-        return;
-    }
-    mainWindow?.webContents.send("status-message", message, temporary);
+    mainWindow?.webContents.send("updateDisplay", message, mode);
 }
 
 function markRequestExplained(
@@ -398,20 +396,13 @@ function actionCommand(
         requestId,
     );
 }
+
 const clientIO: ClientIO = {
     clear: () => {
         mainWindow?.webContents.send("clear");
     },
-    info: () => {
-        /* ignore */
-    },
-    success: sendStatusMessage,
-    status: (message) => sendStatusMessage(message, true),
-    warn: sendStatusMessage,
-    error: sendStatusMessage,
-    result: showResult,
-    setDisplay: showResult,
-    appendDisplay: (message) => showResult(message, true),
+    setDisplay: updateDisplay,
+    appendDisplay: (message, mode) => updateDisplay(message, mode ?? "inline"),
     setDynamicDisplay,
     searchMenuCommand,
     actionCommand,
@@ -455,6 +446,9 @@ const clientIO: ClientIO = {
     },
     exit: () => {
         app.quit();
+    },
+    takeAction: (action: string) => {
+        mainWindow?.webContents.send("take-action", action);
     },
 };
 
@@ -525,6 +519,7 @@ app.whenReady().then(async () => {
         explanationAsynchronousMode: true,
         persistSession: true,
         enableServiceHost: true,
+        metrics: true,
         clientIO,
     });
 
@@ -539,7 +534,7 @@ app.whenReady().then(async () => {
         }
         debugShell(dispatcher.getPrompt(), text);
 
-        await dispatcher.processCommand(text, id, images);
+        const metrics = await dispatcher.processCommand(text, id, images);
         mainWindow?.webContents.send("send-demo-event", "CommandProcessed");
         const newSettingSummary = dispatcher.getSettingSummary();
         if (newSettingSummary !== settingSummary) {
@@ -550,16 +545,23 @@ app.whenReady().then(async () => {
                 dispatcher.getTranslatorNameToEmojiMap(),
             );
         }
+
+        return metrics;
+    }
+
+    if (ShellSettings.getinstance().agentGreeting) {
+        processShellRequest("@greeting", "agent-0", []);
     }
 
     ipcMain.on(
         "process-shell-request",
         (_event, text: string, id: string, images: string[]) => {
             processShellRequest(text, id, images)
-                .then(() =>
+                .then((metrics) =>
                     mainWindow?.webContents.send(
                         "process-shell-request-done",
                         id,
+                        metrics,
                     ),
                 )
                 .catch((error) => {
@@ -571,6 +573,9 @@ app.whenReady().then(async () => {
                 });
         },
     );
+    ipcMain.handle("get-partial-completion", async (_event, prefix: string) => {
+        return dispatcher.getPartialCompletion(prefix);
+    });
     ipcMain.handle(
         "get-dynamic-display",
         async (_event, appAgentName: string, id: string) =>
@@ -597,37 +602,30 @@ app.whenReady().then(async () => {
         // Save the shell configurable settings
         ShellSettings.getinstance().microphoneId = settings.microphoneId;
         ShellSettings.getinstance().microphoneName = settings.microphoneName;
-        ShellSettings.getinstance().hideMenu = settings.hideMenu;
-        ShellSettings.getinstance().hideTabs = settings.hideTabs;
         ShellSettings.getinstance().tts = settings.tts;
         ShellSettings.getinstance().ttsSettings = settings.ttsSettings;
         ShellSettings.getinstance().agentGreeting = settings.agentGreeting;
+        ShellSettings.getinstance().partialCompletion =
+            settings.partialCompletion;
         ShellSettings.getinstance().save();
-
-        // Update based on the new settings
-        mainWindow!.autoHideMenuBar = settings.hideMenu;
-
-        // if the menu bar is visible it won't auto hide immediately when this is toggled so we have to help it along
-        mainWindow?.setMenuBarVisibility(!settings.hideMenu);
     });
 
     globalShortcut.register("Alt+Right", () => {
         mainWindow?.webContents.send("send-demo-event", "Alt+Right");
     });
 
-    globalShortcut.register("F1", () => {
-        mainWindow?.webContents.send("help-requested", "F1");
-    });
-
-    globalShortcut.register("F2", () => {
-        mainWindow?.webContents.send("random-message-requested", "F2");
-    });
-
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.
     // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
-    app.on("browser-window-created", (_, window) => {
+    app.on("browser-window-created", async (_, window) => {
         optimizer.watchWindowShortcuts(window);
+        const browserExtensionPath = join(
+            app.getAppPath(),
+            "../agents/browser/dist/electron",
+        );
+        await window.webContents.session.loadExtension(browserExtensionPath, {
+            allowFileAccess: true,
+        });
     });
 
     createWindow();
@@ -672,23 +670,22 @@ function zoomOut(mainWindow: BrowserWindow) {
     );
 }
 
-function showDialog(dialogName: string) {
-    mainWindow?.webContents.send("show-dialog", dialogName);
-}
-
 const isMac = process.platform === "darwin";
 
 function setupZoomHandlers(mainWindow: BrowserWindow) {
-    // For some reason zoom out's Ctrl+- accelerator doesn't work. Manually handle it.
     mainWindow.webContents.on("before-input-event", (_event, input) => {
         if ((isMac ? input.meta : input.control) && input.type === "keyDown") {
-            // In addition to CmdOrCtrl+= accelerator
-            if (input.code == "NumpadAdd") {
+            if (
+                input.key === "NumpadAdd" ||
+                input.key === "+" ||
+                input.key === "="
+            ) {
                 zoomIn(mainWindow);
-            } else if (input.key === "-") {
-                // REVIEW: accelerator doesn't work for CmdOrCtrl+-. Handle manually.
-                // Handle both regular and numpad minus
+            } else if (input.key === "-" || input.key === "NumpadMinus") {
                 zoomOut(mainWindow);
+            } else if (input.key === "0") {
+                mainWindow.webContents.zoomLevel = 0;
+                ShellSettings.getinstance().set("zoomLevel", 0);
             }
         }
     });
@@ -701,106 +698,4 @@ function setupZoomHandlers(mainWindow: BrowserWindow) {
             zoomOut(mainWindow);
         }
     });
-}
-
-// In this file you can include the rest of your app"s specific main process
-// code. You can also put them in separate files and require them here.
-function setAppMenu(mainWindow: BrowserWindow) {
-    const template: Electron.MenuItemConstructorOptions[] = [
-        {
-            label: "File",
-            role: "fileMenu",
-        },
-        {
-            id: "viewMenu",
-            label: "View",
-            submenu: [
-                { role: "reload" },
-                { role: "forceReload" },
-                { role: "toggleDevTools" },
-                { type: "separator" },
-                { role: "resetZoom" },
-                {
-                    id: "zoomIn",
-                    label: "Zoom In",
-                    accelerator: "CmdOrCtrl+=",
-                    click: () => zoomIn(mainWindow),
-                },
-                {
-                    id: "zoomOut",
-                    label: "Zoom Out",
-                    accelerator: "CmdOrCtrl+-", // doesn't work for some reason. Handle manually. See setupZoomHandlers
-                    click: () => zoomOut(mainWindow),
-                },
-                { type: "separator" },
-                { role: "togglefullscreen" },
-            ],
-        },
-        {
-            id: "demoMenu",
-            label: "Demo",
-            submenu: [],
-        },
-        {
-            id: "settingsMenu",
-            label: "Settings",
-            click: () => showDialog("Settings"),
-        },
-        {
-            id: "infoMenu",
-            label: "Info",
-            submenu: [
-                {
-                    id: "metricsMenu",
-                    label: "Show Metrics",
-                    click: () => showDialog("Metrics"),
-                },
-            ],
-        },
-        {
-            id: "windowMenu",
-            role: "windowMenu",
-        },
-        {
-            role: "help",
-            submenu: [
-                {
-                    label: "Learn More",
-                    click: () => showDialog("Help"),
-                },
-            ],
-        },
-    ];
-
-    const menu = Menu.buildFromTemplate(template);
-    Menu.setApplicationMenu(menu);
-
-    const demoItem = menu.getMenuItemById("demoMenu");
-    demoItem?.submenu?.append(
-        new MenuItem({
-            label: "Run Demo",
-            click() {
-                runDemo(mainWindow!, false);
-            },
-        }),
-    );
-
-    demoItem?.submenu?.append(
-        new MenuItem({
-            label: "Run Demo Interactive",
-            click() {
-                runDemo(mainWindow!, true);
-            },
-        }),
-    );
-
-    const windowItem = menu.getMenuItemById("windowMenu");
-    windowItem?.submenu?.append(
-        new MenuItem({
-            label: "Always on Top",
-            click() {
-                mainWindow?.setAlwaysOnTop(true, "floating");
-            },
-        }),
-    );
 }

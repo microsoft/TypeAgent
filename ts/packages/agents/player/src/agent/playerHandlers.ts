@@ -13,12 +13,12 @@ import {
     AppAgent,
     SessionContext,
     AppAction,
-    createActionResultFromError,
     ActionContext,
     DisplayType,
     AppAgentEvent,
     DynamicDisplay,
 } from "@typeagent/agent-sdk";
+import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import { searchAlbum, searchArtists, searchTracks } from "../client.js";
 import { htmlStatus } from "../playback.js";
 import { getPlayerCommandInterface } from "./playerCommands.js";
@@ -100,16 +100,23 @@ async function validatePlayerWildcardMatch(
         const playAction = action as PlayAction;
         if (playAction.parameters.query) {
             for (const query of playAction.parameters.query) {
+                let result: boolean = false;
                 switch (query.constraint) {
                     case "track":
                     case undefined:
-                        return validateTrack(query.text, clientContext);
+                        result = await validateTrack(query.text, clientContext);
 
                     case "album":
-                        return validateAlbum(query.text, clientContext);
+                        result = await validateAlbum(query.text, clientContext);
 
                     case "artist":
-                        return validateArtist(query.text, clientContext);
+                        result = await validateArtist(
+                            query.text,
+                            clientContext,
+                        );
+                }
+                if (result === false) {
+                    return false;
                 }
             }
         }

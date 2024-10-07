@@ -2,22 +2,35 @@
 // Licensed under the MIT License.
 
 import { printProcessExplanationResult } from "agent-cache";
-import { DispatcherCommandHandler } from "./common/commandHandler.js";
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
+import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 
-export class CorrectCommandHandler implements DispatcherCommandHandler {
+export class CorrectCommandHandler implements CommandHandler {
     public readonly description = "Correct the last explanation";
-    public async run(input: string, context: CommandHandlerContext) {
-        if (context.lastRequestAction === undefined) {
+    public readonly parameters = {
+        args: {
+            correction: {
+                description: "Correction for the last explanation",
+                implicitQuotes: true,
+            },
+        },
+    };
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        if (systemContext.lastRequestAction === undefined) {
             throw new Error("No last request action to correct");
         }
-        if (context.lastExplanation === undefined) {
+        if (systemContext.lastExplanation === undefined) {
             throw new Error("No last explanation to correct");
         }
-        const result = await context.agentCache.correctExplanation(
-            context.lastRequestAction,
-            context.lastExplanation,
-            input,
+        const result = await systemContext.agentCache.correctExplanation(
+            systemContext.lastRequestAction,
+            systemContext.lastExplanation,
+            params.args.correction,
         );
         printProcessExplanationResult(result);
     }

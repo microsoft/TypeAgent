@@ -6,9 +6,8 @@ import {
     defaultSettings,
     ShellSettingsType,
 } from "../../main/shellSettingsType.js";
-import { TabView } from "./tabView.js";
 import { ChatView } from "./chatView.js";
-import { getTTS, getTTSProviders, getTTSVoices } from "./tts.js";
+import { getTTS, getTTSProviders, getTTSVoices } from "./tts/tts.js";
 
 function addOption(
     select: HTMLSelectElement,
@@ -81,11 +80,11 @@ async function updateSelectAsync(
 export class SettingsView {
     private microphoneSources: HTMLSelectElement;
     private mainContainer: HTMLDivElement;
-    private menuCheckBox: HTMLInputElement;
-    private tabsCheckBox: HTMLInputElement;
     private ttsCheckBox: HTMLInputElement;
     private ttsProvider: HTMLSelectElement;
     private ttsVoice: HTMLSelectElement;
+    private agentGreetingCheckBox: HTMLInputElement;
+    private intellisenseCheckBox: HTMLInputElement;
     private _shellSettings: ShellSettingsType = defaultSettings;
     private updateFromSettings: () => Promise<void>;
     public get shellSettings(): Readonly<ShellSettingsType> {
@@ -94,10 +93,10 @@ export class SettingsView {
 
     public set shellSettings(value: ShellSettingsType) {
         this._shellSettings = value;
-        this.menuCheckBox.checked = value.hideMenu;
-        this.tabsCheckBox.checked = value.hideTabs;
         this.ttsCheckBox.checked = value.tts;
         this.microphoneSources.value = value.microphoneId ?? "";
+        this.intellisenseCheckBox.checked = value.partialCompletion;
+        this.agentGreetingCheckBox.checked = value.agentGreeting;
         this.updateFromSettings();
     }
 
@@ -132,13 +131,7 @@ export class SettingsView {
             : this.microphoneSources.selectedOptions[0].innerText;
     }
 
-    public showTabs() {
-        this._shellSettings.hideTabs = false;
-        this.tabsCheckBox.checked = false;
-        this.saveSettings();
-    }
-
-    constructor(tabsView: TabView, chatView: ChatView) {
+    constructor(chatView: ChatView) {
         this.mainContainer = document.createElement("div");
 
         // microphone selection
@@ -164,24 +157,6 @@ export class SettingsView {
             () => this.microphoneIdSettingsValue,
         );
 
-        // auto-hide menu bar
-        this.menuCheckBox = this.addCheckbox("Hide the main menu", () => {
-            this._shellSettings.hideMenu = this.menuCheckBox.checked;
-        });
-
-        const updateTabsView = () => {
-            if (this.shellSettings.hideTabs) {
-                tabsView.hide();
-            } else {
-                tabsView.show();
-            }
-        };
-        // auto-hide tabs
-        this.tabsCheckBox = this.addCheckbox("Hide the tabs", () => {
-            this._shellSettings.hideTabs = this.tabsCheckBox.checked;
-            updateTabsView();
-        });
-
         const updateChatView = () => {
             chatView.tts = this.shellSettings.tts
                 ? getTTS(
@@ -189,6 +164,9 @@ export class SettingsView {
                       this.shellSettings.ttsSettings.voice,
                   )
                 : undefined;
+
+            chatView.enablePartialInput(this.shellSettings.partialCompletion);
+            chatView.setMetricsVisible(this.shellSettings.devUI);
         };
 
         const updateInputs = () => {
@@ -196,14 +174,14 @@ export class SettingsView {
                 chatView.chatInput.camButton.classList.remove(
                     "chat-message-hidden",
                 );
-                chatView.chatInput.picButton.classList.remove(
+                chatView.chatInput.attachButton.classList.remove(
                     "chat-message-hidden",
                 );
             } else {
                 chatView.chatInput.camButton.classList.add(
                     "chat-message-hidden",
                 );
-                chatView.chatInput.picButton.classList.add(
+                chatView.chatInput.attachButton.classList.add(
                     "chat-message-hidden",
                 );
             }
@@ -259,7 +237,6 @@ export class SettingsView {
         updateTTSSelections();
 
         this.updateFromSettings = async () => {
-            updateTabsView();
             updateChatView();
             await updateTTSSelections();
             updateInputs();
@@ -268,6 +245,17 @@ export class SettingsView {
         speechSynthesis.onvoiceschanged = () => {
             updateTTSSelections();
         };
+
+        this.intellisenseCheckBox = this.addCheckbox("Intellisense", () => {
+            this._shellSettings.partialCompletion =
+                this.intellisenseCheckBox.checked;
+            chatView.enablePartialInput(this.intellisenseCheckBox.checked);
+        });
+
+        this.agentGreetingCheckBox = this.addCheckbox("Agent greeting", () => {
+            this._shellSettings.agentGreeting =
+                this.agentGreetingCheckBox.checked;
+        });
     }
 
     getContainer() {

@@ -4,6 +4,7 @@
 import { Readability, isProbablyReaderable } from "@mozilla/readability";
 import { HTMLReducer } from "./htmlReducer";
 import { convert } from "html-to-text";
+import DOMPurify from "dompurify";
 
 function isVisible(element: HTMLElement) {
     var html = document.documentElement;
@@ -203,7 +204,10 @@ function getPageHTMLSubFragments(
     frameId: number,
 ) {
     const domParser = new DOMParser();
-    const doc = domParser.parseFromString(documentHtml, "text/html");
+    const doc = domParser.parseFromString(
+        DOMPurify.sanitize(documentHtml),
+        "text/html",
+    );
     const elements = doc.documentElement.querySelectorAll(cssSelectors);
     let htmlFragments = [];
     if (elements) {
@@ -227,7 +231,10 @@ function getPageHTMLFragments(
         documentHtml = getPageHTML(false, documentHtml, frameId);
     }
     const domParser = new DOMParser();
-    const doc = domParser.parseFromString(documentHtml, "text/html");
+    const doc = domParser.parseFromString(
+        DOMPurify.sanitize(documentHtml),
+        "text/html",
+    );
     let htmlFragments = [];
     let node = doc.body;
     while (node) {
@@ -490,18 +497,6 @@ function setIdsOnAllElements(frameId: number) {
     }
 }
 
-function setupPaleoDbScript() {
-    const helper = document.getElementById("paleobiodbAutomationScript");
-    if (helper) {
-        return;
-    }
-
-    var scriptNode = document.createElement("script");
-    scriptNode.id = "paleobiodbAutomationScript";
-    scriptNode.src = chrome.runtime.getURL("sites/paleobiodb.js");
-    (document.head || document.documentElement).appendChild(scriptNode);
-}
-
 function sendPaleoDbRequest(data: any) {
     document.dispatchEvent(
         new CustomEvent("toPaleoDbAutomation", { detail: data }),
@@ -513,170 +508,206 @@ document.addEventListener("fromPaleoDbAutomation", function (e: any) {
     console.log("received", message);
 });
 
-function setupUIEventsScript() {
-    const helper = document.getElementById("uiEventsScript");
-    if (helper) {
-        return;
-    }
-
-    var scriptNode = document.createElement("script");
-    scriptNode.id = "uiEventsScript";
-    scriptNode.src = chrome.runtime.getURL("uiEventsDispatcher.js");
-
-    scriptNode.onload = function () {
-        // setIdsOnAllElements();
-    };
-
-    (document.head || document.documentElement).appendChild(scriptNode);
-}
-
 function sendUIEventsRequest(data: any) {
     document.dispatchEvent(
         new CustomEvent("toUIEventsDispatcher", { detail: data }),
     );
 }
 
-function sendUIEventsRequestData(data: any) {
-    document.dispatchEvent(
-        new CustomEvent("toUIEventsDispatcherData", { detail: data }),
-    );
-}
-
 document.addEventListener("fromUIEventsDispatcher", async function (e: any) {
     var message = e.detail;
     console.log("received", message);
-    /*
-    const response = await chrome.runtime.sendMessage({
-        type: "uiEventsResult",
-        data: message,
-    });
-    sendUIEventsRequestData(response);
-    */
 });
 
-chrome.runtime.onMessage.addListener(
-    (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
-        (async () => {
-            switch (message.type) {
-                case "get_page_links_by_query": {
-                    const link = matchLinks(message.query) as HTMLAnchorElement;
-                    if (link && link.href) {
-                        sendResponse({ url: link.href });
-                    } else {
-                        sendResponse({});
-                    }
-                    break;
-                }
-
-                case "get_page_links_by_position": {
-                    const link = matchLinksByPostion(
-                        message.position,
-                    ) as HTMLAnchorElement;
-                    if (link && link.href) {
-                        sendResponse({ url: link.href });
-                    } else {
-                        sendResponse({});
-                    }
-                    break;
-                }
-
-                case "scroll_down_on_page": {
-                    window.scrollTo(
-                        0,
-                        window.scrollY + window.innerHeight * 0.9,
-                    );
-                    sendResponse({});
-                    break;
-                }
-
-                case "scroll_up_on_page": {
-                    window.scrollTo(
-                        0,
-                        window.scrollY - window.innerHeight * 0.9,
-                    );
-                    sendResponse({});
-                    break;
-                }
-
-                case "read_page_content": {
-                    const article = getReadablePageContent();
-                    sendResponse(article);
-                    break;
-                }
-
-                case "get_reduced_html": {
-                    const html = getPageHTML(
-                        message.fullSize,
-                        message.inputHtml,
-                        message.frameId,
-                    );
-                    sendResponse(html);
-                    break;
-                }
-
-                case "get_page_text": {
-                    const text = getPageText(
-                        message.inputHtml,
-                        message.frameId,
-                    );
-                    sendResponse(text);
-                    break;
-                }
-
-                case "get_filtered_html_fragments": {
-                    const htmlFragments = getPageHTMLSubFragments(
-                        message.inputHtml,
-                        message.cssSelectors,
-                        message.frameId,
-                    );
-                    sendResponse(htmlFragments);
-                    break;
-                }
-
-                case "get_maxSize_html_fragments": {
-                    const htmlFragments = getPageHTMLFragments(
-                        message.inputHtml,
-                        message.frameId,
-                        message.maxFragmentSize,
-                    );
-                    sendResponse(htmlFragments);
-                    break;
-                }
-
-                case "get_element_bounding_boxes": {
-                    const boundingBoxes = getInteractiveElementsBoundingBoxes();
-                    sendResponse(boundingBoxes);
-                    break;
-                }
-
-                case "setup_ui_events_script": {
-                    setupUIEventsScript();
-                    sendResponse({});
-                    break;
-                }
-
-                case "run_ui_event": {
-                    sendUIEventsRequest(message.action);
-                    sendResponse({});
-                    break;
-                }
-
-                case "setup_paleoBioDb": {
-                    setupPaleoDbScript();
-                    sendResponse({});
-                    break;
-                }
-
-                case "run_paleoBioDb_action": {
-                    sendPaleoDbRequest(message.action);
-                    sendResponse({});
-                    break;
-                }
+async function handleScriptAction(
+    message: any,
+    sendResponse: (response?: any) => void,
+) {
+    switch (message.type) {
+        case "get_page_links_by_query": {
+            const link = matchLinks(message.query) as HTMLAnchorElement;
+            if (link && link.href) {
+                sendResponse({ url: link.href });
+            } else {
+                sendResponse({});
             }
-        })();
+            break;
+        }
 
-        return true;
+        case "get_page_links_by_position": {
+            const link = matchLinksByPostion(
+                message.position,
+            ) as HTMLAnchorElement;
+            if (link && link.href) {
+                sendResponse({ url: link.href });
+            } else {
+                sendResponse({});
+            }
+            break;
+        }
+
+        case "scroll_down_on_page": {
+            window.scrollTo(0, window.scrollY + window.innerHeight * 0.9);
+            sendResponse({});
+            break;
+        }
+
+        case "scroll_up_on_page": {
+            window.scrollTo(0, window.scrollY - window.innerHeight * 0.9);
+            sendResponse({});
+            break;
+        }
+        case "history_go_back": {
+            window.history.back();
+
+            sendResponse({});
+            break;
+        }
+        case "history_go_forward": {
+            window.history.forward();
+
+            sendResponse({});
+            break;
+        }
+
+        case "zoom_in_page": {
+            sendResponse({});
+            break;
+        }
+        case "zoom_out_page": {
+            window.history.forward();
+
+            sendResponse({});
+            break;
+        }
+
+        case "read_page_content": {
+            const article = getReadablePageContent();
+            sendResponse(article);
+            break;
+        }
+
+        case "get_reduced_html": {
+            const html = getPageHTML(
+                message.fullSize,
+                message.inputHtml,
+                message.frameId,
+            );
+            sendResponse(html);
+            break;
+        }
+
+        case "get_page_text": {
+            const text = getPageText(message.inputHtml, message.frameId);
+            sendResponse(text);
+            break;
+        }
+
+        case "get_filtered_html_fragments": {
+            const htmlFragments = getPageHTMLSubFragments(
+                message.inputHtml,
+                message.cssSelectors,
+                message.frameId,
+            );
+            sendResponse(htmlFragments);
+            break;
+        }
+
+        case "get_maxSize_html_fragments": {
+            const htmlFragments = getPageHTMLFragments(
+                message.inputHtml,
+                message.frameId,
+                message.maxFragmentSize,
+            );
+            sendResponse(htmlFragments);
+            break;
+        }
+
+        case "get_element_bounding_boxes": {
+            const boundingBoxes = getInteractiveElementsBoundingBoxes();
+            sendResponse(boundingBoxes);
+            break;
+        }
+
+        case "run_ui_event": {
+            sendUIEventsRequest(message.action);
+            sendResponse({});
+            break;
+        }
+
+        case "run_paleoBioDb_action": {
+            sendPaleoDbRequest(message.action);
+            sendResponse({});
+            break;
+        }
+
+        case "clearCrosswordPageCache": {
+            const value = await localStorage.getItem("pageSchema");
+            if (value) {
+                localStorage.removeItem("pageSchema");
+            }
+            sendResponse({});
+            break;
+        }
+        case "get_page_schema": {
+            const value = localStorage.getItem("pageSchema");
+            if (value) {
+                sendResponse(JSON.parse(value));
+            } else {
+                sendResponse(null);
+            }
+            break;
+        }
+        case "set_page_schema": {
+            let updatedSchema = message.action.parameters.schema;
+            localStorage.setItem("pageSchema", JSON.stringify(updatedSchema));
+            sendResponse({});
+            break;
+        }
+        case "clear_page_schema": {
+            const value = localStorage.getItem("pageSchema");
+            if (value) {
+                localStorage.removeItem("pageSchema");
+            }
+            sendResponse({});
+            break;
+        }
+    }
+}
+
+chrome.runtime?.onMessage.addListener(
+    async (
+        message: any,
+        sender: chrome.runtime.MessageSender,
+        sendResponse,
+    ) => {
+        await handleScriptAction(message, sendResponse);
     },
+);
+
+window.addEventListener(
+    "message",
+    async (event) => {
+        if (
+            event.data.source == "preload" &&
+            event.data.target == "contentScript" &&
+            event.data.messageType == "scriptActionRequest"
+        ) {
+            await handleScriptAction(event.data.body, (response) => {
+                window.top?.postMessage(
+                    {
+                        source: "contentScript",
+                        target: "preload",
+                        messageType: "scriptActionResponse",
+                        id: event.data.id,
+                        body: response,
+                    },
+                    "*",
+                );
+            });
+        }
+    },
+    false,
 );
 
 document.addEventListener("DOMContentLoaded", async () => {

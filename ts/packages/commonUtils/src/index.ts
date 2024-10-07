@@ -37,8 +37,17 @@ export * from "./webSockets.js";
 
 export * from "./stopWatch.js";
 
-export * from "./profiler.js";
-
 export { simpleStarRegex } from "./simpleStartRegex.js";
 
+export * from "./profiler/profileLogger.js";
+export * from "./profiler/profileReader.js";
+
 export { createRpc } from "./rpc.js";
+
+export { CachedImageWithDetails, getImageElement } from "./image.js";
+
+export {
+    getFileExtensionForMimeType,
+    getMimeTypeFromFileExtension as getMimeType,
+    isMimeTypeSupported,
+} from "./mimeTypes.js";

@@ -3,11 +3,12 @@
 
 import { DisplayType, DynamicDisplay } from "@typeagent/agent-sdk";
 import {
+    getPartialCompletion,
     getPrompt,
     getSettingSummary,
     getTranslatorNameToEmojiMap,
     processCommand,
-} from "../command.js";
+} from "./command.js";
 import {
     closeCommandHandlerContext,
     CommandHandlerContext,
@@ -16,13 +17,24 @@ import {
 } from "../handlers/common/commandHandlerContext.js";
 import { getDynamicDisplay } from "../action/actionHandlers.js";
 import { RequestId } from "../handlers/common/interactiveIO.js";
+import { RequestMetrics } from "../utils/metrics.js";
+
+export type PartialCompletionResult = {
+    partial: string; // The head part of the completion
+    space: boolean; // require space between partial and prefix
+    prefix: string; // the prefix for completion match
+    completions: string[]; // All the partial completions available after partial (and space if true)
+};
 
 export interface Dispatcher {
     processCommand(
         command: string,
         requestId?: RequestId,
         attachments?: string[],
-    ): Promise<void>;
+    ): Promise<RequestMetrics | undefined>;
+    getPartialCompletion(
+        prefix: string,
+    ): Promise<PartialCompletionResult | undefined>;
     getDynamicDisplay(
         appAgentName: string,
         type: DisplayType,
@@ -48,6 +60,9 @@ export async function createDispatcher(
     return {
         processCommand(command, requestId, attachments) {
             return processCommand(command, context, requestId, attachments);
+        },
+        getPartialCompletion(prefix) {
+            return getPartialCompletion(prefix, context);
         },
         getDynamicDisplay(appAgentName, type, id) {
             return getDynamicDisplay(context, appAgentName, type, id);

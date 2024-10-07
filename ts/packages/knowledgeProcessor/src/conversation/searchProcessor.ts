@@ -13,7 +13,6 @@ import {
 import {
     Filter,
     GetAnswerAction,
-    SearchAction,
     WebLookupAction,
     ResponseStyle,
 } from "./knowledgeSearchWebSchema.js";
@@ -23,7 +22,11 @@ import {
     KnowledgeActionTranslator,
     createKnowledgeActionTranslator,
 } from "./knowledgeActions.js";
-import { AnswerGenerator, createAnswerGenerator } from "./answerGenerator.js";
+import {
+    AnswerGenerator,
+    AnswerStyle,
+    createAnswerGenerator,
+} from "./answerGenerator.js";
 import { PromptSection } from "typechat";
 import { ChatModel } from "aiclient";
 import {
@@ -286,7 +289,12 @@ export function createSearchProcessor(
         );
         await adjustMessages(query, response, searchOptions, options);
         if (!options.skipAnswerGeneration) {
-            await generateAnswerForSearchTerms(query, response, options);
+            await generateAnswerForSearchTerms(
+                query,
+                response,
+                options,
+                //action.parameters.answerType,
+            );
         }
         return response;
     }
@@ -310,18 +318,18 @@ export function createSearchProcessor(
         query: string,
         response: SearchResponse,
         options: SearchProcessingOptions,
+        style?: AnswerStyle | undefined,
     ) {
-        let style: ResponseStyle | undefined; //"Paragraph";
         response.answer = await answers.generateAnswer(
             query,
-            undefined,
+            style,
             response,
             false,
         );
         if (response.answer?.type === "NoAnswer" && options.fallbackSearch) {
             await fallbackSearch(
                 query,
-                style,
+                undefined,
                 response,
                 options.fallbackSearch,
             );
@@ -484,7 +492,7 @@ export function createSearchProcessor(
     }
 
     function responseHasTopics(response: SearchResponse): boolean {
-        for (const topic of response.allTopics()) {
+        for (const _ of response.allTopics()) {
             return true;
         }
         return false;

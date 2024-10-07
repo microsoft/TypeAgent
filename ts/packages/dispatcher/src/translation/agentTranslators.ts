@@ -43,10 +43,15 @@ function collectTranslatorConfigs(
     translationDefaultEnabled: boolean,
     actionDefaultEnabled: boolean,
 ) {
-    transient = config.transient ?? transient;
+    transient = config.transient ?? transient; // inherit from parent if not specified
     translationDefaultEnabled =
-        config.translationDefaultEnabled ?? translationDefaultEnabled;
-    actionDefaultEnabled = config.actionDefaultEnabled ?? actionDefaultEnabled;
+        config.translationDefaultEnabled ??
+        config.defaultEnabled ??
+        translationDefaultEnabled; // inherit from parent if not specified
+    actionDefaultEnabled =
+        config.actionDefaultEnabled ??
+        config.defaultEnabled ??
+        actionDefaultEnabled; // inherit from parent if not specified
 
     if (config.schema) {
         debugConfig(`Adding translator '${name}'`);

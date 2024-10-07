@@ -27,7 +27,6 @@ import {
     SourceTextBlock,
     TextBlock,
     TextBlockType,
-    collectBlockIds,
     collectBlockText,
     collectSourceIds,
 } from "../text.js";
@@ -320,7 +319,7 @@ export interface TopicIndex<TTopicId = any, TSourceId = any> {
     ): Promise<Set<TSourceId> | undefined>;
 }
 
-export async function createTopicIndex<TSourceId = string>(
+export async function createTopicIndex<TSourceId = any>(
     settings: TextIndexSettings,
     rootPath: string,
     folderSettings?: ObjectFolderSettings,

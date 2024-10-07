@@ -15,10 +15,19 @@ import {
     RelevantLine,
 } from "code-processor";
 import chalk from "chalk";
+import { pathToFileURL } from "url";
 
 export class CodePrinter extends ChatPrinter {
     constructor(io: InteractiveIo) {
         super(io);
+    }
+
+    public writeCode(lines: string | string[]): void {
+        if (typeof lines === "string") {
+            this.writeInColor(chalk.cyanBright, lines);
+        } else {
+            this.writeCodeLines(lines);
+        }
     }
 
     public writeCodeLines(lines: string[]): void {
@@ -128,6 +137,46 @@ export class CodePrinter extends ChatPrinter {
             if (relevantLine) {
                 this.writeDocLine(relevantLine);
             }
+        }
+    }
+
+    public writeAllDocs(lines: string[], docs: CodeDocumentation): void {
+        for (let i = 0; i < lines.length; ++i) {
+            this.writeDocs(lines[i], i + 1, docs);
+            this.writeCodeLine(i + 1, lines[i]);
+        }
+    }
+
+    public writeFullCodeReview(
+        lines: string[],
+        review: CodeReview,
+        showTitle: boolean = true,
+    ): void {
+        if (showTitle) {
+            this.writeHeading("\nCODE REVIEW\n");
+        }
+        for (let i = 0; i < lines.length; ++i) {
+            this.writeCodeReview(lines[i], i + 1, review);
+            this.writeCodeLine(i + 1, lines[i]);
+        }
+    }
+
+    public writeSourceLink(sourcePath: string | undefined): void {
+        if (sourcePath) {
+            this.writeInColor(
+                chalk.blueBright,
+                pathToFileURL(sourcePath).toString(),
+            );
+        }
+    }
+
+    public writeScore(score: number): void {
+        this.writeInColor(chalk.green, `[${score}]`);
+    }
+
+    public writeTimestamp(timestamp?: Date): void {
+        if (timestamp) {
+            this.writeInColor(chalk.gray, timestamp.toString());
         }
     }
 }

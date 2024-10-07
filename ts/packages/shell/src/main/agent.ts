@@ -5,26 +5,60 @@ import {
     ActionContext,
     AppAgent,
     AppAgentManifest,
+    ParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
+    CommandHandlerNoParams,
     CommandHandlerTable,
     getCommandInterface,
-} from "@typeagent/agent-sdk/helpers/commands";
+} from "@typeagent/agent-sdk/helpers/command";
 import { AppAgentProvider } from "agent-dispatcher";
 import { ShellSettings } from "./shellSettings.js";
+import path from "path";
+import { BrowserWindow } from "electron";
+import {
+    displaySuccess,
+    displayWarn,
+} from "@typeagent/agent-sdk/helpers/display";
 
 type ShellContext = {
     settings: ShellSettings;
+    inlineWindow: BrowserWindow | undefined;
 };
 
 const config: AppAgentManifest = {
     emojiChar: "🐚",
+    description: "Shell",
 };
 
-class ShellShowSettingsCommandHandler implements CommandHandler {
+class ShellShowSettingsCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show shell settings";
-    public async run(_input: string, context: ActionContext<ShellContext>) {
+    public async run(context: ActionContext<ShellContext>) {
+        const agentContext = context.sessionContext.agentContext;
+        agentContext.settings.show("settings");
+    }
+}
+
+class ShellShowHelpCommandHandler implements CommandHandlerNoParams {
+    public readonly description = "Show shell help";
+    public async run(context: ActionContext<ShellContext>) {
+        const agentContext = context.sessionContext.agentContext;
+        agentContext.settings.show("help");
+    }
+}
+
+class ShellShowMetricsCommandHandler implements CommandHandlerNoParams {
+    public readonly description = "Show shell metrics";
+    public async run(context: ActionContext<ShellContext>) {
+        const agentContext = context.sessionContext.agentContext;
+        agentContext.settings.show("Metrics");
+    }
+}
+
+class ShellShowRawSettingsCommandHandler implements CommandHandlerNoParams {
+    public readonly description = "Shows raw JSON shell settings";
+    public async run(context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
         const message: string[] = [];
         const printConfig = (options: any, prefix: number = 2) => {
@@ -47,16 +81,29 @@ class ShellShowSettingsCommandHandler implements CommandHandler {
 class ShellSetSettingCommandHandler implements CommandHandler {
     public readonly description: string =
         "Sets a specific setting with the supplied value";
-    public async run(input: string, context: ActionContext<ShellContext>) {
+    public readonly parameters = {
+        args: {
+            name: {
+                description: "Name of the setting to set",
+            },
+            value: {
+                description: "The new value for the setting",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<ShellContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
         const agentContext = context.sessionContext.agentContext;
-        const name = input.substring(0, input.indexOf(" "));
-        const newValue = input.substring(input.indexOf(" ") + 1);
-
+        const { name, value } = params.args;
         let found: boolean = false;
-        for (const [key, _] of Object.entries(agentContext.settings)) {
+        let oldValue: any;
+        for (const [key, v] of Object.entries(agentContext.settings)) {
             if (key === name) {
                 found = true;
-                agentContext.settings.set(name, newValue);
+                agentContext.settings.set(name, value);
+                oldValue = v;
                 break;
             }
         }
@@ -66,16 +113,121 @@ class ShellSetSettingCommandHandler implements CommandHandler {
                 `The supplied shell setting '${name}' could not be found.'`,
             );
         }
-        context.actionIO.setDisplay(`${name} was set to ${newValue}`);
+        const currValue = agentContext.settings[name];
+        if (oldValue !== currValue) {
+            displaySuccess(`${name} is changed to ${currValue}`, context);
+        } else {
+            displayWarn(`${name} is unchanged from ${currValue}`, context);
+        }
+    }
+}
+
+class ShellRunDemoCommandHandler implements CommandHandlerNoParams {
+    public readonly description = "Run Demo";
+    public async run(context: ActionContext<ShellContext>) {
+        context.sessionContext.agentContext.settings.runDemo();
+    }
+}
+
+class ShellRunDemoInteractiveCommandHandler implements CommandHandlerNoParams {
+    public readonly description = "Run Demo Interactive";
+    public async run(context: ActionContext<ShellContext>) {
+        context.sessionContext.agentContext.settings.runDemo(true);
+    }
+}
+
+class ShellSetTopMostCommandHandler implements CommandHandlerNoParams {
+    public readonly description =
+        "Always keep the shell window on top of other windows";
+    public async run(context: ActionContext<ShellContext>) {
+        context.sessionContext.agentContext.settings.toggleTopMost();
+    }
+}
+
+class ShellOpenWebContentView implements CommandHandler {
+    public readonly description = "Show a new Web Content view";
+    public readonly parameters = {
+        args: {
+            site: {
+                description: "Alias or URL for the site of the open.",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<ShellContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        let targetUrl: URL;
+        switch (params.args.site.toLowerCase()) {
+            case "paleoBioDb":
+                targetUrl = new URL("https://paleobiodb.org/navigator/");
+
+                break;
+            case "crossword":
+                targetUrl = new URL(
+                    "https://www.seattletimes.com/games-nytimes-crossword/",
+                );
+
+                break;
+            case "commerce":
+                targetUrl = new URL("https://www.target.com/");
+
+                break;
+            default:
+                targetUrl = new URL(params.args.site);
+        }
+
+        if (
+            !context.sessionContext.agentContext.inlineWindow ||
+            context.sessionContext.agentContext.inlineWindow.isDestroyed()
+        ) {
+            const win = new BrowserWindow({
+                width: 800,
+                height: 1500,
+                autoHideMenuBar: true,
+
+                webPreferences: {
+                    preload: path.join(__dirname, "../preload/webview.mjs"),
+                    sandbox: false,
+                },
+            });
+            win.removeMenu();
+
+            context.sessionContext.agentContext.inlineWindow = win;
+        }
+
+        const inlineWindow = context.sessionContext.agentContext.inlineWindow;
+        inlineWindow.loadURL(targetUrl.toString());
+
+        inlineWindow.webContents.on("did-finish-load", () => {
+            inlineWindow.webContents.send("setupSiteAgent");
+        });
     }
 }
 
 const handlers: CommandHandlerTable = {
     description: "Shell settings command",
-    defaultSubCommand: new ShellShowSettingsCommandHandler(),
     commands: {
-        show: new ShellShowSettingsCommandHandler(),
+        show: {
+            description: "Show shell settings",
+            defaultSubCommand: new ShellShowSettingsCommandHandler(),
+            commands: {
+                settings: new ShellShowSettingsCommandHandler(),
+                help: new ShellShowHelpCommandHandler(),
+                metrics: new ShellShowMetricsCommandHandler(),
+                raw: new ShellShowRawSettingsCommandHandler(),
+            },
+        },
         set: new ShellSetSettingCommandHandler(),
+        run: {
+            description: "Run Demo",
+            defaultSubCommand: new ShellRunDemoCommandHandler(),
+            commands: {
+                interactive: new ShellRunDemoInteractiveCommandHandler(),
+            },
+        },
+        topmost: new ShellSetTopMostCommandHandler(),
+        open: new ShellOpenWebContentView(),
     },
 };
 
@@ -83,6 +235,7 @@ const agent: AppAgent = {
     async initializeAgentContext() {
         return {
             settings: ShellSettings.getinstance(),
+            inlineWindow: undefined,
         };
     },
     ...getCommandInterface(handlers),

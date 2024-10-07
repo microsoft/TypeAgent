@@ -23,19 +23,48 @@ import {
 } from "./calendarQueryHelper.js";
 import {
     SessionContext,
-    createActionResultFromTextDisplay,
-    createActionResultFromHtmlDisplay,
-    createActionResultFromError,
     AppAction,
     AppAgent,
     ActionContext,
 } from "@typeagent/agent-sdk";
+import {
+    createActionResultFromTextDisplay,
+    createActionResultFromHtmlDisplay,
+    createActionResultFromError,
+} from "@typeagent/agent-sdk/helpers/action";
+import {
+    CommandHandlerNoParams,
+    CommandHandlerTable,
+    getCommandInterface,
+} from "@typeagent/agent-sdk/helpers/command";
+
+export class CalendarClientLoginCommandHandler
+    implements CommandHandlerNoParams
+{
+    public readonly description = "Log into the MS Graph to access calendar";
+    public async run(context: ActionContext<CalendarActionContext>) {
+        const calendarClient: CalendarClient | undefined =
+            context.sessionContext.agentContext.calendarClient;
+        if (!calendarClient?.isGraphClientInitialized()) {
+            await calendarClient?.initGraphClient(true);
+        }
+    }
+}
+
+const handlers: CommandHandlerTable = {
+    description: "Calendar login commmand",
+    defaultSubCommand: new CalendarClientLoginCommandHandler(),
+    commands: {
+        login: new CalendarClientLoginCommandHandler(),
+    },
+};
 
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeCalendarContext,
         updateAgentContext: updateCalendarContext,
         executeAction: executeCalendarAction,
+        ...getCommandInterface(handlers),
     };
 }
 
@@ -44,7 +73,7 @@ interface GraphEventRefIds {
     localEventId: string;
 }
 
-type CalendarActionContext = {
+export type CalendarActionContext = {
     calendarClient: CalendarClient | undefined;
     graphEventIds: GraphEventRefIds[] | undefined;
     mapGraphEntity: Map<string, GraphEntity> | undefined;
@@ -267,8 +296,8 @@ export async function handleCalendarAction(
         !calendarContext.calendarClient ||
         !calendarContext.calendarClient?.isGraphClientInitialized()
     ) {
-        return createActionResultFromTextDisplay(
-            "Not handling calendar actions ...",
+        return createActionResultFromError(
+            "Use @calendar login to log into MS Graph and then try your requesy again.",
         );
     }
 
@@ -477,8 +506,8 @@ export async function handleCalendarAction(
                         actionEvent.description,
                     );
 
-                if (findResults.length == 0) {
-                    let findResults: any =
+                if (findResults.length === 0) {
+                    findResults =
                         await calendarContext.calendarClient?.findCalendarEventsBySubject(
                             actionEvent.description,
                         );

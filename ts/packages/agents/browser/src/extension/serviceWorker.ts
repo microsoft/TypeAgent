@@ -726,73 +726,70 @@ let currentCrosswordUrl = "";
 async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
     let messageType = "enableSiteTranslator";
     let messageBody = "";
-    if (targetTab.url?.startsWith("https://paleobiodb.org/")) {
-        // insert site-specific script
-        const result = await chrome.tabs.sendMessage(targetTab.id!, {
-            type: "setup_paleoBioDb",
-        });
+    if (targetTab.url) {
+        const host = new URL(targetTab.url).host;
 
-        messageType = "enableSiteTranslator";
-        messageBody = "browser.paleoBioDb";
-        currentSiteTranslator = "browser.paleoBioDb";
-    } else {
-        if (currentSiteTranslator == "browser.paleoBioDb") {
-            messageType = "disableSiteTranslator";
+        if (host === "paleobiodb.org" || host === "www.paleobiodb.org") {
+            messageType = "enableSiteTranslator";
             messageBody = "browser.paleoBioDb";
+            currentSiteTranslator = "browser.paleoBioDb";
+        } else {
+            if (currentSiteTranslator == "browser.paleoBioDb") {
+                messageType = "disableSiteTranslator";
+                messageBody = "browser.paleoBioDb";
+            }
         }
-    }
 
-    if (
-        targetTab.url?.startsWith("https://embed.universaluclick.com/") ||
-        targetTab.url?.startsWith("https://data.puzzlexperts.com/puzzleapp") ||
-        targetTab.url?.startsWith("https://nytsyn.pzzl.com/cwd_seattle") ||
-        targetTab.url?.startsWith("https://www.wsj.com/puzzles/crossword") ||
-        targetTab.url?.startsWith(
-            "https://www.seattletimes.com/games-nytimes-crossword/",
-        ) ||
-        targetTab.url?.startsWith(
-            "https://www.denverpost.com/games/daily-crossword/",
-        ) ||
-        targetTab.url?.startsWith(
-            "https://www.bestcrosswords.com/bestcrosswords/guestconstructor",
-        )
-    ) {
-        // insert ui automation script
-        const result = await chrome.tabs.sendMessage(targetTab.id!, {
-            type: "setup_ui_events_script",
-        });
+        if (
+            targetTab.url.startsWith("https://embed.universaluclick.com/") ||
+            targetTab.url.startsWith(
+                "https://data.puzzlexperts.com/puzzleapp",
+            ) ||
+            targetTab.url.startsWith("https://nytsyn.pzzl.com/cwd_seattle") ||
+            targetTab.url.startsWith("https://www.wsj.com/puzzles/crossword") ||
+            targetTab.url.startsWith(
+                "https://www.seattletimes.com/games-nytimes-crossword",
+            ) ||
+            targetTab.url.startsWith(
+                "https://www.denverpost.com/games/daily-crossword",
+            ) ||
+            targetTab.url.startsWith(
+                "https://www.bestcrosswords.com/bestcrosswords/guestconstructor",
+            )
+        ) {
+            messageType = "enableSiteTranslator";
+            messageBody = "browser.crossword";
+            currentSiteTranslator = "browser.crossword";
+            currentCrosswordUrl = targetTab.url;
+        }
 
-        messageType = "enableSiteTranslator";
-        messageBody = "browser.crossword";
-        currentSiteTranslator = "browser.crossword";
-        currentCrosswordUrl = targetTab.url;
-    }
+        const commerceHosts = [
+            "www.homedepot.com",
+            "www.target.com",
+            "www.walmart.com",
+        ];
 
-    if (
-        targetTab.url?.startsWith("https://www.homedepot.com/") ||
-        targetTab.url?.startsWith("https://www.target.com/") ||
-        targetTab.url?.startsWith("https://www.walmart.com/")
-    ) {
-        // insert ui automation script
-        const result = await chrome.tabs.sendMessage(targetTab.id!, {
-            type: "setup_ui_events_script",
-        });
+        if (commerceHosts.includes(host)) {
+            messageType = "enableSiteTranslator";
+            messageBody = "browser.commerce";
+            currentSiteTranslator = "browser.commerce";
+        }
 
-        messageType = "enableSiteTranslator";
-        messageBody = "browser.commerce";
-        currentSiteTranslator = "browser.commerce";
-    }
-
-    // trigger translator change
-    if (webSocket && webSocket.readyState === WebSocket.OPEN && messageBody) {
-        webSocket.send(
-            JSON.stringify({
-                source: "browser",
-                target: "dispatcher",
-                messageType: messageType,
-                body: messageBody,
-            }),
-        );
+        // trigger translator change
+        if (
+            webSocket &&
+            webSocket.readyState === WebSocket.OPEN &&
+            messageBody
+        ) {
+            webSocket.send(
+                JSON.stringify({
+                    source: "browser",
+                    target: "dispatcher",
+                    messageType: messageType,
+                    body: messageBody,
+                }),
+            );
+        }
     }
 }
 
@@ -1293,7 +1290,7 @@ function showBadgeBusy() {
     });
 }
 
-chrome.action.onClicked.addListener(async (tab) => {
+chrome.action?.onClicked.addListener(async (tab) => {
     try {
         const connected = await ensureWebsocketConnected();
         if (!connected) {
@@ -1352,7 +1349,7 @@ chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
 });
 
 let embeddingsInitializedWindowId: number;
-chrome.windows.onFocusChanged.addListener(async (windowId) => {
+chrome.windows?.onFocusChanged.addListener(async (windowId) => {
     if (windowId == chrome.windows.WINDOW_ID_NONE) {
         return;
     }
@@ -1385,11 +1382,11 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
     }
 });
 
-chrome.windows.onCreated.addListener(async (windowId) => {
+chrome.windows?.onCreated.addListener(async (windowId) => {
     console.log("Window Created");
 });
 
-chrome.windows.onRemoved.addListener(async (windowId) => {
+chrome.windows?.onRemoved.addListener(async (windowId) => {
     console.log("Window Removed");
 });
 
@@ -1420,6 +1417,30 @@ chrome.runtime.onMessageExternal.addListener(
     },
 );
 
+chrome.runtime.onMessage.addListener(
+    (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
+        async () => {
+            switch (message.type) {
+                case "initialize": {
+                    console.log("Browser Agent Service Worker started");
+                    try {
+                        const connected = await ensureWebsocketConnected();
+                        if (!connected) {
+                            reconnectWebSocket();
+                            showBadgeError();
+                        }
+                    } catch {
+                        reconnectWebSocket();
+                    }
+
+                    sendResponse("Service worker initialize called");
+                    break;
+                }
+            }
+        };
+    },
+);
+
 chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
         title: "Refresh crossword agent",
@@ -1432,7 +1453,7 @@ chrome.runtime.onInstalled.addListener(() => {
     });
 });
 
-chrome.contextMenus.onClicked.addListener(
+chrome.contextMenus?.onClicked.addListener(
     async (info: chrome.contextMenus.OnClickData, tab?: chrome.tabs.Tab) => {
         if (tab == undefined) {
             return;

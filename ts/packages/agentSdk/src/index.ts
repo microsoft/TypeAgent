@@ -7,19 +7,44 @@ export {
     SchemaDefinition,
     AppAgent,
     AppAgentEvent,
-    AppAction,
-    AppActionWithParameters,
     SessionContext,
     StorageListOptions,
     Storage,
     StorageEncoding,
     TokenCachePersistence,
     ActionContext,
+} from "./agentInterface.js";
+
+export {
+    CommandDescriptor,
+    CommandDescriptors,
+    CommandDescriptorTable,
+    AppAgentCommandInterface,
+} from "./command.js";
+
+export {
+    FlagValueTypes,
+    ParameterDefinitions,
+    ParsedCommandParams,
+} from "./parameters.js";
+export {
     ActionIO,
     DisplayType,
     DynamicDisplay,
     DisplayContent,
-    CommandDescriptor,
-    CommandDescriptorTable,
-} from "./agentInterface.js";
-export * from "./memory.js";
+    DisplayAppendMode,
+    DisplayMessageKind,
+} from "./display.js";
+
+export {
+    AppAction,
+    AppActionWithParameters,
+    ActionResultError,
+    ActionResultSuccessNoDisplay,
+    ActionResultSuccess,
+    ActionResult,
+} from "./action.js";
+
+export { Entity } from "./memory.js";
+
+export { Profiler } from "./profiler.js";

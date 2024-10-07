@@ -4,22 +4,29 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { ClientAPI, SpeechToken } from "./electronTypes.js"; // Custom APIs for renderer
+import { RequestMetrics } from "agent-dispatcher";
 
 function getProcessShellRequest() {
     const pendingRequests = new Map<
         string,
-        { resolve: () => void; reject: (reason?: any) => void }
+        {
+            resolve: (metrics?: RequestMetrics) => void;
+            reject: (reason?: any) => void;
+        }
     >();
 
-    ipcRenderer.on("process-shell-request-done", (_, id: string) => {
-        const pendingRequest = pendingRequests.get(id);
-        if (pendingRequest !== undefined) {
-            pendingRequest.resolve();
-            pendingRequests.delete(id);
-        } else {
-            console.warn(`Pending request ${id} not found`);
-        }
-    });
+    ipcRenderer.on(
+        "process-shell-request-done",
+        (_, id: string, metrics?: RequestMetrics) => {
+            const pendingRequest = pendingRequests.get(id);
+            if (pendingRequest !== undefined) {
+                pendingRequest.resolve(metrics);
+                pendingRequests.delete(id);
+            } else {
+                console.warn(`Pending request ${id} not found`);
+            }
+        },
+    );
     ipcRenderer.on(
         "process-shell-request-error",
         (_, id: string, message: string) => {
@@ -36,7 +43,7 @@ function getProcessShellRequest() {
     );
 
     return (request: string, id: string, images: string[]) => {
-        return new Promise<void>((resolve, reject) => {
+        return new Promise<RequestMetrics | undefined>((resolve, reject) => {
             pendingRequests.set(id, { resolve, reject });
             ipcRenderer.send("process-shell-request", request, id, images);
         });
@@ -54,6 +61,9 @@ const api: ClientAPI = {
     ) => ipcRenderer.on("listen-event", callback),
 
     processShellRequest: getProcessShellRequest(),
+    getPartialCompletion: (prefix: string) => {
+        return ipcRenderer.invoke("get-partial-completion", prefix);
+    },
     getDynamicDisplay(source: string, id: string) {
         return ipcRenderer.invoke("get-dynamic-display", source, id);
     },
@@ -63,20 +73,14 @@ const api: ClientAPI = {
     onSearchMenuCommand: (callback) => {
         ipcRenderer.on("search-menu-command", callback);
     },
-    onResponse(callback) {
-        ipcRenderer.on("response", callback);
+    onUpdateDisplay(callback) {
+        ipcRenderer.on("updateDisplay", callback);
     },
     onSetDynamicActionDisplay(callback) {
         ipcRenderer.on("set-dynamic-action-display", callback);
     },
-    onStatusMessage(callback) {
-        ipcRenderer.on("status-message", callback);
-    },
     onClear(callback) {
         ipcRenderer.on("clear", callback);
-    },
-    onSetPartialInputHandler(callback) {
-        ipcRenderer.on("set-partial-input-handler", callback);
     },
     onSettingSummaryChanged(callback) {
         ipcRenderer.on("setting-summary-changed", callback);
@@ -128,6 +132,9 @@ const api: ClientAPI = {
     },
     onNotify(callback) {
         ipcRenderer.on("notification-arrived", callback);
+    },
+    onTakeAction(callback) {
+        ipcRenderer.on("take-action", callback);
     },
 };
 

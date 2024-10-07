@@ -7,12 +7,13 @@ import {
     SearchOptions,
     asyncArray,
     collections,
-    createObjectFolder,
     dateTime,
 } from "typeagent";
 import {
+    KnowledgeStore,
     TextIndex,
     TextIndexSettings,
+    createKnowledgeStore,
     createTextIndex,
 } from "../knowledgeIndex.js";
 import path from "path";
@@ -34,7 +35,6 @@ import {
 } from "../setOperations.js";
 import {
     TemporalLog,
-    createTemporalLog,
     filterTemporalSequence,
     getRangeOfTemporalSequence,
     itemsFromTemporalSequence,
@@ -43,9 +43,8 @@ import { toStopDate, toStartDate } from "./knowledgeActions.js";
 import { ConcreteEntity, Facet } from "./knowledgeSchema.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 
-export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any> {
-    readonly settings: TextIndexSettings;
-    readonly sequence: TemporalLog<TEntityId, TEntityId[]>;
+export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
+    extends KnowledgeStore<ExtractedEntity<TSourceId>, TEntityId> {
     readonly nameIndex: TextIndex<TTextId, TEntityId>;
     readonly typeIndex: TextIndex<TTextId, TEntityId>;
     readonly facetIndex: TextIndex<TTextId, TEntityId>;
@@ -54,14 +53,10 @@ export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any> {
     getMultiple(ids: TEntityId[]): Promise<ExtractedEntity<TSourceId>[]>;
     getSourceIds(ids: TEntityId[]): Promise<TSourceId[]>;
     getEntities(ids: TEntityId[]): Promise<ConcreteEntity[]>;
-    put(entity: ExtractedEntity<TSourceId>, id?: TEntityId): Promise<TEntityId>;
-    putMultiple(
+    add(entity: ExtractedEntity<TSourceId>, id?: TEntityId): Promise<TEntityId>;
+    addMultiple(
         entities: ExtractedEntity<TSourceId>[],
         ids?: TEntityId[],
-    ): Promise<TEntityId[]>;
-    putNext(
-        entities: ExtractedEntity<TSourceId>[],
-        timestamp?: Date,
     ): Promise<TEntityId[]>;
     search(
         filter: EntityFilter,
@@ -93,49 +88,44 @@ export async function createEntityIndex<TSourceId = string>(
     fSys?: FileSystem,
 ): Promise<EntityIndex<string, TSourceId, string>> {
     type EntityId = string;
-    const sequence = await createTemporalLog<EntityId[]>(
-        { concurrency: settings.concurrency },
-        path.join(rootPath, "sequence"),
-        folderSettings,
-        fSys,
-    );
-    const entries = await createObjectFolder<ExtractedEntity<TSourceId>>(
-        path.join(rootPath, "entries"),
-        folderSettings,
-        fSys,
-    );
-    const nameIndex = await createTextIndex<EntityId>(
-        settings,
-        path.join(rootPath, "names"),
-        folderSettings,
-        fSys,
-    );
-    const typeIndex = await createTextIndex<EntityId>(
-        settings,
-        path.join(rootPath, "types"),
-        folderSettings,
-        fSys,
-    );
-    const facetIndex = await createTextIndex<EntityId>(
-        settings,
-        path.join(rootPath, "facets"),
-        folderSettings,
-        fSys,
-    );
+    const [entityStore, nameIndex, typeIndex, facetIndex] = await Promise.all([
+        createKnowledgeStore<ExtractedEntity<TSourceId>>(
+            settings,
+            rootPath,
+            folderSettings,
+            fSys,
+        ),
+        createTextIndex<EntityId>(
+            settings,
+            path.join(rootPath, "names"),
+            folderSettings,
+            fSys,
+        ),
+        createTextIndex<EntityId>(
+            settings,
+            path.join(rootPath, "types"),
+            folderSettings,
+            fSys,
+        ),
+        createTextIndex<EntityId>(
+            settings,
+            path.join(rootPath, "facets"),
+            folderSettings,
+            fSys,
+        ),
+    ]);
     return {
-        settings,
-        sequence,
+        ...entityStore,
         nameIndex,
         typeIndex,
         facetIndex,
-        entities: entries.allObjects,
-        get: entries.get,
+        entities: () => entityStore.entries(),
+        get: (id) => entityStore.get(id),
         getMultiple,
         getSourceIds,
         getEntities,
-        put,
-        putMultiple,
-        putNext,
+        add,
+        addMultiple,
         search,
         searchTerms,
         loadSourceIds,
@@ -147,7 +137,7 @@ export async function createEntityIndex<TSourceId = string>(
         const entities = await asyncArray.mapAsync(
             ids,
             settings.concurrency,
-            (id) => entries.get(id),
+            (id) => entityStore.get(id),
         );
         return removeUndefined(entities);
     }
@@ -167,30 +157,17 @@ export async function createEntityIndex<TSourceId = string>(
             ids,
             settings.concurrency,
             async (id) => {
-                const entity = (await entries.get(id))!;
+                const entity = (await entityStore.get(id))!;
                 return entity.value;
             },
         );
     }
 
-    async function putNext(
-        entities: ExtractedEntity<TSourceId>[],
-        timestamp?: Date,
-    ): Promise<EntityId[]> {
-        const entityIds = await asyncArray.mapAsync(entities, 1, (e) =>
-            entries.put(e),
-        );
-
-        entityIds.sort();
-        await sequence.put(entityIds, timestamp);
-        return entityIds;
-    }
-
-    async function put(
+    async function add(
         extractedEntity: ExtractedEntity<TSourceId>,
         id?: EntityId,
     ): Promise<EntityId> {
-        const entityId = id ? id : await entries.put(extractedEntity);
+        const entityId = id ? id : await entityStore.add(extractedEntity);
         const sourceIds: EntityId[] = [entityId];
         await Promise.all([
             addName(extractedEntity.value.name, sourceIds),
@@ -201,7 +178,7 @@ export async function createEntityIndex<TSourceId = string>(
         return entityId;
     }
 
-    async function putMultiple(
+    async function addMultiple(
         entities: ExtractedEntity<TSourceId>[],
         ids?: EntityId[],
     ): Promise<EntityId[]> {
@@ -210,7 +187,7 @@ export async function createEntityIndex<TSourceId = string>(
         }
         // TODO: parallelize
         return asyncArray.mapAsync(entities, 1, (entity, i) =>
-            put(entity, ids ? ids[i] : undefined),
+            add(entity, ids ? ids[i] : undefined),
         );
     }
 
@@ -257,10 +234,11 @@ export async function createEntityIndex<TSourceId = string>(
         let nameMatchIds: EntityId[] | IterableIterator<EntityId> | undefined;
         let nameTypeMatchIds: EntityId[] | undefined;
         if (filter.timeRange) {
-            results.temporalSequence = await sequence.getEntriesInRange(
-                toStartDate(filter.timeRange.startDate),
-                toStopDate(filter.timeRange.stopDate),
-            );
+            results.temporalSequence =
+                await entityStore.sequence.getEntriesInRange(
+                    toStartDate(filter.timeRange.startDate),
+                    toStopDate(filter.timeRange.stopDate),
+                );
         }
         if (filter.type && filter.type.length > 0) {
             typeMatchIds = await typeIndex.getNearestMultiple(
@@ -319,10 +297,11 @@ export async function createEntityIndex<TSourceId = string>(
     ): Promise<EntitySearchResult<EntityId>> {
         const results = createSearchResults();
         if (filter.timeRange) {
-            results.temporalSequence = await sequence.getEntriesInRange(
-                toStartDate(filter.timeRange.startDate),
-                toStopDate(filter.timeRange.stopDate),
-            );
+            results.temporalSequence =
+                await entityStore.sequence.getEntriesInRange(
+                    toStartDate(filter.timeRange.startDate),
+                    toStopDate(filter.timeRange.stopDate),
+                );
         }
         if (filter.terms && filter.terms.length > 0) {
             const hitCounter = createFrequencyTable<EntityId>();
@@ -503,8 +482,8 @@ export function facetToString(facet: Facet): string {
     return `${facet.name}="${knowledgeValueToString(facet.value)}"`;
 }
 
-export function matchFacet(x: Facet, y: Facet): boolean {
-    if (x.name !== y.name) {
+export function facetMatch(x: Facet, y: Facet): boolean {
+    if (!collections.stringEquals(x.name, y.name, false)) {
         return false;
     }
     if (typeof x.value === "object") {
@@ -523,8 +502,48 @@ export function matchFacet(x: Facet, y: Facet): boolean {
 
 export function mergeEntityFacet(entity: ConcreteEntity, facet: Facet) {
     entity.facets ??= [];
-    const name = facet.name.toLowerCase();
-    if (!entity.facets.find((f) => f.name.toLowerCase() === name)) {
-        entity.facets.push(facet);
+    // Look for an equal facet
+    for (const f of entity.facets) {
+        if (facetMatch(f, facet)) {
+            break;
+        }
     }
+    entity.facets.push(facet);
+}
+
+export function pushFacet(entity: ConcreteEntity, name: string, value: string) {
+    entity.facets ??= [];
+    entity.facets.push({ name, value });
+}
+
+export function entityFromRecord(
+    ns: string,
+    name: string,
+    type: string,
+    record: Record<string, any>,
+): ConcreteEntity {
+    let entity: ConcreteEntity = {
+        name: `${ns}:${name}`,
+        type: [`${ns}:${type}`],
+    };
+    const facets = facetsFromRecord(record);
+    if (facets) {
+        entity.facets = facets;
+    }
+    return entity;
+}
+
+export function facetsFromRecord(
+    record: Record<string, any>,
+): Facet[] | undefined {
+    let facets: Facet[] | undefined;
+    for (const name in record) {
+        const value = record[name];
+        if (value) {
+            facets ??= [];
+            facets.push({ name, value });
+        }
+    }
+
+    return facets;
 }

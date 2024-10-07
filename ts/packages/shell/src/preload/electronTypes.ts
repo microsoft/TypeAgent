@@ -2,9 +2,14 @@
 // Licensed under the MIT License.
 
 import { ElectronAPI } from "@electron-toolkit/preload";
-import { AppAgentEvent, DynamicDisplay } from "@typeagent/agent-sdk";
+import {
+    AppAgentEvent,
+    DisplayAppendMode,
+    DynamicDisplay,
+} from "@typeagent/agent-sdk";
 import { ShellSettings } from "../main/shellSettings.js";
-import { IAgentMessage } from "agent-dispatcher";
+import { IAgentMessage, PartialCompletionResult } from "agent-dispatcher";
+import { RequestMetrics } from "agent-dispatcher";
 
 export type SpeechToken = {
     token: string;
@@ -78,11 +83,6 @@ export type ActionTemplateSequence = {
     prefaceMultiple?: string;
 };
 
-export interface IMessageMetrics {
-    duration: number | undefined;
-    marks?: Map<string, number> | undefined;
-}
-
 export enum NotifyCommands {
     ShowSummary = "summarize",
     Clear = "clear",
@@ -111,13 +111,16 @@ export interface ClientAPI {
         request: string,
         id: string,
         images: string[],
-    ) => Promise<void>;
+    ) => Promise<RequestMetrics | undefined>;
+    getPartialCompletion: (
+        input: string,
+    ) => Promise<PartialCompletionResult | undefined>;
     getDynamicDisplay: (source: string, id: string) => Promise<DynamicDisplay>;
-    onResponse(
+    onUpdateDisplay(
         callback: (
             e: Electron.IpcRendererEvent,
             message: IAgentMessage,
-            append: boolean,
+            mode?: DisplayAppendMode,
         ) => void,
     ): void;
     onSetDynamicActionDisplay(
@@ -130,21 +133,11 @@ export interface ClientAPI {
             nextRefreshMs: number,
         ) => void,
     ): void;
-    onSetPartialInputHandler(
-        callback: (e: Electron.IpcRendererEvent, enabled: boolean) => void,
-    ): void;
     onClear(
         callback: (
             e: Electron.IpcRendererEvent,
             updateMessage: string,
             group_id: string,
-        ) => void,
-    ): void;
-    onStatusMessage(
-        callback: (
-            e: Electron.IpcRendererEvent,
-            message: IAgentMessage,
-            temporary: boolean,
         ) => void,
     ): void;
     onActionCommand(
@@ -229,14 +222,14 @@ export interface ClientAPI {
             e: Electron.IpcRendererEvent,
             settings: ShellSettings,
         ) => void,
-    );
+    ): void;
     onNotificationCommand(
         callback: (
             e: Electron.IpcRendererEvent,
             requestId: string,
             command: string,
         ) => void,
-    );
+    ): void;
     onNotify(
         callback: (
             e: Electron.IpcRendererEvent,
@@ -245,6 +238,9 @@ export interface ClientAPI {
             source: string,
             data: any,
         ) => void,
+    ): void;
+    onTakeAction(
+        callback: (e: Electron.IpcRendererEvent, action: string) => void,
     );
 }
 

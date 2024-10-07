@@ -13,24 +13,24 @@ export type ShellSettingsType = {
     devTools: boolean;
     microphoneId?: string;
     microphoneName?: string;
-    hideMenu: boolean;
-    hideTabs: boolean;
     notifyFilter: string;
     tts: boolean;
     ttsSettings: TTSSettings;
     agentGreeting: boolean;
     multiModalContent: boolean;
+    devUI: boolean;
+    partialCompletion: boolean;
 };
 
 export const defaultSettings: ShellSettingsType = {
     size: [900, 1200],
     zoomLevel: 1,
     devTools: false,
-    hideMenu: true,
-    hideTabs: true,
     notifyFilter: "error;warning;",
     tts: false,
     ttsSettings: {},
     agentGreeting: false,
-    multiModalContent: false,
+    multiModalContent: true,
+    devUI: false,
+    partialCompletion: true,
 };

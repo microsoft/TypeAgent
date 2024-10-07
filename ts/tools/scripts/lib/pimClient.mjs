@@ -57,7 +57,7 @@ class AzPIMClient {
                     duration: options.expirationDuration,
                     endDateTime: null,
                 },
-                startDateTime: new Date(),
+                startDateTime: options.startDateTime !== undefined ? options.startDateTime : new Date(),
             },
             justification: "self elevate from typeagent script",
         };

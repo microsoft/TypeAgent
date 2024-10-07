@@ -2,6 +2,7 @@
     "editor.defaultFormatter": "esbenp.prettier-vscode",
     "cSpell.words": [
         "aiclient",
+        "AUTOINCREMENT",
         "lightgray",
         "oclif",
         "openai",
@@ -12,5 +13,14 @@
     ],
     "[html]": {
         "editor.defaultFormatter": "vscode.html-language-features"
-    }
+    },
+    "jest.virtualFolders": [
+        {"name": "aiclient", "rootPath": "packages/aiclient"},
+        {"name": "cache", "rootPath": "packages/cache"},
+        {"name": "commonUtils", "rootPath": "packages/commonUtils"},
+        {"name": "dispatcher", "rootPath": "packages/dispatcher"},
+        {"name": "knowledgeProcessor", "rootPath": "packages/knowledgeProcessor"},
+        {"name": "typeagent", "rootPath": "packages/typeagent"}
+    ],
+    "jest.runMode": "on-demand"
 }

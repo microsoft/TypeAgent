@@ -2,8 +2,6 @@
 // Licensed under the MIT License.
 
 import {
-    DispatcherCommandHandler,
-    DispatcherHandlerTable,
     getToggleCommandHandlers,
     getToggleHandlerTable,
 } from "./common/commandHandler.js";
@@ -11,120 +9,187 @@ import {
     CommandHandlerContext,
     changeContextConfig,
 } from "./common/commandHandlerContext.js";
-import {
-    getAppAgentName,
-    TranslatorConfigProvider,
-} from "../translation/agentTranslators.js";
-import { getCacheFactory } from "../utils/cacheFactory.js";
+import { getAppAgentName } from "../translation/agentTranslators.js";
 import { getServiceHostCommandHandlers } from "./serviceHost/serviceHostCommandHandler.js";
 import { getLocalWhisperCommandHandlers } from "./serviceHost/localWhisperCommandHandler.js";
 
-import { parseRequestArgs } from "../utils/args.js";
 import { getChatModelNames, simpleStarRegex } from "common-utils";
 import { openai as ai } from "aiclient";
 import { SessionConfig } from "../session/session.js";
 import chalk from "chalk";
-
-function parseToggleTranslatorName(
-    args: string[],
-    action: boolean,
-    provider: TranslatorConfigProvider,
-) {
-    const options: any = {};
-    const translatorNames = provider.getTranslatorNames();
-    for (const arg of args) {
-        if (arg === "@") {
-            for (const [name, config] of provider.getTranslatorConfigs()) {
-                options[name] = action
-                    ? config.actionDefaultEnabled
-                    : config.translationDefaultEnabled;
-            }
-        } else {
-            let name: string;
-            let value: boolean;
-            if (arg.startsWith("-")) {
-                name = arg.substring(1);
-                value = false;
-
-                if (name === "") {
-                    throw new Error("Missing translator name in arg '-'");
-                }
-            } else {
-                name = arg;
-                value = true;
-            }
-            if (arg.includes("*")) {
-                const regExp = simpleStarRegex(name);
-                const matchedTranslatorNames = translatorNames.filter(
-                    (translatorName) => regExp.test(translatorName),
-                );
-                if (matchedTranslatorNames.length === 0) {
-                    throw new Error(`Invalid translator pattern '${name}'`);
-                }
-                for (const translatorName of matchedTranslatorNames) {
-                    options[translatorName] = value;
-                }
-            } else {
-                if (!translatorNames.includes(name)) {
-                    throw new Error(`Invalid translator name '${name}'`);
-                }
-                options[name] = value;
-            }
-        }
-    }
-    return options;
-}
+import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import {
+    CommandHandler,
+    CommandHandlerTable,
+} from "@typeagent/agent-sdk/helpers/command";
+import {
+    displayResult,
+    displayWarn,
+} from "@typeagent/agent-sdk/helpers/display";
+import { alwaysEnabledCommandsAgent } from "./common/appAgentManager.js";
 
 const enum AgentToggle {
     Translator,
     Action,
+    Command,
     Agent,
 }
 
 const AgentToggleDescription = [
     "agent translators",
     "agent actions",
+    "agent commands",
     "agents",
 ] as const;
 
-const AgentToggleCommand = ["translator", "action", "agent"] as const;
-
 function getAgentToggleOptions(
     toggle: AgentToggle,
-    options: Record<string, boolean>,
+    options: Record<string, boolean | null>,
+    translatorNames: string[],
 ) {
     switch (toggle) {
         case AgentToggle.Translator:
             return { translators: options };
         case AgentToggle.Action:
             return { actions: options };
+        case AgentToggle.Command:
+            for (const name of alwaysEnabledCommandsAgent) {
+                delete options[name];
+            }
+            return { commands: options };
         case AgentToggle.Agent:
-            return { translators: options, actions: options };
+            const translatorOptions = Object.fromEntries(
+                translatorNames.map((name) => [
+                    name,
+                    options[getAppAgentName(name)],
+                ]),
+            );
+            for (const name of alwaysEnabledCommandsAgent) {
+                delete options[name];
+            }
+            return {
+                translators: translatorOptions,
+                actions: translatorOptions,
+                commands: options,
+            };
     }
 }
 
-class AgentToggleCommandHandler implements DispatcherCommandHandler {
-    public description = `Toggle ${AgentToggleDescription[this.toggle]}`;
+function setAgentToggleOption(
+    existingNames: string[],
+    existingNameType: "agent" | "translator",
+    options: any,
+    nameOrPattern: string[],
+    enable: boolean,
+) {
+    for (const name of nameOrPattern) {
+        if (name.includes("*")) {
+            const regExp = simpleStarRegex(name);
+            const matchedNames = existingNames.filter((name) =>
+                regExp.test(name),
+            );
+            if (matchedNames.length === 0) {
+                throw new Error(
+                    `Invalid ${existingNameType} name pattern '${name}'`,
+                );
+            }
+            for (const name of matchedNames) {
+                if (options[name] === !enable) {
+                    throw new Error(
+                        `Conflicting setting for ${existingNameType} name '${name}'`,
+                    );
+                }
+                options[name] = enable;
+            }
+        } else {
+            if (!existingNames.includes(name)) {
+                throw new Error(`Invalid ${existingNameType} name '${name}'`);
+            }
+            if (options[name] === !enable) {
+                throw new Error(
+                    `Conflicting setting for ${existingNameType} name '${name}'`,
+                );
+            }
+            options[name] = enable;
+        }
+    }
+}
+
+class AgentToggleCommandHandler implements CommandHandler {
+    public readonly description = `Toggle ${AgentToggleDescription[this.toggle]}`;
+    public readonly parameters = {
+        flags: {
+            reset: {
+                description: "reset to default",
+                char: "r",
+                type: "boolean",
+                default: false,
+            },
+            off: {
+                description: "disable pattern",
+                multiple: true,
+                char: "x",
+            },
+        },
+        args: {
+            agentNames: {
+                description: "enable pattern",
+                multiple: true,
+                optional: true,
+            },
+        },
+    } as const;
     constructor(private toggle: AgentToggle) {}
 
-    public async run(request: string, context: CommandHandlerContext) {
-        const { args } = parseRequestArgs(request);
-        if (args.length < 1) {
-            context.requestIO.warn((log) => {
-                log(
-                    `Usage: @config ${AgentToggleCommand[this.toggle]} [-]<agent>]`,
-                );
-                const translators = context.agents
-                    .getTranslatorNames()
-                    .join(", ");
-                log(`   <agent>: ${translators}`);
-            });
-            return;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const agents = systemContext.agents;
+
+        const options: Record<string, boolean | null> = {};
+        const translatorNames = agents.getTranslatorNames();
+        let existingNames: string[];
+        let existingNameType: "agent" | "translator";
+        if (
+            this.toggle == AgentToggle.Command ||
+            this.toggle === AgentToggle.Agent
+        ) {
+            existingNames = agents.getAppAgentNames();
+            existingNameType = "agent";
+        } else {
+            existingNames = translatorNames;
+            existingNameType = "translator";
         }
 
-        const options = parseToggleTranslatorName(args, false, context.agents);
+        if (params.flags.reset) {
+            for (const name of existingNames) {
+                options[name] = null; // default value
+            }
+        }
+
+        if (params.flags.off) {
+            setAgentToggleOption(
+                existingNames,
+                existingNameType,
+                options,
+                params.flags.off,
+                false,
+            );
+        }
+        if (params.args.agentNames) {
+            setAgentToggleOption(
+                existingNames,
+                existingNameType,
+                options,
+                params.args.agentNames,
+                true,
+            );
+        }
+
         const changed = await changeContextConfig(
-            getAgentToggleOptions(this.toggle, options),
+            getAgentToggleOptions(this.toggle, options, translatorNames),
             context,
         );
 
@@ -132,39 +197,39 @@ class AgentToggleCommandHandler implements DispatcherCommandHandler {
             ([_, value]) => value !== undefined,
         );
         if (changedEntries.length === 0) {
-            context.requestIO.warn("No change");
+            displayWarn("No change", context);
         } else {
             const lines: string[] = [];
             for (const [kind, options] of changedEntries) {
                 lines.push(`Changes (${kind}):`);
                 for (const [name, value] of Object.entries(options as any)) {
-                    lines.push(`  ${name}: ${value ? "enabled" : "disabled"}`);
+                    lines.push(
+                        `  ${name}: ${value === true ? "enabled" : value === false ? "disabled" : `<default>`}`,
+                    );
                 }
             }
-            context.requestIO.result(lines.join("\n"));
+            displayResult(lines, context);
         }
     }
 }
 
-class ExplainerCommandHandler implements DispatcherCommandHandler {
-    public description = "Set explainer";
-    public async run(request: string, context: CommandHandlerContext) {
-        const { args } = parseRequestArgs(request);
-        if (args.length < 1) {
-            context.requestIO.warn((log) => {
-                log("Usage: @config explainer <explainer>");
-                const explainers = getCacheFactory()
-                    .getExplainerNames()
-                    .join(", ");
-                log(`   <explainer>: ${explainers}`);
-            });
-            return;
-        }
-        if (args.length > 2) {
-            throw new Error("Too many arguments.");
-        }
-
-        await changeContextConfig({ explainerName: args[0] }, context);
+class ExplainerCommandHandler implements CommandHandler {
+    public readonly description = "Set explainer";
+    public readonly parameters = {
+        args: {
+            explainerName: {
+                description: "name of the explainer",
+            },
+        },
+    };
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        await changeContextConfig(
+            { explainerName: params.args.explainerName },
+            context,
+        );
     }
 }
 
@@ -179,53 +244,78 @@ function getConfigModel(models: SessionConfig["models"], kind: string) {
     return `Current ${chalk.cyan(kind)} model: ${model ? model : "(default)"}\nURL:${settings.endpoint}`;
 }
 
-class ConfigModelShowCommandHandler implements DispatcherCommandHandler {
+class ConfigModelShowCommandHandler implements CommandHandler {
     public readonly description = "Show current model";
-    public async run(request: string, context: CommandHandlerContext) {
-        const models = context.session.getConfig().models;
-        const { args } = parseRequestArgs(request);
-        if (args.length > 1) {
-            throw new Error("Too many arguments.");
-        }
-        if (args.length === 1) {
-            context.requestIO.result(getConfigModel(models, args[0]));
+    public readonly parameters = {
+        args: {
+            kind: {
+                description: "Model kind to show",
+                optional: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const models = systemContext.session.getConfig().models;
+
+        if (params.args.kind !== undefined) {
+            displayResult(getConfigModel(models, params.args.kind), context);
         } else {
-            context.requestIO.result(
+            displayResult(
                 Object.keys(models)
                     .map((kind) => getConfigModel(models, kind))
                     .join("\n"),
+                context,
             );
         }
     }
 }
 
-class ConfigModelSetCommandHandler implements DispatcherCommandHandler {
+class ConfigModelSetCommandHandler implements CommandHandler {
     public readonly description = "Set model";
-    public async run(request: string, context: CommandHandlerContext) {
-        const { args } = parseRequestArgs(request);
-        const models = context.session.getConfig().models;
-        if (args.length === 0) {
+    public readonly parameters = {
+        args: {
+            kindOrModel: {
+                description: "Model kind or name",
+                optional: true,
+            },
+            model: {
+                description: "Model name",
+                optional: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const models = systemContext.session.getConfig().models;
+        if (params.args.kindOrModel === undefined) {
             const newConfig = {
                 models: Object.fromEntries(
                     Object.keys(models).map((kind) => [kind, ""]),
                 ),
             };
             await changeContextConfig(newConfig, context);
-            context.requestIO.result(`Reset to default model for all`);
+            displayResult(`Reset to default model for all`, context);
             return;
         }
 
         let kind = "translator";
         let model = "";
-        if (args.length === 1) {
-            if (models.hasOwnProperty(args[0])) {
-                kind = args[0];
+        if (params.args.model === undefined) {
+            if (models.hasOwnProperty(params.args.kindOrModel)) {
+                kind = params.args.kindOrModel;
             } else {
-                model = args[0];
+                model = params.args.kindOrModel;
             }
         } else {
-            kind = args[0];
-            model = args[1];
+            kind = params.args.kindOrModel;
+            model = params.args.model;
         }
 
         if (!models.hasOwnProperty(kind)) {
@@ -235,12 +325,13 @@ class ConfigModelSetCommandHandler implements DispatcherCommandHandler {
         }
         const modelNames = getChatModelNames();
         if (model === "") {
-            context.requestIO.result(`Reset to default model for ${kind}`);
+            displayResult(`Reset to default model for ${kind}`, context);
         } else if (!modelNames.includes(model)) {
-            context.requestIO.error(
+            throw new Error(
                 `Invalid model name: ${model}\nValid model names: ${modelNames.join(", ")}`,
             );
-            return;
+        } else {
+            displayResult(`Model for ${kind} is set to ${model}`, context);
         }
         await changeContextConfig(
             {
@@ -253,12 +344,13 @@ class ConfigModelSetCommandHandler implements DispatcherCommandHandler {
     }
 }
 
-export function getConfigCommandHandlers(): DispatcherHandlerTable {
+export function getConfigCommandHandlers(): CommandHandlerTable {
     return {
         description: "Configuration commands",
         commands: {
             translator: new AgentToggleCommandHandler(AgentToggle.Translator),
             action: new AgentToggleCommandHandler(AgentToggle.Action),
+            command: new AgentToggleCommandHandler(AgentToggle.Command),
             agent: new AgentToggleCommandHandler(AgentToggle.Agent),
             model: {
                 description: "Configure model",
@@ -357,7 +449,8 @@ export function getConfigCommandHandlers(): DispatcherHandlerTable {
                     async: getToggleHandlerTable(
                         "asynchronous explanation",
                         async (context, enable) => {
-                            context.explanationAsynchronousMode = enable;
+                            context.sessionContext.agentContext.explanationAsynchronousMode =
+                                enable;
                         },
                     ),
                 },
@@ -367,7 +460,7 @@ export function getConfigCommandHandlers(): DispatcherHandlerTable {
             dev: getToggleHandlerTable(
                 "development mode",
                 async (context, enable) => {
-                    context.developerMode = enable;
+                    context.sessionContext.agentContext.developerMode = enable;
                 },
             ),
             log: {
@@ -377,7 +470,8 @@ export function getConfigCommandHandlers(): DispatcherHandlerTable {
                     db: getToggleHandlerTable(
                         "logging",
                         async (context, enable) => {
-                            context.dblogging = false;
+                            context.sessionContext.agentContext.dblogging =
+                                false;
                         },
                     ),
                 },

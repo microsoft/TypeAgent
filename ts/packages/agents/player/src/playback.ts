@@ -163,17 +163,14 @@ export async function selectDevice(keyword: string, context: IClientContext) {
                 device.name.toLowerCase().includes(keyword.toLowerCase()) ||
                 device.type.toLowerCase().includes(keyword.toLowerCase())
             ) {
-                let result = "";
+                let html = "";
                 const status = await getPlaybackState(context.service);
                 if (status) {
                     if (status.device.id === device.id) {
-                        result += `<div>Device ${device.name} is already selected</div>\n`;
-                        console.log(
-                            chalk.green(
-                                `Device ${device.name} is already selected`,
-                            ),
-                        );
-                        return result;
+                        const text = `Device ${device.name} is already selected`;
+                        html += `<div>${text}</div>\n`;
+                        console.log(chalk.yellow(text));
+                        return { html, text };
                     }
                     await transferPlayback(
                         context.service,
@@ -182,13 +179,10 @@ export async function selectDevice(keyword: string, context: IClientContext) {
                     );
                 }
                 context.deviceId = device.id!;
-                result += `<div>Selected device ${device.name} of type ${device.type}</div>\n`;
-                console.log(
-                    chalk.green(
-                        `Selected device ${device.name} of type ${device.type}`,
-                    ),
-                );
-                return result;
+                const text = `Selected device ${device.name} of type ${device.type}`;
+                html += `<div>${text}</div>\n`;
+                console.log(chalk.green(text));
+                return { html, text };
             }
         }
     }
@@ -198,12 +192,14 @@ export async function listAvailableDevices(context: IClientContext) {
     const devices = await getDevices(context.service);
     if (devices && devices.devices.length > 0) {
         let devHTML = "<div><div>Available Devices...</div><ul>\n";
+        let literalText = "Available devices:\n";
         for (const device of devices.devices) {
             const description = `${device.name} (${device.type})${device.is_active ? " [active]" : ""}`;
             console.log(chalk.magenta(`Device ${description}`));
             devHTML += `<li>${description}</li>\n`;
+            literalText += `    ${description}\n`;
         }
         devHTML += "</ul></div>";
-        return devHTML;
+        return { html: devHTML, lit: literalText };
     }
 }

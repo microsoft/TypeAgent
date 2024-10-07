@@ -1,5 +1,6 @@
 {
   "emojiChar": "📩",
+  "description": "Agent integration with MS Graph's email",
   "schema": {
     "description": "Email agent helps manage email messages. Use it to send, reply, forward, find messages etc.",
     "schemaFile": "./emailActionsSchema.ts",

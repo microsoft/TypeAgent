@@ -18,8 +18,8 @@ import {
 } from "typeagent";
 import * as path from "path";
 import { getData } from "typechat";
+//import { testStringTables } from "./testSql.js";
 //import { runKnowledgeTests } from "./knowledgeTests.js";
-import { conversation } from "knowledge-processor";
 
 export function func1(x: number, y: number, op: string): number {
     switch (op) {
@@ -172,62 +172,6 @@ export function testCircularArray() {
     console.log([...buffer]);
 }
 
-export async function testConversationEntities(): Promise<void> {
-    const testConversation = await conversation.createConversationManager(
-        "testConversation",
-        "/data/tests",
-        true,
-    );
-    const testMessage = "Bach ate pizza while he wrote fugues";
-    let entity1: conversation.ConcreteEntity = {
-        name: "bach",
-        type: ["composer", "person"],
-    };
-    let entity2: conversation.ConcreteEntity = {
-        name: "pizza",
-        type: ["food"],
-    };
-    await testConversation.addMessage(testMessage, [entity1, entity2]);
-
-    const query = "What food did we talk about?";
-    let matches = await testConversation.search(query);
-    if (matches && matches.response && matches.response.answer) {
-        console.log(matches.response.answer);
-    } else {
-        console.log("bug");
-    }
-    const filters: conversation.TermFilter[] = [
-        {
-            terms: ["food"],
-        },
-    ];
-    matches = await testConversation.search(query, filters);
-    if (matches && matches.response && matches.response.answer) {
-        console.log(matches.response.answer);
-    } else {
-        console.log("bug");
-    }
-    // Now do separate search and answer
-    let searchResponse = await testConversation.getSearchResponse(
-        query,
-        filters,
-    );
-    if (searchResponse) {
-        if (searchResponse.response?.hasHits()) {
-            console.log("Has hits");
-        }
-        matches = await testConversation.generateAnswerForSearchResponse(
-            query,
-            searchResponse,
-        );
-        if (matches && matches.response && matches.response.answer) {
-            console.log(matches.response.answer);
-        } else {
-            console.log("bug");
-        }
-    }
-}
-
 export async function runTestCases(): Promise<void> {
     testCircularArray();
     await testEmbedding();
@@ -238,7 +182,7 @@ export async function runTestCases(): Promise<void> {
 }
 
 export async function runTests(): Promise<void> {
-    await testConversationEntities();
-    await runTestCases();
+    //await testStringTables();
+    //await runTestCases();
     // await runKnowledgeTests();
 }

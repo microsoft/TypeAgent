@@ -11,7 +11,11 @@ import {
     TokenCachePersistence,
     ActionIO,
     DisplayType,
+    DisplayContent,
+    DisplayAppendMode,
     AppAgentEvent,
+    ParsedCommandParams,
+    ParameterDefinitions,
 } from "@typeagent/agent-sdk";
 
 import { createRpc } from "common-utils";
@@ -37,7 +41,7 @@ if (typeof module.instantiate !== "function") {
 const agent: AppAgent = module.instantiate();
 
 const agentInvokeHandlers: AgentInvokeFunctions = {
-    async initializeAgentContext(): Promise<any> {
+    async initializeAgentContext(): Promise<unknown> {
         if (agent.initializeAgentContext === undefined) {
             throw new Error("Invalid invocation of initializeAgentContext");
         }
@@ -114,16 +118,16 @@ const agentInvokeHandlers: AgentInvokeFunctions = {
     },
     async executeCommand(
         param: Partial<ActionContextParams> & {
-            command: string[] | undefined;
-            args: string;
+            commands: string[];
+            params: ParsedCommandParams<ParameterDefinitions> | undefined;
         },
     ) {
         if (agent.executeCommand === undefined) {
             throw new Error("Invalid invocation of executeCommand");
         }
         return agent.executeCommand(
-            param.command,
-            param.args,
+            param.commands,
+            param.params,
             getActionContextShim(param),
         );
     },
@@ -174,11 +178,11 @@ function getStorage(contextId: number, session: boolean): Storage {
                 session,
             });
         },
-        save: async (data: string): Promise<void> => {
+        save: async (token: string): Promise<void> => {
             return rpc.invoke("tokenCacheWrite", {
                 contextId,
                 session,
-                data,
+                token,
             });
         },
     };
@@ -316,16 +320,23 @@ function getActionContextShim(
         get type(): DisplayType {
             return "text";
         },
-        setDisplay(content: string): void {
+        setDisplay(content: DisplayContent): void {
             rpc.send("setDisplay", {
                 actionContextId,
                 content,
             });
         },
-        appendDisplay(content: string): void {
+        appendDisplay(content: DisplayContent, mode: DisplayAppendMode): void {
             rpc.send("appendDisplay", {
                 actionContextId,
                 content,
+                mode,
+            });
+        },
+        takeAction(action: string) {
+            rpc.send("takeAction", {
+                actionContextId,
+                action,
             });
         },
     };
@@ -337,12 +348,6 @@ function getActionContextShim(
         },
         get actionIO() {
             return actionIO;
-        },
-        performanceMark: (name: string): void => {
-            rpc.send("performanceMark", {
-                actionContextId,
-                name,
-            });
         },
     };
 }

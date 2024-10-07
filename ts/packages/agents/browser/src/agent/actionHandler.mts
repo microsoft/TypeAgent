@@ -8,8 +8,8 @@ import {
   AppActionWithParameters,
   AppAgent,
   SessionContext,
-  createActionResult,
 } from "@typeagent/agent-sdk";
+import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import {
   getBoardSchema,
@@ -104,6 +104,14 @@ async function updateBrowserContext(
                 requestIO.success(data.body.message);
               }
               */
+              break;
+            }
+            case "debugBrowserAction": {
+              await executeBrowserAction(
+                data.body,
+                context as unknown as ActionContext<BrowserActionContext>,
+              );
+
               break;
             }
             case "tabIndexRequest": {

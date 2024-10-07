@@ -30,13 +30,17 @@ export function binarySearch(
     return ~lo;
 }
 
-// Finds the first location of value... i.e. handles duplicates in the array
+/** 
+ * Finds the first location of value... i.e. handles duplicates in the array 
+ * If value is not found, returns the location of the first value >= to value 
+ */
 export function binarySearchFirst(
     array: any[],
     value: any,
     compareFn: (x: any, y: any) => number,
+    startAt: number = 0
 ) {
-    let lo: number = 0;
+    let lo: number = startAt;
     let hi: number = array.length - 1;
     while (lo <= hi) {
         const mid = (lo + hi) >> 1;
@@ -51,13 +55,16 @@ export function binarySearchFirst(
     return lo;
 }
 
-// Finds the last location of value... i.e. handles duplicates in the array
+/** 
+ * Returns the position of the last item <= to value 
+ */
 export function binarySearchLast(
     array: any[],
     value: any,
     compareFn: (x: any, y: any) => number,
+    startAt: number = 0
 ) {
-    let lo: number = 0;
+    let lo: number = startAt;
     let hi: number = array.length - 1;
     while (lo <= hi) {
         const mid = (lo + hi) >> 1;
@@ -90,6 +97,35 @@ export function insertIntoSorted(
     return sorted;
 }
 
+export function getInRange(
+    values: any[], 
+    startAt: any, 
+    stopAt: any | undefined, 
+    compareFn: (x: any, y: any) => number): any[] 
+{
+    let startIndex = binarySearchFirst(
+        values,
+        startAt,
+        compareFn,
+    );
+    if (startIndex === values.length) {
+        // No such value
+        return [];
+    }
+
+    if (stopAt === undefined) {  
+        return values.slice(startIndex);  
+    }  
+
+    const stopIndex = binarySearchLast(values, stopAt, compareFn, startIndex);
+    // If the stopIndex has a value that matches the range, use it..
+    if (stopIndex < values.length && compareFn(values[stopIndex], stopAt) === 0) {  
+        return values.slice(startIndex, stopIndex + 1);  
+    }  
+  
+    return values.slice(startIndex, stopIndex); 
+}
+
 /**
  * Array concatenation that handles (ignores) undefined arrays. The caller has to do fewer checks
  * @param arrays 
@@ -102,6 +138,39 @@ export function concatArrays<T>(...arrays: (Array<T> | undefined)[]): T[] {
         }
     }
     return result;
+}
+
+export function removeItemFromArray<T>(array: T[], items: T | T[]): T[] {
+    if (Array.isArray(items)) {
+        for (const item of items) {
+            const pos = array.indexOf(item);
+            if (pos >= 0) {
+                array.splice(pos, 1);
+            }        
+        }
+    }
+    else {
+        const pos = array.indexOf(items);
+        if (pos >= 0) {
+            array.splice(pos, 1);
+        }    
+    }
+    return array;
+}
+
+export type Slice<T=any> = {
+    startAt: number;
+    value: T[];
+}
+
+export function* slices<T=any>(array: T[], size: number): IterableIterator<Slice<T>> {
+    for (let i = 0; i < array.length; i += size) {        
+        const slice = array.slice(i, i + size);
+        if (slice.length === 0) {
+            break;
+        }
+        yield {startAt: i, value: slice};
+    }
 }
 
 export class CircularArray<T> implements Iterable<T> {

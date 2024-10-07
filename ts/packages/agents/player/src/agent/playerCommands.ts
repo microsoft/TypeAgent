@@ -1,15 +1,49 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionContext } from "@typeagent/agent-sdk";
+import {
+    ActionContext,
+    AppAgentCommandInterface,
+    ParsedCommandParams,
+} from "@typeagent/agent-sdk";
 import {
     getCommandInterface,
     CommandHandlerTable,
-} from "@typeagent/agent-sdk/helpers/commands";
+    CommandHandler,
+} from "@typeagent/agent-sdk/helpers/command";
 import { PlayerActionContext } from "./playerHandlers.js";
 import { loadHistoryFile } from "../client.js";
-import { AppAgentCommandInterface } from "../../../../agentSdk/dist/agentInterface.js";
 
+const loadHandlerParameters = {
+    args: {
+        file: {
+            description: "File to load",
+        },
+    },
+} as const;
+const loadHandler: CommandHandler = {
+    description: "Load spotify user data",
+    parameters: loadHandlerParameters,
+    run: async (
+        context: ActionContext<PlayerActionContext>,
+        params: ParsedCommandParams<typeof loadHandlerParameters>,
+    ) => {
+        const sessionContext = context.sessionContext;
+        const agentContext = sessionContext.agentContext;
+        if (agentContext.spotify === undefined) {
+            throw new Error("Spotify integration is not enabled.");
+        }
+        context.actionIO.setDisplay("Loading Spotify user data...");
+
+        await loadHistoryFile(
+            sessionContext.profileStorage,
+            params.args.file,
+            agentContext.spotify,
+        );
+
+        context.actionIO.setDisplay("Spotify user data loaded.");
+    },
+};
 const handlers: CommandHandlerTable = {
     description: "Player App Agent Commands",
     commands: {
@@ -17,37 +51,7 @@ const handlers: CommandHandlerTable = {
             description: "Configure spotify integration",
             defaultSubCommand: undefined,
             commands: {
-                load: {
-                    description: "Load spotify user data",
-                    run: async (
-                        request: string,
-                        context: ActionContext<PlayerActionContext>,
-                    ) => {
-                        if (request === "") {
-                            throw new Error("No file specified.");
-                        }
-                        const sessionContext = context.sessionContext;
-                        const agentContext = sessionContext.agentContext;
-                        if (agentContext.spotify === undefined) {
-                            throw new Error(
-                                "Spotify integration is not enabled.",
-                            );
-                        }
-                        context.actionIO.setDisplay(
-                            "Loading Spotify user data...",
-                        );
-
-                        await loadHistoryFile(
-                            sessionContext.profileStorage,
-                            request,
-                            agentContext.spotify,
-                        );
-
-                        context.actionIO.setDisplay(
-                            "Spotify user data loaded.",
-                        );
-                    },
-                },
+                load: loadHandler,
             },
         },
     },

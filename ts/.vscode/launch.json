@@ -27,7 +27,7 @@
             "env": {
               "REMOTE_DEBUGGING_PORT": "9222"
             }
-          },       
+        },       
         {
             "name": "Player Service",
             "type": "node",
@@ -54,7 +54,7 @@
           "program": "./bin/run.js",
           "args": [ "interactive" ],
           "console": "externalTerminal",
-          "preLaunchTask": "pnpm: build",
+          //"preLaunchTask": "pnpm: build",
           "outFiles": [
               "${workspaceFolder}/**/*.js"
           ]
@@ -119,7 +119,10 @@
             //"preLaunchTask": "pnpm: build",
             "outFiles": [
                 "${workspaceFolder}/**/*.js"
-            ]
+            ],
+            //"args": ["codeMemory"]
+            //"args": ["code"]
+            //"args": ["tests"]
         },
         {
             "name": "Launch YOUR Example",
@@ -219,7 +222,21 @@
 				"${workspaceFolder}/packages/coda/out/**/*.js"
 			],
 			"preLaunchTask": "${defaultBuildTask}"
-		}
+		},
+        {
+            "name": "Knowledge Visualizier (Main process)",
+            "type": "node",
+            "request": "launch",
+            "cwd": "${workspaceRoot}/packages/knowledgeVisualizer",
+            "runtimeExecutable": "${workspaceRoot}/packages/knowledgeVisualizer/node_modules/.bin/electron-vite",
+            "windows": {
+              "runtimeExecutable": "${workspaceRoot}/packages/knowledgeVisualizer/node_modules/.bin/electron-vite.cmd"
+            },
+            "runtimeArgs": ["--sourcemap"],
+            "env": {
+              "REMOTE_DEBUGGING_PORT": "9222"
+            }
+        },       
     ]
 }
 
