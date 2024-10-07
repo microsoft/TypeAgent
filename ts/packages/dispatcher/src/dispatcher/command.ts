@@ -342,15 +342,16 @@ function getPartialCompletedCommand(input: string) {
         return { partial: commandPrefix[0], prefix: command };
     }
 
-    if (/\s+$/.test(command)) {
+    const trimmedEnd = input.trimEnd();
+    if (trimmedEnd !== input) {
         // There is trailing space, just resolve the whole command
-        return { partial: input.trimEnd(), prefix: "" };
+        return { partial: trimmedEnd, prefix: "" };
     }
 
-    const suffix = input.match(/\s+\S+$/);
+    const suffix = input.match(/\s\S+$/);
     if (suffix === null) {
         // No suffix, resolve the whole command
-        return { partial: input.trimEnd(), prefix: "" };
+        return { partial: trimmedEnd, prefix: "" };
     }
     const split = input.length - suffix[0].length;
     return {
