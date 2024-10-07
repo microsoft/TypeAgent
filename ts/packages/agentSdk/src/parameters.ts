@@ -122,4 +122,5 @@ type ArgsOutput<T extends ArgDefinitions | undefined> = T extends ArgDefinitions
 export type ParsedCommandParams<T extends ParameterDefinitions> = {
     args: ArgsOutput<T["args"]>;
     flags: FlagsOutput<T["flags"]>;
+    tokens: string[];
 };
