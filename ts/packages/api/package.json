@@ -1,7 +1,7 @@
 {
   "name": "agent-api",
   "version": "0.0.1",
-  "description": "TypeAgent Dispatcher API",
+  "description": "TypeAgent API",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
@@ -11,21 +11,13 @@
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
-  "main": "",
-  "bin": {
-    "agent-api": "./bin/index.ts",
-    "agent-api-dev": "./bin/index.ts"
-  },
+  "main": "./dist/index.js",
   "scripts": {
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
-    "regen": "./bin/dev.js data regenerate -f ../dispatcher/test/data/**/**/*.json ../dispatcher/test/repo/explanations/**/**/*.json",
-    "regen:builtin": "./bin/dev.js data regenerate --builtin player",
-    "start": "npx --no .",
-    "start:dev": "npx --no agent-api-dev",
-    "stat": "./bin/dev.js data stat -f ../dispatcher/test/data/**/**/*.json ../dispatcher/test/repo/explanations/**/**/*.json",
+    "start": "node ./dist/index.js",
     "tsc": "tsc -b"
   },
   "dependencies": {

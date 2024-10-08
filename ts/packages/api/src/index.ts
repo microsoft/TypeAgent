@@ -4,30 +4,48 @@
 import dotenv from "dotenv";
 import { DisplayAppendMode } from '@typeagent/agent-sdk';
 import { ClientIO, createDispatcher, IAgentMessage, RequestId } from 'agent-dispatcher';
-import { createServer, IncomingMessage, ServerResponse } from 'node:http';
+import { createServer } from 'node:http';
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { getMimeType } from "common-utils";
+
+// web server config
+const webConfig = JSON.parse(readFileSync("data/config.json").toString());
 
 // typeAgent config
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
 
-let reqq: ServerResponse<IncomingMessage> | undefined = undefined;
+//let reqq: ServerResponse<IncomingMessage> | undefined = undefined;
+
 // web server
 const server = createServer(async (req, res) => {
 
-  reqq = res;
-  const metrics = await dispatcher.processCommand("@greeting", "agent-0", []);
-  console.log(metrics);
+  //reqq = res;
+   const metrics = await dispatcher.processCommand("@greeting", "agent-0", []);
+   console.log(metrics);
 
 
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('Hello World!\n');
+  // res.writeHead(200, { 'Content-Type': 'text/plain' });
+  // res.end('Hello World!\n');
+
+  // serve up the requested file if we have it
+  const requestedFile: string = path.join(webConfig.wwwroot, req.url == "/" || req.url === undefined ? "index.html" : req.url);
+  if (existsSync(requestedFile)) {
+    res.writeHead(200, { 'Content-Type': getMimeType(path.extname(requestedFile)) });
+    res.end(readFileSync(requestedFile).toString());
+  } else {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('File Not Found!\n'); 
+  }
+
 });
 
 function updateDisplay(message: IAgentMessage, mode?: DisplayAppendMode) {
-  console.log("updateDisplay");
+  // console.log("updateDisplay");
 
-  reqq!.writeHead(200, { 'Content-Type': 'text/plain' });
-  reqq!.end(`${message.message}\n`);
+  // reqq!.writeHead(200, { 'Content-Type': 'text/plain' });
+  // reqq!.end(`${message.message}\n`);
 }
 
 const clientIO: ClientIO = {
