@@ -68,10 +68,18 @@ export function splitSentenceIntoPhrases(
     return split(text, /(?<=[,:\-])\s+/, options);
 }
 
+/**
+ * Split the given text into blocks.
+ * Block types include paragraph, sentences, words..
+ * @param text
+ * @param blockType The type of blocks to produce
+ * @param options
+ * @returns
+ */
 export function splitIntoBlocks(
     text: string,
     blockType: TextBlockType,
-    options?: SplitOptions,
+    options?: SplitOptions | undefined,
 ): TextBlock[] {
     let values: string[];
     switch (blockType) {

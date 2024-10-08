@@ -43,13 +43,13 @@
     "onStartupFinished"
   ],
   "dependencies": {
-    "axios": "^1.6.1",
-    "body-parser": "^1.20.2",
+    "axios": "^1.7.4",
+    "body-parser": "^1.20.3",
     "chalk": "^5.3.0",
     "cors": "^2.8.5",
     "debug": "^4.3.4",
     "dotenv": "^16.3.1",
-    "express": "^4.19.2",
+    "express": "^4.20.0",
     "open": "^7.0.4",
     "ws": "^8.17.1"
   },

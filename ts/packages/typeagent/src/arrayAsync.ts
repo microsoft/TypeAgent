@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { collections } from ".";
+import { Slice, slices } from "./lib";
+
 export type ProcessAsync<T, TResult> = (
     item: T,
     index: number,
@@ -133,6 +136,73 @@ export async function forEachAsync<T>(
                 }
             }
         }
+    }
+}
+
+export type ProcessBatch<T, TResult> = (slice: Slice<T>) => Promise<TResult>[];
+export type ProgressBatch<T, TResult> = (
+    slice: Slice<T>,
+    results: TResult[],
+) => void;
+
+export async function forEachBatch<T = any, TResult = any>(
+    array: T[] | AsyncIterableIterator<T>,
+    sliceSize: number,
+    processor: ProcessBatch<T, TResult>,
+    progress?: ProgressBatch<T, TResult>,
+    maxCount?: number | undefined,
+): Promise<void> {
+    if (Array.isArray(array)) {
+        for (const batch of slices(array, sliceSize)) {
+            const results = await Promise.all(processor(batch));
+            if (progress) {
+                progress(batch, results);
+            }
+        }
+    } else {
+        for await (const batch of readBatches(array, sliceSize)) {
+            const results = await Promise.all(processor(batch));
+            if (progress) {
+                progress(batch, results);
+            }
+        }
+    }
+}
+
+/**
+ * Read items from the given iterable in batches
+ * @param source source of items
+ * @param batchSize batch size
+ * @returns
+ */
+export async function* readBatches<T = any>(
+    source: AsyncIterableIterator<T> | Array<T>,
+    batchSize: number,
+): AsyncIterableIterator<Slice<T>> {
+    if (batchSize <= 0) {
+        return;
+    }
+
+    if (Array.isArray(source)) {
+        for (const slice of collections.slices(source, batchSize)) {
+            yield slice;
+        }
+        return;
+    }
+
+    let value: T[] | undefined;
+    let startAt = 0;
+    for await (const item of source) {
+        value ??= [];
+        value.push(item);
+        if (value.length === batchSize) {
+            yield { startAt, value };
+            startAt += value.length;
+            value = undefined;
+        }
+    }
+    if (value && value.length > 0) {
+        yield { startAt, value };
     }
 }
 

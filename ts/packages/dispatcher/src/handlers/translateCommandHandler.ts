@@ -3,18 +3,28 @@
 
 import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import { translateRequest } from "./requestCommandHandler.js";
-import { ActionContext } from "@typeagent/agent-sdk";
-import { CommandHandlerNoParse } from "@typeagent/agent-sdk/helpers/command";
+import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { displaySuccess } from "@typeagent/agent-sdk/helpers/display";
 
-export class TranslateCommandHandler implements CommandHandlerNoParse {
+export class TranslateCommandHandler implements CommandHandler {
     public readonly description = "Translate a request";
-    public readonly parameters = true;
+    public readonly parameters = {
+        args: {
+            request: {
+                description: "Request to translate",
+                implicitQuotes: true,
+            },
+        },
+    } as const;
     public async run(
         context: ActionContext<CommandHandlerContext>,
-        request: string,
+        params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const requestAction = await translateRequest(request, context);
+        const requestAction = await translateRequest(
+            params.args.request,
+            context,
+        );
         displaySuccess(`${requestAction}`, context);
     }
 }

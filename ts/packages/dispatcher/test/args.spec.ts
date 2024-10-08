@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { parseParams } from "../src/helpers/parameterHelpers.js";
+import { parseParams } from "../src/dispatcher/parameters.js";
 
 describe("Argument parsing", () => {
     const parameters = {
@@ -112,6 +112,24 @@ describe("Argument parsing", () => {
         const multiple: string[] = args.multiple!; // Use ! to make sure the type is correct
         expect(single).toBe("hello");
         expect(multiple).toStrictEqual(["world"]);
+    });
+
+    const implicitQuoteArgs = {
+        args: {
+            implicit: {
+                description: "implicit",
+                implicitQuotes: true,
+            },
+        },
+    };
+    it("implicit quote arguments", () => {
+        const params = parseParams(" hello   world  ", implicitQuoteArgs);
+        const flags: undefined = params.flags;
+        expect(flags).toBe(undefined);
+
+        const args = params.args;
+        const implicit: string = args.implicit;
+        expect(implicit).toBe("hello   world");
     });
     it("Too many args", () => {
         try {

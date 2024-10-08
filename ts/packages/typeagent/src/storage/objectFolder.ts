@@ -181,10 +181,16 @@ export async function createObjectFolder<T>(
     }
 
     function exists(name: string): boolean {
+        if (!name) {
+            return false;
+        }
         return fileSystem.exists(fullPath(name));
     }
 
     async function get(name: string): Promise<T | undefined> {
+        if (!name) {
+            return undefined;
+        }
         validateName(name);
         const filePath = fullPath(name);
         try {
@@ -196,10 +202,9 @@ export async function createObjectFolder<T>(
                 return <T>folderSettings.deserializer(buffer);
             } else {
                 const json = await fileSystem.read(filePath);
-                if (json.length === 0) {
-                    return undefined;
+                if (json) {
+                    return JSON.parse(json);
                 }
-                return JSON.parse(<string>json);
             }
         } catch (err: any) {
             if (err.code !== "ENOENT") {

@@ -38,10 +38,12 @@
       "execMode": "dispatcher"
     },
     "dispatcher": {
-      "emojiChar": "🤖"
+      "emojiChar": "🤖",
+      "description": "Built-in agent to dispatch request"
     },
     "system": {
       "emojiChar": "🔧",
+      "description": "Built-in agent to manage system configuration and sessions",
       "subTranslators": {
         "config": {
           "schema": {

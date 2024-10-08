@@ -319,6 +319,48 @@ export interface ArgDef {
     defaultValue?: any | undefined;
 }
 
+function makeArg(
+    description: string | undefined,
+    type: ArgType,
+    defaultValue?: any | undefined,
+): ArgDef {
+    let arg: ArgDef = {
+        type,
+    };
+    if (description) {
+        arg.description = description;
+    }
+    if (defaultValue !== undefined) {
+        arg.defaultValue = defaultValue;
+    }
+    return arg;
+}
+
+export function arg(
+    description: string,
+    defaultValue?: string | undefined,
+): ArgDef {
+    return makeArg(description, "string", defaultValue);
+}
+
+export function argBool(
+    description?: string | undefined,
+    defaultValue?: boolean | undefined,
+): ArgDef {
+    return makeArg(
+        description,
+        "boolean",
+        defaultValue == undefined ? false : defaultValue,
+    );
+}
+
+export function argNum(
+    description: string,
+    defaultValue?: number | undefined,
+): ArgDef {
+    return makeArg(description, "number", defaultValue);
+}
+
 /**
  * Named command line arguments
  */
@@ -758,11 +800,12 @@ function displayArgs(
         args,
         true,
         (v) => {
-            let text = v.description ?? "";
+            let text = v.description;
             if (v.defaultValue !== undefined) {
-                return [text, `(default): ${v.defaultValue}`];
+                const defText = `(default): ${v.defaultValue}`;
+                return text ? [text, defText] : defText;
             }
-            return text;
+            return text ?? "";
         },
         indent,
     );
