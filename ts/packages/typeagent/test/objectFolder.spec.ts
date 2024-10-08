@@ -4,7 +4,9 @@
 import { asyncArray } from "../src/index.js";
 import { removeDir } from "../src/objStream.js";
 import {
+    createFileNameGenerator,
     createObjectFolder,
+    generateTimestampString,
     ObjectFolder,
     ObjectFolderSettings,
 } from "../src/storage/objectFolder.js";
@@ -45,6 +47,19 @@ describe("storage.objectFolder", () => {
     const folderPath = testDirectoryPath("./data/test/testStore");
     beforeAll(async () => {
         folder = await ensureStore(folderPath, true);
+    });
+    test("idGen", () => {
+        const nameGenerator = createFileNameGenerator(
+            generateTimestampString,
+            (name: string) => true,
+        );
+        const maxNames = 256;
+        let prevName = "";
+        for (let i = 0; i < maxNames; ++i) {
+            const objFileName = nameGenerator.next().value;
+            expect(objFileName).not.toEqual(prevName);
+            prevName = objFileName;
+        }
     });
     test("putAndGet", async () => {
         const obj: TestObject = {

@@ -17,6 +17,7 @@ import {
 } from "interactive-app";
 import {
     asyncArray,
+    collections,
     dateTime,
     getFileName,
     isDirectoryPath,
@@ -469,15 +470,22 @@ export async function runChatMemory(): Promise<void> {
                 namedArgs.concurrency,
             );
             let i = 0;
-            for (const email of emails) {
+            for (const emailBatch of collections.slices(
+                emails,
+                namedArgs.concurrency,
+            )) {
                 ++i;
-                printer.writeProgress(i, emails.length);
-                if (email.sourcePath) {
-                    printer.writeLine(email.sourcePath);
-                }
+                printer.writeBatchProgress(
+                    emailBatch,
+                    undefined,
+                    emails.length,
+                );
+                emailBatch.value.forEach((e) =>
+                    printer.writeLine(e.sourcePath),
+                );
                 await knowLib.email.addEmailToConversation(
                     context.emailMemory,
-                    email,
+                    emailBatch.value,
                 );
             }
         }
