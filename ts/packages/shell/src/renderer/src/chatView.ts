@@ -1587,11 +1587,15 @@ export class ChatView {
             this,
             request,
             this.messageDiv,
-            getClientAPI().processShellRequest(requestText, id, images),
+            //getClientAPI().processShellRequest(requestText, id, images),
+            // TODO: replace with call that can go to API
+            new Promise<RequestMetrics>((value) => { console.log(value);}),            
             new Date(),
             this.agents,
             this.hideMetrics,
         );
+        // TODO: remove after TODO above is done
+        console.log(images.length + requestText);
 
         if (hidden) {
             mg.userMessageContainer.classList.add("chat-message-hidden");

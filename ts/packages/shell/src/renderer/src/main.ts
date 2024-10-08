@@ -27,6 +27,12 @@ function addEvents(
     cameraView: CameraView,
 ) {
     const api = getClientAPI();
+
+    if (api === undefined) {
+        console.log("No API available...on mobile!?");
+        return;
+    }
+
     api.onListenEvent((_, name, token, useLocalWhisper) => {
         console.log(`listen event: ${name}`);
         if (useLocalWhisper) {
@@ -316,5 +322,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     chatView.chatInputFocus();
 
-    (window as any).electron.ipcRenderer.send("dom ready");
+    if ((window as any).electron) {
+        (window as any).electron.ipcRenderer.send("dom ready");
+    }
 });
