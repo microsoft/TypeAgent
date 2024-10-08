@@ -17,7 +17,7 @@ export interface PersonalizedGreetingAction {
         // a set possible generic greeting responses to the user
         possibleGreetings: GenericGreeting[];
     };
-};
+}
 
 // A typical greeting
 // Greetings can include some color commentary and or an initiator like "Wow, you're up late" or "I'm glad it's Friday"
@@ -26,5 +26,4 @@ export interface GenericGreeting {
     // Be sure to make the greeting relevant to time of day (i.e. don't say good morning in the afternoon).
     // you can also use greetings such as Namaste/Shalom/Bonjour or smilar.
     generatedGreeting: string;
-};
-
+}
