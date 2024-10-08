@@ -20,7 +20,7 @@ import {
 import { getElapsedString, createLimiter, Limiter } from "common-utils";
 import { getCacheFactory } from "../cacheFactory.js";
 import { Result } from "typechat";
-import { isMultipleAction } from "../../translation/systemActionsInlineSchema.js";
+import { isMultipleAction } from "../../translation/multipleActionSchema.js";
 
 const testDataJSONVersion = 2;
 export type TestDataEntry<T extends object = object> =

@@ -32,7 +32,7 @@ import { loadAssistantSelectionJsonTranslator } from "../translation/unknownSwit
 import {
     MultipleAction,
     isMultipleAction,
-} from "../translation/systemActionsInlineSchema.js";
+} from "../translation/multipleActionSchema.js";
 import { makeRequestPromptCreator } from "./common/chatHistoryPrompt.js";
 import { MatchResult } from "../../../cache/dist/constructions/constructions.js";
 import registerDebug from "debug";
