@@ -771,6 +771,9 @@ importers:
 
   packages/api:
     dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../agentSdk
       agent-cache:
         specifier: workspace:*
         version: link:../cache
