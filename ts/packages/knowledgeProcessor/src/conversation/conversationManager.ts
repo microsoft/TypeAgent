@@ -461,10 +461,11 @@ function mergeKnowledge(
     }
 
     let topics = collections.concatArrays(x.topics, y.topics);
+    let actions = collections.concatArrays(x.actions, y.actions);
     return {
         entities: [...merged.values()],
         topics,
-        actions: x.actions,
+        actions,
     };
 }
 

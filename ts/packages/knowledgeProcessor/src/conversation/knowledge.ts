@@ -244,25 +244,23 @@ export function knowledgeValueToString(value: Value): string {
 
 export function actionToString(action: Action): string {
     let text = "";
-    if (action.subjectEntityName !== NoEntityName) {
-        text += " ";
-        text += action.subjectEntityName;
-    }
+    text = appendEntityName(text, action.subjectEntityName);
     text += ` [${action.verbs.join(", ")}]`;
-    /*
-    if (action.params) {
-        text += `(${actionParamsToString(action)})`;
-    }
-    */
-    if (action.objectEntityName !== NoEntityName) {
-        text += " ";
-        text += action.objectEntityName;
-    }
+    text = appendEntityName(text, action.objectEntityName);
+    text = appendEntityName(text, action.indirectObjectEntityName);
     text += ` {${action.verbTense}}`;
     if (action.subjectEntityFacet) {
         text += ` <${facetToString(action.subjectEntityFacet)}>`;
     }
     return text;
+
+    function appendEntityName(text: string, name: string): string {
+        if (name !== NoEntityName) {
+            text += " ";
+            text += name;
+        }
+        return text;
+    }
 }
 
 export function actionVerbsToString(
