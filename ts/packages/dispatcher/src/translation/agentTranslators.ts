@@ -10,7 +10,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { TypeChatJsonTranslator } from "typechat";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
-import { getMultipleActionSchemaDef } from "./systemActionsInlineSchema.js";
+import { getMultipleActionSchemaDef } from "./multipleActionSchema.js";
 import { TranslatorSchemaDef, composeTranslatorSchemas } from "common-utils";
 
 import registerDebug from "debug";
