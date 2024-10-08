@@ -14,9 +14,20 @@ import { MetricsView } from "./metricsView";
 import { ShellSettings } from "../../main/shellSettings";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { CameraView } from "./cameraView";
+import { webapi } from "./webSocketAPI";
 
-export function getClientAPI(): ClientAPI {
+export function getClientAPI(): ClientAPI {    
     return globalThis.api;
+}
+
+export function getWebSocketAPI(): ClientAPI {
+    if (globalThis.webApi === undefined) {
+        globalThis.webApi = webapi;
+        // TODO: implement
+        //globalThis.ws = new WebSocket();
+    }
+
+    return globalThis.webApi;
 }
 
 function addEvents(
