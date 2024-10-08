@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type GreetingAction = PersonalizedGreetingAction | UnknownAction;
+export type GreetingAction = PersonalizedGreetingAction;
 
 // Use this action greet the user.
 // Generate a five possible greetings and make sure they are varied in tone, length, cadence, delivery, and style.
@@ -26,13 +26,4 @@ export interface GenericGreeting {
     // Be sure to make the greeting relevant to time of day (i.e. don't say good morning in the afternoon).
     // you can also use greetings such as Namaste/Shalom/Bonjour or smilar.
     generatedGreeting: string;
-}
-
-// if the user types text that can not easily be understood as a list action, this action is used
-export interface UnknownAction {
-    actionName: "unknown";
-    parameters: {
-        // text typed by the user that the system did not understand
-        text: string;
-    };
 }
