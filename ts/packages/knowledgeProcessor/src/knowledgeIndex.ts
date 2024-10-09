@@ -448,7 +448,7 @@ export async function createTextIndex<TSourceId = any>(
             case SetOp.Intersect:
                 return intersectMultiple(...matches);
             case SetOp.IntersectUnion:
-                return intersectUnionMultiple(...matches);
+                return intersectUnionMultiple(...matches) ?? [];
         }
     }
 

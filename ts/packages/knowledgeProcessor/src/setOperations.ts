@@ -52,7 +52,7 @@ export function intersectMultiple<T>(
 
 export function intersectUnionMultiple<T>(
     ...arrays: (Iterator<T> | IterableIterator<T> | Array<T> | undefined)[]
-): T[] {
+): T[] | undefined {
     // We can to do this more optimally...
     let combined = createFrequencyTable<T>();
     for (const array of arrays) {
@@ -60,6 +60,10 @@ export function intersectUnionMultiple<T>(
             combined.addMultiple(array);
         }
     }
+    if (combined.size === 0) {
+        return undefined;
+    }
+
     const topKItems = combined.getTop();
     return topKItems;
 }
@@ -332,6 +336,7 @@ export type WithFrequency<T = any> = {
 };
 
 export interface FrequencyTable<T> {
+    readonly size: number;
     get(value: T): WithFrequency<T> | undefined;
     getFrequency(value: T): number;
     add(value: T): number;
@@ -347,6 +352,9 @@ export function createFrequencyTable<T>(
 ): FrequencyTable<T> {
     const map = new Map<any, WithFrequency<T>>();
     return {
+        get size() {
+            return map.size;
+        },
         get,
         getFrequency,
         add,

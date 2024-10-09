@@ -782,6 +782,7 @@ export async function runChatMemory(): Promise<void> {
                     conversation.NoEntityName,
                 ),
                 object: arg("Object to search for"),
+                indirectObject: arg("Indirect object to search for"),
                 verb: arg(
                     "Verb to search for. Compound verbs are comma separated",
                 ),
@@ -826,6 +827,7 @@ export async function runChatMemory(): Promise<void> {
             filterType: "Action",
             subjectEntityName: namedArgs.subject,
             objectEntityName: namedArgs.object,
+            indirectObjectEntityName: namedArgs.indirectObject,
         };
         if (verbs && verbs.length > 0) {
             filter.verbFilter = {
@@ -844,8 +846,10 @@ export async function runChatMemory(): Promise<void> {
             loadActions: true,
         });
         if (matches.actions) {
-            for (const action of matches.actions) {
-                printer.writeLine(conversation.actionToString(action));
+            for (let i = 0; i < matches.actions.length; ++i) {
+                printer.writeLine(
+                    `${i + 1}, ${conversation.actionToString(matches.actions[i])}`,
+                );
             }
             if (namedArgs.showMessages && matches.actionIds) {
                 const messages = await loadMessages(

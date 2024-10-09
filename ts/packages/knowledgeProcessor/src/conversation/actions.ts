@@ -257,11 +257,11 @@ export async function createActionIndex<TSourceId = any>(
             matchVerbs(filter, options),
         ]);
         results.actionIds = [
-            ...intersectUnionMultiple(
+            ...intersectMultiple(
+                verbToActionIds,
                 subjectToActionIds,
                 objectToActionIds,
                 indirectObjectToActionIds,
-                verbToActionIds,
             ),
         ];
         if (options.loadActions && results.actionIds) {
@@ -275,12 +275,6 @@ export async function createActionIndex<TSourceId = any>(
         options: ActionSearchOptions,
     ): Promise<ActionSearchResult<ActionId>> {
         const results = createSearchResults<ActionId>();
-        /*
-        if (!filter.verbs || filter.verbs.length === 0) {
-            return results;
-        }
-        */
-
         if (filter.timeRange) {
             results.temporalSequence = await matchTimeRange(filter.timeRange);
         }
@@ -299,7 +293,7 @@ export async function createActionIndex<TSourceId = any>(
         ]);
         results.actionIds = [
             ...intersectMultiple(
-                intersectUnionMultiple(
+                intersectMultiple(
                     subjectToActionIds,
                     objectToActionIds,
                     indirectToObjectIds,

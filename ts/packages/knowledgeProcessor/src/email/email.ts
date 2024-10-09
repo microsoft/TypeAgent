@@ -38,20 +38,6 @@ export function emailAddressListToString(
         : "";
 }
 
-export function emailAliasToEntity(alias: string): ConcreteEntity {
-    return {
-        name: alias,
-        type: ["email_alias"],
-    };
-}
-
-export function emailDisplayNameToEntity(name: string): ConcreteEntity {
-    return {
-        name,
-        type: ["person", "email"],
-    };
-}
-
 export function emailAddressToEntities(
     emailAddress: EmailAddress,
 ): ConcreteEntity[] {
@@ -137,6 +123,10 @@ export function emailToEntities(
     pushAddresses(email.to, entities);
     pushAddresses(email.cc, entities);
     pushAddresses(email.bcc, entities);
+    entities.push({
+        name: "email",
+        type: ["message"],
+    });
     return entities;
 
     function pushAddresses(
