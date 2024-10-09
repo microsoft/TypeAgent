@@ -42,6 +42,7 @@ import {
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { toStopDate, toStartDate } from "./knowledgeActions.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
+import { TermFilterV2, VerbTermV2 } from "./knowledgeTermSearchSchema2.js";
 
 export interface ActionSearchOptions extends SearchOptions {
     verbSearchOptions?: SearchOptions | undefined;
@@ -81,6 +82,10 @@ export interface ActionIndex<TActionId = any, TSourceId = any>
     ): Promise<ActionSearchResult<TActionId>>;
     searchTerms(
         filter: TermFilter,
+        options: ActionSearchOptions,
+    ): Promise<ActionSearchResult<TActionId>>;
+    searchTermsV2(
+        filter: TermFilterV2,
         options: ActionSearchOptions,
     ): Promise<ActionSearchResult<TActionId>>;
     loadSourceIds(
@@ -143,6 +148,7 @@ export async function createActionIndex<TSourceId = any>(
         getSourceIds,
         search,
         searchTerms,
+        searchTermsV2,
         loadSourceIds,
     };
 
@@ -237,8 +243,15 @@ export async function createActionIndex<TSourceId = any>(
     async function search(
         filter: ActionFilter,
         options: ActionSearchOptions,
+        timeRange?: DateTimeRange | undefined,
+        searchResults?: ActionSearchResult<ActionId> | undefined,
     ): Promise<ActionSearchResult<ActionId>> {
-        const results = createSearchResults<ActionId>();
+        const results = searchResults ?? createSearchResults<ActionId>();
+
+        if (timeRange) {
+            results.temporalSequence = await matchTimeRange(timeRange);
+        }
+
         const names = await getNameIndex();
         const [
             subjectToActionIds,
@@ -262,8 +275,17 @@ export async function createActionIndex<TSourceId = any>(
                 subjectToActionIds,
                 objectToActionIds,
                 indirectObjectToActionIds,
+                itemsFromTemporalSequence(results.temporalSequence),
             ),
         ];
+        if (results.actionIds && results.temporalSequence) {
+            // The temporal sequence maintains all entity ids seen at a timestamp.
+            // Since we identified specific entity ids, we remove the other ones
+            results.temporalSequence = filterTemporalSequence(
+                results.temporalSequence,
+                results.actionIds,
+            );
+        }
         if (options.loadActions && results.actionIds) {
             results.actions = await getActions(results.actionIds);
         }
@@ -293,12 +315,12 @@ export async function createActionIndex<TSourceId = any>(
         ]);
         results.actionIds = [
             ...intersectMultiple(
-                intersectMultiple(
+                intersectUnionMultiple(
                     subjectToActionIds,
                     objectToActionIds,
                     indirectToObjectIds,
-                    verbToActionIds,
                 ),
+                verbToActionIds,
                 itemsFromTemporalSequence(results.temporalSequence),
             ),
         ];
@@ -315,6 +337,79 @@ export async function createActionIndex<TSourceId = any>(
             results.actions = await getActions(results.actionIds);
         }
         return results;
+    }
+
+    async function searchTermsV2(
+        filter: TermFilterV2,
+        options: ActionSearchOptions,
+    ): Promise<ActionSearchResult<ActionId>> {
+        const results = createSearchResults<ActionId>();
+        if (filter.timeRange) {
+            results.temporalSequence = await matchTimeRange(filter.timeRange);
+        }
+
+        if (filter.verbs) {
+            await searchVerbTerm(
+                filter.verbs,
+                filter.timeRange,
+                options,
+                results,
+            );
+        } else {
+            const names = await getNameIndex();
+            const [subjectToActionIds, objectToActionIds, indirectToActionIds] =
+                await Promise.all([
+                    matchTerms(names, subjectIndex, filter.terms, options),
+                    matchTerms(names, objectIndex, filter.terms, options),
+                    matchTerms(
+                        names,
+                        indirectObjectIndex,
+                        filter.terms,
+                        options,
+                    ),
+                ]);
+            results.actionIds = [
+                ...intersectMultiple(
+                    intersectUnionMultiple(
+                        subjectToActionIds,
+                        objectToActionIds,
+                        indirectToActionIds,
+                    ),
+                    itemsFromTemporalSequence(results.temporalSequence),
+                ),
+            ];
+        }
+        if (results.actionIds && results.temporalSequence) {
+            // The temporal sequence maintains all entity ids seen at a timestamp.
+            // Since we identified specific entity ids, we remove the other ones
+            results.temporalSequence = filterTemporalSequence(
+                results.temporalSequence,
+                results.actionIds,
+            );
+        }
+
+        if (options.loadActions && results.actionIds) {
+            results.actions = await getActions(results.actionIds);
+        }
+        return results;
+    }
+
+    async function searchVerbTerm(
+        filter: VerbTermV2,
+        timeRange: DateTimeRange | undefined,
+        options: ActionSearchOptions,
+        results: ActionSearchResult<string>,
+    ) {
+        const actionFilter: ActionFilter = {
+            filterType: "Action",
+            verbFilter: {
+                verbs: filter.verbs,
+            },
+            subjectEntityName: filter.subject ?? "none",
+            objectEntityName: filter.object,
+            indirectObjectEntityName: filter.indirectObject,
+        };
+        await search(actionFilter, options, timeRange, results);
     }
 
     async function matchName(

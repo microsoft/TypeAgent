@@ -34,7 +34,7 @@ export type EntityFilter = {
 export type VerbFilter = {
     // Each verb is typically a word
     verbs: string[];
-    verbTense: "past" | "present" | "future";
+    verbTense?: "past" | "present" | "future";
 };
 
 // Use to search for actions performed by an entity
@@ -44,8 +44,8 @@ export type ActionFilter = {
     // When user is looking for particular action verbs
     verbFilter?: VerbFilter;
     subjectEntityName: string | "none";
-    objectEntityName?: string;
-    indirectObjectEntityName?: string;
+    objectEntityName?: string | undefined;
+    indirectObjectEntityName?: string | undefined;
 };
 
 export type Filter = TopicFilter | EntityFilter | ActionFilter;
