@@ -42,7 +42,7 @@ import {
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { toStopDate, toStartDate } from "./knowledgeActions.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
-import { TermFilterV2, VerbTermV2 } from "./knowledgeTermSearchSchema2.js";
+import { TermFilterV2, ActionTerm } from "./knowledgeTermSearchSchema2.js";
 
 export interface ActionSearchOptions extends SearchOptions {
     verbSearchOptions?: SearchOptions | undefined;
@@ -348,9 +348,9 @@ export async function createActionIndex<TSourceId = any>(
             results.temporalSequence = await matchTimeRange(filter.timeRange);
         }
 
-        if (filter.verbs) {
+        if (filter.action) {
             await searchVerbTerm(
-                filter.verbs,
+                filter.action,
                 filter.timeRange,
                 options,
                 results,
@@ -359,12 +359,17 @@ export async function createActionIndex<TSourceId = any>(
             const names = await getNameIndex();
             const [subjectToActionIds, objectToActionIds, indirectToActionIds] =
                 await Promise.all([
-                    matchTerms(names, subjectIndex, filter.terms, options),
-                    matchTerms(names, objectIndex, filter.terms, options),
+                    matchTerms(
+                        names,
+                        subjectIndex,
+                        filter.searchTerms,
+                        options,
+                    ),
+                    matchTerms(names, objectIndex, filter.searchTerms, options),
                     matchTerms(
                         names,
                         indirectObjectIndex,
-                        filter.terms,
+                        filter.searchTerms,
                         options,
                     ),
                 ]);
@@ -395,7 +400,7 @@ export async function createActionIndex<TSourceId = any>(
     }
 
     async function searchVerbTerm(
-        filter: VerbTermV2,
+        filter: ActionTerm,
         timeRange: DateTimeRange | undefined,
         options: ActionSearchOptions,
         results: ActionSearchResult<string>,

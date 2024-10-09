@@ -258,6 +258,7 @@ export async function runChatMemory(): Promise<void> {
         actions,
         searchQuery,
         search,
+        searchRaw,
         makeTestSet,
         runTestSet,
     };
@@ -954,6 +955,34 @@ export async function runChatMemory(): Promise<void> {
     handlers.search.metadata = searchDef();
     async function search(args: string[], io: InteractiveIo): Promise<void> {
         await searchConversation(context.searcher, true, args);
+    }
+
+    function searchRawDef(): CommandMetadata {
+        return {
+            description: "Search raw",
+            args: {
+                query: arg("Query to run"),
+            },
+            options: {
+                v2: argBool("Run v2", true),
+            },
+        };
+    }
+    handlers.searchRaw.metadata = searchRawDef();
+    async function searchRaw(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, searchRawDef());
+        const result = namedArgs.v2
+            ? await context.searcher.actions.translateSearchTermsV2(
+                  namedArgs.query,
+              )
+            : await context.searcher.actions.translateSearchTerms(
+                  namedArgs.query,
+              );
+        if (result.success) {
+            printer.writeJson(result.data, true);
+        } else {
+            printer.writeError(result.message);
+        }
     }
 
     async function searchNoEval(
