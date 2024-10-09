@@ -190,6 +190,16 @@ export interface ClientAPI {
         ) => void,
     ): void;
     sendYesNo: (askYesNoId: number, accept: boolean) => void;
+    onProposeAction(
+        callback: (
+            e: Electron.IpcRendererEvent,
+            proposeActionId: number,
+            actionTemplates: ActionTemplateSequence,
+            requestId: string,
+            source: string,
+        ) => void,
+    ): void;
+    sendProposedAction(proposeActionId: number, response?: string): void;
     onQuestion(
         callback: (
             e: Electron.IpcRendererEvent,

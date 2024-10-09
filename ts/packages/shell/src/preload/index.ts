@@ -97,6 +97,12 @@ const api: ClientAPI = {
     sendYesNo: (askYesNoId: number, accept: boolean) => {
         ipcRenderer.send("askYesNoResponse", askYesNoId, accept);
     },
+    onProposeAction(callback) {
+        ipcRenderer.on("proposeAction", callback);
+    },
+    sendProposedAction: (proposeActionId: number, action?: string) => {
+        ipcRenderer.send("proposeActionResponse", proposeActionId, action);
+    },
     onQuestion(callback) {
         ipcRenderer.on("question", callback);
     },

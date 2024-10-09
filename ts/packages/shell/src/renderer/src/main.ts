@@ -89,6 +89,16 @@ function addEvents(
     api.onAskYesNo(async (_, askYesNoId, message, id, source) => {
         chatView.askYesNo(askYesNoId, message, id, source);
     });
+    api.onProposeAction(
+        async (_, proposeActionId, actionTemplates, id, source) => {
+            chatView.proposeAction(
+                proposeActionId,
+                actionTemplates,
+                id,
+                source,
+            );
+        },
+    );
     api.onQuestion(async (_, questionId, message, id, source) => {
         chatView.question(questionId, message, id, source);
     });

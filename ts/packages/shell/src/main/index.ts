@@ -337,6 +337,36 @@ async function askYesNo(
     });
 }
 
+let maxProposeActionId = 0;
+async function proposeAction(
+    actionTemplates: ActionTemplateSequence,
+    requestId: RequestId,
+    source: string,
+) {
+    const currentProposeActionId = maxProposeActionId++;
+    return new Promise<string | undefined>((resolve) => {
+        const callback = (
+            _event: Electron.IpcMainEvent,
+            proposeActionId: number,
+            response?: string,
+        ) => {
+            if (currentProposeActionId !== proposeActionId) {
+                return;
+            }
+            ipcMain.removeListener("proposeActionResponse", callback);
+            resolve(response);
+        };
+        ipcMain.on("proposeActionResponse", callback);
+        mainWindow?.webContents.send(
+            "proposeAction",
+            currentProposeActionId,
+            actionTemplates,
+            requestId,
+            source,
+        );
+    });
+}
+
 let maxQuestionId = 0;
 async function question(message: string, requestId: RequestId) {
     // Ignore message without requestId
@@ -407,6 +437,7 @@ const clientIO: ClientIO = {
     searchMenuCommand,
     actionCommand,
     askYesNo,
+    proposeAction,
     question,
     notify(event: string, requestId: RequestId, data: any, source: string) {
         switch (event) {

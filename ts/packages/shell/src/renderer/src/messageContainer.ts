@@ -8,7 +8,10 @@ import { PhaseTiming } from "agent-dispatcher";
 import { ChoicePanel, InputChoice } from "./choicePanel";
 import { setContent } from "./setContent";
 import { ChatView } from "./chatView";
-import { iconRoadrunner } from "./icon";
+import { iconCheckMarkCircle, iconRoadrunner, iconX } from "./icon";
+import { ActionCascade } from "./ActionCascade";
+import { getClientAPI } from "./main";
+import { ActionTemplateSequence } from "../../preload/electronTypes";
 
 function createTimestampDiv(timestamp: Date, className: string) {
     const timeStampDiv = document.createElement("div");
@@ -223,6 +226,49 @@ export class MessageContainer {
                 onSelected(choice);
             },
         );
+    }
+
+    public proposeAction(
+        proposeActionId: number,
+        actionTemplates: ActionTemplateSequence,
+    ) {
+        // use this div to show the proposed action
+        const actionContainer = document.createElement("div");
+        actionContainer.className = "action-container";
+
+        const actionCascade = new ActionCascade(actionTemplates);
+        const actionDiv = actionCascade.toHTML();
+        actionDiv.className = "action-text";
+        actionContainer.appendChild(actionDiv);
+        this.messageDiv.appendChild(actionContainer);
+
+        const choices: InputChoice[] = [
+            {
+                text: "Yes",
+                element: iconCheckMarkCircle(),
+                selectKey: ["y", "Y", "Enter"],
+                value: true,
+            },
+            {
+                text: "No",
+                element: iconX(),
+                selectKey: ["n", "N", "Delete"],
+                value: false,
+            },
+        ];
+        this.addChoicePanel(choices, (choice: InputChoice) => {
+            if (choice.value === true) {
+                actionContainer.remove();
+                getClientAPI().sendProposedAction(proposeActionId);
+                return;
+            }
+
+            actionContainer.innerHTML = "";
+            const actionCascade = new ActionCascade(actionTemplates, true);
+            const actionDiv = actionCascade.toHTML();
+            actionDiv.className = "action-text";
+            this.messageDiv.appendChild(actionDiv);
+        });
     }
 
     private speakText(tts: TTS, speakText: string) {

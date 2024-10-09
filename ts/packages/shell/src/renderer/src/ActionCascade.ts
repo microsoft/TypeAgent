@@ -15,7 +15,7 @@ export class ActionCascade {
         public editMode = false,
     ) {}
 
-    public scalarToHTML(
+    private scalarToHTML(
         li: HTMLLIElement,
         paramName: string,
         paramValue: TemplateParamScalar,
@@ -42,7 +42,7 @@ export class ActionCascade {
         }
     }
 
-    public paramToHTML(
+    private paramToHTML(
         paramName: string,
         paramValue: TemplateParamFieldOpt,
         topLevel = false,

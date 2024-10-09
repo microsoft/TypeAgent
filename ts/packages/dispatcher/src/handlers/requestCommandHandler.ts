@@ -49,6 +49,7 @@ import {
     displayStatus,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
+import { DispatcherName } from "./common/interactiveIO.js";
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
@@ -104,37 +105,24 @@ async function confirmTranslation(
         "register",
         systemContext.requestId!,
     );
-    const accept = await systemContext.requestIO.askYesNo("reserved", true);
-    if (accept) {
+    const newActions = await systemContext.requestIO.proposeAction(
+        templateSequence,
+        DispatcherName,
+    );
+
+    if (newActions !== undefined) {
         return { requestAction };
     }
-
-    const searchMenuItems = Array.from(allActionInfo.values()).map(
-        (info) => info.item,
-    );
-    systemContext.clientIO?.searchMenuCommand(
-        "actions",
-        "register",
-        "",
-        searchMenuItems,
-        true,
-    );
-    const actionLegend = `Select the action you would like to run for this request ...`;
-    systemContext.clientIO?.searchMenuCommand(
-        "actions",
-        "legend",
-        actionLegend,
-    );
-    const answer = await systemContext.requestIO.question(actionLegend);
-    if (answer !== undefined) {
-        const actionInfo = allActionInfo.get(answer);
-        if (actionInfo && actionInfo.template) {
-            console.log(
-                `Selected action: ${actionInfo.template.agent}.${actionInfo.item.matchText}`,
-            );
-        }
-    }
-    return { requestAction: null };
+    return newActions
+        ? {
+              requestAction: new RequestAction(
+                  requestAction.request,
+                  actions,
+                  requestAction.history,
+              ),
+              replacedAction: newActions,
+          }
+        : { requestAction };
 }
 
 async function getValidatedMatch(

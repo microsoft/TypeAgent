@@ -375,23 +375,6 @@ export class ChatView {
         return actionInfo.actionTemplates;
     }
 
-    proposeAction(requestId: string) {
-        // use this div to show the proposed action
-        const actionContainer = document.createElement("div");
-        actionContainer.className = "action-container";
-
-        // build the action div from the reserved action templates
-        const actionTemplates = this.getActionTemplates(requestId);
-        if (actionTemplates !== undefined) {
-            this.actionCascade = new ActionCascade(actionTemplates);
-            const actionDiv = this.actionCascade.toHTML();
-            actionDiv.className = "action-text";
-            actionContainer.appendChild(actionDiv);
-        }
-
-        return actionContainer;
-    }
-
     registerSearchMenu(
         id: string,
         initialChoices: SearchMenuItem[],
@@ -819,15 +802,7 @@ export class ChatView {
         if (agentMessage === undefined) {
             return;
         }
-        if (message === "reserved") {
-            const container = this.proposeAction(requestId);
-            agentMessage.setMessage(
-                { type: "html", content: container.innerHTML },
-                source,
-            );
-        } else {
-            agentMessage.setMessage(message, source, "inline");
-        }
+        agentMessage.setMessage(message, source, "inline");
         const choices: InputChoice[] = [
             {
                 text: "Yes",
@@ -849,6 +824,22 @@ export class ChatView {
         this.updateScroll();
     }
 
+    public proposeAction(
+        proposeActionId: number,
+        actionTemplates: ActionTemplateSequence,
+        requestId: string,
+        source: string,
+    ) {
+        const agentMessage = this.ensureAgentMessage({
+            message: "",
+            requestId,
+            source,
+        });
+        if (agentMessage === undefined) {
+            return;
+        }
+        agentMessage.proposeAction(proposeActionId, actionTemplates);
+    }
     question(
         questionId: number,
         message: string,
