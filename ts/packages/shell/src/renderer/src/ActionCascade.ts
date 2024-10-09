@@ -36,6 +36,7 @@ export class ActionCascade {
             const input = document.createElement("input");
             input.type = "text";
             input.name = paramName;
+            input.value = paramValue.value?.toString() || "";
             li.appendChild(input);
         } else {
             li.innerText = `${paramName}: ${paramValue.value}`;

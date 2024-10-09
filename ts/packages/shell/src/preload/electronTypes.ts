@@ -140,24 +140,6 @@ export interface ClientAPI {
             group_id: string,
         ) => void,
     ): void;
-    onActionCommand(
-        callback: (
-            e: Electron.IpcRendererEvent,
-            actionTemplates: ActionTemplateSequence,
-            command: ActionUICommand,
-            requestId: string,
-        ) => void,
-    ): void;
-    onSearchMenuCommand(
-        callback: (
-            e: Electron.IpcRendererEvent,
-            menuId: string,
-            command: string,
-            prefix?: string,
-            choices?: SearchMenuItem[],
-            visible?: boolean,
-        ) => void,
-    ): void;
     onMarkRequestExplained(
         callback: (
             e: Electron.IpcRendererEvent,

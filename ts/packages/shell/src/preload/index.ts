@@ -67,12 +67,6 @@ const api: ClientAPI = {
     getDynamicDisplay(source: string, id: string) {
         return ipcRenderer.invoke("get-dynamic-display", source, id);
     },
-    onActionCommand: (callback) => {
-        ipcRenderer.on("action-command", callback);
-    },
-    onSearchMenuCommand: (callback) => {
-        ipcRenderer.on("search-menu-command", callback);
-    },
     onUpdateDisplay(callback) {
         ipcRenderer.on("updateDisplay", callback);
     },

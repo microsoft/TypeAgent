@@ -71,12 +71,6 @@ function addEvents(
                 nextRefreshMs,
             ),
     );
-    api.onActionCommand((_, actionTemplates, command, requestId) => {
-        chatView.actionCommand(actionTemplates, command, requestId);
-    });
-    api.onSearchMenuCommand((_, menuId, command, prefix, choices, visible) => {
-        chatView.searchMenuCommand(menuId, command, prefix, choices, visible);
-    });
     api.onClear((_) => {
         chatView.clear();
     });

@@ -16,17 +16,7 @@ import { RequestMetrics } from "../../utils/metrics.js";
 export const DispatcherName = "dispatcher";
 export type RequestId = string | undefined;
 
-export type SearchMenuCommand =
-    | "register"
-    | "legend"
-    | "complete"
-    | "cancel"
-    | "show"
-    | "remove";
-
 export type ActionUICommand = "register" | "replace" | "remove";
-
-export type SearchMenuState = "active" | "inactive";
 
 export enum NotifyCommands {
     ShowSummary = "summarize",
@@ -34,13 +24,6 @@ export enum NotifyCommands {
     ShowUnread = "unread",
     ShowAll = "all",
 }
-
-export type SearchMenuContext = {
-    state: SearchMenuState;
-    menuId: string;
-    lastPrefix: string;
-    choices?: string[];
-};
 
 export interface IAgentMessage {
     message: DisplayContent;
@@ -54,19 +37,6 @@ export interface IAgentMessage {
 export interface ClientIO {
     clear(): void;
     exit(): void;
-
-    actionCommand(
-        actionTemplates: ActionTemplateSequence,
-        command: ActionUICommand,
-        requestId: RequestId,
-    ): void;
-    searchMenuCommand(
-        menuId: string,
-        command: SearchMenuCommand,
-        prefix?: string,
-        choices?: SearchMenuItem[],
-        visible?: boolean,
-    ): void;
 
     // Display
     setDisplay(message: IAgentMessage): void;
