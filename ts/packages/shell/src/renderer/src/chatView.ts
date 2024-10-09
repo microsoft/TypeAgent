@@ -662,7 +662,6 @@ export class ChatView {
                     "",
                     this.messageDiv,
                     undefined,
-                    new Date(),
                     this.agents,
                     this.hideMetrics,
                 );
@@ -715,7 +714,6 @@ export class ChatView {
             request,
             this.messageDiv,
             getClientAPI().processShellRequest(requestText, id, images),
-            new Date(),
             this.agents,
             this.hideMetrics,
         );

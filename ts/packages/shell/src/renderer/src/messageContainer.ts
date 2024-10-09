@@ -120,7 +120,7 @@ export class MessageContainer {
 
     constructor(
         private chatView: ChatView,
-        className: string,
+        classNameSuffix: "agent" | "user",
         private _source: string,
         private readonly agents: Map<string, string>,
         beforeElem: Element,
@@ -129,11 +129,11 @@ export class MessageContainer {
         private showFirstResponseMetrics = false,
     ) {
         const div = document.createElement("div");
-        div.className = className;
+        div.className = `chat-message-container-${classNameSuffix}`;
 
         const timestampDiv = createTimestampDiv(
             new Date(),
-            "chat-timestamp-left",
+            `chat-timestamp-${classNameSuffix}`,
         );
         div.append(timestampDiv);
         this.timestampDiv = timestampDiv;
@@ -147,7 +147,7 @@ export class MessageContainer {
         const bodyClass = this.hideMetrics
             ? "chat-message-body-hide-metrics"
             : "chat-message-body";
-        messageBodyDiv.className = `${bodyClass} chat-message-agent`;
+        messageBodyDiv.className = `${bodyClass} chat-message-${classNameSuffix}`;
         div.append(messageBodyDiv);
         this.messageBodyDiv = messageBodyDiv;
 

@@ -30,16 +30,15 @@ export class MessageGroup {
         request: DisplayContent,
         container: HTMLDivElement,
         requestPromise: Promise<RequestMetrics | undefined> | undefined,
-        timeStamp: Date,
         public agents: Map<string, string>,
         private hideMetrics: boolean,
     ) {
         const userMessageContainer = document.createElement("div");
-        userMessageContainer.className = "chat-message-right";
+        userMessageContainer.className = "chat-message-container-user";
 
         const timeStampDiv = createTimestampDiv(
-            timeStamp,
-            "chat-timestamp-right",
+            new Date(),
+            "chat-timestamp-user",
         );
         userMessageContainer.appendChild(timeStampDiv);
 
@@ -199,7 +198,7 @@ export class MessageGroup {
                 if (this.agentMessages[i] === undefined) {
                     const newAgentMessage = new MessageContainer(
                         this.chatView,
-                        "chat-message-left",
+                        "agent",
                         msg.source,
                         this.agents,
                         beforeElem.div,
