@@ -181,26 +181,6 @@ export class Action {
         return pstructCopy;
     }
 
-    public toHTML(prefaceText?: string) {
-        let html = "<div>";
-        if (prefaceText) {
-            html += `<div class="preface-text">${prefaceText}</div>`;
-        }
-        // make a nested html list starting with the action name and then the parameters
-        html += `<div>Action: ${this.fullActionName}</div>`;
-        const entries = Object.entries(this.action.parameters);
-        if (entries.length !== 0) {
-            html += "<div>Parameters: <ul>";
-            for (const [key, value] of entries.sort()) {
-                html += this.paramToHTML(key, value);
-            }
-            html += "</ul>";
-            html += "</div>";
-        }
-        html += "</div>";
-        return html;
-    }
-
     public toIAction(): IAction {
         return this.action;
     }
@@ -337,21 +317,6 @@ export class Actions {
             prefaceMultiple,
             templates: [],
         };
-    }
-
-    public toHTML(prefaceSingle: string, prefaceMultiple: string) {
-        if (Array.isArray(this.actions)) {
-            let html = "<div>";
-            if (prefaceMultiple) {
-                html += `<div class="preface-text">${prefaceMultiple}</div>`;
-            }
-            const actionDivs = this.actions.map((a) => a.toHTML());
-            html += actionDivs.join("\n");
-            html += "</div>";
-            return html;
-        } else {
-            return this.actions.toHTML(prefaceSingle);
-        }
     }
 
     public toIAction() {
