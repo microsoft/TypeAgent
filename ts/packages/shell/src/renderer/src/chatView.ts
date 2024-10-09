@@ -26,18 +26,7 @@ import DOMPurify from "dompurify";
 import { PhaseTiming, RequestMetrics } from "agent-dispatcher";
 
 import { PartialCompletion } from "./partial";
-
-export interface InputChoice {
-    element: HTMLElement;
-    text: string;
-    selectKey?: string[];
-    onSelected: (choice: InputChoice) => void;
-}
-
-export interface ChoicePanel {
-    choices: InputChoice[];
-    panelDiv: HTMLDivElement;
-}
+import { ChoicePanel, InputChoice } from "./choicePanel";
 
 interface ISymbolNode {
     symbolName: string;
@@ -324,7 +313,7 @@ class MessageContainer {
     public setMessage(
         content: DisplayContent,
         source: string,
-        appendMode?: DisplayAppendMode,
+        appendMode?: DisplayAppendMode, // default to not appending.
     ) {
         if (typeof content !== "string" && content.kind === "info") {
             // Don't display info
@@ -358,6 +347,20 @@ class MessageContainer {
         this.lastAppendMode = appendMode;
 
         this.updateDivState();
+    }
+
+    public addChoicePanel(
+        choices: InputChoice[],
+        onSelected: (choice: InputChoice) => void,
+    ) {
+        const choicePanel = new ChoicePanel(
+            this.messageDiv,
+            choices,
+            (choice: InputChoice) => {
+                choicePanel.remove();
+                onSelected(choice);
+            },
+        );
     }
 
     private speakText(tts: TTS, speakText: string) {
@@ -1034,36 +1037,6 @@ export function getSelectionXCoord() {
     return x;
 }
 
-export function proposeYesNo(
-    chatView: ChatView,
-    askYesNoId: number,
-    requestId: string,
-    source: string,
-    _message: string,
-) {
-    const choices: InputChoice[] = [
-        {
-            text: "Yes",
-            element: iconCheckMarkCircle(),
-            selectKey: ["y", "Y", "Enter"],
-            onSelected: (_choice) => {
-                chatView.answerYesNo(askYesNoId, true, requestId, source);
-                chatView.removeChoicePanel();
-            },
-        },
-        {
-            text: "No",
-            element: iconX(),
-            selectKey: ["n", "N", "Delete"],
-            onSelected: (_choice) => {
-                chatView.answerYesNo(askYesNoId, false, requestId, source);
-                chatView.removeChoicePanel();
-            },
-        },
-    ];
-    chatView.addChoicePanel(choices);
-}
-
 const DynamicDisplayMinRefreshIntervalMs = 15;
 export class ChatView {
     private topDiv: HTMLDivElement;
@@ -1078,8 +1051,7 @@ export class ChatView {
         undefined;
     keyboardListener: undefined | ((event: KeyboardEvent) => void) = undefined;
     private partialCompletion: PartialCompletion | undefined;
-    choicePanel: ChoicePanel | undefined = undefined;
-    choicePanelOnly = false;
+
     commandBackStackIndex = -1;
     registeredActions: Map<string, ActionInfo> = new Map<string, ActionInfo>();
     actionCascade: ActionCascade | undefined = undefined;
@@ -1117,59 +1089,49 @@ export class ChatView {
                 }
             },
             (eta: ExpandableTextarea, ev: KeyboardEvent) => {
-                if (this.partialCompletion?.handleSpecialKeys(ev) === true) {
+                if (
+                    this.partialCompletion?.handleSpecialKeys(ev) === true ||
+                    this.searchMenu?.handleSpecialKeys(
+                        ev,
+                        eta.getEditedText(),
+                    ) === true
+                ) {
                     return false;
                 }
-                if (this.choicePanel) {
-                    if (
-                        !this.choicePanelInputHandler(ev) ||
-                        this.choicePanelOnly
-                    ) {
-                        return false;
-                    }
-                } else if (this.searchMenu) {
-                    if (
-                        this.searchMenu.handleSpecialKeys(
-                            ev,
-                            eta.getEditedText(),
-                        )
-                    ) {
-                        return false;
-                    }
-                } else if (this.chatInput) {
-                    if (!ev.altKey && !ev.ctrlKey) {
-                        if (ev.key == "ArrowUp" || ev.key == "ArrowDown") {
-                            const messages = this.messageDiv.querySelectorAll(
-                                ".chat-message-user:not(.chat-message-hidden) .chat-message-content",
-                            );
 
-                            if (messages.length !== 0) {
-                                if (
-                                    ev.key == "ArrowUp" &&
-                                    this.commandBackStackIndex <
-                                        messages.length - 1
-                                ) {
-                                    this.commandBackStackIndex++;
-                                } else if (
-                                    ev.key == "ArrowDown" &&
-                                    this.commandBackStackIndex > -1
-                                ) {
-                                    this.commandBackStackIndex--;
-                                }
+                // history
+                if (!ev.altKey && !ev.ctrlKey) {
+                    if (ev.key == "ArrowUp" || ev.key == "ArrowDown") {
+                        const messages = this.messageDiv.querySelectorAll(
+                            ".chat-message-user:not(.chat-message-hidden) .chat-message-content",
+                        );
 
-                                if (this.commandBackStackIndex == -1) {
-                                    this.chatInput.clear();
-                                } else {
-                                    const content =
-                                        messages[this.commandBackStackIndex]
-                                            .textContent;
-                                    this.chatInput.textarea.setContent(content);
-                                }
-                                return false;
+                        if (messages.length !== 0) {
+                            if (
+                                ev.key == "ArrowUp" &&
+                                this.commandBackStackIndex < messages.length - 1
+                            ) {
+                                this.commandBackStackIndex++;
+                            } else if (
+                                ev.key == "ArrowDown" &&
+                                this.commandBackStackIndex > -1
+                            ) {
+                                this.commandBackStackIndex--;
                             }
+
+                            if (this.commandBackStackIndex == -1) {
+                                this.chatInput.clear();
+                            } else {
+                                const content =
+                                    messages[this.commandBackStackIndex]
+                                        .textContent;
+                                this.chatInput.textarea.setContent(content);
+                            }
+                            return false;
                         }
                     }
                 }
+
                 return true;
             },
         );
@@ -1178,51 +1140,6 @@ export class ChatView {
 
         // Add the input div at the bottom so it's always visible
         this.topDiv.append(this.inputContainer);
-    }
-
-    choicePanelInputHandler(ev: KeyboardEvent) {
-        if (this.choicePanel !== undefined) {
-            const key = ev.key;
-
-            const choice = this.choicePanel.choices.find((c) =>
-                c.selectKey?.includes(key),
-            );
-            if (choice) {
-                choice.onSelected(choice);
-                this.removeChoicePanel();
-                return false;
-            }
-        }
-        return true;
-    }
-
-    addChoicePanel(choices: InputChoice[], disableOtherInput = true) {
-        if (this.choicePanel) {
-            this.removeChoicePanel();
-        }
-        const panelDiv = document.createElement("div");
-        panelDiv.className = "chat-message chat-message-right choice-panel";
-        this.choicePanel = { choices, panelDiv };
-        for (const choice of choices) {
-            const choiceDiv = document.createElement("div");
-            choiceDiv.className = "action-button";
-            choiceDiv.appendChild(choice.element);
-            choiceDiv.addEventListener("click", () => {
-                this.removeChoicePanel();
-                choice.onSelected(choice);
-            });
-            panelDiv.appendChild(choiceDiv);
-        }
-        this.choicePanelOnly = disableOtherInput;
-        this.inputContainer.before(panelDiv);
-    }
-
-    removeChoicePanel() {
-        if (this.choicePanel) {
-            this.choicePanel.panelDiv.remove();
-            this.choicePanel = undefined;
-            this.choicePanelOnly = false;
-        }
     }
 
     placeSearchMenu() {
@@ -1243,25 +1160,20 @@ export class ChatView {
         return actionInfo.actionTemplates;
     }
 
-    proposeAction(message: string, requestId: string) {
+    proposeAction(requestId: string) {
         // use this div to show the proposed action
         const actionContainer = document.createElement("div");
         actionContainer.className = "action-container";
-        if (message === "reserved") {
-            // build the action div from the reserved action templates
-            const actionTemplates = this.getActionTemplates(requestId);
-            if (actionTemplates !== undefined) {
-                this.actionCascade = new ActionCascade(actionTemplates);
-                const actionDiv = this.actionCascade.toHTML();
-                actionDiv.className = "action-text";
-                actionContainer.appendChild(actionDiv);
-            }
-        } else {
-            const actionDiv = document.createElement("div");
+
+        // build the action div from the reserved action templates
+        const actionTemplates = this.getActionTemplates(requestId);
+        if (actionTemplates !== undefined) {
+            this.actionCascade = new ActionCascade(actionTemplates);
+            const actionDiv = this.actionCascade.toHTML();
             actionDiv.className = "action-text";
-            setContent(actionDiv, message);
             actionContainer.appendChild(actionDiv);
         }
+
         return actionContainer;
     }
 
@@ -1691,19 +1603,11 @@ export class ChatView {
             msg.requestId as string,
         )?.ensureAgentMessage(msg, notification);
     }
-
-    chatInputFocus() {
-        setTimeout(() => {
-            const input = this.inputContainer.querySelector(
-                "#phraseDiv",
-            ) as HTMLDivElement;
-            if (input) {
-                input.focus();
-            }
-        }, 0);
+    public chatInputFocus() {
+        this.chatInput.focus();
     }
 
-    askYesNo(
+    public askYesNo(
         askYesNoId: number,
         message: string,
         requestId: string,
@@ -1717,30 +1621,34 @@ export class ChatView {
         if (agentMessage === undefined) {
             return;
         }
-        agentMessage.div.className = "chat-message chat-message-confirm";
-        const proposeElm = this.proposeAction(message, requestId);
-        agentMessage.div.appendChild(proposeElm);
-        proposeYesNo(this, askYesNoId, requestId, message, source);
-        this.updateScroll();
-    }
-
-    answerYesNo(
-        questionId: number,
-        answer: boolean,
-        requestId: string,
-        source: string,
-    ) {
-        let message = answer ? "Accepted!" : "Rejected!";
-        this.showStatusMessage(
-            {
-                message,
-                requestId,
+        if (message === "reserved") {
+            const container = this.proposeAction(requestId);
+            agentMessage.setMessage(
+                { type: "html", content: container.innerHTML },
                 source,
+            );
+        } else {
+            agentMessage.setMessage(message, source, "inline");
+        }
+        const choices: InputChoice[] = [
+            {
+                text: "Yes",
+                element: iconCheckMarkCircle(),
+                selectKey: ["y", "Y", "Enter"],
+                value: true,
             },
-            true,
-        );
-        getClientAPI().sendYesNo(questionId, answer);
-        this.chatInputFocus();
+            {
+                text: "No",
+                element: iconX(),
+                selectKey: ["n", "N", "Delete"],
+                value: false,
+            },
+        ];
+        agentMessage.addChoicePanel(choices, (choice) => {
+            agentMessage.setMessage(`  ${choice.text}`, source, "inline");
+            getClientAPI().sendYesNo(askYesNoId, choice.value);
+        });
+        this.updateScroll();
     }
 
     question(
