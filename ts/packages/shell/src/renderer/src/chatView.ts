@@ -4,7 +4,7 @@
 import { IdGenerator, getClientAPI } from "./main";
 import { ChatInput, ExpandableTextarea, questionInput } from "./chatInput";
 import { SearchMenu } from "./search";
-import { iconCheckMarkCircle, iconX, iconRoadrunner } from "./icon";
+import { iconCheckMarkCircle, iconX } from "./icon";
 import {
     ActionInfo,
     ActionTemplateSequence,
@@ -668,7 +668,7 @@ export class ChatView {
 
                 this.idToMessageGroup.set(id, mg);
 
-                mg.userMessageContainer.classList.add("chat-message-hidden");
+                mg.hideUserMessage();
 
                 return mg;
             }
@@ -719,8 +719,7 @@ export class ChatView {
         );
 
         if (hidden) {
-            mg.userMessageContainer.classList.add("chat-message-hidden");
-            mg.userMessage.classList.add("chat-message-hidden");
+            mg.hideUserMessage();
         }
 
         this.idToMessageGroup.set(id, mg);
@@ -753,30 +752,16 @@ export class ChatView {
     }
 
     markRequestExplained(id: string, timestamp: string, fromCache?: boolean) {
-        const pair = this.idToMessageGroup.get(id);
-        if (pair !== undefined) {
-            if (timestamp !== undefined) {
-                const cachePart = fromCache ? "by cache match" : "by model";
-                pair.userMessage.setAttribute(
-                    "data-expl",
-                    `Explained ${cachePart} at ${timestamp}`,
-                );
-            }
-            pair.userMessage.classList.add("chat-message-explained");
-            const icon = iconRoadrunner();
-            icon.getElementsByTagName("svg")[0].style.fill = fromCache
-                ? "#00c000"
-                : "#c0c000";
-            icon.className = "chat-message-explained-icon";
-            pair.userMessage.appendChild(icon);
-        }
+        this.idToMessageGroup
+            .get(id)
+            ?.markRequestExplained(timestamp, fromCache);
     }
 
     randomCommandSelected(id: string, message: string) {
         const pair = this.idToMessageGroup.get(id);
         if (pair !== undefined) {
             if (message.length > 0) {
-                pair.updateMessageText(message);
+                pair.updateUserMessage(message);
             }
         }
     }

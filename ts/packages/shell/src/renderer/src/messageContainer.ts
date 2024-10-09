@@ -8,8 +8,9 @@ import { PhaseTiming } from "agent-dispatcher";
 import { ChoicePanel, InputChoice } from "./choicePanel";
 import { setContent } from "./setContent";
 import { ChatView } from "./chatView";
+import { iconRoadrunner } from "./icon";
 
-export function createTimestampDiv(timestamp: Date, className: string) {
+function createTimestampDiv(timestamp: Date, className: string) {
     const timeStampDiv = document.createElement("div");
     timeStampDiv.classList.add(className);
 
@@ -26,7 +27,7 @@ export function createTimestampDiv(timestamp: Date, className: string) {
     return timeStampDiv;
 }
 
-export function updateMetrics(
+function updateMetrics(
     mainMetricsDiv: HTMLDivElement,
     markMetricsDiv: HTMLDivElement,
     name: string,
@@ -70,7 +71,7 @@ function metricsString(name: string, duration: number, count = 1) {
     return `${name}: <b>${formatTimeReaderFriendly(avg)}${count !== 1 ? `(out of ${count})` : ""}</b>`;
 }
 
-export function updateMetricsVisibility(visible: boolean, div: HTMLDivElement) {
+function updateMetricsVisibility(visible: boolean, div: HTMLDivElement) {
     const addClass = visible
         ? "chat-message-body"
         : "chat-message-body-hide-metrics";
@@ -86,7 +87,7 @@ export class MessageContainer {
     private readonly messageBodyDiv: HTMLDivElement;
     private readonly messageDiv: HTMLDivElement;
     private readonly timestampDiv: HTMLDivElement;
-    private readonly iconDiv: HTMLDivElement;
+    private readonly iconDiv?: HTMLDivElement;
 
     private metricsDiv?: {
         mainMetricsDiv: HTMLDivElement;
@@ -110,17 +111,19 @@ export class MessageContainer {
     }
 
     private updateSource() {
-        const source = this._source;
-        const sourceIcon = this.agents.get(source);
+        if (this.iconDiv !== undefined) {
+            const source = this._source;
+            const sourceIcon = this.agents.get(source);
 
-        // set source and source icon
-        (this.timestampDiv.firstChild as HTMLDivElement).innerText = source; // name
-        this.iconDiv.innerText = sourceIcon ?? "❔"; // icon
+            // set source and source icon
+            (this.timestampDiv.firstChild as HTMLDivElement).innerText = source; // name
+            this.iconDiv.innerText = sourceIcon ?? "❔"; // icon
+        }
     }
 
     constructor(
         private chatView: ChatView,
-        classNameSuffix: "agent" | "user",
+        private classNameSuffix: "agent" | "user",
         private _source: string,
         private readonly agents: Map<string, string>,
         beforeElem: Element,
@@ -138,10 +141,12 @@ export class MessageContainer {
         div.append(timestampDiv);
         this.timestampDiv = timestampDiv;
 
-        const agentIconDiv = document.createElement("div");
-        agentIconDiv.className = "agent-icon";
-        div.append(agentIconDiv);
-        this.iconDiv = agentIconDiv;
+        if (classNameSuffix === "agent") {
+            const agentIconDiv = document.createElement("div");
+            agentIconDiv.className = "agent-icon";
+            div.append(agentIconDiv);
+            this.iconDiv = agentIconDiv;
+        }
 
         const messageBodyDiv = document.createElement("div");
         const bodyClass = this.hideMetrics
@@ -320,8 +325,7 @@ export class MessageContainer {
     private ensureMetricsDiv() {
         if (this.metricsDiv === undefined) {
             const metricsContainer = document.createElement("div");
-            metricsContainer.className =
-                "chat-message-metrics chat-message-metrics-left";
+            metricsContainer.className = `chat-message-metrics chat-message-metrics-${this.classNameSuffix}`;
             this.messageBodyDiv.append(metricsContainer);
 
             const metricsDetails = document.createElement("div");
@@ -359,7 +363,11 @@ export class MessageContainer {
         return this.metricsDiv;
     }
 
-    public updateMainMetrics(metrics?: PhaseTiming, total?: number) {
+    public updateMainMetrics(
+        name: string,
+        metrics?: PhaseTiming,
+        total?: number,
+    ) {
         if (metrics === undefined && total === undefined) {
             return;
         }
@@ -367,7 +375,7 @@ export class MessageContainer {
         updateMetrics(
             metricsDiv.mainMetricsDiv,
             metricsDiv.markMetricsDiv,
-            "Action",
+            name,
             metrics,
             total,
         );
@@ -438,5 +446,22 @@ export class MessageContainer {
     public setMetricsVisible(visible: boolean) {
         this.hideMetrics = !visible;
         updateMetricsVisibility(visible, this.messageBodyDiv);
+    }
+
+    public markRequestExplained(timestamp: string, fromCache?: boolean) {
+        if (timestamp !== undefined) {
+            const cachePart = fromCache ? "by cache match" : "by model";
+            this.messageDiv.setAttribute(
+                "data-expl",
+                `Explained ${cachePart} at ${timestamp}`,
+            );
+        }
+        this.messageDiv.classList.add("chat-message-explained");
+        const icon = iconRoadrunner();
+        icon.getElementsByTagName("svg")[0].style.fill = fromCache
+            ? "#00c000"
+            : "#c0c000";
+        icon.className = "chat-message-explained-icon";
+        this.messageDiv.appendChild(icon);
     }
 }
