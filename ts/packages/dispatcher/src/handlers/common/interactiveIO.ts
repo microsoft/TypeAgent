@@ -16,8 +16,6 @@ import { RequestMetrics } from "../../utils/metrics.js";
 export const DispatcherName = "dispatcher";
 export type RequestId = string | undefined;
 
-export type ActionUICommand = "register" | "replace" | "remove";
-
 export enum NotifyCommands {
     ShowSummary = "summarize",
     Clear = "clear",

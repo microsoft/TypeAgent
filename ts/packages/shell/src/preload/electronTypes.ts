@@ -26,8 +26,6 @@ export type SearchMenuItem = {
     emojiChar?: string;
     groupName?: string;
 };
-
-export type ActionUICommand = "register" | "replace" | "remove";
 export type ActionInfo = {
     actionTemplates: ActionTemplateSequence;
     requestId: string;
