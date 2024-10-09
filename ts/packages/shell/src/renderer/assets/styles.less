@@ -21,7 +21,7 @@ body {
 
 .user-textarea {
   padding: 5px 8px;
-  display: block;
+  display: flex;
   width: calc(100% - 48px);
   overflow: hidden;
   resize: none;
@@ -88,8 +88,17 @@ body {
 
 /* CSS */
 .action-button {
-  border: none;
-  background-color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  width: 100%;
+}
+
+.action-button:hover {
+  background-color: #c6e3ef;
 }
 
 .preface-text {
