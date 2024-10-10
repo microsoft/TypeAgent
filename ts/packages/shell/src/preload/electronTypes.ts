@@ -26,8 +26,6 @@ export type SearchMenuItem = {
     emojiChar?: string;
     groupName?: string;
 };
-
-export type ActionUICommand = "register" | "replace" | "remove";
 export type ActionInfo = {
     actionTemplates: ActionTemplateSequence;
     requestId: string;
@@ -35,13 +33,11 @@ export type ActionInfo = {
 
 export type TemplateParamPrimitive = {
     type: "string" | "number" | "boolean";
-    value?: string | number | boolean;
 };
 
 export type TemplateParamStringUnion = {
     type: "string-union";
     typeEnum: string[];
-    value?: string;
 };
 
 export type TemplateParamScalar =
@@ -51,7 +47,6 @@ export type TemplateParamScalar =
 export type TemplateParamArray = {
     type: "array";
     elementType: TemplateParamField;
-    elements?: TemplateParamField[];
 };
 
 export type TemplateParamObject = {
@@ -79,6 +74,7 @@ export type ActionTemplate = {
 
 export type ActionTemplateSequence = {
     templates: ActionTemplate[];
+    actions: unknown;
     prefaceSingle?: string;
     prefaceMultiple?: string;
 };
@@ -140,24 +136,6 @@ export interface ClientAPI {
             group_id: string,
         ) => void,
     ): void;
-    onActionCommand(
-        callback: (
-            e: Electron.IpcRendererEvent,
-            actionTemplates: ActionTemplateSequence,
-            command: ActionUICommand,
-            requestId: string,
-        ) => void,
-    ): void;
-    onSearchMenuCommand(
-        callback: (
-            e: Electron.IpcRendererEvent,
-            menuId: string,
-            command: string,
-            prefix?: string,
-            choices?: SearchMenuItem[],
-            visible?: boolean,
-        ) => void,
-    ): void;
     onMarkRequestExplained(
         callback: (
             e: Electron.IpcRendererEvent,
@@ -190,6 +168,16 @@ export interface ClientAPI {
         ) => void,
     ): void;
     sendYesNo: (askYesNoId: number, accept: boolean) => void;
+    onProposeAction(
+        callback: (
+            e: Electron.IpcRendererEvent,
+            proposeActionId: number,
+            actionTemplates: ActionTemplateSequence,
+            requestId: string,
+            source: string,
+        ) => void,
+    ): void;
+    sendProposedAction(proposeActionId: number, replacement?: unknown): void;
     onQuestion(
         callback: (
             e: Electron.IpcRendererEvent,

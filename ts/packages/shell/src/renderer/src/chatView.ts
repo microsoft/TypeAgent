@@ -3,15 +3,8 @@
 
 import { IdGenerator, getClientAPI } from "./main";
 import { ChatInput, ExpandableTextarea, questionInput } from "./chatInput";
-import { SearchMenu } from "./search";
 import { iconCheckMarkCircle, iconX } from "./icon";
-import {
-    ActionInfo,
-    ActionTemplateSequence,
-    ActionUICommand,
-    SearchMenuItem,
-} from "../../preload/electronTypes";
-import { ActionCascade } from "./ActionCascade";
+import { ActionTemplateSequence } from "../../preload/electronTypes";
 import {
     DisplayAppendMode,
     DisplayContent,
@@ -260,16 +253,9 @@ export class ChatView {
 
     private idToMessageGroup: Map<string, MessageGroup> = new Map();
     chatInput: ChatInput;
-    idToSearchMenu = new Map<string, SearchMenu>();
-    searchMenu: SearchMenu | undefined = undefined;
-    searchMenuAnswerHandler: ((item: SearchMenuItem) => void) | undefined =
-        undefined;
-    keyboardListener: undefined | ((event: KeyboardEvent) => void) = undefined;
     private partialCompletion: PartialCompletion | undefined;
 
     commandBackStackIndex = -1;
-    registeredActions: Map<string, ActionInfo> = new Map<string, ActionInfo>();
-    actionCascade: ActionCascade | undefined = undefined;
 
     private hideMetrics = true;
     constructor(
@@ -290,27 +276,14 @@ export class ChatView {
                     type: "html",
                     content: messageHtml,
                 });
-                if (this.searchMenu) {
-                    this.cancelSearchMenu();
-                }
             },
-            (eta: ExpandableTextarea) => {
+            (_eta: ExpandableTextarea) => {
                 if (this.partialCompletion) {
                     this.partialCompletion.update();
                 }
-                if (this.searchMenu) {
-                    this.placeSearchMenu();
-                    this.searchMenu.completePrefix(eta.getEditedText());
-                }
             },
-            (eta: ExpandableTextarea, ev: KeyboardEvent) => {
-                if (
-                    this.partialCompletion?.handleSpecialKeys(ev) === true ||
-                    this.searchMenu?.handleSpecialKeys(
-                        ev,
-                        eta.getEditedText(),
-                    ) === true
-                ) {
+            (_eta: ExpandableTextarea, ev: KeyboardEvent) => {
+                if (this.partialCompletion?.handleSpecialKeys(ev) === true) {
                     return false;
                 }
 
@@ -355,162 +328,6 @@ export class ChatView {
 
         // Add the input div at the bottom so it's always visible
         this.topDiv.append(this.inputContainer);
-    }
-
-    placeSearchMenu() {
-        if (this.searchMenu) {
-            let x = Math.floor(getSelectionXCoord());
-            const leftBound = this.inputContainer.getBoundingClientRect().left;
-            x -= leftBound;
-            this.searchMenu.getContainer().style.left = `${x}px`;
-        }
-    }
-
-    getActionTemplates(requestId: string) {
-        const actionInfo = this.registeredActions.get(requestId);
-        if (actionInfo === undefined) {
-            console.error(`Invalid requestId ${requestId}`);
-            return undefined;
-        }
-        return actionInfo.actionTemplates;
-    }
-
-    proposeAction(requestId: string) {
-        // use this div to show the proposed action
-        const actionContainer = document.createElement("div");
-        actionContainer.className = "action-container";
-
-        // build the action div from the reserved action templates
-        const actionTemplates = this.getActionTemplates(requestId);
-        if (actionTemplates !== undefined) {
-            this.actionCascade = new ActionCascade(actionTemplates);
-            const actionDiv = this.actionCascade.toHTML();
-            actionDiv.className = "action-text";
-            actionContainer.appendChild(actionDiv);
-        }
-
-        return actionContainer;
-    }
-
-    registerSearchMenu(
-        id: string,
-        initialChoices: SearchMenuItem[],
-        visible = true,
-        prefix = "",
-    ) {
-        const searchMenu = new SearchMenu(
-            (item) => this.searchMenuOnSelection(item),
-            false,
-        );
-        searchMenu.setChoices(initialChoices);
-        this.idToSearchMenu.set(id, searchMenu);
-        if (visible) {
-            this.setSearchMenu(searchMenu, prefix);
-        }
-    }
-
-    searchMenuOnSelection(item: SearchMenuItem) {
-        if (this.searchMenu) {
-            console.log(`Selected: ${item.matchText}`);
-            if (this.searchMenuAnswerHandler) {
-                this.searchMenuAnswerHandler(item);
-            } else {
-                console.error("No selection handler");
-            }
-            this.chatInput.clear();
-            this.cancelSearchMenu();
-        }
-    }
-
-    completeSearchMenu(id: string, prefix = "") {
-        const searchMenu = this.idToSearchMenu.get(id);
-        if (searchMenu) {
-            searchMenu.completePrefix(prefix);
-        }
-    }
-
-    showSearchMenu(id: string, prefix = "") {
-        const searchMenu = this.idToSearchMenu.get(id);
-        if (searchMenu) {
-            this.setSearchMenu(searchMenu, prefix);
-        }
-    }
-
-    cancelSearchMenu() {
-        if (this.searchMenu) {
-            this.searchMenu.getContainer().remove();
-            this.searchMenu = undefined;
-            this.searchMenuAnswerHandler = undefined;
-        }
-    }
-
-    registerActionStructure(
-        actionTemplates: ActionTemplateSequence,
-        requestId: string,
-    ) {
-        this.registeredActions.set(requestId, {
-            actionTemplates,
-            requestId,
-        });
-    }
-
-    actionCommand(
-        actionTemplates: ActionTemplateSequence,
-        command: ActionUICommand,
-        requestId: string,
-    ) {
-        switch (command) {
-            case "register":
-                this.registerActionStructure(actionTemplates, requestId);
-                break;
-            case "remove":
-                this.registeredActions.delete(requestId);
-                break;
-            case "replace":
-                break;
-        }
-    }
-
-    searchMenuCommand(
-        menuId: string,
-        command: string,
-        prefix = "",
-        choices: SearchMenuItem[] = [],
-        visible = true,
-    ) {
-        switch (command) {
-            case "register":
-                this.registerSearchMenu(menuId, choices, visible, prefix);
-                break;
-            case "complete":
-                this.completeSearchMenu(menuId, prefix);
-                break;
-            case "cancel":
-                this.cancelSearchMenu();
-                break;
-            case "legend":
-                if (this.searchMenu) {
-                    this.searchMenu.addLegend(prefix);
-                }
-                break;
-            case "show":
-                this.showSearchMenu(menuId, prefix);
-                break;
-            case "remove":
-                if (this.idToSearchMenu.has(menuId)) {
-                    this.cancelSearchMenu();
-                    this.idToSearchMenu.delete(menuId);
-                }
-                break;
-        }
-    }
-
-    setSearchMenu(searchMenu: SearchMenu, prefix = "") {
-        this.searchMenu = searchMenu;
-        const searchContainer = this.searchMenu.getContainer();
-        this.inputContainer.appendChild(searchContainer);
-        this.placeSearchMenu();
-        this.searchMenu.completePrefix(prefix);
     }
 
     enablePartialInput(enabled: boolean) {
@@ -819,15 +636,7 @@ export class ChatView {
         if (agentMessage === undefined) {
             return;
         }
-        if (message === "reserved") {
-            const container = this.proposeAction(requestId);
-            agentMessage.setMessage(
-                { type: "html", content: container.innerHTML },
-                source,
-            );
-        } else {
-            agentMessage.setMessage(message, source, "inline");
-        }
+        agentMessage.setMessage(message, source, "inline");
         const choices: InputChoice[] = [
             {
                 text: "Yes",
@@ -849,6 +658,22 @@ export class ChatView {
         this.updateScroll();
     }
 
+    public proposeAction(
+        proposeActionId: number,
+        actionTemplates: ActionTemplateSequence,
+        requestId: string,
+        source: string,
+    ) {
+        const agentMessage = this.ensureAgentMessage({
+            message: "",
+            requestId,
+            source,
+        });
+        if (agentMessage === undefined) {
+            return;
+        }
+        agentMessage.proposeAction(proposeActionId, actionTemplates);
+    }
     question(
         questionId: number,
         message: string,
@@ -865,19 +690,14 @@ export class ChatView {
         }
         agentMessage.div.innerHTML = "";
         this.showStatusMessage({ message, requestId, source }, true);
-        if (this.searchMenu) {
-            this.searchMenuAnswerHandler = (item) => {
-                this.answer(questionId, item.selectedText, requestId);
-            };
-        } else {
-            const replacementElm = questionInput(
-                this,
-                questionId,
-                message,
-                requestId,
-            );
-            agentMessage.div.appendChild(replacementElm);
-        }
+
+        const replacementElm = questionInput(
+            this,
+            questionId,
+            message,
+            requestId,
+        );
+        agentMessage.div.appendChild(replacementElm);
     }
 
     answer(questionId: number, answer: string, requestId: string) {
