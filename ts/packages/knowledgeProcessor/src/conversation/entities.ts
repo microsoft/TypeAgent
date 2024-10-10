@@ -43,6 +43,8 @@ import { toStopDate, toStartDate } from "./knowledgeActions.js";
 import { ConcreteEntity, Facet } from "./knowledgeSchema.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
+import { getAllTermsInFilter } from "./searchProcessor.js";
+import { DateTimeRange } from "./dateTimeSchema.js";
 
 export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
     extends KnowledgeStore<ExtractedEntity<TSourceId>, TEntityId> {
@@ -84,6 +86,16 @@ export interface EntitySearchOptions extends SearchOptions {
     matchNameToType: boolean;
     combinationSetOp?: SetOp | undefined;
     topK?: number;
+}
+
+export function createEntitySearchOptions(): EntitySearchOptions {
+    return {
+        maxMatches: 2,
+        minScore: 0.8,
+        matchNameToType: true,
+        combinationSetOp: SetOp.IntersectUnion,
+        loadEntities: true,
+    };
 }
 
 export async function createEntityIndex<TSourceId = string>(
@@ -301,72 +313,32 @@ export async function createEntityIndex<TSourceId = string>(
         filter: TermFilter,
         options: EntitySearchOptions,
     ): Promise<EntitySearchResult<EntityId>> {
-        const results = createSearchResults();
-        if (filter.timeRange) {
-            results.temporalSequence =
-                await entityStore.sequence.getEntriesInRange(
-                    toStartDate(filter.timeRange.startDate),
-                    toStopDate(filter.timeRange.stopDate),
-                );
-        }
-        if (filter.terms && filter.terms.length > 0) {
-            const hitCounter = createFrequencyTable<EntityId>();
-            await Promise.all([
-                nameIndex.getNearestHitsMultiple(
-                    filter.terms,
-                    hitCounter,
-                    options.nameSearchOptions?.maxMatches ?? options.maxMatches,
-                    options.nameSearchOptions?.minScore ?? options.minScore,
-                ),
-                typeIndex.getNearestHitsMultiple(
-                    filter.terms,
-                    hitCounter,
-                    options.maxMatches,
-                    options.minScore,
-                ),
-                facetIndex.getNearestHitsMultiple(
-                    combineTerms(filter),
-                    hitCounter,
-                    options.maxMatches,
-                    options.minScore,
-                ),
-            ]);
-            const entityHits = hitCounter.getTopK(options.topK ?? 3);
-            results.entityIds = [
-                ...intersectMultiple(
-                    entityHits,
-                    itemsFromTemporalSequence(results.temporalSequence),
-                ),
-            ];
-        }
-        if (results.entityIds && results.temporalSequence) {
-            // The temporal sequence maintains all entity ids seen at a timestamp.
-            // Since we identified specific entity ids, we remove the other ones
-            results.temporalSequence = filterTemporalSequence(
-                results.temporalSequence,
-                results.entityIds,
-            );
-        }
-        if (options.loadEntities && results.entityIds) {
-            results.entities = await getEntities(results.entityIds);
-        }
-        return results;
+        const terms = combineTerms(filter);
+        return findEntities(terms, filter.timeRange, options);
     }
 
     async function searchTermsV2(
         filter: TermFilterV2,
         options: EntitySearchOptions,
     ): Promise<EntitySearchResult<EntityId>> {
+        const terms = getAllTermsInFilter(filter);
+        return findEntities(terms, filter.timeRange, options);
+    }
+
+    async function findEntities(
+        terms: string[],
+        timeRange: DateTimeRange | undefined,
+        options: EntitySearchOptions,
+    ): Promise<EntitySearchResult<EntityId>> {
         const results = createSearchResults();
-        if (filter.timeRange) {
+        if (timeRange) {
             results.temporalSequence =
                 await entityStore.sequence.getEntriesInRange(
-                    toStartDate(filter.timeRange.startDate),
-                    toStopDate(filter.timeRange.stopDate),
+                    toStartDate(timeRange.startDate),
+                    toStopDate(timeRange.stopDate),
                 );
         }
 
-        const terms = combineTermsV2(filter);
         if (terms && terms.length > 0) {
             const hitCounter = createFrequencyTable<EntityId>();
             await Promise.all([
@@ -421,26 +393,6 @@ export async function createEntityIndex<TSourceId = string>(
             }
         }
         return terms ?? filter.terms;
-    }
-
-    function combineTermsV2(filter: TermFilterV2): string[] {
-        let terms: string[] = [];
-        if (filter.action) {
-            terms.push(...filter.action.verbs);
-            if (filter.action.subject) {
-                terms.push(filter.action.subject);
-            }
-            if (filter.action.object) {
-                terms.push(filter.action.object);
-            }
-            if (filter.action.indirectObject) {
-                terms.push(filter.action.indirectObject);
-            }
-        }
-        if (filter.searchTerms && filter.searchTerms.length > 0) {
-            terms.push(...filter.searchTerms);
-        }
-        return terms;
     }
 
     async function loadSourceIds(

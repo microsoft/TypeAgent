@@ -982,17 +982,16 @@ export async function runChatMemory(): Promise<void> {
         const searchAction = <conversation.GetAnswerWithTermsActionV2>(
             result.data
         );
-        const actionIndex = await context.conversation.getActionIndex();
-        const options: conversation.ActionSearchOptions =
-            conversation.createDefaultActionSearchOption(true);
-        for (let f of searchAction.parameters.filters) {
-            const searchResult = await actionIndex.searchTermsV2(f, options);
-            if (!searchResult.actions) {
-                printer.writeLine("No matches");
-            } else {
-                printer.writeActions(searchResult.actions);
-            }
-        }
+        const options = conversation.createConversationSearchOptions(false);
+        const searchResponse = await context.conversation.searchTermsV2(
+            searchAction.parameters.filters,
+            options,
+        );
+        printer.writeTopics([...searchResponse.allTopics()]);
+        printer.writeCompositeEntities(
+            searchResponse.mergeAllEntities(Number.MAX_SAFE_INTEGER),
+        );
+        printer.writeActions([...searchResponse.allActions()]);
     }
 
     async function searchNoEval(

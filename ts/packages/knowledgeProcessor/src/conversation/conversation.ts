@@ -27,6 +27,7 @@ import {
     TopicSearchResult,
     createTopicIndex,
     createTopicMerger,
+    createTopicSearchOptions,
 } from "./topics.js";
 import {
     TextIndexSettings,
@@ -38,6 +39,7 @@ import {
     EntitySearchOptions,
     EntitySearchResult,
     createEntityIndex,
+    createEntitySearchOptions,
     mergeEntities,
 } from "./entities.js";
 import { ExtractedKnowledge } from "./knowledge.js";
@@ -58,8 +60,10 @@ import {
     ActionSearchOptions,
     ActionSearchResult,
     createActionIndex,
+    createActionSearchOptions,
 } from "./actions.js";
 import { SearchTermsAction, TermFilter } from "./knowledgeTermSearchSchema.js";
+import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
 
 export interface RecentItems<T> {
     readonly entries: collections.CircularArray<T>;
@@ -156,6 +160,10 @@ export interface Conversation<
     ): Promise<SearchResponse>;
     searchTerms(
         filters: TermFilter[],
+        options: ConversationSearchOptions,
+    ): Promise<SearchResponse>;
+    searchTermsV2(
+        filters: TermFilterV2[],
         options: ConversationSearchOptions,
     ): Promise<SearchResponse>;
     searchMessages(
@@ -413,6 +421,20 @@ export type ConversationSearchOptions = {
     loadMessages?: boolean;
 };
 
+export function createConversationSearchOptions(
+    topLevelSummary: boolean,
+): ConversationSearchOptions {
+    const topicLevel = topLevelSummary ? 2 : 1;
+    const searchOptions: ConversationSearchOptions = {
+        entity: createEntitySearchOptions(),
+        topic: createTopicSearchOptions(topLevelSummary),
+        action: createActionSearchOptions(false),
+        topicLevel,
+        loadMessages: !topLevelSummary,
+    };
+    return searchOptions;
+}
+
 /**
  * Create or load a persistent conversation, using the given rootPath as the storage root.
  * - The conversation is stored in folders below the given root path
@@ -475,6 +497,7 @@ export async function createConversation(
         addKnowledgeToIndex,
         search,
         searchTerms,
+        searchTermsV2,
         searchMessages,
         findMessage,
 
@@ -812,6 +835,44 @@ export async function createConversation(
                     filter,
                     options.action,
                 );
+                results.actions.push(actionResult);
+            }
+        }
+        if (options.loadMessages) {
+            await resolveMessages(
+                results,
+                topicIndex,
+                entityIndex,
+                actionIndex,
+            );
+        }
+        return results;
+    }
+
+    async function searchTermsV2(
+        filters: TermFilterV2[],
+        options: ConversationSearchOptions,
+    ): Promise<SearchResponse> {
+        const [entityIndex, topicIndex, actionIndex] = await Promise.all([
+            getEntityIndex(),
+            getTopicsIndex(options.topicLevel),
+            getActionIndex(),
+        ]);
+        const results = createSearchResponse<MessageId, TopicId, EntityId>();
+        for (const filter of filters) {
+            const tasks = [
+                topicIndex.searchTermsV2(filter, options.topic),
+                entityIndex.searchTermsV2(filter, options.entity),
+            ];
+            if (options.action) {
+                tasks.push(actionIndex.searchTermsV2(filter, options.action));
+            }
+            // Only search actions if (a) actions are enabled (b) we have an action filter
+            const [topicResult, entityResult, actionResult] =
+                await Promise.all(tasks);
+            results.topics.push(topicResult);
+            results.entities.push(entityResult);
+            if (actionResult) {
                 results.actions.push(actionResult);
             }
         }

@@ -66,7 +66,7 @@ function createSearchResults<TActionId = any>(): ActionSearchResult<TActionId> {
     };
 }
 
-export function createDefaultActionSearchOption(
+export function createActionSearchOptions(
     loadActions: boolean = false,
 ): ActionSearchOptions {
     return {
@@ -477,9 +477,12 @@ export async function createActionIndex<TSourceId = any>(
     async function matchTerms(
         names: TextIndex<string>,
         nameIndex: KeyValueIndex<string, ActionId>,
-        terms: string[],
+        terms: string[] | undefined,
         options: ActionSearchOptions,
     ) {
+        if (!terms || terms.length === 0) {
+            return undefined;
+        }
         const matches = await asyncArray.mapAsync(
             terms,
             settings.concurrency,

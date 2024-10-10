@@ -146,6 +146,17 @@ export class ChatMemoryPrinter extends ChatPrinter {
         }
     }
 
+    public writeCompositeEntities(
+        entities: (conversation.CompositeEntity | undefined)[],
+    ): void {
+        if (entities && entities.length > 0) {
+            this.writeTitle("Entities");
+            for (const entity of entities) {
+                this.writeCompositeEntity(entity);
+            }
+        }
+    }
+
     public writeActions(actions: conversation.Action[] | undefined): void {
         if (actions && actions.length > 0) {
             this.writeTitle("Actions");

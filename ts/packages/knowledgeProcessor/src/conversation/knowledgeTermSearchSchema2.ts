@@ -34,7 +34,7 @@ export type ActionTerm = {
 // Search indexes for following search terms: typically single word keywords.
 export type TermFilterV2 = {
     action?: ActionTerm;
-    searchTerms: SearchTerm[];
+    searchTerms?: SearchTerm[];
     // Use only if request explicitly asks for time range
     timeRange?: DateTimeRange | undefined; // in this time range
 };

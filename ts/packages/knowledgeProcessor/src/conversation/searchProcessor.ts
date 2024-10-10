@@ -34,6 +34,10 @@ import {
     SearchTermsAction,
     TermFilter,
 } from "./knowledgeTermSearchSchema.js";
+import {
+    GetAnswerWithTermsActionV2,
+    TermFilterV2,
+} from "./knowledgeTermSearchSchema2.js";
 
 export type SearchProcessingOptions = {
     maxMatches: number;
@@ -59,6 +63,11 @@ export interface ConversationSearchProcessor {
         filters: TermFilter[] | undefined,
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponse | undefined>;
+    handleGetAnswersTermsV2(
+        query: string,
+        action: GetAnswerWithTermsActionV2,
+        options: SearchProcessingOptions,
+    ): Promise<SearchResponse>;
     /**
      * Generate an answer using a prior search response
      * @param searchResponse
@@ -95,6 +104,7 @@ export function createSearchProcessor(
         answers,
         search,
         searchTerms,
+        handleGetAnswersTermsV2,
         buildContext,
         generateAnswer,
     };
@@ -254,35 +264,10 @@ export function createSearchProcessor(
         options: SearchProcessingOptions,
     ): Promise<SearchResponse> {
         const topLevelTopicSummary = isSummaryRequest(action);
-        const topicLevel = topLevelTopicSummary ? 2 : 1;
-        const searchOptions: ConversationSearchOptions = {
-            entity: {
-                maxMatches: options.maxMatches,
-                minScore: options.minScore,
-                matchNameToType: true,
-                loadEntities: true,
-            },
-            topic: {
-                maxMatches: topLevelTopicSummary
-                    ? Number.MAX_SAFE_INTEGER
-                    : options.maxMatches,
-                minScore: options.minScore,
-                loadTopics: true,
-            },
-            topicLevel,
-            loadMessages: !topLevelTopicSummary,
-        };
-        if (options.includeActions) {
-            searchOptions.action = {
-                maxMatches: options.maxMatches,
-                minScore: options.minScore,
-                verbSearchOptions: {
-                    maxMatches: 1,
-                    minScore: options.minScore,
-                },
-                loadActions: false,
-            };
-        }
+        const searchOptions = createSearchOptions(
+            topLevelTopicSummary,
+            options,
+        );
         const response = await conversation.searchTerms(
             action.parameters.filters,
             searchOptions,
@@ -295,6 +280,27 @@ export function createSearchProcessor(
                 options,
                 //action.parameters.answerType,
             );
+        }
+        return response;
+    }
+
+    async function handleGetAnswersTermsV2(
+        query: string,
+        action: GetAnswerWithTermsActionV2,
+        options: SearchProcessingOptions,
+    ): Promise<SearchResponse> {
+        const topLevelTopicSummary = isSummaryRequestV2(action);
+        const searchOptions = createSearchOptions(
+            topLevelTopicSummary,
+            options,
+        );
+        const response = await conversation.searchTermsV2(
+            action.parameters.filters,
+            searchOptions,
+        );
+        await adjustMessages(query, response, searchOptions, options);
+        if (!options.skipAnswerGeneration) {
+            await generateAnswerForSearchTerms(query, response, options);
         }
         return response;
     }
@@ -371,6 +377,19 @@ export function createSearchProcessor(
         const filters = action.parameters.filters;
         for (const filter of filters) {
             if (filter.terms && filter.terms.length > 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function isSummaryRequestV2(action: GetAnswerWithTermsActionV2): boolean {
+        const filters = action.parameters.filters;
+        for (const filter of filters) {
+            if (
+                filter.action ||
+                (filter.searchTerms && filter.searchTerms.length > 0)
+            ) {
                 return false;
             }
         }
@@ -516,4 +535,60 @@ export function createSearchProcessor(
             );
         }
     }
+
+    function createSearchOptions(
+        topLevelTopicSummary: boolean,
+        options: SearchProcessingOptions,
+    ) {
+        const topicLevel = topLevelTopicSummary ? 2 : 1;
+        const searchOptions: ConversationSearchOptions = {
+            entity: {
+                maxMatches: options.maxMatches,
+                minScore: options.minScore,
+                matchNameToType: true,
+                loadEntities: true,
+            },
+            topic: {
+                maxMatches: topLevelTopicSummary
+                    ? Number.MAX_SAFE_INTEGER
+                    : options.maxMatches,
+                minScore: options.minScore,
+                loadTopics: true,
+            },
+            topicLevel,
+            loadMessages: !topLevelTopicSummary,
+        };
+        if (options.includeActions) {
+            searchOptions.action = {
+                maxMatches: options.maxMatches,
+                minScore: options.minScore,
+                verbSearchOptions: {
+                    maxMatches: 1,
+                    minScore: options.minScore,
+                },
+                loadActions: false,
+            };
+        }
+        return searchOptions;
+    }
+}
+
+export function getAllTermsInFilter(filter: TermFilterV2): string[] {
+    let terms: string[] = [];
+    if (filter.action) {
+        terms.push(...filter.action.verbs);
+        if (filter.action.subject) {
+            terms.push(filter.action.subject);
+        }
+        if (filter.action.object) {
+            terms.push(filter.action.object);
+        }
+        if (filter.action.indirectObject) {
+            terms.push(filter.action.indirectObject);
+        }
+    }
+    if (filter.searchTerms && filter.searchTerms.length > 0) {
+        terms.push(...filter.searchTerms);
+    }
+    return terms;
 }
