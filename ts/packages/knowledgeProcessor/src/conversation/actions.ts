@@ -48,7 +48,6 @@ import { TermFilterV2, ActionTerm } from "./knowledgeTermSearchSchema2.js";
 
 export interface ActionSearchOptions extends SearchOptions {
     verbSearchOptions?: SearchOptions | undefined;
-    nameSearchOptions?: SearchOptions | undefined;
     loadActions?: boolean | undefined;
 }
 
@@ -299,11 +298,13 @@ export async function createActionIndex<TSourceId = any>(
         ]);
         results.actionIds = [
             ...intersectMultiple(
+                intersectUnionMultiple(
+                    subjectToActionIds,
+                    objectToActionIds,
+                    indirectObjectToActionIds,
+                    termsToActionIds,
+                ),
                 verbToActionIds,
-                subjectToActionIds,
-                objectToActionIds,
-                indirectObjectToActionIds,
-                termsToActionIds,
                 itemsFromTemporalSequence(results.temporalSequence),
             ),
         ];
@@ -431,12 +432,11 @@ export async function createActionIndex<TSourceId = any>(
         options: ActionSearchOptions,
     ): Promise<IterableIterator<ActionId> | undefined> {
         if (name && name !== NoEntityName) {
-            const nameOptions = options.nameSearchOptions ?? options;
             // Possible names of entities
             const nameIds = await names.getNearestText(
                 name,
-                nameOptions.maxMatches,
-                nameOptions.minScore,
+                options.maxMatches,
+                options.minScore,
             );
             if (nameIds && nameIds.length > 0) {
                 // Load all actions for those entities

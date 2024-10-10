@@ -54,13 +54,14 @@ export function intersectUnionMultiple<T>(
     ...arrays: (Iterator<T> | IterableIterator<T> | Array<T> | undefined)[]
 ): T[] | undefined {
     // We can to do this more optimally...
-    let combined = createFrequencyTable<T>();
+    let combined: FrequencyTable<T> | undefined;
     for (const array of arrays) {
         if (array) {
+            combined ??= createFrequencyTable<T>();
             combined.addMultiple(array);
         }
     }
-    if (combined.size === 0) {
+    if (!combined || combined.size === 0) {
         return undefined;
     }
 

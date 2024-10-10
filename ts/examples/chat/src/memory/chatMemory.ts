@@ -780,7 +780,7 @@ export async function runChatMemory(): Promise<void> {
                 tense: arg("Verb tense: past | present | future", "past"),
                 count: argNum("Num action matches", 1),
                 verbCount: argNum("Num verb matches", 1),
-                nameCount: argNum("Num name matches", 2),
+                nameCount: argNum("Num name matches", 3),
                 showMessages: argBool("display messages", false),
             },
         };
@@ -826,16 +826,10 @@ export async function runChatMemory(): Promise<void> {
                 verbTense,
             };
         }
-        const matches = await index.search(filter, {
-            maxMatches: namedArgs.count,
-            verbSearchOptions: {
-                maxMatches: namedArgs.verbCount,
-            },
-            nameSearchOptions: {
-                maxMatches: namedArgs.nameCount,
-            },
-            loadActions: true,
-        });
+        const searchOptions = conversation.createActionSearchOptions(true);
+        searchOptions.verbSearchOptions!.maxMatches = namedArgs.verbCount;
+        searchOptions.maxMatches = namedArgs.nameCount;
+        const matches = await index.search(filter, searchOptions);
         if (matches.actions) {
             for (let i = 0; i < matches.actions.length; ++i) {
                 printer.writeLine(
@@ -974,7 +968,6 @@ export async function runChatMemory(): Promise<void> {
         );
         const options = conversation.createConversationSearchOptions();
         options.action!.loadActions = true;
-        options.action!.verbSearchOptions!.minScore = 0.7;
         const searchResponse = await context.conversation.searchTermsV2(
             searchAction.parameters.filters,
             options,
