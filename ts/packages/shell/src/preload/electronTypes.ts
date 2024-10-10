@@ -33,13 +33,11 @@ export type ActionInfo = {
 
 export type TemplateParamPrimitive = {
     type: "string" | "number" | "boolean";
-    value?: string | number | boolean;
 };
 
 export type TemplateParamStringUnion = {
     type: "string-union";
     typeEnum: string[];
-    value?: string;
 };
 
 export type TemplateParamScalar =
@@ -49,7 +47,6 @@ export type TemplateParamScalar =
 export type TemplateParamArray = {
     type: "array";
     elementType: TemplateParamField;
-    elements?: TemplateParamField[];
 };
 
 export type TemplateParamObject = {
@@ -180,7 +177,7 @@ export interface ClientAPI {
             source: string,
         ) => void,
     ): void;
-    sendProposedAction(proposeActionId: number, response?: string): void;
+    sendProposedAction(proposeActionId: number, replacement?: unknown): void;
     onQuestion(
         callback: (
             e: Electron.IpcRendererEvent,

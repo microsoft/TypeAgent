@@ -59,58 +59,6 @@ function parseActionNameParts(fullActionName: string) {
     return { translatorName, actionName };
 }
 
-function copyActionValue(
-    value: ParamFieldType,
-    field: TemplateParamField,
-): TemplateParamField {
-    switch (field.type) {
-        case "array":
-            return {
-                type: "array",
-                elementType: field.elementType,
-                elements: (value as ParamFieldType[]).map((v) =>
-                    copyActionValue(v, field.elementType),
-                ),
-            };
-        case "object":
-            const fields: { [key: string]: TemplateParamFieldOpt } = {};
-            for (const [key, templateField] of Object.entries(field.fields)) {
-                const fieldValue = (value as ParamObjectType)[key];
-                if (fieldValue !== undefined) {
-                    fields[key] = {
-                        optional: templateField.optional ?? false,
-                        field: copyActionValue(fieldValue, templateField.field),
-                    };
-                }
-            }
-            return {
-                type: "object",
-                fields,
-            };
-        case "string-union":
-            return {
-                type: "string-union",
-                typeEnum: field.typeEnum,
-                value: value as string,
-            };
-        case "boolean":
-            return {
-                type: field.type,
-                value: value as boolean,
-            };
-        case "number":
-            return {
-                type: field.type,
-                value: value as number,
-            };
-        case "string":
-            return {
-                type: field.type,
-                value: value as string,
-            };
-    }
-}
-
 export class Action {
     constructor(
         private readonly action: IAction,
@@ -140,45 +88,6 @@ export class Action {
             fullActionName: this.fullActionName,
             parameters: this.action.parameters,
         };
-    }
-
-    public paramToHTML(key: string | undefined, value: ParamFieldType) {
-        let html = "";
-        if (Array.isArray(value)) {
-            for (let i = 0; i < value.length; i++) {
-                const arrayKey = key ? `${key}[${i}]` : i.toString();
-                html += `<li>${this.paramToHTML(arrayKey, value[i] as ParamFieldType)}</li>`;
-            }
-        } else if (typeof value === "object") {
-            html += `<li>${key}:<ul class="no-bullets">`;
-            for (const [k, v] of Object.entries(value)) {
-                html += this.paramToHTML(k, v);
-            }
-            html += "</ul></li>";
-        } else {
-            html += `<li>${key}: <span style="color:green">${value}</span></li>`;
-        }
-        return html;
-    }
-
-    public addValues(parameterStructure: TemplateParamObject) {
-        const pstructCopy: TemplateParamObject = {
-            type: "object",
-            fields: {},
-        };
-        const entries = Object.entries(this.action.parameters);
-        if (entries.length !== 0) {
-            for (const [key, value] of entries.sort()) {
-                const field = parameterStructure.fields[key];
-                if (field && value) {
-                    pstructCopy.fields[key] = {
-                        optional: field.optional ?? false,
-                        field: copyActionValue(value, field.field),
-                    };
-                }
-            }
-        }
-        return pstructCopy;
     }
 
     public toIAction(): IAction {
@@ -280,9 +189,7 @@ export class Actions {
                     );
                 }
                 templates.push({
-                    parameterStructure: action.addValues(
-                        actionInfo.template!.parameterStructure,
-                    ),
+                    parameterStructure: actionInfo.template!.parameterStructure,
                     name: action.actionName,
                     agent: action.translatorNameString,
                 });
@@ -297,9 +204,7 @@ export class Actions {
                 );
             }
             templates.push({
-                parameterStructure: this.actions.addValues(
-                    actionInfo.template!.parameterStructure,
-                ),
+                parameterStructure: actionInfo.template!.parameterStructure,
                 name: this.actions.actionName,
                 agent: this.actions.translatorNameString,
             });

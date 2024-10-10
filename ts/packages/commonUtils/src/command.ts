@@ -23,13 +23,11 @@ export type ActionInfo = {
 
 export type TemplateParamPrimitive = {
     type: "string" | "number" | "boolean";
-    value?: string | number | boolean;
 };
 
 export type TemplateParamStringUnion = {
     type: "string-union";
     typeEnum: string[];
-    value?: string;
 };
 
 export type TemplateParamScalar =
@@ -39,7 +37,6 @@ export type TemplateParamScalar =
 export type TemplateParamArray = {
     type: "array";
     elementType: TemplateParamField;
-    elements?: TemplateParamField[];
 };
 
 export type TemplateParamObject = {

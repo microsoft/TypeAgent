@@ -9,6 +9,7 @@ import {
     printProcessRequestActionResult,
     Actions,
     HistoryContext,
+    JSONAction,
 } from "agent-cache";
 import {
     CommandHandlerContext,
@@ -101,22 +102,20 @@ async function confirmTranslation(
         allActionInfo,
     );
 
-    const newActions = await systemContext.requestIO.proposeAction(
+    // TODO: Need to validate
+    const newActions = (await systemContext.requestIO.proposeAction(
         templateSequence,
         DispatcherName,
-    );
+    )) as JSONAction | JSONAction[];
 
-    if (newActions !== undefined) {
-        return { requestAction };
-    }
     return newActions
         ? {
               requestAction: new RequestAction(
                   requestAction.request,
-                  actions,
+                  Actions.fromJSON(newActions),
                   requestAction.history,
               ),
-              replacedAction: newActions,
+              replacedAction: actions,
           }
         : { requestAction };
 }

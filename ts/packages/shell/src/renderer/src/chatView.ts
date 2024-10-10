@@ -4,9 +4,7 @@
 import { IdGenerator, getClientAPI } from "./main";
 import { ChatInput, ExpandableTextarea, questionInput } from "./chatInput";
 import { iconCheckMarkCircle, iconX } from "./icon";
-import {
-    ActionTemplateSequence
-} from "../../preload/electronTypes";
+import { ActionTemplateSequence } from "../../preload/electronTypes";
 import {
     DisplayAppendMode,
     DisplayContent,

@@ -57,7 +57,7 @@ export interface ClientIO {
         actionTemplates: ActionTemplateSequence,
         requestId: RequestId,
         source: string,
-    ): Promise<string | undefined>;
+    ): Promise<unknown>;
 
     question(
         message: string,
@@ -112,7 +112,7 @@ export interface RequestIO {
     proposeAction(
         actionTemplates: ActionTemplateSequence,
         source: string,
-    ): Promise<string | undefined>;
+    ): Promise<unknown>;
     // returns undefined if input is disabled
     question(
         message: string,

@@ -24,12 +24,8 @@ import {
     Dispatcher,
 } from "agent-dispatcher";
 
-import {
-    IAgentMessage,
-} from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
-import {
-    ActionTemplateSequence,
-} from "../preload/electronTypes.js";
+import { IAgentMessage } from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
+import { ActionTemplateSequence } from "../preload/electronTypes.js";
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
@@ -342,17 +338,17 @@ async function proposeAction(
     source: string,
 ) {
     const currentProposeActionId = maxProposeActionId++;
-    return new Promise<string | undefined>((resolve) => {
+    return new Promise<unknown>((resolve) => {
         const callback = (
             _event: Electron.IpcMainEvent,
             proposeActionId: number,
-            response?: string,
+            replacement?: unknown,
         ) => {
             if (currentProposeActionId !== proposeActionId) {
                 return;
             }
             ipcMain.removeListener("proposeActionResponse", callback);
-            resolve(response);
+            resolve(replacement);
         };
         ipcMain.on("proposeActionResponse", callback);
         mainWindow?.webContents.send(

@@ -94,8 +94,8 @@ const api: ClientAPI = {
     onProposeAction(callback) {
         ipcRenderer.on("proposeAction", callback);
     },
-    sendProposedAction: (proposeActionId: number, action?: string) => {
-        ipcRenderer.send("proposeActionResponse", proposeActionId, action);
+    sendProposedAction: (proposeActionId: number, replacement?: unknown) => {
+        ipcRenderer.send("proposeActionResponse", proposeActionId, replacement);
     },
     onQuestion(callback) {
         ipcRenderer.on("question", callback);

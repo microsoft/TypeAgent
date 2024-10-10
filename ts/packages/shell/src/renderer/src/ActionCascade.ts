@@ -1,145 +1,292 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { TemplateParamArray, TemplateParamField } from "common-utils";
 import {
     ActionTemplateSequence,
     TemplateParamFieldOpt,
     TemplateParamScalar,
 } from "../../preload/electronTypes";
-
-import { iconX } from "./icon";
-
 export class ActionCascade {
+    private readonly container: HTMLDivElement;
+    private readonly table: HTMLTableElement;
     private current: any;
+    private editMode = false;
     constructor(
+        appendTo: HTMLElement,
         private actionTemplates: ActionTemplateSequence,
-        public editMode = false,
+        private enableEdit = true,
     ) {
         this.current = structuredClone(actionTemplates.actions);
+        this.container = document.createElement("div");
+        this.container.className = "action-text";
+        appendTo.appendChild(this.container);
+
+        this.table = document.createElement("table");
+        this.createUI();
     }
 
-    private scalarToHTML(
-        li: HTMLLIElement,
-        paramName: string,
-        paramValue: TemplateParamScalar,
-        value: any,
-        topLevel = false,
-    ) {
-        // TODO: show mismatched type
-        if (!this.editMode) {
-            li.innerText = `${paramName}: ${paramValue.value}`;
+    public get value() {
+        return this.current;
+    }
+
+    public reset() {
+        this.current = structuredClone(this.actionTemplates.actions);
+        this.createTable();
+    }
+
+    public setEditMode(editMode: boolean) {
+        if (this.editMode === editMode) {
             return;
         }
-        if (topLevel) {
-            // TODO: make width dynamic
-            const cancelButton = iconX();
-            cancelButton.onclick = () => {
-                console.log("cancel");
-            };
-            li.appendChild(cancelButton);
+        if (!this.enableEdit && editMode === true) {
+            throw new Error(
+                "Cannot set edit mode to true on a non-editable action cascade",
+            );
         }
-        const label = document.createElement("label");
-        label.innerText = paramName;
-        li.appendChild(label);
-        const input = document.createElement("input");
-        input.type = "text";
-        input.name = paramName;
-        input.value = value;
-        li.appendChild(input);
+
+        this.editMode = editMode;
+        if (editMode) {
+            this.container.classList.add("action-text-editable");
+        } else {
+            this.container.classList.remove("action-text-editable");
+        }
     }
 
-    private paramToHTML(
+    public remove() {
+        this.container.remove();
+    }
+
+    private createUIForScalar(
         paramName: string,
-        paramValue: TemplateParamFieldOpt,
-        value: unknown,
-        topLevel = false,
+        paramValue: TemplateParamScalar,
+        optional: boolean,
+        valueObject: unknown,
+        valueKey: string | number,
+        level: number,
     ) {
-        const liSeq: HTMLLIElement[] = [];
-        switch (paramValue.field.type) {
+        const value = valueObject?.[valueKey];
+        // TODO: show mismatched type
+        if (typeof value !== paramValue.type) {
+            console.log(`Mismatched type: ${paramName}`);
+        }
+        this.createRow(paramName, optional, valueObject, valueKey, level, true);
+    }
+
+    private createRow(
+        paramName: string,
+        optional: boolean,
+        valueObject: unknown,
+        valueKey: string | number,
+        level: number,
+        editable: boolean = false,
+    ) {
+        const row = this.table.insertRow();
+        const nameCell = row.insertCell();
+        nameCell.style.paddingLeft = `${level * 20}px`;
+        nameCell.innerText = paramName;
+
+        const getValue = () => {
+            const value = valueObject?.[valueKey];
+            if (value !== undefined && typeof value !== "object") {
+                return value;
+            }
+            return "";
+        };
+        const valueCell = row.insertCell();
+        valueCell.innerText = getValue();
+
+        if (this.enableEdit && editable) {
+            const input = document.createElement("input");
+            input.type = "text";
+
+            const editCell = row.insertCell();
+            const editButton = document.createElement("button");
+            editButton.innerText = "✏️";
+            editButton.className = "action-edit-button";
+            editButton.onclick = () => {
+                this.table.classList.add("editing");
+                row.classList.add("editing");
+                input.value = valueCell.innerText;
+                valueCell.replaceChildren(input);
+                input.focus();
+            };
+            editCell.appendChild(editButton);
+
+            const optionalCell = row.insertCell();
+            if (optional) {
+                const optionalButton = document.createElement("button");
+                optionalButton.innerText = "❌";
+                optionalButton.className = "action-edit-button";
+                optionalButton.onclick = () => {
+                    row.remove();
+                };
+                optionalCell.appendChild(optionalButton);
+            }
+
+            const saveCell = row.insertCell();
+            const saveButton = document.createElement("button");
+            saveButton.innerText = "💾";
+            saveButton.className = "action-editing-button";
+            saveButton.onclick = () => {
+                this.table.classList.remove("editing");
+                row.classList.remove("editing");
+                if (typeof valueObject === "object") {
+                    valueObject![valueKey] = input.value;
+                }
+                valueCell.innerText = getValue();
+            };
+            saveCell.appendChild(saveButton);
+
+            const cancelCell = row.insertCell();
+            const cancelButton = document.createElement("button");
+            cancelButton.innerText = "🛇";
+            cancelButton.className = "action-editing-button";
+            cancelButton.onclick = () => {
+                this.table.classList.remove("editing");
+                row.classList.remove("editing");
+                valueCell.innerText = getValue();
+            };
+            cancelCell.appendChild(cancelButton);
+        }
+    }
+
+    private createUIForArray(
+        paramName: string,
+        paramValue: TemplateParamArray,
+        optional: boolean,
+        value: unknown,
+        level: number,
+    ) {
+        if (!Array.isArray(value)) {
+            console.log(`Mismatched type: ${paramName}`);
+            return;
+        }
+
+        this.createRow(paramName, optional, undefined, "", level);
+        const elmType = paramValue.elementType;
+        for (let i = 0; i < value.length; i++) {
+            this.createUIForField(
+                `[${i}]`,
+                elmType,
+                false,
+                value,
+                i,
+                level + 1,
+            );
+        }
+    }
+    private createUIForField(
+        paramName: string,
+        paramValue: TemplateParamField,
+        optional: boolean,
+        valueObject: unknown,
+        valueKey: string | number,
+        level: number,
+    ) {
+        switch (paramValue.type) {
             case "array": {
-                if (paramValue.field.elements) {
-                    const elts = paramValue.field.elements;
-                    for (let i = 0; i < elts.length; i++) {
-                        const arrayKey = paramName
-                            ? `${paramName}[${i}]`
-                            : i.toString();
-                        const innerSeq = this.paramToHTML(
-                            arrayKey,
-                            {
-                                field: paramValue.field.elements[i],
-                            } as TemplateParamFieldOpt,
-                            value?.[i],
-                        );
-                        for (const elt of innerSeq) {
-                            liSeq.push(elt);
-                        }
-                    }
-                }
-                if (this.editMode) {
-                    // add a button to add more elements
-                    const addButton = document.createElement("button");
-                    addButton.innerText = "Add array element";
-                    addButton.onclick = () => {
-                        console.log("add");
-                    };
-                    const li = document.createElement("li");
-                    li.appendChild(addButton);
-                    liSeq.push(li);
-                }
+                this.createUIForArray(
+                    paramName,
+                    paramValue,
+                    optional,
+                    valueObject?.[valueKey],
+                    level,
+                );
+
                 break;
             }
             case "object": {
-                const li = document.createElement("li");
-                li.innerText = paramName;
-                const ul = this.objectToHTML(
-                    paramValue.field.fields,
-                    value,
-                    topLevel,
+                this.createUIForObject(
+                    paramName,
+                    paramValue.fields,
+                    optional,
+                    valueObject?.[valueKey],
+                    level,
                 );
-                li.appendChild(ul);
-                liSeq.push(li);
                 break;
             }
             default: {
-                if (paramValue.optional && value === undefined) {
-                    break;
-                }
-                const li = document.createElement("li");
-                this.scalarToHTML(
-                    li,
+                this.createUIForScalar(
                     paramName,
-                    paramValue.field,
-                    value,
-                    topLevel,
+                    paramValue,
+                    optional,
+                    valueObject,
+                    valueKey,
+                    level,
                 );
-                liSeq.push(li);
+
                 break;
             }
         }
-        return liSeq;
     }
 
-    private objectToHTML(
+    private createUIForObject(
+        paramName: string,
         fields: Record<string, TemplateParamFieldOpt>,
+        optional: boolean,
         value: unknown,
-        topLevel = false,
+        level = 0,
     ) {
-        const ul = document.createElement("ul");
+        const entries = Object.entries(fields);
+        if (entries.length === 0) {
+            return;
+        }
+
+        this.createRow(paramName, optional, undefined, "", level);
+        const missingOptionalFields: string[] = [];
         for (const [k, v] of Object.entries(fields)) {
             const fieldValue =
                 typeof value === "object" ? value?.[k] : undefined;
-            const innerLiSeq = this.paramToHTML(k, v, fieldValue, topLevel);
-            for (const innerLi of innerLiSeq) {
-                ul.appendChild(innerLi);
+            if (v.optional && fieldValue === undefined) {
+                missingOptionalFields.push(k);
+                break;
             }
+            this.createUIForField(
+                k,
+                v.field,
+                v.optional ?? false,
+                value,
+                k,
+                level + 1,
+            );
         }
-        return ul;
     }
 
-    public toHTML() {
+    private createTable() {
+        const actions = Array.isArray(this.current)
+            ? this.current
+            : [this.current];
+        this.clearTable();
+        for (let i = 0; i < this.actionTemplates.templates.length; i++) {
+            const actionTemplate = this.actionTemplates.templates[i];
+            const action = actions[i];
+            if (action === undefined) {
+                break;
+            }
+
+            this.createRow("Agent", false, actionTemplate, "agent", 0);
+            this.createRow("Action", false, actionTemplate, "name", 0);
+            this.createUIForObject(
+                "Parameters",
+                actionTemplate.parameterStructure.fields,
+                false,
+                action.parameters,
+            );
+        }
+
+        if (this.table.children.length !== 0) {
+            this.container.appendChild(this.table);
+        }
+    }
+    private clearTable() {
+        this.table.remove();
+        this.table.replaceChildren();
+    }
+
+    private createUI() {
         // for now assume a single action
-        const div = document.createElement("div");
-        let actions;
+        const div = this.container;
         if (
             this.actionTemplates.templates.length === 1 &&
             this.actionTemplates.prefaceSingle
@@ -148,7 +295,6 @@ export class ActionCascade {
             preface.className = "preface-text";
             preface.innerText = this.actionTemplates.prefaceSingle;
             div.appendChild(preface);
-            actions = [this.current];
         } else if (
             this.actionTemplates.templates.length > 1 &&
             this.actionTemplates.prefaceMultiple
@@ -157,51 +303,8 @@ export class ActionCascade {
             preface.className = "preface-text";
             preface.innerText = this.actionTemplates.prefaceMultiple;
             div.appendChild(preface);
-            actions = this.current;
         }
-        for (let i = 0; i < this.actionTemplates.templates.length; i++) {
-            const actionTemplate = this.actionTemplates.templates[i];
-            const action = actions[i];
-            if (action === undefined) {
-                break;
-            }
-            const agentDiv = document.createElement("div");
-            agentDiv.innerText = `Agent: ${actionTemplate.agent}`;
-            div.appendChild(agentDiv);
-            const actionDiv = document.createElement("div");
-            actionDiv.innerText = `Action: ${actionTemplate.name}`;
-            div.appendChild(actionDiv);
-            // now the parameters
-            const entries = Object.entries(
-                actionTemplate.parameterStructure.fields,
-            );
-            if (entries.length !== 0) {
-                const paramDiv = document.createElement("div");
-                paramDiv.innerText = "Parameters:";
-                const ul = this.objectToHTML(
-                    actionTemplate.parameterStructure.fields,
-                    action.parameters,
-                );
-                paramDiv.appendChild(ul);
-                div.appendChild(paramDiv);
-            }
-        }
-        if (this.editMode) {
-            // add a button to enter an additional action
-            const addButton = document.createElement("button");
-            addButton.innerText = "Add action";
-            addButton.onclick = () => {
-                console.log("add");
-            };
-            div.appendChild(addButton);
-            // add a button to submit the action
-            const submitButton = document.createElement("button");
-            submitButton.innerText = "Submit";
-            submitButton.onclick = () => {
-                console.log("submit");
-            };
-            div.appendChild(submitButton);
-        }
-        return div;
+
+        this.createTable();
     }
 }

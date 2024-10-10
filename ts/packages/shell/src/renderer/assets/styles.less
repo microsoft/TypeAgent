@@ -666,3 +666,18 @@ input[type="file"] {
 .notification-debug {
   color: pink;
 }
+
+.action-edit-button,
+.action-editing-button,
+.action-text-editable table.editing .action-edit-button,
+.action-text-editable tr.editing .action-edit-button {
+  visibility: hidden;
+}
+.action-text-editable .action-edit-button,
+.action-text-editable tr.editing .action-editing-button {
+  visibility: visible;
+}
+
+.action-text td.error {
+  color: red;
+}
