@@ -258,7 +258,7 @@ export async function runChatMemory(): Promise<void> {
         actions,
         searchQuery,
         search,
-        searchRaw,
+        searchV2,
         makeTestSet,
         runTestSet,
     };
@@ -957,31 +957,41 @@ export async function runChatMemory(): Promise<void> {
         await searchConversation(context.searcher, true, args);
     }
 
-    function searchRawDef(): CommandMetadata {
+    function searchV2Def(): CommandMetadata {
         return {
-            description: "Search raw",
+            description: "Search by terms V2",
             args: {
                 query: arg("Query to run"),
             },
-            options: {
-                v2: argBool("Run v2", true),
-            },
         };
     }
-    handlers.searchRaw.metadata = searchRawDef();
-    async function searchRaw(args: string[]): Promise<void> {
-        const namedArgs = parseNamedArguments(args, searchRawDef());
-        const result = namedArgs.v2
-            ? await context.searcher.actions.translateSearchTermsV2(
-                  namedArgs.query,
-              )
-            : await context.searcher.actions.translateSearchTerms(
-                  namedArgs.query,
-              );
-        if (result.success) {
-            printer.writeJson(result.data, true);
-        } else {
+    handlers.searchV2.metadata = searchV2Def();
+    async function searchV2(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, searchV2Def());
+        const result = await context.searcher.actions.translateSearchTermsV2(
+            namedArgs.query,
+        );
+        if (!result.success) {
             printer.writeError(result.message);
+            return;
+        }
+        printer.writeJson(result.data, true);
+        if (result.data.actionName !== "getAnswer") {
+            return;
+        }
+        const searchAction = <conversation.GetAnswerWithTermsActionV2>(
+            result.data
+        );
+        const actionIndex = await context.conversation.getActionIndex();
+        const options: conversation.ActionSearchOptions =
+            conversation.createDefaultActionSearchOption(true);
+        for (let f of searchAction.parameters.filters) {
+            const searchResult = await actionIndex.searchTermsV2(f, options);
+            if (!searchResult.actions) {
+                printer.writeLine("No matches");
+            } else {
+                printer.writeActions(searchResult.actions);
+            }
         }
     }
 

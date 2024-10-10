@@ -66,6 +66,20 @@ function createSearchResults<TActionId = any>(): ActionSearchResult<TActionId> {
     };
 }
 
+export function createDefaultActionSearchOption(
+    loadActions: boolean = false,
+): ActionSearchOptions {
+    return {
+        maxMatches: 2,
+        minScore: 0.8,
+        verbSearchOptions: {
+            maxMatches: 1,
+            minScore: 0.8,
+        },
+        loadActions,
+    };
+}
+
 export interface ActionIndex<TActionId = any, TSourceId = any>
     extends KnowledgeStore<ExtractedAction<TSourceId>, TActionId> {
     readonly verbIndex: TextIndex<TActionId>;
@@ -409,6 +423,7 @@ export async function createActionIndex<TSourceId = any>(
             filterType: "Action",
             verbFilter: {
                 verbs: filter.verbs,
+                verbTense: "past",
             },
             subjectEntityName: filter.subject ?? "none",
             objectEntityName: filter.object,

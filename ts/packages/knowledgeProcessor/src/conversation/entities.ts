@@ -42,6 +42,7 @@ import {
 import { toStopDate, toStartDate } from "./knowledgeActions.js";
 import { ConcreteEntity, Facet } from "./knowledgeSchema.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
+import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
 
 export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
     extends KnowledgeStore<ExtractedEntity<TSourceId>, TEntityId> {
@@ -64,6 +65,10 @@ export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
     ): Promise<EntitySearchResult<TEntityId>>;
     searchTerms(
         filter: TermFilter,
+        options: EntitySearchOptions,
+    ): Promise<EntitySearchResult<TEntityId>>;
+    searchTermsV2(
+        filter: TermFilterV2,
         options: EntitySearchOptions,
     ): Promise<EntitySearchResult<TEntityId>>;
     loadSourceIds(
@@ -128,6 +133,7 @@ export async function createEntityIndex<TSourceId = string>(
         addMultiple,
         search,
         searchTerms,
+        searchTermsV2,
         loadSourceIds,
     };
 
@@ -347,6 +353,64 @@ export async function createEntityIndex<TSourceId = string>(
         return results;
     }
 
+    async function searchTermsV2(
+        filter: TermFilterV2,
+        options: EntitySearchOptions,
+    ): Promise<EntitySearchResult<EntityId>> {
+        const results = createSearchResults();
+        if (filter.timeRange) {
+            results.temporalSequence =
+                await entityStore.sequence.getEntriesInRange(
+                    toStartDate(filter.timeRange.startDate),
+                    toStopDate(filter.timeRange.stopDate),
+                );
+        }
+
+        const terms = combineTermsV2(filter);
+        if (terms && terms.length > 0) {
+            const hitCounter = createFrequencyTable<EntityId>();
+            await Promise.all([
+                nameIndex.getNearestHitsMultiple(
+                    terms,
+                    hitCounter,
+                    options.nameSearchOptions?.maxMatches ?? options.maxMatches,
+                    options.nameSearchOptions?.minScore ?? options.minScore,
+                ),
+                typeIndex.getNearestHitsMultiple(
+                    terms,
+                    hitCounter,
+                    options.maxMatches,
+                    options.minScore,
+                ),
+                facetIndex.getNearestHitsMultiple(
+                    terms,
+                    hitCounter,
+                    options.maxMatches,
+                    options.minScore,
+                ),
+            ]);
+            const entityHits = hitCounter.getTopK(options.topK ?? 3);
+            results.entityIds = [
+                ...intersectMultiple(
+                    entityHits,
+                    itemsFromTemporalSequence(results.temporalSequence),
+                ),
+            ];
+        }
+        if (results.entityIds && results.temporalSequence) {
+            // The temporal sequence maintains all entity ids seen at a timestamp.
+            // Since we identified specific entity ids, we remove the other ones
+            results.temporalSequence = filterTemporalSequence(
+                results.temporalSequence,
+                results.entityIds,
+            );
+        }
+        if (options.loadEntities && results.entityIds) {
+            results.entities = await getEntities(results.entityIds);
+        }
+        return results;
+    }
+
     function combineTerms(filter: TermFilter): string[] {
         let terms: string[] | undefined;
         if (filter.verbs && filter.verbs.length > 0) {
@@ -357,6 +421,26 @@ export async function createEntityIndex<TSourceId = string>(
             }
         }
         return terms ?? filter.terms;
+    }
+
+    function combineTermsV2(filter: TermFilterV2): string[] {
+        let terms: string[] = [];
+        if (filter.action) {
+            terms.push(...filter.action.verbs);
+            if (filter.action.subject) {
+                terms.push(filter.action.subject);
+            }
+            if (filter.action.object) {
+                terms.push(filter.action.object);
+            }
+            if (filter.action.indirectObject) {
+                terms.push(filter.action.indirectObject);
+            }
+        }
+        if (filter.searchTerms && filter.searchTerms.length > 0) {
+            terms.push(...filter.searchTerms);
+        }
+        return terms;
     }
 
     async function loadSourceIds(

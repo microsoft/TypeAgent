@@ -7,6 +7,7 @@ import { DateTimeRange } from "./dateTimeSchema.js";
  Conversation memory is a sequence of messages between one or more users/speakers and assistants.
  The message sequence, and any entities, actions and topics in each message are indexed.
  */
+
 // Search terms are one of the following:
 // Entity Terms:
 // - the name of an entity or thing such as "Bach", "Great Gatsby", "frog" or "piano"
