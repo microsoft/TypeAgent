@@ -19,21 +19,24 @@ import { DateTimeRange } from "./dateTimeSchema.js";
 // - use empty term array for summaries
 export type SearchTerm = string;
 
+export type VerbsTerm = {
+    verbs: string[];
+    verbTense: "past" | "present" | "future";
+};
 // Action Terms:
 // - when user is querying an action
 // - verb, subject, object and indirectObject associated with the verb
 export type ActionTerm = {
-    verbs: string[]; // action verbs
-    verbTense: "past" | "present" | "future";
+    verbs?: VerbsTerm | undefined; // action verbs
     // - subject, object and indirectObject associated with the verb
     subject?: string | undefined;
     object?: string | undefined;
-    indirectObject?: string | undefined;
 };
 
 // Search indexes for following search terms: typically single word keywords.
 export type TermFilterV2 = {
     action?: ActionTerm;
+    // do not include terms already in action
     searchTerms?: SearchTerm[];
     // Use only if request explicitly asks for time range
     timeRange?: DateTimeRange | undefined; // in this time range

@@ -43,7 +43,6 @@ import { toStopDate, toStartDate } from "./knowledgeActions.js";
 import { ConcreteEntity, Facet } from "./knowledgeSchema.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
-import { getAllTermsInFilter } from "./searchProcessor.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
 
 export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
@@ -321,8 +320,10 @@ export async function createEntityIndex<TSourceId = string>(
         filter: TermFilterV2,
         options: EntitySearchOptions,
     ): Promise<EntitySearchResult<EntityId>> {
-        const terms = getAllTermsInFilter(filter);
-        return findEntities(terms, filter.timeRange, options);
+        if (filter.searchTerms && filter.searchTerms.length > 0) {
+            return findEntities(filter.searchTerms, filter.timeRange, options);
+        }
+        return createSearchResults();
     }
 
     async function findEntities(

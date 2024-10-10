@@ -64,6 +64,7 @@ import {
 } from "./actions.js";
 import { SearchTermsAction, TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
+import { getAllTermsInFilter } from "./searchProcessor.js";
 
 export interface RecentItems<T> {
     readonly entries: collections.CircularArray<T>;
@@ -422,7 +423,7 @@ export type ConversationSearchOptions = {
 };
 
 export function createConversationSearchOptions(
-    topLevelSummary: boolean,
+    topLevelSummary: boolean = false,
 ): ConversationSearchOptions {
     const topicLevel = topLevelSummary ? 2 : 1;
     const searchOptions: ConversationSearchOptions = {
@@ -457,7 +458,10 @@ export async function createConversation(
     type ActionId = string;
 
     settings.indexActions ??= true;
-
+    folderSettings ??= {
+        cacheNames: true,
+        useWeakRefs: true,
+    };
     const messages = await createTextStore(
         { concurrency: settings.indexSettings.concurrency },
         path.join(rootPath, "messages"),
@@ -859,17 +863,21 @@ export async function createConversation(
             getActionIndex(),
         ]);
         const results = createSearchResponse<MessageId, TopicId, EntityId>();
-        for (const filter of filters) {
+        for (let filter of filters) {
+            const actionResult = options.action
+                ? await actionIndex.searchTermsV2(filter, options.action)
+                : undefined;
+            if (!actionResult?.actionIds?.length) {
+                filter = {
+                    searchTerms: getAllTermsInFilter(filter),
+                };
+            }
             const tasks = [
                 topicIndex.searchTermsV2(filter, options.topic),
                 entityIndex.searchTermsV2(filter, options.entity),
             ];
-            if (options.action) {
-                tasks.push(actionIndex.searchTermsV2(filter, options.action));
-            }
             // Only search actions if (a) actions are enabled (b) we have an action filter
-            const [topicResult, entityResult, actionResult] =
-                await Promise.all(tasks);
+            const [topicResult, entityResult] = await Promise.all(tasks);
             results.topics.push(topicResult);
             results.entities.push(entityResult);
             if (actionResult) {

@@ -726,3 +726,24 @@ export async function createKnowledgeStore<T>(
         return id ? id : await entries.put(item, id);
     }
 }
+
+export interface TermMap {
+    get(term: string): string | undefined;
+    put(term: string, value: string): void;
+}
+
+export function createTermMap(caseSensitive: boolean = false) {
+    const map = new Map<string, string>();
+    return {
+        get(term: string) {
+            return map.get(prepareTerm(term));
+        },
+        put(term: string, value: string) {
+            map.set(prepareTerm(term), value);
+        },
+    };
+
+    function prepareTerm(term: string): string {
+        return caseSensitive ? term : term.toLowerCase();
+    }
+}

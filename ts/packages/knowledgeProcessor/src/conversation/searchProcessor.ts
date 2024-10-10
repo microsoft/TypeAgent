@@ -575,16 +575,16 @@ export function createSearchProcessor(
 
 export function getAllTermsInFilter(filter: TermFilterV2): string[] {
     let terms: string[] = [];
-    if (filter.action) {
-        terms.push(...filter.action.verbs);
-        if (filter.action.subject) {
-            terms.push(filter.action.subject);
+    const action = filter.action;
+    if (action) {
+        if (action.verbs) {
+            terms.push(...action.verbs.verbs);
         }
-        if (filter.action.object) {
-            terms.push(filter.action.object);
+        if (action.subject) {
+            terms.push(action.subject);
         }
-        if (filter.action.indirectObject) {
-            terms.push(filter.action.indirectObject);
+        if (action.object) {
+            terms.push(action.object);
         }
     }
     if (filter.searchTerms && filter.searchTerms.length > 0) {

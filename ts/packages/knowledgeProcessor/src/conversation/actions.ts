@@ -11,10 +11,12 @@ import {
 import {
     KeyValueIndex,
     KnowledgeStore,
+    TermMap,
     TextIndex,
     TextIndexSettings,
     createIndexFolder,
     createKnowledgeStore,
+    createTermMap,
     createTextIndex,
 } from "../knowledgeIndex.js";
 import { Action, VerbTense } from "./knowledgeSchema.js";
@@ -82,7 +84,7 @@ export function createActionSearchOptions(
 
 export interface ActionIndex<TActionId = any, TSourceId = any>
     extends KnowledgeStore<ExtractedAction<TSourceId>, TActionId> {
-    readonly verbIndex: TextIndex<TActionId>;
+    readonly verbTermMap: TermMap;
 
     addMultiple(
         items: ExtractedAction<TSourceId>[],
@@ -107,6 +109,8 @@ export interface ActionIndex<TActionId = any, TSourceId = any>
         results: ActionSearchResult<TActionId>[],
         unique?: Set<TSourceId>,
     ): Promise<Set<TSourceId> | undefined>;
+
+    getAllVerbs(): Promise<string[]>;
 }
 
 export async function createActionIndex<TSourceId = any>(
@@ -153,9 +157,10 @@ export async function createActionIndex<TSourceId = any>(
             fSys,
         ),
     ]);
+    const verbTermMap = createTermMap();
     return {
         ...actionStore,
-        verbIndex,
+        verbTermMap,
         add,
         addMultiple,
         getActions,
@@ -164,6 +169,8 @@ export async function createActionIndex<TSourceId = any>(
         searchTerms,
         searchTermsV2,
         loadSourceIds,
+
+        getAllVerbs,
     };
 
     async function add(
@@ -232,6 +239,10 @@ export async function createActionIndex<TSourceId = any>(
         );
     }
 
+    async function getAllVerbs(): Promise<string[]> {
+        return [...verbIndex.text()].sort();
+    }
+
     async function addVerb(
         action: Action,
         actionIds: ActionId[],
@@ -257,6 +268,7 @@ export async function createActionIndex<TSourceId = any>(
     async function search(
         filter: ActionFilter,
         options: ActionSearchOptions,
+        otherTerms?: string[] | undefined,
         timeRange?: DateTimeRange | undefined,
         searchResults?: ActionSearchResult<ActionId> | undefined,
     ): Promise<ActionSearchResult<ActionId>> {
@@ -271,6 +283,7 @@ export async function createActionIndex<TSourceId = any>(
             subjectToActionIds,
             objectToActionIds,
             indirectObjectToActionIds,
+            termsToActionIds,
             verbToActionIds,
         ] = await Promise.all([
             matchName(names, subjectIndex, filter.subjectEntityName, options),
@@ -281,6 +294,7 @@ export async function createActionIndex<TSourceId = any>(
                 filter.indirectObjectEntityName,
                 options,
             ),
+            matchTerms(names, indirectObjectIndex, otherTerms, options),
             matchVerbs(filter, options),
         ]);
         results.actionIds = [
@@ -289,6 +303,7 @@ export async function createActionIndex<TSourceId = any>(
                 subjectToActionIds,
                 objectToActionIds,
                 indirectObjectToActionIds,
+                termsToActionIds,
                 itemsFromTemporalSequence(results.temporalSequence),
             ),
         ];
@@ -358,46 +373,21 @@ export async function createActionIndex<TSourceId = any>(
         options: ActionSearchOptions,
     ): Promise<ActionSearchResult<ActionId>> {
         const results = createSearchResults<ActionId>();
+        if (!filter.action) {
+            return results;
+        }
         if (filter.timeRange) {
             results.temporalSequence = await matchTimeRange(filter.timeRange);
         }
 
-        if (filter.action) {
-            await searchVerbTerm(
-                filter.action,
-                filter.timeRange,
-                options,
-                results,
-            );
-        } else {
-            const names = await getNameIndex();
-            const [subjectToActionIds, objectToActionIds, indirectToActionIds] =
-                await Promise.all([
-                    matchTerms(
-                        names,
-                        subjectIndex,
-                        filter.searchTerms,
-                        options,
-                    ),
-                    matchTerms(names, objectIndex, filter.searchTerms, options),
-                    matchTerms(
-                        names,
-                        indirectObjectIndex,
-                        filter.searchTerms,
-                        options,
-                    ),
-                ]);
-            results.actionIds = [
-                ...intersectMultiple(
-                    intersectUnionMultiple(
-                        subjectToActionIds,
-                        objectToActionIds,
-                        indirectToActionIds,
-                    ),
-                    itemsFromTemporalSequence(results.temporalSequence),
-                ),
-            ];
-        }
+        await searchVerbTerm(
+            filter.action,
+            filter.searchTerms,
+            filter.timeRange,
+            options,
+            results,
+        );
+
         if (results.actionIds && results.temporalSequence) {
             // The temporal sequence maintains all entity ids seen at a timestamp.
             // Since we identified specific entity ids, we remove the other ones
@@ -414,22 +404,24 @@ export async function createActionIndex<TSourceId = any>(
     }
 
     async function searchVerbTerm(
-        filter: ActionTerm,
+        actionTerm: ActionTerm,
+        otherTerms: string[] | undefined,
         timeRange: DateTimeRange | undefined,
         options: ActionSearchOptions,
         results: ActionSearchResult<string>,
     ) {
         const actionFilter: ActionFilter = {
             filterType: "Action",
-            verbFilter: {
-                verbs: filter.verbs,
-                verbTense: filter.verbTense,
-            },
-            subjectEntityName: filter.subject ?? "none",
-            objectEntityName: filter.object,
-            indirectObjectEntityName: filter.indirectObject,
+            subjectEntityName: actionTerm.subject ?? "none",
+            objectEntityName: actionTerm.object,
         };
-        await search(actionFilter, options, timeRange, results);
+        if (actionTerm.verbs) {
+            actionFilter.verbFilter = {
+                verbs: actionTerm.verbs.verbs,
+                verbTense: actionTerm.verbs.verbTense,
+            };
+        }
+        await search(actionFilter, options, otherTerms, timeRange, results);
     }
 
     async function matchName(
@@ -497,6 +489,7 @@ export async function createActionIndex<TSourceId = any>(
         options: ActionSearchOptions,
     ): Promise<ActionId[] | undefined> {
         if (verbs && verbs.length > 0) {
+            verbs = mapVerbTerms(verbs);
             const verbOptions = options.verbSearchOptions ?? options;
             const matches = await verbIndex.getNearest(
                 actionVerbsToString(verbs, verbTense),
@@ -506,6 +499,10 @@ export async function createActionIndex<TSourceId = any>(
             return matches;
         }
         return undefined;
+    }
+
+    function mapVerbTerms(terms: string[]): string[] {
+        return terms.map((t) => verbTermMap.get(t) ?? t);
     }
 
     async function matchTimeRange(timeRange: DateTimeRange | undefined) {

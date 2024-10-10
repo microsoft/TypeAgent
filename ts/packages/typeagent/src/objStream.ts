@@ -66,7 +66,7 @@ export async function appendObjects<T>(
 }
 
 /**
- * Iteratively read objects from stream or file.
+ * Iteratively read objects from stream or file with JSON lines.
  * Objects are read in JSON line format and deserialized
  * @param output stream or file to read from
  * @returns: Asynchronous iterator over objects
@@ -130,7 +130,7 @@ export async function* readLines(
 }
 
 /**
- * Read all objects in a file or stream.
+ * Read all objects from a file or stream containing Json lines.
  * Each object is on its own JSON line
  * @param input stream or file to read
  * @returns array of objects
@@ -263,6 +263,12 @@ export async function readAllLines(
     return lines;
 }
 
+/**
+ * Write the given lines to a file
+ * @param lines
+ * @param filePath
+ * @param basePath
+ */
 export async function writeAllLines(
     lines: string[],
     filePath: string,
@@ -276,16 +282,16 @@ export async function writeAllLines(
 }
 
 /**
- * Read all JSON objects, stored as individual lines, in the given file.
+ * Read a JSON object from the given file.
  * @param filePath
  * @param validator
  * @returns
  */
 export async function readJsonFile<T>(
     filePath: string,
-    defaultValue?: T,
-    fSys?: FileSystem,
-    validator?: (obj: any) => T,
+    defaultValue?: T | undefined,
+    fSys?: FileSystem | undefined,
+    validator?: ((obj: any) => T) | undefined,
 ): Promise<T | undefined> {
     try {
         let json;
@@ -308,6 +314,13 @@ export async function readJsonFile<T>(
     return defaultValue ?? undefined;
 }
 
+/**
+ * Write a json object to a file
+ * @param filePath
+ * @param value
+ * @param fSys
+ * @returns
+ */
 export async function writeJsonFile(
     filePath: string,
     value: any,
@@ -317,6 +330,29 @@ export async function writeJsonFile(
     return fSys
         ? fSys.write(filePath, json)
         : fs.promises.writeFile(filePath, json);
+}
+
+export async function readMapFile<K, V>(
+    filePath: string,
+    fSys?: FileSystem,
+    validator?: (obj: any) => [[K, V]],
+): Promise<Map<K, V>> {
+    const entries = await readJsonFile<[[K, V]]>(
+        filePath,
+        undefined,
+        fSys,
+        validator,
+    );
+    return new Map<K, V>(entries);
+}
+
+export async function writeMapFile<K, V>(
+    filePath: string,
+    map: Map<K, V>,
+): Promise<void> {
+    // Convert the Map to an array of key-value pairs
+    const entries = Array.from(map.entries());
+    await writeJsonFile(filePath, entries);
 }
 
 /**

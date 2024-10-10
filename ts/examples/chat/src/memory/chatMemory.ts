@@ -101,14 +101,6 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         conversationPath,
         conversationSettings,
     );
-    const emailStorePath = path.join(
-        storePath,
-        ReservedConversationNames.outlook,
-    );
-    const emailConversation = await createConversation(
-        emailStorePath,
-        conversationSettings,
-    );
     const context: ChatContext = {
         storePath,
         chatModel,
@@ -129,12 +121,10 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         conversation,
         entityTopK: 16,
         searcher: createSearchProcessor(conversation, chatModel, true, 16),
-        emailMemory: await knowLib.conversation.createConversationManager(
+        emailMemory: await knowLib.email.createEmailMemory(
             ReservedConversationNames.outlook,
-            emailStorePath,
-            false,
-            emailConversation,
-            knowLib.email.createEmailTopicMerger(),
+            storePath,
+            conversationSettings,
         ),
     };
     context.searchMemory = await createSearchMemory(context);
@@ -818,7 +808,7 @@ export async function runChatMemory(): Promise<void> {
             if (verbs.length === 0) {
                 verbs = undefined;
             } else if (verbs[0] === "*") {
-                const allVerbs = [...index.verbIndex.text()].sort();
+                const allVerbs = await index.getAllVerbs();
                 printer.writeList(allVerbs, { type: "ul" });
                 return;
             }
@@ -982,7 +972,9 @@ export async function runChatMemory(): Promise<void> {
         const searchAction = <conversation.GetAnswerWithTermsActionV2>(
             result.data
         );
-        const options = conversation.createConversationSearchOptions(false);
+        const options = conversation.createConversationSearchOptions();
+        options.action!.loadActions = true;
+        options.action!.verbSearchOptions!.minScore = 0.7;
         const searchResponse = await context.conversation.searchTermsV2(
             searchAction.parameters.filters,
             options,

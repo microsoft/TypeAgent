@@ -15,8 +15,13 @@ import { TextBlock, TextBlockType } from "../text.js";
 import {
     ConversationManager,
     ConversationMessage,
+    createConversationManager,
 } from "../conversation/conversationManager.js";
 import { TopicMerger } from "../conversation/topics.js";
+import {
+    ConversationSettings,
+    createConversation,
+} from "../conversation/conversation.js";
 
 export function emailAddressToString(address: EmailAddress): string {
     if (address.displayName) {
@@ -146,14 +151,19 @@ export function emailToEntities(
     }
 }
 
+enum EmailVerbs {
+    send = "send",
+    receive = "receive",
+}
+
 function createEmailActions(
     sender: EmailAddress,
     recipient: EmailAddress,
     buffer?: Action[] | undefined,
 ): Action[] {
     const actions = buffer ?? [];
-    addAction("send", sender, recipient);
-    addAction("receive", recipient, sender);
+    addAction(EmailVerbs.send, sender, recipient);
+    addAction(EmailVerbs.receive, recipient, sender);
     return actions;
 
     function addAction(
@@ -253,6 +263,33 @@ export function createEmailTopicMerger(): TopicMerger {
     };
 }
 
+/**
+ * Create email memory at the given root path
+ * @param name
+ * @param rootPath
+ * @param settings
+ * @returns
+ */
+export async function createEmailMemory(
+    name: string,
+    rootPath: string,
+    settings: ConversationSettings,
+) {
+    const storePath = path.join(rootPath, name);
+    const emailConversation = await createConversation(settings, storePath);
+    const actions = await emailConversation.getActionIndex();
+    actions.verbTermMap.put("say", EmailVerbs.send);
+    actions.verbTermMap.put("discuss", EmailVerbs.send);
+    actions.verbTermMap.put("talk", EmailVerbs.send);
+
+    return createConversationManager(
+        name,
+        rootPath,
+        false,
+        emailConversation,
+        createEmailTopicMerger(),
+    );
+}
 /**
  * Add an email message to an email conversation
  * @param cm
