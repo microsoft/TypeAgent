@@ -9,6 +9,7 @@ import {
     printProcessRequestActionResult,
     Actions,
     HistoryContext,
+    JSONAction,
 } from "agent-cache";
 import {
     CommandHandlerContext,
@@ -32,7 +33,7 @@ import { loadAssistantSelectionJsonTranslator } from "../translation/unknownSwit
 import {
     MultipleAction,
     isMultipleAction,
-} from "../translation/systemActionsInlineSchema.js";
+} from "../translation/multipleActionSchema.js";
 import { makeRequestPromptCreator } from "./common/chatHistoryPrompt.js";
 import { MatchResult } from "../../../cache/dist/constructions/constructions.js";
 import registerDebug from "debug";
@@ -49,6 +50,7 @@ import {
     displayStatus,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
+import { DispatcherName } from "./common/interactiveIO.js";
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
@@ -99,42 +101,23 @@ async function confirmTranslation(
         prefaceMultiple,
         allActionInfo,
     );
-    systemContext.clientIO?.actionCommand(
-        templateSequence,
-        "register",
-        systemContext.requestId!,
-    );
-    const accept = await systemContext.requestIO.askYesNo("reserved", true);
-    if (accept) {
-        return { requestAction };
-    }
 
-    const searchMenuItems = Array.from(allActionInfo.values()).map(
-        (info) => info.item,
-    );
-    systemContext.clientIO?.searchMenuCommand(
-        "actions",
-        "register",
-        "",
-        searchMenuItems,
-        true,
-    );
-    const actionLegend = `Select the action you would like to run for this request ...`;
-    systemContext.clientIO?.searchMenuCommand(
-        "actions",
-        "legend",
-        actionLegend,
-    );
-    const answer = await systemContext.requestIO.question(actionLegend);
-    if (answer !== undefined) {
-        const actionInfo = allActionInfo.get(answer);
-        if (actionInfo && actionInfo.template) {
-            console.log(
-                `Selected action: ${actionInfo.template.agent}.${actionInfo.item.matchText}`,
-            );
-        }
-    }
-    return { requestAction: null };
+    // TODO: Need to validate
+    const newActions = (await systemContext.requestIO.proposeAction(
+        templateSequence,
+        DispatcherName,
+    )) as JSONAction | JSONAction[];
+
+    return newActions
+        ? {
+              requestAction: new RequestAction(
+                  requestAction.request,
+                  Actions.fromJSON(newActions),
+                  requestAction.history,
+              ),
+              replacedAction: actions,
+          }
+        : { requestAction };
 }
 
 async function getValidatedMatch(
@@ -715,6 +698,7 @@ export class RequestCommandHandler implements CommandHandler {
             request: {
                 description: "Request to translate",
                 implicitQuotes: true,
+                optional: true, // can be optional since the user can supply images and no text // TODO: revisit
             },
         },
     } as const;
@@ -729,7 +713,8 @@ export class RequestCommandHandler implements CommandHandler {
         );
         try {
             // Don't handle the request if it contains the separator
-            const request = params.args.request;
+            const request =
+                params.args.request === undefined ? "" : params.args.request;
             if (request.includes(RequestAction.Separator)) {
                 throw new Error(
                     `Invalid translation request with translation separator '${RequestAction.Separator}'.  Use @explain if you want to explain a translation.`,

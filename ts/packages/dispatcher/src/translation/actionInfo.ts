@@ -173,7 +173,7 @@ function getTemplateParamFieldType(
         default:
             console.log(`Unhandled type ${param.type}`);
     }
-    return { type: "string", value: "unhandled" };
+    return { type: "string" };
 }
 
 // assumes parser is open to the correct parameter object

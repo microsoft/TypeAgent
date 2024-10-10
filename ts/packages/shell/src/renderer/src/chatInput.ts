@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { _arrayBufferToBase64, ChatView, setContent } from "./chatView";
+import { _arrayBufferToBase64, ChatView } from "./chatView";
 import {
     iconMicrophone,
     iconMicrophoneListening,
@@ -11,6 +11,7 @@ import {
     iconSend,
 } from "./icon";
 import { getClientAPI } from "./main";
+import { setContent } from "./setContent";
 import { recognizeOnce } from "./speech";
 import { getSpeechToken } from "./speechToken";
 
@@ -137,6 +138,10 @@ export class ExpandableTextarea {
             }
         }
     }
+
+    public focus() {
+        setTimeout(() => this.textEntry.focus(), 0);
+    }
 }
 
 export function questionInput(
@@ -175,18 +180,17 @@ export function questionInput(
 }
 
 export class ChatInput {
-    inputContainer: HTMLDivElement;
+    private inputContainer: HTMLDivElement;
     textarea: ExpandableTextarea;
-    micButton: HTMLButtonElement;
+    private micButton: HTMLButtonElement;
     attachButton: HTMLLabelElement;
     camButton: HTMLButtonElement;
-    dragTemp: string | undefined = undefined;
-    fileInput: HTMLInputElement;
+    private dragTemp: string | undefined = undefined;
+    private fileInput: HTMLInputElement;
     public dragEnabled: boolean = true;
     sendButton: HTMLButtonElement;
-    separator: HTMLDivElement;
-    separatorContainer: HTMLDivElement;
-
+    private separator: HTMLDivElement;
+    private separatorContainer: HTMLDivElement;
     constructor(
         inputId: string,
         buttonId: string,
@@ -386,7 +390,7 @@ export class ChatInput {
                 this.textarea.getTextEntry().innerHTML.length == 0;
         }
 
-        this.textarea.getTextEntry().focus();
+        this.textarea.focus();
     }
 
     clear() {
@@ -396,5 +400,9 @@ export class ChatInput {
 
     getInputContainer() {
         return this.inputContainer;
+    }
+
+    public focus() {
+        this.textarea.focus();
     }
 }

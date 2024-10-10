@@ -29,6 +29,9 @@ import {
     ContextParams,
 } from "./agentProcessTypes.js";
 import { Action, JSONAction } from "agent-cache";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:agentProcess");
 
 const modulePath = process.argv[2];
 const module = await import(modulePath);
@@ -364,4 +367,10 @@ process.send!({
             (a === "closeAgentContext" &&
                 agent.initializeAgentContext !== undefined),
     ),
+});
+
+debug(`Agent process started: ${modulePath}`);
+process.on("disconnect", () => {
+    debug(`Parent process disconnected, exiting: ${modulePath}`);
+    process.exit(-1);
 });
