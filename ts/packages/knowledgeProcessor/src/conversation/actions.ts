@@ -423,7 +423,7 @@ export async function createActionIndex<TSourceId = any>(
             filterType: "Action",
             verbFilter: {
                 verbs: filter.verbs,
-                verbTense: "past",
+                verbTense: filter.verbTense,
             },
             subjectEntityName: filter.subject ?? "none",
             objectEntityName: filter.object,

@@ -23,7 +23,8 @@ export type SearchTerm = string;
 // - when user is querying an action
 // - verb, subject, object and indirectObject associated with the verb
 export type ActionTerm = {
-    verbs: string[]; // action verbs,
+    verbs: string[]; // action verbs
+    verbTense: "past" | "present" | "future";
     // - subject, object and indirectObject associated with the verb
     subject?: string | undefined;
     object?: string | undefined;
