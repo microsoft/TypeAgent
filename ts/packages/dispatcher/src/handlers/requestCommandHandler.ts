@@ -100,6 +100,7 @@ async function confirmTranslation(
         prefaceMultiple,
         allActionInfo,
     );
+
     const newActions = await systemContext.requestIO.proposeAction(
         templateSequence,
         DispatcherName,

@@ -268,54 +268,47 @@ export class Actions {
         prefaceMultiple: string,
         parameterStructures: Map<string, ActionInfo>,
     ): ActionTemplateSequence {
+        const templates: ActionTemplate[] = [];
         if (Array.isArray(this.actions)) {
-            const templates: ActionTemplate[] = [];
             for (const action of this.actions) {
                 const actionInfo = parameterStructures.get(
                     action.fullActionName,
                 );
-                if (actionInfo) {
-                    templates.push({
-                        parameterStructure: action.addValues(
-                            actionInfo.template!.parameterStructure,
-                        ),
-                        name: action.actionName,
-                        agent: action.translatorNameString,
-                    });
-                } else {
-                    console.log(
+                if (actionInfo === undefined) {
+                    throw new Error(
                         `Action ${action.fullActionName} not found in parameterStructures`,
                     );
                 }
+                templates.push({
+                    parameterStructure: action.addValues(
+                        actionInfo.template!.parameterStructure,
+                    ),
+                    name: action.actionName,
+                    agent: action.translatorNameString,
+                });
             }
         } else {
             const actionInfo = parameterStructures.get(
                 this.actions.fullActionName,
             );
-            if (actionInfo) {
-                return {
-                    prefaceSingle,
-                    prefaceMultiple,
-                    templates: [
-                        {
-                            parameterStructure: this.actions.addValues(
-                                actionInfo.template!.parameterStructure,
-                            ),
-                            name: this.actions.actionName,
-                            agent: this.actions.translatorNameString,
-                        },
-                    ],
-                };
-            } else {
-                console.log(
+            if (actionInfo === undefined) {
+                throw new Error(
                     `Action ${this.actions.fullActionName} not found in parameterStructures`,
                 );
             }
+            templates.push({
+                parameterStructure: this.actions.addValues(
+                    actionInfo.template!.parameterStructure,
+                ),
+                name: this.actions.actionName,
+                agent: this.actions.translatorNameString,
+            });
         }
         return {
             prefaceSingle,
             prefaceMultiple,
-            templates: [],
+            actions: this.toJSON(),
+            templates,
         };
     }
 

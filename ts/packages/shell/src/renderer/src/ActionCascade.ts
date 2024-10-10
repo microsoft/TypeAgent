@@ -10,42 +10,48 @@ import {
 import { iconX } from "./icon";
 
 export class ActionCascade {
+    private current: any;
     constructor(
-        public actionTemplates: ActionTemplateSequence,
+        private actionTemplates: ActionTemplateSequence,
         public editMode = false,
-    ) {}
+    ) {
+        this.current = structuredClone(actionTemplates.actions);
+    }
 
     private scalarToHTML(
         li: HTMLLIElement,
         paramName: string,
         paramValue: TemplateParamScalar,
+        value: any,
         topLevel = false,
     ) {
-        if (this.editMode) {
-            if (topLevel) {
-                // TODO: make width dynamic
-                const cancelButton = iconX();
-                cancelButton.onclick = () => {
-                    console.log("cancel");
-                };
-                li.appendChild(cancelButton);
-            }
-            const label = document.createElement("label");
-            label.innerText = paramName;
-            li.appendChild(label);
-            const input = document.createElement("input");
-            input.type = "text";
-            input.name = paramName;
-            input.value = paramValue.value?.toString() || "";
-            li.appendChild(input);
-        } else {
+        // TODO: show mismatched type
+        if (!this.editMode) {
             li.innerText = `${paramName}: ${paramValue.value}`;
+            return;
         }
+        if (topLevel) {
+            // TODO: make width dynamic
+            const cancelButton = iconX();
+            cancelButton.onclick = () => {
+                console.log("cancel");
+            };
+            li.appendChild(cancelButton);
+        }
+        const label = document.createElement("label");
+        label.innerText = paramName;
+        li.appendChild(label);
+        const input = document.createElement("input");
+        input.type = "text";
+        input.name = paramName;
+        input.value = value;
+        li.appendChild(input);
     }
 
     private paramToHTML(
         paramName: string,
         paramValue: TemplateParamFieldOpt,
+        value: unknown,
         topLevel = false,
     ) {
         const liSeq: HTMLLIElement[] = [];
@@ -57,9 +63,13 @@ export class ActionCascade {
                         const arrayKey = paramName
                             ? `${paramName}[${i}]`
                             : i.toString();
-                        const innerSeq = this.paramToHTML(arrayKey, {
-                            field: paramValue.field.elements[i],
-                        } as TemplateParamFieldOpt);
+                        const innerSeq = this.paramToHTML(
+                            arrayKey,
+                            {
+                                field: paramValue.field.elements[i],
+                            } as TemplateParamFieldOpt,
+                            value?.[i],
+                        );
                         for (const elt of innerSeq) {
                             liSeq.push(elt);
                         }
@@ -81,22 +91,27 @@ export class ActionCascade {
             case "object": {
                 const li = document.createElement("li");
                 li.innerText = paramName;
-                const ul = document.createElement("ul");
-                const fields = paramValue.field.fields;
-                for (const [k, v] of Object.entries(fields)) {
-                    const innerLiSeq = this.paramToHTML(k, v);
-                    for (const innerLi of innerLiSeq) {
-                        ul.appendChild(innerLi);
-                    }
-                }
+                const ul = this.objectToHTML(
+                    paramValue.field.fields,
+                    value,
+                    topLevel,
+                );
                 li.appendChild(ul);
                 liSeq.push(li);
                 break;
             }
             default: {
-                // TODO: handle input case and undefined value
+                if (paramValue.optional && value === undefined) {
+                    break;
+                }
                 const li = document.createElement("li");
-                this.scalarToHTML(li, paramName, paramValue.field, topLevel);
+                this.scalarToHTML(
+                    li,
+                    paramName,
+                    paramValue.field,
+                    value,
+                    topLevel,
+                );
                 liSeq.push(li);
                 break;
             }
@@ -104,9 +119,27 @@ export class ActionCascade {
         return liSeq;
     }
 
+    private objectToHTML(
+        fields: Record<string, TemplateParamFieldOpt>,
+        value: unknown,
+        topLevel = false,
+    ) {
+        const ul = document.createElement("ul");
+        for (const [k, v] of Object.entries(fields)) {
+            const fieldValue =
+                typeof value === "object" ? value?.[k] : undefined;
+            const innerLiSeq = this.paramToHTML(k, v, fieldValue, topLevel);
+            for (const innerLi of innerLiSeq) {
+                ul.appendChild(innerLi);
+            }
+        }
+        return ul;
+    }
+
     public toHTML() {
         // for now assume a single action
         const div = document.createElement("div");
+        let actions;
         if (
             this.actionTemplates.templates.length === 1 &&
             this.actionTemplates.prefaceSingle
@@ -115,6 +148,7 @@ export class ActionCascade {
             preface.className = "preface-text";
             preface.innerText = this.actionTemplates.prefaceSingle;
             div.appendChild(preface);
+            actions = [this.current];
         } else if (
             this.actionTemplates.templates.length > 1 &&
             this.actionTemplates.prefaceMultiple
@@ -123,8 +157,14 @@ export class ActionCascade {
             preface.className = "preface-text";
             preface.innerText = this.actionTemplates.prefaceMultiple;
             div.appendChild(preface);
+            actions = this.current;
         }
-        for (const actionTemplate of this.actionTemplates.templates) {
+        for (let i = 0; i < this.actionTemplates.templates.length; i++) {
+            const actionTemplate = this.actionTemplates.templates[i];
+            const action = actions[i];
+            if (action === undefined) {
+                break;
+            }
             const agentDiv = document.createElement("div");
             agentDiv.innerText = `Agent: ${actionTemplate.agent}`;
             div.appendChild(agentDiv);
@@ -138,14 +178,10 @@ export class ActionCascade {
             if (entries.length !== 0) {
                 const paramDiv = document.createElement("div");
                 paramDiv.innerText = "Parameters:";
-                const ul = document.createElement("ul");
-                // TODO: split the entries by optional and required
-                for (const [key, value] of entries.sort()) {
-                    const liSeq = this.paramToHTML(key, value, true);
-                    for (const li of liSeq) {
-                        ul.appendChild(li);
-                    }
-                }
+                const ul = this.objectToHTML(
+                    actionTemplate.parameterStructure.fields,
+                    action.parameters,
+                );
                 paramDiv.appendChild(ul);
                 div.appendChild(paramDiv);
             }

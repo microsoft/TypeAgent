@@ -264,7 +264,11 @@ export class MessageContainer {
             }
 
             actionContainer.innerHTML = "";
-            const actionCascade = new ActionCascade(actionTemplates, true);
+            const actionCascade = new ActionCascade(
+                actionTemplates,
+
+                true,
+            );
             const actionDiv = actionCascade.toHTML();
             actionDiv.className = "action-text";
             this.messageDiv.appendChild(actionDiv);
