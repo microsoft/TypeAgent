@@ -248,7 +248,7 @@ export async function runChatMemory(): Promise<void> {
         actions,
         searchQuery,
         search,
-        searchV2,
+        searchV2Debug,
         makeTestSet,
         runTestSet,
     };
@@ -859,6 +859,7 @@ export async function runChatMemory(): Promise<void> {
                 eval: argBool("Evaluate search query", true),
                 debug: argBool("Show debug info", true),
                 save: argBool("Save the search", true),
+                v2: argBool("Run V2 match", false),
             },
         };
     }
@@ -941,7 +942,7 @@ export async function runChatMemory(): Promise<void> {
         await searchConversation(context.searcher, true, args);
     }
 
-    function searchV2Def(): CommandMetadata {
+    function searchV2DebugDef(): CommandMetadata {
         return {
             description: "Search by terms V2",
             args: {
@@ -949,9 +950,9 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.searchV2.metadata = searchV2Def();
-    async function searchV2(args: string[]): Promise<void> {
-        const namedArgs = parseNamedArguments(args, searchV2Def());
+    handlers.searchV2Debug.metadata = searchV2DebugDef();
+    async function searchV2Debug(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, searchV2DebugDef());
         const result = await context.searcher.actions.translateSearchTermsV2(
             namedArgs.query,
         );
@@ -960,23 +961,12 @@ export async function runChatMemory(): Promise<void> {
             return;
         }
         printer.writeJson(result.data, true);
-        if (result.data.actionName !== "getAnswer") {
-            return;
+        if (result.data.actionName === "getAnswer") {
+            const searchResponse = await context.conversation.searchTermsV2(
+                result.data.parameters.filters,
+            );
+            printer.writeSearchResponse(searchResponse);
         }
-        const searchAction = <conversation.GetAnswerWithTermsActionV2>(
-            result.data
-        );
-        const options = conversation.createConversationSearchOptions();
-        options.action!.loadActions = true;
-        const searchResponse = await context.conversation.searchTermsV2(
-            searchAction.parameters.filters,
-            options,
-        );
-        printer.writeTopics([...searchResponse.allTopics()]);
-        printer.writeCompositeEntities(
-            searchResponse.mergeAllEntities(Number.MAX_SAFE_INTEGER),
-        );
-        printer.writeActions([...searchResponse.allActions()]);
     }
 
     async function searchNoEval(
@@ -1071,7 +1061,6 @@ export async function runChatMemory(): Promise<void> {
         recordAnswer: boolean,
         args: string[],
     ): Promise<void> {
-        const timestampQ = new Date();
         const namedArgs = parseNamedArguments(args, searchDef());
         const maxMatches = namedArgs.maxMatches;
         const minScore = namedArgs.minScore;
@@ -1100,11 +1089,24 @@ export async function runChatMemory(): Promise<void> {
             return;
         }
 
-        const result = await searcher.searchTerms(
-            query,
-            undefined,
-            searchOptions,
-        );
+        const timestampQ = new Date();
+        let result:
+            | conversation.SearchTermsActionResponse
+            | conversation.SearchTermsActionResponseV2
+            | undefined;
+        if (namedArgs.v2) {
+            result = await searcher.searchTermsV2(
+                query,
+                undefined,
+                searchOptions,
+            );
+        } else {
+            result = await searcher.searchTerms(
+                query,
+                undefined,
+                searchOptions,
+            );
+        }
         if (!result) {
             printer.writeError("No result");
             return;
@@ -1124,7 +1126,9 @@ export async function runChatMemory(): Promise<void> {
     }
 
     async function writeSearchTermsResult(
-        result: conversation.SearchTermsActionResponse,
+        result:
+            | conversation.SearchTermsActionResponse
+            | conversation.SearchTermsActionResponseV2,
         stats: boolean,
     ) {
         if (result.response && result.response.answer) {
@@ -1274,7 +1278,9 @@ export async function runChatMemory(): Promise<void> {
                 const topicIds = new Set(response.allTopicIds());
                 printer.writeLine(`Topic Hit Count: ${topicIds.size}`);
             }
-            const allEntities = response.mergeAllEntities(16);
+            const allEntities = response.getCompositeEntities(
+                context.searcher.answers.settings.topKEntities,
+            );
             if (allEntities && allEntities.length > 0) {
                 printer.writeLine(`Entity Hit Count: ${allEntities.length}`);
             } else {
@@ -1552,7 +1558,7 @@ export async function runChatMemory(): Promise<void> {
         showMessages: boolean,
     ) {
         if (!logMode) {
-            const entities = response.mergeAllEntities(3);
+            const entities = response.getCompositeEntities(3);
             if (entities.length > 0) {
                 printer.writeListInColor(
                     chalk.green,

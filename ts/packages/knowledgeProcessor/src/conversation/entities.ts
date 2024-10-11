@@ -87,13 +87,15 @@ export interface EntitySearchOptions extends SearchOptions {
     topK?: number;
 }
 
-export function createEntitySearchOptions(): EntitySearchOptions {
+export function createEntitySearchOptions(
+    loadEntities: boolean = true,
+): EntitySearchOptions {
     return {
         maxMatches: 2,
         minScore: 0.8,
         matchNameToType: true,
         combinationSetOp: SetOp.IntersectUnion,
-        loadEntities: true,
+        loadEntities,
     };
 }
 

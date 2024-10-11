@@ -63,7 +63,10 @@ import {
     createActionSearchOptions,
 } from "./actions.js";
 import { SearchTermsAction, TermFilter } from "./knowledgeTermSearchSchema.js";
-import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
+import {
+    SearchTermsActionV2,
+    TermFilterV2,
+} from "./knowledgeTermSearchSchema2.js";
 import { getAllTermsInFilter } from "./searchProcessor.js";
 
 export interface RecentItems<T> {
@@ -165,7 +168,7 @@ export interface Conversation<
     ): Promise<SearchResponse>;
     searchTermsV2(
         filters: TermFilterV2[],
-        options: ConversationSearchOptions,
+        options?: ConversationSearchOptions | undefined,
     ): Promise<SearchResponse>;
     searchMessages(
         query: string,
@@ -224,7 +227,7 @@ export interface SearchResponse<
     allEntities(): IterableIterator<ConcreteEntity>;
     allEntityIds(): IterableIterator<TEntityId>;
     allEntityNames(): string[];
-    mergeAllEntities(topK: number): CompositeEntity[];
+    getCompositeEntities(topK: number): CompositeEntity[];
     entityTimeRanges(): (dateTime.DateRange | undefined)[];
 
     allActions(): IterableIterator<Action>;
@@ -257,7 +260,7 @@ export function createSearchResponse<
             allEntities,
             allEntityIds,
             allEntityNames,
-            mergeAllEntities,
+            getCompositeEntities: mergeAllEntities,
             entityTimeRanges,
             allActions,
             allActionIds,
@@ -427,9 +430,9 @@ export function createConversationSearchOptions(
 ): ConversationSearchOptions {
     const topicLevel = topLevelSummary ? 2 : 1;
     const searchOptions: ConversationSearchOptions = {
-        entity: createEntitySearchOptions(),
+        entity: createEntitySearchOptions(true),
         topic: createTopicSearchOptions(topLevelSummary),
-        action: createActionSearchOptions(false),
+        action: createActionSearchOptions(true),
         topicLevel,
         loadMessages: !topLevelSummary,
     };
@@ -855,8 +858,9 @@ export async function createConversation(
 
     async function searchTermsV2(
         filters: TermFilterV2[],
-        options: ConversationSearchOptions,
+        searchOptions?: ConversationSearchOptions | undefined,
     ): Promise<SearchResponse> {
+        const options = searchOptions ?? createConversationSearchOptions();
         const [entityIndex, topicIndex, actionIndex] = await Promise.all([
             getEntityIndex(),
             getTopicsIndex(options.topicLevel),
@@ -1048,5 +1052,10 @@ export type SearchActionResponse = {
 
 export type SearchTermsActionResponse = {
     action: SearchTermsAction;
+    response?: SearchResponse | undefined;
+};
+
+export type SearchTermsActionResponseV2 = {
+    action: SearchTermsActionV2;
     response?: SearchResponse | undefined;
 };

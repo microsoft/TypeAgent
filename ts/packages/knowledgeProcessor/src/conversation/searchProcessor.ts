@@ -8,6 +8,7 @@ import {
     SearchActionResponse,
     SearchResponse,
     SearchTermsActionResponse,
+    SearchTermsActionResponseV2,
     createSearchResponse,
 } from "./conversation.js";
 import {
@@ -36,6 +37,7 @@ import {
 } from "./knowledgeTermSearchSchema.js";
 import {
     GetAnswerWithTermsActionV2,
+    SearchTermsActionV2,
     TermFilterV2,
 } from "./knowledgeTermSearchSchema2.js";
 
@@ -63,11 +65,11 @@ export interface ConversationSearchProcessor {
         filters: TermFilter[] | undefined,
         options: SearchProcessingOptions,
     ): Promise<SearchTermsActionResponse | undefined>;
-    handleGetAnswersTermsV2(
+    searchTermsV2(
         query: string,
-        action: GetAnswerWithTermsActionV2,
+        filters: TermFilterV2[] | undefined,
         options: SearchProcessingOptions,
-    ): Promise<SearchResponse>;
+    ): Promise<SearchTermsActionResponseV2 | undefined>;
     /**
      * Generate an answer using a prior search response
      * @param searchResponse
@@ -104,7 +106,7 @@ export function createSearchProcessor(
         answers,
         search,
         searchTerms,
-        handleGetAnswersTermsV2,
+        searchTermsV2,
         buildContext,
         generateAnswer,
     };
@@ -175,6 +177,48 @@ export function createSearchProcessor(
         };
         if (rr.action.actionName !== "unknown") {
             rr.response = await handleGetAnswersTerms(
+                query,
+                rr.action,
+                options,
+            );
+        }
+        return rr;
+    }
+
+    async function searchTermsV2(
+        query: string,
+        filters: TermFilterV2[] | undefined,
+        options: SearchProcessingOptions,
+    ): Promise<SearchTermsActionResponseV2 | undefined> {
+        const context = await buildContext();
+        let action: SearchTermsActionV2 | undefined;
+        if (filters && filters.length > 0) {
+            // Filters already provided
+            action = {
+                actionName: "getAnswer",
+                parameters: {
+                    filters,
+                },
+            };
+        } else {
+            const actionResult = await searchTranslator.translateSearchTermsV2(
+                query,
+                context,
+            );
+            if (!actionResult.success) {
+                return undefined;
+            }
+            action = actionResult.data;
+        }
+
+        if (options.progress) {
+            options.progress(action);
+        }
+        const rr: SearchTermsActionResponseV2 = {
+            action,
+        };
+        if (rr.action.actionName !== "unknown") {
+            rr.response = await handleGetAnswersTermsV2(
                 query,
                 rr.action,
                 options,

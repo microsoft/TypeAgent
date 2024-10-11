@@ -179,4 +179,12 @@ export class ChatMemoryPrinter extends ChatPrinter {
             this.writeLine();
         }
     }
+
+    public writeSearchResponse(response: conversation.SearchResponse) {
+        this.writeTopics([...response.allTopics()]);
+        this.writeCompositeEntities(
+            response.getCompositeEntities(Number.MAX_SAFE_INTEGER),
+        );
+        this.writeActions([...response.allActions()]);
+    }
 }
