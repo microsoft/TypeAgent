@@ -169,7 +169,9 @@ const clientIO: ClientIO = {
       }
     }));
   },
-  askYesNo: (message, requestId, defaultValue?): Promise<boolean> => {return new Promise<boolean>((resolve)=>{});},
+  askYesNo: (message, requestId, defaultValue?): Promise<boolean> => {
+    return new Promise<boolean>((resolve)=>{});
+  },
   question: (): Promise<string> => { return new Promise<string>((resolve) => {});},
   proposeAction: (actionTemplates, requestId, source): Promise<unknown> => {return new Promise<unknown>((resolve) => {});},
   notify(event: string, requestId: RequestId, data: any, source: string) {
