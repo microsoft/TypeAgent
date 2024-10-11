@@ -216,14 +216,15 @@ export class MessageContainer {
 
     public addChoicePanel(
         choices: InputChoice[],
-        onSelected: (choice: InputChoice) => void,
+        onSelected: (choice: InputChoice) => boolean | void,
     ) {
         const choicePanel = new ChoicePanel(
             this.messageDiv,
             choices,
             (choice: InputChoice) => {
-                choicePanel.remove();
-                onSelected(choice);
+                if (onSelected(choice) !== false) {
+                    choicePanel.remove();
+                }
             },
         );
     }
@@ -282,15 +283,20 @@ export class MessageContainer {
             ];
             this.addChoicePanel(choices, (choice: InputChoice) => {
                 if (choice.value === true) {
+                    if (actionCascade.hasErrors) {
+                        return false;
+                    }
                     actionContainer.remove();
                     getClientAPI().sendProposedAction(
                         proposeActionId,
                         actionCascade.value,
                     );
+                } else {
+                    actionCascade.reset();
+                    actionCascade.setEditMode(false);
+                    confirm();
                 }
-                actionCascade.reset();
-                actionCascade.setEditMode(false);
-                confirm();
+                return true;
             });
         };
 

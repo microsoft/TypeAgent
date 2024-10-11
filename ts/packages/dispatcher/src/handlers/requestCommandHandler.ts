@@ -9,7 +9,7 @@ import {
     printProcessRequestActionResult,
     Actions,
     HistoryContext,
-    JSONAction,
+    FullAction,
 } from "agent-cache";
 import {
     CommandHandlerContext,
@@ -106,13 +106,13 @@ async function confirmTranslation(
     const newActions = (await systemContext.requestIO.proposeAction(
         templateSequence,
         DispatcherName,
-    )) as JSONAction | JSONAction[];
+    )) as FullAction[] | undefined;
 
     return newActions
         ? {
               requestAction: new RequestAction(
                   requestAction.request,
-                  Actions.fromJSON(newActions),
+                  Actions.fromFullActions(newActions),
                   requestAction.history,
               ),
               replacedAction: actions,

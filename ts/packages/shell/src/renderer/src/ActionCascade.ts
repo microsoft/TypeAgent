@@ -7,11 +7,49 @@ import {
     TemplateParamFieldOpt,
     TemplateParamScalar,
 } from "../../preload/electronTypes";
+
+function isValidValue(paramField: TemplateParamScalar, value: any) {
+    return paramField.type === "string-union"
+        ? paramField.typeEnum.includes(value)
+        : typeof value === paramField.type;
+}
+function toValueType(paramField: TemplateParamScalar, value: string) {
+    switch (paramField.type) {
+        case "string":
+            return value;
+        case "string-union":
+            return paramField.typeEnum.includes(value) ? value : undefined;
+        case "number":
+            const mayBeInt = parseInt(value);
+            return mayBeInt.toString() === value ? mayBeInt : undefined;
+
+        case "boolean":
+            return value === "true"
+                ? true
+                : value === "false"
+                  ? false
+                  : undefined;
+    }
+}
+
+// Track hierarchy of fields for delete
+type FieldGroup = {
+    row: HTMLTableRowElement;
+    fields: FieldGroup[];
+};
+
+function removeFieldGroup(fieldGroup: FieldGroup) {
+    fieldGroup.fields.forEach((f) => removeFieldGroup(f));
+    fieldGroup.row.remove();
+}
+
 export class ActionCascade {
     private readonly container: HTMLDivElement;
     private readonly table: HTMLTableElement;
     private current: any;
     private editMode = false;
+
+    private errorCount = 0;
     constructor(
         appendTo: HTMLElement,
         private actionTemplates: ActionTemplateSequence,
@@ -30,8 +68,14 @@ export class ActionCascade {
         return this.current;
     }
 
+    public get hasErrors() {
+        return this.errorCount !== 0;
+    }
+
     public reset() {
         this.current = structuredClone(this.actionTemplates.actions);
+        this.table.classList.remove("editing");
+        this.errorCount = 0;
         this.createTable();
     }
 
@@ -56,184 +100,207 @@ export class ActionCascade {
     public remove() {
         this.container.remove();
     }
-
-    private createUIForScalar(
+    private createFieldGroup(
         paramName: string,
-        paramValue: TemplateParamScalar,
-        optional: boolean,
-        valueObject: unknown,
-        valueKey: string | number,
-        level: number,
-    ) {
-        const value = valueObject?.[valueKey];
-        // TODO: show mismatched type
-        if (typeof value !== paramValue.type) {
-            console.log(`Mismatched type: ${paramName}`);
+        valueDisplay: string | undefined,
+        optional: boolean = false,
+        level: number = 0,
+        parent?: FieldGroup,
+    ): FieldGroup | undefined {
+        if (valueDisplay === undefined && optional) {
+            return undefined;
         }
-        this.createRow(paramName, optional, valueObject, valueKey, level, true);
-    }
-
-    private createRow(
-        paramName: string,
-        optional: boolean,
-        valueObject: unknown,
-        valueKey: string | number,
-        level: number,
-        editable: boolean = false,
-    ) {
         const row = this.table.insertRow();
+        const fieldGroup: FieldGroup = { row, fields: [] };
         const nameCell = row.insertCell();
         nameCell.style.paddingLeft = `${level * 20}px`;
         nameCell.innerText = paramName;
+        nameCell.className = "name-cell";
 
-        const getValue = () => {
-            const value = valueObject?.[valueKey];
-            if (value !== undefined && typeof value !== "object") {
-                return value;
-            }
-            return "";
-        };
         const valueCell = row.insertCell();
-        valueCell.innerText = getValue();
+        valueCell.innerText = valueDisplay ?? "";
+        valueCell.className = "value-cell";
 
-        if (this.enableEdit && editable) {
-            const input = document.createElement("input");
-            input.type = "text";
-
-            const editCell = row.insertCell();
-            const editButton = document.createElement("button");
-            editButton.innerText = "✏️";
-            editButton.className = "action-edit-button";
-            editButton.onclick = () => {
-                this.table.classList.add("editing");
-                row.classList.add("editing");
-                input.value = valueCell.innerText;
-                valueCell.replaceChildren(input);
-                input.focus();
-            };
-            editCell.appendChild(editButton);
-
-            const optionalCell = row.insertCell();
+        if (this.enableEdit) {
+            const optionCell = row.insertCell();
+            optionCell.className = "button-cell";
             if (optional) {
                 const optionalButton = document.createElement("button");
                 optionalButton.innerText = "❌";
                 optionalButton.className = "action-edit-button";
                 optionalButton.onclick = () => {
-                    row.remove();
+                    removeFieldGroup(fieldGroup);
                 };
-                optionalCell.appendChild(optionalButton);
+                optionCell.appendChild(optionalButton);
+            }
+        }
+        parent?.fields.push(fieldGroup);
+        return fieldGroup;
+    }
+
+    private createUIForScalar(
+        fullPropertyName: string,
+        paramName: string,
+        paramField: TemplateParamScalar,
+        optional: boolean,
+        level: number,
+        parent: FieldGroup,
+    ) {
+        const value = this.getProperty(fullPropertyName);
+        const valueStr = isValidValue(paramField, value)
+            ? value.toString()
+            : undefined;
+        const fieldGroup = this.createFieldGroup(
+            paramName,
+            valueStr,
+            optional,
+            level,
+            parent,
+        );
+        if (fieldGroup === undefined) {
+            return;
+        }
+        const valueCell = fieldGroup.row.cells[1];
+        let currentValid = true;
+        const setValueValid = (valid: boolean) => {
+            if (valid === currentValid) {
+                return;
             }
 
-            const saveCell = row.insertCell();
-            const saveButton = document.createElement("button");
-            saveButton.innerText = "💾";
-            saveButton.className = "action-editing-button";
-            saveButton.onclick = () => {
-                this.table.classList.remove("editing");
-                row.classList.remove("editing");
-                if (typeof valueObject === "object") {
-                    valueObject![valueKey] = input.value;
-                }
-                valueCell.innerText = getValue();
-            };
-            saveCell.appendChild(saveButton);
+            if (valid) {
+                this.errorCount--;
+                fieldGroup.row.classList.remove("error");
+            } else {
+                this.errorCount++;
+                fieldGroup.row.classList.add("error");
+            }
+            currentValid = valid;
+        };
 
-            const cancelCell = row.insertCell();
-            const cancelButton = document.createElement("button");
-            cancelButton.innerText = "🛇";
-            cancelButton.className = "action-editing-button";
-            cancelButton.onclick = () => {
-                this.table.classList.remove("editing");
-                row.classList.remove("editing");
-                valueCell.innerText = getValue();
-            };
-            cancelCell.appendChild(cancelButton);
+        setValueValid(valueStr !== undefined);
+
+        if (this.enableEdit) {
+            const row = fieldGroup.row;
+            const input = document.createElement("input");
+            input.type = "text";
+            if (fullPropertyName !== undefined) {
+                const editCell = row.insertCell();
+                editCell.className = "button-cell";
+                const editButton = document.createElement("button");
+                editButton.innerText = "✏️";
+                editButton.className = "action-edit-button";
+                editButton.onclick = () => {
+                    this.table.classList.add("editing");
+                    row.classList.add("editing");
+                    input.value = valueCell.innerText;
+                    valueCell.replaceChildren(input);
+                    input.focus();
+                };
+                editCell.appendChild(editButton);
+
+                const saveCell = row.insertCell();
+                saveCell.className = "button-cell";
+                const saveButton = document.createElement("button");
+                saveButton.innerText = "💾";
+                saveButton.className = "action-editing-button";
+                saveButton.onclick = () => {
+                    const newValue = toValueType(paramField, input.value);
+                    if (newValue === undefined) {
+                        setValueValid(false);
+                        return;
+                    }
+
+                    setValueValid(true);
+                    this.table.classList.remove("editing");
+                    row.classList.remove("editing");
+                    this.setProperty(fullPropertyName, newValue);
+                    valueCell.innerText = input.value;
+                };
+                saveCell.appendChild(saveButton);
+
+                const cancelCell = row.insertCell();
+                cancelCell.className = "button-cell";
+                const cancelButton = document.createElement("button");
+                cancelButton.innerText = "🛇";
+                cancelButton.className = "action-editing-button";
+                cancelButton.onclick = () => {
+                    this.table.classList.remove("editing");
+                    row.classList.remove("editing");
+                    const value = this.getProperty(fullPropertyName);
+                    const valueStr = isValidValue(paramField, value)
+                        ? value.toString()
+                        : undefined;
+
+                    valueCell.innerText = valueStr;
+                    setValueValid(valueStr !== undefined);
+                };
+                cancelCell.appendChild(cancelButton);
+            }
         }
+        return fieldGroup;
     }
 
     private createUIForArray(
+        fullPropertyName: string,
         paramName: string,
         paramValue: TemplateParamArray,
         optional: boolean,
-        value: unknown,
         level: number,
+        parent: FieldGroup,
     ) {
-        if (!Array.isArray(value)) {
-            console.log(`Mismatched type: ${paramName}`);
+        const value = this.getProperty(fullPropertyName);
+        const valid = Array.isArray(value);
+        const fieldGroup = this.createFieldGroup(
+            paramName,
+            valid ? "" : undefined,
+            optional,
+            level,
+            parent,
+        );
+        if (fieldGroup === undefined) {
             return;
         }
-
-        this.createRow(paramName, optional, undefined, "", level);
         const elmType = paramValue.elementType;
-        for (let i = 0; i < value.length; i++) {
+        // Must have at least one.
+        const items = valid && value.length !== 0 ? value.length : 1;
+        for (let i = 0; i < items; i++) {
             this.createUIForField(
+                `${fullPropertyName}.${i}`,
                 `[${i}]`,
                 elmType,
                 false,
-                value,
-                i,
                 level + 1,
+                fieldGroup,
             );
         }
-    }
-    private createUIForField(
-        paramName: string,
-        paramValue: TemplateParamField,
-        optional: boolean,
-        valueObject: unknown,
-        valueKey: string | number,
-        level: number,
-    ) {
-        switch (paramValue.type) {
-            case "array": {
-                this.createUIForArray(
-                    paramName,
-                    paramValue,
-                    optional,
-                    valueObject?.[valueKey],
-                    level,
-                );
-
-                break;
-            }
-            case "object": {
-                this.createUIForObject(
-                    paramName,
-                    paramValue.fields,
-                    optional,
-                    valueObject?.[valueKey],
-                    level,
-                );
-                break;
-            }
-            default: {
-                this.createUIForScalar(
-                    paramName,
-                    paramValue,
-                    optional,
-                    valueObject,
-                    valueKey,
-                    level,
-                );
-
-                break;
-            }
-        }
+        return fieldGroup;
     }
 
     private createUIForObject(
+        fullPropertyName: string,
         paramName: string,
         fields: Record<string, TemplateParamFieldOpt>,
-        optional: boolean,
-        value: unknown,
+        optional: boolean = false,
         level = 0,
+        parent?: FieldGroup,
     ) {
         const entries = Object.entries(fields);
         if (entries.length === 0) {
             return;
         }
 
-        this.createRow(paramName, optional, undefined, "", level);
+        const value = this.getProperty(fullPropertyName);
+        const fieldGroup = this.createFieldGroup(
+            paramName,
+            typeof value === "object" ? "" : undefined,
+            optional,
+            level,
+            parent,
+        );
+
+        if (fieldGroup === undefined) {
+            return;
+        }
         const missingOptionalFields: string[] = [];
         for (const [k, v] of Object.entries(fields)) {
             const fieldValue =
@@ -243,35 +310,77 @@ export class ActionCascade {
                 break;
             }
             this.createUIForField(
+                `${fullPropertyName}.${k}`,
                 k,
                 v.field,
                 v.optional ?? false,
-                value,
-                k,
                 level + 1,
+                fieldGroup,
             );
+        }
+
+        return fieldGroup;
+    }
+
+    private createUIForField(
+        fullPropertyName: string,
+        paramName: string,
+        paramField: TemplateParamField,
+        optional: boolean,
+        level: number,
+        parent: FieldGroup,
+    ) {
+        switch (paramField.type) {
+            case "array":
+                this.createUIForArray(
+                    fullPropertyName,
+                    paramName,
+                    paramField,
+                    optional,
+                    level,
+                    parent,
+                );
+                break;
+
+            case "object":
+                this.createUIForObject(
+                    fullPropertyName,
+                    paramName,
+                    paramField.fields,
+                    optional,
+                    level,
+                    parent,
+                );
+                break;
+
+            default:
+                this.createUIForScalar(
+                    fullPropertyName,
+                    paramName,
+                    paramField,
+                    optional,
+                    level,
+                    parent,
+                );
+                break;
         }
     }
 
     private createTable() {
-        const actions = Array.isArray(this.current)
-            ? this.current
-            : [this.current];
         this.clearTable();
         for (let i = 0; i < this.actionTemplates.templates.length; i++) {
             const actionTemplate = this.actionTemplates.templates[i];
-            const action = actions[i];
+            const action = this.current[i];
             if (action === undefined) {
                 break;
             }
 
-            this.createRow("Agent", false, actionTemplate, "agent", 0);
-            this.createRow("Action", false, actionTemplate, "name", 0);
+            this.createFieldGroup("Agent", action.translatorName);
+            this.createFieldGroup("Action", action.actionName);
             this.createUIForObject(
+                `${i}.parameters`,
                 "Parameters",
                 actionTemplate.parameterStructure.fields,
-                false,
-                action.parameters,
             );
         }
 
@@ -306,5 +415,76 @@ export class ActionCascade {
         }
 
         this.createTable();
+    }
+
+    private getProperty(name: string) {
+        const properties = name.split(".");
+        let lastName: string | number = "current";
+        let curr: any = this;
+        for (let i = 0; i < properties.length; i++) {
+            const name = properties[i];
+            // Protect against prototype pollution
+            if (
+                name === "__proto__" ||
+                name === "constructor" ||
+                name === "prototype"
+            ) {
+                throw new Error(`Invalid property name: ${name}`);
+            }
+            const maybeIndex = parseInt(name);
+            if (maybeIndex.toString() === name) {
+                // Array index
+                const next = curr[lastName];
+                if (next === undefined || !Array.isArray(next)) {
+                    return undefined;
+                }
+                curr = next;
+                lastName = maybeIndex;
+            } else {
+                const next = curr[lastName];
+                if (next === undefined || typeof next !== "object") {
+                    return undefined;
+                }
+                curr = next;
+                lastName = name;
+            }
+        }
+        return curr[lastName];
+    }
+    private setProperty(name: string, value: any) {
+        const properties = name.split(".");
+        let lastName: string | number = "current";
+        let curr = this;
+        for (let i = 0; i < properties.length; i++) {
+            const name = properties[i];
+            // Protect against prototype pollution
+            if (
+                name === "__proto__" ||
+                name === "constructor" ||
+                name === "prototype"
+            ) {
+                throw new Error(`Invalid property name: ${name}`);
+            }
+            const maybeIndex = parseInt(name);
+            if (maybeIndex.toString() === name) {
+                // Array index
+                let next = curr[lastName];
+                if (next === undefined || !Array.isArray(next)) {
+                    next = [];
+                    curr[lastName] = next;
+                }
+                curr = next;
+                lastName = maybeIndex;
+            } else {
+                let next = curr[lastName];
+                if (next === undefined || typeof next !== "object") {
+                    next = {};
+                    curr[lastName] = next;
+                }
+                curr = next;
+                lastName = name;
+            }
+        }
+        curr[lastName] = value;
     }
 }
