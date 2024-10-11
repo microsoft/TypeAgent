@@ -9,6 +9,7 @@ import {
     DisplayMessageKind,
 } from "@typeagent/agent-sdk";
 import DOMPurify from "dompurify";
+import { SettingsView } from "./settingsView";
 
 const ansi_up = new AnsiUp();
 ansi_up.use_classes = true;
@@ -47,7 +48,8 @@ function matchKindStyle(elm: HTMLElement, kindStyle?: string) {
 export function setContent(
     elm: HTMLElement,
     content: DisplayContent,
-    appendMode?: DisplayAppendMode,
+    settingsView: SettingsView,
+    appendMode?: DisplayAppendMode,    
 ): string | undefined {
     // Remove existing content if we are not appending.
     if (appendMode === undefined) {
@@ -93,6 +95,11 @@ export function setContent(
     }
 
     let contentElm: HTMLElement = contentDiv;
+    if (!settingsView.isDisplayTypeAllowed(type)) {
+        contentElm.innerText = `The supplied content type (${type}) is not allowed by the configured settings.`;
+        return contentElm.innerText;
+    }
+
     if (type === "text") {
         const prevElm = contentDiv.lastChild as HTMLElement | null;
         if (prevElm?.classList.contains("chat-message-agent-text")) {

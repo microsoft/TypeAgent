@@ -12,6 +12,7 @@ import { iconCheckMarkCircle, iconRoadrunner, iconX } from "./icon";
 import { ActionCascade } from "./ActionCascade";
 import { getClientAPI } from "./main";
 import { ActionTemplateSequence } from "../../preload/electronTypes";
+import { SettingsView } from "./settingsView";
 
 function createTimestampDiv(timestamp: Date, className: string) {
     const timeStampDiv = document.createElement("div");
@@ -126,6 +127,7 @@ export class MessageContainer {
 
     constructor(
         private chatView: ChatView,
+        private settingsView: SettingsView,
         private classNameSuffix: "agent" | "user",
         private _source: string,
         private readonly agents: Map<string, string>,
@@ -202,6 +204,7 @@ export class MessageContainer {
         const speakText = setContent(
             this.messageDiv,
             content,
+            this.settingsView,
             appendMode === "inline" && this.lastAppendMode !== "inline"
                 ? "block"
                 : appendMode,

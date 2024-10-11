@@ -8,6 +8,7 @@ import {
 } from "../../main/shellSettingsType.js";
 import { ChatView } from "./chatView.js";
 import { getTTS, getTTSProviders, getTTSVoices } from "./tts/tts.js";
+import { DisplayType } from "../../preload/electronTypes";
 
 function addOption(
     select: HTMLSelectElement,
@@ -310,5 +311,15 @@ export class SettingsView {
             "save-settings",
             this.shellSettings,
         );
+    }
+
+    public isDisplayTypeAllowed(displayType: DisplayType): boolean {
+        for(let i = 0; i < this.shellSettings.allowedDisplayType.length; i++) {
+            if (this.shellSettings.allowedDisplayType[i] === displayType) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

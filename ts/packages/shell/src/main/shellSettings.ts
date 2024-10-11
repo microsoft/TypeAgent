@@ -12,6 +12,7 @@ import {
 } from "./shellSettingsType.js";
 import {
     ClientSettingsProvider,
+    DisplayType,
     EmptyFunction,
 } from "../preload/electronTypes.js";
 
@@ -35,6 +36,7 @@ export class ShellSettings
     public multiModalContent: boolean;
     public devUI: boolean;
     public partialCompletion: boolean;
+    public allowedDisplayType: DisplayType[];
     public onSettingsChanged: EmptyFunction | null;
     public onShowSettingsDialog: ((dialogName: string) => void) | null;
     public onRunDemo: ((interactive: boolean) => void) | null;
@@ -77,6 +79,7 @@ export class ShellSettings
         this.multiModalContent = settings.multiModalContent;
         this.devUI = settings.devUI;
         this.partialCompletion = settings.partialCompletion;
+        this.allowedDisplayType = settings.allowedDisplayType;
 
         this.onSettingsChanged = null;
         this.onShowSettingsDialog = null;
@@ -168,5 +171,15 @@ export class ShellSettings
         if (ShellSettings.getinstance().onToggleTopMost != null) {
             ShellSettings.getinstance().onToggleTopMost!();
         }
+    }
+
+    public isDisplayTypeAllowed(displayType: DisplayType): boolean {
+        for(let i = 0; i < this.allowedDisplayType.length; i++) {
+                if (this.allowedDisplayType[i] === displayType) {
+                    return true;
+                }
+        }
+
+        return false;
     }
 }

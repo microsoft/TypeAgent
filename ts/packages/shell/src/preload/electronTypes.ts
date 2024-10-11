@@ -92,6 +92,8 @@ export interface ClientSettingsProvider {
     set: SetSettingFunction | null;
 }
 
+export type DisplayType = "html" | "iframe" | "text";
+
 // end duplicate type section
 
 export interface ClientAPI {

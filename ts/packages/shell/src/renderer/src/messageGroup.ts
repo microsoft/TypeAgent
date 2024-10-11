@@ -7,6 +7,7 @@ import { RequestMetrics } from "agent-dispatcher";
 
 import { MessageContainer } from "./messageContainer";
 import { ChatView } from "./chatView";
+import { SettingsView } from "./settingsView";
 
 export class MessageGroup {
     public metricsDiv?: {
@@ -19,6 +20,7 @@ export class MessageGroup {
     private readonly start: number = performance.now();
     constructor(
         private readonly chatView: ChatView,
+        private readonly settingsView: SettingsView,
         request: DisplayContent,
         container: HTMLDivElement,
         requestPromise: Promise<RequestMetrics | undefined> | undefined,
@@ -27,6 +29,7 @@ export class MessageGroup {
     ) {
         this.userMessage = new MessageContainer(
             chatView,
+            settingsView,
             "user",
             "",
             agents,
@@ -87,6 +90,7 @@ export class MessageGroup {
         if (this.statusMessage === undefined) {
             this.statusMessage = new MessageContainer(
                 this.chatView,
+                this.settingsView,
                 "agent",
                 source,
                 this.agents,
@@ -157,6 +161,7 @@ export class MessageGroup {
                 if (this.agentMessages[i] === undefined) {
                     const newAgentMessage = new MessageContainer(
                         this.chatView,
+                        this.settingsView,
                         "agent",
                         msg.source,
                         this.agents,

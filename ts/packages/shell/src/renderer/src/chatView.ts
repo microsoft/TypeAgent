@@ -16,6 +16,7 @@ import { IAgentMessage } from "agent-dispatcher";
 import { PartialCompletion } from "./partial";
 import { InputChoice } from "./choicePanel";
 import { MessageGroup } from "./messageGroup";
+import { SettingsView } from "./settingsView";
 
 interface ISymbolNode {
     symbolName: string;
@@ -250,6 +251,7 @@ export class ChatView {
     private topDiv: HTMLDivElement;
     private messageDiv: HTMLDivElement;
     private inputContainer: HTMLDivElement;
+    private _settingsView: SettingsView | undefined;
 
     private idToMessageGroup: Map<string, MessageGroup> = new Map();
     chatInput: ChatInput;
@@ -500,6 +502,7 @@ export class ChatView {
             if (id.startsWith("agent-")) {
                 const mg: MessageGroup = new MessageGroup(
                     this,
+                    this.settingsView!,
                     "",
                     this.messageDiv,
                     undefined,
@@ -552,6 +555,7 @@ export class ChatView {
 
         const mg: MessageGroup = new MessageGroup(
             this,
+            this.settingsView!,
             request,
             this.messageDiv,
             getClientAPI().processShellRequest(requestText, id, images),
@@ -720,6 +724,7 @@ export class ChatView {
             questionId,
             message,
             requestId,
+            this.settingsView!,
         );
         agentMessage.div.appendChild(replacementElm);
     }
@@ -761,6 +766,14 @@ export class ChatView {
         for (const messageGroup of this.idToMessageGroup.values()) {
             messageGroup.setMetricsVisible(visible);
         }
+    }
+
+    public set settingsView(value: SettingsView) {
+        this._settingsView = value;
+    }
+
+    public get settingsView(): SettingsView | undefined {
+        return this._settingsView;
     }
 }
 
