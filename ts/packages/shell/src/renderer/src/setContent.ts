@@ -60,18 +60,15 @@ export function setContent(
     let kind: DisplayMessageKind | undefined;
     let text: string;
     let speak: boolean;
-    let script: string | undefined;
     if (typeof content === "string") {
         type = "text";
         text = content;
         speak = false;
-        script = undefined;
     } else {
         type = content.type;
         text = content.content;
         kind = content.kind;
         speak = content.speak ?? false;
-        script = content.script;
     }
 
     const kindStyle = kind ? `chat-message-kind-${kind}` : undefined;
@@ -124,7 +121,7 @@ export function setContent(
 
     // if the agent wants to show script we need to do that in isolation so create an iframe
     // and put both the script and supplied HTML into it
-    if (script) {
+    if (type === "iframe") {
         const iframe: HTMLIFrameElement = document.createElement("iframe");
         iframe.sandbox.add("allow-scripts");
         iframe.classList.add("host-frame");
@@ -133,11 +130,11 @@ export function setContent(
         <link href="./assets/styles.less" type="text/css" rel="stylesheet">
         <link href="./assets/carousel.less" type="text/css" rel="stylesheet">
         </head>
-        <body style="height: auto; overflow: hidden;">${text}<script>${script}</script></body></html>`;
+        <body style="height: auto; overflow: hidden;">${text}</body></html>`;
 
         contentElm.appendChild(iframe);
     } else {
-        // HTML only
+        // vanilla, sanitized HTML only
         contentElm.innerHTML += contentHtml;
     }
 
