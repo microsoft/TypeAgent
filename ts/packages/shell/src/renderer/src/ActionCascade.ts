@@ -43,25 +43,18 @@ function removeFieldGroup(fieldGroup: FieldGroup) {
     fieldGroup.row.remove();
 }
 
-export class ActionCascade {
-    private readonly container: HTMLDivElement;
-    private readonly table: HTMLTableElement;
+class FieldContainer {
+    public readonly table: HTMLTableElement;
     private current: any;
-    private editMode = false;
-
     private errorCount = 0;
+
     constructor(
-        appendTo: HTMLElement,
         private actionTemplates: ActionTemplateSequence,
         private enableEdit = true,
     ) {
         this.current = structuredClone(actionTemplates.actions);
-        this.container = document.createElement("div");
-        this.container.className = "action-text";
-        appendTo.appendChild(this.container);
-
         this.table = document.createElement("table");
-        this.createUI();
+        this.createTable();
     }
 
     public get value() {
@@ -79,27 +72,6 @@ export class ActionCascade {
         this.createTable();
     }
 
-    public setEditMode(editMode: boolean) {
-        if (this.editMode === editMode) {
-            return;
-        }
-        if (!this.enableEdit && editMode === true) {
-            throw new Error(
-                "Cannot set edit mode to true on a non-editable action cascade",
-            );
-        }
-
-        this.editMode = editMode;
-        if (editMode) {
-            this.container.classList.add("action-text-editable");
-        } else {
-            this.container.classList.remove("action-text-editable");
-        }
-    }
-
-    public remove() {
-        this.container.remove();
-    }
     private createFieldGroup(
         paramName: string,
         valueDisplay: string | undefined,
@@ -383,40 +355,11 @@ export class ActionCascade {
                 actionTemplate.parameterStructure.fields,
             );
         }
-
-        if (this.table.children.length !== 0) {
-            this.container.appendChild(this.table);
-        }
     }
     private clearTable() {
         this.table.remove();
         this.table.replaceChildren();
     }
-
-    private createUI() {
-        // for now assume a single action
-        const div = this.container;
-        if (
-            this.actionTemplates.templates.length === 1 &&
-            this.actionTemplates.prefaceSingle
-        ) {
-            const preface = document.createElement("div");
-            preface.className = "preface-text";
-            preface.innerText = this.actionTemplates.prefaceSingle;
-            div.appendChild(preface);
-        } else if (
-            this.actionTemplates.templates.length > 1 &&
-            this.actionTemplates.prefaceMultiple
-        ) {
-            const preface = document.createElement("div");
-            preface.className = "preface-text";
-            preface.innerText = this.actionTemplates.prefaceMultiple;
-            div.appendChild(preface);
-        }
-
-        this.createTable();
-    }
-
     private getProperty(name: string) {
         const properties = name.split(".");
         let lastName: string | number = "current";
@@ -486,5 +429,83 @@ export class ActionCascade {
             }
         }
         curr[lastName] = value;
+    }
+}
+export class ActionCascade {
+    private readonly container: HTMLDivElement;
+    private readonly fieldContainer: FieldContainer;
+    private editMode = false;
+
+    constructor(
+        appendTo: HTMLElement,
+        private actionTemplates: ActionTemplateSequence,
+        private enableEdit = true,
+    ) {
+        this.container = document.createElement("div");
+        this.container.className = "action-text";
+        appendTo.appendChild(this.container);
+
+        this.fieldContainer = new FieldContainer(actionTemplates, enableEdit);
+        this.createUI();
+    }
+
+    public get value() {
+        return this.fieldContainer.value;
+    }
+
+    public get hasErrors() {
+        return this.fieldContainer.hasErrors;
+    }
+
+    public reset() {
+        this.fieldContainer.reset();
+    }
+
+    public setEditMode(editMode: boolean) {
+        if (this.editMode === editMode) {
+            return;
+        }
+        if (!this.enableEdit && editMode === true) {
+            throw new Error(
+                "Cannot set edit mode to true on a non-editable action cascade",
+            );
+        }
+
+        this.editMode = editMode;
+        if (editMode) {
+            this.container.classList.add("action-text-editable");
+        } else {
+            this.container.classList.remove("action-text-editable");
+        }
+    }
+
+    public remove() {
+        this.container.remove();
+    }
+
+    private createUI() {
+        // for now assume a single action
+        const div = this.container;
+        if (
+            this.actionTemplates.templates.length === 1 &&
+            this.actionTemplates.prefaceSingle
+        ) {
+            const preface = document.createElement("div");
+            preface.className = "preface-text";
+            preface.innerText = this.actionTemplates.prefaceSingle;
+            div.appendChild(preface);
+        } else if (
+            this.actionTemplates.templates.length > 1 &&
+            this.actionTemplates.prefaceMultiple
+        ) {
+            const preface = document.createElement("div");
+            preface.className = "preface-text";
+            preface.innerText = this.actionTemplates.prefaceMultiple;
+            div.appendChild(preface);
+        }
+
+        if (this.fieldContainer.table.children.length !== 0) {
+            this.container.appendChild(this.fieldContainer.table);
+        }
     }
 }
