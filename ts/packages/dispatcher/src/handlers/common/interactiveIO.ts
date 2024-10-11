@@ -16,31 +16,12 @@ import { RequestMetrics } from "../../utils/metrics.js";
 export const DispatcherName = "dispatcher";
 export type RequestId = string | undefined;
 
-export type SearchMenuCommand =
-    | "register"
-    | "legend"
-    | "complete"
-    | "cancel"
-    | "show"
-    | "remove";
-
-export type ActionUICommand = "register" | "replace" | "remove";
-
-export type SearchMenuState = "active" | "inactive";
-
 export enum NotifyCommands {
     ShowSummary = "summarize",
     Clear = "clear",
     ShowUnread = "unread",
     ShowAll = "all",
 }
-
-export type SearchMenuContext = {
-    state: SearchMenuState;
-    menuId: string;
-    lastPrefix: string;
-    choices?: string[];
-};
 
 export interface IAgentMessage {
     message: DisplayContent;
@@ -53,29 +34,37 @@ export interface IAgentMessage {
 // Client provided IO
 export interface ClientIO {
     clear(): void;
-    actionCommand(
-        actionTemplates: ActionTemplateSequence,
-        command: ActionUICommand,
-        requestId: RequestId,
-    ): void;
-    searchMenuCommand(
-        menuId: string,
-        command: SearchMenuCommand,
-        prefix?: string,
-        choices?: SearchMenuItem[],
-        visible?: boolean,
-    ): void;
+    exit(): void;
+
+    // Display
     setDisplay(message: IAgentMessage): void;
     appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void;
+    setDynamicDisplay(
+        source: string,
+        requestId: RequestId,
+        actionIndex: number,
+        displayId: string,
+        nextRefreshMs: number,
+    ): void;
+
+    // Input
     askYesNo(
         message: string,
         requestId: RequestId,
         defaultValue?: boolean,
     ): Promise<boolean>;
+    proposeAction(
+        actionTemplates: ActionTemplateSequence,
+        requestId: RequestId,
+        source: string,
+    ): Promise<unknown>;
+
     question(
         message: string,
         requestId: RequestId,
     ): Promise<string | undefined>;
+
+    // Notification (TODO: turn these in to dispatcher events)
     notify(
         event: string,
         requestId: RequestId,
@@ -92,14 +81,8 @@ export interface ClientIO {
         },
         source: string,
     ): void;
-    setDynamicDisplay(
-        source: string,
-        requestId: RequestId,
-        actionIndex: number,
-        displayId: string,
-        nextRefreshMs: number,
-    ): void;
-    exit(): void;
+
+    // Host specific (TODO: Formalize the API)
     takeAction(action: string): void;
 }
 
@@ -126,7 +109,10 @@ export interface RequestIO {
     // Input
     isInputEnabled(): boolean;
     askYesNo(message: string, defaultValue?: boolean): Promise<boolean>;
-
+    proposeAction(
+        actionTemplates: ActionTemplateSequence,
+        source: string,
+    ): Promise<unknown>;
     // returns undefined if input is disabled
     question(
         message: string,
@@ -226,6 +212,13 @@ export function getConsoleRequestIO(
         askYesNo: async (message: string, defaultValue?: boolean) => {
             return await askYesNo(message, stdio, defaultValue);
         },
+        proposeAction: async (
+            actionTemplates: ActionTemplateSequence,
+            source: string,
+        ) => {
+            // TODO: Not implemented
+            return undefined;
+        },
         question: async (message: string) => {
             return await stdio?.question(`${message}: `);
         },
@@ -312,6 +305,10 @@ export function getRequestIO(
         isInputEnabled: () => true,
         askYesNo: async (message: string, defaultValue?: boolean) =>
             clientIO.askYesNo(message, requestId, defaultValue),
+        proposeAction: async (
+            actionTemplates: ActionTemplateSequence,
+            source: string,
+        ) => clientIO.proposeAction(actionTemplates, requestId, source),
         question: async (message: string) =>
             clientIO.question(message, requestId),
         notify(
@@ -337,6 +334,7 @@ export function getNullRequestIO(): RequestIO {
         appendDisplay: () => {},
         isInputEnabled: () => false,
         askYesNo: async () => false,
+        proposeAction: async () => undefined,
         question: async () => undefined,
         notify: () => {},
         takeAction: () => {},

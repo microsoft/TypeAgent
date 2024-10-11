@@ -9,6 +9,7 @@ import {
     printProcessRequestActionResult,
     Actions,
     HistoryContext,
+    FullAction,
 } from "agent-cache";
 import {
     CommandHandlerContext,
@@ -49,6 +50,7 @@ import {
     displayStatus,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
+import { DispatcherName } from "./common/interactiveIO.js";
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
@@ -99,42 +101,23 @@ async function confirmTranslation(
         prefaceMultiple,
         allActionInfo,
     );
-    systemContext.clientIO?.actionCommand(
-        templateSequence,
-        "register",
-        systemContext.requestId!,
-    );
-    const accept = await systemContext.requestIO.askYesNo("reserved", true);
-    if (accept) {
-        return { requestAction };
-    }
 
-    const searchMenuItems = Array.from(allActionInfo.values()).map(
-        (info) => info.item,
-    );
-    systemContext.clientIO?.searchMenuCommand(
-        "actions",
-        "register",
-        "",
-        searchMenuItems,
-        true,
-    );
-    const actionLegend = `Select the action you would like to run for this request ...`;
-    systemContext.clientIO?.searchMenuCommand(
-        "actions",
-        "legend",
-        actionLegend,
-    );
-    const answer = await systemContext.requestIO.question(actionLegend);
-    if (answer !== undefined) {
-        const actionInfo = allActionInfo.get(answer);
-        if (actionInfo && actionInfo.template) {
-            console.log(
-                `Selected action: ${actionInfo.template.agent}.${actionInfo.item.matchText}`,
-            );
-        }
-    }
-    return { requestAction: null };
+    // TODO: Need to validate
+    const newActions = (await systemContext.requestIO.proposeAction(
+        templateSequence,
+        DispatcherName,
+    )) as FullAction[] | undefined;
+
+    return newActions
+        ? {
+              requestAction: new RequestAction(
+                  requestAction.request,
+                  Actions.fromFullActions(newActions),
+                  requestAction.history,
+              ),
+              replacedAction: actions,
+          }
+        : { requestAction };
 }
 
 async function getValidatedMatch(

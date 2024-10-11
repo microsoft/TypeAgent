@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { _arrayBufferToBase64, ChatView, setContent } from "./chatView";
+import { _arrayBufferToBase64, ChatView } from "./chatView";
 import {
     iconMicrophone,
     iconMicrophoneListening,
@@ -11,6 +11,7 @@ import {
     iconSend,
 } from "./icon";
 import { getClientAPI } from "./main";
+import { setContent } from "./setContent";
 import { recognizeOnce } from "./speech";
 import { getSpeechToken } from "./speechToken";
 
