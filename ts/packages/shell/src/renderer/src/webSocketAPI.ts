@@ -44,13 +44,7 @@ export const webapi: ClientAPI = {
             placeHolder1({resolve, reject});
         });
     },
-    onActionCommand: (callback) => {
-        placeHolder("action-command", callback);
-    },
-    onSearchMenuCommand: (callback) => {
-        placeHolder("search-menu-command", callback);
-    },
-    onUpdateDisplay(callback) {
+        onUpdateDisplay(callback) {
         //placeHolder("updateDisplay", callback);
         fnMap.set("update-display", callback);
     },
@@ -75,6 +69,12 @@ export const webapi: ClientAPI = {
     sendYesNo: (askYesNoId: number, accept: boolean) => {
         placeHolder3("askYesNoResponse", askYesNoId, accept);
     },
+    onProposeAction(callback) {
+        placeHolder("proposeAction", callback);
+    },
+    sendProposedAction: (proposeActionId: number, replacement?: unknown) => {
+        placeHolder3("proposeActionResponse", proposeActionId, replacement);
+    },    
     onQuestion(callback) {
         placeHolder("question", callback);
     },
