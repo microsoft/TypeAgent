@@ -67,12 +67,6 @@ const api: ClientAPI = {
     getDynamicDisplay(source: string, id: string) {
         return ipcRenderer.invoke("get-dynamic-display", source, id);
     },
-    onActionCommand: (callback) => {
-        ipcRenderer.on("action-command", callback);
-    },
-    onSearchMenuCommand: (callback) => {
-        ipcRenderer.on("search-menu-command", callback);
-    },
     onUpdateDisplay(callback) {
         ipcRenderer.on("updateDisplay", callback);
     },
@@ -96,6 +90,12 @@ const api: ClientAPI = {
     },
     sendYesNo: (askYesNoId: number, accept: boolean) => {
         ipcRenderer.send("askYesNoResponse", askYesNoId, accept);
+    },
+    onProposeAction(callback) {
+        ipcRenderer.on("proposeAction", callback);
+    },
+    sendProposedAction: (proposeActionId: number, replacement?: unknown) => {
+        ipcRenderer.send("proposeActionResponse", proposeActionId, replacement);
     },
     onQuestion(callback) {
         ipcRenderer.on("question", callback);

@@ -24,14 +24,8 @@ import {
     Dispatcher,
 } from "agent-dispatcher";
 
-import {
-    IAgentMessage,
-    SearchMenuCommand,
-} from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
-import {
-    ActionTemplateSequence,
-    SearchMenuItem,
-} from "../preload/electronTypes.js";
+import { IAgentMessage } from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
+import { ActionTemplateSequence } from "../preload/electronTypes.js";
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
@@ -337,6 +331,36 @@ async function askYesNo(
     });
 }
 
+let maxProposeActionId = 0;
+async function proposeAction(
+    actionTemplates: ActionTemplateSequence,
+    requestId: RequestId,
+    source: string,
+) {
+    const currentProposeActionId = maxProposeActionId++;
+    return new Promise<unknown>((resolve) => {
+        const callback = (
+            _event: Electron.IpcMainEvent,
+            proposeActionId: number,
+            replacement?: unknown,
+        ) => {
+            if (currentProposeActionId !== proposeActionId) {
+                return;
+            }
+            ipcMain.removeListener("proposeActionResponse", callback);
+            resolve(replacement);
+        };
+        ipcMain.on("proposeActionResponse", callback);
+        mainWindow?.webContents.send(
+            "proposeAction",
+            currentProposeActionId,
+            actionTemplates,
+            requestId,
+            source,
+        );
+    });
+}
+
 let maxQuestionId = 0;
 async function question(message: string, requestId: RequestId) {
     // Ignore message without requestId
@@ -367,36 +391,6 @@ async function question(message: string, requestId: RequestId) {
     });
 }
 
-function searchMenuCommand(
-    menuId: string,
-    command: SearchMenuCommand,
-    prefix?: string,
-    choices?: SearchMenuItem[],
-    visible?: boolean,
-) {
-    mainWindow?.webContents.send(
-        "search-menu-command",
-        menuId,
-        command,
-        prefix,
-        choices,
-        visible,
-    );
-}
-
-function actionCommand(
-    actionTemplates: ActionTemplateSequence,
-    command: string,
-    requestId: RequestId,
-) {
-    mainWindow?.webContents.send(
-        "action-command",
-        actionTemplates,
-        command,
-        requestId,
-    );
-}
-
 const clientIO: ClientIO = {
     clear: () => {
         mainWindow?.webContents.send("clear");
@@ -404,9 +398,8 @@ const clientIO: ClientIO = {
     setDisplay: updateDisplay,
     appendDisplay: (message, mode) => updateDisplay(message, mode ?? "inline"),
     setDynamicDisplay,
-    searchMenuCommand,
-    actionCommand,
     askYesNo,
+    proposeAction,
     question,
     notify(event: string, requestId: RequestId, data: any, source: string) {
         switch (event) {

@@ -94,12 +94,6 @@ function addEvents(
                 nextRefreshMs,
             ),
     );
-    api.onActionCommand((_, actionTemplates, command, requestId) => {
-        chatView.actionCommand(actionTemplates, command, requestId);
-    });
-    api.onSearchMenuCommand((_, menuId, command, prefix, choices, visible) => {
-        chatView.searchMenuCommand(menuId, command, prefix, choices, visible);
-    });
     api.onClear((_) => {
         chatView.clear();
     });
@@ -112,6 +106,16 @@ function addEvents(
     api.onAskYesNo(async (_, askYesNoId, message, id, source) => {
         chatView.askYesNo(askYesNoId, message, id, source);
     });
+    api.onProposeAction(
+        async (_, proposeActionId, actionTemplates, id, source) => {
+            chatView.proposeAction(
+                proposeActionId,
+                actionTemplates,
+                id,
+                source,
+            );
+        },
+    );
     api.onQuestion(async (_, questionId, message, id, source) => {
         chatView.question(questionId, message, id, source);
     });
@@ -324,11 +328,8 @@ document.addEventListener("DOMContentLoaded", function () {
         cameraView.toggleVisibility();
     };
 
-    chatView.chatInput.camButton.onclick = () => {
-        cameraView.toggleVisibility();
-    };
-
     const settingsView = new SettingsView(chatView);
+    chatView.settingsView = settingsView;
     tabs.getTabContainerByName("Settings").append(settingsView.getContainer());
     tabs.getTabContainerByName("Metrics").append(
         new MetricsView().getContainer(),

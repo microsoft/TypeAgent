@@ -18,12 +18,33 @@ When loading dispatcher agent in a NPM package, the dispatcher first loads the m
 
 ### Instantiation Entry point
 
-The instantiation entry point is the code entry point for a dispatcher agent. After loading the `./agent/handlers` ESM module,
-the `instantiate` function will be call to get an instance of the `AppAgent`. The `AppAgent` provides four optional APIs:
+`AppAgent` is the main interface any agents needs to implements.
+
+The instantiation entry point is the code entry point for an app agent. After loading the `./agent/handlers` ESM module, the `instantiate` function will be call to get an instance of the `AppAgent`. The `AppAgent` provides these optional APIs:
+
+Lifecycle APIs:
 
 - `initializeAgentContext` - Dispatcher will call after the agent is loaded. It is expected to create a context that will be passed back on all subsequent call to other APIs.
 - `updateAgentContext` - A signal indicating whether the action is enabled or disabled for the agent, allowing it to manage resources such as login. The dispatcher calls this function during initialization or when the user enables or disables actions for the dispatcher agent. Each sub-translator can be enabled or disabled independently and the dispatcher will call this API once for each sub-translator. The `translatorName` parameter can be used to distinguish the sub-translator.
+- `closeAgentContext` - Called when the `AppAgent` is not longer needed to release resources.
+
+Command APIs:
+
+- `getCommands` - If the `AppAgent` want to provide `@` commands, this function should return `CommandDescriptors`.
+- `executeCommand` - Dispatcher will call this function after parsing the command based ont he `CommandDescriptors` and provide the agent `ParsedCommandParams` to execute the command.
+
+Action API:
+
 - `executeAction` - After the dispatcher translates a user request using the provided translator schema in the manifest, it will route to the agent and call this function to perform the action. All sub-translator actions route to the same API, and the agent will need to handle further routing to handlers.
+- `streamPartialAction` - For cases action can be handled while the translation result is being streamed from the LLM. Look at `chat.generateResponse` as an example.
+
+Cache extensions:
+
+- `validateWildcardMatch` - For parameters is can be wildcards, this function provide the agent to validate the wildcard match from the cache to avoid over generalization.
+
+Output:
+
+- `getDyanmicDisplay` - For command/action result that needs to be updated periodically, the host will call this function to get the updated display.
 
 ## Trademarks
 

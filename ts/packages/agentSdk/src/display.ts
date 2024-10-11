@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type DisplayType = "html" | "text";
+export type DisplayType = "html" | "iframe" | "text";
 
 export type DynamicDisplay = {
     content: DisplayContent;
@@ -15,7 +15,6 @@ export type DisplayContent =
           content: string;
           kind?: DisplayMessageKind; // Optional message kind for client specific styling
           speak?: boolean; // Optional flag to indicate if the content should be spoken
-          script?: string; // Optional javascript that belongs with the supplied HTML
       };
 
 export type DisplayMessageKind =

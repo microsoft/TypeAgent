@@ -21,7 +21,7 @@ body {
 
 .user-textarea {
   padding: 5px 8px;
-  display: block;
+  display: flex;
   width: calc(100% - 48px);
   overflow: hidden;
   resize: none;
@@ -88,8 +88,17 @@ body {
 
 /* CSS */
 .action-button {
-  border: none;
-  background-color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  width: 100%;
+}
+
+.action-button:hover {
+  background-color: #c6e3ef;
 }
 
 .preface-text {
@@ -199,12 +208,12 @@ body {
   animation: message 0.15s ease-out 0s forwards;
 }
 
-.chat-message-left {
+.chat-message-container-agent {
   .chat-message-container;
   margin-left: 10px;
 }
 
-.chat-message-right {
+.chat-message-container-user {
   .chat-message-container;
   margin-right: 10px;
   align-self: flex-end;
@@ -267,12 +276,12 @@ body {
   text-align: right;
 }
 
-.chat-message-metrics-left {
+.chat-message-metrics-agent {
   .chat-message-metrics;
   background-color: #c2edff;
 }
 
-.chat-message-metrics-right {
+.chat-message-metrics-user {
   .chat-message-metrics;
   background-color: rgb(150, 150, 202);
 }
@@ -337,12 +346,12 @@ body {
   margin: 4px;
 }
 
-.chat-timestamp-left {
+.chat-timestamp-agent {
   .chat-timestamp;
   margin-left: 34px;
 }
 
-.chat-timestamp-right {
+.chat-timestamp-user {
   .chat-timestamp;
   text-align: end;
 }
@@ -656,4 +665,50 @@ input[type="file"] {
 
 .notification-debug {
   color: pink;
+}
+
+.action-text table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.action-text tr {
+  border-top: 1px solid lightgray;
+  border-bottom: 1px solid lightgray;
+}
+.action-text td {
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+.action-text td.name-cell {
+  width: 30%;
+}
+
+.action-text td.value-cell {
+  width: 62%;
+}
+
+.action-text td.button-cell {
+  width: 100%;
+  padding: 0px;
+}
+
+.action-edit-button,
+.action-editing-button,
+.action-text-editable table.editing .action-edit-button,
+.action-text-editable tr.editing .action-edit-button {
+  padding: 4px;
+  border: lightgray;
+  background-color: transparent;
+  visibility: hidden;
+}
+.action-text-editable .action-edit-button,
+.action-text-editable tr.editing .action-editing-button {
+  visibility: visible;
+}
+
+.action-text tr.error,
+.action-text tr.error input {
+  color: red;
 }

@@ -133,11 +133,6 @@ async function handlePhotoAction(
                 result = createActionResult(
                     "Failed to generate the requested image.",
                 );
-                //  } else if (images.length == 1) {
-                //      result = createActionResultFromHtmlDisplay(
-                //          `<img class="chat-input-image" src="${images[0].image_url}" alt="${images[0].revised_prompt}" />`,
-                //          "Generated 1 image.",
-                //      );
             } else {
                 const urls: string[] = [];
                 const captions: string[] = [];
@@ -160,7 +155,7 @@ function createCarouselForImages(
 ): ActionResultSuccess {
     const hash: string = randomBytes(4).readUInt32LE(0).toString();
     const jScript: string = `
-    
+    <script>
     var slideShow_${hash} = new function()  {
         let slideIndex = 1;
         showSlides(slideIndex);
@@ -176,26 +171,37 @@ function createCarouselForImages(
         }
 
         function showSlides(n) {
-        let i;
-        let slides = document.getElementsByClassName("mySlides ${hash}");
-        let dots = document.getElementsByClassName("dot ${hash}");
-        if (n > slides.length) {slideIndex = 1}
-        if (n < 1) {slideIndex = slides.length}
-        for (i = 0; i < slides.length; i++) {
-            slides[i].classList.add("slideshow-hidden");
+            let i;
+            let slides = document.getElementsByClassName("mySlides ${hash}");
+            let dots = document.getElementsByClassName("dot ${hash}");
+
+            if (slides === undefined || slides.length == 0) return;
+            if (n > slides.length) {slideIndex = 1}
+            if (n < 1) {slideIndex = slides.length}
+            for (i = 0; i < slides.length; i++) {
+                slides[i].classList.add("slideshow-hidden");
+            }
+            for (i = 0; i < dots.length; i++) {
+                dots[i].classList.remove("active");
+            }
+            slides[slideIndex-1].classList.remove("slideshow-hidden");
+            dots[slideIndex-1].classList.add("active");
         }
-        for (i = 0; i < dots.length; i++) {
-            dots[i].classList.remove("active");
-        }
-        slides[slideIndex-1].classList.remove("slideshow-hidden");
-        dots[slideIndex-1].classList.add("active");
-        }
+
+        var ro = new ResizeObserver(entries => {
+         for (let e of entries) {
+            window.top.postMessage('slideshow_${hash}_' + document.getElementById('slideshow_${hash}').scrollHeight, '*');
+         }
+        });
+
+        ro.observe(document.querySelector('#slideshow_${hash}'));
     };
-    `;
+    </script>`;
 
     const carousel_start: string = `
+    <div id="slideshow_${hash}">
         <!-- Slideshow container -->
-    <div class="slideshow-container">`;
+    <div class="slideshow-container ${hash}">`;
     let carouselDots: string = "";
 
     let carousel: string = "";
@@ -222,11 +228,11 @@ function createCarouselForImages(
     <!-- The dots/circles -->
     <div style="text-align:center">
     ${carouselDots}
+    </div>    
     </div>`;
 
     return createActionResultFromHtmlDisplayWithScript(
-        carousel_start + carousel + carousel_end,
-        jScript,
+        carousel_start + carousel + carousel_end + jScript,
         `There are ${images.length} shown.`,
     );
 }
