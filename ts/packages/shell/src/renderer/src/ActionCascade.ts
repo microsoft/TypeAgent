@@ -36,7 +36,10 @@ class FieldData {
     private current: any;
     public readonly table: HTMLTableElement;
     public errorCount = 0;
-    constructor(data: any) {
+    constructor(
+        data: any,
+        public readonly enableEdit: boolean,
+    ) {
         this.table = document.createElement("table");
         this.current = structuredClone(data);
     }
@@ -125,7 +128,6 @@ class FieldGroup {
     public row: HTMLTableRowElement | undefined;
     protected fields: FieldGroup[] = [];
     constructor(
-        enableEdit: boolean,
         data: FieldData,
         paramName: string,
         valueDisplay: string | undefined,
@@ -145,7 +147,7 @@ class FieldGroup {
         valueCell.innerText = valueDisplay ?? "";
         valueCell.className = "value-cell";
 
-        if (enableEdit) {
+        if (data.enableEdit) {
             const optionCell = row.insertCell();
             optionCell.className = "button-cell";
             if (optional) {
@@ -172,7 +174,6 @@ class FieldGroup {
 
 class FieldScalar extends FieldGroup {
     constructor(
-        enableEdit: boolean,
         data: FieldData,
         fullPropertyName: string,
         paramName: string,
@@ -184,7 +185,7 @@ class FieldScalar extends FieldGroup {
         const valueStr = isValidValue(paramField, value)
             ? value.toString()
             : undefined;
-        super(enableEdit, data, paramName, valueStr, optional, level);
+        super(data, paramName, valueStr, optional, level);
         if (this.row === undefined) {
             return;
         }
@@ -208,7 +209,7 @@ class FieldScalar extends FieldGroup {
 
         setValueValid(valueStr !== undefined);
 
-        if (enableEdit) {
+        if (data.enableEdit) {
             const input = document.createElement("input");
             input.type = "text";
             if (fullPropertyName !== undefined) {
@@ -270,7 +271,6 @@ class FieldScalar extends FieldGroup {
 
 class FieldObject extends FieldGroup {
     constructor(
-        enableEdit: boolean,
         data: FieldData,
         fullPropertyName: string,
         paramName: string,
@@ -285,7 +285,6 @@ class FieldObject extends FieldGroup {
 
         const value = data.getProperty(fullPropertyName);
         super(
-            enableEdit,
             data,
             paramName,
             typeof value === "object" ? "" : undefined,
@@ -306,7 +305,6 @@ class FieldObject extends FieldGroup {
             }
             this.fields.push(
                 createUIForField(
-                    enableEdit,
                     data,
                     `${fullPropertyName}.${k}`,
                     k,
@@ -321,7 +319,6 @@ class FieldObject extends FieldGroup {
 
 class FieldArray extends FieldGroup {
     constructor(
-        enableEdit: boolean,
         data: FieldData,
         fullPropertyName: string,
         paramName: string,
@@ -331,14 +328,7 @@ class FieldArray extends FieldGroup {
     ) {
         const value = data.getProperty(fullPropertyName);
         const valid = Array.isArray(value);
-        super(
-            enableEdit,
-            data,
-            paramName,
-            valid ? "" : undefined,
-            optional,
-            level,
-        );
+        super(data, paramName, valid ? "" : undefined, optional, level);
         if (this.row === undefined) {
             return;
         }
@@ -348,7 +338,6 @@ class FieldArray extends FieldGroup {
         for (let i = 0; i < items; i++) {
             this.fields.push(
                 createUIForField(
-                    enableEdit,
                     data,
                     `${fullPropertyName}.${i}`,
                     `[${i}]`,
@@ -362,7 +351,6 @@ class FieldArray extends FieldGroup {
 }
 
 function createUIForField(
-    enableEdit: boolean,
     data: FieldData,
     fullPropertyName: string,
     paramName: string,
@@ -373,7 +361,6 @@ function createUIForField(
     switch (paramField.type) {
         case "array":
             return new FieldArray(
-                enableEdit,
                 data,
                 fullPropertyName,
                 paramName,
@@ -384,7 +371,6 @@ function createUIForField(
 
         case "object":
             return new FieldObject(
-                enableEdit,
                 data,
                 fullPropertyName,
                 paramName,
@@ -395,7 +381,6 @@ function createUIForField(
 
         default:
             return new FieldScalar(
-                enableEdit,
                 data,
                 fullPropertyName,
                 paramName,
@@ -412,9 +397,9 @@ class FieldContainer {
     constructor(
         appendTo: HTMLElement,
         private actionTemplates: ActionTemplateSequence,
-        private enableEdit = true,
+        enableEdit = true,
     ) {
-        this.data = new FieldData(actionTemplates.actions);
+        this.data = new FieldData(actionTemplates.actions, enableEdit);
         this.createFields();
         appendTo.appendChild(this.data.table);
     }
@@ -443,20 +428,9 @@ class FieldContainer {
                 break;
             }
 
-            new FieldGroup(
-                this.enableEdit,
-                this.data,
-                "Agent",
-                action.translatorName,
-            );
-            new FieldGroup(
-                this.enableEdit,
-                this.data,
-                "Action",
-                action.actionName,
-            );
+            new FieldGroup(this.data, "Agent", action.translatorName);
+            new FieldGroup(this.data, "Action", action.actionName);
             new FieldObject(
-                this.enableEdit,
                 this.data,
                 `${i}.parameters`,
                 "Parameters",
