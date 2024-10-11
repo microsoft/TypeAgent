@@ -932,11 +932,7 @@ export function setContent(
         </head>
         <body style="height: auto; overflow: hidden;">${text}<script>${script}</script></body></html>`;
 
-        const scriptBlock: HTMLScriptElement = document.createElement("script");
-        scriptBlock.attributes["type"] = "text/javascript";
-        scriptBlock.innerHTML = script;        
         contentElm.appendChild(iframe);
-        document.body.appendChild(scriptBlock);
     } else {
         // HTML only
         contentElm.innerHTML += contentHtml;
@@ -1153,6 +1149,32 @@ export class ChatView {
 
         // Add the input div at the bottom so it's always visible
         this.topDiv.append(this.inputContainer);
+
+        // wire up messages from slide show iframes
+        window.onmessage = (e) => {
+            if (e.data.startsWith("slideshow_")) {
+
+                const temp: string[] = (e.data as string).split("_");
+                if (temp.length != 3 ) {
+                    return;
+                }
+
+                const hash = temp[1];
+                const size = temp[2];
+
+                // find the iframe from which this message originated
+                const iframes = document.getElementsByTagName("iframe");
+                for(let i = 0; i < iframes.length; i++) {
+                    if (iframes[i].srcdoc.indexOf(`slideshow_${hash}`) > -1) {
+                        
+                        // resize the host iframe to fit the content size as reported by the iframe
+                        iframes[i].style.height = size + "px";
+
+                        break;
+                    }
+                };
+            }
+        };
     }
 
     placeSearchMenu() {
