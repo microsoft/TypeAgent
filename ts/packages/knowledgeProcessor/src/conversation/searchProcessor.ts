@@ -337,6 +337,7 @@ export function createSearchProcessor(
         const searchOptions = createSearchOptions(
             topLevelTopicSummary,
             options,
+            true,
         );
         const response = await conversation.searchTermsV2(
             action.parameters.filters,
@@ -583,6 +584,7 @@ export function createSearchProcessor(
     function createSearchOptions(
         topLevelTopicSummary: boolean,
         options: SearchProcessingOptions,
+        loadActions: boolean = false,
     ) {
         const topicLevel = topLevelTopicSummary ? 2 : 1;
         const searchOptions: ConversationSearchOptions = {
@@ -610,7 +612,7 @@ export function createSearchProcessor(
                     maxMatches: 1,
                     minScore: options.minScore,
                 },
-                loadActions: false,
+                loadActions,
             };
         }
         return searchOptions;

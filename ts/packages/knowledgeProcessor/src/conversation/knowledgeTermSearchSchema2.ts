@@ -28,7 +28,7 @@ export type VerbsTerm = {
 // - verb, subject, object and indirectObject associated with the verb
 export type ActionTerm = {
     verbs?: VerbsTerm | undefined; // action verbs
-    // - subject, object and indirectObject associated with the verb
+    // - subject and object for the verb
     subject?: string | undefined;
     object?: string | undefined;
 };

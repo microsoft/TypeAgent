@@ -857,7 +857,7 @@ export async function runChatMemory(): Promise<void> {
                 fallback: argBool("Fallback to message search", true),
                 action: argBool("Include actions"),
                 eval: argBool("Evaluate search query", true),
-                debug: argBool("Show debug info", true),
+                debug: argBool("Show debug info", false),
                 save: argBool("Save the search", true),
                 v2: argBool("Run V2 match", false),
             },
@@ -1129,12 +1129,10 @@ export async function runChatMemory(): Promise<void> {
         result:
             | conversation.SearchTermsActionResponse
             | conversation.SearchTermsActionResponseV2,
-        stats: boolean,
+        debug: boolean,
     ) {
         if (result.response && result.response.answer) {
-            if (stats) {
-                writeResultStats(result.response);
-            }
+            writeResultStats(result.response);
             if (result.response.answer.answer) {
                 const answer = result.response.answer.answer;
                 printer.writeInColor(chalk.green, answer);
@@ -1143,6 +1141,12 @@ export async function runChatMemory(): Promise<void> {
                 printer.writeInColor(chalk.red, answer);
             }
             printer.writeLine();
+            if (debug) {
+                printer.writeSearchResponse(
+                    result.response,
+                    context.searcher.answers.settings,
+                );
+            }
         }
     }
 
@@ -1237,17 +1241,7 @@ export async function runChatMemory(): Promise<void> {
     ) {
         printer.writeTitle("DEBUG INFORMATION");
         if (rr.response) {
-            if (rr.response.topics) {
-                await writeTopicResults(topicIndex, rr.response, false, false);
-            }
-            if (rr.response.entities) {
-                await writeEntityResults(
-                    entityIndex,
-                    rr.response,
-                    false,
-                    false,
-                );
-            }
+            printer.writeSearchResponse(rr.response);
             if (rr.response.messages) {
                 printer.writeTitle("Messages");
                 printer.writeTemporalBlocks(
@@ -1505,98 +1499,6 @@ export async function runChatMemory(): Promise<void> {
             }
             printer.writeList(list, { type: "ul" });
         }
-    }
-
-    async function writeTopicResults(
-        topicIndex: knowLib.conversation.TopicIndex,
-        response: conversation.SearchResponse,
-        logMode: boolean,
-        showMessages: boolean,
-    ) {
-        if (!logMode) {
-            const topics = [...response.allTopics()].sort();
-            if (topics.length > 0) {
-                printer.writeListInColor(chalk.blueBright, topics, {
-                    type: "ul",
-                });
-            }
-            return;
-        }
-
-        const results = response.topics;
-        printer.writeTitle("Topics");
-        const topicIds = [];
-        for (let i = 0; i < results.length; ++i) {
-            const result = results[i];
-            if (result.temporalSequence) {
-                for (const entry of result.temporalSequence) {
-                    const topics = await topicIndex.getMultiple(entry.value);
-                    printer.writeLine();
-                    printer.writeTimestamp(entry.timestamp);
-                    await writeExtractedTopics(topics, showMessages);
-                    topicIds.push(...entry.value);
-                }
-            } else if (result.topicIds) {
-                const topics = await topicIndex.getMultiple(result.topicIds);
-                await writeExtractedTopics(topics, false);
-                topicIds.push(...result.topicIds);
-            }
-            if (showMessages && topicIds.length > 0) {
-                const messages = await loadMessages(
-                    await topicIndex.getSourceIds(topicIds),
-                );
-                printer.writeTemporalBlocks(chalk.cyan, messages);
-            }
-        }
-        printer.writeLine();
-    }
-
-    async function writeEntityResults(
-        entityIndex: knowLib.conversation.EntityIndex,
-        response: conversation.SearchResponse,
-        logMode: boolean,
-        showMessages: boolean,
-    ) {
-        if (!logMode) {
-            const entities = response.getCompositeEntities(3);
-            if (entities.length > 0) {
-                printer.writeListInColor(
-                    chalk.green,
-                    entities.map((e) => conversation.entityToString(e)),
-                    { type: "ul" },
-                );
-            }
-            return;
-        }
-
-        const results = response.entities;
-        printer.writeTitle("Entities");
-        const entityIds = [];
-        for (let i = 0; i < results.length; ++i) {
-            const result = results[i];
-            if (result.temporalSequence) {
-                for (const entry of result.temporalSequence) {
-                    const entities = await entityIndex.getMultiple(entry.value);
-                    printer.writeLine();
-                    printer.writeTimestamp(entry.timestamp);
-                    printer.writeExtractedEntities(entities);
-                    entityIds.push(...entry.value);
-                }
-            } else if (result.entityIds) {
-                const entities = await entityIndex.getMultiple(
-                    result.entityIds,
-                );
-                printer.writeExtractedEntities(entities);
-                entityIds.push(...result.entityIds);
-            }
-            if (showMessages && entityIds.length > 0) {
-                const messages = await loadMessages(
-                    await entityIndex.getSourceIds(entityIds),
-                );
-                printer.writeTemporalBlocks(chalk.cyan, messages);
-            }
-        }
-        printer.writeLine();
     }
 
     async function loadMessages(
