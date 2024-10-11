@@ -44,17 +44,19 @@ function removeFieldGroup(fieldGroup: FieldGroup) {
 }
 
 class FieldContainer {
-    public readonly table: HTMLTableElement;
+    private readonly table: HTMLTableElement;
     private current: any;
     private errorCount = 0;
 
     constructor(
+        appendTo: HTMLElement,
         private actionTemplates: ActionTemplateSequence,
         private enableEdit = true,
     ) {
         this.current = structuredClone(actionTemplates.actions);
         this.table = document.createElement("table");
-        this.createTable();
+        this.createFields();
+        appendTo.appendChild(this.table);
     }
 
     public get value() {
@@ -69,7 +71,7 @@ class FieldContainer {
         this.current = structuredClone(this.actionTemplates.actions);
         this.table.classList.remove("editing");
         this.errorCount = 0;
-        this.createTable();
+        this.createFields();
     }
 
     private createFieldGroup(
@@ -338,7 +340,7 @@ class FieldContainer {
         }
     }
 
-    private createTable() {
+    private createFields() {
         this.clearTable();
         for (let i = 0; i < this.actionTemplates.templates.length; i++) {
             const actionTemplate = this.actionTemplates.templates[i];
@@ -445,8 +447,12 @@ export class ActionCascade {
         this.container.className = "action-text";
         appendTo.appendChild(this.container);
 
-        this.fieldContainer = new FieldContainer(actionTemplates, enableEdit);
         this.createUI();
+        this.fieldContainer = new FieldContainer(
+            this.container,
+            actionTemplates,
+            enableEdit,
+        );
     }
 
     public get value() {
@@ -502,10 +508,6 @@ export class ActionCascade {
             preface.className = "preface-text";
             preface.innerText = this.actionTemplates.prefaceMultiple;
             div.appendChild(preface);
-        }
-
-        if (this.fieldContainer.table.children.length !== 0) {
-            this.container.appendChild(this.fieldContainer.table);
         }
     }
 }
