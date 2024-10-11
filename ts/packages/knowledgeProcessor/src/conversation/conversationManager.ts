@@ -488,7 +488,7 @@ async function extractKnowledge(
     let extractedKnowledge: ExtractedKnowledge | undefined;
     let knownKnowledge: ExtractedKnowledge | undefined;
     if (knowledge) {
-        knownKnowledge = createExtractedKnowledge(message.blockId, knowledge);
+        knownKnowledge = createExtractedKnowledge(message, knowledge);
     }
     const knowledgeResult = await extractKnowledgeFromBlock(
         knowledgeExtractor,

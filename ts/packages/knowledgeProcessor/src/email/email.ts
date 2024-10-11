@@ -281,6 +281,7 @@ export async function createEmailMemory(
     actions.verbTermMap.put("say", EmailVerbs.send);
     actions.verbTermMap.put("discuss", EmailVerbs.send);
     actions.verbTermMap.put("talk", EmailVerbs.send);
+    actions.verbTermMap.put("get", EmailVerbs.receive);
 
     return createConversationManager(
         name,

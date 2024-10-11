@@ -218,9 +218,9 @@ export async function createActionIndex<TSourceId = any>(
     }
 
     async function getSourceIds(ids: ActionId[]): Promise<TSourceId[]> {
-        const entities = await actionStore.getMultiple(ids);
+        const actions = await actionStore.getMultiple(ids);
         const unique = uniqueFrom<ExtractedAction<TSourceId>>(
-            entities,
+            actions,
             (e) => e.sourceIds,
             true,
         );

@@ -876,11 +876,15 @@ export async function createConversation(
                     searchTerms: getAllTermsInFilter(filter),
                 };
             }
+            /*
+            filter = {
+                searchTerms: getAllTermsInFilter(filter),
+            };
+            */
             const tasks = [
                 topicIndex.searchTermsV2(filter, options.topic),
                 entityIndex.searchTermsV2(filter, options.entity),
             ];
-            // Only search actions if (a) actions are enabled (b) we have an action filter
             const [topicResult, entityResult] = await Promise.all(tasks);
             results.topics.push(topicResult);
             results.entities.push(entityResult);
