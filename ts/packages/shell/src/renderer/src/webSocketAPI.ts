@@ -16,6 +16,17 @@ export const webapi: ClientAPI = {
     ) => placeHolder("listen-event", callback),
 
     processShellRequest: (request: string, id: string, images: string[]) => {
+
+        // call server websocket and send request
+        globalThis.ws.send(JSON.stringify({    
+            message: "shellrequest",
+            data: {
+                request,
+                id,
+                images
+            }
+        }));
+
         return new Promise<RequestMetrics | undefined>((resolve, reject) => {
             placeHolder(id, { resolve, reject });
             placeHolder4("process-shell-request", request, id, images);
@@ -40,7 +51,8 @@ export const webapi: ClientAPI = {
         placeHolder("search-menu-command", callback);
     },
     onUpdateDisplay(callback) {
-        placeHolder("updateDisplay", callback);
+        //placeHolder("updateDisplay", callback);
+        fnMap.set("update-display", callback);
     },
     onSetDynamicActionDisplay(callback) {
         placeHolder("set-dynamic-action-display", callback);
@@ -108,6 +120,8 @@ export const webapi: ClientAPI = {
     },
 };
 
+let fnMap: Map<string, any> = new Map<string, any>();
+
 function placeHolder1(category: any) {
     console.log(category);
 }
@@ -122,4 +136,55 @@ function placeHolder3(category: string, data: any, data2: any) {
 
 function placeHolder4(category: string, data: any, data2: any, data3: any) {
     console.log(category + "\n" + data + data2 + data3);
+}
+
+export async function createWebSocket(endpoint: string = "ws://localhost:8080") {
+    return new Promise<WebSocket | undefined>((resolve) => {
+        const webSocket = new WebSocket(endpoint);
+
+        webSocket.onopen = (event: object) => {
+            console.log("websocket open" + event);
+            resolve(webSocket);
+        };
+        // messages from the typeAgent server appear here
+        webSocket.onmessage = (event: any) => {
+            console.log("websocket message: " + JSON.stringify(event));
+
+            const msgObj = JSON.parse(event.data);
+            switch(msgObj.message) {
+                case "update-display":
+                    if (fnMap.has("update-display")) {
+                        fnMap.get("update-display")(undefined, msgObj.data.message, msgObj.data.mode);
+                    }
+                  break;
+              }
+
+        };
+        webSocket.onclose = (event: object) => {
+            console.log("websocket connection closed" + event);
+            resolve(undefined);
+        };
+        webSocket.onerror = (event: object) => {
+            console.log("websocket error" + event);
+            resolve(undefined);
+        };
+    });
+}
+
+export function keepWebSocketAlive(webSocket: WebSocket, source: string) {
+    const keepAliveIntervalId = setInterval(() => {
+        if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+            webSocket.send(
+                JSON.stringify({
+                    source: `${source}`,
+                    target: "none",
+                    messageType: "keepAlive",
+                    body: {},
+                }),
+            );
+        } else {
+            console.log("Clearing keepalive retry interval");
+            clearInterval(keepAliveIntervalId);
+        }
+    }, 20 * 1000);
 }

@@ -810,6 +810,9 @@ importers:
       typescript:
         specifier: ^5.4.3
         version: 5.4.3
+      ws:
+        specifier: ^8.17.1
+        version: 8.17.1
     devDependencies:
       '@types/debug':
         specifier: ^4.1.10
@@ -820,6 +823,9 @@ importers:
       '@types/node':
         specifier: ^18.18.7
         version: 18.18.7
+      '@types/ws':
+        specifier: ^8.5.10
+        version: 8.5.10
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@18.18.7)(ts-node@10.9.1(@types/node@18.18.7)(typescript@5.4.3))

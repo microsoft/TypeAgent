@@ -4,10 +4,14 @@
 import dotenv from "dotenv";
 import { DisplayAppendMode } from '@typeagent/agent-sdk';
 import { ClientIO, createDispatcher, IAgentMessage, RequestId } from 'agent-dispatcher';
-import { createServer } from 'node:http';
+import { createServer, IncomingMessage } from 'node:http';
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { getMimeType } from "common-utils";
+import WebSocket, { WebSocketServer } from "ws";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:api");
 
 // web server config
 const webConfig = JSON.parse(readFileSync("data/config.json").toString());
@@ -16,18 +20,8 @@ const webConfig = JSON.parse(readFileSync("data/config.json").toString());
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
 
-//let reqq: ServerResponse<IncomingMessage> | undefined = undefined;
-
 // web server
 const server = createServer(async (req, res) => {
-
-  //reqq = res;
-   const metrics = await dispatcher.processCommand("@greeting", "agent-0", []);
-   console.log(metrics);
-
-
-  // res.writeHead(200, { 'Content-Type': 'text/plain' });
-  // res.end('Hello World!\n');
 
   // serve up the requested file if we have it
   const requestedFile: string = path.join(webConfig.wwwroot, req.url == "/" || req.url === undefined ? "index.html" : req.url);
@@ -41,8 +35,112 @@ const server = createServer(async (req, res) => {
 
 });
 
+// websocket server
+const hostEndpoint = process.env["WEBSOCKET_HOST"] ?? "ws://localhost:3030";
+const url = new URL(hostEndpoint);
+const wss = new WebSocketServer({
+  port: parseInt(url.port),
+  path: url.pathname
+});
+
+wss.on("listening", () => {
+  debug(`WebSocket server started at ${hostEndpoint}`);
+  process.send?.("Success");
+});
+
+wss.on("error", (error) => {
+  console.error(`WebSocket server error: ${error}`);
+  wss.close();
+  process.send!("Failure");
+  process.exit(1);
+});
+
+let currentws: WebSocket | undefined;
+wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
+  debug("New client connected");
+
+  currentws = ws;
+
+  if (req.url) {
+      const params = new URLSearchParams(req.url.split("?")[1]);
+      const clientId = params.get("clientId");
+      if (clientId) {
+          for (var client of wss.clients) {
+              if ((client as any).clientId) {
+                  wss.clients.delete(client);
+              }
+          }
+
+          (ws as any).clientId = clientId;
+      }
+  }
+
+  debug(`Connection count: ${wss.clients.size}`);
+
+  // messages from web clients arrive here
+  ws.on("message", async (message: string) => {
+      try {
+          const msgObj = JSON.parse(message);
+          debug(`Received ${msgObj.message} message`);
+
+          switch(msgObj.message) {
+            case "shellrequest":
+                const metrics = await dispatcher.processCommand(msgObj.data.request, msgObj.data.id, msgObj.data.images);
+                console.log(metrics);    
+              break;
+          }
+      } catch {
+          debug("WebSocket message not parsed.");
+      }
+  });
+
+  ws.on("close", () => {
+      debug("Client disconnected");
+  });
+});
+
+process.on("disconnect", () => {
+  // Parent process has disconnected, close the WebSocket server and exit
+  wss.close();
+  process.exit(1);
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 function updateDisplay(message: IAgentMessage, mode?: DisplayAppendMode) {
-  // console.log("updateDisplay");
+
+  currentws?.send(JSON.stringify({
+    message: "udpate-display",
+    data: {
+      message,
+      mode
+    }
+  }));
+  console.log("update-display");
 
   // reqq!.writeHead(200, { 'Content-Type': 'text/plain' });
   // reqq!.end(`${message.message}\n`);

@@ -14,17 +14,23 @@ import { MetricsView } from "./metricsView";
 import { ShellSettings } from "../../main/shellSettings";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { CameraView } from "./cameraView";
-import { webapi } from "./webSocketAPI";
+import { createWebSocket, webapi } from "./webSocketAPI";
 
 export function getClientAPI(): ClientAPI {    
-    return globalThis.api;
+    if (globalThis.api !== undefined) {
+        return globalThis.api;
+    } else {
+        return getWebSocketAPI();
+    }
+    
 }
 
 export function getWebSocketAPI(): ClientAPI {
     if (globalThis.webApi === undefined) {
         globalThis.webApi = webapi;
-        // TODO: implement
-        //globalThis.ws = new WebSocket();
+
+        // TODO: update ws URI
+       createWebSocket("ws://localhost:3030").then((ws) => globalThis.ws = ws);
     }
 
     return globalThis.webApi;
