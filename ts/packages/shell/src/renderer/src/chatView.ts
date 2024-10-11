@@ -332,9 +332,8 @@ export class ChatView {
         // wire up messages from slide show iframes
         window.onmessage = (e) => {
             if (e.data.startsWith("slideshow_")) {
-
                 const temp: string[] = (e.data as string).split("_");
-                if (temp.length != 3 ) {
+                if (temp.length != 3) {
                     return;
                 }
 
@@ -343,15 +342,14 @@ export class ChatView {
 
                 // find the iframe from which this message originated
                 const iframes = document.getElementsByTagName("iframe");
-                for(let i = 0; i < iframes.length; i++) {
+                for (let i = 0; i < iframes.length; i++) {
                     if (iframes[i].srcdoc.indexOf(`slideshow_${hash}`) > -1) {
-                        
                         // resize the host iframe to fit the content size as reported by the iframe
                         iframes[i].style.height = size + "px";
 
                         break;
                     }
-                };
+                }
             }
         };
     }

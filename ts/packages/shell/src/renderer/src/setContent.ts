@@ -127,7 +127,7 @@ export function setContent(
     if (script) {
         const iframe: HTMLIFrameElement = document.createElement("iframe");
         iframe.sandbox.add("allow-scripts");
-        iframe.classList.add("host-frame");        
+        iframe.classList.add("host-frame");
         iframe.srcdoc = `<html>
         <head>
         <link href="./assets/styles.less" type="text/css" rel="stylesheet">

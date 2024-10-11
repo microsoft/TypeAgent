@@ -191,8 +191,6 @@ function createCarouselForImages(
             }
             slides[slideIndex-1].classList.remove("slideshow-hidden");
             dots[slideIndex-1].classList.add("active");
-
-            //window.top.postMessage('slideshow_${hash}_' + document.getElementsByClassName('slideshow-container ${hash}')[0].scrollHeight, '*')            
         }
 
         var ro = new ResizeObserver(entries => {
