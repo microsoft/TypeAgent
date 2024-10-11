@@ -35,5 +35,5 @@ export const defaultSettings: ShellSettingsType = {
     multiModalContent: true,
     devUI: false,
     partialCompletion: true,
-    allowedDisplayType: [ "html", "iframe", "text" ],
+    allowedDisplayType: ["html", "iframe", "text"],
 };

@@ -314,7 +314,7 @@ export class SettingsView {
     }
 
     public isDisplayTypeAllowed(displayType: DisplayType): boolean {
-        for(let i = 0; i < this.shellSettings.allowedDisplayType.length; i++) {
+        for (let i = 0; i < this.shellSettings.allowedDisplayType.length; i++) {
             if (this.shellSettings.allowedDisplayType[i] === displayType) {
                 return true;
             }

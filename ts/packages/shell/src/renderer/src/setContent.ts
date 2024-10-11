@@ -49,7 +49,7 @@ export function setContent(
     elm: HTMLElement,
     content: DisplayContent,
     settingsView: SettingsView,
-    appendMode?: DisplayAppendMode,    
+    appendMode?: DisplayAppendMode,
 ): string | undefined {
     // Remove existing content if we are not appending.
     if (appendMode === undefined) {

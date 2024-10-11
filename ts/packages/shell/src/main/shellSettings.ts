@@ -174,10 +174,10 @@ export class ShellSettings
     }
 
     public isDisplayTypeAllowed(displayType: DisplayType): boolean {
-        for(let i = 0; i < this.allowedDisplayType.length; i++) {
-                if (this.allowedDisplayType[i] === displayType) {
-                    return true;
-                }
+        for (let i = 0; i < this.allowedDisplayType.length; i++) {
+            if (this.allowedDisplayType[i] === displayType) {
+                return true;
+            }
         }
 
         return false;
