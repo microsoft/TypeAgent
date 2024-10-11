@@ -144,11 +144,31 @@ function updateDisplay(message: IAgentMessage, mode?: DisplayAppendMode) {
 
 const clientIO: ClientIO = {
   clear: () => {
-      //mainWindow?.webContents.send("clear");
+    currentws?.send(JSON.stringify({
+      message: "clear",
+      data: {}
+    }));
   },
   setDisplay: updateDisplay,
   appendDisplay: (message, mode) => updateDisplay(message, mode ?? "inline"),
-  setDynamicDisplay: () => { console.log("setDynamicDisplay");},
+  setDynamicDisplay: (
+    source: string,
+    requestId: RequestId,
+    actionIndex: number,
+    displayId: string,
+    nextRefreshMs: number,
+  ) => { 
+    currentws?.send(JSON.stringify({
+      message: "set-dynamic-action-display",
+      data: {
+        source,
+        requestId,
+        actionIndex,
+        displayId,
+        nextRefreshMs
+      }
+    }));
+  },
   askYesNo: (message, requestId, defaultValue?): Promise<boolean> => {return new Promise<boolean>((resolve)=>{});},
   question: (): Promise<string> => { return new Promise<string>((resolve) => {});},
   proposeAction: (actionTemplates, requestId, source): Promise<unknown> => {return new Promise<unknown>((resolve) => {});},

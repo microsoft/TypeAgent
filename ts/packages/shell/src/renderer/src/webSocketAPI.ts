@@ -48,10 +48,10 @@ export const webapi: ClientAPI = {
         fnMap.set("update-display", callback);
     },
     onSetDynamicActionDisplay(callback) {
-        placeHolder("set-dynamic-action-display", callback);
+        fnMap.set("set-dynamic-action-display", callback);
     },
     onClear(callback) {
-        placeHolder("clear", callback);
+        fnMap.set("clear", callback);
     },
     onSettingSummaryChanged(callback) {
         placeHolder("setting-summary-changed", callback);
@@ -160,6 +160,11 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080", 
                 case "exit":
                     window.close();
                     break;
+                case "clear":
+                    if (fnMap.has("clear")) {
+                        fnMap.get("clear")(undefined, msgObj.data);
+                    }
+                    break;
                 case "take-action":
                     if (fnMap.has("take-action")) {
                         fnMap.get("take-action")(undefined, msgObj.data);
@@ -167,6 +172,11 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080", 
                     break;
                 case "notify":
                     notify(msgObj);
+                    break;
+                case "set-dynamic-action-display":
+                    if (fnMap.has("set-dynamic-action-display")) {
+                        fnMap.get("set-dynamic-action-display")(undefined, msgObj.data.source, msgObj.data.requestId, msgObj.data.actionIndex, msgObj.data.displayId, msgObj.data.nextRefreshMs);
+                    }                    
                     break;
               }
 
