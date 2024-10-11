@@ -30,7 +30,7 @@ export function getWebSocketAPI(): ClientAPI {
         globalThis.webApi = webapi;
 
         // TODO: update ws URI
-       createWebSocket("ws://localhost:3030").then((ws) => globalThis.ws = ws);
+       createWebSocket("ws://localhost:3030", true).then((ws) => globalThis.ws = ws);
     }
 
     return globalThis.webApi;

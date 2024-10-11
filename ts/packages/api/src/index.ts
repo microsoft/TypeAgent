@@ -134,7 +134,7 @@ process.on("disconnect", () => {
 function updateDisplay(message: IAgentMessage, mode?: DisplayAppendMode) {
 
   currentws?.send(JSON.stringify({
-    message: "udpate-display",
+    message: "update-display",
     data: {
       message,
       mode

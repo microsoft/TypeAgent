@@ -138,7 +138,7 @@ function placeHolder4(category: string, data: any, data2: any, data3: any) {
     console.log(category + "\n" + data + data2 + data3);
 }
 
-export async function createWebSocket(endpoint: string = "ws://localhost:8080") {
+export async function createWebSocket(endpoint: string = "ws://localhost:8080", autoReconnect: boolean = true) {
     return new Promise<WebSocket | undefined>((resolve) => {
         const webSocket = new WebSocket(endpoint);
 
@@ -151,6 +151,7 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080") 
             console.log("websocket message: " + JSON.stringify(event));
 
             const msgObj = JSON.parse(event.data);
+            console.log(msgObj);
             switch(msgObj.message) {
                 case "update-display":
                     if (fnMap.has("update-display")) {
@@ -163,6 +164,11 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080") 
         webSocket.onclose = (event: object) => {
             console.log("websocket connection closed" + event);
             resolve(undefined);
+
+            // reconnect?
+            if (autoReconnect) {
+                createWebSocket("ws://localhost:3030", true).then((ws) => globalThis.ws = ws);                
+            }
         };
         webSocket.onerror = (event: object) => {
             console.log("websocket error" + event);
