@@ -132,7 +132,6 @@ process.on("disconnect", () => {
 
 
 function updateDisplay(message: IAgentMessage, mode?: DisplayAppendMode) {
-
   currentws?.send(JSON.stringify({
     message: "update-display",
     data: {
@@ -141,9 +140,6 @@ function updateDisplay(message: IAgentMessage, mode?: DisplayAppendMode) {
     }
   }));
   console.log("update-display");
-
-  // reqq!.writeHead(200, { 'Content-Type': 'text/plain' });
-  // reqq!.end(`${message.message}\n`);
 }
 
 const clientIO: ClientIO = {
@@ -193,10 +189,17 @@ const clientIO: ClientIO = {
       // }
   },
   exit: () => {
-      //app.quit();
+    currentws?.send(JSON.stringify({
+      message: "exit",
+      data: {}
+    }));
+  
   },
   takeAction: (action: string) => {
-      //mainWindow?.webContents.send("take-action", action);
+    currentws?.send(JSON.stringify({
+      message: "take-action",
+      data: action
+    }));
   },
 };
 

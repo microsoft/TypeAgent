@@ -44,8 +44,7 @@ export const webapi: ClientAPI = {
             placeHolder1({resolve, reject});
         });
     },
-        onUpdateDisplay(callback) {
-        //placeHolder("updateDisplay", callback);
+    onUpdateDisplay(callback) {
         fnMap.set("update-display", callback);
     },
     onSetDynamicActionDisplay(callback) {
@@ -113,10 +112,10 @@ export const webapi: ClientAPI = {
         placeHolder("notification-command", callback);
     },
     onNotify(callback) {
-        placeHolder("notification-arrived", callback);
+        fnMap.set("notification-arrived", callback);
     },
     onTakeAction(callback) {
-        placeHolder("take-action", callback);
+        fnMap.set("take-action", callback);
     },
 };
 
@@ -158,6 +157,17 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080", 
                         fnMap.get("update-display")(undefined, msgObj.data.message, msgObj.data.mode);
                     }
                   break;
+                case "exit":
+                    window.close();
+                    break;
+                case "take-action":
+                    if (fnMap.has("take-action")) {
+                        fnMap.get("take-action")(undefined, msgObj.data);
+                    }
+                    break;
+                case "notify":
+                    notify(msgObj);
+                    break;
               }
 
         };
@@ -174,6 +184,50 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080", 
             console.log("websocket error" + event);
             resolve(undefined);
         };
+
+        function notify(msg: any) {
+            console.log(msg);
+            // switch (msg.message) {
+            //     case "explained":
+            //         if (msg.data.requestId === undefined) {
+            //             console.warn("markRequestExplained: requestId is undefined");
+            //             return;
+            //         } else {
+                        
+            //         }
+            //         markRequestExplained(
+            //             requestId,
+            //             data.time,
+            //             data.fromCache,
+            //             data.fromUser,
+            //         );
+            //         break;
+            //     case "randomCommandSelected":
+            //         updateRandomCommandSelected(requestId, data.message);
+            //         break;
+            //     case "showNotifications":
+            //         mainWindow?.webContents.send(
+            //             "notification-command",
+            //             requestId,
+            //             data,
+            //         );
+            //         break;
+            //     case AppAgentEvent.Error:
+            //     case AppAgentEvent.Warning:
+            //     case AppAgentEvent.Info:
+            //         console.log(`[${event}] ${source}: ${data}`);
+            //         mainWindow?.webContents.send(
+            //             "notification-arrived",
+            //             event,
+            //             requestId,
+            //             source,
+            //             data,
+            //         );
+            //         break;
+            //     default:
+            //     // ignore
+            // }            
+        }
     });
 }
 
