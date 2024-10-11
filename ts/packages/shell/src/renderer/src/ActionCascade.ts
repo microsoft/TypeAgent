@@ -32,15 +32,54 @@ function toValueType(paramField: TemplateParamScalar, value: string) {
     }
 }
 
-// Track hierarchy of fields for delete
-type FieldGroup = {
-    row: HTMLTableRowElement;
-    fields: FieldGroup[];
-};
+class FieldGroup {
+    // TODO: Make this private
+    public row: HTMLTableRowElement;
+    private fields: FieldGroup[] = [];
+    constructor(
+        enableEdit: boolean,
+        paramName: string,
+        valueDisplay: string | undefined,
+        optional: boolean = false,
+        level: number = 0,
+        parent?: FieldGroup,
+    ) {
+        const row = document.createElement("tr");
+        const nameCell = row.insertCell();
+        nameCell.style.paddingLeft = `${level * 20}px`;
+        nameCell.innerText = paramName;
+        nameCell.className = "name-cell";
 
-function removeFieldGroup(fieldGroup: FieldGroup) {
-    fieldGroup.fields.forEach((f) => removeFieldGroup(f));
-    fieldGroup.row.remove();
+        const valueCell = row.insertCell();
+        valueCell.innerText = valueDisplay ?? "";
+        valueCell.className = "value-cell";
+
+        if (enableEdit) {
+            const optionCell = row.insertCell();
+            optionCell.className = "button-cell";
+            if (optional) {
+                const optionalButton = document.createElement("button");
+                optionalButton.innerText = "❌";
+                optionalButton.className = "action-edit-button";
+                optionalButton.onclick = () => {
+                    this.remove();
+                };
+                optionCell.appendChild(optionalButton);
+            }
+        }
+        parent?.fields.push(this);
+        this.row = row;
+    }
+
+    public insert(table: HTMLTableElement) {
+        table.appendChild(this.row);
+        this.fields.forEach((f) => f.insert(table));
+    }
+
+    public remove() {
+        this.fields.forEach((f) => f.remove());
+        this.row.remove();
+    }
 }
 
 class FieldContainer {
@@ -84,31 +123,15 @@ class FieldContainer {
         if (valueDisplay === undefined && optional) {
             return undefined;
         }
-        const row = this.table.insertRow();
-        const fieldGroup: FieldGroup = { row, fields: [] };
-        const nameCell = row.insertCell();
-        nameCell.style.paddingLeft = `${level * 20}px`;
-        nameCell.innerText = paramName;
-        nameCell.className = "name-cell";
-
-        const valueCell = row.insertCell();
-        valueCell.innerText = valueDisplay ?? "";
-        valueCell.className = "value-cell";
-
-        if (this.enableEdit) {
-            const optionCell = row.insertCell();
-            optionCell.className = "button-cell";
-            if (optional) {
-                const optionalButton = document.createElement("button");
-                optionalButton.innerText = "❌";
-                optionalButton.className = "action-edit-button";
-                optionalButton.onclick = () => {
-                    removeFieldGroup(fieldGroup);
-                };
-                optionCell.appendChild(optionalButton);
-            }
-        }
-        parent?.fields.push(fieldGroup);
+        const fieldGroup = new FieldGroup(
+            this.enableEdit,
+            paramName,
+            valueDisplay,
+            optional,
+            level,
+            parent,
+        );
+        fieldGroup.insert(this.table);
         return fieldGroup;
     }
 
@@ -359,7 +382,6 @@ class FieldContainer {
         }
     }
     private clearTable() {
-        this.table.remove();
         this.table.replaceChildren();
     }
     private getProperty(name: string) {
