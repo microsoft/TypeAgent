@@ -880,7 +880,6 @@ export async function runChatMemory(): Promise<void> {
             maxMatches,
             minScore,
             maxMessages: 15,
-            combinationSetOp: knowLib.sets.SetOp.IntersectUnion,
             progress: (value) => printer.writeJson(value),
         };
         if (namedArgs.fallback) {
@@ -1072,7 +1071,6 @@ export async function runChatMemory(): Promise<void> {
             maxMatches,
             minScore,
             maxMessages: 15,
-            combinationSetOp: knowLib.sets.SetOp.IntersectUnion,
             progress: (value) => printer.writeJson(value),
         };
         if (namedArgs.fallback) {

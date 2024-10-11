@@ -46,7 +46,6 @@ export type SearchProcessingOptions = {
     minScore: number;
     maxMessages: number;
     fallbackSearch?: SearchOptions | undefined;
-    combinationSetOp?: SetOp;
     includeActions?: boolean;
     skipAnswerGeneration?: boolean;
     progress?: ((action: any) => void) | undefined;
@@ -252,7 +251,7 @@ export function createSearchProcessor(
                 maxMatches: options.maxMatches,
                 minScore: options.minScore,
                 matchNameToType: true,
-                combinationSetOp: options.combinationSetOp,
+                combinationSetOp: SetOp.IntersectUnion,
                 loadEntities: true,
             },
             topic: {
