@@ -919,30 +919,27 @@ export function setContent(
               ? textToHtml(text)
               : stripAnsi(encodeTextToHtml(text));
 
-    contentElm.innerHTML += contentHtml;
-
     // if the agent wants to show script we need to do that in isolation so create an iframe
     // and put both the script and supplied HTML into it
     if (script) {
-
         const iframe: HTMLIFrameElement = document.createElement("iframe");
         iframe.sandbox.add("allow-scripts");
-        iframe.sandbox.add("allow-same-origin");
-        iframe.classList.add("host-frame");
+        iframe.classList.add("host-frame");        
         iframe.srcdoc = `<html>
         <head>
-        <script type="text/javascript">${script}</script>
         <link href="./assets/styles.less" type="text/css" rel="stylesheet">
         <link href="./assets/carousel.less" type="text/css" rel="stylesheet">
         </head>
-        <body style="background: blue;">${text}<script>${script}</script></body></html>`;
+        <body style="height: auto; overflow: hidden;">${text}<script>${script}</script></body></html>`;
 
         const scriptBlock: HTMLScriptElement = document.createElement("script");
         scriptBlock.attributes["type"] = "text/javascript";
-        scriptBlock.innerHTML = script;
-
-        document.body.appendChild(scriptBlock);
+        scriptBlock.innerHTML = script;        
         contentElm.appendChild(iframe);
+        document.body.appendChild(scriptBlock);
+    } else {
+        // HTML only
+        contentElm.innerHTML += contentHtml;
     }
 
     if (!speak) {

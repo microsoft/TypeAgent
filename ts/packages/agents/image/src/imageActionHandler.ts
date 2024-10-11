@@ -179,6 +179,8 @@ function createCarouselForImages(
         let i;
         let slides = document.getElementsByClassName("mySlides ${hash}");
         let dots = document.getElementsByClassName("dot ${hash}");
+
+        if (slides === undefined || slides.length == 0) return;
         if (n > slides.length) {slideIndex = 1}
         if (n < 1) {slideIndex = slides.length}
         for (i = 0; i < slides.length; i++) {
