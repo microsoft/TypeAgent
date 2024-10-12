@@ -175,6 +175,16 @@ const clientIO: ClientIO = {
   question: (): Promise<string> => { return new Promise<string>((resolve) => {});},
   proposeAction: (actionTemplates, requestId, source): Promise<unknown> => {return new Promise<unknown>((resolve) => {});},
   notify(event: string, requestId: RequestId, data: any, source: string) {
+    currentws?.send(JSON.stringify({
+      message: "notify",
+      data: {
+        event,
+        requestId,
+        data,
+        source
+      }
+    }));
+
       // switch (event) {
       //     case "explained":
       //         markRequestExplained(

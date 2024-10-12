@@ -57,10 +57,10 @@ export const webapi: ClientAPI = {
         placeHolder("setting-summary-changed", callback);
     },
     onMarkRequestExplained(callback) {
-        placeHolder("mark-explained", callback);
+        fnMap.set("mark-explained", callback);
     },
     onRandomCommandSelected(callback) {
-        placeHolder("update-random-command", callback);
+        fnMap.set("update-random-command", callback);
     },
     onAskYesNo(callback) {
         placeHolder("askYesNo", callback);
@@ -100,7 +100,7 @@ export const webapi: ClientAPI = {
         placeHolder("help-requested", callback);
     },
     onRandomMessageRequested(callback) {
-        placeHolder("random-message-requested", callback);
+        fnMap.set("random-message-requested", callback);
     },
     onShowDialog(callback) {
         placeHolder("show-dialog", callback);
@@ -174,6 +174,7 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080", 
                     notify(msgObj);
                     break;
                 case "set-dynamic-action-display":
+                    // TODO: verify
                     if (fnMap.has("set-dynamic-action-display")) {
                         fnMap.get("set-dynamic-action-display")(undefined, msgObj.data.source, msgObj.data.requestId, msgObj.data.actionIndex, msgObj.data.displayId, msgObj.data.nextRefreshMs);
                     }                    
@@ -196,25 +197,23 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080", 
         };
 
         function notify(msg: any) {
-            console.log(msg);
-            // switch (msg.message) {
-            //     case "explained":
-            //         if (msg.data.requestId === undefined) {
-            //             console.warn("markRequestExplained: requestId is undefined");
-            //             return;
-            //         } else {
-                        
-            //         }
-            //         markRequestExplained(
-            //             requestId,
-            //             data.time,
-            //             data.fromCache,
-            //             data.fromUser,
-            //         );
-            //         break;
-            //     case "randomCommandSelected":
-            //         updateRandomCommandSelected(requestId, data.message);
-            //         break;
+            switch (msg.data.event) {
+                case "explained":
+                    // TODO: verify
+                    if (msg.data.requestId === undefined) {
+                        console.warn("markRequestExplained: requestId is undefined");
+                        return;
+                    } else {
+                        if (fnMap.has("mark-explained")) {
+                            fnMap.get("mark-explained")(undefined, msg.data.requestId, msg.data.data.time, msg.data.data.fromCache, msg.data.data.fromUser);
+                        } 
+                    }
+                    break;
+                case "randomCommandSelected":
+                    if (fnMap.has("update-random-command")) {
+                        fnMap.get("update-random-command")(undefined, msg.data.requestId, msg.data.data.message);
+                    }
+                    break;
             //     case "showNotifications":
             //         mainWindow?.webContents.send(
             //             "notification-command",
@@ -236,7 +235,7 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080", 
             //         break;
             //     default:
             //     // ignore
-            // }            
+            }            
         }
     });
 }
