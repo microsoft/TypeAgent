@@ -61,12 +61,13 @@ export async function createObjectPage<T = any>(
 }
 
 export interface HashObjectFolder<T = any> {
-    get(name: string): Promise<T | undefined>;
+    get(key: string): Promise<T | undefined>;
     put(key: string, value: T): Promise<void>;
 }
 
 export async function createHashObjectFolder<T = any>(
     folderPath: string,
+    clean: boolean = false,
     numBuckets: number = 17,
     fSys?: FileSystem,
 ): Promise<HashObjectFolder<T>> {
@@ -76,7 +77,9 @@ export async function createHashObjectFolder<T = any>(
     };
     type KVPage = ObjectPage<KV>;
     const fileSystem = fSys ?? fsDefault();
-
+    if (clean) {
+        await fileSystem.rmdir(folderPath);
+    }
     await fileSystem.ensureDir(folderPath);
 
     return {
