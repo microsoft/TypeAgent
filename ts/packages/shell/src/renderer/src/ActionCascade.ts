@@ -146,12 +146,10 @@ abstract class FieldBase {
 
         valueCell.className = "value-cell";
 
-        if (this.data.enableEdit) {
-            if (this.optional) {
-                this.addButton(1, "❌", "action-edit-button", () => {
-                    this.deleteField();
-                });
-            }
+        if (this.data.enableEdit && this.optional) {
+            this.addButton(1, "❌", "action-edit-button", () => {
+                this.deleteField();
+            });
         }
         if (parent !== undefined) {
             parent?.insertAfter(row);
@@ -183,25 +181,27 @@ abstract class FieldBase {
     }
 
     public abstract getValueDisplay(): string | undefined;
+    public insertAfter(row: HTMLTableRowElement) {
+        this.row.after(row);
+    }
 
+    public remove() {
+        if (!this.isValid) {
+            this.data.errorCount--;
+        }
+        this.row.remove();
+    }
     protected updateValueDisplay() {
         const valueDisplay = this.getValueDisplay();
         this.setValid(valueDisplay !== undefined);
 
         if (valueDisplay === undefined && this.optional) {
             this.setVisibility(false);
-        } else {
-            this.valueCell.innerText = valueDisplay ?? "";
-            this.setVisibility(true);
+            return false;
         }
-    }
-
-    private setVisibility(visible: boolean) {
-        if (visible) {
-            this.row.classList.remove("hidden");
-        } else {
-            this.row.classList.add("hidden");
-        }
+        this.valueCell.innerText = valueDisplay ?? "";
+        this.setVisibility(true);
+        return true;
     }
 
     protected setValid(valid: boolean) {
@@ -217,31 +217,37 @@ abstract class FieldBase {
             this.row.classList.add("error");
         }
     }
-
-    public insertAfter(row: HTMLTableRowElement) {
-        this.row.after(row);
-    }
-    public deleteField() {
+    protected deleteField() {
+        // Only optional is deletable. so just visibility to false
         this.setVisibility(false);
+        this.setValue(undefined);
     }
-
-    public remove() {
-        if (!this.isValid) {
-            this.data.errorCount--;
-        }
-        this.row.remove();
-    }
-
     protected getValue() {
         return this.data.getProperty(this.fullPropertyName);
     }
     protected setValue(value: any) {
         this.data.setProperty(this.fullPropertyName, value);
     }
+
+    private setVisibility(visible: boolean) {
+        if (visible) {
+            this.row.classList.remove("hidden");
+        } else {
+            this.row.classList.add("hidden");
+        }
+    }
 }
 
 abstract class FieldGroup extends FieldBase {
-    protected fields: FieldBase[] = [];
+    private readonly fields: FieldBase[] = [];
+
+    public insertAfter(row: HTMLTableRowElement) {
+        if (this.fields.length === 0) {
+            super.insertAfter(row);
+        } else {
+            this.fields[this.fields.length - 1].insertAfter(row);
+        }
+    }
 
     protected createChildField(
         fieldName: string | number,
@@ -261,18 +267,17 @@ abstract class FieldGroup extends FieldBase {
         this.fields.push(field);
         return field;
     }
-
-    public insertAfter(row: HTMLTableRowElement) {
-        if (this.fields.length === 0) {
-            super.insertAfter(row);
-        } else {
-            this.fields[this.fields.length - 1].insertAfter(row);
+    protected clearChildFields() {
+        if (this.fields.length !== 0) {
+            this.fields.forEach((f) => f.remove());
+            this.fields.length = 0;
         }
     }
+    protected abstract createChildFields(): void;
 
-    public deleteField() {
-        this.fields.forEach((f) => f.deleteField());
+    protected deleteField() {
         super.deleteField();
+        this.clearChildFields();
     }
 }
 
@@ -332,11 +337,6 @@ class FieldScalar extends FieldBase {
             ? value.toString()
             : undefined;
     }
-
-    public deleteField() {
-        this.setValue(undefined);
-        super.deleteField();
-    }
 }
 
 class FieldObject extends FieldGroup {
@@ -344,21 +344,27 @@ class FieldObject extends FieldGroup {
         data: FieldData,
         fullPropertyName: string,
         paramName: string,
-        fields: Record<string, TemplateParamFieldOpt>,
+        private readonly fieldTypes: Record<string, TemplateParamFieldOpt>,
         optional: boolean = false,
         level = 0,
         parent?: FieldGroup,
     ) {
         super(data, fullPropertyName, paramName, optional, level, parent);
-        this.updateValueDisplay();
-        for (const [k, v] of Object.entries(fields)) {
-            this.createChildField(k, k, v.field, v.optional ?? false);
+        if (this.updateValueDisplay()) {
+            this.createChildFields();
         }
     }
 
     public getValueDisplay() {
         const value = this.getValue();
         return typeof value === "object" ? "" : undefined;
+    }
+
+    protected createChildFields() {
+        this.clearChildFields();
+        for (const [k, v] of Object.entries(this.fieldTypes)) {
+            this.createChildField(k, k, v.field, v.optional ?? false);
+        }
     }
 }
 
@@ -373,21 +379,33 @@ class FieldArray extends FieldGroup {
         parent: FieldGroup | undefined,
     ) {
         super(data, fullPropertyName, paramName, optional, level, parent);
-        this.updateValueDisplay();
 
         if (data.enableEdit) {
             this.addButton(0, "➕", "action-edit-button", () => {
                 const value = this.ensureArray();
+                const index = value.length;
                 value.push(undefined);
                 this.setValid(true);
-                this.fields.push(this.createChildIndex(this.fields.length));
+                this.createChildIndex(index);
             });
         }
-        this.createChildFields();
+
+        if (this.updateValueDisplay()) {
+            this.createChildFields();
+        }
     }
     public getValueDisplay() {
         const value = this.getValue();
         return Array.isArray(value) && value.length !== 0 ? "" : undefined;
+    }
+
+    protected createChildFields() {
+        this.clearChildFields();
+
+        const items = this.getArray()?.length ?? 0;
+        for (let i = 0; i < items; i++) {
+            this.createChildIndex(i);
+        }
     }
 
     private getArray() {
@@ -423,18 +441,6 @@ class FieldArray extends FieldGroup {
             }
         });
         return field;
-    }
-
-    private createChildFields() {
-        if (this.fields.length !== 0) {
-            this.fields.forEach((f) => f.remove());
-            this.fields = [];
-        }
-
-        const items = this.getArray()?.length ?? 0;
-        for (let i = 0; i < items; i++) {
-            this.fields.push(this.createChildIndex(i));
-        }
     }
 }
 
