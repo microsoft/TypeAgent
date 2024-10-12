@@ -41,3 +41,12 @@ export function stringCompare(x: string, y: string, caseSensitive: boolean): num
 export function stringEquals(x: string, y: string, caseSensitive: boolean): boolean {
     return caseSensitive ? x === y : stringCompare(x, y, caseSensitive) === 0;    
 }
+
+// Uses the djb2 hash
+export function stringHashCode(value: string): number {  
+    let hash = 5381;  
+    for (let i = 0; i < value.length; i++) {  
+        hash = (hash * 33) ^ value.charCodeAt(i);  
+    }  
+    return hash >>> 0; // Ensure the hash is a positive 32-bit integer  
+}  

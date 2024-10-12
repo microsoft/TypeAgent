@@ -97,6 +97,29 @@ export function insertIntoSorted(
     return sorted;
 }
 
+/**
+ * In place. 
+ * If item exists in sorted list, replace it. Else add it
+ * @param sorted 
+ * @param value 
+ * @param compareFn 
+ * @returns 
+ */
+export function addOrUpdateIntoSorted(
+    sorted: any[],
+    value: any,
+    compareFn: (x: any, y: any) => number,
+): any[] {
+    let pos = binarySearch(sorted, value, compareFn);
+    if (pos < 0) {
+        pos = ~pos;
+        sorted.splice(pos, 0, value);
+    } else {
+        sorted[pos] = value;
+    }
+    return sorted;
+}
+
 export function getInRange(
     values: any[], 
     startAt: any, 

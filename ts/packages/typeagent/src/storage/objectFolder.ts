@@ -389,49 +389,6 @@ export async function createObjectFolder<T>(
         }
         return JSON.stringify(obj);
     }
-
-    /**
-     * Write to a temp file, then rename the file synchronously
-     * @param filePath
-     * @param data
-     */
-    async function safeWrite(
-        filePath: string,
-        data: string | Buffer,
-    ): Promise<void> {
-        let tempFilePath: string | undefined = toTempPath(filePath);
-        let backupFilePath: string | undefined;
-        try {
-            await fileSystem.write(tempFilePath, data);
-            backupFilePath = toBackupPath(filePath);
-            // These renames need to be synchronous to ensure atomicity
-            if (!fileSystem.renameFile(filePath, backupFilePath)) {
-                backupFilePath = undefined; // No backup file created because no filePath exists
-            }
-            try {
-                fileSystem.renameFile(tempFilePath, filePath);
-                tempFilePath = undefined;
-            } catch (error: any) {
-                // Try to name the file back to what it was
-                if (backupFilePath) {
-                    fileSystem.renameFile(backupFilePath, filePath);
-                    backupFilePath = undefined;
-                }
-                throw error;
-            }
-        } catch (error: any) {
-            logError("fileSystem.write", filePath, error);
-            throw error;
-        } finally {
-            // Remove all temp files
-            if (tempFilePath) {
-                await fileSystem.removeFile(tempFilePath);
-            }
-            if (backupFilePath) {
-                await fileSystem.removeFile(backupFilePath);
-            }
-        }
-    }
 }
 
 /**
@@ -660,4 +617,49 @@ function logError(where: string, message: string, error: any) {
     const errorText = `ERROR:${where}\n${message}\n${error}`;
     console.log(errorText);
     storageError(errorText);
+}
+
+/**
+ * Write to a temp file, then rename the file synchronously
+ * @param filePath
+ * @param data
+ */
+export async function safeWrite(
+    filePath: string,
+    data: string | Buffer,
+    fSys?: FileSystem | undefined,
+): Promise<void> {
+    const fileSystem = fSys ?? fsDefault();
+    let tempFilePath: string | undefined = toTempPath(filePath);
+    let backupFilePath: string | undefined;
+    try {
+        await fileSystem.write(tempFilePath, data);
+        backupFilePath = toBackupPath(filePath);
+        // These renames need to be synchronous to ensure atomicity
+        if (!fileSystem.renameFile(filePath, backupFilePath)) {
+            backupFilePath = undefined; // No backup file created because no filePath exists
+        }
+        try {
+            fileSystem.renameFile(tempFilePath, filePath);
+            tempFilePath = undefined;
+        } catch (error: any) {
+            // Try to name the file back to what it was
+            if (backupFilePath) {
+                fileSystem.renameFile(backupFilePath, filePath);
+                backupFilePath = undefined;
+            }
+            throw error;
+        }
+    } catch (error: any) {
+        logError("fileSystem.write", filePath, error);
+        throw error;
+    } finally {
+        // Remove all temp files
+        if (tempFilePath) {
+            await fileSystem.removeFile(tempFilePath);
+        }
+        if (backupFilePath) {
+            await fileSystem.removeFile(backupFilePath);
+        }
+    }
 }
