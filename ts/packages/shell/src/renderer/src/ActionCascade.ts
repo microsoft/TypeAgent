@@ -124,40 +124,29 @@ class FieldData {
     }
 }
 
-abstract class FieldBase {
+class FieldRow {
     protected readonly row: HTMLTableRowElement;
     protected readonly valueCell: HTMLTableCellElement;
-    private isValid: boolean = true;
     constructor(
-        protected readonly data: FieldData,
-        protected readonly fullPropertyName: string,
-        private readonly label: string,
-        private readonly optional: boolean,
+        label: string,
         protected readonly level: number,
         parent: FieldGroup | undefined,
     ) {
         const row = document.createElement("tr");
         const nameCell = row.insertCell();
         nameCell.style.paddingLeft = `${this.level * 20}px`;
-        nameCell.innerText = this.label;
+        nameCell.innerText = label;
         nameCell.className = "name-cell";
 
         const valueCell = row.insertCell();
-
         valueCell.className = "value-cell";
 
-        if (this.data.enableEdit && this.optional) {
-            this.addButton(1, "❌", "action-edit-button", () => {
-                this.deleteField();
-            });
-        }
-        if (parent !== undefined) {
-            parent?.insertAfter(row);
-        } else {
-            this.data.table.appendChild(row);
-        }
         this.row = row;
         this.valueCell = valueCell;
+
+        if (parent !== undefined) {
+            parent.insertAfter(row);
+        }
     }
 
     public addButton(
@@ -180,25 +169,55 @@ abstract class FieldBase {
         buttonCell.appendChild(button);
     }
 
+    public removeButton(index: number) {
+        if (this.row.cells.length <= index + 2) {
+            return;
+        }
+        this.row.cells[index + 2].replaceChildren();
+    }
+
+    public remove() {
+        this.row.remove();
+    }
+}
+
+abstract class FieldBase extends FieldRow {
+    private isValid: boolean = true;
+    constructor(
+        protected readonly data: FieldData,
+        protected readonly fullPropertyName: string,
+        label: string,
+        private readonly optional: boolean,
+        protected readonly level: number,
+        parent: FieldGroup | undefined,
+    ) {
+        super(label, level, parent);
+        if (parent === undefined) {
+            this.data.table.appendChild(this.row);
+        }
+    }
+
+    public abstract setDefaultValue();
     public abstract getValueDisplay(): string | undefined;
     public insertAfter(row: HTMLTableRowElement) {
         this.row.after(row);
     }
-
+    public get isVisible() {
+        return !this.row.classList.contains("hidden");
+    }
     public remove() {
         if (!this.isValid) {
             this.data.errorCount--;
         }
-        this.row.remove();
+        super.remove();
     }
     protected updateValueDisplay() {
         const valueDisplay = this.getValueDisplay();
-        this.setValid(valueDisplay !== undefined);
-
         if (valueDisplay === undefined && this.optional) {
             this.setVisibility(false);
             return false;
         }
+        this.setValid(valueDisplay !== undefined);
         this.valueCell.innerText = valueDisplay ?? "";
         this.setVisibility(true);
         return true;
@@ -217,16 +236,17 @@ abstract class FieldBase {
             this.row.classList.add("error");
         }
     }
-    protected deleteField() {
-        // Only optional is deletable. so just visibility to false
-        this.setVisibility(false);
-        this.setValue(undefined);
-    }
+
     protected getValue() {
         return this.data.getProperty(this.fullPropertyName);
     }
     protected setValue(value: any) {
         this.data.setProperty(this.fullPropertyName, value);
+    }
+    public deleteValue() {
+        // Only optional is deletable. so just visibility to false
+        this.setVisibility(false);
+        this.setValue(undefined);
     }
 
     private setVisibility(visible: boolean) {
@@ -267,16 +287,23 @@ abstract class FieldGroup extends FieldBase {
         this.fields.push(field);
         return field;
     }
+
+    public remove() {
+        super.remove();
+        this.clearChildFields();
+    }
+
     protected clearChildFields() {
         if (this.fields.length !== 0) {
             this.fields.forEach((f) => f.remove());
             this.fields.length = 0;
         }
     }
+
     protected abstract createChildFields(): void;
 
-    protected deleteField() {
-        super.deleteField();
+    public deleteValue() {
+        super.deleteValue();
         this.clearChildFields();
     }
 }
@@ -296,9 +323,7 @@ class FieldScalar extends FieldBase {
         this.updateValueDisplay();
 
         if (data.enableEdit && this.fieldType !== defaultTemplatParamScalar) {
-            const input = document.createElement("input");
-            input.type = "text";
-
+            const input = this.createInputElement();
             const row = this.row;
             const valueCell = this.valueCell;
             this.addButton(0, "✏️", "action-edit-button", () => {
@@ -331,6 +356,48 @@ class FieldScalar extends FieldBase {
         }
     }
 
+    private createInputElement() {
+        let element: HTMLSelectElement | HTMLInputElement;
+        switch (this.fieldType.type) {
+            case "string":
+                element = document.createElement("input");
+                element.type = "text";
+                return element;
+            case "number":
+                element = document.createElement("input");
+                element.type = "number";
+                return element;
+            case "boolean":
+                element = document.createElement("select");
+                element.options.add(new Option("true"));
+                element.options.add(new Option("false"));
+                return element;
+            case "string-union":
+                element = document.createElement("select");
+                for (const value of this.fieldType.typeEnum) {
+                    element.options.add(new Option(value));
+                }
+                return element;
+        }
+    }
+    public setDefaultValue() {
+        switch (this.fieldType.type) {
+            case "string":
+                this.setValue("");
+                break;
+            case "number":
+                this.setValue(0);
+                break;
+            case "boolean":
+                this.setValue(false);
+                break;
+            case "string-union":
+                this.setValue(this.fieldType.typeEnum[0]);
+                break;
+        }
+        this.updateValueDisplay();
+    }
+
     public getValueDisplay() {
         const value = this.getValue();
         return isValidValue(this.fieldType, value)
@@ -339,7 +406,33 @@ class FieldScalar extends FieldBase {
     }
 }
 
+class FieldObjectOptionalField extends FieldRow {
+    private readonly select: HTMLSelectElement;
+    constructor(
+        label: string,
+        level: number,
+        parent: FieldGroup,
+        fields: Iterable<string>,
+    ) {
+        super(label, level, parent);
+        this.row.cells[0].classList.add("temp");
+        const select = document.createElement("select");
+        this.select = select;
+
+        for (const field of fields) {
+            select.options.add(new Option(field));
+        }
+        this.valueCell.appendChild(select);
+        this.row.classList.add("editing");
+    }
+
+    public get value() {
+        return this.select.value;
+    }
+}
+
 class FieldObject extends FieldGroup {
+    private readonly hasRequiredFields: boolean;
     constructor(
         data: FieldData,
         fullPropertyName: string,
@@ -350,6 +443,9 @@ class FieldObject extends FieldGroup {
         parent?: FieldGroup,
     ) {
         super(data, fullPropertyName, paramName, optional, level, parent);
+        this.hasRequiredFields = Object.values(fieldTypes).some(
+            (f) => !f.optional,
+        );
         if (this.updateValueDisplay()) {
             this.createChildFields();
         }
@@ -357,14 +453,82 @@ class FieldObject extends FieldGroup {
 
     public getValueDisplay() {
         const value = this.getValue();
-        return typeof value === "object" ? "" : undefined;
+        // Missing required fields will count as errors already
+        return this.hasRequiredFields || typeof value === "object"
+            ? ""
+            : undefined;
+    }
+
+    public setDefaultValue() {
+        this.setValue({});
+        if (this.updateValueDisplay()) {
+            this.createChildFields();
+        }
     }
 
     protected createChildFields() {
         this.clearChildFields();
+        const missingFields = new Map<string, FieldBase>();
+        let hasMissingFieldButton = false;
+        const updateMissingFieldButton = () => {
+            if (missingFields.size === 0) {
+                if (!hasMissingFieldButton) {
+                    return;
+                }
+                hasMissingFieldButton = false;
+                this.removeButton(0);
+                return;
+            }
+            if (hasMissingFieldButton) {
+                return;
+            }
+            hasMissingFieldButton = true;
+            this.addButton(0, "➕", "action-edit-button", () => {
+                this.data.table.classList.add("editing");
+                // create a temporary row
+                const inputRow = new FieldObjectOptionalField(
+                    "<field name>",
+                    this.level + 1,
+                    this,
+                    missingFields.keys(),
+                );
+                inputRow.addButton(2, "💾", "action-editing-button", () => {
+                    const fieldName = inputRow.value;
+
+                    const field = missingFields.get(fieldName);
+                    if (field === undefined) {
+                        return;
+                    }
+                    missingFields.delete(fieldName);
+                    field.setDefaultValue();
+                    inputRow.remove();
+                    this.data.table.classList.remove("editing");
+                    updateMissingFieldButton();
+                });
+
+                inputRow.addButton(3, "🛇", "action-editing-button", () => {
+                    inputRow.remove();
+                    this.data.table.classList.remove("editing");
+                });
+            });
+        };
         for (const [k, v] of Object.entries(this.fieldTypes)) {
-            this.createChildField(k, k, v.field, v.optional ?? false);
+            const optional = v.optional ?? false;
+            const field = this.createChildField(k, k, v.field, optional);
+
+            if (this.data.enableEdit && optional) {
+                if (!field.isVisible) {
+                    // Optional field without a value.
+                    missingFields.set(k, field);
+                }
+                field.addButton(1, "❌", "action-edit-button", () => {
+                    field.deleteValue();
+                    missingFields.set(k, field);
+                    updateMissingFieldButton();
+                });
+            }
         }
+        updateMissingFieldButton();
     }
 }
 
@@ -394,9 +558,18 @@ class FieldArray extends FieldGroup {
             this.createChildFields();
         }
     }
+
     public getValueDisplay() {
         const value = this.getValue();
         return Array.isArray(value) && value.length !== 0 ? "" : undefined;
+    }
+
+    public setDefaultValue() {
+        // Add at least one element to start with.
+        this.setValue([undefined]);
+        if (this.updateValueDisplay()) {
+            this.createChildFields();
+        }
     }
 
     protected createChildFields() {

@@ -106,7 +106,11 @@ async function confirmTranslation(
     const newActions = (await systemContext.requestIO.proposeAction(
         templateSequence,
         DispatcherName,
-    )) as FullAction[] | undefined;
+    )) as FullAction[] | undefined | null;
+
+    if (newActions === null) {
+        throw new Error("Request cancelled");
+    }
 
     return newActions
         ? {
