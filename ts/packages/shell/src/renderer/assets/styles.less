@@ -690,8 +690,22 @@ input[type="file"] {
 }
 
 .action-text td.button-cell {
-  width: 100%;
   padding: 0px;
+}
+
+.action-text input,
+.action-text select {
+  width: 100%;
+}
+
+.action-text .temp {
+  text-align: right;
+  font-style: italic;
+  color: lightgray;
+}
+
+.action-text tr.hidden {
+  display: none;
 }
 
 .action-edit-button,
@@ -711,4 +725,5 @@ input[type="file"] {
 .action-text tr.error,
 .action-text tr.error input {
   color: red;
+  font-weight: bold;
 }

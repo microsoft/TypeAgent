@@ -32,392 +32,27 @@ function toValueType(paramField: TemplateParamScalar, value: string) {
     }
 }
 
-// Track hierarchy of fields for delete
-type FieldGroup = {
-    row: HTMLTableRowElement;
-    fields: FieldGroup[];
-};
-
-function removeFieldGroup(fieldGroup: FieldGroup) {
-    fieldGroup.fields.forEach((f) => removeFieldGroup(f));
-    fieldGroup.row.remove();
-}
-
-export class ActionCascade {
-    private readonly container: HTMLDivElement;
-    private readonly table: HTMLTableElement;
+class FieldData {
     private current: any;
-    private editMode = false;
-
-    private errorCount = 0;
+    public readonly table: HTMLTableElement;
+    public errorCount = 0;
     constructor(
-        appendTo: HTMLElement,
-        private actionTemplates: ActionTemplateSequence,
-        private enableEdit = true,
+        data: any,
+        public readonly enableEdit: boolean,
     ) {
-        this.current = structuredClone(actionTemplates.actions);
-        this.container = document.createElement("div");
-        this.container.className = "action-text";
-        appendTo.appendChild(this.container);
-
         this.table = document.createElement("table");
-        this.createUI();
+        this.current = structuredClone(data);
     }
 
     public get value() {
         return this.current;
     }
 
-    public get hasErrors() {
-        return this.errorCount !== 0;
+    public set value(data: any) {
+        this.current = structuredClone(data);
     }
 
-    public reset() {
-        this.current = structuredClone(this.actionTemplates.actions);
-        this.table.classList.remove("editing");
-        this.errorCount = 0;
-        this.createTable();
-    }
-
-    public setEditMode(editMode: boolean) {
-        if (this.editMode === editMode) {
-            return;
-        }
-        if (!this.enableEdit && editMode === true) {
-            throw new Error(
-                "Cannot set edit mode to true on a non-editable action cascade",
-            );
-        }
-
-        this.editMode = editMode;
-        if (editMode) {
-            this.container.classList.add("action-text-editable");
-        } else {
-            this.container.classList.remove("action-text-editable");
-        }
-    }
-
-    public remove() {
-        this.container.remove();
-    }
-    private createFieldGroup(
-        paramName: string,
-        valueDisplay: string | undefined,
-        optional: boolean = false,
-        level: number = 0,
-        parent?: FieldGroup,
-    ): FieldGroup | undefined {
-        if (valueDisplay === undefined && optional) {
-            return undefined;
-        }
-        const row = this.table.insertRow();
-        const fieldGroup: FieldGroup = { row, fields: [] };
-        const nameCell = row.insertCell();
-        nameCell.style.paddingLeft = `${level * 20}px`;
-        nameCell.innerText = paramName;
-        nameCell.className = "name-cell";
-
-        const valueCell = row.insertCell();
-        valueCell.innerText = valueDisplay ?? "";
-        valueCell.className = "value-cell";
-
-        if (this.enableEdit) {
-            const optionCell = row.insertCell();
-            optionCell.className = "button-cell";
-            if (optional) {
-                const optionalButton = document.createElement("button");
-                optionalButton.innerText = "❌";
-                optionalButton.className = "action-edit-button";
-                optionalButton.onclick = () => {
-                    removeFieldGroup(fieldGroup);
-                };
-                optionCell.appendChild(optionalButton);
-            }
-        }
-        parent?.fields.push(fieldGroup);
-        return fieldGroup;
-    }
-
-    private createUIForScalar(
-        fullPropertyName: string,
-        paramName: string,
-        paramField: TemplateParamScalar,
-        optional: boolean,
-        level: number,
-        parent: FieldGroup,
-    ) {
-        const value = this.getProperty(fullPropertyName);
-        const valueStr = isValidValue(paramField, value)
-            ? value.toString()
-            : undefined;
-        const fieldGroup = this.createFieldGroup(
-            paramName,
-            valueStr,
-            optional,
-            level,
-            parent,
-        );
-        if (fieldGroup === undefined) {
-            return;
-        }
-        const valueCell = fieldGroup.row.cells[1];
-        let currentValid = true;
-        const setValueValid = (valid: boolean) => {
-            if (valid === currentValid) {
-                return;
-            }
-
-            if (valid) {
-                this.errorCount--;
-                fieldGroup.row.classList.remove("error");
-            } else {
-                this.errorCount++;
-                fieldGroup.row.classList.add("error");
-            }
-            currentValid = valid;
-        };
-
-        setValueValid(valueStr !== undefined);
-
-        if (this.enableEdit) {
-            const row = fieldGroup.row;
-            const input = document.createElement("input");
-            input.type = "text";
-            if (fullPropertyName !== undefined) {
-                const editCell = row.insertCell();
-                editCell.className = "button-cell";
-                const editButton = document.createElement("button");
-                editButton.innerText = "✏️";
-                editButton.className = "action-edit-button";
-                editButton.onclick = () => {
-                    this.table.classList.add("editing");
-                    row.classList.add("editing");
-                    input.value = valueCell.innerText;
-                    valueCell.replaceChildren(input);
-                    input.focus();
-                };
-                editCell.appendChild(editButton);
-
-                const saveCell = row.insertCell();
-                saveCell.className = "button-cell";
-                const saveButton = document.createElement("button");
-                saveButton.innerText = "💾";
-                saveButton.className = "action-editing-button";
-                saveButton.onclick = () => {
-                    const newValue = toValueType(paramField, input.value);
-                    if (newValue === undefined) {
-                        setValueValid(false);
-                        return;
-                    }
-
-                    setValueValid(true);
-                    this.table.classList.remove("editing");
-                    row.classList.remove("editing");
-                    this.setProperty(fullPropertyName, newValue);
-                    valueCell.innerText = input.value;
-                };
-                saveCell.appendChild(saveButton);
-
-                const cancelCell = row.insertCell();
-                cancelCell.className = "button-cell";
-                const cancelButton = document.createElement("button");
-                cancelButton.innerText = "🛇";
-                cancelButton.className = "action-editing-button";
-                cancelButton.onclick = () => {
-                    this.table.classList.remove("editing");
-                    row.classList.remove("editing");
-                    const value = this.getProperty(fullPropertyName);
-                    const valueStr = isValidValue(paramField, value)
-                        ? value.toString()
-                        : undefined;
-
-                    valueCell.innerText = valueStr;
-                    setValueValid(valueStr !== undefined);
-                };
-                cancelCell.appendChild(cancelButton);
-            }
-        }
-        return fieldGroup;
-    }
-
-    private createUIForArray(
-        fullPropertyName: string,
-        paramName: string,
-        paramValue: TemplateParamArray,
-        optional: boolean,
-        level: number,
-        parent: FieldGroup,
-    ) {
-        const value = this.getProperty(fullPropertyName);
-        const valid = Array.isArray(value);
-        const fieldGroup = this.createFieldGroup(
-            paramName,
-            valid ? "" : undefined,
-            optional,
-            level,
-            parent,
-        );
-        if (fieldGroup === undefined) {
-            return;
-        }
-        const elmType = paramValue.elementType;
-        // Must have at least one.
-        const items = valid && value.length !== 0 ? value.length : 1;
-        for (let i = 0; i < items; i++) {
-            this.createUIForField(
-                `${fullPropertyName}.${i}`,
-                `[${i}]`,
-                elmType,
-                false,
-                level + 1,
-                fieldGroup,
-            );
-        }
-        return fieldGroup;
-    }
-
-    private createUIForObject(
-        fullPropertyName: string,
-        paramName: string,
-        fields: Record<string, TemplateParamFieldOpt>,
-        optional: boolean = false,
-        level = 0,
-        parent?: FieldGroup,
-    ) {
-        const entries = Object.entries(fields);
-        if (entries.length === 0) {
-            return;
-        }
-
-        const value = this.getProperty(fullPropertyName);
-        const fieldGroup = this.createFieldGroup(
-            paramName,
-            typeof value === "object" ? "" : undefined,
-            optional,
-            level,
-            parent,
-        );
-
-        if (fieldGroup === undefined) {
-            return;
-        }
-        const missingOptionalFields: string[] = [];
-        for (const [k, v] of Object.entries(fields)) {
-            const fieldValue =
-                typeof value === "object" ? value?.[k] : undefined;
-            if (v.optional && fieldValue === undefined) {
-                missingOptionalFields.push(k);
-                break;
-            }
-            this.createUIForField(
-                `${fullPropertyName}.${k}`,
-                k,
-                v.field,
-                v.optional ?? false,
-                level + 1,
-                fieldGroup,
-            );
-        }
-
-        return fieldGroup;
-    }
-
-    private createUIForField(
-        fullPropertyName: string,
-        paramName: string,
-        paramField: TemplateParamField,
-        optional: boolean,
-        level: number,
-        parent: FieldGroup,
-    ) {
-        switch (paramField.type) {
-            case "array":
-                this.createUIForArray(
-                    fullPropertyName,
-                    paramName,
-                    paramField,
-                    optional,
-                    level,
-                    parent,
-                );
-                break;
-
-            case "object":
-                this.createUIForObject(
-                    fullPropertyName,
-                    paramName,
-                    paramField.fields,
-                    optional,
-                    level,
-                    parent,
-                );
-                break;
-
-            default:
-                this.createUIForScalar(
-                    fullPropertyName,
-                    paramName,
-                    paramField,
-                    optional,
-                    level,
-                    parent,
-                );
-                break;
-        }
-    }
-
-    private createTable() {
-        this.clearTable();
-        for (let i = 0; i < this.actionTemplates.templates.length; i++) {
-            const actionTemplate = this.actionTemplates.templates[i];
-            const action = this.current[i];
-            if (action === undefined) {
-                break;
-            }
-
-            this.createFieldGroup("Agent", action.translatorName);
-            this.createFieldGroup("Action", action.actionName);
-            this.createUIForObject(
-                `${i}.parameters`,
-                "Parameters",
-                actionTemplate.parameterStructure.fields,
-            );
-        }
-
-        if (this.table.children.length !== 0) {
-            this.container.appendChild(this.table);
-        }
-    }
-    private clearTable() {
-        this.table.remove();
-        this.table.replaceChildren();
-    }
-
-    private createUI() {
-        // for now assume a single action
-        const div = this.container;
-        if (
-            this.actionTemplates.templates.length === 1 &&
-            this.actionTemplates.prefaceSingle
-        ) {
-            const preface = document.createElement("div");
-            preface.className = "preface-text";
-            preface.innerText = this.actionTemplates.prefaceSingle;
-            div.appendChild(preface);
-        } else if (
-            this.actionTemplates.templates.length > 1 &&
-            this.actionTemplates.prefaceMultiple
-        ) {
-            const preface = document.createElement("div");
-            preface.className = "preface-text";
-            preface.innerText = this.actionTemplates.prefaceMultiple;
-            div.appendChild(preface);
-        }
-
-        this.createTable();
-    }
-
-    private getProperty(name: string) {
+    public getProperty(name: string) {
         const properties = name.split(".");
         let lastName: string | number = "current";
         let curr: any = this;
@@ -451,7 +86,7 @@ export class ActionCascade {
         }
         return curr[lastName];
     }
-    private setProperty(name: string, value: any) {
+    public setProperty(name: string, value: any) {
         const properties = name.split(".");
         let lastName: string | number = "current";
         let curr = this;
@@ -486,5 +121,671 @@ export class ActionCascade {
             }
         }
         curr[lastName] = value;
+    }
+}
+
+class FieldRow {
+    protected readonly row: HTMLTableRowElement;
+    protected readonly valueCell: HTMLTableCellElement;
+    constructor(
+        label: string,
+        protected readonly level: number,
+        parent: FieldGroup | undefined,
+    ) {
+        const row = document.createElement("tr");
+        const nameCell = row.insertCell();
+        nameCell.style.paddingLeft = `${this.level * 20}px`;
+        nameCell.innerText = label;
+        nameCell.className = "name-cell";
+
+        const valueCell = row.insertCell();
+        valueCell.className = "value-cell";
+
+        this.row = row;
+        this.valueCell = valueCell;
+
+        if (parent !== undefined) {
+            parent.insertAfter(row);
+        }
+    }
+
+    public addButton(
+        index: number,
+        iconChar: string,
+        className: string,
+        onclick: () => void,
+    ) {
+        if (this.row.cells.length <= index + 2) {
+            for (let i = this.row.cells.length; i <= index + 2; i++) {
+                this.row.insertCell();
+            }
+        }
+        const buttonCell = this.row.cells[index + 2];
+        buttonCell.className = "button-cell";
+        const button = document.createElement("button");
+        button.innerText = iconChar;
+        button.className = className;
+        button.onclick = onclick;
+        buttonCell.appendChild(button);
+    }
+
+    public removeButton(index: number) {
+        if (this.row.cells.length <= index + 2) {
+            return;
+        }
+        this.row.cells[index + 2].replaceChildren();
+    }
+
+    public remove() {
+        this.row.remove();
+    }
+}
+
+abstract class FieldBase extends FieldRow {
+    private isValid: boolean = true;
+    constructor(
+        protected readonly data: FieldData,
+        protected readonly fullPropertyName: string,
+        label: string,
+        private readonly optional: boolean,
+        protected readonly level: number,
+        parent: FieldGroup | undefined,
+    ) {
+        super(label, level, parent);
+        if (parent === undefined) {
+            this.data.table.appendChild(this.row);
+        }
+    }
+
+    public abstract setDefaultValue();
+    public abstract getValueDisplay(): string | undefined;
+    public insertAfter(row: HTMLTableRowElement) {
+        this.row.after(row);
+    }
+    public get isVisible() {
+        return !this.row.classList.contains("hidden");
+    }
+    public remove() {
+        if (!this.isValid) {
+            this.data.errorCount--;
+        }
+        super.remove();
+    }
+    protected updateValueDisplay() {
+        const valueDisplay = this.getValueDisplay();
+        if (valueDisplay === undefined && this.optional) {
+            this.setVisibility(false);
+            return false;
+        }
+        this.setValid(valueDisplay !== undefined);
+        this.valueCell.innerText = valueDisplay ?? "";
+        this.setVisibility(true);
+        return true;
+    }
+
+    protected setValid(valid: boolean) {
+        if (valid === this.isValid) {
+            return;
+        }
+        this.isValid = valid;
+        if (valid) {
+            this.data.errorCount--;
+            this.row.classList.remove("error");
+        } else {
+            this.data.errorCount++;
+            this.row.classList.add("error");
+        }
+    }
+
+    protected getValue() {
+        return this.data.getProperty(this.fullPropertyName);
+    }
+    protected setValue(value: any) {
+        this.data.setProperty(this.fullPropertyName, value);
+    }
+    public deleteValue() {
+        // Only optional is deletable. so just visibility to false
+        this.setVisibility(false);
+        this.setValue(undefined);
+    }
+
+    private setVisibility(visible: boolean) {
+        if (visible) {
+            this.row.classList.remove("hidden");
+        } else {
+            this.row.classList.add("hidden");
+        }
+    }
+}
+
+abstract class FieldGroup extends FieldBase {
+    private readonly fields: FieldBase[] = [];
+
+    public insertAfter(row: HTMLTableRowElement) {
+        if (this.fields.length === 0) {
+            super.insertAfter(row);
+        } else {
+            this.fields[this.fields.length - 1].insertAfter(row);
+        }
+    }
+
+    protected createChildField(
+        fieldName: string | number,
+        label: string,
+        fieldType: TemplateParamField,
+        optional: boolean,
+    ) {
+        const field = createUIForField(
+            this.data,
+            `${this.fullPropertyName}.${fieldName}`,
+            label,
+            fieldType,
+            optional,
+            this.level + 1,
+            this,
+        );
+        this.fields.push(field);
+        return field;
+    }
+
+    public remove() {
+        super.remove();
+        this.clearChildFields();
+    }
+
+    protected clearChildFields() {
+        if (this.fields.length !== 0) {
+            this.fields.forEach((f) => f.remove());
+            this.fields.length = 0;
+        }
+    }
+
+    protected abstract createChildFields(): void;
+
+    public deleteValue() {
+        super.deleteValue();
+        this.clearChildFields();
+    }
+}
+
+const defaultTemplatParamScalar = { type: "string" } as const;
+class FieldScalar extends FieldBase {
+    constructor(
+        data: FieldData,
+        fullPropertyName: string,
+        label: string,
+        private readonly fieldType: TemplateParamScalar = defaultTemplatParamScalar,
+        optional: boolean = false,
+        level: number = 0,
+        parent?: FieldGroup,
+    ) {
+        super(data, fullPropertyName, label, optional, level, parent);
+        this.updateValueDisplay();
+
+        if (data.enableEdit && this.fieldType !== defaultTemplatParamScalar) {
+            const input = this.createInputElement();
+            const row = this.row;
+            const valueCell = this.valueCell;
+            this.addButton(0, "✏️", "action-edit-button", () => {
+                data.table.classList.add("editing");
+                row.classList.add("editing");
+                input.value = valueCell.innerText;
+                valueCell.replaceChildren(input);
+                input.focus();
+            });
+
+            this.addButton(2, "💾", "action-editing-button", () => {
+                const newValue = toValueType(fieldType, input.value);
+                if (newValue === undefined) {
+                    this.setValid(false);
+                    return;
+                }
+
+                this.setValid(true);
+                data.table.classList.remove("editing");
+                row.classList.remove("editing");
+                data.setProperty(fullPropertyName, newValue);
+                valueCell.innerText = input.value;
+            });
+
+            this.addButton(3, "🛇", "action-editing-button", () => {
+                data.table.classList.remove("editing");
+                row.classList.remove("editing");
+                this.updateValueDisplay();
+            });
+        }
+    }
+
+    private createInputElement() {
+        let element: HTMLSelectElement | HTMLInputElement;
+        switch (this.fieldType.type) {
+            case "string":
+                element = document.createElement("input");
+                element.type = "text";
+                return element;
+            case "number":
+                element = document.createElement("input");
+                element.type = "number";
+                return element;
+            case "boolean":
+                element = document.createElement("select");
+                element.options.add(new Option("true"));
+                element.options.add(new Option("false"));
+                return element;
+            case "string-union":
+                element = document.createElement("select");
+                for (const value of this.fieldType.typeEnum) {
+                    element.options.add(new Option(value));
+                }
+                return element;
+        }
+    }
+    public setDefaultValue() {
+        switch (this.fieldType.type) {
+            case "string":
+                this.setValue("");
+                break;
+            case "number":
+                this.setValue(0);
+                break;
+            case "boolean":
+                this.setValue(false);
+                break;
+            case "string-union":
+                this.setValue(this.fieldType.typeEnum[0]);
+                break;
+        }
+        this.updateValueDisplay();
+    }
+
+    public getValueDisplay() {
+        const value = this.getValue();
+        return isValidValue(this.fieldType, value)
+            ? value.toString()
+            : undefined;
+    }
+}
+
+class FieldObjectOptionalField extends FieldRow {
+    private readonly select: HTMLSelectElement;
+    constructor(
+        label: string,
+        level: number,
+        parent: FieldGroup,
+        fields: Iterable<string>,
+    ) {
+        super(label, level, parent);
+        this.row.cells[0].classList.add("temp");
+        const select = document.createElement("select");
+        this.select = select;
+
+        for (const field of fields) {
+            select.options.add(new Option(field));
+        }
+        this.valueCell.appendChild(select);
+        this.row.classList.add("editing");
+    }
+
+    public get value() {
+        return this.select.value;
+    }
+}
+
+class FieldObject extends FieldGroup {
+    private readonly hasRequiredFields: boolean;
+    constructor(
+        data: FieldData,
+        fullPropertyName: string,
+        paramName: string,
+        private readonly fieldTypes: Record<string, TemplateParamFieldOpt>,
+        optional: boolean = false,
+        level = 0,
+        parent?: FieldGroup,
+    ) {
+        super(data, fullPropertyName, paramName, optional, level, parent);
+        this.hasRequiredFields = Object.values(fieldTypes).some(
+            (f) => !f.optional,
+        );
+        if (this.updateValueDisplay()) {
+            this.createChildFields();
+        }
+    }
+
+    public getValueDisplay() {
+        const value = this.getValue();
+        // Missing required fields will count as errors already
+        return this.hasRequiredFields || typeof value === "object"
+            ? ""
+            : undefined;
+    }
+
+    public setDefaultValue() {
+        this.setValue({});
+        if (this.updateValueDisplay()) {
+            this.createChildFields();
+        }
+    }
+
+    protected createChildFields() {
+        this.clearChildFields();
+        const missingFields = new Map<string, FieldBase>();
+        let hasMissingFieldButton = false;
+        const updateMissingFieldButton = () => {
+            if (missingFields.size === 0) {
+                if (!hasMissingFieldButton) {
+                    return;
+                }
+                hasMissingFieldButton = false;
+                this.removeButton(0);
+                return;
+            }
+            if (hasMissingFieldButton) {
+                return;
+            }
+            hasMissingFieldButton = true;
+            this.addButton(0, "➕", "action-edit-button", () => {
+                this.data.table.classList.add("editing");
+                // create a temporary row
+                const inputRow = new FieldObjectOptionalField(
+                    "<field name>",
+                    this.level + 1,
+                    this,
+                    missingFields.keys(),
+                );
+                inputRow.addButton(2, "💾", "action-editing-button", () => {
+                    const fieldName = inputRow.value;
+
+                    const field = missingFields.get(fieldName);
+                    if (field === undefined) {
+                        return;
+                    }
+                    missingFields.delete(fieldName);
+                    field.setDefaultValue();
+                    inputRow.remove();
+                    this.data.table.classList.remove("editing");
+                    updateMissingFieldButton();
+                });
+
+                inputRow.addButton(3, "🛇", "action-editing-button", () => {
+                    inputRow.remove();
+                    this.data.table.classList.remove("editing");
+                });
+            });
+        };
+        for (const [k, v] of Object.entries(this.fieldTypes)) {
+            const optional = v.optional ?? false;
+            const field = this.createChildField(k, k, v.field, optional);
+
+            if (this.data.enableEdit && optional) {
+                if (!field.isVisible) {
+                    // Optional field without a value.
+                    missingFields.set(k, field);
+                }
+                field.addButton(1, "❌", "action-edit-button", () => {
+                    field.deleteValue();
+                    missingFields.set(k, field);
+                    updateMissingFieldButton();
+                });
+            }
+        }
+        updateMissingFieldButton();
+    }
+}
+
+class FieldArray extends FieldGroup {
+    constructor(
+        data: FieldData,
+        fullPropertyName: string,
+        paramName: string,
+        private readonly paramValue: TemplateParamArray,
+        optional: boolean,
+        level: number,
+        parent: FieldGroup | undefined,
+    ) {
+        super(data, fullPropertyName, paramName, optional, level, parent);
+
+        if (data.enableEdit) {
+            this.addButton(0, "➕", "action-edit-button", () => {
+                const value = this.ensureArray();
+                const index = value.length;
+                value.push(undefined);
+                this.setValid(true);
+                this.createChildIndex(index);
+            });
+        }
+
+        if (this.updateValueDisplay()) {
+            this.createChildFields();
+        }
+    }
+
+    public getValueDisplay() {
+        const value = this.getValue();
+        return Array.isArray(value) && value.length !== 0 ? "" : undefined;
+    }
+
+    public setDefaultValue() {
+        // Add at least one element to start with.
+        this.setValue([undefined]);
+        if (this.updateValueDisplay()) {
+            this.createChildFields();
+        }
+    }
+
+    protected createChildFields() {
+        this.clearChildFields();
+
+        const items = this.getArray()?.length ?? 0;
+        for (let i = 0; i < items; i++) {
+            this.createChildIndex(i);
+        }
+    }
+
+    private getArray() {
+        const value = this.getValue();
+        return Array.isArray(value) ? value : undefined;
+    }
+
+    private ensureArray() {
+        const value = this.getValue();
+        if (Array.isArray(value)) {
+            return value;
+        }
+        const newArray = [];
+        this.setValue(newArray);
+        return newArray;
+    }
+
+    private createChildIndex(index: number) {
+        const field = this.createChildField(
+            index,
+            `[${index}]`,
+            this.paramValue.elementType,
+            false,
+        );
+        field.addButton(1, "❌", "action-edit-button", () => {
+            const value = this.getArray();
+            if (value) {
+                value.splice(index, 1);
+                this.createChildFields();
+                if (value.length === 0) {
+                    this.setValid(false);
+                }
+            }
+        });
+        return field;
+    }
+}
+
+function createUIForField(
+    data: FieldData,
+    fullPropertyName: string,
+    paramName: string,
+    paramField: TemplateParamField,
+    optional: boolean,
+    level: number,
+    parent: FieldGroup | undefined,
+) {
+    switch (paramField.type) {
+        case "array":
+            return new FieldArray(
+                data,
+                fullPropertyName,
+                paramName,
+                paramField,
+                optional,
+                level,
+                parent,
+            );
+
+        case "object":
+            return new FieldObject(
+                data,
+                fullPropertyName,
+                paramName,
+                paramField.fields,
+                optional,
+                level,
+                parent,
+            );
+
+        default:
+            return new FieldScalar(
+                data,
+                fullPropertyName,
+                paramName,
+                paramField,
+                optional,
+                level,
+                parent,
+            );
+    }
+}
+
+class FieldContainer {
+    private data: FieldData;
+
+    constructor(
+        appendTo: HTMLElement,
+        private readonly actionTemplates: ActionTemplateSequence,
+        enableEdit = true,
+    ) {
+        this.data = new FieldData(actionTemplates.actions, enableEdit);
+        this.createFields();
+        appendTo.appendChild(this.data.table);
+    }
+
+    public get value() {
+        return this.data.value;
+    }
+
+    public get hasErrors() {
+        return this.data.errorCount !== 0;
+    }
+
+    public reset() {
+        this.data.value = this.actionTemplates.actions;
+        this.data.table.classList.remove("editing");
+        this.data.errorCount = 0;
+        this.createFields();
+    }
+
+    private createFields() {
+        this.data.table.replaceChildren();
+        for (let i = 0; i < this.actionTemplates.templates.length; i++) {
+            const actionTemplate = this.actionTemplates.templates[i];
+            const action = this.data.value[i];
+            if (action === undefined) {
+                break;
+            }
+
+            new FieldScalar(this.data, `${i}.translatorName`, "Agent");
+            new FieldScalar(this.data, `${i}.actionName`, "Action");
+            new FieldObject(
+                this.data,
+                `${i}.parameters`,
+                "Parameters",
+                actionTemplate.parameterStructure.fields,
+            );
+        }
+    }
+}
+
+export class ActionCascade {
+    private readonly container: HTMLDivElement;
+    private readonly fieldContainer: FieldContainer;
+    private editMode = false;
+
+    constructor(
+        appendTo: HTMLElement,
+        private readonly actionTemplates: ActionTemplateSequence,
+        private readonly enableEdit = true,
+    ) {
+        this.container = document.createElement("div");
+        this.container.className = "action-text";
+        appendTo.appendChild(this.container);
+
+        this.createUI();
+        this.fieldContainer = new FieldContainer(
+            this.container,
+            actionTemplates,
+            enableEdit,
+        );
+    }
+
+    public get value() {
+        return this.fieldContainer.value;
+    }
+
+    public get hasErrors() {
+        return this.fieldContainer.hasErrors;
+    }
+
+    public reset() {
+        this.fieldContainer.reset();
+    }
+
+    public setEditMode(editMode: boolean) {
+        if (this.editMode === editMode) {
+            return;
+        }
+        if (!this.enableEdit && editMode === true) {
+            throw new Error(
+                "Cannot set edit mode to true on a non-editable action cascade",
+            );
+        }
+
+        this.editMode = editMode;
+        if (editMode) {
+            this.container.classList.add("action-text-editable");
+        } else {
+            this.container.classList.remove("action-text-editable");
+        }
+    }
+
+    public remove() {
+        this.container.remove();
+    }
+
+    private createUI() {
+        // for now assume a single action
+        const div = this.container;
+        if (
+            this.actionTemplates.templates.length === 1 &&
+            this.actionTemplates.prefaceSingle
+        ) {
+            const preface = document.createElement("div");
+            preface.className = "preface-text";
+            preface.innerText = this.actionTemplates.prefaceSingle;
+            div.appendChild(preface);
+        } else if (
+            this.actionTemplates.templates.length > 1 &&
+            this.actionTemplates.prefaceMultiple
+        ) {
+            const preface = document.createElement("div");
+            preface.className = "preface-text";
+            preface.innerText = this.actionTemplates.prefaceMultiple;
+            div.appendChild(preface);
+        }
     }
 }
