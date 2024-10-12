@@ -151,26 +151,28 @@ export class CameraView {
         this.mainContainer.append(buttonDiv);
 
         // List cameras and microphones.
-        navigator.mediaDevices
-            .enumerateDevices()
-            .then((devices) => {
-                devices.forEach((device) => {
-                    if (device.kind === "videoinput") {
-                        console.log(
-                            `${device.kind}: ${device.label} id = ${device.deviceId}`,
-                        );
-                        this.cameras.push(device);
-                    }
-                });
+        if (navigator.mediaDevices !== undefined) {
+            navigator.mediaDevices
+                .enumerateDevices()
+                .then((devices) => {
+                    devices.forEach((device) => {
+                        if (device.kind === "videoinput") {
+                            console.log(
+                                `${device.kind}: ${device.label} id = ${device.deviceId}`,
+                            );
+                            this.cameras.push(device);
+                        }
+                    });
 
-                if (devices.length < 2) {
-                    this.swapCameras.classList.add("single-camera");
-                }
-            })
-            .catch((err) => {
-                console.error(`${err.name}: ${err.message}`);
-            });
-    }
+                    if (devices.length < 2) {
+                        this.swapCameras.classList.add("single-camera");
+                    }
+                })
+                .catch((err) => {
+                    console.error(`${err.name}: ${err.message}`);
+                });
+            }
+        }
 
     // Capture a photo by fetching the current contents of the video
     // and drawing it into a canvas, then converting that to a PNG
