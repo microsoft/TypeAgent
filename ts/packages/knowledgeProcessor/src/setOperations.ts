@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { mathLib } from "typeagent";
+import { mathLib, ScoredItem } from "typeagent";
 
 export enum SetOp {
     Union,
@@ -79,6 +79,7 @@ export function* union<T>(
     let yVal = y.next();
 
     while (!xVal.done && !yVal.done) {
+        // TODO: replace with a comparer: currently for strings, this is 2 comparisons
         if (xVal.value === yVal.value) {
             yield xVal.value;
             xVal = x.next();
@@ -113,20 +114,27 @@ export function unionMultiple<T>(
     return combined ?? [];
 }
 
-export function* unionEx<T>(
-    xArray: Iterator<T> | Array<T>,
-    yArray: Iterator<T> | Array<T>,
+export function* unionScored<T = any>(
+    xArray: Iterator<ScoredItem<T>> | Array<ScoredItem<T>>,
+    yArray: Iterator<ScoredItem<T>> | Array<ScoredItem<T>>,
     comparer: (x: T, y: T) => number,
-): IterableIterator<T> {
-    const x: Iterator<T> = Array.isArray(xArray) ? xArray.values() : xArray;
-    const y: Iterator<T> = Array.isArray(yArray) ? yArray.values() : yArray;
+): IterableIterator<ScoredItem<T>> {
+    const x: Iterator<ScoredItem<T>> = Array.isArray(xArray)
+        ? xArray.values()
+        : xArray;
+    const y: Iterator<ScoredItem<T>> = Array.isArray(yArray)
+        ? yArray.values()
+        : yArray;
     let xVal = x.next();
     let yVal = y.next();
 
     while (!xVal.done && !yVal.done) {
-        const cmp = comparer(xVal.value, yVal.value);
+        const cmp = comparer(xVal.value.item, yVal.value.item);
         if (cmp === 0) {
-            yield xVal.value;
+            // If both are equal, yield the one with the higher score
+            yield xVal.value.score >= yVal.value.score
+                ? xVal.value
+                : yVal.value;
             xVal = x.next();
             yVal = y.next();
         } else if (cmp < 0) {
@@ -185,20 +193,6 @@ export function unionArrays<T = any>(
     if (x) {
         if (y) {
             return [...union(x.values(), y.values())];
-        }
-        return x;
-    }
-    return y;
-}
-
-export function unionArraysEx<T = any>(
-    x: T[] | undefined,
-    y: T[] | undefined,
-    comparer: (x: T, y: T) => number,
-): T[] | undefined {
-    if (x && x.length > 0) {
-        if (y && y.length > 0) {
-            return [...unionEx(x.values(), y.values(), comparer)];
         }
         return x;
     }

@@ -729,7 +729,7 @@ export async function runChatMemory(): Promise<void> {
     handlers.entities.metadata = entitiesDef();
     async function entities(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, entitiesDef());
-        let query = namedArgs.name ?? namedArgs.type;
+        let query = namedArgs.name ?? namedArgs.type ?? namedArgs.facet;
         if (query) {
             const isMultipart =
                 namedArgs.facet || (namedArgs.name && namedArgs.type);
