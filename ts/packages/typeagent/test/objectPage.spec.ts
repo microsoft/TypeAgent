@@ -4,6 +4,8 @@
 import { createHashObjectFolder } from "../src/storage/objectPage";
 import { testDirectoryPath } from "./common";
 
+const timeoutMs = 10000;
+
 describe("storage.objectHashFolder", () => {
     const folderPath = testDirectoryPath("./data/test/objectHash");
     test("end2end", async () => {
@@ -20,18 +22,41 @@ describe("storage.objectHashFolder", () => {
             expect(stored).toEqual(value);
         }
     });
-    test("numbers", async () => {
+    test(
+        "numbers",
+        async () => {
+            await testNumbers(17);
+        },
+        timeoutMs,
+    );
+    test(
+        "numbersWithCache",
+        async () => {
+            await testNumbers(17, 4);
+        },
+        timeoutMs,
+    );
+
+    async function testNumbers(
+        numBuckets: number,
+        cacheSize?: number | undefined,
+    ) {
         const hashFolder = await createHashObjectFolder<number>(
             folderPath,
             true,
+            numBuckets,
+            {
+                cacheSize,
+            },
         );
         let count = 1024;
         for (let i = 0; i < count; ++i) {
             await hashFolder.put(i.toString(), i);
         }
+        await hashFolder.save();
         for (let i = 0; i < count; ++i) {
             const value = await hashFolder.get(i.toString());
             expect(value).toEqual(i);
         }
-    });
+    }
 });

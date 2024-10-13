@@ -15,10 +15,14 @@ export enum FileNameType {
     Timestamp,
     Tick,
 }
+
+export type ObjectSerializer = (obj: any) => Buffer;
+export type ObjectDeserializer = (buffer: Buffer) => any;
+
 export interface ObjectFolderSettings {
     allowSubFolders?: boolean;
-    serializer?: (obj: any) => Buffer;
-    deserializer?: (buffer: Buffer) => any;
+    serializer?: ObjectSerializer;
+    deserializer?: ObjectDeserializer;
     fileNameType?: FileNameType;
     cacheNames?: boolean | undefined; // Default is true
     useWeakRefs?: boolean | undefined; // Default is false
@@ -146,12 +150,13 @@ export async function createObjectFolder<T>(
         }
 
         const filePath = fullPath(fileName);
-        const data = serializeObject(obj);
-        if (folderSettings.safeWrites) {
-            await safeWrite(filePath, data);
-        } else {
-            await fileSystem.write(filePath, data);
-        }
+        await writeObjectToFile(
+            filePath,
+            obj,
+            folderSettings.serializer,
+            folderSettings.safeWrites,
+            fileSystem,
+        );
         if (isNewName) {
             pushName(fileName);
         }
@@ -193,25 +198,7 @@ export async function createObjectFolder<T>(
         }
         validateName(name);
         const filePath = fullPath(name);
-        try {
-            if (folderSettings.deserializer) {
-                const buffer = await fileSystem.readBuffer(filePath);
-                if (buffer.length == 0) {
-                    return undefined;
-                }
-                return <T>folderSettings.deserializer(buffer);
-            } else {
-                const json = await fileSystem.read(filePath);
-                if (json) {
-                    return JSON.parse(json);
-                }
-            }
-        } catch (err: any) {
-            if (err.code !== "ENOENT") {
-                logError("objectFolder.get", filePath, err);
-            }
-        }
-        return undefined;
+        return readObjectFromFile(filePath, settings?.deserializer, fileSystem);
     }
 
     async function* all(): AsyncIterableIterator<NameValue<T>> {
@@ -381,13 +368,6 @@ export async function createObjectFolder<T>(
                 return !fileSystem.exists(fullPath(name));
             },
         );
-    }
-
-    function serializeObject(obj: any) {
-        if (folderSettings.serializer) {
-            return folderSettings.serializer(obj);
-        }
-        return JSON.stringify(obj);
     }
 }
 
@@ -586,7 +566,7 @@ function createFileSystem(): FileSystem {
         try {
             await fs.promises.writeFile(filePath, data);
         } catch (error: any) {
-            logError("fileSystem.write", filePath, error);
+            logError("fileSystem:write", filePath, error);
             throw error;
         }
     }
@@ -651,7 +631,7 @@ export async function safeWrite(
             throw error;
         }
     } catch (error: any) {
-        logError("fileSystem.write", filePath, error);
+        logError("fileSystem:write", filePath, error);
         throw error;
     } finally {
         // Remove all temp files
@@ -661,5 +641,48 @@ export async function safeWrite(
         if (backupFilePath) {
             await fileSystem.removeFile(backupFilePath);
         }
+    }
+}
+
+export async function readObjectFromFile<T>(
+    filePath: string,
+    deserializer: ObjectDeserializer | undefined,
+    fSys?: FileSystem,
+): Promise<T | undefined> {
+    const fileSystem = fSys ?? fsDefault();
+    try {
+        if (deserializer) {
+            const buffer = await fileSystem.readBuffer(filePath);
+            if (buffer.length == 0) {
+                return undefined;
+            }
+            return deserializer(buffer);
+        } else {
+            const json = await fileSystem.read(filePath);
+            if (json) {
+                return JSON.parse(json);
+            }
+        }
+    } catch (err: any) {
+        if (err.code !== "ENOENT") {
+            logError("loadObjectFromFile", filePath, err);
+        }
+    }
+    return undefined;
+}
+
+export function writeObjectToFile<T>(
+    filePath: string,
+    obj: T,
+    serializer?: ObjectSerializer | undefined,
+    safeWrites: boolean = false,
+    fSys?: FileSystem,
+): Promise<void> {
+    const fileSystem = fSys ?? fsDefault();
+    const data = serializer ? serializer(obj) : JSON.stringify(obj);
+    if (safeWrites) {
+        return safeWrite(filePath, data);
+    } else {
+        return fileSystem.write(filePath, data);
     }
 }

@@ -153,6 +153,7 @@ export class ChatMemoryPrinter extends ChatPrinter {
             this.writeTitle("Entities");
             for (const entity of entities) {
                 this.writeCompositeEntity(entity);
+                this.writeLine();
             }
             this.writeLine();
         }
