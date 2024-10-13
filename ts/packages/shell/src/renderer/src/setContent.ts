@@ -132,12 +132,23 @@ export function setContent(
         const iframe: HTMLIFrameElement = document.createElement("iframe");
         iframe.sandbox.add("allow-scripts");
         iframe.classList.add("host-frame");
+
+        // use the same stylesheets as the main page
+        let css: string = "";
+        const links = document.head.getElementsByTagName("link");
+        for(let i = 0; i < links.length; i++) {
+            if (links[i].rel.toLowerCase() == "stylesheet") {
+                css += links[i].outerHTML;
+            }
+        }
+
         iframe.srcdoc = `<html>
         <head>
-        <link href="./assets/styles.less" type="text/css" rel="stylesheet">
-        <link href="./assets/carousel.less" type="text/css" rel="stylesheet">
+        ${css}
         </head>
         <body style="height: auto; overflow: hidden;">${text}</body></html>`;
+
+        // give the iframe the same stylesheet as the host page
 
         contentElm.appendChild(iframe);
     } else {

@@ -26,7 +26,7 @@ const server = createServer(async (req, res) => {
   // serve up the requested file if we have it
   const requestedFile: string = path.join(webConfig.wwwroot, req.url == "/" || req.url === undefined ? "index.html" : req.url);
   if (existsSync(requestedFile)) {
-    res.writeHead(200, { 'Content-Type': getMimeType(path.extname(requestedFile)) });
+    res.writeHead(200, { 'Content-Type': getMimeType(path.extname(requestedFile)), 'Access-Control-Allow-Origin': '*' });
     res.end(readFileSync(requestedFile).toString());
   } else {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
