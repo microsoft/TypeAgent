@@ -54,7 +54,7 @@ export const webapi: ClientAPI = {
         fnMap.set("clear", callback);
     },
     onSettingSummaryChanged(callback) {
-        placeHolder("setting-summary-changed", callback);
+        fnMap.set("setting-summary-changed", callback);
     },
     onMarkRequestExplained(callback) {
         fnMap.set("mark-explained", callback);
@@ -178,6 +178,12 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080", 
                     if (fnMap.has("set-dynamic-action-display")) {
                         fnMap.get("set-dynamic-action-display")(undefined, msgObj.data.source, msgObj.data.requestId, msgObj.data.actionIndex, msgObj.data.displayId, msgObj.data.nextRefreshMs);
                     }                    
+                    break;
+                case "setting-summary-changed":
+                    if (fnMap.has("setting-summary-changed")) {
+                        let agentsMap: Map<string, string> = new Map<string, string>(msgObj.data.registeredAgents);
+                        fnMap.get("setting-summary-changed")(undefined, msgObj.data.summary, agentsMap)
+                    }
                     break;
               }
 

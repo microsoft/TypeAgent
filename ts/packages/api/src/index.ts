@@ -19,6 +19,7 @@ const webConfig = JSON.parse(readFileSync("data/config.json").toString());
 // typeAgent config
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
+let settingSummary: string = "";
 
 // web server
 const server = createServer(async (req, res) => {
@@ -83,10 +84,23 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
           const msgObj = JSON.parse(message);
           debug(`Received ${msgObj.message} message`);
 
+          const newSettingSummary = dispatcher.getSettingSummary();
+          if (newSettingSummary !== settingSummary) {
+              settingSummary = newSettingSummary;
+
+              currentws?.send(JSON.stringify({
+                message: "setting-summary-changed",
+                data: {
+                  summary: newSettingSummary,
+                  registeredAgents: [...dispatcher.getTranslatorNameToEmojiMap()],
+                }
+              }));
+          }
+
           switch(msgObj.message) {
             case "shellrequest":
                 const metrics = await dispatcher.processCommand(msgObj.data.request, msgObj.data.id, msgObj.data.images);
-                console.log(metrics);    
+                console.log(metrics);            
               break;
           }
       } catch {
