@@ -122,6 +122,7 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         entityTopK: 16,
         searcher: createSearchProcessor(conversation, chatModel, true, 16),
         emailMemory: await knowLib.email.createEmailMemory(
+            chatModel,
             ReservedConversationNames.outlook,
             storePath,
             conversationSettings,
@@ -610,7 +611,7 @@ export async function runChatMemory(): Promise<void> {
             namedArgs.maxTurns,
         );
         let messageIndex = await context.conversation.getMessageIndex();
-        cm.topicMerger.mergeWindow = namedArgs.mergeWindow;
+        cm.topicMerger.settings.mergeWindowSize = namedArgs.mergeWindow;
 
         let count = 0;
         const concurrency = namedArgs.concurrency;
@@ -641,7 +642,7 @@ export async function runChatMemory(): Promise<void> {
                         message,
                         knowledge,
                     );
-                const mergedTopic = await cm.topicMerger.next(true, true);
+                const mergedTopic = await cm.topicMerger.next(true);
                 if (mergedTopic) {
                     printer.writeTitle("Merged Topic:");
                     printer.writeTemporalBlock(chalk.blueBright, mergedTopic);

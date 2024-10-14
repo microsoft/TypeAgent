@@ -266,6 +266,12 @@ export class CircularArray<T> implements Iterable<T> {
         return this.buffer[this.count - 1];
     }
 
+    public reset(): void {
+        this.count = 0;
+        this.head = 0;
+        this.tail = this.count;
+    }
+
     private isFull() {
         return this.count == this.buffer.length;
     }

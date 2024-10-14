@@ -44,7 +44,6 @@ import {
 } from "./entities.js";
 import { ExtractedKnowledge } from "./knowledge.js";
 import { Filter, SearchAction } from "./knowledgeSearchWebSchema.js";
-import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
 import {
     intersectSets,
@@ -68,12 +67,14 @@ import {
     TermFilterV2,
 } from "./knowledgeTermSearchSchema2.js";
 import { getAllTermsInFilter } from "./searchProcessor.js";
+import { TypeChatLanguageModel } from "typechat";
 
 export interface RecentItems<T> {
     readonly entries: collections.CircularArray<T>;
     push(items: T | T[]): void;
     getContext(maxContextLength: number): string[];
     getUnique(): T[];
+    reset(): void;
 }
 
 export function createRecentItemsWindow<T>(
@@ -86,6 +87,9 @@ export function createRecentItemsWindow<T>(
         push,
         getContext,
         getUnique,
+        reset() {
+            entries.reset();
+        },
     };
 
     function push(items: T | T[]): void {
@@ -1011,23 +1015,40 @@ export async function createConversation(
     }
 }
 
+export interface ConversationTopicMerger extends TopicMerger {
+    reset(): Promise<void>;
+}
+
 export async function createConversationTopicMerger(
-    mergeModel: ChatModel,
+    mergeModel: TypeChatLanguageModel,
     conversation: Conversation,
     baseTopicLevel: number,
-    mergeWindow: number,
-): Promise<TopicMerger> {
-    const baseTopics = await conversation.getTopicsIndex(baseTopicLevel);
-    const topLevelTopics = await conversation.getTopicsIndex(
-        baseTopicLevel + 1,
-    );
-    const topicMerger = await createTopicMerger(
-        mergeModel,
-        baseTopics,
-        mergeWindow,
-        topLevelTopics,
-    );
-    return topicMerger;
+    mergeWindowSize: number = 4,
+): Promise<ConversationTopicMerger> {
+    let baseTopics: TopicIndex | undefined;
+    let topLevelTopics: TopicIndex | undefined;
+    let topicMerger: TopicMerger | undefined;
+    await init();
+
+    return {
+        ...topicMerger!,
+        reset,
+    };
+
+    async function reset(): Promise<void> {
+        await init();
+    }
+
+    async function init() {
+        baseTopics = await conversation.getTopicsIndex(baseTopicLevel);
+        topLevelTopics = await conversation.getTopicsIndex(baseTopicLevel + 1);
+        topicMerger = await createTopicMerger(
+            mergeModel,
+            baseTopics,
+            { mergeWindowSize, trackRecent: true },
+            topLevelTopics,
+        );
+    }
 }
 
 export interface RecentConversation {

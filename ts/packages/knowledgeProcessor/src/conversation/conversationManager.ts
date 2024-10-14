@@ -13,6 +13,7 @@ import { SourceTextBlock, TextBlock } from "../text.js";
 import {
     Conversation,
     ConversationSettings,
+    ConversationTopicMerger,
     createConversation,
     createConversationTopicMerger,
     SearchTermsActionResponse,
@@ -164,15 +165,12 @@ export async function createConversationManager(
     conversationPath: string,
     createNew: boolean,
     existingConversation?: Conversation | undefined,
-    topicMerger?: TopicMerger | undefined,
 ): Promise<ConversationManager<string, string>> {
     const conversationSettings = createConversationSettings();
     const knowledgeModel = openai.createChatModel();
     const answerModel = openai.createChatModel();
 
     const folderSettings = defaultFolderSettings();
-    const topicMergeWindowSize = 4;
-    const maxCharsPerChunk = 2048;
 
     const conversation =
         existingConversation === undefined
@@ -187,10 +185,10 @@ export async function createConversationManager(
     }
     const knowledgeExtractor = createKnowledgeExtractor(
         knowledgeModel,
-        createKnowledgeExtractorSettings(maxCharsPerChunk),
+        createKnowledgeExtractorSettings(),
     );
 
-    topicMerger ??= await createMerger();
+    let topicMerger = await createMerger();
 
     const searchProcessor = createSearchProcessor(
         conversation,
@@ -341,15 +339,14 @@ export async function createConversationManager(
 
     async function clear(removeMessages: boolean): Promise<void> {
         await conversation.clear(removeMessages);
-        topicMerger = await createMerger();
+        await topicMerger!.reset();
     }
 
-    async function createMerger(): Promise<TopicMerger> {
+    async function createMerger(): Promise<ConversationTopicMerger> {
         return await createConversationTopicMerger(
             knowledgeModel,
             conversation,
             1, // Merge base topic level 1 into a higher level
-            topicMergeWindowSize,
         );
     }
 
@@ -452,7 +449,10 @@ export async function addMessageBatchToConversation(
             return [m.value, m.blockId];
         }),
     );
-
+    //
+    // Knowledge extraction can be done in parallel
+    // But we update the knowledge index sequentially
+    //
     const concurrency = conversation.settings.indexSettings.concurrency;
     const extractedKnowledge = await asyncArray.mapAsync(
         messageBlocks,
@@ -522,7 +522,10 @@ async function indexKnowledge(
         knowledge,
     );
     if (topicMerger) {
-        await topicMerger.next(true, true);
+        const topicCount = knowledgeIds.topicIds?.length ?? 0;
+        if (topicCount > 0) {
+            await topicMerger.next(true);
+        }
     }
     await conversation.addKnowledgeToIndex(knowledge, knowledgeIds);
 }
