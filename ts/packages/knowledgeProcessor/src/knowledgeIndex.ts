@@ -591,7 +591,7 @@ export async function createTextIndex<TSourceId = any>(
         value: string,
         maxMatches?: number,
         minScore?: number,
-    ): Promise<ScoredItem<TSourceId>[][]> {
+    ): Promise<IterableIterator<ScoredItem<TSourceId>>[]> {
         if (!semanticIndex) {
             return [];
         }
@@ -606,7 +606,7 @@ export async function createTextIndex<TSourceId = any>(
             settings.concurrency,
             (m) => postingFolder.get(m.item),
         );
-        const scoredPostings: ScoredItem<TSourceId>[][] = [];
+        const scoredPostings: IterableIterator<ScoredItem<TSourceId>>[] = [];
         for (let i = 0; i < nearestPostings.length; ++i) {
             const posting = nearestPostings[i];
             if (posting) {
@@ -618,16 +618,21 @@ export async function createTextIndex<TSourceId = any>(
         return scoredPostings;
     }
 
-    function scorePostings(
+    function* scorePostings(
         postings: TSourceId[],
         score: number,
-    ): ScoredItem<TSourceId>[] {
+    ): IterableIterator<ScoredItem<TSourceId>> {
+        /*
         return postings.map((item) => {
             return {
                 item,
                 score,
             };
         });
+        */
+        for (const item of postings) {
+            yield { item, score };
+        }
     }
 
     function textToId(
