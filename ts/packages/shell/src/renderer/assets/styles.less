@@ -667,10 +667,54 @@ input[type="file"] {
   color: pink;
 }
 
+.action-text table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.action-text tr {
+  border-top: 1px solid lightgray;
+  border-bottom: 1px solid lightgray;
+}
+.action-text td {
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+.action-text td.name-cell {
+  width: 30%;
+}
+
+.action-text td.value-cell {
+  width: 62%;
+}
+
+.action-text td.button-cell {
+  padding: 0px;
+}
+
+.action-text input,
+.action-text select {
+  width: 100%;
+}
+
+.action-text .temp {
+  text-align: right;
+  font-style: italic;
+  color: lightgray;
+}
+
+.action-text tr.hidden {
+  display: none;
+}
+
 .action-edit-button,
 .action-editing-button,
 .action-text-editable table.editing .action-edit-button,
 .action-text-editable tr.editing .action-edit-button {
+  padding: 4px;
+  border: lightgray;
+  background-color: transparent;
   visibility: hidden;
 }
 .action-text-editable .action-edit-button,
@@ -678,6 +722,8 @@ input[type="file"] {
   visibility: visible;
 }
 
-.action-text td.error {
+.action-text tr.error,
+.action-text tr.error input {
   color: red;
+  font-weight: bold;
 }

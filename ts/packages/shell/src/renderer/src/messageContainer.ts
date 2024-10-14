@@ -12,6 +12,7 @@ import { iconCheckMarkCircle, iconRoadrunner, iconX } from "./icon";
 import { ActionCascade } from "./ActionCascade";
 import { getClientAPI } from "./main";
 import { ActionTemplateSequence } from "../../preload/electronTypes";
+import { SettingsView } from "./settingsView";
 
 function createTimestampDiv(timestamp: Date, className: string) {
     const timeStampDiv = document.createElement("div");
@@ -126,6 +127,7 @@ export class MessageContainer {
 
     constructor(
         private chatView: ChatView,
+        private settingsView: SettingsView,
         private classNameSuffix: "agent" | "user",
         private _source: string,
         private readonly agents: Map<string, string>,
@@ -202,6 +204,7 @@ export class MessageContainer {
         const speakText = setContent(
             this.messageDiv,
             content,
+            this.settingsView,
             appendMode === "inline" && this.lastAppendMode !== "inline"
                 ? "block"
                 : appendMode,
@@ -216,14 +219,15 @@ export class MessageContainer {
 
     public addChoicePanel(
         choices: InputChoice[],
-        onSelected: (choice: InputChoice) => void,
+        onSelected: (choice: InputChoice) => boolean | void,
     ) {
         const choicePanel = new ChoicePanel(
             this.messageDiv,
             choices,
             (choice: InputChoice) => {
-                choicePanel.remove();
-                onSelected(choice);
+                if (onSelected(choice) !== false) {
+                    choicePanel.remove();
+                }
             },
         );
     }
@@ -242,29 +246,42 @@ export class MessageContainer {
             actionTemplates,
         );
 
+        const createTextSpan = (text: string) => {
+            const span = document.createElement("span");
+            span.innerText = text;
+            return span;
+        };
         const confirm = () => {
             const choices: InputChoice[] = [
                 {
                     text: "Accept",
-                    element: iconCheckMarkCircle(),
+                    element: createTextSpan("✓"),
                     selectKey: ["y", "Y", "Enter"],
                     value: true,
                 },
                 {
                     text: "Edit",
-                    element: iconX(),
+                    element: createTextSpan("✎"),
                     selectKey: ["n", "N", "Delete"],
+                    value: undefined,
+                },
+                {
+                    text: "Cancel",
+                    element: createTextSpan("✕"),
+                    selectKey: ["Escape"],
                     value: false,
                 },
             ];
             this.addChoicePanel(choices, (choice: InputChoice) => {
-                if (choice.value === true) {
-                    actionContainer.remove();
-                    getClientAPI().sendProposedAction(proposeActionId);
+                if (choice.value === undefined) {
+                    edit();
                     return;
                 }
-                edit();
+                actionContainer.remove();
+                const replacement = choice.value ? undefined : null;
+                getClientAPI().sendProposedAction(proposeActionId, replacement);
             });
+            this.scrollIntoView();
         };
         const edit = () => {
             actionCascade.setEditMode(true);
@@ -282,16 +299,22 @@ export class MessageContainer {
             ];
             this.addChoicePanel(choices, (choice: InputChoice) => {
                 if (choice.value === true) {
+                    if (actionCascade.hasErrors) {
+                        return false;
+                    }
                     actionContainer.remove();
                     getClientAPI().sendProposedAction(
                         proposeActionId,
                         actionCascade.value,
                     );
+                } else {
+                    actionCascade.reset();
+                    actionCascade.setEditMode(false);
+                    confirm();
                 }
-                actionCascade.reset();
-                actionCascade.setEditMode(false);
-                confirm();
+                return true;
             });
+            this.scrollIntoView();
         };
 
         confirm();

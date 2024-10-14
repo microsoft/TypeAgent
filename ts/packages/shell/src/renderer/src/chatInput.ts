@@ -12,6 +12,7 @@ import {
 } from "./icon";
 import { getClientAPI } from "./main";
 import { setContent } from "./setContent";
+import { SettingsView } from "./settingsView";
 import { recognizeOnce } from "./speech";
 import { getSpeechToken } from "./speechToken";
 
@@ -149,6 +150,7 @@ export function questionInput(
     questionId: number,
     message: string,
     id: string,
+    settingsView: SettingsView,
 ) {
     // use this to type replacement JSON object for action
     // first make a container div
@@ -157,7 +159,7 @@ export function questionInput(
     // then add a title div to it
     const title = document.createElement("div");
     title.className = "replacement-title";
-    setContent(title, message);
+    setContent(title, message, settingsView);
     replacementContainer.appendChild(title);
     // then add a replacement div to it
     const textarea = new ExpandableTextarea(

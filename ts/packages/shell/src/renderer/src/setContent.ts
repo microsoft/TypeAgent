@@ -9,6 +9,7 @@ import {
     DisplayMessageKind,
 } from "@typeagent/agent-sdk";
 import DOMPurify from "dompurify";
+import { SettingsView } from "./settingsView";
 
 const ansi_up = new AnsiUp();
 ansi_up.use_classes = true;
@@ -47,6 +48,7 @@ function matchKindStyle(elm: HTMLElement, kindStyle?: string) {
 export function setContent(
     elm: HTMLElement,
     content: DisplayContent,
+    settingsView: SettingsView,
     appendMode?: DisplayAppendMode,
 ): string | undefined {
     // Remove existing content if we are not appending.
@@ -60,18 +62,15 @@ export function setContent(
     let kind: DisplayMessageKind | undefined;
     let text: string;
     let speak: boolean;
-    let script: string | undefined;
     if (typeof content === "string") {
         type = "text";
         text = content;
         speak = false;
-        script = undefined;
     } else {
         type = content.type;
         text = content.content;
         kind = content.kind;
         speak = content.speak ?? false;
-        script = content.script;
     }
 
     const kindStyle = kind ? `chat-message-kind-${kind}` : undefined;
@@ -96,6 +95,11 @@ export function setContent(
     }
 
     let contentElm: HTMLElement = contentDiv;
+    if (!settingsView.isDisplayTypeAllowed(type)) {
+        contentElm.innerText = `The supplied content type (${type}) is not allowed by the configured settings.`;
+        return contentElm.innerText;
+    }
+
     if (type === "text") {
         const prevElm = contentDiv.lastChild as HTMLElement | null;
         if (prevElm?.classList.contains("chat-message-agent-text")) {
@@ -122,14 +126,23 @@ export function setContent(
               ? textToHtml(text)
               : stripAnsi(encodeTextToHtml(text));
 
-    contentElm.innerHTML += contentHtml;
+    // if the agent wants to show script we need to do that in isolation so create an iframe
+    // and put both the script and supplied HTML into it
+    if (type === "iframe") {
+        const iframe: HTMLIFrameElement = document.createElement("iframe");
+        iframe.sandbox.add("allow-scripts");
+        iframe.classList.add("host-frame");
+        iframe.srcdoc = `<html>
+        <head>
+        <link href="./assets/styles.less" type="text/css" rel="stylesheet">
+        <link href="./assets/carousel.less" type="text/css" rel="stylesheet">
+        </head>
+        <body style="height: auto; overflow: hidden;">${text}</body></html>`;
 
-    if (script) {
-        const scriptBlock: HTMLScriptElement = document.createElement("script");
-        scriptBlock.attributes["type"] = "text/javascript";
-        scriptBlock.innerHTML = script;
-
-        document.body.appendChild(scriptBlock);
+        contentElm.appendChild(iframe);
+    } else {
+        // vanilla, sanitized HTML only
+        contentElm.innerHTML += contentHtml;
     }
 
     if (!speak) {

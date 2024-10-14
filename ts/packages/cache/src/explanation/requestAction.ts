@@ -47,6 +47,10 @@ export interface IAction {
     parameters: ParamObjectType;
 }
 
+export interface FullAction extends IAction {
+    translatorName: string;
+}
+
 export interface JSONAction {
     fullActionName: string;
     parameters: ParamObjectType;
@@ -104,6 +108,22 @@ export class Action {
                 parameters: actionJSON.parameters,
             },
             translatorName,
+        );
+    }
+
+    public toFullAction(): FullAction {
+        return {
+            ...this.action,
+            translatorName: this.translatorName,
+        };
+    }
+    public static fromFullAction(fullAction: FullAction): Action {
+        return new Action(
+            {
+                actionName: fullAction.actionName,
+                parameters: fullAction.parameters,
+            },
+            fullAction.translatorName,
         );
     }
 }
@@ -212,7 +232,7 @@ export class Actions {
         return {
             prefaceSingle,
             prefaceMultiple,
-            actions: this.toJSON(),
+            actions: this.toFullActions(),
             templates,
         };
     }
@@ -221,6 +241,20 @@ export class Actions {
         return Array.isArray(this.actions)
             ? this.actions.map((a) => a.toIAction())
             : this.actions.toIAction();
+    }
+
+    public toFullActions(): FullAction[] {
+        return Array.isArray(this.actions)
+            ? this.actions.map((a) => a.toFullAction())
+            : [this.actions.toFullAction()];
+    }
+
+    public static fromFullActions(fullAction: FullAction[]): Actions {
+        return new Actions(
+            fullAction.length === 1
+                ? Action.fromFullAction(fullAction[0])
+                : fullAction.map((a) => Action.fromFullAction(a)),
+        );
     }
 
     public static fromString(actions: string) {

@@ -306,6 +306,7 @@ document.addEventListener("DOMContentLoaded", function () {
     };
 
     const settingsView = new SettingsView(chatView);
+    chatView.settingsView = settingsView;
     tabs.getTabContainerByName("Settings").append(settingsView.getContainer());
     tabs.getTabContainerByName("Metrics").append(
         new MetricsView().getContainer(),

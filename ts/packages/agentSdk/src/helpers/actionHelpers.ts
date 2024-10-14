@@ -62,16 +62,14 @@ export function createActionResultFromHtmlDisplay(
 
 export function createActionResultFromHtmlDisplayWithScript(
     displayText: string,
-    scriptText: string,
     literalText?: string,
 ): ActionResultSuccess {
     return {
         literalText,
         entities: [],
         displayContent: {
-            type: "html",
+            type: "iframe",
             content: displayText,
-            script: scriptText,
         },
     };
 }

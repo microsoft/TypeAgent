@@ -16,6 +16,7 @@ import { IAgentMessage } from "agent-dispatcher";
 import { PartialCompletion } from "./partial";
 import { InputChoice } from "./choicePanel";
 import { MessageGroup } from "./messageGroup";
+import { SettingsView } from "./settingsView";
 
 interface ISymbolNode {
     symbolName: string;
@@ -250,6 +251,7 @@ export class ChatView {
     private topDiv: HTMLDivElement;
     private messageDiv: HTMLDivElement;
     private inputContainer: HTMLDivElement;
+    private _settingsView: SettingsView | undefined;
 
     private idToMessageGroup: Map<string, MessageGroup> = new Map();
     chatInput: ChatInput;
@@ -328,6 +330,30 @@ export class ChatView {
 
         // Add the input div at the bottom so it's always visible
         this.topDiv.append(this.inputContainer);
+
+        // wire up messages from slide show iframes
+        window.onmessage = (e) => {
+            if (e.data.startsWith("slideshow_")) {
+                const temp: string[] = (e.data as string).split("_");
+                if (temp.length != 3) {
+                    return;
+                }
+
+                const hash = temp[1];
+                const size = temp[2];
+
+                // find the iframe from which this message originated
+                const iframes = document.getElementsByTagName("iframe");
+                for (let i = 0; i < iframes.length; i++) {
+                    if (iframes[i].srcdoc.indexOf(`slideshow_${hash}`) > -1) {
+                        // resize the host iframe to fit the content size as reported by the iframe
+                        iframes[i].style.height = size + "px";
+
+                        break;
+                    }
+                }
+            }
+        };
     }
 
     enablePartialInput(enabled: boolean) {
@@ -476,6 +502,7 @@ export class ChatView {
             if (id.startsWith("agent-")) {
                 const mg: MessageGroup = new MessageGroup(
                     this,
+                    this.settingsView!,
                     "",
                     this.messageDiv,
                     undefined,
@@ -528,6 +555,7 @@ export class ChatView {
 
         const mg: MessageGroup = new MessageGroup(
             this,
+            this.settingsView!,
             request,
             this.messageDiv,
             getClientAPI().processShellRequest(requestText, id, images),
@@ -696,6 +724,7 @@ export class ChatView {
             questionId,
             message,
             requestId,
+            this.settingsView!,
         );
         agentMessage.div.appendChild(replacementElm);
     }
@@ -737,6 +766,14 @@ export class ChatView {
         for (const messageGroup of this.idToMessageGroup.values()) {
             messageGroup.setMetricsVisible(visible);
         }
+    }
+
+    public set settingsView(value: SettingsView) {
+        this._settingsView = value;
+    }
+
+    public get settingsView(): SettingsView | undefined {
+        return this._settingsView;
     }
 }
 

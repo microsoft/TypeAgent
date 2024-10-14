@@ -5,6 +5,7 @@
 export type {
     IAction,
     JSONAction,
+    FullAction,
     ParamValueType,
     ParamObjectType,
     HistoryContext,
