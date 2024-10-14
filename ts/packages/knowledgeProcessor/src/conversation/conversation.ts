@@ -871,15 +871,13 @@ export async function createConversation(
             const actionResult = options.action
                 ? await actionIndex.searchTermsV2(filter, options.action)
                 : undefined;
-            /*
-            if (!actionResult?.actionIds?.length) {
-                filter = {
-                    searchTerms: getAllTermsInFilter(filter),
-                };
-            }
-            */
+            const hasActionMatches =
+                actionResult &&
+                actionResult.actionIds &&
+                actionResult.actionIds.length > 0;
+            // Search entities
             filter = {
-                searchTerms: getAllTermsInFilter(filter),
+                searchTerms: getAllTermsInFilter(filter, !hasActionMatches),
             };
             const tasks = [
                 topicIndex.searchTermsV2(filter, options.topic),

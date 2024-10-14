@@ -448,10 +448,10 @@ export function createHitTable<T>(
         if (map.size === 0) {
             return [];
         }
-        let maxFreq = mathLib.max(map.values(), (v) => v.score)!.score;
+        let maxScore = mathLib.max(map.values(), (v) => v.score)!.score;
         let top: T[] = [];
         for (const value of map.values()) {
-            if (value.score === maxFreq) {
+            if (value.score === maxScore) {
                 top.push(value.item);
             }
         }
@@ -465,16 +465,17 @@ export function createHitTable<T>(
         if (k < 1 || topItems.length === 0) {
             return topK;
         }
-        // Find the k'th lowest score
+        // Stop when we have matched k highest scores
         let prevScore = topItems[0].score;
         let kCount = 1;
         for (let i = 0; i < topItems.length; ++i) {
-            if (topItems[i].score < prevScore) {
+            const score = topItems[i].score;
+            if (score < prevScore) {
                 kCount++;
                 if (kCount > k) {
                     break;
                 }
-                prevScore = topItems[i].score;
+                prevScore = score;
             }
             topK.push(topItems[i].item);
         }
