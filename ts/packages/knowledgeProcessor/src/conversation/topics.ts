@@ -49,6 +49,8 @@ import {
 } from "../setOperations.js";
 import { createRecentItemsWindow } from "./conversation.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
+import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
+import { getAllTermsInFilter } from "./searchProcessor.js";
 
 export interface TopicExtractor {
     nextTopic(
@@ -264,6 +266,16 @@ export interface TopicSearchOptions extends SearchOptions {
     loadTopics?: boolean;
 }
 
+export function createTopicSearchOptions(
+    isTopicSummary: boolean = false,
+): TopicSearchOptions {
+    return {
+        maxMatches: isTopicSummary ? Number.MAX_SAFE_INTEGER : 2,
+        minScore: 0.8,
+        loadTopics: true,
+    };
+}
+
 export interface TopicSearchResult<TTopicId = any> {
     topicIds?: TTopicId[] | undefined;
     topics?: string[];
@@ -312,6 +324,10 @@ export interface TopicIndex<TTopicId = any, TSourceId = any> {
         filter: TermFilter,
         options: TopicSearchOptions,
     ): Promise<TopicSearchResult<TTopicId>>;
+    searchTermsV2(
+        filter: TermFilterV2,
+        options: TopicSearchOptions,
+    ): Promise<TopicSearchResult<TTopicId>>;
     loadSourceIds(
         sourceIdLog: TemporalLog<TSourceId>,
         results: TopicSearchResult<TTopicId>[],
@@ -358,6 +374,7 @@ export async function createTopicIndex<TSourceId = any>(
         putMultiple,
         search,
         searchTerms,
+        searchTermsV2,
         loadSourceIds,
     };
 
@@ -499,6 +516,21 @@ export async function createTopicIndex<TSourceId = any>(
             filter.terms && filter.terms.length > 0
                 ? filter.terms.join(" ")
                 : "*";
+        const topicFilter: TopicFilter = {
+            filterType: "Topic",
+            topics,
+            timeRange: filter.timeRange,
+        };
+        return search(topicFilter, options);
+    }
+
+    async function searchTermsV2(
+        filter: TermFilterV2,
+        options: TopicSearchOptions,
+    ): Promise<TopicSearchResult<TopicId>> {
+        // We will just use the standard topic stuff for now, since that does the same thing
+        const terms = getAllTermsInFilter(filter);
+        const topics = terms && terms.length > 0 ? terms.join(" ") : "*";
         const topicFilter: TopicFilter = {
             filterType: "Topic",
             topics,

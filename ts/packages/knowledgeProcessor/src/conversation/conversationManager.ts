@@ -3,7 +3,12 @@
 
 import path from "path";
 import { openai } from "aiclient";
-import { ObjectFolderSettings, SearchOptions, collections } from "typeagent";
+import {
+    ObjectFolderSettings,
+    SearchOptions,
+    asyncArray,
+    collections,
+} from "typeagent";
 import { SourceTextBlock, TextBlock } from "../text.js";
 import {
     Conversation,
@@ -28,18 +33,32 @@ import {
 } from "./searchProcessor.js";
 import { createEmbeddingCache } from "../modelCache.js";
 import { KnowledgeSearchMode } from "./knowledgeActions.js";
-import { SetOp, unionArrays } from "../setOperations.js";
+import { unionArrays } from "../setOperations.js";
 import { ConcreteEntity, KnowledgeResponse } from "./knowledgeSchema.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TopicMerger } from "./topics.js";
 import { logError } from "../diagnostics.js";
 import { mergeEntityFacet } from "./entities.js";
+import assert from "assert";
+
+export type ConversationMessage = {
+    /**
+     * Text of the message
+     */
+    text: string | TextBlock;
+    /**
+     * Any pre-extracted knowledge associated with this message
+     */
+    knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined;
+    /**
+     * Message timestamp
+     */
+    timestamp?: Date | undefined;
+};
 
 export type AddMessageTask = {
     type: "addMessage";
-    message: string | TextBlock;
-    knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined;
-    timestamp?: Date | undefined;
+    message: ConversationMessage;
     callback?: ((error?: any | undefined) => void) | undefined;
 };
 
@@ -68,6 +87,11 @@ export interface ConversationManager<TMessageId = any, TTopicId = any> {
         knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
         timestamp?: Date | undefined,
     ): Promise<void>;
+    /**
+     * Add a batch message to the conversation
+     * @param messages Conversation messages to add
+     */
+    addMessageBatch(messages: ConversationMessage[]): Promise<void>;
     /**
      * Queue the message for adding to the conversation memory in the background
      * @param message
@@ -189,6 +213,7 @@ export async function createConversationManager(
         searchProcessor,
         updateTaskQueue,
         addMessage,
+        addMessageBatch,
         queueAddMessage,
         search,
         getSearchResponse,
@@ -211,6 +236,15 @@ export async function createConversationManager(
         );
     }
 
+    function addMessageBatch(messages: ConversationMessage[]): Promise<void> {
+        return addMessageBatchToConversation(
+            conversation,
+            knowledgeExtractor,
+            topicMerger,
+            messages,
+        );
+    }
+
     function queueAddMessage(
         message: string | TextBlock,
         knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
@@ -218,9 +252,11 @@ export async function createConversationManager(
     ): boolean {
         return updateTaskQueue.push({
             type: "addMessage",
-            message,
-            knowledge,
-            timestamp,
+            message: {
+                text: message,
+                knowledge,
+                timestamp,
+            },
         });
     }
 
@@ -239,9 +275,9 @@ export async function createConversationManager(
                         conversation,
                         knowledgeExtractor,
                         topicMerger,
-                        addTask.message,
-                        addTask.knowledge,
-                        addTask.timestamp,
+                        addTask.message.text,
+                        addTask.message.knowledge,
+                        addTask.message.timestamp,
                     );
                     break;
             }
@@ -356,7 +392,6 @@ export async function createConversationManager(
             maxMatches: fuzzySearchOptions.maxMatches,
             minScore: fuzzySearchOptions.minScore,
             maxMessages,
-            combinationSetOp: SetOp.IntersectUnion,
             progress,
             fallbackSearch: { maxMatches: maxMessages },
         };
@@ -369,7 +404,7 @@ export async function createConversationManager(
  * @param knowledgeExtractor
  * @param topicMerger (Optional)
  * @param message message text or message text block to add
- * @param knownEntities
+ * @param knownKnowledge pre-extracted/known knowledge associated with this message
  * @param timestamp
  */
 export async function addMessageToConversation(
@@ -377,32 +412,83 @@ export async function addMessageToConversation(
     knowledgeExtractor: KnowledgeExtractor,
     topicMerger: TopicMerger | undefined,
     message: string | TextBlock,
-    knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
+    knownKnowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
     timestamp?: Date | undefined,
 ): Promise<void> {
-    const block = await conversation.addMessage(message, timestamp);
-    await extractKnowledgeAndIndex(
-        conversation,
+    const messageBlock = await conversation.addMessage(message, timestamp);
+
+    const messageIndex = await conversation.getMessageIndex();
+    await messageIndex.put(messageBlock.value, messageBlock.blockId);
+
+    let extractedKnowledge = await extractKnowledge(
         knowledgeExtractor,
-        topicMerger,
-        block,
-        knowledge,
+        messageBlock,
+        knownKnowledge,
     );
+    if (extractedKnowledge) {
+        await indexKnowledge(
+            conversation,
+            topicMerger,
+            messageBlock,
+            extractedKnowledge,
+        );
+    }
 }
 
-async function extractKnowledgeAndIndex(
+export async function addMessageBatchToConversation(
     conversation: Conversation,
     knowledgeExtractor: KnowledgeExtractor,
     topicMerger: TopicMerger | undefined,
+    messages: ConversationMessage[],
+): Promise<void> {
+    const messageBlocks = await asyncArray.mapAsync(messages, 1, (m) =>
+        conversation.addMessage(m.text, m.timestamp),
+    );
+    assert.ok(messages.length === messageBlocks.length);
+
+    const messageIndex = await conversation.getMessageIndex();
+    await messageIndex.putMultiple(
+        messageBlocks.map((m) => {
+            return [m.value, m.blockId];
+        }),
+    );
+
+    const concurrency = conversation.settings.indexSettings.concurrency;
+    const extractedKnowledge = await asyncArray.mapAsync(
+        messageBlocks,
+        concurrency,
+        (message, index) => {
+            return extractKnowledge(
+                knowledgeExtractor,
+                message,
+                messages[index].knowledge,
+            );
+        },
+    );
+
+    assert.ok(messageBlocks.length === extractedKnowledge.length);
+    for (let i = 0; i < extractedKnowledge.length; ++i) {
+        const knowledge = extractedKnowledge[i];
+        if (knowledge) {
+            await indexKnowledge(
+                conversation,
+                topicMerger,
+                messageBlocks[i],
+                knowledge,
+            );
+        }
+    }
+}
+
+async function extractKnowledge(
+    knowledgeExtractor: KnowledgeExtractor,
     message: SourceTextBlock,
     knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
-) {
-    const messageIndex = await conversation.getMessageIndex();
-    await messageIndex.put(message.value, message.blockId);
+): Promise<ExtractedKnowledge | undefined> {
     let extractedKnowledge: ExtractedKnowledge | undefined;
     let knownKnowledge: ExtractedKnowledge | undefined;
     if (knowledge) {
-        knownKnowledge = createExtractedKnowledge(message.blockId, knowledge);
+        knownKnowledge = createExtractedKnowledge(message, knowledge);
     }
     const knowledgeResult = await extractKnowledgeFromBlock(
         knowledgeExtractor,
@@ -421,14 +507,7 @@ async function extractKnowledgeAndIndex(
     } else {
         extractedKnowledge = knownKnowledge;
     }
-    if (extractedKnowledge) {
-        await indexKnowledge(
-            conversation,
-            topicMerger,
-            message,
-            extractedKnowledge,
-        );
-    }
+    return extractedKnowledge;
 }
 
 async function indexKnowledge(
@@ -461,10 +540,11 @@ function mergeKnowledge(
     }
 
     let topics = collections.concatArrays(x.topics, y.topics);
+    let actions = collections.concatArrays(x.actions, y.actions);
     return {
         entities: [...merged.values()],
         topics,
-        actions: x.actions,
+        actions,
     };
 }
 

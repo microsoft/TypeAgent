@@ -448,7 +448,7 @@ export async function createTextIndex<TSourceId = any>(
             case SetOp.Intersect:
                 return intersectMultiple(...matches);
             case SetOp.IntersectUnion:
-                return intersectUnionMultiple(...matches);
+                return intersectUnionMultiple(...matches) ?? [];
         }
     }
 
@@ -724,5 +724,26 @@ export async function createKnowledgeStore<T>(
 
     async function add(item: T, id?: TId): Promise<TId> {
         return id ? id : await entries.put(item, id);
+    }
+}
+
+export interface TermMap {
+    get(term: string): string | undefined;
+    put(term: string, value: string): void;
+}
+
+export function createTermMap(caseSensitive: boolean = false) {
+    const map = new Map<string, string>();
+    return {
+        get(term: string) {
+            return map.get(prepareTerm(term));
+        },
+        put(term: string, value: string) {
+            map.set(prepareTerm(term), value);
+        },
+    };
+
+    function prepareTerm(term: string): string {
+        return caseSensitive ? term : term.toLowerCase();
     }
 }

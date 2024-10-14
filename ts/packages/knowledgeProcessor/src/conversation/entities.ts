@@ -42,6 +42,8 @@ import {
 import { toStopDate, toStartDate } from "./knowledgeActions.js";
 import { ConcreteEntity, Facet } from "./knowledgeSchema.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
+import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
+import { DateTimeRange } from "./dateTimeSchema.js";
 
 export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
     extends KnowledgeStore<ExtractedEntity<TSourceId>, TEntityId> {
@@ -66,6 +68,10 @@ export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
         filter: TermFilter,
         options: EntitySearchOptions,
     ): Promise<EntitySearchResult<TEntityId>>;
+    searchTermsV2(
+        filter: TermFilterV2,
+        options: EntitySearchOptions,
+    ): Promise<EntitySearchResult<TEntityId>>;
     loadSourceIds(
         sourceIdLog: TemporalLog<TSourceId>,
         results: EntitySearchResult<TEntityId>[],
@@ -79,6 +85,18 @@ export interface EntitySearchOptions extends SearchOptions {
     matchNameToType: boolean;
     combinationSetOp?: SetOp | undefined;
     topK?: number;
+}
+
+export function createEntitySearchOptions(
+    loadEntities: boolean = true,
+): EntitySearchOptions {
+    return {
+        maxMatches: 2,
+        minScore: 0.8,
+        matchNameToType: true,
+        combinationSetOp: SetOp.IntersectUnion,
+        loadEntities,
+    };
 }
 
 export async function createEntityIndex<TSourceId = string>(
@@ -128,6 +146,7 @@ export async function createEntityIndex<TSourceId = string>(
         addMultiple,
         search,
         searchTerms,
+        searchTermsV2,
         loadSourceIds,
     };
 
@@ -295,31 +314,51 @@ export async function createEntityIndex<TSourceId = string>(
         filter: TermFilter,
         options: EntitySearchOptions,
     ): Promise<EntitySearchResult<EntityId>> {
+        const terms = combineTerms(filter);
+        return findEntities(terms, filter.timeRange, options);
+    }
+
+    async function searchTermsV2(
+        filter: TermFilterV2,
+        options: EntitySearchOptions,
+    ): Promise<EntitySearchResult<EntityId>> {
+        if (filter.searchTerms && filter.searchTerms.length > 0) {
+            return findEntities(filter.searchTerms, filter.timeRange, options);
+        }
+        return createSearchResults();
+    }
+
+    async function findEntities(
+        terms: string[],
+        timeRange: DateTimeRange | undefined,
+        options: EntitySearchOptions,
+    ): Promise<EntitySearchResult<EntityId>> {
         const results = createSearchResults();
-        if (filter.timeRange) {
+        if (timeRange) {
             results.temporalSequence =
                 await entityStore.sequence.getEntriesInRange(
-                    toStartDate(filter.timeRange.startDate),
-                    toStopDate(filter.timeRange.stopDate),
+                    toStartDate(timeRange.startDate),
+                    toStopDate(timeRange.stopDate),
                 );
         }
-        if (filter.terms && filter.terms.length > 0) {
+
+        if (terms && terms.length > 0) {
             const hitCounter = createFrequencyTable<EntityId>();
             await Promise.all([
                 nameIndex.getNearestHitsMultiple(
-                    filter.terms,
+                    terms,
                     hitCounter,
                     options.nameSearchOptions?.maxMatches ?? options.maxMatches,
                     options.nameSearchOptions?.minScore ?? options.minScore,
                 ),
                 typeIndex.getNearestHitsMultiple(
-                    filter.terms,
+                    terms,
                     hitCounter,
                     options.maxMatches,
                     options.minScore,
                 ),
                 facetIndex.getNearestHitsMultiple(
-                    combineTerms(filter),
+                    terms,
                     hitCounter,
                     options.maxMatches,
                     options.minScore,

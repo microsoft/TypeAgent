@@ -3,6 +3,7 @@
 
 import { asyncArray, dateTime, readJsonFile } from "typeagent";
 import {
+    Action,
     ConcreteEntity,
     KnowledgeResponse,
 } from "../conversation/knowledgeSchema.js";
@@ -11,8 +12,16 @@ import fs from "fs";
 import path from "path";
 import { removeUndefined } from "../setOperations.js";
 import { TextBlock, TextBlockType } from "../text.js";
-import { ConversationManager } from "../conversation/conversationManager.js";
+import {
+    ConversationManager,
+    ConversationMessage,
+    createConversationManager,
+} from "../conversation/conversationManager.js";
 import { TopicMerger } from "../conversation/topics.js";
+import {
+    ConversationSettings,
+    createConversation,
+} from "../conversation/conversation.js";
 
 export function emailAddressToString(address: EmailAddress): string {
     if (address.displayName) {
@@ -34,30 +43,32 @@ export function emailAddressListToString(
         : "";
 }
 
-export function emailAddressToEntity(
-    role: string,
+export function emailAddressToEntities(
     emailAddress: EmailAddress,
-): ConcreteEntity | undefined {
-    if (!(emailAddress.address && emailAddress.displayName)) {
-        return undefined;
+): ConcreteEntity[] {
+    const entities: ConcreteEntity[] = [];
+    if (emailAddress.displayName) {
+        const entity: ConcreteEntity = {
+            name: emailAddress.displayName,
+            type: ["person", "email"],
+        };
+        entities.push(entity);
+        if (emailAddress.address) {
+            entity.facets = [];
+            entity.facets.push({
+                name: "email_alias",
+                value: emailAddress.address,
+            });
+        }
     }
-    const entity: ConcreteEntity = {
-        name: "",
-        type: ["email", "email_address"],
-        facets: [{ name: "role", value: role }],
-    };
-    if (emailAddress.address && emailAddress.displayName) {
-        entity.name = emailAddress.displayName;
-        entity.facets!.push({
-            name: "email_alias",
-            value: emailAddress.address,
+    if (emailAddress.address) {
+        entities.push({
+            name: emailAddress.address,
+            type: ["email_alias"],
         });
-    } else if (emailAddress.address) {
-        entity.name = emailAddress.address;
-    } else {
-        entity.name = emailAddress.displayName;
     }
-    return entity;
+
+    return entities;
 }
 
 export function emailToString(
@@ -108,29 +119,117 @@ export function emailToTextBlock(email: Email): TextBlock<string> {
     return block;
 }
 
-export function emailToEntities(email: Email): ConcreteEntity[] {
-    const entities: ConcreteEntity[] = [];
-    const recipient = "recipient";
-    push(emailAddressToEntity("sender", email.from));
-    if (email.to) {
-        push(email.to.map((e) => emailAddressToEntity(recipient, e)));
-    }
-    if (email.cc) {
-        push(email.cc.map((e) => emailAddressToEntity(recipient, e)));
-    }
-    if (email.bcc) {
-        push(email.bcc.map((e) => emailAddressToEntity(recipient, e)));
-    }
+export function emailToEntities(
+    email: Email,
+    buffer?: ConcreteEntity[] | undefined,
+): ConcreteEntity[] {
+    const entities = buffer ?? [];
+    pushAddresses(email.from, entities);
+    pushAddresses(email.to, entities);
+    pushAddresses(email.cc, entities);
+    pushAddresses(email.bcc, entities);
+    entities.push({
+        name: "email",
+        type: ["message"],
+    });
     return entities;
 
-    type EntityType = ConcreteEntity | undefined;
-    function push(newEntities: EntityType | EntityType[]) {
-        if (Array.isArray(newEntities)) {
-            entities.push(...removeUndefined(newEntities));
-        } else if (newEntities) {
-            entities.push(newEntities);
+    function pushAddresses(
+        addresses: EmailAddress[] | EmailAddress | undefined,
+        entities: ConcreteEntity[],
+    ) {
+        if (!addresses) {
+            return;
+        }
+        if (Array.isArray(addresses)) {
+            for (const address of addresses) {
+                entities.push(...emailAddressToEntities(address));
+            }
+        } else {
+            entities.push(...emailAddressToEntities(addresses));
         }
     }
+}
+
+enum EmailVerbs {
+    send = "send",
+    receive = "receive",
+}
+
+function createEmailActions(
+    sender: EmailAddress,
+    recipient: EmailAddress,
+    buffer?: Action[] | undefined,
+): Action[] {
+    const actions = buffer ?? [];
+    addAction(EmailVerbs.send, sender, recipient);
+    addAction(EmailVerbs.receive, recipient, sender);
+    return actions;
+
+    function addAction(
+        verb: string,
+        sender: EmailAddress,
+        recipient: EmailAddress,
+    ) {
+        if (sender.displayName) {
+            addActions(verb, sender.displayName, recipient, actions);
+        }
+        if (sender.address) {
+            addActions(verb, sender.address, recipient, actions);
+        }
+    }
+
+    function addActions(
+        verb: string,
+        sender: string,
+        recipient: EmailAddress,
+        actions: Action[],
+    ) {
+        if (recipient.displayName) {
+            actions.push(createAction(verb, sender, recipient.displayName));
+        }
+        if (recipient.address) {
+            actions.push(createAction(verb, sender, recipient.address));
+        }
+    }
+
+    function createAction(verb: string, from: string, to: string): Action {
+        return {
+            verbs: [verb],
+            verbTense: "past",
+            subjectEntityName: from,
+            objectEntityName: "email",
+            indirectObjectEntityName: to,
+        };
+    }
+}
+
+export function emailToActions(email: Email): Action[] {
+    const actions: Action[] = [];
+    addActions(email.from, email.to, actions);
+    addActions(email.from, email.cc, actions);
+    addActions(email.from, email.bcc, actions);
+
+    return actions;
+
+    function addActions(
+        sender: EmailAddress,
+        recipients: EmailAddress[] | undefined,
+        buffer: Action[],
+    ) {
+        if (recipients) {
+            recipients.forEach((r) => createEmailActions(sender, r, buffer));
+        }
+    }
+}
+
+function emailToKnowledge(email: Email): KnowledgeResponse {
+    return {
+        entities: emailToEntities(email),
+        topics: email.subject ? [email.subject] : [],
+        actions: emailToActions(email),
+        inverseActions: [],
+    };
 }
 
 export async function loadEmail(filePath: string): Promise<Email | undefined> {
@@ -165,22 +264,63 @@ export function createEmailTopicMerger(): TopicMerger {
 }
 
 /**
+ * Create email memory at the given root path
+ * @param name
+ * @param rootPath
+ * @param settings
+ * @returns
+ */
+export async function createEmailMemory(
+    name: string,
+    rootPath: string,
+    settings: ConversationSettings,
+) {
+    const storePath = path.join(rootPath, name);
+    const emailConversation = await createConversation(settings, storePath);
+    const actions = await emailConversation.getActionIndex();
+    actions.verbTermMap.put("say", EmailVerbs.send);
+    actions.verbTermMap.put("discuss", EmailVerbs.send);
+    actions.verbTermMap.put("talk", EmailVerbs.send);
+    actions.verbTermMap.put("get", EmailVerbs.receive);
+
+    return createConversationManager(
+        name,
+        rootPath,
+        false,
+        emailConversation,
+        createEmailTopicMerger(),
+    );
+}
+/**
  * Add an email message to an email conversation
  * @param cm
- * @param email
+ * @param emails
  */
 export async function addEmailToConversation(
     cm: ConversationManager,
-    email: Email,
+    emails: Email | Email[],
 ): Promise<void> {
-    const block = emailToTextBlock(email);
-    const knowledge: KnowledgeResponse = {
-        entities: emailToEntities(email),
-        topics: email.subject ? [email.subject] : [],
-        actions: [],
-        inverseActions: [],
-    };
-    await cm.addMessage(block, knowledge, dateTime.stringToDate(email.sentOn));
+    if (Array.isArray(emails)) {
+        const messages: ConversationMessage[] = emails.map<ConversationMessage>(
+            (email) => {
+                return {
+                    text: emailToTextBlock(email),
+                    knowledge: emailToKnowledge(email),
+                    timestamp: dateTime.stringToDate(email.sentOn),
+                };
+            },
+        );
+        await cm.addMessageBatch(messages);
+    } else {
+        const email = emails;
+        const block = emailToTextBlock(email);
+        const knowledge = emailToKnowledge(email);
+        await cm.addMessage(
+            block,
+            knowledge,
+            dateTime.stringToDate(email.sentOn),
+        );
+    }
 }
 
 function makeHeader(name: string, text: string | undefined): string {

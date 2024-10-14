@@ -65,7 +65,7 @@ export function createAnswerGenerator(
         const context: any = {
             entities: {
                 timeRanges: response.entityTimeRanges(),
-                values: response.mergeAllEntities(settings!.topKEntities),
+                values: response.getCompositeEntities(settings!.topKEntities),
             },
             topics: {
                 timeRanges: response.topicTimeRanges(),

@@ -27,6 +27,7 @@ import {
     TopicSearchResult,
     createTopicIndex,
     createTopicMerger,
+    createTopicSearchOptions,
 } from "./topics.js";
 import {
     TextIndexSettings,
@@ -38,6 +39,7 @@ import {
     EntitySearchOptions,
     EntitySearchResult,
     createEntityIndex,
+    createEntitySearchOptions,
     mergeEntities,
 } from "./entities.js";
 import { ExtractedKnowledge } from "./knowledge.js";
@@ -58,8 +60,14 @@ import {
     ActionSearchOptions,
     ActionSearchResult,
     createActionIndex,
+    createActionSearchOptions,
 } from "./actions.js";
 import { SearchTermsAction, TermFilter } from "./knowledgeTermSearchSchema.js";
+import {
+    SearchTermsActionV2,
+    TermFilterV2,
+} from "./knowledgeTermSearchSchema2.js";
+import { getAllTermsInFilter } from "./searchProcessor.js";
 
 export interface RecentItems<T> {
     readonly entries: collections.CircularArray<T>;
@@ -158,6 +166,10 @@ export interface Conversation<
         filters: TermFilter[],
         options: ConversationSearchOptions,
     ): Promise<SearchResponse>;
+    searchTermsV2(
+        filters: TermFilterV2[],
+        options?: ConversationSearchOptions | undefined,
+    ): Promise<SearchResponse>;
     searchMessages(
         query: string,
         options: SearchOptions,
@@ -215,7 +227,7 @@ export interface SearchResponse<
     allEntities(): IterableIterator<ConcreteEntity>;
     allEntityIds(): IterableIterator<TEntityId>;
     allEntityNames(): string[];
-    mergeAllEntities(topK: number): CompositeEntity[];
+    getCompositeEntities(topK: number): CompositeEntity[];
     entityTimeRanges(): (dateTime.DateRange | undefined)[];
 
     allActions(): IterableIterator<Action>;
@@ -248,7 +260,7 @@ export function createSearchResponse<
             allEntities,
             allEntityIds,
             allEntityNames,
-            mergeAllEntities,
+            getCompositeEntities: mergeAllEntities,
             entityTimeRanges,
             allActions,
             allActionIds,
@@ -413,6 +425,20 @@ export type ConversationSearchOptions = {
     loadMessages?: boolean;
 };
 
+export function createConversationSearchOptions(
+    topLevelSummary: boolean = false,
+): ConversationSearchOptions {
+    const topicLevel = topLevelSummary ? 2 : 1;
+    const searchOptions: ConversationSearchOptions = {
+        entity: createEntitySearchOptions(true),
+        topic: createTopicSearchOptions(topLevelSummary),
+        action: createActionSearchOptions(true),
+        topicLevel,
+        loadMessages: !topLevelSummary,
+    };
+    return searchOptions;
+}
+
 /**
  * Create or load a persistent conversation, using the given rootPath as the storage root.
  * - The conversation is stored in folders below the given root path
@@ -435,7 +461,10 @@ export async function createConversation(
     type ActionId = string;
 
     settings.indexActions ??= true;
-
+    folderSettings ??= {
+        cacheNames: true,
+        useWeakRefs: true,
+    };
     const messages = await createTextStore(
         { concurrency: settings.indexSettings.concurrency },
         path.join(rootPath, "messages"),
@@ -475,6 +504,7 @@ export async function createConversation(
         addKnowledgeToIndex,
         search,
         searchTerms,
+        searchTermsV2,
         searchMessages,
         findMessage,
 
@@ -826,6 +856,53 @@ export async function createConversation(
         return results;
     }
 
+    async function searchTermsV2(
+        filters: TermFilterV2[],
+        searchOptions?: ConversationSearchOptions | undefined,
+    ): Promise<SearchResponse> {
+        const options = searchOptions ?? createConversationSearchOptions();
+        const [entityIndex, topicIndex, actionIndex] = await Promise.all([
+            getEntityIndex(),
+            getTopicsIndex(options.topicLevel),
+            getActionIndex(),
+        ]);
+        const results = createSearchResponse<MessageId, TopicId, EntityId>();
+        for (let filter of filters) {
+            const actionResult = options.action
+                ? await actionIndex.searchTermsV2(filter, options.action)
+                : undefined;
+            if (!actionResult?.actionIds?.length) {
+                filter = {
+                    searchTerms: getAllTermsInFilter(filter),
+                };
+            }
+            /*
+            filter = {
+                searchTerms: getAllTermsInFilter(filter),
+            };
+            */
+            const tasks = [
+                topicIndex.searchTermsV2(filter, options.topic),
+                entityIndex.searchTermsV2(filter, options.entity),
+            ];
+            const [topicResult, entityResult] = await Promise.all(tasks);
+            results.topics.push(topicResult);
+            results.entities.push(entityResult);
+            if (actionResult) {
+                results.actions.push(actionResult);
+            }
+        }
+        if (options.loadMessages) {
+            await resolveMessages(
+                results,
+                topicIndex,
+                entityIndex,
+                actionIndex,
+            );
+        }
+        return results;
+    }
+
     async function searchMessages(
         query: string,
         options: SearchOptions,
@@ -979,5 +1056,10 @@ export type SearchActionResponse = {
 
 export type SearchTermsActionResponse = {
     action: SearchTermsAction;
+    response?: SearchResponse | undefined;
+};
+
+export type SearchTermsActionResponseV2 = {
+    action: SearchTermsActionV2;
     response?: SearchResponse | undefined;
 };

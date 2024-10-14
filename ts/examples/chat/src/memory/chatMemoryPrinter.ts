@@ -146,10 +146,24 @@ export class ChatMemoryPrinter extends ChatPrinter {
         }
     }
 
+    public writeCompositeEntities(
+        entities: (conversation.CompositeEntity | undefined)[],
+    ): void {
+        if (entities && entities.length > 0) {
+            this.writeTitle("Entities");
+            for (const entity of entities) {
+                this.writeCompositeEntity(entity);
+                this.writeLine();
+            }
+            this.writeLine();
+        }
+    }
+
     public writeActions(actions: conversation.Action[] | undefined): void {
         if (actions && actions.length > 0) {
             this.writeTitle("Actions");
             this.writeList(actions.map((a) => conversation.actionToString(a)));
+            this.writeLine();
         }
     }
 
@@ -167,5 +181,18 @@ export class ChatMemoryPrinter extends ChatPrinter {
             );
             this.writeLine();
         }
+    }
+
+    public writeSearchResponse(
+        response: conversation.SearchResponse,
+        settings?: conversation.AnswerGeneratorSettings,
+    ) {
+        this.writeTopics([...response.allTopics()]);
+        this.writeCompositeEntities(
+            response.getCompositeEntities(
+                settings?.topKEntities ?? Number.MAX_SAFE_INTEGER,
+            ),
+        );
+        this.writeActions([...response.allActions()]);
     }
 }
