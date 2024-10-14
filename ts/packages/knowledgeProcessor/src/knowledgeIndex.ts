@@ -17,7 +17,7 @@ import {
     removeDir,
 } from "typeagent";
 import {
-    FrequencyTable,
+    HitTable,
     SetOp,
     intersectMultiple,
     intersectUnionMultiple,
@@ -25,6 +25,7 @@ import {
     union,
     unionArrays,
     unionMultiple,
+    unionMultipleScored,
 } from "./setOperations.js";
 import { TextBlock, TextBlockType } from "./text.js";
 import { TemporalLog, createTemporalLog } from "./temporal.js";
@@ -114,13 +115,13 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
     ): Promise<TSourceId[]>;
     getNearestHits(
         value: string,
-        hitCounter: FrequencyTable<TSourceId>,
+        hitTable: HitTable<TSourceId>,
         maxMatches?: number,
         minScore?: number,
     ): Promise<void>;
     getNearestHitsMultiple(
         values: string[],
-        hitCounter: FrequencyTable<TSourceId>,
+        hitTable: HitTable<TSourceId>,
         maxMatches?: number,
         minScore?: number,
     ): Promise<void>;
@@ -375,7 +376,7 @@ export async function createTextIndex<TSourceId = any>(
 
     async function getNearestHits(
         value: string,
-        hitCounter: FrequencyTable<TSourceId>,
+        hitTable: HitTable<TSourceId>,
         maxMatches?: number,
         minScore?: number,
     ): Promise<void> {
@@ -383,33 +384,41 @@ export async function createTextIndex<TSourceId = any>(
         // Check exact match first
         let postings = await get(value);
         let postingsNearest:
-            | TSourceId[]
-            | IterableIterator<TSourceId>
+            | ScoredItem<TSourceId>[]
+            | IterableIterator<ScoredItem<TSourceId>>
             | undefined;
         if (maxMatches > 1) {
-            const nearestPostings = await getNearestPostings(
+            const scoredPostings = await getNearestPostingsWithScore(
                 value,
                 maxMatches,
                 minScore,
             );
-            postingsNearest = unionMultiple(...nearestPostings);
+            postingsNearest = unionMultipleScored(...scoredPostings);
         } else if (semanticIndex && (!postings || postings.length === 0)) {
             const textId = await semanticIndex.nearestNeighbor(value, minScore);
             if (textId) {
-                postingsNearest = await postingFolder.get(textId.item);
+                const postings = await postingFolder.get(textId.item);
+                if (postings) {
+                    postingsNearest = scorePostings(postings, textId.score);
+                }
             }
         }
-        hitCounter.addMultiple(unionMultiple(postings, postingsNearest));
+        hitTable.addMultipleScored(
+            unionMultipleScored(
+                postings ? scorePostings(postings, 1.0) : undefined,
+                postingsNearest,
+            ),
+        );
     }
 
     async function getNearestHitsMultiple(
         values: string[],
-        hitCounter: FrequencyTable<TSourceId>,
+        hitTable: HitTable<TSourceId>,
         maxMatches?: number,
         minScore?: number,
     ): Promise<void> {
         return asyncArray.forEachAsync(values, settings.concurrency, (v) =>
-            getNearestHits(v, hitCounter, maxMatches, minScore),
+            getNearestHits(v, hitTable, maxMatches, minScore),
         );
     }
 
@@ -576,6 +585,49 @@ export async function createTextIndex<TSourceId = any>(
         return asyncArray.mapAsync(nearestText, settings.concurrency, (m) =>
             postingFolder.get(m.item),
         );
+    }
+
+    async function getNearestPostingsWithScore(
+        value: string,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<ScoredItem<TSourceId>[][]> {
+        if (!semanticIndex) {
+            return [];
+        }
+        maxMatches ??= 1;
+        const nearestText = await semanticIndex.nearestNeighbors(
+            value,
+            maxMatches,
+            minScore,
+        );
+        const nearestPostings = await asyncArray.mapAsync(
+            nearestText,
+            settings.concurrency,
+            (m) => postingFolder.get(m.item),
+        );
+        const scoredPostings: ScoredItem<TSourceId>[][] = [];
+        for (let i = 0; i < nearestPostings.length; ++i) {
+            const posting = nearestPostings[i];
+            if (posting) {
+                scoredPostings.push(
+                    scorePostings(posting, nearestText[i].score),
+                );
+            }
+        }
+        return scoredPostings;
+    }
+
+    function scorePostings(
+        postings: TSourceId[],
+        score: number,
+    ): ScoredItem<TSourceId>[] {
+        return postings.map((item) => {
+            return {
+                item,
+                score,
+            };
+        });
     }
 
     function textToId(
