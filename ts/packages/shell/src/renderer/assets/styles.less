@@ -54,24 +54,6 @@ body {
   background-color: white;
 }
 
-.action-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background-color: white;
-}
-
-// action button
-.action-buttons {
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  height: 40px;
-  color: green;
-  font-family: inherit;
-  font-size: inherit;
-}
-
 .choice-panel {
   display: flex;
   justify-content: space-around;
@@ -81,13 +63,7 @@ body {
   font-size: inherit;
 }
 
-.action-text {
-  padding: 10px 16px;
-  align-self: center;
-}
-
-/* CSS */
-.action-button {
+.choice-button {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -97,8 +73,20 @@ body {
   width: 100%;
 }
 
-.action-button:hover {
+.choice-button:hover {
   background-color: #c6e3ef;
+}
+.choice-button:focus {
+  box-shadow:
+    inset 0px 0.8px 0px -0.25px rgba(255, 255, 255, 0.2),
+    0px 0.5px 1px rgba(0, 0, 0, 0.1),
+    0px 0px 0px 3.5px rgba(58, 108, 217, 0.5);
+  outline: 0;
+}
+
+.action-text {
+  padding: 10px 16px;
+  align-self: center;
 }
 
 .preface-text {
@@ -106,13 +94,6 @@ body {
   border-bottom: 1px dotted #808080;
   padding-bottom: 5px;
   margin-bottom: 10px;
-}
-.action-button:focus {
-  box-shadow:
-    inset 0px 0.8px 0px -0.25px rgba(255, 255, 255, 0.2),
-    0px 0.5px 1px rgba(0, 0, 0, 0.1),
-    0px 0px 0px 3.5px rgba(58, 108, 217, 0.5);
-  outline: 0;
 }
 
 .replacement-title {
@@ -720,6 +701,12 @@ input[type="file"] {
 .action-text-editable .action-edit-button,
 .action-text-editable tr.editing .action-editing-button {
   visibility: visible;
+  opacity: 0.25;
+}
+.action-text-editable tr:hover .action-edit-button,
+.action-text-editable tr.editing:hover .action-editing-button {
+  visibility: visible;
+  opacity: 1;
 }
 
 .action-text tr.error,
