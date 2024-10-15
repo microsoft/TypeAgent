@@ -10,6 +10,7 @@ import {
     collections,
     createObjectFolder,
     dateTime,
+    //generateMonotonicName,
 } from "typeagent";
 import { intersectMultiple, setFrom } from "./setOperations.js";
 import { DateRange } from "../../typeagent/dist/dateTime.js";
@@ -251,7 +252,7 @@ export async function putTimestampedObject(
 ): Promise<string> {
     timestamp ??= new Date();
     const tValue = dateTime.stringifyTimestamped(value, timestamp);
-    return store.put(tValue, dateTime.timestampString(timestamp));
+    return store.put(tValue);
 }
 
 export async function getTimestampedObject<T>(

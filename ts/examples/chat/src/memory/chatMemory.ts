@@ -708,7 +708,11 @@ export async function runChatMemory(): Promise<void> {
         }
 
         for await (const topic of index.entries()) {
-            await writeExtractedTopic(topic, namedArgs.showMessages);
+            await writeExtractedTopic(
+                topic,
+                namedArgs.showMessages,
+                namedArgs.level,
+            );
         }
     }
 
@@ -1425,13 +1429,16 @@ export async function runChatMemory(): Promise<void> {
     async function writeExtractedTopic(
         topic: knowLib.TextBlock,
         showMessages: boolean,
+        level: number = 1,
     ) {
         if (showMessages) {
-            const messages = await loadMessages(topic.sourceIds);
-            printer.writeTemporalBlocks(chalk.greenBright, messages);
+            const textBlocks =
+                level === 1
+                    ? await loadMessages(topic.sourceIds)
+                    : await loadTopics(level, topic.sourceIds);
+            printer.writeTemporalBlocks(chalk.greenBright, textBlocks);
         }
-        printer.writeLine(topic.value);
-        printer.writeLine();
+        printer.writeBullet(topic.value);
     }
 
     function writeExtractedAction(
@@ -1505,6 +1512,22 @@ export async function runChatMemory(): Promise<void> {
     ): Promise<(dateTime.Timestamped<knowLib.TextBlock> | undefined)[]> {
         if (ids && ids.length > 0) {
             return await context.conversation.messages.getMultiple(ids);
+        }
+        return [];
+    }
+
+    async function loadTopics(
+        topicLevel: number,
+        ids?: string[],
+    ): Promise<(dateTime.Timestamped<knowLib.TextBlock> | undefined)[]> {
+        if (ids && ids.length > 0) {
+            const index = await context.conversation.getTopicsIndex(
+                topicLevel - 1,
+            );
+            return (await index.sequence.getMultiple(ids)) as (
+                | dateTime.Timestamped<knowLib.TextBlock>
+                | undefined
+            )[];
         }
         return [];
     }

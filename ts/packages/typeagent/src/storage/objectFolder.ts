@@ -447,7 +447,8 @@ function validateName(name: string) {
         );
     }
 }
-function generateMonotonicName(
+
+export function generateMonotonicName(
     counterStartAt: number,
     baseName: string,
     isNameAcceptable: (name: string) => boolean,
