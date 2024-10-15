@@ -219,6 +219,7 @@ export class CameraView {
     }
 
     public startCamera() {
+        if (navigator.mediaDevices !== undefined) {
         navigator.mediaDevices
             .getUserMedia({
                 video: { deviceId: this.cameras[this.cameraIndex].deviceId },
@@ -239,6 +240,7 @@ export class CameraView {
                 this.video.classList.add("camera-hidden");
                 this.snapButton.classList.add("camera-hidden");
             });
+        }
 
         this.clearPhoto();
     }

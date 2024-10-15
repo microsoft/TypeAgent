@@ -194,7 +194,8 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080", 
 
             // reconnect?
             if (autoReconnect) {
-                createWebSocket("ws://localhost:3030", true).then((ws) => globalThis.ws = ws);                
+                let url = window.location
+                createWebSocket(`ws://${url.hostname}:3030`, true).then((ws) => globalThis.ws = ws);                
             }
         };
         webSocket.onerror = (event: object) => {
