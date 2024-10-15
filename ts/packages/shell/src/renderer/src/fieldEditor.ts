@@ -1,12 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { TemplateParamArray, TemplateParamField } from "common-utils";
 import {
+    TemplateParamArray,
+    TemplateParamField,
     ActionTemplateSequence,
     TemplateParamFieldOpt,
     TemplateParamScalar,
-} from "../../preload/electronTypes";
+} from "agent-dispatcher";
 
 function isValidValue(paramField: TemplateParamScalar, value: any) {
     return paramField.type === "string-union"

@@ -3,7 +3,7 @@
 
 import { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
 import { TTS, TTSMetrics } from "./tts/tts";
-import { PhaseTiming } from "agent-dispatcher";
+import { ActionTemplateSequence, PhaseTiming } from "agent-dispatcher";
 
 import { ChoicePanel, InputChoice } from "./choicePanel";
 import { setContent } from "./setContent";
@@ -11,7 +11,6 @@ import { ChatView } from "./chatView";
 import { iconCheckMarkCircle, iconRoadrunner, iconX } from "./icon";
 import { FieldEditor } from "./fieldEditor";
 import { getClientAPI } from "./main";
-import { ActionTemplateSequence } from "../../preload/electronTypes";
 import { SettingsView } from "./settingsView";
 
 function createTimestampDiv(timestamp: Date, className: string) {

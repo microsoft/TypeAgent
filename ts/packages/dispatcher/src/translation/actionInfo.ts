@@ -7,14 +7,53 @@ import {
     TranslatorConfigProvider,
 } from "./agentTranslators.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
-import {
-    ActionTemplate,
-    ActionInfo,
-    SearchMenuItem,
-    TemplateParamField,
-    TemplateParamObject,
-} from "common-utils";
 
+export type TemplateParamPrimitive = {
+    type: "string" | "number" | "boolean";
+};
+
+export type TemplateParamStringUnion = {
+    type: "string-union";
+    typeEnum: string[];
+};
+
+export type TemplateParamScalar =
+    | TemplateParamPrimitive
+    | TemplateParamStringUnion;
+
+export type TemplateParamArray = {
+    type: "array";
+    elementType: TemplateParamField;
+};
+
+export type TemplateParamObject = {
+    type: "object";
+    fields: {
+        [key: string]: TemplateParamFieldOpt;
+    };
+};
+
+export type TemplateParamFieldOpt = {
+    optional?: boolean;
+    field: TemplateParamField;
+};
+
+export type TemplateParamField =
+    | TemplateParamScalar
+    | TemplateParamObject
+    | TemplateParamArray;
+
+export type ActionTemplate = {
+    agent: string;
+    name: string;
+    parameterStructure: TemplateParamObject;
+};
+
+export type ActionInfo = {
+    name: string;
+    comments: string;
+    template?: ActionTemplate | undefined;
+};
 function getActionInfo(
     actionTypeName: string,
     translatorConfig: TranslatorConfig,
@@ -26,7 +65,6 @@ function getActionInfo(
         throw new Error(`Action type '${actionTypeName}' not found in schema`);
     }
     let name: string | undefined = undefined;
-    let item: SearchMenuItem | undefined = undefined;
     let template: ActionTemplate | undefined = undefined;
     let comments: string | undefined = undefined;
     for (const child of node.children) {
@@ -37,12 +75,6 @@ function getActionInfo(
                 return undefined;
             }
             name = child.symbol.value.slice(1, -1);
-            item = {
-                matchText: name,
-                emojiChar: translatorConfig.emojiChar,
-                groupName: translatorName,
-                selectedText: `${translatorName}.${name}`,
-            };
             comments = node.leadingComments?.join(" ") ?? "";
         } else if (child.symbol.name === "parameters") {
             parser.open(child.symbol.name);
@@ -55,13 +87,12 @@ function getActionInfo(
             };
         }
     }
-    if (name !== undefined && item !== undefined && comments !== undefined) {
+    if (name !== undefined && comments !== undefined) {
         if (template !== undefined) {
             template.name = name;
         }
         return {
             name,
-            item,
             comments: node.leadingComments?.join(" ") ?? "",
             template,
         };

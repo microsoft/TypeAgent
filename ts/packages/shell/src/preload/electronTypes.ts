@@ -8,7 +8,11 @@ import {
     DynamicDisplay,
 } from "@typeagent/agent-sdk";
 import { ShellSettings } from "../main/shellSettings.js";
-import { IAgentMessage, PartialCompletionResult } from "agent-dispatcher";
+import {
+    ActionTemplateSequence,
+    IAgentMessage,
+    PartialCompletionResult,
+} from "agent-dispatcher";
 import { RequestMetrics } from "agent-dispatcher";
 
 export type SpeechToken = {
@@ -16,67 +20,6 @@ export type SpeechToken = {
     expire: number;
     endpoint: string;
     region: string;
-};
-
-// TODO: remove duplicate types due to package circular dependencies (commonUtils/command.ts is other source)
-
-export type SearchMenuItem = {
-    matchText: string;
-    selectedText: string;
-    emojiChar?: string;
-    groupName?: string;
-};
-export type ActionInfo = {
-    actionTemplates: ActionTemplateSequence;
-    requestId: string;
-};
-
-export type TemplateParamPrimitive = {
-    type: "string" | "number" | "boolean";
-};
-
-export type TemplateParamStringUnion = {
-    type: "string-union";
-    typeEnum: string[];
-};
-
-export type TemplateParamScalar =
-    | TemplateParamPrimitive
-    | TemplateParamStringUnion;
-
-export type TemplateParamArray = {
-    type: "array";
-    elementType: TemplateParamField;
-};
-
-export type TemplateParamObject = {
-    type: "object";
-    fields: {
-        [key: string]: TemplateParamFieldOpt;
-    };
-};
-
-export type TemplateParamFieldOpt = {
-    optional?: boolean;
-    field: TemplateParamField;
-};
-
-export type TemplateParamField =
-    | TemplateParamScalar
-    | TemplateParamObject
-    | TemplateParamArray;
-
-export type ActionTemplate = {
-    agent: string;
-    name: string;
-    parameterStructure: TemplateParamObject;
-};
-
-export type ActionTemplateSequence = {
-    templates: ActionTemplate[];
-    actions: unknown;
-    preface?: string;
-    editPreface?: string;
 };
 
 export enum NotifyCommands {
