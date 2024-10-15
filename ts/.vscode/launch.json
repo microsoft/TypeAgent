@@ -68,7 +68,11 @@
             "cwd": "${workspaceFolder}/packages/api",
             "program": "./dist/index.js",
             //"preLaunchTask": "tsc: build - tsconfig.json",
-            "outFiles": ["${workspaceFolder}/**/*.js"]
+            "outFiles": ["${workspaceFolder}/**/*.js"],
+            "resolveSourceMapLocations": [
+                "${workspaceFolder}/",
+                "!/node_modules/**"
+            ],
         },        
         {
             "type": "node",
