@@ -2,19 +2,19 @@
 // Licensed under the MIT License.
 
 import {
-    TemplateParamArray,
-    TemplateParamField,
+    ActionParamArray,
+    ActionParamField,
     ActionTemplateSequence,
-    TemplateParamFieldOpt,
-    TemplateParamScalar,
+    ActionParamFieldOpt,
+    ActionParamScalar,
 } from "agent-dispatcher";
 
-function isValidValue(paramField: TemplateParamScalar, value: any) {
+function isValidValue(paramField: ActionParamScalar, value: any) {
     return paramField.type === "string-union"
         ? paramField.typeEnum.includes(value)
         : typeof value === paramField.type;
 }
-function toValueType(paramField: TemplateParamScalar, value: string) {
+function toValueType(paramField: ActionParamScalar, value: string) {
     switch (paramField.type) {
         case "string":
             return value;
@@ -274,7 +274,7 @@ abstract class FieldGroup extends FieldBase {
     protected createChildField(
         fieldName: string | number,
         label: string,
-        fieldType: TemplateParamField,
+        fieldType: ActionParamField,
         optional: boolean,
     ) {
         const field = createUIForField(
@@ -316,7 +316,7 @@ class FieldScalar extends FieldBase {
         data: FieldData,
         fullPropertyName: string,
         label: string,
-        private readonly fieldType: TemplateParamScalar = defaultTemplatParamScalar,
+        private readonly fieldType: ActionParamScalar = defaultTemplatParamScalar,
         optional: boolean = false,
         level: number = 0,
         parent?: FieldGroup,
@@ -447,7 +447,7 @@ class FieldObject extends FieldGroup {
         data: FieldData,
         fullPropertyName: string,
         paramName: string,
-        private readonly fieldTypes: Record<string, TemplateParamFieldOpt>,
+        private readonly fieldTypes: Record<string, ActionParamFieldOpt>,
         optional: boolean = false,
         level = 0,
         parent?: FieldGroup,
@@ -547,7 +547,7 @@ class FieldArray extends FieldGroup {
         data: FieldData,
         fullPropertyName: string,
         paramName: string,
-        private readonly paramValue: TemplateParamArray,
+        private readonly paramValue: ActionParamArray,
         optional: boolean,
         level: number,
         parent: FieldGroup | undefined,
@@ -631,7 +631,7 @@ function createUIForField(
     data: FieldData,
     fullPropertyName: string,
     paramName: string,
-    paramField: TemplateParamField,
+    paramField: ActionParamField,
     optional: boolean,
     level: number,
     parent: FieldGroup | undefined,

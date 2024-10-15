@@ -8,45 +8,43 @@ import {
 } from "./agentTranslators.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 
-export type TemplateParamPrimitive = {
+export type ActionParamPrimitive = {
     type: "string" | "number" | "boolean";
 };
 
-export type TemplateParamStringUnion = {
+export type ActionParamStringUnion = {
     type: "string-union";
     typeEnum: string[];
 };
 
-export type TemplateParamScalar =
-    | TemplateParamPrimitive
-    | TemplateParamStringUnion;
+export type ActionParamScalar = ActionParamPrimitive | ActionParamStringUnion;
 
-export type TemplateParamArray = {
+export type ActionParamArray = {
     type: "array";
-    elementType: TemplateParamField;
+    elementType: ActionParamField;
 };
 
-export type TemplateParamObject = {
+export type ActionParamObject = {
     type: "object";
     fields: {
-        [key: string]: TemplateParamFieldOpt;
+        [key: string]: ActionParamFieldOpt;
     };
 };
 
-export type TemplateParamFieldOpt = {
+export type ActionParamFieldOpt = {
     optional?: boolean;
-    field: TemplateParamField;
+    field: ActionParamField;
 };
 
-export type TemplateParamField =
-    | TemplateParamScalar
-    | TemplateParamObject
-    | TemplateParamArray;
+export type ActionParamField =
+    | ActionParamScalar
+    | ActionParamObject
+    | ActionParamArray;
 
 export type ActionInfo = {
     actionName: string;
     comments: string;
-    parameters?: TemplateParamObject | undefined;
+    parameters?: ActionParamObject | undefined;
 };
 
 function getActionInfo(
@@ -59,7 +57,7 @@ function getActionInfo(
     }
     let actionName: string | undefined = undefined;
     let comments: string | undefined = undefined;
-    let parameters: TemplateParamObject | undefined = undefined;
+    let parameters: ActionParamObject | undefined = undefined;
     for (const child of node.children) {
         if (child.symbol.name === "actionName") {
             // values are quoted.
@@ -71,7 +69,7 @@ function getActionInfo(
             comments = node.leadingComments?.join(" ") ?? "";
         } else if (child.symbol.name === "parameters") {
             parser.open(child.symbol.name);
-            parameters = getTemplateParamObjectType(parser);
+            parameters = getActionParamObjectType(parser);
             parser.close();
         }
     }
@@ -85,6 +83,7 @@ function getActionInfo(
     return undefined;
 }
 
+// Global Cache
 const translatorNameToActionInfo = new Map<string, ActionInfo[]>();
 
 export function getTranslatorActionInfo(
@@ -93,20 +92,19 @@ export function getTranslatorActionInfo(
 ): ActionInfo[] {
     if (translatorNameToActionInfo.has(translatorName)) {
         return translatorNameToActionInfo.get(translatorName)!;
-    } else {
-        const parser = new SchemaParser();
-        parser.loadSchema(getPackageFilePath(translatorConfig.schemaFile));
-
-        const actionInfo: ActionInfo[] = [];
-        for (const actionTypeName of parser.actionTypeNames()) {
-            const info = getActionInfo(actionTypeName, parser);
-            if (info) {
-                actionInfo.push(info);
-            }
-        }
-        translatorNameToActionInfo.set(translatorName, actionInfo);
-        return actionInfo;
     }
+    const parser = new SchemaParser();
+    parser.loadSchema(getPackageFilePath(translatorConfig.schemaFile));
+
+    const actionInfo: ActionInfo[] = [];
+    for (const actionTypeName of parser.actionTypeNames()) {
+        const info = getActionInfo(actionTypeName, parser);
+        if (info) {
+            actionInfo.push(info);
+        }
+    }
+    translatorNameToActionInfo.set(translatorName, actionInfo);
+    return actionInfo;
 }
 
 export function getAllActionInfo(
@@ -128,11 +126,11 @@ export function getAllActionInfo(
     return allActionInfo;
 }
 
-function getTemplateParamFieldType(
+function getActionParamFieldType(
     parser: SchemaParser,
     param: ISymbol,
     valueType?: NodeType,
-): TemplateParamField {
+): ActionParamField {
     let type = param.type;
     if (valueType !== undefined) {
         type = valueType;
@@ -148,20 +146,20 @@ function getTemplateParamFieldType(
         case NodeType.Interface:
         case NodeType.TypeReference:
             parser.open(param.name);
-            const tree = getTemplateParamObjectType(parser);
+            const tree = getActionParamObjectType(parser);
             parser.close();
             return tree;
         case NodeType.Array:
             return {
                 type: "array",
-                elementType: getTemplateParamFieldType(
+                elementType: getActionParamFieldType(
                     parser,
                     param,
                     param.valueType,
                 ),
             };
         case NodeType.Property:
-            return getTemplateParamFieldType(parser, param, param.valueType);
+            return getActionParamFieldType(parser, param, param.valueType);
         case NodeType.Union:
             if (param.valueType === NodeType.String) {
                 return {
@@ -175,7 +173,7 @@ function getTemplateParamFieldType(
             break;
         case NodeType.ObjectArray:
             parser.open(param.name);
-            const elementType = getTemplateParamObjectType(parser);
+            const elementType = getActionParamObjectType(parser);
             parser.close();
             return {
                 type: "array",
@@ -188,12 +186,12 @@ function getTemplateParamFieldType(
 }
 
 // assumes parser is open to the correct parameter object
-function getTemplateParamObjectType(parser: SchemaParser): TemplateParamObject {
+function getActionParamObjectType(parser: SchemaParser): ActionParamObject {
     let fields: { [key: string]: any } = {};
     const paramChildren = parser.symbols();
     if (paramChildren !== undefined) {
         for (const param of paramChildren) {
-            const fieldType = getTemplateParamFieldType(parser, param);
+            const fieldType = getActionParamFieldType(parser, param);
             fields[param.name] = {
                 field: fieldType,
                 optional: param.optional,

@@ -2,12 +2,12 @@
 // Licensed under the MIT License.
 
 import { Actions } from "agent-cache";
-import { ActionInfo, TemplateParamObject } from "./actionInfo.js";
+import { ActionInfo, ActionParamObject } from "./actionInfo.js";
 
 export type ActionTemplate = {
     agent: string;
     name: string;
-    parameterStructure?: TemplateParamObject | undefined;
+    parameterStructure?: ActionParamObject | undefined;
 };
 
 export type ActionTemplateSequence = {

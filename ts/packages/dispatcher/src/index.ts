@@ -15,9 +15,9 @@ export type {
 export type { Timing, PhaseTiming, RequestMetrics } from "./utils/metrics.js";
 
 export type {
-    TemplateParamArray,
-    TemplateParamField,
-    TemplateParamFieldOpt,
-    TemplateParamScalar,
+    ActionParamArray,
+    ActionParamField,
+    ActionParamFieldOpt,
+    ActionParamScalar,
 } from "./translation/actionInfo.js";
 export type { ActionTemplateSequence } from "./translation/actionTemplate.js";
