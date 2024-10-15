@@ -89,7 +89,7 @@ async function confirmTranslation(
     const editPreface = `Edit the following action(s) to match your requests.  Click on the values to start editing. Use the ➕/✕ buttons to add/delete optional fields.`;
 
     const templateSequence = toTemplateSequence(
-        systemContext.agents,
+        systemContext,
         actions,
         preface,
         editPreface,

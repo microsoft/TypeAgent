@@ -568,10 +568,18 @@ app.whenReady().then(async () => {
     ipcMain.handle("get-partial-completion", async (_event, prefix: string) => {
         return dispatcher.getPartialCompletion(prefix);
     });
+    ipcMain.handle("get-dynamic-display", async (_event, appAgentName, id) =>
+        dispatcher.getDynamicDisplay(appAgentName, "html", id),
+    );
     ipcMain.handle(
-        "get-dynamic-display",
-        async (_event, appAgentName: string, id: string) =>
-            dispatcher.getDynamicDisplay(appAgentName, "html", id),
+        "get-template-schema",
+        async (_event, appAgentName, templateName, data) => {
+            return dispatcher.getTemplateSchema(
+                appAgentName,
+                templateName,
+                data,
+            );
+        },
     );
     ipcMain.on("dom ready", async () => {
         settingSummary = dispatcher.getSettingSummary();

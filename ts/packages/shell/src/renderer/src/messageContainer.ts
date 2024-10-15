@@ -9,7 +9,7 @@ import { ChoicePanel, InputChoice } from "./choicePanel";
 import { setContent } from "./setContent";
 import { ChatView } from "./chatView";
 import { iconCheckMarkCircle, iconRoadrunner, iconX } from "./icon";
-import { FieldEditor } from "./fieldEditor";
+import { TemplateEditor } from "./templateEditor";
 import { getClientAPI } from "./main";
 import { SettingsView } from "./settingsView";
 
@@ -240,7 +240,10 @@ export class MessageContainer {
         actionContainer.className = "action-container";
         this.messageDiv.appendChild(actionContainer);
 
-        const actionCascade = new FieldEditor(actionContainer, actionTemplates);
+        const actionCascade = new TemplateEditor(
+            actionContainer,
+            actionTemplates,
+        );
 
         const createTextSpan = (text: string) => {
             const span = document.createElement("span");

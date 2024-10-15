@@ -5,6 +5,7 @@ import { AppAction, ActionResult } from "./action.js";
 import { AppAgentCommandInterface } from "./command.js";
 import { ActionIO, DisplayType, DynamicDisplay } from "./display.js";
 import { Profiler } from "./profiler.js";
+import { TemplateSchema } from "./templateInput.js";
 
 //==============================================================================
 // Manifest
@@ -66,6 +67,13 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
         action: AppAction,
         context: SessionContext,
     ): Promise<boolean>;
+
+    // Input
+    getTemplateSchema?(
+        templateName: string,
+        data: unknown,
+        context: SessionContext,
+    ): TemplateSchema;
 
     // Output
     getDynamicDisplay?(
