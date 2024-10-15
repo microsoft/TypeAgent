@@ -193,8 +193,8 @@ export class Actions {
     }
 
     public toTemplateSequence(
-        prefaceSingle: string,
-        prefaceMultiple: string,
+        preface: string,
+        editPreface: string,
         parameterStructures: Map<string, ActionInfo>,
     ): ActionTemplateSequence {
         const templates: ActionTemplate[] = [];
@@ -230,8 +230,8 @@ export class Actions {
             });
         }
         return {
-            prefaceSingle,
-            prefaceMultiple,
+            preface,
+            editPreface,
             actions: this.toFullActions(),
             templates,
         };

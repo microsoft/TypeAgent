@@ -65,8 +65,8 @@ export type ActionTemplate = {
 export type ActionTemplateSequence = {
     templates: ActionTemplate[];
     actions: unknown;
-    prefaceSingle?: string;
-    prefaceMultiple?: string;
+    preface?: string;
+    editPreface?: string;
 };
 
 // end duplicate type section
