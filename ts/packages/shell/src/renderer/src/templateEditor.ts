@@ -2,19 +2,20 @@
 // Licensed under the MIT License.
 
 import {
-    ActionParamArray,
-    ActionParamField,
-    ActionTemplateSequence,
-    ActionParamFieldOpt,
-    ActionParamScalar,
-} from "agent-dispatcher";
+    TemplateFieldArray,
+    TemplateField,
+    TemplateFieldOpt,
+    TemplateFieldScalar,
+} from "@typeagent/agent-sdk";
+import { ActionTemplateSequence } from "agent-dispatcher";
+import { getClientAPI } from "./main";
 
-function isValidValue(paramField: ActionParamScalar, value: any) {
+function isValidValue(paramField: TemplateFieldScalar, value: any) {
     return paramField.type === "string-union"
         ? paramField.typeEnum.includes(value)
         : typeof value === paramField.type;
 }
-function toValueType(paramField: ActionParamScalar, value: string) {
+function toValueType(paramField: TemplateFieldScalar, value: string) {
     switch (paramField.type) {
         case "string":
             return value;
@@ -33,25 +34,27 @@ function toValueType(paramField: ActionParamScalar, value: string) {
     }
 }
 
-class FieldData {
-    private current: any;
+class FieldContainer {
+    private current: unknown[];
     public readonly table: HTMLTableElement;
+    private readonly fieldObjects: FieldObject[] = [];
     public errorCount = 0;
     public editMode = false;
+
     constructor(
-        data: any,
+        public readonly actionTemplates: ActionTemplateSequence,
         public readonly enableEdit: boolean,
     ) {
         this.table = document.createElement("table");
-        this.current = structuredClone(data);
+        this.current = structuredClone(actionTemplates.actions);
+        this.createFields();
     }
 
-    public get value() {
-        return this.current;
-    }
-
-    public set value(data: any) {
-        this.current = structuredClone(data);
+    public reset() {
+        this.current = structuredClone(this.actionTemplates.actions);
+        this.table.classList.remove("editing");
+        this.errorCount = 0;
+        this.createFields();
     }
 
     public getProperty(name: string) {
@@ -124,6 +127,48 @@ class FieldData {
         }
         curr[lastName] = value;
     }
+
+    private createFields() {
+        this.table.replaceChildren();
+        for (let i = 0; i < this.actionTemplates.templates.length; i++) {
+            const actionTemplate = this.actionTemplates.templates[i];
+            const action = this.current[i];
+            if (action === undefined) {
+                break;
+            }
+
+            this.fieldObjects.push(
+                new FieldObject(
+                    this,
+                    i.toString(),
+                    `Action ${i}`,
+                    actionTemplate.fields,
+                ),
+            );
+        }
+    }
+
+    public async refreshSchema(index: number) {
+        const template = await getClientAPI().getTemplateSchema(
+            this.actionTemplates.templateAppAgent,
+            this.actionTemplates.templateName,
+            this.current[index],
+        );
+
+        this.fieldObjects[index].remove();
+        this.fieldObjects[index] = new FieldObject(
+            this,
+            index.toString(),
+            `Action ${index}`,
+            template.fields,
+        );
+
+        this.actionTemplates.templates[index] = template;
+    }
+
+    public getSchemaValue(): any {
+        return this.fieldObjects.map((f) => f.getSchemaValue());
+    }
 }
 
 class FieldRow {
@@ -186,12 +231,12 @@ class FieldRow {
 abstract class FieldBase extends FieldRow {
     private isValid: boolean = true;
     constructor(
-        protected readonly data: FieldData,
+        protected readonly data: FieldContainer,
         protected readonly fullPropertyName: string,
         label: string,
         private readonly optional: boolean,
         protected readonly level: number,
-        parent: FieldGroup | undefined,
+        protected readonly parent: FieldGroup | undefined,
     ) {
         super(label, level, parent);
         if (parent === undefined) {
@@ -199,6 +244,7 @@ abstract class FieldBase extends FieldRow {
         }
     }
 
+    public abstract getSchemaValue(): any;
     public abstract setDefaultValue();
     public abstract getValueDisplay(): string | undefined;
     public insertAfter(row: HTMLTableRowElement) {
@@ -261,7 +307,7 @@ abstract class FieldBase extends FieldRow {
 }
 
 abstract class FieldGroup extends FieldBase {
-    private readonly fields: FieldBase[] = [];
+    protected readonly fields: FieldBase[] = [];
 
     public insertAfter(row: HTMLTableRowElement) {
         if (this.fields.length === 0) {
@@ -274,7 +320,7 @@ abstract class FieldGroup extends FieldBase {
     protected createChildField(
         fieldName: string | number,
         label: string,
-        fieldType: ActionParamField,
+        fieldType: TemplateField,
         optional: boolean,
     ) {
         const field = createUIForField(
@@ -313,10 +359,10 @@ abstract class FieldGroup extends FieldBase {
 const defaultTemplatParamScalar = { type: "string" } as const;
 class FieldScalar extends FieldBase {
     constructor(
-        data: FieldData,
+        data: FieldContainer,
         fullPropertyName: string,
         label: string,
-        private readonly fieldType: ActionParamScalar = defaultTemplatParamScalar,
+        private readonly fieldType: TemplateFieldScalar = defaultTemplatParamScalar,
         optional: boolean = false,
         level: number = 0,
         parent?: FieldGroup,
@@ -356,6 +402,17 @@ class FieldScalar extends FieldBase {
                 row.classList.remove("editing");
                 data.setProperty(fullPropertyName, newValue);
                 valueCell.innerText = input.value;
+
+                if (
+                    fieldType.type === "string-union" &&
+                    fieldType.discriminator !== newValue
+                ) {
+                    // Need to refresh the schema
+                    this.data.refreshSchema(
+                        parseInt(this.fullPropertyName.split(".")[0]),
+                    );
+                    return;
+                }
             });
 
             this.addButton(1, "🛇", "action-editing-button", () => {
@@ -366,6 +423,9 @@ class FieldScalar extends FieldBase {
         }
     }
 
+    public getSchemaValue() {
+        return this.getValue();
+    }
     private createInputElement() {
         let element: HTMLSelectElement | HTMLInputElement;
         switch (this.fieldType.type) {
@@ -444,10 +504,10 @@ class FieldObjectOptionalField extends FieldRow {
 class FieldObject extends FieldGroup {
     private readonly hasRequiredFields: boolean;
     constructor(
-        data: FieldData,
+        data: FieldContainer,
         fullPropertyName: string,
         paramName: string,
-        private readonly fieldTypes: Record<string, ActionParamFieldOpt>,
+        private readonly fieldTypes: Record<string, TemplateFieldOpt>,
         optional: boolean = false,
         level = 0,
         parent?: FieldGroup,
@@ -540,14 +600,25 @@ class FieldObject extends FieldGroup {
         }
         updateMissingFieldButton();
     }
+
+    public getSchemaValue() {
+        const value: Record<string, any> = {};
+        const fieldEntries = Object.entries(this.fieldTypes);
+        for (let i = 0; i < fieldEntries.length; i++) {
+            const name = fieldEntries[i][0];
+            const field = this.fields[i];
+            value[name] = field.getSchemaValue();
+        }
+        return value;
+    }
 }
 
 class FieldArray extends FieldGroup {
     constructor(
-        data: FieldData,
+        data: FieldContainer,
         fullPropertyName: string,
         paramName: string,
-        private readonly paramValue: ActionParamArray,
+        private readonly paramValue: TemplateFieldArray,
         optional: boolean,
         level: number,
         parent: FieldGroup | undefined,
@@ -580,6 +651,10 @@ class FieldArray extends FieldGroup {
         if (this.updateValueDisplay()) {
             this.createChildFields();
         }
+    }
+
+    public getSchemaValue() {
+        return this.fields.map((f) => f.getSchemaValue());
     }
 
     protected createChildFields() {
@@ -628,10 +703,10 @@ class FieldArray extends FieldGroup {
 }
 
 function createUIForField(
-    data: FieldData,
+    data: FieldContainer,
     fullPropertyName: string,
     paramName: string,
-    paramField: ActionParamField,
+    paramField: TemplateField,
     optional: boolean,
     level: number,
     parent: FieldGroup | undefined,
@@ -672,21 +747,20 @@ function createUIForField(
     }
 }
 
-class FieldContainer {
-    private data: FieldData;
+class FieldEditor {
+    private data: FieldContainer;
 
     constructor(
         appendTo: HTMLElement,
-        private readonly actionTemplates: ActionTemplateSequence,
+        actionTemplates: ActionTemplateSequence,
         enableEdit = true,
     ) {
-        this.data = new FieldData(actionTemplates.actions, enableEdit);
-        this.createFields();
+        this.data = new FieldContainer(actionTemplates, enableEdit);
         appendTo.appendChild(this.data.table);
     }
 
     public get value() {
-        return this.data.value;
+        return this.data.getSchemaValue();
     }
 
     public get hasErrors() {
@@ -694,43 +768,17 @@ class FieldContainer {
     }
 
     public reset() {
-        this.data.value = this.actionTemplates.actions;
-        this.data.table.classList.remove("editing");
-        this.data.errorCount = 0;
-        this.createFields();
+        this.data.reset();
     }
 
     public setEditMode(editMode: boolean) {
         this.data.editMode = editMode;
     }
-
-    private createFields() {
-        this.data.table.replaceChildren();
-        for (let i = 0; i < this.actionTemplates.templates.length; i++) {
-            const actionTemplate = this.actionTemplates.templates[i];
-            const action = this.data.value[i];
-            if (action === undefined) {
-                break;
-            }
-
-            new FieldScalar(this.data, `${i}.translatorName`, "Agent");
-            new FieldScalar(this.data, `${i}.actionName`, "Action");
-
-            if (actionTemplate.parameterStructure) {
-                new FieldObject(
-                    this.data,
-                    `${i}.parameters`,
-                    "Parameters",
-                    actionTemplate.parameterStructure.fields,
-                );
-            }
-        }
-    }
 }
 
-export class FieldEditor {
+export class TemplateEditor {
     private readonly container: HTMLDivElement;
-    private readonly fieldContainer: FieldContainer;
+    private readonly fieldEditor: FieldEditor;
     private readonly preface: HTMLDivElement;
     private editMode = false;
 
@@ -748,7 +796,7 @@ export class FieldEditor {
 
         this.preface.innerText = this.actionTemplates.preface ?? "";
 
-        this.fieldContainer = new FieldContainer(
+        this.fieldEditor = new FieldEditor(
             this.container,
             actionTemplates,
             enableEdit,
@@ -756,15 +804,15 @@ export class FieldEditor {
     }
 
     public get value() {
-        return this.fieldContainer.value;
+        return this.fieldEditor.value;
     }
 
     public get hasErrors() {
-        return this.fieldContainer.hasErrors;
+        return this.fieldEditor.hasErrors;
     }
 
     public reset() {
-        this.fieldContainer.reset();
+        this.fieldEditor.reset();
     }
 
     public setEditMode(editMode: boolean) {
@@ -778,7 +826,7 @@ export class FieldEditor {
         }
 
         this.editMode = editMode;
-        this.fieldContainer.setEditMode(editMode);
+        this.fieldEditor.setEditMode(editMode);
         if (editMode) {
             this.container.classList.add("action-text-editable");
             this.preface.innerText = this.actionTemplates.editPreface ?? "";

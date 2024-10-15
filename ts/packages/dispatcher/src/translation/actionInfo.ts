@@ -2,10 +2,7 @@
 // Licensed under the MIT License.
 
 import { ISymbol, SchemaParser, NodeType } from "schema-parser";
-import {
-    TranslatorConfig,
-    TranslatorConfigProvider,
-} from "./agentTranslators.js";
+import { TranslatorConfig } from "./agentTranslators.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 
 export type ActionParamPrimitive = {

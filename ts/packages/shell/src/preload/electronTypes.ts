@@ -6,6 +6,7 @@ import {
     AppAgentEvent,
     DisplayAppendMode,
     DynamicDisplay,
+    TemplateSchema,
 } from "@typeagent/agent-sdk";
 import { ShellSettings } from "../main/shellSettings.js";
 import {
@@ -57,6 +58,11 @@ export interface ClientAPI {
         input: string,
     ) => Promise<PartialCompletionResult | undefined>;
     getDynamicDisplay: (source: string, id: string) => Promise<DynamicDisplay>;
+    getTemplateSchema: (
+        appAgentName: string,
+        templateName: string,
+        data: unknown,
+    ) => Promise<TemplateSchema>;
     onUpdateDisplay(
         callback: (
             e: Electron.IpcRendererEvent,

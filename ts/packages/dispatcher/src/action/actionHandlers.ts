@@ -17,6 +17,7 @@ import {
     DisplayAppendMode,
     ParsedCommandParams,
     ParameterDefinitions,
+    TemplateSchema,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
@@ -401,4 +402,18 @@ export async function executeCommand(
         actionContext.profiler = undefined;
         closeActionContext();
     }
+}
+
+export function getTemplateSchema(
+    context: CommandHandlerContext,
+    appAgentName: string,
+    templateName: string,
+    data: unknown,
+): TemplateSchema {
+    const appAgent = context.agents.getAppAgent(appAgentName);
+    if (appAgent.getTemplateSchema === undefined) {
+        throw new Error(`Template schema not supported by '${appAgentName}'`);
+    }
+    const sessionContext = context.agents.getSessionContext(appAgentName);
+    return appAgent.getTemplateSchema(templateName, data, sessionContext);
 }
