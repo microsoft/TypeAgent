@@ -6,6 +6,7 @@ import {
     TemplateField,
     TemplateFieldOpt,
     TemplateFieldScalar,
+    TemplateSchema,
 } from "@typeagent/agent-sdk";
 import { ActionTemplateSequence } from "agent-dispatcher";
 import { getClientAPI } from "./main";
@@ -36,6 +37,7 @@ function toValueType(paramField: TemplateFieldScalar, value: string) {
 
 class FieldContainer {
     private current: unknown[];
+    private templates: TemplateSchema[];
     public readonly table: HTMLTableElement;
     private readonly fieldObjects: FieldObject[] = [];
     public errorCount = 0;
@@ -47,13 +49,15 @@ class FieldContainer {
     ) {
         this.table = document.createElement("table");
         this.current = structuredClone(actionTemplates.actions);
+        this.templates = [...this.actionTemplates.templates];
         this.createFields();
     }
 
     public reset() {
-        this.current = structuredClone(this.actionTemplates.actions);
         this.table.classList.remove("editing");
         this.errorCount = 0;
+        this.current = structuredClone(this.actionTemplates.actions);
+        this.templates = [...this.actionTemplates.templates];
         this.createFields();
     }
 
@@ -130,8 +134,9 @@ class FieldContainer {
 
     private createFields() {
         this.table.replaceChildren();
-        for (let i = 0; i < this.actionTemplates.templates.length; i++) {
-            const actionTemplate = this.actionTemplates.templates[i];
+        this.fieldObjects.length = 0;
+        for (let i = 0; i < this.templates.length; i++) {
+            const actionTemplate = this.templates[i];
             const action = this.current[i];
             if (action === undefined) {
                 break;
@@ -163,7 +168,7 @@ class FieldContainer {
             template.fields,
         );
 
-        this.actionTemplates.templates[index] = template;
+        this.templates[index] = template;
     }
 
     public getSchemaValue(): any {
@@ -172,6 +177,7 @@ class FieldContainer {
 }
 
 class FieldRow {
+    private readonly buttonCells: HTMLElement[] = [];
     protected readonly row: HTMLTableRowElement;
     protected readonly valueCell: HTMLTableCellElement;
     constructor(
@@ -181,9 +187,24 @@ class FieldRow {
     ) {
         const row = document.createElement("tr");
         const nameCell = row.insertCell();
-        nameCell.style.paddingLeft = `${this.level * 20}px`;
-        nameCell.innerText = label;
         nameCell.className = "name-cell";
+        const buttonDiv = document.createElement("div");
+        nameCell.appendChild(buttonDiv);
+        buttonDiv.className = "left-button-div";
+
+        const labelDiv = document.createElement("div");
+        labelDiv.style.paddingLeft = `${this.level * 20}px`;
+        labelDiv.innerText = label;
+        labelDiv.className = "name-div";
+        nameCell.appendChild(labelDiv);
+
+        const button0Div = document.createElement("div");
+        buttonDiv.appendChild(button0Div);
+        this.buttonCells.push(button0Div);
+
+        const button1Div = document.createElement("div");
+        buttonDiv.appendChild(button1Div);
+        this.buttonCells.push(button1Div);
 
         const valueCell = row.insertCell();
         valueCell.className = "value-cell";
@@ -202,12 +223,14 @@ class FieldRow {
         className: string,
         onclick: () => void,
     ) {
-        if (this.row.cells.length <= index + 2) {
-            for (let i = this.row.cells.length; i <= index + 2; i++) {
-                this.row.insertCell();
+        if (index >= this.buttonCells.length) {
+            for (let i = this.buttonCells.length; i <= index; i++) {
+                const buttonCell = this.row.insertCell();
+                this.buttonCells.push(buttonCell);
             }
         }
-        const buttonCell = this.row.cells[index + 2];
+
+        const buttonCell = this.buttonCells[index];
         buttonCell.className = "button-cell";
         const button = document.createElement("button");
         button.innerText = iconChar;
@@ -216,11 +239,13 @@ class FieldRow {
         buttonCell.appendChild(button);
     }
 
+    public showButton(index: number, show: boolean) {
+        const buttonCell = this.buttonCells[index];
+        buttonCell.style.visibility = show ? "visible" : "hidden";
+    }
+
     public removeButton(index: number) {
-        if (this.row.cells.length <= index + 2) {
-            return;
-        }
-        this.row.cells[index + 2].replaceChildren();
+        this.buttonCells[index].replaceChildren();
     }
 
     public remove() {
@@ -390,36 +415,46 @@ class FieldScalar extends FieldBase {
                 input.focus();
             };
 
-            this.addButton(0, "💾", "action-editing-button", () => {
-                const newValue = toValueType(fieldType, input.value);
-                if (newValue === undefined) {
-                    this.setValid(false);
-                    return;
-                }
+            this.addButton(
+                ButtonIndex.save,
+                "💾",
+                "action-editing-button",
+                () => {
+                    const newValue = toValueType(fieldType, input.value);
+                    if (newValue === undefined) {
+                        this.setValid(false);
+                        return;
+                    }
 
-                this.setValid(true);
-                data.table.classList.remove("editing");
-                row.classList.remove("editing");
-                data.setProperty(fullPropertyName, newValue);
-                valueCell.innerText = input.value;
+                    this.setValid(true);
+                    data.table.classList.remove("editing");
+                    row.classList.remove("editing");
+                    data.setProperty(fullPropertyName, newValue);
+                    valueCell.innerText = input.value;
 
-                if (
-                    fieldType.type === "string-union" &&
-                    fieldType.discriminator !== newValue
-                ) {
-                    // Need to refresh the schema
-                    this.data.refreshSchema(
-                        parseInt(this.fullPropertyName.split(".")[0]),
-                    );
-                    return;
-                }
-            });
+                    if (
+                        fieldType.type === "string-union" &&
+                        fieldType.discriminator !== newValue
+                    ) {
+                        // Need to refresh the schema
+                        this.data.refreshSchema(
+                            parseInt(this.fullPropertyName.split(".")[0]),
+                        );
+                        return;
+                    }
+                },
+            );
 
-            this.addButton(1, "🛇", "action-editing-button", () => {
-                data.table.classList.remove("editing");
-                row.classList.remove("editing");
-                this.updateValueDisplay();
-            });
+            this.addButton(
+                ButtonIndex.cancel,
+                "🛇",
+                "action-editing-button",
+                () => {
+                    data.table.classList.remove("editing");
+                    row.classList.remove("editing");
+                    this.updateValueDisplay();
+                },
+            );
         }
     }
 
@@ -501,6 +536,15 @@ class FieldObjectOptionalField extends FieldRow {
     }
 }
 
+const enum ButtonIndex {
+    add = 2,
+    up = 0,
+    down = 1,
+    delete = 3,
+    save = 2,
+    cancel = 3,
+}
+
 class FieldObject extends FieldGroup {
     private readonly hasRequiredFields: boolean;
     constructor(
@@ -546,14 +590,14 @@ class FieldObject extends FieldGroup {
                     return;
                 }
                 hasMissingFieldButton = false;
-                this.removeButton(0);
+                this.removeButton(ButtonIndex.add);
                 return;
             }
             if (hasMissingFieldButton) {
                 return;
             }
             hasMissingFieldButton = true;
-            this.addButton(0, "➕", "action-edit-button", () => {
+            this.addButton(ButtonIndex.add, "➕", "action-edit-button", () => {
                 this.data.table.classList.add("editing");
                 // create a temporary row
                 const inputRow = new FieldObjectOptionalField(
@@ -562,24 +606,34 @@ class FieldObject extends FieldGroup {
                     this,
                     missingFields.keys(),
                 );
-                inputRow.addButton(0, "💾", "action-editing-button", () => {
-                    const fieldName = inputRow.value;
+                inputRow.addButton(
+                    ButtonIndex.save,
+                    "💾",
+                    "action-editing-button",
+                    () => {
+                        const fieldName = inputRow.value;
 
-                    const field = missingFields.get(fieldName);
-                    if (field === undefined) {
-                        return;
-                    }
-                    missingFields.delete(fieldName);
-                    field.setDefaultValue();
-                    inputRow.remove();
-                    this.data.table.classList.remove("editing");
-                    updateMissingFieldButton();
-                });
+                        const field = missingFields.get(fieldName);
+                        if (field === undefined) {
+                            return;
+                        }
+                        missingFields.delete(fieldName);
+                        field.setDefaultValue();
+                        inputRow.remove();
+                        this.data.table.classList.remove("editing");
+                        updateMissingFieldButton();
+                    },
+                );
 
-                inputRow.addButton(1, "🛇", "action-editing-button", () => {
-                    inputRow.remove();
-                    this.data.table.classList.remove("editing");
-                });
+                inputRow.addButton(
+                    ButtonIndex.cancel,
+                    "🛇",
+                    "action-editing-button",
+                    () => {
+                        inputRow.remove();
+                        this.data.table.classList.remove("editing");
+                    },
+                );
             });
         };
         for (const [k, v] of Object.entries(this.fieldTypes)) {
@@ -591,11 +645,16 @@ class FieldObject extends FieldGroup {
                     // Optional field without a value.
                     missingFields.set(k, field);
                 }
-                field.addButton(1, "✕", "action-edit-button", () => {
-                    field.deleteValue();
-                    missingFields.set(k, field);
-                    updateMissingFieldButton();
-                });
+                field.addButton(
+                    ButtonIndex.delete,
+                    "✕",
+                    "action-edit-button",
+                    () => {
+                        field.deleteValue();
+                        missingFields.set(k, field);
+                        updateMissingFieldButton();
+                    },
+                );
             }
         }
         updateMissingFieldButton();
@@ -626,12 +685,16 @@ class FieldArray extends FieldGroup {
         super(data, fullPropertyName, paramName, optional, level, parent);
 
         if (data.enableEdit) {
-            this.addButton(0, "➕", "action-edit-button", () => {
+            this.addButton(ButtonIndex.add, "➕", "action-edit-button", () => {
                 const value = this.ensureArray();
                 const index = value.length;
                 value.push(undefined);
                 this.setValid(true);
                 this.createChildIndex(index);
+
+                if (index !== 0) {
+                    this.updateArrows(this.fields[index - 1], index - 1);
+                }
             });
         }
 
@@ -680,6 +743,10 @@ class FieldArray extends FieldGroup {
         this.setValue(newArray);
         return newArray;
     }
+    private updateArrows(field: FieldBase, index: number) {
+        field.showButton(0, index !== 0);
+        field.showButton(1, index + 1 !== this.getArray()?.length);
+    }
 
     private createChildIndex(index: number) {
         const field = this.createChildField(
@@ -688,7 +755,25 @@ class FieldArray extends FieldGroup {
             this.paramValue.elementType,
             false,
         );
-        field.addButton(1, "✕", "action-edit-button", () => {
+        field.addButton(ButtonIndex.up, "⬆", "action-edit-button", () => {
+            const value = this.getArray();
+            if (value) {
+                const item = value.splice(index, 1)[0];
+                value.splice(index - 1, 0, item);
+                this.createChildFields();
+            }
+        });
+        field.addButton(ButtonIndex.down, "⬇", "action-edit-button", () => {
+            const value = this.getArray();
+            if (value) {
+                const item = value.splice(index, 1)[0];
+                value.splice(index + 1, 0, item);
+                this.createChildFields();
+            }
+        });
+
+        this.updateArrows(field, index);
+        field.addButton(ButtonIndex.delete, "✕", "action-edit-button", () => {
             const value = this.getArray();
             if (value) {
                 value.splice(index, 1);
@@ -698,6 +783,7 @@ class FieldArray extends FieldGroup {
                 }
             }
         });
+
         return field;
     }
 }
