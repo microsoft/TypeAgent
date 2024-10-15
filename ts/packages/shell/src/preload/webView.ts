@@ -8,6 +8,7 @@ import {
     createWebSocket,
     keepWebSocketAlive,
 } from "common-utils";
+import DOMPurify from 'dompurify';
 
 let webSocket: any = null;
 
@@ -267,7 +268,8 @@ async function runBrowserAction(action: any) {
             console.log("We should navigate to " + JSON.stringify(response));
 
             if (response && response.url) {
-                window.location.href = response.url;
+                const sanitizedUrl = DOMPurify.sanitize(response.url);
+                window.location.href = sanitizedUrl;
                 confirmationMessage = `Navigated to the  ${action.parameters.keywords} link`;
             }
 
