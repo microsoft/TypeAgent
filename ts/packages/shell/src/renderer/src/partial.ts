@@ -2,9 +2,8 @@
 // Licensed under the MIT License.
 
 import { PartialCompletionResult } from "agent-dispatcher";
-import { SearchMenuItem } from "../../preload/electronTypes";
 import { getClientAPI } from "./main";
-import { SearchMenu } from "./search";
+import { SearchMenu, SearchMenuItem } from "./search";
 
 import registerDebug from "debug";
 import { ExpandableTextarea } from "./chatInput";

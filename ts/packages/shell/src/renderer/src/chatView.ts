@@ -4,210 +4,18 @@
 import { IdGenerator, getClientAPI } from "./main";
 import { ChatInput, ExpandableTextarea, questionInput } from "./chatInput";
 import { iconCheckMarkCircle, iconX } from "./icon";
-import { ActionTemplateSequence } from "../../preload/electronTypes";
 import {
     DisplayAppendMode,
     DisplayContent,
     DynamicDisplay,
 } from "@typeagent/agent-sdk";
 import { TTS } from "./tts/tts";
-import { IAgentMessage } from "agent-dispatcher";
+import { IAgentMessage, ActionTemplateSequence } from "agent-dispatcher";
 
 import { PartialCompletion } from "./partial";
 import { InputChoice } from "./choicePanel";
 import { MessageGroup } from "./messageGroup";
 import { SettingsView } from "./settingsView";
-
-interface ISymbolNode {
-    symbolName: string;
-    children: ISymbolNode[];
-    parent?: ISymbolNode;
-}
-
-enum SymbolType {
-    Union,
-    Action,
-    Parameter,
-    Object,
-    String,
-    Boolean,
-    Number,
-    Array,
-}
-
-function symbolNode(
-    symbolName: string,
-    symbolType: SymbolType,
-    children: ISymbolNode[],
-    parent?: ISymbolNode,
-): ISymbolNode {
-    const newSym = {
-        symbolName,
-        symbolType,
-        children,
-        parent,
-    };
-    newSym.children.forEach((child) => {
-        child.parent = newSym;
-    });
-    return newSym;
-}
-
-function symbolsFromStrings(
-    symbolNames: string[],
-    symbolType: SymbolType,
-    parent: ISymbolNode,
-): ISymbolNode[] {
-    return symbolNames.map((name) => symbolNode(name, symbolType, [], parent));
-}
-
-export class PlayerShimCursor {
-    actionNames = [
-        "play",
-        "status",
-        "pause",
-        "resume",
-        "stop",
-        "next",
-        "previous",
-        "shuffle",
-        "listDevices",
-        "selectDevice",
-        "setVolume",
-        "changeVolume",
-        "searchTracks",
-        "listPlaylists",
-        "getPlaylist",
-        "getAlbum",
-        "getFavorites",
-        "filterTracks",
-        "createPlaylist",
-        "deletePlaylist",
-        "getQueue",
-        "unknown",
-    ];
-    root: ISymbolNode = symbolNode("root", SymbolType.Union, []);
-    cursor: ISymbolNode = this.root;
-    constructor() {
-        this.root.children = symbolsFromStrings(
-            this.actionNames,
-            SymbolType.Action,
-            this.root,
-        );
-        this.setParameters();
-    }
-
-    setParameters() {
-        for (const child of this.root.children) {
-            switch (child.symbolName) {
-                case "play": {
-                    const queryNode = symbolNode(
-                        "query",
-                        SymbolType.Object,
-                        [],
-                    );
-                    child.children = [
-                        symbolNode("trackNumber", SymbolType.Number, [], child),
-                        symbolNode("trackRange", SymbolType.Array, [], child),
-                        symbolNode("quantity", SymbolType.Number, [], child),
-                        queryNode,
-                    ];
-                    queryNode.children = [
-                        symbolNode("name", SymbolType.String, [], queryNode),
-                        symbolNode("type", SymbolType.String, [], queryNode),
-                    ];
-                    break;
-                }
-                case "selectDevice":
-                    child.children = [
-                        symbolNode("keyword", SymbolType.String, [], child),
-                    ];
-                    break;
-                case "shuffle":
-                    child.children = [
-                        symbolNode("on", SymbolType.Boolean, [], child),
-                    ];
-                    break;
-                case "setVolume":
-                    child.children = [
-                        symbolNode(
-                            "newVolumeLevel",
-                            SymbolType.Number,
-                            [],
-                            child,
-                        ),
-                    ];
-                    break;
-                case "changeVolume":
-                    child.children = [
-                        symbolNode(
-                            "volumeChangePercentage",
-                            SymbolType.Number,
-                            [],
-                            child,
-                        ),
-                    ];
-                    break;
-                case "searchTracks":
-                    child.children = [
-                        symbolNode("query", SymbolType.String, [], child),
-                    ];
-                    break;
-                case "getPlaylist":
-                    child.children = [
-                        symbolNode("name", SymbolType.String, [], child),
-                    ];
-                    break;
-                case "getAlbum":
-                    child.children = [
-                        symbolNode("name", SymbolType.String, [], child),
-                    ];
-                    break;
-                case "filterTracks": {
-                    child.children = [
-                        symbolNode("filterType", SymbolType.String, [], child),
-                        symbolNode("filterValue", SymbolType.String, [], child),
-                        symbolNode("negate", SymbolType.Boolean, [], child),
-                    ];
-                    break;
-                }
-                case "createPlaylist":
-                    child.children = [
-                        symbolNode("name", SymbolType.String, [], child),
-                    ];
-                    break;
-                case "deletePlaylist":
-                    child.children = [
-                        symbolNode("name", SymbolType.String, [], child),
-                    ];
-                    break;
-                case "unknown":
-                    child.children = [
-                        symbolNode("text", SymbolType.String, [], child),
-                    ];
-                    break;
-            }
-        }
-    }
-
-    open(name: string) {
-        const child = this.cursor.children.find(
-            (child) => child.symbolName === name,
-        );
-        if (child) {
-            this.cursor = child;
-        }
-    }
-
-    close() {
-        if (this.cursor.parent !== undefined) {
-            this.cursor = this.cursor.parent;
-        }
-    }
-    symbolNames() {
-        return this.cursor.children.map((child) => child.symbolName);
-    }
-}
 
 export function getSelectionXCoord() {
     let sel = window.getSelection();
@@ -669,13 +477,13 @@ export class ChatView {
             {
                 text: "Yes",
                 element: iconCheckMarkCircle(),
-                selectKey: ["y", "Y", "Enter"],
+                selectKey: ["Enter"],
                 value: true,
             },
             {
                 text: "No",
                 element: iconX(),
-                selectKey: ["n", "N", "Delete"],
+                selectKey: ["Delete"],
                 value: false,
             },
         ];

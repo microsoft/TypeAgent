@@ -1,8 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SearchMenuItem } from "../../preload/electronTypes";
 import { TST } from "./prefixTree";
+
+export type SearchMenuItem = {
+    matchText: string;
+    selectedText: string;
+    emojiChar?: string;
+    groupName?: string;
+};
 
 export class SearchMenu {
     private searchContainer: HTMLDivElement;

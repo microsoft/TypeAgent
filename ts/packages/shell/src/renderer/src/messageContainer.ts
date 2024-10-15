@@ -3,15 +3,14 @@
 
 import { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
 import { TTS, TTSMetrics } from "./tts/tts";
-import { PhaseTiming } from "agent-dispatcher";
+import { ActionTemplateSequence, PhaseTiming } from "agent-dispatcher";
 
 import { ChoicePanel, InputChoice } from "./choicePanel";
 import { setContent } from "./setContent";
 import { ChatView } from "./chatView";
 import { iconCheckMarkCircle, iconRoadrunner, iconX } from "./icon";
-import { ActionCascade } from "./ActionCascade";
+import { FieldEditor } from "./fieldEditor";
 import { getClientAPI } from "./main";
-import { ActionTemplateSequence } from "../../preload/electronTypes";
 import { SettingsView } from "./settingsView";
 
 function createTimestampDiv(timestamp: Date, className: string) {
@@ -241,34 +240,44 @@ export class MessageContainer {
         actionContainer.className = "action-container";
         this.messageDiv.appendChild(actionContainer);
 
-        const actionCascade = new ActionCascade(
-            actionContainer,
-            actionTemplates,
-        );
+        const actionCascade = new FieldEditor(actionContainer, actionTemplates);
 
+        const createTextSpan = (text: string) => {
+            const span = document.createElement("span");
+            span.innerText = text;
+            return span;
+        };
         const confirm = () => {
             const choices: InputChoice[] = [
                 {
                     text: "Accept",
-                    element: iconCheckMarkCircle(),
+                    element: createTextSpan("✓"),
                     selectKey: ["y", "Y", "Enter"],
                     value: true,
                 },
                 {
                     text: "Edit",
-                    element: iconX(),
+                    element: createTextSpan("✎"),
                     selectKey: ["n", "N", "Delete"],
+                    value: undefined,
+                },
+                {
+                    text: "Cancel",
+                    element: createTextSpan("✕"),
+                    selectKey: ["Escape"],
                     value: false,
                 },
             ];
             this.addChoicePanel(choices, (choice: InputChoice) => {
-                if (choice.value === true) {
-                    actionContainer.remove();
-                    getClientAPI().sendProposedAction(proposeActionId);
+                if (choice.value === undefined) {
+                    edit();
                     return;
                 }
-                edit();
+                actionContainer.remove();
+                const replacement = choice.value ? undefined : null;
+                getClientAPI().sendProposedAction(proposeActionId, replacement);
             });
+            this.scrollIntoView();
         };
         const edit = () => {
             actionCascade.setEditMode(true);
@@ -301,6 +310,7 @@ export class MessageContainer {
                 }
                 return true;
             });
+            this.scrollIntoView();
         };
 
         confirm();

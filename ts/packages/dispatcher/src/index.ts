@@ -13,3 +13,11 @@ export type {
     IAgentMessage,
 } from "./handlers/common/interactiveIO.js";
 export type { Timing, PhaseTiming, RequestMetrics } from "./utils/metrics.js";
+
+export type {
+    ActionParamArray,
+    ActionParamField,
+    ActionParamFieldOpt,
+    ActionParamScalar,
+} from "./translation/actionInfo.js";
+export type { ActionTemplateSequence } from "./translation/actionTemplate.js";

@@ -7,28 +7,57 @@ import {
     TranslatorConfigProvider,
 } from "./agentTranslators.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
-import {
-    ActionTemplate,
-    ActionInfo,
-    SearchMenuItem,
-    TemplateParamField,
-    TemplateParamObject,
-} from "common-utils";
+
+export type ActionParamPrimitive = {
+    type: "string" | "number" | "boolean";
+};
+
+export type ActionParamStringUnion = {
+    type: "string-union";
+    typeEnum: string[];
+};
+
+export type ActionParamScalar = ActionParamPrimitive | ActionParamStringUnion;
+
+export type ActionParamArray = {
+    type: "array";
+    elementType: ActionParamField;
+};
+
+export type ActionParamObject = {
+    type: "object";
+    fields: {
+        [key: string]: ActionParamFieldOpt;
+    };
+};
+
+export type ActionParamFieldOpt = {
+    optional?: boolean;
+    field: ActionParamField;
+};
+
+export type ActionParamField =
+    | ActionParamScalar
+    | ActionParamObject
+    | ActionParamArray;
+
+export type ActionInfo = {
+    actionName: string;
+    comments: string;
+    parameters?: ActionParamObject | undefined;
+};
 
 function getActionInfo(
     actionTypeName: string,
-    translatorConfig: TranslatorConfig,
-    translatorName: string,
     parser: SchemaParser,
 ): ActionInfo | undefined {
     const node = parser.openActionNode(actionTypeName);
     if (node === undefined) {
         throw new Error(`Action type '${actionTypeName}' not found in schema`);
     }
-    let name: string | undefined = undefined;
-    let item: SearchMenuItem | undefined = undefined;
-    let template: ActionTemplate | undefined = undefined;
+    let actionName: string | undefined = undefined;
     let comments: string | undefined = undefined;
+    let parameters: ActionParamObject | undefined = undefined;
     for (const child of node.children) {
         if (child.symbol.name === "actionName") {
             // values are quoted.
@@ -36,92 +65,53 @@ function getActionInfo(
                 // TODO: Filter out unknown actions, we should make that invalidate at some point.
                 return undefined;
             }
-            name = child.symbol.value.slice(1, -1);
-            item = {
-                matchText: name,
-                emojiChar: translatorConfig.emojiChar,
-                groupName: translatorName,
-                selectedText: `${translatorName}.${name}`,
-            };
+            actionName = child.symbol.value.slice(1, -1);
             comments = node.leadingComments?.join(" ") ?? "";
         } else if (child.symbol.name === "parameters") {
             parser.open(child.symbol.name);
-            const parameterStructure = getTemplateParamObjectType(parser);
+            parameters = getActionParamObjectType(parser);
             parser.close();
-            template = {
-                agent: translatorName,
-                name: "",
-                parameterStructure,
-            };
         }
     }
-    if (name !== undefined && item !== undefined && comments !== undefined) {
-        if (template !== undefined) {
-            template.name = name;
-        }
+    if (actionName !== undefined && comments !== undefined) {
         return {
-            name,
-            item,
-            comments: node.leadingComments?.join(" ") ?? "",
-            template,
+            actionName,
+            comments,
+            parameters,
         };
     }
     return undefined;
 }
 
-const translatorNameToActionInfo = new Map<string, ActionInfo[]>();
+// Global Cache
+const translatorNameToActionInfo = new Map<string, Map<string, ActionInfo>>();
 
-export function getTranslatorActionInfo(
+export function getTranslatorActionInfos(
     translatorConfig: TranslatorConfig,
     translatorName: string,
-): ActionInfo[] {
+): Map<string, ActionInfo> {
     if (translatorNameToActionInfo.has(translatorName)) {
         return translatorNameToActionInfo.get(translatorName)!;
-    } else {
-        const parser = new SchemaParser();
-        parser.loadSchema(getPackageFilePath(translatorConfig.schemaFile));
-
-        const actionInfo: ActionInfo[] = [];
-        for (const actionTypeName of parser.actionTypeNames()) {
-            const info = getActionInfo(
-                actionTypeName,
-                translatorConfig,
-                translatorName,
-                parser,
-            );
-            if (info) {
-                actionInfo.push(info);
-            }
-        }
-        translatorNameToActionInfo.set(translatorName, actionInfo);
-        return actionInfo;
     }
-}
+    const parser = new SchemaParser();
+    parser.loadSchema(getPackageFilePath(translatorConfig.schemaFile));
 
-export function getAllActionInfo(
-    translatorNames: string[],
-    provider: TranslatorConfigProvider,
-) {
-    let allActionInfo = new Map<string, ActionInfo>();
-    for (const name of translatorNames) {
-        const translatorConfig = provider.getTranslatorConfig(name);
-        if (translatorConfig.injected) {
-            continue;
-        }
-        const actionInfo = getTranslatorActionInfo(translatorConfig, name);
-        for (const info of actionInfo) {
-            const fullActionName = `${name}.${info.name}`;
-            allActionInfo.set(fullActionName, info);
+    const actionInfo = new Map<string, ActionInfo>();
+    for (const actionTypeName of parser.actionTypeNames()) {
+        const info = getActionInfo(actionTypeName, parser);
+        if (info) {
+            actionInfo.set(info.actionName, info);
         }
     }
-    return allActionInfo;
+    translatorNameToActionInfo.set(translatorName, actionInfo);
+    return actionInfo;
 }
 
-function getTemplateParamFieldType(
+function getActionParamFieldType(
     parser: SchemaParser,
     param: ISymbol,
     valueType?: NodeType,
-): TemplateParamField {
+): ActionParamField {
     let type = param.type;
     if (valueType !== undefined) {
         type = valueType;
@@ -137,20 +127,20 @@ function getTemplateParamFieldType(
         case NodeType.Interface:
         case NodeType.TypeReference:
             parser.open(param.name);
-            const tree = getTemplateParamObjectType(parser);
+            const tree = getActionParamObjectType(parser);
             parser.close();
             return tree;
         case NodeType.Array:
             return {
                 type: "array",
-                elementType: getTemplateParamFieldType(
+                elementType: getActionParamFieldType(
                     parser,
                     param,
                     param.valueType,
                 ),
             };
         case NodeType.Property:
-            return getTemplateParamFieldType(parser, param, param.valueType);
+            return getActionParamFieldType(parser, param, param.valueType);
         case NodeType.Union:
             if (param.valueType === NodeType.String) {
                 return {
@@ -164,7 +154,7 @@ function getTemplateParamFieldType(
             break;
         case NodeType.ObjectArray:
             parser.open(param.name);
-            const elementType = getTemplateParamObjectType(parser);
+            const elementType = getActionParamObjectType(parser);
             parser.close();
             return {
                 type: "array",
@@ -177,12 +167,12 @@ function getTemplateParamFieldType(
 }
 
 // assumes parser is open to the correct parameter object
-function getTemplateParamObjectType(parser: SchemaParser): TemplateParamObject {
+function getActionParamObjectType(parser: SchemaParser): ActionParamObject {
     let fields: { [key: string]: any } = {};
     const paramChildren = parser.symbols();
     if (paramChildren !== undefined) {
         for (const param of paramChildren) {
-            const fieldType = getTemplateParamFieldType(parser, param);
+            const fieldType = getActionParamFieldType(parser, param);
             fields[param.name] = {
                 field: fieldType,
                 optional: param.optional,
