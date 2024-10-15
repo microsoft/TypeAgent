@@ -32,9 +32,9 @@ function createSelectionSchema(
     const actionComments: string[] = [];
     for (const info of actionInfos) {
         if (info !== undefined) {
-            actionNames.push(`"${info.name}"`);
+            actionNames.push(`"${info.actionName}"`);
             actionComments.push(
-                `"${info.name}"${info.comments ? ` - ${info.comments}` : ""}`,
+                `"${info.actionName}"${info.comments ? ` - ${info.comments}` : ""}`,
             );
         }
     }

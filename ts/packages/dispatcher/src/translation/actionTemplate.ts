@@ -2,7 +2,13 @@
 // Licensed under the MIT License.
 
 import { Actions } from "agent-cache";
-import { ActionInfo, ActionTemplate } from "./actionInfo.js";
+import { ActionInfo, TemplateParamObject } from "./actionInfo.js";
+
+export type ActionTemplate = {
+    agent: string;
+    name: string;
+    parameterStructure?: TemplateParamObject | undefined;
+};
 
 export type ActionTemplateSequence = {
     templates: ActionTemplate[];
@@ -27,7 +33,7 @@ export function toTemplateSequence(
             );
         }
         templates.push({
-            parameterStructure: actionInfo.template!.parameterStructure,
+            parameterStructure: actionInfo.parameters,
             name: action.actionName,
             agent: action.translatorNameString,
         });

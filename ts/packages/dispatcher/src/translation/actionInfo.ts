@@ -43,30 +43,23 @@ export type TemplateParamField =
     | TemplateParamObject
     | TemplateParamArray;
 
-export type ActionTemplate = {
-    agent: string;
-    name: string;
-    parameterStructure: TemplateParamObject;
+export type ActionInfo = {
+    actionName: string;
+    comments: string;
+    parameters?: TemplateParamObject | undefined;
 };
 
-export type ActionInfo = {
-    name: string;
-    comments: string;
-    template?: ActionTemplate | undefined;
-};
 function getActionInfo(
     actionTypeName: string,
-    translatorConfig: TranslatorConfig,
-    translatorName: string,
     parser: SchemaParser,
 ): ActionInfo | undefined {
     const node = parser.openActionNode(actionTypeName);
     if (node === undefined) {
         throw new Error(`Action type '${actionTypeName}' not found in schema`);
     }
-    let name: string | undefined = undefined;
-    let template: ActionTemplate | undefined = undefined;
+    let actionName: string | undefined = undefined;
     let comments: string | undefined = undefined;
+    let parameters: TemplateParamObject | undefined = undefined;
     for (const child of node.children) {
         if (child.symbol.name === "actionName") {
             // values are quoted.
@@ -74,27 +67,19 @@ function getActionInfo(
                 // TODO: Filter out unknown actions, we should make that invalidate at some point.
                 return undefined;
             }
-            name = child.symbol.value.slice(1, -1);
+            actionName = child.symbol.value.slice(1, -1);
             comments = node.leadingComments?.join(" ") ?? "";
         } else if (child.symbol.name === "parameters") {
             parser.open(child.symbol.name);
-            const parameterStructure = getTemplateParamObjectType(parser);
+            parameters = getTemplateParamObjectType(parser);
             parser.close();
-            template = {
-                agent: translatorName,
-                name: "",
-                parameterStructure,
-            };
         }
     }
-    if (name !== undefined && comments !== undefined) {
-        if (template !== undefined) {
-            template.name = name;
-        }
+    if (actionName !== undefined && comments !== undefined) {
         return {
-            name,
+            actionName,
             comments: node.leadingComments?.join(" ") ?? "",
-            template,
+            parameters,
         };
     }
     return undefined;
@@ -114,12 +99,7 @@ export function getTranslatorActionInfo(
 
         const actionInfo: ActionInfo[] = [];
         for (const actionTypeName of parser.actionTypeNames()) {
-            const info = getActionInfo(
-                actionTypeName,
-                translatorConfig,
-                translatorName,
-                parser,
-            );
+            const info = getActionInfo(actionTypeName, parser);
             if (info) {
                 actionInfo.push(info);
             }
@@ -141,7 +121,7 @@ export function getAllActionInfo(
         }
         const actionInfo = getTranslatorActionInfo(translatorConfig, name);
         for (const info of actionInfo) {
-            const fullActionName = `${name}.${info.name}`;
+            const fullActionName = `${name}.${info.actionName}`;
             allActionInfo.set(fullActionName, info);
         }
     }

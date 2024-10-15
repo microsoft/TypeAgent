@@ -715,12 +715,15 @@ class FieldContainer {
 
             new FieldScalar(this.data, `${i}.translatorName`, "Agent");
             new FieldScalar(this.data, `${i}.actionName`, "Action");
-            new FieldObject(
-                this.data,
-                `${i}.parameters`,
-                "Parameters",
-                actionTemplate.parameterStructure.fields,
-            );
+
+            if (actionTemplate.parameterStructure) {
+                new FieldObject(
+                    this.data,
+                    `${i}.parameters`,
+                    "Parameters",
+                    actionTemplate.parameterStructure.fields,
+                );
+            }
         }
     }
 }

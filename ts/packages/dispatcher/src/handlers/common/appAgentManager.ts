@@ -143,7 +143,7 @@ export class AppAgentManager implements TranslatorConfigProvider {
                 if (config.injected) {
                     for (const info of getTranslatorActionInfo(config, name)) {
                         this.injectedTranslatorForActionName.set(
-                            info.name,
+                            info.actionName,
                             name,
                         );
                     }
