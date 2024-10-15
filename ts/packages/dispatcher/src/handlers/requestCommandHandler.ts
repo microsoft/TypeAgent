@@ -84,10 +84,9 @@ async function confirmTranslation(
         displayInfo(messages.join("\n"), context);
         return { requestAction };
     }
-    const prefaceSingle =
-        "Use the buttons to run or cancel the following action. You can also type Enter to run it or Del to cancel it.";
-    const prefaceMultiple =
-        "Use the buttons to run or cancel the following sequence of actions. You can also type Enter to run it or Del to cancel it.";
+    const preface =
+        "Use the buttons to run or cancel the following action(s). You can also press [Enter] to run it, [Del] to edit it, or [Escape] to cancel it.";
+    const editPreface = `Edit the following action(s) to match your requests.  Click on the values to start editing. Use the ➕/✕ buttons to add/delete optional fields.`;
     const translatorNames = getActiveTranslatorList(systemContext).filter(
         (name) => !name.startsWith("system."),
     );
@@ -97,8 +96,8 @@ async function confirmTranslation(
         systemContext.agents,
     );
     const templateSequence = actions.toTemplateSequence(
-        prefaceSingle,
-        prefaceMultiple,
+        preface,
+        editPreface,
         allActionInfo,
     );
 

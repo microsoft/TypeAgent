@@ -651,6 +651,8 @@ input[type="file"] {
 .action-text table {
   width: 100%;
   border-collapse: collapse;
+  margin-top: 10px;
+  margin-bottom: 10px;
 }
 
 .action-text tr {
@@ -658,8 +660,8 @@ input[type="file"] {
   border-bottom: 1px solid lightgray;
 }
 .action-text td {
-  padding-left: 5px;
-  padding-right: 5px;
+  padding-left: 10px;
+  padding-right: 10px;
 }
 
 .action-text td.name-cell {
@@ -667,6 +669,7 @@ input[type="file"] {
 }
 
 .action-text td.value-cell {
+  border-left: 1px solid lightgray;
   width: 62%;
 }
 
@@ -692,20 +695,22 @@ input[type="file"] {
 .action-edit-button,
 .action-editing-button,
 .action-text-editable table.editing .action-edit-button,
-.action-text-editable tr.editing .action-edit-button {
+.action-text-editable table.editing tr:hover .action-edit-button,
+.action-text-editable tr.editing:hover .action-edit-button {
   padding: 4px;
   border: lightgray;
   background-color: transparent;
-  visibility: hidden;
+  display: none;
+  opacity: 0;
 }
-.action-text-editable .action-edit-button,
-.action-text-editable tr.editing .action-editing-button {
-  visibility: visible;
+.action-text-editable .action-edit-button {
+  display: block;
   opacity: 0.25;
 }
+
 .action-text-editable tr:hover .action-edit-button,
-.action-text-editable tr.editing:hover .action-editing-button {
-  visibility: visible;
+.action-text-editable tr.editing .action-editing-button {
+  display: block;
   opacity: 1;
 }
 

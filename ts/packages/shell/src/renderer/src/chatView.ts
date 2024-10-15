@@ -669,13 +669,13 @@ export class ChatView {
             {
                 text: "Yes",
                 element: iconCheckMarkCircle(),
-                selectKey: ["y", "Y", "Enter"],
+                selectKey: ["Enter"],
                 value: true,
             },
             {
                 text: "No",
                 element: iconX(),
-                selectKey: ["n", "N", "Delete"],
+                selectKey: ["Delete"],
                 value: false,
             },
         ];

@@ -36,6 +36,7 @@ class FieldData {
     private current: any;
     public readonly table: HTMLTableElement;
     public errorCount = 0;
+    public editMode = false;
     constructor(
         data: any,
         public readonly enableEdit: boolean,
@@ -326,15 +327,23 @@ class FieldScalar extends FieldBase {
             const input = this.createInputElement();
             const row = this.row;
             const valueCell = this.valueCell;
-            this.addButton(0, "✏️", "action-edit-button", () => {
+            valueCell.onclick = () => {
+                if (
+                    !this.data.editMode ||
+                    this.data.table.classList.contains("editing")
+                ) {
+                    // If another field is being edited, don't start editing this one.
+                    return;
+                }
+
                 data.table.classList.add("editing");
                 row.classList.add("editing");
                 input.value = valueCell.innerText;
                 valueCell.replaceChildren(input);
                 input.focus();
-            });
+            };
 
-            this.addButton(2, "💾", "action-editing-button", () => {
+            this.addButton(0, "💾", "action-editing-button", () => {
                 const newValue = toValueType(fieldType, input.value);
                 if (newValue === undefined) {
                     this.setValid(false);
@@ -348,7 +357,7 @@ class FieldScalar extends FieldBase {
                 valueCell.innerText = input.value;
             });
 
-            this.addButton(3, "🛇", "action-editing-button", () => {
+            this.addButton(1, "🛇", "action-editing-button", () => {
                 data.table.classList.remove("editing");
                 row.classList.remove("editing");
                 this.updateValueDisplay();
@@ -492,7 +501,7 @@ class FieldObject extends FieldGroup {
                     this,
                     missingFields.keys(),
                 );
-                inputRow.addButton(2, "💾", "action-editing-button", () => {
+                inputRow.addButton(0, "💾", "action-editing-button", () => {
                     const fieldName = inputRow.value;
 
                     const field = missingFields.get(fieldName);
@@ -506,7 +515,7 @@ class FieldObject extends FieldGroup {
                     updateMissingFieldButton();
                 });
 
-                inputRow.addButton(3, "🛇", "action-editing-button", () => {
+                inputRow.addButton(1, "🛇", "action-editing-button", () => {
                     inputRow.remove();
                     this.data.table.classList.remove("editing");
                 });
@@ -521,7 +530,7 @@ class FieldObject extends FieldGroup {
                     // Optional field without a value.
                     missingFields.set(k, field);
                 }
-                field.addButton(1, "❌", "action-edit-button", () => {
+                field.addButton(1, "✕", "action-edit-button", () => {
                     field.deleteValue();
                     missingFields.set(k, field);
                     updateMissingFieldButton();
@@ -603,7 +612,7 @@ class FieldArray extends FieldGroup {
             this.paramValue.elementType,
             false,
         );
-        field.addButton(1, "❌", "action-edit-button", () => {
+        field.addButton(1, "✕", "action-edit-button", () => {
             const value = this.getArray();
             if (value) {
                 value.splice(index, 1);
@@ -690,6 +699,10 @@ class FieldContainer {
         this.createFields();
     }
 
+    public setEditMode(editMode: boolean) {
+        this.data.editMode = editMode;
+    }
+
     private createFields() {
         this.data.table.replaceChildren();
         for (let i = 0; i < this.actionTemplates.templates.length; i++) {
@@ -711,9 +724,10 @@ class FieldContainer {
     }
 }
 
-export class ActionCascade {
+export class FieldEditor {
     private readonly container: HTMLDivElement;
     private readonly fieldContainer: FieldContainer;
+    private readonly preface: HTMLDivElement;
     private editMode = false;
 
     constructor(
@@ -725,7 +739,11 @@ export class ActionCascade {
         this.container.className = "action-text";
         appendTo.appendChild(this.container);
 
-        this.createUI();
+        this.preface = document.createElement("div");
+        this.container.appendChild(this.preface);
+
+        this.preface.innerText = this.actionTemplates.preface ?? "";
+
         this.fieldContainer = new FieldContainer(
             this.container,
             actionTemplates,
@@ -756,36 +774,17 @@ export class ActionCascade {
         }
 
         this.editMode = editMode;
+        this.fieldContainer.setEditMode(editMode);
         if (editMode) {
             this.container.classList.add("action-text-editable");
+            this.preface.innerText = this.actionTemplates.editPreface ?? "";
         } else {
             this.container.classList.remove("action-text-editable");
+            this.preface.innerText = this.actionTemplates.preface ?? "";
         }
     }
 
     public remove() {
         this.container.remove();
-    }
-
-    private createUI() {
-        // for now assume a single action
-        const div = this.container;
-        if (
-            this.actionTemplates.templates.length === 1 &&
-            this.actionTemplates.prefaceSingle
-        ) {
-            const preface = document.createElement("div");
-            preface.className = "preface-text";
-            preface.innerText = this.actionTemplates.prefaceSingle;
-            div.appendChild(preface);
-        } else if (
-            this.actionTemplates.templates.length > 1 &&
-            this.actionTemplates.prefaceMultiple
-        ) {
-            const preface = document.createElement("div");
-            preface.className = "preface-text";
-            preface.innerText = this.actionTemplates.prefaceMultiple;
-            div.appendChild(preface);
-        }
     }
 }
