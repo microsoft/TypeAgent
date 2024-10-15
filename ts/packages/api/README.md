@@ -2,18 +2,17 @@
 
 ## Overview
 
-TypeAgent HTTP API is a HTTP API server to **TypeAgent sample code**. It  explores architectures for building distributed _interactive agents_ with _natural language interfaces_ using [TypeChat](https://github.com/microsoft/typechat).
-
-TypeAgent CLI includes addition commands to help with development.
+TypeAgent API is a HTTP+WS API server for **TypeAgent sample code**. It  explores architectures for building distributed _interactive agents_ with _natural language interfaces_ using [TypeChat](https://github.com/microsoft/typechat). This interface shows devlopers one way of broadening the reach of Agents to web-enabled devices such as internet browsers, mobile phones, and IOT connected devices.
 
 ## Running
 
-After setting up and building at the workspace root, there are several additional ways to start the CLI in this directory.
+After setting up and building at the workspace root, there are several additional ways to start the server in this directory.
 
 ### Globally Link the package
 
 - Run `pnpm link --global` in this package directory.
-- Try `agent-http` (`agent-http-dev` for dev version).
+- Try `agent-http` (`agent-http-dev`).
+- Use VS code to debug the project.
 
 NOTES:
 
@@ -36,7 +35,7 @@ During development, you can run the development version **without building** (us
 
 ### Other Methods
 
-Other more convenient ways to start the CLI with slightly more overhead:
+Other more convenient ways to start the server with slightly more overhead:
 
 - Running thru package.json's bin: `npx .` or `npx agent-http-dev` (development version)
 - Running thru package.json's script: `npm run start`
