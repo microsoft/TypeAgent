@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 import { createDispatcher } from 'agent-dispatcher';
 import { readFileSync } from "node:fs";
 import { TypeAgentAPIServerConfig, TypeAgentAPIWebServer } from "./webServer.js";
-import { WebAPIClientIO } from "./clientIO.js";
+import { WebAPIClientIO } from "./webClientIO.js";
 import { TypeAgentAPIWebSocketServer } from "./webSocketServer.js";
 
 // create things in this order so that when they are started we are ready to serve:
