@@ -237,6 +237,8 @@ class FieldRow {
         button.className = className;
         button.onclick = onclick;
         buttonCell.appendChild(button);
+
+        return button;
     }
 
     public showButton(index: number, show: boolean) {
@@ -415,7 +417,7 @@ class FieldScalar extends FieldBase {
                 input.focus();
             };
 
-            this.addButton(
+            const saveButton = this.addButton(
                 ButtonIndex.save,
                 "💾",
                 "action-editing-button",
@@ -445,7 +447,7 @@ class FieldScalar extends FieldBase {
                 },
             );
 
-            this.addButton(
+            const cancelButton = this.addButton(
                 ButtonIndex.cancel,
                 "🛇",
                 "action-editing-button",
@@ -455,6 +457,24 @@ class FieldScalar extends FieldBase {
                     this.updateValueDisplay();
                 },
             );
+
+            if (input.tagName.toLowerCase() === "input") {
+                (input as HTMLInputElement).addEventListener(
+                    "keydown",
+                    (event) => {
+                        switch (event.key) {
+                            case "Enter":
+                                event.preventDefault();
+                                saveButton.click();
+                                break;
+                            case "Escape":
+                                event.preventDefault();
+                                cancelButton.click();
+                                break;
+                        }
+                    },
+                );
+            }
         }
     }
 
