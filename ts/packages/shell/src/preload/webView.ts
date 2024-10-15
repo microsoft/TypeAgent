@@ -8,7 +8,7 @@ import {
     createWebSocket,
     keepWebSocketAlive,
 } from "common-utils";
-import DOMPurify from 'dompurify';
+import DOMPurify from "dompurify";
 
 let webSocket: any = null;
 
