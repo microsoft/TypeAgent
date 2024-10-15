@@ -51,6 +51,7 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { DispatcherName } from "./common/interactiveIO.js";
+import { toTemplateSequence } from "../translation/actionTemplate.js";
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
@@ -95,7 +96,8 @@ async function confirmTranslation(
         translatorNames,
         systemContext.agents,
     );
-    const templateSequence = actions.toTemplateSequence(
+    const templateSequence = toTemplateSequence(
+        actions,
         preface,
         editPreface,
         allActionInfo,

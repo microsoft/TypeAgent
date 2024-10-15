@@ -24,8 +24,7 @@ import {
     Dispatcher,
 } from "agent-dispatcher";
 
-import { IAgentMessage } from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
-import { ActionTemplateSequence } from "../preload/electronTypes.js";
+import { IAgentMessage, ActionTemplateSequence } from "agent-dispatcher";
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";

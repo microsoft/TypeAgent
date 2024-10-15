@@ -3,7 +3,7 @@
 
 import { askYesNo } from "../../utils/interactive.js";
 import readline from "readline/promises";
-import { SearchMenuItem, ActionTemplateSequence } from "common-utils";
+import { ActionTemplateSequence } from "../../translation/actionTemplate.js";
 import chalk from "chalk";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
 import {
