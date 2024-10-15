@@ -5,7 +5,7 @@ import {
     InlineTranslatorSchemaDef,
     createJsonTranslatorFromSchemaDef,
 } from "common-utils";
-import { getTranslatorActionInfo } from "./actionInfo.js";
+import { getTranslatorActionInfos } from "./actionInfo.js";
 import { Result, success } from "typechat";
 import registerDebug from "debug";
 import { TranslatorConfigProvider } from "./agentTranslators.js";
@@ -23,20 +23,18 @@ function createSelectionSchema(
         selectSchemaCache.set(translatorName, undefined);
         return undefined;
     }
-    const actionInfos = getTranslatorActionInfo(
+    const actionInfos = getTranslatorActionInfos(
         translatorConfig,
         translatorName,
     );
 
     const actionNames: string[] = [];
     const actionComments: string[] = [];
-    for (const info of actionInfos) {
-        if (info !== undefined) {
-            actionNames.push(`"${info.name}"`);
-            actionComments.push(
-                `"${info.name}"${info.comments ? ` - ${info.comments}` : ""}`,
-            );
-        }
+    for (const info of actionInfos.values()) {
+        actionNames.push(`"${info.actionName}"`);
+        actionComments.push(
+            `"${info.actionName}"${info.comments ? ` - ${info.comments}` : ""}`,
+        );
     }
 
     if (actionNames.length === 0) {

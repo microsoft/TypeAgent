@@ -37,7 +37,6 @@ import {
 import { makeRequestPromptCreator } from "./common/chatHistoryPrompt.js";
 import { MatchResult } from "../../../cache/dist/constructions/constructions.js";
 import registerDebug from "debug";
-import { getAllActionInfo } from "../translation/actionInfo.js";
 import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
 import ExifReader from "exifreader";
 import { Result } from "typechat";
@@ -88,19 +87,12 @@ async function confirmTranslation(
     const preface =
         "Use the buttons to run or cancel the following action(s). You can also press [Enter] to run it, [Del] to edit it, or [Escape] to cancel it.";
     const editPreface = `Edit the following action(s) to match your requests.  Click on the values to start editing. Use the ➕/✕ buttons to add/delete optional fields.`;
-    const translatorNames = getActiveTranslatorList(systemContext).filter(
-        (name) => !name.startsWith("system."),
-    );
 
-    const allActionInfo = getAllActionInfo(
-        translatorNames,
-        systemContext.agents,
-    );
     const templateSequence = toTemplateSequence(
+        systemContext.agents,
         actions,
         preface,
         editPreface,
-        allActionInfo,
     );
 
     // TODO: Need to validate
