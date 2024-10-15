@@ -662,6 +662,14 @@ input[type="file"] {
 .action-text td {
   padding-left: 10px;
   padding-right: 10px;
+  height: 22px;
+}
+
+.action-text div {
+  display: inline-block;
+}
+.left-button-div {
+  position: absolute;
 }
 
 .action-text td.name-cell {
@@ -675,11 +683,14 @@ input[type="file"] {
 
 .action-text td.button-cell {
   padding: 0px;
+  text-align: center;
 }
 
 .action-text input,
-.action-text select {
+.action-text select,
+.action-text button {
   width: 100%;
+  height: 100%;
 }
 
 .action-text .temp {
@@ -702,6 +713,7 @@ input[type="file"] {
   background-color: transparent;
   display: none;
   opacity: 0;
+  width: 100%;
 }
 .action-text-editable .action-edit-button {
   display: block;
