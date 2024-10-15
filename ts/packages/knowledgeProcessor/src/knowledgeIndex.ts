@@ -31,7 +31,7 @@ import { TextBlock, TextBlockType } from "./text.js";
 import { TemporalLog, createTemporalLog } from "./temporal.js";
 import { TextEmbeddingModel } from "aiclient";
 
-export interface KeyValueIndex<TKeyId, TValueId> {
+export interface KeyValueIndex<TKeyId = any, TValueId = any> {
     get(id: TKeyId): Promise<TValueId[] | undefined>;
     getMultiple(ids: TKeyId[], concurrency?: number): Promise<TValueId[][]>;
     put(postings: TValueId[], id?: TKeyId): Promise<TKeyId>;
@@ -140,6 +140,11 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         maxMatches: number,
         minScore?: number,
     ): Promise<TTextId[]>;
+    getNearestTextScored(
+        text: string,
+        maxMatches: number,
+        minScore?: number,
+    ): Promise<ScoredItem<TTextId>[]>;
     getNearestTextMultiple(
         values: string[],
         orMatches: boolean,
@@ -212,6 +217,7 @@ export async function createTextIndex<TSourceId = any>(
         getNearestMultiple,
         getNearestText,
         getNearestTextMultiple,
+        getNearestTextScored,
         nearestNeighbors,
         nearestNeighborsText,
         remove,
@@ -382,7 +388,7 @@ export async function createTextIndex<TSourceId = any>(
     ): Promise<void> {
         maxMatches ??= 1;
         // Check exact match first
-        let postings = await get(value);
+        let postingsExact = await get(value);
         let postingsNearest:
             | ScoredItem<TSourceId>[]
             | IterableIterator<ScoredItem<TSourceId>>
@@ -394,7 +400,10 @@ export async function createTextIndex<TSourceId = any>(
                 minScore,
             );
             postingsNearest = unionMultipleScored(...scoredPostings);
-        } else if (semanticIndex && (!postings || postings.length === 0)) {
+        } else if (
+            semanticIndex &&
+            (!postingsExact || postingsExact.length === 0)
+        ) {
             const textId = await semanticIndex.nearestNeighbor(value, minScore);
             if (textId) {
                 const postings = await postingFolder.get(textId.item);
@@ -405,7 +414,7 @@ export async function createTextIndex<TSourceId = any>(
         }
         hitTable.addMultipleScored(
             unionMultipleScored(
-                postings ? scorePostings(postings, 1.0) : undefined,
+                postingsExact ? scorePostings(postingsExact, 1.0) : undefined,
                 postingsNearest,
             ),
         );
@@ -482,6 +491,35 @@ export async function createTextIndex<TSourceId = any>(
             if (nearestMatches.length > 0) {
                 const nearestIds = nearestMatches.map((m) => m.item).sort();
                 matchedIds = unionArrays(matchedIds, nearestIds) as TextId[];
+            }
+        }
+        return matchedIds;
+    }
+
+    async function getNearestTextScored(
+        value: string,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<ScoredItem<TextId>[]> {
+        maxMatches ??= 1;
+        // Check exact match first
+        let matchedIds: ScoredItem<TextId>[] = [];
+        let exactMatchId = textToId(value);
+        if (exactMatchId) {
+            matchedIds.push({ item: exactMatchId, score: 1.0 });
+        }
+        if (semanticIndex && maxMatches > 1) {
+            const nearestMatches = await semanticIndex.nearestNeighbors(
+                value,
+                maxMatches,
+                minScore,
+            );
+            if (nearestMatches.length > 0) {
+                for (const match of nearestMatches) {
+                    if (match.item !== exactMatchId) {
+                        matchedIds.push(match);
+                    }
+                }
             }
         }
         return matchedIds;

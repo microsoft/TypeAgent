@@ -674,7 +674,7 @@ export async function runChatMemory(): Promise<void> {
                 exact: argBool("Exact match?"),
                 count: argNum("Num matches", 3),
                 minScore: argMinScore(0),
-                showMessages: argBool(),
+                showSource: argBool("Show the sources of this topic"),
                 level: argNum("Topics at this level", 1),
             },
         };
@@ -707,12 +707,12 @@ export async function runChatMemory(): Promise<void> {
             return;
         }
 
+        const sourceIndex =
+            namedArgs.level > 1
+                ? await context.conversation.getTopicsIndex(namedArgs.level - 1)
+                : undefined;
         for await (const topic of index.entries()) {
-            await writeExtractedTopic(
-                topic,
-                namedArgs.showMessages,
-                namedArgs.level,
-            );
+            await writeExtractedTopic(topic, namedArgs.showSource, sourceIndex);
         }
     }
 
@@ -1428,17 +1428,22 @@ export async function runChatMemory(): Promise<void> {
 
     async function writeExtractedTopic(
         topic: knowLib.TextBlock,
-        showMessages: boolean,
-        level: number = 1,
+        showSource: boolean,
+        sourceIndex?: conversation.TopicIndex | undefined,
     ) {
-        if (showMessages) {
-            const textBlocks =
-                level === 1
-                    ? await loadMessages(topic.sourceIds)
-                    : await loadTopics(level, topic.sourceIds);
-            printer.writeTemporalBlocks(chalk.greenBright, textBlocks);
-        }
         printer.writeBullet(topic.value);
+        if (showSource) {
+            if (sourceIndex) {
+                const textBlocks = await loadTopics(
+                    sourceIndex,
+                    topic.sourceIds,
+                );
+                printer.writeListInColor(chalk.greenBright, textBlocks);
+            } else {
+                const textBlocks = await loadMessages(topic.sourceIds);
+                printer.writeTemporalBlocks(chalk.greenBright, textBlocks);
+            }
+        }
     }
 
     function writeExtractedAction(
@@ -1517,17 +1522,15 @@ export async function runChatMemory(): Promise<void> {
     }
 
     async function loadTopics(
-        topicLevel: number,
+        topicLevel: conversation.TopicIndex | number,
         ids?: string[],
-    ): Promise<(dateTime.Timestamped<knowLib.TextBlock> | undefined)[]> {
+    ) {
         if (ids && ids.length > 0) {
-            const index = await context.conversation.getTopicsIndex(
-                topicLevel - 1,
-            );
-            return (await index.sequence.getMultiple(ids)) as (
-                | dateTime.Timestamped<knowLib.TextBlock>
-                | undefined
-            )[];
+            const index =
+                typeof topicLevel === "number"
+                    ? await context.conversation.getTopicsIndex(topicLevel - 1)
+                    : topicLevel;
+            return index.getMultipleText(ids);
         }
         return [];
     }

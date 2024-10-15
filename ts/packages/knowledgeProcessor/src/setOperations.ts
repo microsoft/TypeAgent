@@ -352,7 +352,10 @@ export interface HitTable<T> {
     get(value: T): ScoredItem<T> | undefined;
     getScore(value: T): number;
     add(value: T, score?: number | undefined): number;
-    addMultiple(values: Iterator<T> | IterableIterator<T> | Array<T>): void;
+    addMultiple(
+        values: Iterator<T> | IterableIterator<T> | Array<T>,
+        score?: number | undefined,
+    ): void;
     addMultipleScored(
         values:
             | Iterator<ScoredItem<T>>
@@ -410,11 +413,12 @@ export function createHitTable<T>(
 
     function addMultiple(
         values: Iterator<T> | IterableIterator<T> | Array<T>,
+        score?: number | undefined,
     ): void {
         const x: Iterator<T> = Array.isArray(values) ? values.values() : values;
         let xValue = x.next();
         while (!xValue.done) {
-            add(xValue.value);
+            add(xValue.value, score);
             xValue = x.next();
         }
     }
