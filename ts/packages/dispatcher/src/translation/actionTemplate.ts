@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import { Actions } from "agent-cache";
-import { ActionInfo, ActionParamObject } from "./actionInfo.js";
+import { ActionParamObject, getTranslatorActionInfos } from "./actionInfo.js";
+import { TranslatorConfigProvider } from "./agentTranslators.js";
 
 export type ActionTemplate = {
     agent: string;
@@ -18,18 +19,23 @@ export type ActionTemplateSequence = {
 };
 
 export function toTemplateSequence(
+    provider: TranslatorConfigProvider,
     actions: Actions,
     preface: string,
     editPreface: string,
-    parameterStructures: Map<string, ActionInfo>,
 ): ActionTemplateSequence {
     const templates: ActionTemplate[] = [];
 
     for (const action of actions) {
-        const actionInfo = parameterStructures.get(action.fullActionName);
+        const config = provider.getTranslatorConfig(action.translatorName);
+        const actionInfos = getTranslatorActionInfos(
+            config,
+            action.translatorName,
+        );
+        const actionInfo = actionInfos.get(action.actionName);
         if (actionInfo === undefined) {
             throw new Error(
-                `Action ${action.fullActionName} not found in parameterStructures`,
+                `ActionInfo for '${action.fullActionName}' not found`,
             );
         }
         templates.push({

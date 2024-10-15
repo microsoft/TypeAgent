@@ -76,7 +76,7 @@ function getActionInfo(
     if (actionName !== undefined && comments !== undefined) {
         return {
             actionName,
-            comments: node.leadingComments?.join(" ") ?? "",
+            comments,
             parameters,
         };
     }
@@ -84,46 +84,27 @@ function getActionInfo(
 }
 
 // Global Cache
-const translatorNameToActionInfo = new Map<string, ActionInfo[]>();
+const translatorNameToActionInfo = new Map<string, Map<string, ActionInfo>>();
 
-export function getTranslatorActionInfo(
+export function getTranslatorActionInfos(
     translatorConfig: TranslatorConfig,
     translatorName: string,
-): ActionInfo[] {
+): Map<string, ActionInfo> {
     if (translatorNameToActionInfo.has(translatorName)) {
         return translatorNameToActionInfo.get(translatorName)!;
     }
     const parser = new SchemaParser();
     parser.loadSchema(getPackageFilePath(translatorConfig.schemaFile));
 
-    const actionInfo: ActionInfo[] = [];
+    const actionInfo = new Map<string, ActionInfo>();
     for (const actionTypeName of parser.actionTypeNames()) {
         const info = getActionInfo(actionTypeName, parser);
         if (info) {
-            actionInfo.push(info);
+            actionInfo.set(info.actionName, info);
         }
     }
     translatorNameToActionInfo.set(translatorName, actionInfo);
     return actionInfo;
-}
-
-export function getAllActionInfo(
-    translatorNames: string[],
-    provider: TranslatorConfigProvider,
-) {
-    let allActionInfo = new Map<string, ActionInfo>();
-    for (const name of translatorNames) {
-        const translatorConfig = provider.getTranslatorConfig(name);
-        if (translatorConfig.injected) {
-            continue;
-        }
-        const actionInfo = getTranslatorActionInfo(translatorConfig, name);
-        for (const info of actionInfo) {
-            const fullActionName = `${name}.${info.actionName}`;
-            allActionInfo.set(fullActionName, info);
-        }
-    }
-    return allActionInfo;
 }
 
 function getActionParamFieldType(

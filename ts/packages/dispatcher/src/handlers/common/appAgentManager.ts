@@ -16,7 +16,7 @@ import {
 import { createSessionContext } from "../../action/actionHandlers.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 import registerDebug from "debug";
-import { getTranslatorActionInfo } from "../../translation/actionInfo.js";
+import { getTranslatorActionInfos } from "../../translation/actionInfo.js";
 import { DeepPartialUndefinedAndNull } from "common-utils";
 
 const debug = registerDebug("typeagent:agents");
@@ -141,7 +141,8 @@ export class AppAgentManager implements TranslatorConfigProvider {
                 this.emojis[name] = config.emojiChar;
 
                 if (config.injected) {
-                    for (const info of getTranslatorActionInfo(config, name)) {
+                    const actionInfos = getTranslatorActionInfos(config, name);
+                    for (const info of actionInfos.values()) {
                         this.injectedTranslatorForActionName.set(
                             info.actionName,
                             name,
