@@ -194,10 +194,15 @@ export interface TopicMerger<TTopicId = any> {
      * @param updateIndex if true, add newly merged topic into topic index
      */
     next(
+        lastTopics: TextBlock[],
+        lastTopicIds: TTopicId[],
+        timestamp: Date | undefined,
         updateIndex: boolean,
-        newTopicCount?: number | undefined,
     ): Promise<dateTime.Timestamped<TextBlock<TTopicId>> | undefined>;
     mergeWindow(
+        lastTopics: TextBlock[],
+        lastTopicIds: TTopicId[],
+        timestamp: Date | undefined,
         windowSize: number,
         updateIndex: boolean,
     ): Promise<dateTime.Timestamped<TextBlock<TTopicId>> | undefined>;
@@ -221,30 +226,52 @@ export async function createTopicMerger<TTopicId = string>(
     };
 
     async function next(
+        lastTopics: TextBlock[],
+        lastTopicIds: TTopicId[],
+        timestamp: Date | undefined,
         updateIndex: boolean,
     ): Promise<dateTime.Timestamped<TextBlock<TTopicId>> | undefined> {
         ++childSize;
         if (childSize % settings.mergeWindowSize > 0) {
             return undefined;
         }
-        return await mergeWindow(settings.mergeWindowSize, updateIndex);
+        return await mergeWindow(
+            lastTopics,
+            lastTopicIds,
+            timestamp,
+            settings.mergeWindowSize,
+            updateIndex,
+        );
     }
 
     async function mergeWindow(
+        lastTopics: TextBlock[],
+        lastTopicIds: TTopicId[],
+        timestamp: Date | undefined,
         windowSize: number,
         updateIndex: boolean,
     ): Promise<dateTime.Timestamped<TextBlock<TTopicId>> | undefined> {
-        const topicWindow = await childIndex.sequence.getNewest(windowSize);
-        if (topicWindow.length === 0) {
-            return undefined;
+        const topics: Topic[] =
+            windowSize === 1 ? lastTopics.map((t) => t.value) : [];
+        const allTopicIds: TTopicId[] = windowSize === 1 ? lastTopicIds : [];
+        if (windowSize > 1) {
+            const topicWindow = await childIndex.sequence.getNewest(windowSize);
+            if (topicWindow.length === 0) {
+                return undefined;
+            }
+            timestamp = topicWindow[0].timestamp;
+            for (const entry of topicWindow) {
+                const topicsText = await childIndex.getMultipleText(
+                    entry.value,
+                );
+                topics.push(topicsText.join("\n"));
+                allTopicIds.push(...entry.value);
+            }
+        } else {
+            timestamp ??= new Date();
         }
-        const timestamp = topicWindow[0].timestamp;
-        const topics: Topic[] = [];
-        const allTopicIds: TTopicId[] = [];
-        for (const entry of topicWindow) {
-            const topicsText = await childIndex.getMultipleText(entry.value);
-            topics.push(topicsText.join("\n"));
-            allTopicIds.push(...entry.value);
+        if (topics.length === 0) {
+            return undefined;
         }
         let topicsResponse = await topicExtractor.mergeTopics(
             topics,

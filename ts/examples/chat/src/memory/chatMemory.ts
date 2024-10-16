@@ -642,10 +642,20 @@ export async function runChatMemory(): Promise<void> {
                         message,
                         knowledge,
                     );
-                const mergedTopic = await cm.topicMerger.next(true);
-                if (mergedTopic) {
-                    printer.writeTitle("Merged Topic:");
-                    printer.writeTemporalBlock(chalk.blueBright, mergedTopic);
+                if (knowledgeIds.topicIds && knowledgeIds.topicIds.length > 0) {
+                    const mergedTopic = await cm.topicMerger.next(
+                        knowledge.topics!,
+                        knowledgeIds.topicIds,
+                        undefined,
+                        true,
+                    );
+                    if (mergedTopic) {
+                        printer.writeTitle("Merged Topic:");
+                        printer.writeTemporalBlock(
+                            chalk.blueBright,
+                            mergedTopic,
+                        );
+                    }
                 }
                 await cm.conversation.addKnowledgeToIndex(
                     knowledge,

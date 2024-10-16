@@ -229,8 +229,8 @@ export async function createConversationManager(
             knowledgeExtractor,
             topicMerger,
             message,
-            knowledge,
             timestamp,
+            knowledge,
         );
     }
 
@@ -274,8 +274,8 @@ export async function createConversationManager(
                         knowledgeExtractor,
                         topicMerger,
                         addTask.message.text,
-                        addTask.message.knowledge,
                         addTask.message.timestamp,
+                        addTask.message.knowledge,
                     );
                     break;
             }
@@ -409,8 +409,8 @@ export async function addMessageToConversation(
     knowledgeExtractor: KnowledgeExtractor,
     topicMerger: TopicMerger | undefined,
     message: string | TextBlock,
+    timestamp: Date | undefined,
     knownKnowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
-    timestamp?: Date | undefined,
 ): Promise<void> {
     const messageBlock = await conversation.addMessage(message, timestamp);
 
@@ -428,6 +428,7 @@ export async function addMessageToConversation(
             topicMerger,
             messageBlock,
             extractedKnowledge,
+            timestamp,
         );
     }
 }
@@ -475,6 +476,7 @@ export async function addMessageBatchToConversation(
                 topicMerger,
                 messageBlocks[i],
                 knowledge,
+                messages[i].timestamp,
             );
         }
     }
@@ -515,19 +517,26 @@ async function indexKnowledge(
     topicMerger: TopicMerger | undefined,
     message: SourceTextBlock,
     knowledge: ExtractedKnowledge,
+    timestamp: Date | undefined,
 ): Promise<void> {
     // Add next message... this updates the "sequence"
     const knowledgeIds = await conversation.addKnowledgeForMessage(
         message,
         knowledge,
     );
-    if (topicMerger) {
-        const topicCount = knowledgeIds.topicIds?.length ?? 0;
-        if (topicCount > 0) {
-            await topicMerger.next(true);
-        }
-    }
     await conversation.addKnowledgeToIndex(knowledge, knowledgeIds);
+    if (
+        topicMerger &&
+        knowledgeIds.topicIds &&
+        knowledgeIds.topicIds.length > 0
+    ) {
+        await topicMerger.next(
+            knowledge.topics!,
+            knowledgeIds.topicIds,
+            timestamp,
+            true,
+        );
+    }
 }
 
 function mergeKnowledge(
