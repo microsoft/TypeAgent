@@ -108,10 +108,10 @@ export const webapi: ClientAPI = {
             placeHolder1({resolve, reject});
         });
     },
-    getLocalWhisperStatus: () => {
-        // TODO: implement - local whisper not supported on mobile
-        return new Promise<boolean | undefined>((resolve, reject) => {
-            placeHolder1({resolve, reject});
+    getLocalWhisperStatus: () => {        
+        // local whisper not supported on mobile
+        return new Promise<boolean | undefined>((resolve) => {
+            resolve(false);
         });
     },
     onSendInputText(callback) {
@@ -136,6 +136,7 @@ export const webapi: ClientAPI = {
     },
     onSettingsChanged(callback) {
         // only applies if we make the mobile agent for settings
+        // TODO: figure out resolution
         placeHolder("settings-changed", callback);
     },
     onNotificationCommand(callback) {
