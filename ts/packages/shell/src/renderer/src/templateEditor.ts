@@ -581,9 +581,10 @@ class FieldObject extends FieldGroup {
         parent?: FieldGroup,
     ) {
         super(data, fullPropertyName, paramName, optional, level, parent);
-        this.hasRequiredFields = Object.values(fieldTypes).some(
-            (f) => !f.optional,
-        );
+        const fields = Object.values(fieldTypes);
+        this.hasRequiredFields =
+            fields.length === 0 ||
+            Object.values(fields).some((f) => !f.optional);
         this.updateValueDisplay();
     }
 
