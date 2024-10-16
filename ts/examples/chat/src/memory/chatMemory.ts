@@ -438,7 +438,7 @@ export async function runChatMemory(): Promise<void> {
                 sourcePath: argSourceFileOrFolder(),
             },
             options: {
-                concurrency: argConcurrency(2),
+                concurrency: argConcurrency(1),
                 clean: argClean(),
             },
         };
@@ -473,7 +473,9 @@ export async function runChatMemory(): Promise<void> {
                     emails.length,
                 );
                 emailBatch.value.forEach((e) =>
-                    printer.writeLine(e.sourcePath),
+                    printer.writeLine(
+                        `${e.sourcePath}\n${knowLib.email.emailToString(e).length} chars`,
+                    ),
                 );
                 await knowLib.email.addEmailToConversation(
                     context.emailMemory,
@@ -873,7 +875,7 @@ export async function runChatMemory(): Promise<void> {
                 action: argBool("Include actions"),
                 eval: argBool("Evaluate search query", true),
                 debug: argBool("Show debug info", false),
-                save: argBool("Save the search", true),
+                save: argBool("Save the search", false),
                 v2: argBool("Run V2 match", false),
             },
         };
@@ -1085,7 +1087,7 @@ export async function runChatMemory(): Promise<void> {
         const searchOptions: conversation.SearchProcessingOptions = {
             maxMatches,
             minScore,
-            maxMessages: 15,
+            maxMessages: 10,
             progress: (value) => printer.writeJson(value),
         };
         if (namedArgs.fallback) {

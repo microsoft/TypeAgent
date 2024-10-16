@@ -36,7 +36,8 @@ export function loadSchema(filePaths: string[], basePath?: string): string {
             filePath = fileURLToPath(new URL(file, basePath));
         }
         const rawText: string = fs.readFileSync(filePath, "utf-8");
-        const fileText = stripImports(filePath, rawText);
+        let fileText = stripImports(filePath, rawText);
+        fileText = stripCopyright(fileText);
         schemaText += fileText;
         schemaText += "\n";
     }
@@ -62,4 +63,13 @@ function stripImports(filePath: string, schemaText: string) {
                 "\n"),
     );
     return text;
+}
+
+function stripCopyright(schemaText: string): string {
+    schemaText = schemaText.replace(
+        "// Copyright (c) Microsoft Corporation.",
+        "",
+    );
+    schemaText = schemaText.replace("// Licensed under the MIT License.", "");
+    return schemaText;
 }

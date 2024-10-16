@@ -66,7 +66,7 @@ export function createAnswerGenerator(
         response: SearchResponse,
         higherPrecision: boolean,
     ): Promise<AnswerResponse | undefined> {
-        const maxContextLength = settings?.maxContextLength ?? 1024 * 32;
+        const maxContextLength = settings?.maxContextLength ?? 1000 * 30;
         const context: any = {
             entities: {
                 timeRanges: response.entityTimeRanges(),
@@ -114,7 +114,7 @@ export function createAnswerGenerator(
         };
         if (prompt.length > maxContextLength) {
             prompt = prompt.slice(0, maxContextLength);
-            logError(
+            log(
                 "generateAnswerWithModel",
                 `Prompt exceeds ${maxContextLength} chars. Trimmed.`,
             );
@@ -134,8 +134,7 @@ export function createAnswerGenerator(
     }
 }
 
-function logError(where: string, message: string) {
-    const errorText = `ERROR:${where}\n${message}`;
-    console.log(errorText);
+function log(where: string, message: string) {
+    const errorText = `${where}\n${message}`;
     answerError(errorText);
 }
