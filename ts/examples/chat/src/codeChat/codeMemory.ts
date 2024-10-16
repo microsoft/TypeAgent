@@ -22,6 +22,7 @@ import {
     CommandHandler,
     CommandMetadata,
     InteractiveIo,
+    NamedArgs,
     parseNamedArguments,
     runConsole,
 } from "interactive-app";
@@ -96,7 +97,7 @@ export async function runCodeMemory(): Promise<void> {
         };
     }
     handlers.codeReview.metadata = codeReviewDef();
-    async function codeReview(args: string[]): Promise<void> {
+    async function codeReview(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, codeReviewDef());
         const sourceFilePath = getSourcePath(namedArgs.sourceFile);
         const codeName = codeBlockNameFromFilePath(sourceFilePath);
@@ -131,7 +132,7 @@ export async function runCodeMemory(): Promise<void> {
         };
     }
     handlers.codeDocument.metadata = codeDocumentDef();
-    async function codeDocument(args: string[]): Promise<void> {
+    async function codeDocument(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, codeDocumentDef());
         const sourceFilePath = getSourcePath(namedArgs.sourceFile);
         const functions = await loadCodeChunks(sourceFilePath);
@@ -178,7 +179,7 @@ export async function runCodeMemory(): Promise<void> {
         };
     }
     handlers.codeGen.metadata = codeGenDef();
-    async function codeGen(args: string[]): Promise<void> {
+    async function codeGen(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, codeGenDef());
         const response = await codeGenerator.generate({
             description: namedArgs.def,
@@ -208,7 +209,7 @@ export async function runCodeMemory(): Promise<void> {
         };
     }
     handlers.codeImport.metadata = codeImportDef();
-    async function codeImport(args: string[]): Promise<void> {
+    async function codeImport(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, codeImportDef());
         const fullPath = getSourcePath(namedArgs.sourceFile);
         const sourceFile = await tsCode.loadSourceFile(fullPath);
@@ -257,7 +258,7 @@ export async function runCodeMemory(): Promise<void> {
         };
     }
     handlers.codeSearch.metadata = codeSearchDef();
-    async function codeSearch(args: string[]): Promise<void> {
+    async function codeSearch(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, codeSearchDef());
         const matches = await developerMemory.searchCode(
             namedArgs.query,
@@ -285,7 +286,7 @@ export async function runCodeMemory(): Promise<void> {
         };
     }
     handlers.bugs.metadata = bugsDef();
-    async function bugs(args: string[]): Promise<void> {
+    async function bugs(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, bugsDef());
         if (namedArgs.query) {
             const searchResults = await developerMemory.bugs.search(
@@ -312,7 +313,7 @@ export async function runCodeMemory(): Promise<void> {
         };
     }
     handlers.comments.metadata = commentsDef();
-    async function comments(args: string[]): Promise<void> {
+    async function comments(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, commentsDef());
         if (namedArgs.query) {
             const searchResults = await developerMemory.comments.search(
