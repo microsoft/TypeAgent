@@ -54,24 +54,6 @@ body {
   background-color: white;
 }
 
-.action-container {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background-color: white;
-}
-
-// action button
-.action-buttons {
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  height: 40px;
-  color: green;
-  font-family: inherit;
-  font-size: inherit;
-}
-
 .choice-panel {
   display: flex;
   justify-content: space-around;
@@ -81,13 +63,7 @@ body {
   font-size: inherit;
 }
 
-.action-text {
-  padding: 10px 16px;
-  align-self: center;
-}
-
-/* CSS */
-.action-button {
+.choice-button {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -97,8 +73,20 @@ body {
   width: 100%;
 }
 
-.action-button:hover {
+.choice-button:hover {
   background-color: #c6e3ef;
+}
+.choice-button:focus {
+  box-shadow:
+    inset 0px 0.8px 0px -0.25px rgba(255, 255, 255, 0.2),
+    0px 0.5px 1px rgba(0, 0, 0, 0.1),
+    0px 0px 0px 3.5px rgba(58, 108, 217, 0.5);
+  outline: 0;
+}
+
+.action-text {
+  padding: 10px 16px;
+  align-self: center;
 }
 
 .preface-text {
@@ -106,13 +94,6 @@ body {
   border-bottom: 1px dotted #808080;
   padding-bottom: 5px;
   margin-bottom: 10px;
-}
-.action-button:focus {
-  box-shadow:
-    inset 0px 0.8px 0px -0.25px rgba(255, 255, 255, 0.2),
-    0px 0.5px 1px rgba(0, 0, 0, 0.1),
-    0px 0px 0px 3.5px rgba(58, 108, 217, 0.5);
-  outline: 0;
 }
 
 .replacement-title {
@@ -670,6 +651,8 @@ input[type="file"] {
 .action-text table {
   width: 100%;
   border-collapse: collapse;
+  margin-top: 10px;
+  margin-bottom: 10px;
 }
 
 .action-text tr {
@@ -677,8 +660,16 @@ input[type="file"] {
   border-bottom: 1px solid lightgray;
 }
 .action-text td {
-  padding-left: 5px;
-  padding-right: 5px;
+  padding-left: 10px;
+  padding-right: 10px;
+  height: 22px;
+}
+
+.action-text div {
+  display: inline-block;
+}
+.left-button-div {
+  position: absolute;
 }
 
 .action-text td.name-cell {
@@ -686,16 +677,20 @@ input[type="file"] {
 }
 
 .action-text td.value-cell {
+  border-left: 1px solid lightgray;
   width: 62%;
 }
 
 .action-text td.button-cell {
   padding: 0px;
+  text-align: center;
 }
 
 .action-text input,
-.action-text select {
+.action-text select,
+.action-text button {
   width: 100%;
+  height: 100%;
 }
 
 .action-text .temp {
@@ -711,15 +706,24 @@ input[type="file"] {
 .action-edit-button,
 .action-editing-button,
 .action-text-editable table.editing .action-edit-button,
-.action-text-editable tr.editing .action-edit-button {
+.action-text-editable table.editing tr:hover .action-edit-button,
+.action-text-editable tr.editing:hover .action-edit-button {
   padding: 4px;
   border: lightgray;
   background-color: transparent;
-  visibility: hidden;
+  display: none;
+  opacity: 0;
+  width: 100%;
 }
-.action-text-editable .action-edit-button,
+.action-text-editable .action-edit-button {
+  display: block;
+  opacity: 0.25;
+}
+
+.action-text-editable tr:hover .action-edit-button,
 .action-text-editable tr.editing .action-editing-button {
-  visibility: visible;
+  display: block;
+  opacity: 1;
 }
 
 .action-text tr.error,

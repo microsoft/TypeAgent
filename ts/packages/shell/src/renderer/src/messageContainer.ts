@@ -3,15 +3,14 @@
 
 import { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
 import { TTS, TTSMetrics } from "./tts/tts";
-import { PhaseTiming } from "agent-dispatcher";
+import { ActionTemplateSequence, PhaseTiming } from "agent-dispatcher";
 
 import { ChoicePanel, InputChoice } from "./choicePanel";
 import { setContent } from "./setContent";
 import { ChatView } from "./chatView";
 import { iconCheckMarkCircle, iconRoadrunner, iconX } from "./icon";
-import { ActionCascade } from "./ActionCascade";
+import { TemplateEditor } from "./templateEditor";
 import { getClientAPI } from "./main";
-import { ActionTemplateSequence } from "../../preload/electronTypes";
 import { SettingsView } from "./settingsView";
 
 function createTimestampDiv(timestamp: Date, className: string) {
@@ -241,7 +240,7 @@ export class MessageContainer {
         actionContainer.className = "action-container";
         this.messageDiv.appendChild(actionContainer);
 
-        const actionCascade = new ActionCascade(
+        const actionCascade = new TemplateEditor(
             actionContainer,
             actionTemplates,
         );

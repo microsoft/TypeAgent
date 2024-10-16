@@ -20,7 +20,7 @@ export class ChoicePanel {
         this.panelDiv.className = "choice-panel";
         for (const choice of choices) {
             const choiceDiv = document.createElement("div");
-            choiceDiv.className = "action-button";
+            choiceDiv.className = "choice-button";
             choiceDiv.appendChild(choice.element);
             choiceDiv.appendChild(document.createTextNode(choice.text));
             choiceDiv.addEventListener("click", () => {

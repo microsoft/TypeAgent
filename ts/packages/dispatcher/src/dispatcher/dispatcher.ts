@@ -15,9 +15,13 @@ import {
     initializeCommandHandlerContext,
     InitializeCommandHandlerContextOptions,
 } from "../handlers/common/commandHandlerContext.js";
-import { getDynamicDisplay } from "../action/actionHandlers.js";
+import {
+    getDynamicDisplay,
+    getTemplateSchema,
+} from "../action/actionHandlers.js";
 import { RequestId } from "../handlers/common/interactiveIO.js";
 import { RequestMetrics } from "../utils/metrics.js";
+import { TemplateSchema } from "../../../agentSdk/dist/templateInput.js";
 
 export type PartialCompletionResult = {
     partial: string; // The head part of the completion
@@ -40,6 +44,11 @@ export interface Dispatcher {
         type: DisplayType,
         id: string,
     ): Promise<DynamicDisplay>;
+    getTemplateSchema(
+        appAgentName: string,
+        templateName: string,
+        data: unknown,
+    ): TemplateSchema;
     close(): Promise<void>;
 
     // TODO: Review these APIs
@@ -66,6 +75,9 @@ export async function createDispatcher(
         },
         getDynamicDisplay(appAgentName, type, id) {
             return getDynamicDisplay(context, appAgentName, type, id);
+        },
+        getTemplateSchema(appAgentName, templateName, data) {
+            return getTemplateSchema(context, appAgentName, templateName, data);
         },
         async close() {
             await closeCommandHandlerContext(context);

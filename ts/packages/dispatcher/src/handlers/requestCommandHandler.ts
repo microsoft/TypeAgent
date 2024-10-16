@@ -37,7 +37,6 @@ import {
 import { makeRequestPromptCreator } from "./common/chatHistoryPrompt.js";
 import { MatchResult } from "../../../cache/dist/constructions/constructions.js";
 import registerDebug from "debug";
-import { getAllActionInfo } from "../translation/actionInfo.js";
 import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
 import ExifReader from "exifreader";
 import { Result } from "typechat";
@@ -51,6 +50,7 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { DispatcherName } from "./common/interactiveIO.js";
+import { toTemplateSequence } from "../translation/actionTemplate.js";
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
@@ -84,22 +84,15 @@ async function confirmTranslation(
         displayInfo(messages.join("\n"), context);
         return { requestAction };
     }
-    const prefaceSingle =
-        "Use the buttons to run or cancel the following action. You can also type Enter to run it or Del to cancel it.";
-    const prefaceMultiple =
-        "Use the buttons to run or cancel the following sequence of actions. You can also type Enter to run it or Del to cancel it.";
-    const translatorNames = getActiveTranslatorList(systemContext).filter(
-        (name) => !name.startsWith("system."),
-    );
+    const preface =
+        "Use the buttons to run or cancel the following action(s). You can also press [Enter] to run it, [Del] to edit it, or [Escape] to cancel it.";
+    const editPreface = `Edit the following action(s) to match your requests.  Click on the values to start editing. Use the ➕/✕ buttons to add/delete optional fields.`;
 
-    const allActionInfo = getAllActionInfo(
-        translatorNames,
-        systemContext.agents,
-    );
-    const templateSequence = actions.toTemplateSequence(
-        prefaceSingle,
-        prefaceMultiple,
-        allActionInfo,
+    const templateSequence = toTemplateSequence(
+        systemContext,
+        actions,
+        preface,
+        editPreface,
     );
 
     // TODO: Need to validate
