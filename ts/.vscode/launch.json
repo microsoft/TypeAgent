@@ -70,8 +70,6 @@
             //"preLaunchTask": "tsc: build - tsconfig.json",
             "outFiles": ["${workspaceFolder}/**/*.js"],
             "resolveSourceMapLocations": [
-                "${workspaceFolder}/",
-                "!/node_modules/**"
             ],
         },        
         {

@@ -5,6 +5,7 @@ import WebSocket, { WebSocketServer } from "ws";
 //import registerDebug from "debug";
 import { Dispatcher } from "agent-dispatcher";
 import { IncomingMessage } from "node:http";
+import { WebAPIClientIO } from "./webClientIO.js";
 
 export class TypeAgentAPIWebSocketServer {
     private server: WebSocketServer;
@@ -12,7 +13,7 @@ export class TypeAgentAPIWebSocketServer {
     private settingSummary: string = "";
     private currentws: WebSocket | undefined;
 
-    constructor(endpoint: URL, dispatcher: Dispatcher) {
+    constructor(endpoint: URL, dispatcher: Dispatcher, webClientIO: WebAPIClientIO) {
         this.server = new WebSocketServer({
             port: parseInt(endpoint.port),
             path: endpoint.pathname
@@ -33,7 +34,7 @@ export class TypeAgentAPIWebSocketServer {
         this.server.on("connection", (ws: WebSocket, req: IncomingMessage) => {
             console.log("New client connected");
             
-            this.currentws = ws;
+            webClientIO.CurrentWebSocket = ws;
             
             if (req.url) {
                 const params = new URLSearchParams(req.url.split("?")[1]);

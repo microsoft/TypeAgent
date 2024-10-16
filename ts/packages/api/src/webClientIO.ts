@@ -8,6 +8,14 @@ import WebSocket from "ws";
 export class WebAPIClientIO implements ClientIO 
  {
     private currentws: WebSocket | undefined;
+
+    public get CurrentWebSocket() {
+      return this.currentws;
+    }
+
+    public set CurrentWebSocket(value: WebSocket | undefined) {
+      this.currentws = value;
+    }
     
     clear() {
       this.currentws?.send(JSON.stringify({
@@ -16,7 +24,7 @@ export class WebAPIClientIO implements ClientIO
       }));
     }
 
-    setDisplay() { this.updateDisplay(); }
+    setDisplay(message: IAgentMessage) { this.updateDisplay(message, "inline"); }
 
     appendDisplay(message: IAgentMessage, mode: DisplayAppendMode) {
         this.updateDisplay(message, mode ?? "inline");
@@ -52,12 +60,15 @@ export class WebAPIClientIO implements ClientIO
       }));
     };
 
+    // TODO: implement
     askYesNo(message: string, requestId: RequestId, defaultValue?: boolean): Promise<boolean> {
       return new Promise<boolean>((resolve)=>{});
     }
 
+    // TODO: implement
     question(): Promise<string> { return new Promise<string>((resolve) => {}); }
     
+    // TODO: implement
     proposeAction(actionTemplates: ActionTemplateSequence, requestId: RequestId, source: string): Promise<unknown> {return new Promise<unknown>((resolve) => {});}
     
     notify(event: string, requestId: RequestId, data: any, source: string) {
@@ -70,41 +81,6 @@ export class WebAPIClientIO implements ClientIO
           source
         }
       }));
-  
-        // switch (event) {
-        //     case "explained":
-        //         markRequestExplained(
-        //             requestId,
-        //             data.time,
-        //             data.fromCache,
-        //             data.fromUser,
-        //         );
-        //         break;
-        //     case "randomCommandSelected":
-        //         updateRandomCommandSelected(requestId, data.message);
-        //         break;
-        //     case "showNotifications":
-        //         mainWindow?.webContents.send(
-        //             "notification-command",
-        //             requestId,
-        //             data,
-        //         );
-        //         break;
-        //     case AppAgentEvent.Error:
-        //     case AppAgentEvent.Warning:
-        //     case AppAgentEvent.Info:
-        //         console.log(`[${event}] ${source}: ${data}`);
-        //         mainWindow?.webContents.send(
-        //             "notification-arrived",
-        //             event,
-        //             requestId,
-        //             source,
-        //             data,
-        //         );
-        //         break;
-        //     default:
-        //     // ignore
-        // }
     }
 
     exit() {

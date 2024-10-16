@@ -63,7 +63,7 @@ export const webapi: ClientAPI = {
         fnMap.set("update-random-command", callback);
     },
     onAskYesNo(callback) {
-        placeHolder("askYesNo", callback);
+        fnMap.set("askYesNo", callback);
     },
     sendYesNo: (askYesNoId: number, accept: boolean) => {
         placeHolder3("askYesNoResponse", askYesNoId, accept);
@@ -153,37 +153,30 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080", 
             console.log(msgObj);
             switch(msgObj.message) {
                 case "update-display":
-                    if (fnMap.has("update-display")) {
-                        fnMap.get("update-display")(undefined, msgObj.data.message, msgObj.data.mode);
-                    }
+                    fnMap.get("update-display")(undefined, msgObj.data.message, msgObj.data.mode);
                   break;
                 case "exit":
                     window.close();
                     break;
                 case "clear":
-                    if (fnMap.has("clear")) {
-                        fnMap.get("clear")(undefined, msgObj.data);
-                    }
+                    fnMap.get("clear")(undefined, msgObj.data);
                     break;
                 case "take-action":
-                    if (fnMap.has("take-action")) {
-                        fnMap.get("take-action")(undefined, msgObj.data);
-                    }
+                    fnMap.get("take-action")(undefined, msgObj.data);
                     break;
                 case "notify":
                     notify(msgObj);
                     break;
                 case "set-dynamic-action-display":
                     // TODO: verify
-                    if (fnMap.has("set-dynamic-action-display")) {
-                        fnMap.get("set-dynamic-action-display")(undefined, msgObj.data.source, msgObj.data.requestId, msgObj.data.actionIndex, msgObj.data.displayId, msgObj.data.nextRefreshMs);
-                    }                    
+                    fnMap.get("set-dynamic-action-display")(undefined, msgObj.data.source, msgObj.data.requestId, msgObj.data.actionIndex, msgObj.data.displayId, msgObj.data.nextRefreshMs);
                     break;
                 case "setting-summary-changed":
-                    if (fnMap.has("setting-summary-changed")) {
-                        let agentsMap: Map<string, string> = new Map<string, string>(msgObj.data.registeredAgents);
-                        fnMap.get("setting-summary-changed")(undefined, msgObj.data.summary, agentsMap)
-                    }
+                    let agentsMap: Map<string, string> = new Map<string, string>(msgObj.data.registeredAgents);
+                    fnMap.get("setting-summary-changed")(undefined, msgObj.data.summary, agentsMap)
+                    break;
+                case "askYesNo":
+                    fnMap.get("askYesNo")(msgObj.data.askYesNoId, msgObj.data.message, msgObj.data.requestId, msgObj.data.source);
                     break;
               }
 
@@ -221,6 +214,7 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080", 
                         fnMap.get("update-random-command")(undefined, msg.data.requestId, msg.data.data.message);
                     }
                     break;
+                    // TODO: implement
             //     case "showNotifications":
             //         mainWindow?.webContents.send(
             //             "notification-command",

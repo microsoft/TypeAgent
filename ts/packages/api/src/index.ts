@@ -32,7 +32,7 @@ const dispatcher = await createDispatcher("api", {
 // websocket server
 const hostEndpoint = process.env["WEBSOCKET_HOST"] ?? "ws://localhost:3030";
 const url = new URL(hostEndpoint);
-const webSocketServer: TypeAgentAPIWebSocketServer = new TypeAgentAPIWebSocketServer(url, dispatcher);
+const webSocketServer: TypeAgentAPIWebSocketServer = new TypeAgentAPIWebSocketServer(url, dispatcher, webClientIO);
 webSocketServer.noop();
 
 // Web Server setup -------------------------------------------------------------------------------
