@@ -7,6 +7,9 @@ import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
 import { flatten } from "../setOperations.js";
 import { SearchResponse } from "./conversation.js";
+import registerDebug from "debug";
+
+const answerError = registerDebug("knowledge-processor:answerGenerator:error");
 
 export type AnswerStyle = "List" | "List_Entities" | "Paragraph";
 
@@ -22,6 +25,7 @@ export interface AnswerGenerator {
 
 export type AnswerGeneratorSettings = {
     topKEntities: number;
+    maxContextLength?: number | number;
 };
 
 export function createAnswerGenerator(
@@ -62,6 +66,7 @@ export function createAnswerGenerator(
         response: SearchResponse,
         higherPrecision: boolean,
     ): Promise<AnswerResponse | undefined> {
+        const maxContextLength = settings?.maxContextLength ?? 1024 * 32;
         const context: any = {
             entities: {
                 timeRanges: response.entityTimeRanges(),
@@ -102,10 +107,18 @@ export function createAnswerGenerator(
             prompt += "List ALL entities if query intent implies that.\n";
         }
         prompt += `Your answer is readable and complete, with suitable formatting (line breaks, bullet points etc).`;
+        // TODO: Switch to using a Prompt Builder here, to avoid truncation
         let contextSection: PromptSection = {
             role: "user",
             content: `[CONVERSATION HISTORY]\n${JSON.stringify(context, undefined, 1)}`,
         };
+        if (prompt.length > maxContextLength) {
+            prompt = prompt.slice(0, maxContextLength);
+            logError(
+                "generateAnswerWithModel",
+                `Prompt exceeds ${maxContextLength} chars. Trimmed.`,
+            );
+        }
         const result = await translator.translate(prompt, [contextSection]);
         return result.success ? result.data : undefined;
     }
@@ -119,4 +132,10 @@ export function createAnswerGenerator(
                 return "List ALL relevant entities";
         }
     }
+}
+
+function logError(where: string, message: string) {
+    const errorText = `ERROR:${where}\n${message}`;
+    console.log(errorText);
+    answerError(errorText);
 }

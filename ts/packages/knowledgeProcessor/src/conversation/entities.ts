@@ -24,7 +24,7 @@ import {
     SetOp,
     WithFrequency,
     addToSet,
-    createFrequencyTable,
+    createHitTable,
     intersect,
     intersectMultiple,
     intersectUnionMultiple,
@@ -343,7 +343,7 @@ export async function createEntityIndex<TSourceId = string>(
         }
 
         if (terms && terms.length > 0) {
-            const hitCounter = createFrequencyTable<EntityId>();
+            const hitCounter = createHitTable<EntityId>();
             await Promise.all([
                 nameIndex.getNearestHitsMultiple(
                     terms,

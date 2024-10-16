@@ -120,6 +120,7 @@
             "outFiles": [
                 "${workspaceFolder}/**/*.js"
             ],
+            "cwd": "${workspaceFolder}/examples/chat/src/codeChat",
             //"args": ["codeMemory"]
             //"args": ["code"]
             //"args": ["tests"]

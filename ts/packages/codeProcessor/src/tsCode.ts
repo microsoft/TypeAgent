@@ -239,9 +239,10 @@ export async function getImports(sourceFile: ts.SourceFile): Promise<string[]> {
 }
 
 /**
- * Load typescript modules
- * @param sourceFile
- * @param baseDirPath
+ * Load typescript modules.
+ * Currently very simplistic. Only works if if your modules names are are files in baseDirPath. Relative paths not supported
+ * @param sourceFile import modules from this file
+ * @param baseDirPath directory where modules are located.
  * @returns
  */
 export async function loadImports(

@@ -52,6 +52,7 @@ export async function runCodeChat(): Promise<void> {
         findCode,
         clearCodeIndex,
         regex,
+        cwd,
     };
     addStandardHandlers(handlers);
     await runConsole({
@@ -69,13 +70,17 @@ export async function runCodeChat(): Promise<void> {
         printer = new CodePrinter(io);
     }
 
+    async function cwd() {
+        printer.writeLine(process.cwd());
+    }
+
     function reviewDef(): CommandMetadata {
         return {
             description: "Review the given Typescript file",
             options: {
                 sourceFile: {
                     description: "Path to source file",
-                    type: "path",
+                    type: "string",
                     defaultValue: sampleFiles.testCode,
                 },
                 verbose: {

@@ -618,11 +618,14 @@ export function createSearchProcessor(
     }
 }
 
-export function getAllTermsInFilter(filter: TermFilterV2): string[] {
-    let terms: string[] = [];
+export function getAllTermsInFilter(
+    filter: TermFilterV2,
+    includeVerbs: boolean = true,
+): string[] {
     const action = filter.action;
     if (action) {
-        if (action.verbs) {
+        let terms: string[] = [];
+        if (includeVerbs && action.verbs) {
             terms.push(...action.verbs.verbs);
         }
         if (action.subject) {
@@ -631,9 +634,10 @@ export function getAllTermsInFilter(filter: TermFilterV2): string[] {
         if (action.object) {
             terms.push(action.object);
         }
+        if (filter.searchTerms && filter.searchTerms.length > 0) {
+            terms.push(...filter.searchTerms);
+        }
+        return terms;
     }
-    if (filter.searchTerms && filter.searchTerms.length > 0) {
-        terms.push(...filter.searchTerms);
-    }
-    return terms;
+    return filter.searchTerms ?? [];
 }
