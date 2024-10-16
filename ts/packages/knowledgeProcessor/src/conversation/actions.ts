@@ -296,14 +296,16 @@ export async function createActionIndex<TSourceId = any>(
             matchTerms(names, indirectObjectIndex, otherTerms, options),
             matchVerbs(filter, options),
         ]);
+        const entityActionIds = intersectUnionMultiple(
+            subjectToActionIds,
+            objectToActionIds,
+            indirectObjectToActionIds,
+            termsToActionIds,
+        );
+
         results.actionIds = [
             ...intersectMultiple(
-                intersectUnionMultiple(
-                    subjectToActionIds,
-                    objectToActionIds,
-                    indirectObjectToActionIds,
-                    termsToActionIds,
-                ),
+                entityActionIds,
                 verbToActionIds,
                 itemsFromTemporalSequence(results.temporalSequence),
             ),
