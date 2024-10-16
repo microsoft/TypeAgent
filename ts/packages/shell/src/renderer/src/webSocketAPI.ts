@@ -1,11 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DynamicDisplay } from "@typeagent/agent-sdk";
+import { AppAgentEvent, DynamicDisplay } from "@typeagent/agent-sdk";
 import { PartialCompletionResult, RequestMetrics } from "agent-dispatcher";
 import { ClientAPI, SpeechToken } from "../../preload/electronTypes";
 
 export const webapi: ClientAPI = {
+    // TODO: implement
     onListenEvent: (
         callback: (
             e: Electron.IpcRendererEvent,
@@ -27,18 +28,21 @@ export const webapi: ClientAPI = {
             }
         }));
 
+        // TODO: is this needed?
         return new Promise<RequestMetrics | undefined>((resolve, reject) => {
             placeHolder(id, { resolve, reject });
             placeHolder4("process-shell-request", request, id, images);
         });
     },
     getPartialCompletion: (prefix: string) => {
+        // TODO: implement
         return new Promise<PartialCompletionResult | undefined>((resolve, reject) => {
             placeHolder1({ resolve, reject });
             placeHolder("process-shell-request", prefix);
         });
     },
     getDynamicDisplay(source: string, id: string) {
+        // TODO: implement
         return new Promise<DynamicDisplay>((resolve, reject) => {
             placeHolder(source, id);
             placeHolder1({resolve, reject});
@@ -66,50 +70,76 @@ export const webapi: ClientAPI = {
         fnMap.set("askYesNo", callback);
     },
     sendYesNo: (askYesNoId: number, accept: boolean) => {
-        placeHolder3("askYesNoResponse", askYesNoId, accept);
+        globalThis.ws?.send(JSON.stringify({
+            message: "askYesNoResponse",
+            data: {
+                askYesNoId,
+                accept
+            }
+          }));
     },
     onProposeAction(callback) {
-        placeHolder("proposeAction", callback);
+        fnMap.set("proposeAction", callback);
     },
     sendProposedAction: (proposeActionId: number, replacement?: unknown) => {
-        placeHolder3("proposeActionResponse", proposeActionId, replacement);
+        globalThis.ws?.send(JSON.stringify({
+            message: "proposeActionResponse",
+            data: {
+                proposeActionId,
+                replacement
+            }
+          }));
     },    
     onQuestion(callback) {
-        placeHolder("question", callback);
+        fnMap.set("question", callback);
     },
     sendAnswer: (questionId: number, answer?: string) => {
-        placeHolder3("questionResponse", questionId, answer);
+        globalThis.ws?.send(JSON.stringify({
+            message: "questionResponse",
+            data: {
+                questionId,
+                answer
+            }
+          }));        
     },
     getSpeechToken: () => {
+        // TODO: implement
         return new Promise<SpeechToken | undefined>((resolve, reject) => {
             placeHolder1({resolve, reject});
         });
     },
     getLocalWhisperStatus: () => {
+        // TODO: implement - local whisper not supported on mobile
         return new Promise<boolean | undefined>((resolve, reject) => {
             placeHolder1({resolve, reject});
         });
     },
     onSendInputText(callback) {
+        // TODO: figure out if this is still ued
         placeHolder("send-input-text", callback);
     },
     onSendDemoEvent(callback) {
+        // doesn't apply on mobile
         placeHolder("send-demo-event", callback);
     },
     onHelpRequested(callback) {
+        // no longer supported (i.e. F1 key)
         placeHolder("help-requested", callback);
     },
     onRandomMessageRequested(callback) {
         fnMap.set("random-message-requested", callback);
     },
     onShowDialog(callback) {
+        // not supported without @shell command
+        // TODO: inject replacement on mobile?
         placeHolder("show-dialog", callback);
     },
     onSettingsChanged(callback) {
+        // only applies if we make the mobile agent for settings
         placeHolder("settings-changed", callback);
     },
     onNotificationCommand(callback) {
-        placeHolder("notification-command", callback);
+        fnMap.set("notification-command", callback);
     },
     onNotify(callback) {
         fnMap.set("notification-arrived", callback);
@@ -129,10 +159,6 @@ function placeHolder(category: string, callback: any) {
     console.log(category + "\n" + callback);
 }
 
-function placeHolder3(category: string, data: any, data2: any) {
-    console.log(category + "\n" + data + data2);
-}
-
 function placeHolder4(category: string, data: any, data2: any, data3: any) {
     console.log(category + "\n" + data + data2 + data3);
 }
@@ -145,6 +171,7 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080", 
             console.log("websocket open" + event);
             resolve(webSocket);
         };
+
         // messages from the typeAgent server appear here
         webSocket.onmessage = (event: any) => {
             console.log("websocket message: " + JSON.stringify(event));
@@ -178,6 +205,12 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080", 
                 case "askYesNo":
                     fnMap.get("askYesNo")(msgObj.data.askYesNoId, msgObj.data.message, msgObj.data.requestId, msgObj.data.source);
                     break;
+                case "proposeAction":
+                    fnMap.get("proposeAction")(undefined, msgObj.data.currentProposeActionId, msgObj.data.actionTemplates, msgObj.data.requestId, msgObj.data.source);
+                    break;
+                case "question":
+                    fnMap.get("question")(msgObj.data.currentQuestionId, msgObj.data.message, msgObj.data.requestId);
+                    break;
               }
 
         };
@@ -204,38 +237,24 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080", 
                         console.warn("markRequestExplained: requestId is undefined");
                         return;
                     } else {
-                        if (fnMap.has("mark-explained")) {
-                            fnMap.get("mark-explained")(undefined, msg.data.requestId, msg.data.data.time, msg.data.data.fromCache, msg.data.data.fromUser);
-                        } 
+                        fnMap.get("mark-explained")(undefined, msg.data.requestId, msg.data.data.time, msg.data.data.fromCache, msg.data.data.fromUser);
                     }
                     break;
                 case "randomCommandSelected":
-                    if (fnMap.has("update-random-command")) {
-                        fnMap.get("update-random-command")(undefined, msg.data.requestId, msg.data.data.message);
-                    }
+                    fnMap.get("update-random-command")(undefined, msg.data.requestId, msg.data.data.message);
                     break;
                     // TODO: implement
-            //     case "showNotifications":
-            //         mainWindow?.webContents.send(
-            //             "notification-command",
-            //             requestId,
-            //             data,
-            //         );
-            //         break;
-            //     case AppAgentEvent.Error:
-            //     case AppAgentEvent.Warning:
-            //     case AppAgentEvent.Info:
-            //         console.log(`[${event}] ${source}: ${data}`);
-            //         mainWindow?.webContents.send(
-            //             "notification-arrived",
-            //             event,
-            //             requestId,
-            //             source,
-            //             data,
-            //         );
-            //         break;
-            //     default:
-            //     // ignore
+                case "showNotifications":
+                    fnMap.get("notification-command")(undefined, msg.data.requestId, msg.data.data);
+                    break;
+                case AppAgentEvent.Error:
+                case AppAgentEvent.Warning:
+                case AppAgentEvent.Info:
+                    console.log(`[${msg.data.event}] ${msg.data.source}: ${msg.data.data}`);
+                    fnMap.get("notification-arrived")(undefined, msg.data.event, msg.data.requestId, msg.data.source, msg.data.data);
+                    break;
+                default:
+                // ignore
             }            
         }
     });

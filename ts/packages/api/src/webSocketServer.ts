@@ -74,8 +74,18 @@ export class TypeAgentAPIWebSocketServer {
                     switch(msgObj.message) {
                         case "shellrequest":
                             const metrics = await dispatcher.processCommand(msgObj.data.request, msgObj.data.id, msgObj.data.images);
-                            console.log(metrics);            
-                        break;
+                            console.log(metrics);
+                            break;
+                        case "askYesNoResponse":
+                            // user said Yes (or no)!
+                            webClientIO.resolveYesNoPromise(msgObj.data.askYesNoId, msgObj.data.accept);
+                            break;          
+                        case "proposeActionResponse":
+                            webClientIO.resolveProposeActionPromise(msgObj.data.proposeActionId, msgObj.data.replacement);
+                            break;
+                        case "questionResponse":
+                            webClientIO.resolveQuestionPromise(msgObj.data.questionId, msgObj.data.answer);
+                            break;
                     }
                 } catch {
                     console.log("WebSocket message not parsed.");
