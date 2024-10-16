@@ -24,7 +24,7 @@ import {
     Dispatcher,
 } from "agent-dispatcher";
 
-import { IAgentMessage, ActionTemplateSequence } from "agent-dispatcher";
+import { IAgentMessage, TemplateEditConfig } from "agent-dispatcher";
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
@@ -332,7 +332,7 @@ async function askYesNo(
 
 let maxProposeActionId = 0;
 async function proposeAction(
-    actionTemplates: ActionTemplateSequence,
+    actionTemplates: TemplateEditConfig,
     requestId: RequestId,
     source: string,
 ) {

@@ -50,7 +50,7 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { DispatcherName } from "./common/interactiveIO.js";
-import { toTemplateSequence } from "../translation/actionTemplate.js";
+import { getActionTemplateEditConfig } from "../translation/actionTemplate.js";
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
@@ -88,7 +88,7 @@ async function confirmTranslation(
         "Use the buttons to run or cancel the following action(s). You can also press [Enter] to run it, [Del] to edit it, or [Escape] to cancel it.";
     const editPreface = `Edit the following action(s) to match your requests.  Click on the values to start editing. Use the ➕/✕ buttons to add/delete optional fields.`;
 
-    const templateSequence = toTemplateSequence(
+    const templateSequence = getActionTemplateEditConfig(
         systemContext,
         actions,
         preface,

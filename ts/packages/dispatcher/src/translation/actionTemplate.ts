@@ -11,20 +11,23 @@ import {
     SessionContext,
 } from "@typeagent/agent-sdk";
 
-export type ActionTemplateSequence = {
+export type TemplateData = {
+    schema: TemplateSchema;
+    data: unknown;
+};
+export type TemplateEditConfig = {
     templateAppAgent: string;
     templateName: string;
-    templates: TemplateSchema[];
-    actions: unknown[];
+    templateData: TemplateData | TemplateData[];
+    defaultTemplate: TemplateSchema;
     preface?: string;
     editPreface?: string;
 };
 
-function toTemplate(
-    context: CommandHandlerContext,
+function getDefaultActionTemplate(
     translators: string[],
-    action: Action,
-) {
+    discrimintator?: string,
+): TemplateSchema {
     const translatorName: TemplateFieldStringUnion = {
         type: "string-union",
         typeEnum: translators,
@@ -37,13 +40,26 @@ function toTemplate(
             },
         },
     };
+    if (discrimintator) {
+        translatorName.discriminator = discrimintator;
+    }
+    return template;
+}
+
+function toTemplate(
+    context: CommandHandlerContext,
+    translators: string[],
+    action: Action,
+) {
     const config = context.agents.getTranslatorConfig(action.translatorName);
 
     if (config === undefined) {
-        return template;
+        return getDefaultActionTemplate(translators);
     }
-    translatorName.discriminator = action.translatorName;
-
+    const template = getDefaultActionTemplate(
+        translators,
+        action.translatorName,
+    );
     const actionInfos = getTranslatorActionInfos(config, action.translatorName);
     const actionName: TemplateFieldStringUnion = {
         type: "string-union",
@@ -68,17 +84,20 @@ function toTemplate(
     return template;
 }
 
-export function toTemplateSequence(
+export function getActionTemplateEditConfig(
     context: CommandHandlerContext,
     actions: Actions,
     preface: string,
     editPreface: string,
-): ActionTemplateSequence {
-    const templates: TemplateSchema[] = [];
+): TemplateEditConfig {
+    const templateData: TemplateData[] = [];
 
     const translators = getActiveTranslatorList(context);
     for (const action of actions) {
-        templates.push(toTemplate(context, translators, action));
+        templateData.push({
+            schema: toTemplate(context, translators, action),
+            data: action.toFullAction(),
+        });
     }
 
     return {
@@ -86,8 +105,8 @@ export function toTemplateSequence(
         templateName: "action",
         preface,
         editPreface,
-        actions: actions.toFullActions(),
-        templates,
+        templateData,
+        defaultTemplate: getDefaultActionTemplate(translators),
     };
 }
 
