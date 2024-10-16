@@ -35,7 +35,7 @@ export async function loadTypescriptCode(
     sourceFile: string,
     moduleDir?: string | undefined,
 ): Promise<TypeScriptCode> {
-    const sourcePath = getAbsolutePath(sourceFile);
+    const sourcePath = getSourcePath(sourceFile);
     const sourceText = await readAllLines(sourcePath); // Load lines of code
     const sourceCode = await tsCode.loadSourceFile(sourcePath);
     moduleDir = getModuleDirPath(sourceFile, moduleDir);
@@ -63,7 +63,7 @@ function getAbsolutePath(filePath: string): string {
         return filePath;
     }
     // Temporary support for current sample files
-    // Eventually, all relative paths will be resolved using the process working directory only
+    // Eventually, all relative paths will be resolved only cwd
     const basePath = isSampleFile(filePath) ? sampleRootDir : process.cwd();
     return path.join(basePath, filePath);
 }
@@ -99,7 +99,6 @@ export function createTypescriptBlock(
 }
 
 export function getSourcePath(sourcePath?: string): string {
-    // Temporary, so we can support current sample files.
     return getAbsolutePath(sourcePath ?? sampleFiles.testCode);
 }
 

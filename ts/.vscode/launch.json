@@ -122,7 +122,7 @@
             ],
             "cwd": "${workspaceFolder}/examples/chat/src/codeChat",
             //"args": ["codeMemory"]
-            "args": ["code"]
+            //"args": ["code"]
             //"args": ["tests"]
         },
         {
