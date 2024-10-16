@@ -77,11 +77,13 @@ export async function runCodeChat(): Promise<void> {
         // Try to pass it to an LLM for transformation in a regular @ command
         const transformed = await commandTransformer.transform(line, io) as NamedArgs | undefined;
         if (transformed && transformed.name != "Undefined") {
-            io.writer.writeLine("[Transformed]: " + JSON.stringify(transformed));
+            // io.writer.writeLine("[Transformed]: " + JSON.stringify(transformed));
             const name = transformed.name as string;
             if (name in handlers) {
                 await handlers[name](transformed, io);
-            }  // TODO: ELSE
+            } else {
+                io.writer.writeLine(`Sorry, I don't know anything about ${name}; try @help`);
+            }
         }
         else {
             io.writer.writeLine("Sorry, I didn't get that; try @help");

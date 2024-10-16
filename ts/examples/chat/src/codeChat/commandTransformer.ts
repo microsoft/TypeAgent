@@ -7,7 +7,7 @@ import { CommandHandler, CommandMetadata, InteractiveIo } from "interactive-app"
 import { TypeChatLanguageModel, TypeChatJsonTranslator, createJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 
-console.log("[codeProcessor.js loading]");
+// console.log("[codeProcessor.js loading]");
 
 export interface CommandTransformer {
     model: TypeChatLanguageModel;
@@ -26,10 +26,10 @@ export function createCommandTransformer(model: TypeChatLanguageModel): CommandT
     async function transform(command: string): Promise<object | undefined> {
         const result = await transformer.translator!.translate(command);
         if (result.success === false) {
-            console.log("Error:", result.message);
+            // console.log("Error:", result.message);
             return undefined;
         } else {
-            console.log(JSON.stringify(result, null, 2));
+            // console.log(JSON.stringify(result, null, 2));
             return result.data;
         }
     }
@@ -65,9 +65,9 @@ export function completeCommandTransformer(
     schemaText += "  | { name: 'Unknown', query: string }  // Fallback\n";
     schemaText += ";\n";
     commandTransformer.schemaText = schemaText;
-    console.log("[schema text begin]");
-    console.log(schemaText);
-    console.log("[schema text end]");
+    // console.log("[schema text begin]");
+    // console.log(schemaText);
+    // console.log("[schema text end]");
 
     // Now construct the translator and add it
     const validator = createTypeScriptJsonValidator<any>(commandTransformer.schemaText, "Command");
