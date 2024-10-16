@@ -383,6 +383,18 @@ export function generateTimestampString(timestamp?: Date): string {
     return name;
 }
 
+export function ensureUniqueObjectName(
+    store: ObjectFolder<string>,
+    id: string,
+): string | undefined {
+    if (!store.exists(id)) {
+        return id;
+    }
+    return generateMonotonicName(1, id, (name: string) => {
+        return !store.exists(name);
+    }).name;
+}
+
 function generateTickString(timestamp?: Date): string {
     timestamp ??= new Date();
     return timestamp.getTime().toString();

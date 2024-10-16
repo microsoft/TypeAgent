@@ -10,6 +10,7 @@ import {
     collections,
     createObjectFolder,
     dateTime,
+    ensureUniqueObjectName,
     //generateMonotonicName,
 } from "typeagent";
 import { intersectMultiple, setFrom } from "./setOperations.js";
@@ -252,7 +253,12 @@ export async function putTimestampedObject(
 ): Promise<string> {
     timestamp ??= new Date();
     const tValue = dateTime.stringifyTimestamped(value, timestamp);
-    return store.put(tValue);
+    let id: string | undefined = dateTime.timestampString(timestamp);
+    id = ensureUniqueObjectName(store, id);
+    if (!id) {
+        throw new Error(`${store.path}\nCould not create unique id for ${id}`);
+    }
+    return store.put(tValue, id);
 }
 
 export async function getTimestampedObject<T>(
