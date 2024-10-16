@@ -15,8 +15,6 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 import { AppAgentProvider } from "agent-dispatcher";
 import { ShellSettings } from "./shellSettings.js";
-import path from "path";
-import { BrowserWindow } from "electron";
 import {
     displaySuccess,
     displayWarn,
@@ -24,7 +22,6 @@ import {
 
 type ShellContext = {
     settings: ShellSettings;
-    inlineWindow: BrowserWindow | undefined;
 };
 
 const config: AppAgentManifest = {
@@ -159,7 +156,7 @@ class ShellOpenWebContentView implements CommandHandler {
     ) {
         let targetUrl: URL;
         switch (params.args.site.toLowerCase()) {
-            case "paleoBioDb":
+            case "paleobiodb":
                 targetUrl = new URL("https://paleobiodb.org/navigator/");
 
                 break;
@@ -176,32 +173,16 @@ class ShellOpenWebContentView implements CommandHandler {
             default:
                 targetUrl = new URL(params.args.site);
         }
+        context.sessionContext.agentContext.settings.openInlineBrowser(
+            targetUrl,
+        );
+    }
+}
 
-        if (
-            !context.sessionContext.agentContext.inlineWindow ||
-            context.sessionContext.agentContext.inlineWindow.isDestroyed()
-        ) {
-            const win = new BrowserWindow({
-                width: 800,
-                height: 1500,
-                autoHideMenuBar: true,
-
-                webPreferences: {
-                    preload: path.join(__dirname, "../preload/webview.mjs"),
-                    sandbox: false,
-                },
-            });
-            win.removeMenu();
-
-            context.sessionContext.agentContext.inlineWindow = win;
-        }
-
-        const inlineWindow = context.sessionContext.agentContext.inlineWindow;
-        inlineWindow.loadURL(targetUrl.toString());
-
-        inlineWindow.webContents.on("did-finish-load", () => {
-            inlineWindow.webContents.send("setupSiteAgent");
-        });
+class ShellCloseWebContentView implements CommandHandlerNoParams {
+    public readonly description = "Close the new Web Content view";
+    public async run(context: ActionContext<ShellContext>) {
+        context.sessionContext.agentContext.settings.closeInlineBrowser();
     }
 }
 
@@ -228,6 +209,7 @@ const handlers: CommandHandlerTable = {
         },
         topmost: new ShellSetTopMostCommandHandler(),
         open: new ShellOpenWebContentView(),
+        close: new ShellCloseWebContentView(),
     },
 };
 
