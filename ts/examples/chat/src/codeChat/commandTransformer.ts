@@ -14,7 +14,7 @@ export interface CommandTransformer {
     metadata?: Record<string, CommandMetadata>;
     schemaText?: string;
     translator?: TypeChatJsonTranslator<any>;
-    transform(command: string, io: InteractiveIo): Promise<string | undefined>;
+    transform(command: string, io: InteractiveIo): Promise<object | undefined>;
 }
 
 export function createCommandTransformer(model: TypeChatLanguageModel): CommandTransformer {
@@ -23,10 +23,15 @@ export function createCommandTransformer(model: TypeChatLanguageModel): CommandT
         transform,
     }
 
-    async function transform(command: string): Promise<string | undefined> {
-        const result = await transformer.translator?.translate(command);
-        console.log(JSON.stringify(result, null, 2));
-        return undefined;
+    async function transform(command: string): Promise<object | undefined> {
+        const result = await transformer.translator!.translate(command);
+        if (result.success === false) {
+            console.log("Error:", result.message);
+            return undefined;
+        } else {
+            console.log(JSON.stringify(result, null, 2));
+            return result.data;
+        }
     }
 
     return transformer;
@@ -40,6 +45,7 @@ export function completeCommandTransformer(
     // Copy the handlers' metadata into the command transformer
     const cmdMetadata: Record<string, CommandMetadata> = {};
     for (const key in handlers) {
+        // TODO: Some handlers have no metadata, only a description?
         const metadata = handlers[key].metadata;
         if (metadata && typeof metadata === "object") {
             cmdMetadata[key] = metadata;
@@ -73,7 +79,7 @@ export function completeCommandTransformer(
 }
 
 function makeClassDef(name: string, metadata: CommandMetadata): string {
-    let def = `\n// ${metadata.description}\n`;
+    let def = `// ${metadata.description}\n`;
     def += `export interface ${name} {\n`;
     def += "  name: '" + name + "';\n";
     const options = metadata.options;

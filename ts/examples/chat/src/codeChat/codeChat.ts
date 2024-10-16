@@ -7,6 +7,7 @@ import {
     CommandHandler,
     CommandMetadata,
     InteractiveIo,
+    NamedArgs,
     addStandardHandlers,
     parseNamedArguments,
     runConsole,
@@ -74,12 +75,15 @@ export async function runCodeChat(): Promise<void> {
         io: InteractiveIo,
     ): Promise<void> {
         // Try to pass it to an LLM for transformation in a regular @ command
-        const transformed = await commandTransformer.transform(line, io);
-        if (transformed) {
-            io.writer.writeLine(transformed);
+        const transformed = await commandTransformer.transform(line, io) as NamedArgs | undefined;
+        if (transformed && transformed.name != "Undefined") {
+            io.writer.writeLine("[Transformed]: " + JSON.stringify(transformed));
+            if (transformed.name == "codeReview") {
+                await codeReview(transformed);
+            }
         }
         else {
-            io.writer.writeLine("Sorry, only commands prefixed with @ are supported.");
+            io.writer.writeLine("Sorry, I didn't get that; try @help");
         }
     }
 
@@ -109,8 +113,13 @@ export async function runCodeChat(): Promise<void> {
         };
     }
     handlers.codeReview.metadata = reviewDef();
-    async function codeReview(args: string[]): Promise<void> {
-        const namedArgs = parseNamedArguments(args, reviewDef());
+    async function codeReview(args: string[] | NamedArgs): Promise<void> {
+        let namedArgs: NamedArgs;
+        if (args instanceof Array) {
+            namedArgs = parseNamedArguments(args, reviewDef());
+        } else {
+            namedArgs = args;
+        }
 
         printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
 
