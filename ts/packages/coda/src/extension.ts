@@ -3,6 +3,7 @@
 
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
+import * as fs from "fs";
 import * as vscode from "vscode";
 import { initializeWS } from "./wsConnect";
 
@@ -25,6 +26,18 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     context.subscriptions.push(disposable);
+    // make a command to list to console all of the commands available
+    let listCommands = vscode.commands.registerCommand(
+        "coda-shell.listCommands",
+        () => {
+            vscode.commands.getCommands().then((commands) => {
+                // write commands to file
+                const filePath = "/temp/commands.txt";
+                fs.writeFileSync(filePath, commands.join("\n"));
+            });
+        },
+    );
+    context.subscriptions.push(listCommands);
 }
 
 // This method is called when your extension is deactivated
