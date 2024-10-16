@@ -2,14 +2,17 @@
 // Licensed under the MIT License.
 import { Module, StoredCodeBlock, tsCode } from "code-processor";
 import { ArgDef } from "interactive-app";
-import { getAbsolutePath, readAllLines } from "typeagent";
+import path from "path";
+import { readAllLines } from "typeagent";
 import ts from "typescript";
+import { fileURLToPath } from "url";
 
 export const sampleFiles = {
     snippet: "../../src/codeChat/testCode/snippet.ts",
     testCode: "../../src/codeChat/testCode/testCode.ts",
+    modules: "../../dist/codeChat/testCode",
 };
-export const sampleModuleDir = "../../dist/codeChat/testCode";
+export const sampleRootDir = path.dirname(fileURLToPath(import.meta.url));
 
 export function isSampleFile(sourceFile: string): boolean {
     sourceFile = sourceFile.toLowerCase();
@@ -32,17 +35,12 @@ export async function loadTypescriptCode(
     sourceFile: string,
     moduleDir?: string | undefined,
 ): Promise<TypeScriptCode> {
-    const sourcePath = getAbsolutePath(sourceFile, import.meta.url);
+    const sourcePath = getAbsolutePath(sourceFile);
     const sourceText = await readAllLines(sourcePath); // Load lines of code
     const sourceCode = await tsCode.loadSourceFile(sourcePath);
-    if (!moduleDir && isSampleFile(sourceFile)) {
-        moduleDir = sampleModuleDir;
-    }
+    moduleDir = getModuleDirPath(sourceFile, moduleDir);
     let modules = moduleDir
-        ? await tsCode.loadImports(
-              sourceCode,
-              getAbsolutePath(moduleDir, import.meta.url),
-          )
+        ? await tsCode.loadImports(sourceCode, moduleDir)
         : undefined;
 
     return {
@@ -51,6 +49,23 @@ export async function loadTypescriptCode(
         sourceCode,
         modules,
     };
+}
+
+/**
+ * Get full path
+ * @param filePath
+ * @param basePath
+ * @returns
+ */
+function getAbsolutePath(filePath: string): string {
+    if (path.isAbsolute(filePath)) {
+        // already absolute
+        return filePath;
+    }
+    // Temporary support for current sample files
+    // Eventually, all relative paths will be resolved using the process working directory only
+    const basePath = isSampleFile(filePath) ? sampleRootDir : process.cwd();
+    return path.join(basePath, filePath);
 }
 
 export function loadCodeChunks(
@@ -84,8 +99,19 @@ export function createTypescriptBlock(
 }
 
 export function getSourcePath(sourcePath?: string): string {
-    sourcePath ??= sampleFiles.testCode;
-    return getAbsolutePath(sourcePath, import.meta.url);
+    // Temporary, so we can support current sample files.
+    return getAbsolutePath(sourcePath ?? sampleFiles.testCode);
+}
+
+// Temporary, to support current sample files.
+function getModuleDirPath(
+    sourceFile: string,
+    moduleDir?: string,
+): string | undefined {
+    if (isSampleFile(sourceFile) && !moduleDir) {
+        moduleDir = sampleFiles.modules;
+    }
+    return moduleDir ? getAbsolutePath(moduleDir) : undefined;
 }
 
 export function argSourceFile(): ArgDef {

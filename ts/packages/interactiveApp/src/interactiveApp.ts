@@ -462,7 +462,7 @@ export function createNamedArgs(): NamedArgs {
     }
 
     function checkPath(value: any): string {
-        if (typeof value !== "string" || !fs.existsSync(value)) {
+        if (typeof value !== "string" /*|| !fs.existsSync(value)*/) {
             throw Error(`Path ${value} does not exist`);
         }
         return value;
