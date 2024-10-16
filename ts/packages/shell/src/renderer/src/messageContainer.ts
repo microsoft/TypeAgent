@@ -3,7 +3,7 @@
 
 import { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
 import { TTS, TTSMetrics } from "./tts/tts";
-import { ActionTemplateSequence, PhaseTiming } from "agent-dispatcher";
+import { TemplateEditConfig, PhaseTiming } from "agent-dispatcher";
 
 import { ChoicePanel, InputChoice } from "./choicePanel";
 import { setContent } from "./setContent";
@@ -233,7 +233,7 @@ export class MessageContainer {
 
     public proposeAction(
         proposeActionId: number,
-        actionTemplates: ActionTemplateSequence,
+        actionTemplates: TemplateEditConfig,
     ) {
         // use this div to show the proposed action
         const actionContainer = document.createElement("div");

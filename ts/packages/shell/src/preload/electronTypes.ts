@@ -10,7 +10,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { ShellSettings } from "../main/shellSettings.js";
 import {
-    ActionTemplateSequence,
+    TemplateEditConfig,
     IAgentMessage,
     PartialCompletionResult,
 } from "agent-dispatcher";
@@ -123,7 +123,7 @@ export interface ClientAPI {
         callback: (
             e: Electron.IpcRendererEvent,
             proposeActionId: number,
-            actionTemplates: ActionTemplateSequence,
+            actionTemplates: TemplateEditConfig,
             requestId: string,
             source: string,
         ) => void,

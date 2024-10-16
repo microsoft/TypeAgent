@@ -20,4 +20,7 @@ export type {
     ActionParamFieldOpt,
     ActionParamScalar,
 } from "./translation/actionInfo.js";
-export type { ActionTemplateSequence } from "./translation/actionTemplate.js";
+export type {
+    TemplateEditConfig,
+    TemplateData,
+} from "./translation/actionTemplate.js";
