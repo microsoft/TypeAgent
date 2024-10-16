@@ -4,121 +4,102 @@
 // The command structure is given by some schema.
 
 import { CommandHandler, CommandMetadata, InteractiveIo } from "interactive-app";
-import { TypeChatLanguageModel } from "typechat";
+import { TypeChatLanguageModel, TypeChatJsonTranslator, createJsonTranslator } from "typechat";
+import { createTypeScriptJsonValidator } from "typechat/ts";
 
 console.log("[codeProcessor.js loading]");
 
 export interface CommandTransformer {
-    transform(command: string, io: InteractiveIo): Promise<string | undefined>;
     model: TypeChatLanguageModel;
-    metadata: Record<string, CommandMetadata>;
+    metadata?: Record<string, CommandMetadata>;
+    schemaText?: string;
+    translator?: TypeChatJsonTranslator<any>;
+    transform(command: string, io: InteractiveIo): Promise<string | undefined>;
 }
 
 export function createCommandTransformer(model: TypeChatLanguageModel): CommandTransformer {
-    const meta: Record<string, CommandMetadata> = {};
     const transformer: CommandTransformer = {
-        transform,
         model,
-        metadata,
+        transform,
     }
 
     async function transform(command: string): Promise<string | undefined> {
+        const result = await transformer.translator?.translate(command);
+        console.log(JSON.stringify(result, null, 2));
         return undefined;
     }
 
     return transformer;
 }
 
-export function copyMetadataToCommandTransformer(handlers: Record<string, CommandHandler>, commandTransformer: CommandTransformer): void {
+// Call this when the handlers' metadata is complete, before calling transform()
+export function completeCommandTransformer(
+    handlers: Record<string, CommandHandler>,
+    commandTransformer: CommandTransformer,
+): void {
+    // Copy the handlers' metadata into the command transformer
+    const cmdMetadata: Record<string, CommandMetadata> = {};
     for (const key in handlers) {
         const metadata = handlers[key].metadata;
-        if (typeof metadata === "object") {
-            commandTransformer.metadata[key] = metadata;
+        if (metadata && typeof metadata === "object") {
+            cmdMetadata[key] = metadata;
         }
     }
+    commandTransformer.metadata = cmdMetadata;
+
+    // Construct a suitable TypeChat schema and add it
+    let schemaText: string = "";
+    for (const key in cmdMetadata) {
+        schemaText += makeClassDef(key, cmdMetadata[key]);
+    }
+    schemaText += "export type Command = \n";
+    for (const key in cmdMetadata) {
+        schemaText += `  | ${key}\n`;
+    }
+    schemaText += "  | { name: 'Unknown', query: string }  // Fallback\n";
+    schemaText += ";\n";
+    commandTransformer.schemaText = schemaText;
+    console.log("[schema text begin]");
+    console.log(schemaText);
+    console.log("[schema text end]");
+
+    // Now construct the translator and add it
+    const validator = createTypeScriptJsonValidator<any>(commandTransformer.schemaText, "Command");
+    const translator = createJsonTranslator<any>(
+        commandTransformer.model,
+        validator,
+    );
+    commandTransformer.translator = translator;
 }
 
-/* Schema draft
-
-🤖> @help clearCodeIndex
-Clear the code index
-
-🤖> @help codeAnswer
-Answer questions about code
-
-USAGE
-codeAnswer [OPTIONS]
-
-OPTIONS
-  question    Question to ask
-  sourceFile  Path to source file
-              (default): ../../src/codeChat/testCode/testCode.ts
-  verbose     (default): false
-🤖> @help codeBreakpoints
-Suggest where to set breakpoints in a Typescript file
-
-USAGE
-codeBreakpoints [OPTIONS]
-
-OPTIONS
-  bug         A description of the observed bug
-              (default): I am observing assertion failures in the code below.
-  moduleDir   Path to modules dir
-  sourceFile  Path to source file
-              (default): ../../src/codeChat/testCode/snippet.ts
-  verbose     Verbose output
-              (default): false
-🤖> @help codeReview
-Review the given Typescript file
-
-USAGE
-codeReview [OPTIONS]
-
-OPTIONS
-  sourceFile  Path to source file
-              (default): ../../src/codeChat/testCode/testCode.ts
-  verbose     Verbose output
-              (default): false
-🤖> @help codeDebug
-Debug the given Typescript file
-
-USAGE
-codeDebug [OPTIONS]
-
-OPTIONS
-  bug         A description of the observed bug
-              (default): I am observing assertion failures in the code below. Review the code below and explain why
-  moduleDir   Path to modules dir
-  sourceFile  Path to source file
-              (default): ../../src/codeChat/testCode/snippet.ts
-  verbose     Verbose output
-              (default): false
-🤖> @help codeDocument
-Document given code
-
-USAGE
-codeDocument [OPTIONS]
-
-OPTIONS
-  sourceFile  Path to source file
-              (default): ../../src/codeChat/testCode/testCode.ts
-🤖> @help indexCode
-Index given code
-
-USAGE
-indexCode --sourceFile <path> [OPTIONS]
-
-ARGUMENTS
-  sourceFile  Path to source file
-
-OPTIONS
-  module   Module name
-  verbose  (default): false
-🤖> @help clearCodeIndex
-Clear the code index
-
-🤖> @help regex
-Generate a regular expression from the given requirements.
-
-
- */
+function makeClassDef(name: string, metadata: CommandMetadata): string {
+    let def = `\n// ${metadata.description}\n`;
+    def += `export interface ${name} {\n`;
+    def += "  name: '" + name + "';\n";
+    const options = metadata.options;
+    for (const key in options) {
+        const option = options[key];
+        let tp: string | undefined = option.type ? String(option.type) : undefined;
+        if (tp === "path") {
+            tp = "string";
+        }
+        if (!tp) {
+            tp = "string";  // Or any?
+        }
+        if (option.defaultValue === undefined) {
+            def += `  ${key}: ${tp}`;
+        } else {
+            def += `  ${key}?: ${tp} | undefined`;
+        }
+        def += ";";
+        if (option.description) {
+            def += `  // ${option.description}`;
+        }
+        if (option.defaultValue !== undefined) {
+            def += `  // default: ${JSON.stringify(option.defaultValue)}`;
+        }
+        def += "\n";
+    }   
+    def += "}\n\n";
+    return def;
+}

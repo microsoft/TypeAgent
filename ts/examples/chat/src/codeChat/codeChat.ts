@@ -31,7 +31,10 @@ import {
     loadTypescriptCode,
     sampleFiles,
 } from "./common.js";
-import { createCommandTransformer, copyMetadataToCommandTransformer } from "./commandTransformer.js";
+import {
+    createCommandTransformer,
+    completeCommandTransformer,
+} from "./commandTransformer.js";
 
 export async function runCodeChat(): Promise<void> {
     const model = openai.createChatModel();
@@ -451,5 +454,5 @@ export async function runCodeChat(): Promise<void> {
         }
     }
 
-    copyMetadataToCommandTransformer(handlers, commandTransformer);
+    completeCommandTransformer(handlers, commandTransformer);
 }
