@@ -36,6 +36,11 @@
         "command": "coda-shell.start",
         "title": "Start you typeagent experience ...",
         "category": "Coda Shell"
+      },
+      {
+        "command": "coda-shell.listCommands",
+        "title": "List commands to a file ...",
+        "category": "Coda Shell"
       }
     ]
   },
