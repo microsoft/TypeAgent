@@ -1,0 +1,130 @@
+Below is a list of command definitions in (mostly) JSON.
+You will then get a line of text that may represent a human's attempt to specify one of those commands.
+Or it may be garbage, in which case you should answer with **just** the string "garbage".
+
+Here are the JSON command definitions. The syntax is not exactly JSON (sorry);
+each definition is a plaintext command name followed by a JSON object.
+The name should be inserted into the object under the key "name".
+For example, `lubber { description: 'play a game of landlubber' }`
+should become `{ name: "lubber", description: 'play a game of landlubber' }`
+etc.
+
+```
+codeReview {
+  description: 'Review the given Typescript file',
+  options: {
+    sourceFile: {
+      description: 'Path to source file',
+      type: 'path',
+      defaultValue: '../../src/codeChat/testCode/testCode.ts'
+    },
+    verbose: {
+      description: 'Verbose output',
+      type: 'boolean',
+      defaultValue: false
+    }
+  }
+}
+codeDebug {
+  description: 'Debug the given Typescript file',
+  options: {
+    sourceFile: {
+      description: 'Path to source file',
+      type: 'path',
+      defaultValue: '../../src/codeChat/testCode/snippet.ts'
+    },
+    moduleDir: { description: 'Path to modules dir', type: 'path' },
+    bug: {
+      description: 'A description of the observed bug',
+      defaultValue: 'I am observing assertion failures in the code below. Review the code below and explain why'
+    },
+    verbose: {
+      description: 'Verbose output',
+      type: 'boolean',
+      defaultValue: false
+    }
+  }
+}
+codeBreakpoints {
+  description: 'Suggest where to set breakpoints in a Typescript file',
+  options: {
+    sourceFile: {
+      description: 'Path to source file',
+      type: 'path',
+      defaultValue: '../../src/codeChat/testCode/snippet.ts'
+    },
+    moduleDir: { description: 'Path to modules dir', type: 'path' },
+    bug: {
+      description: 'A description of the observed bug',
+      defaultValue: 'I am observing assertion failures in the code below.'
+    },
+    verbose: {
+      description: 'Verbose output',
+      type: 'boolean',
+      defaultValue: false
+    }
+  }
+}
+codeAnswer {
+  description: 'Answer questions about code',
+  options: {
+    question: { description: 'Question to ask' },
+    sourceFile: {
+      description: 'Path to source file',
+      type: 'path',
+      defaultValue: '../../src/codeChat/testCode/testCode.ts'
+    },
+    verbose: { type: 'boolean', defaultValue: false }
+  }
+}
+codeDocument {
+  description: 'Document given code',
+  options: {
+    sourceFile: {
+      description: 'Path to source file',
+      type: 'path',
+      defaultValue: '../../src/codeChat/testCode/testCode.ts'
+    }
+  }
+}
+indexCode {
+  description: 'Index given code',
+  args: { sourceFile: { description: 'Path to source file', type: 'path' } },
+  options: {
+    module: { description: 'Module name' },
+    verbose: { type: 'boolean', defaultValue: false }
+  }
+}
+findCode {
+  description: 'Query the code index',
+  args: { query: { description: 'Query to run' } },
+  options: {
+    maxMatches: {
+      description: 'Max number of matches',
+      type: 'number',
+      defaultValue: 1
+    }
+  }
+}
+clearCodeIndex { description: "Clear the code index" }
+regex { description: "Generate a regular expression from the given requirements." }
+help { description: "Display help" }
+commands { description: "List all commands" }
+cls { description: "Clear the screen" }
+```
+
+Here are some examples:
+
+INPUT:
+please review the file src/main.ts
+OUTPUT:
+{ "name": "codeReview", "options": { "sourceFile": "src/main.ts" } }
+
+INPUT:
+clear screen
+OUTPUT:
+{ "name": "cls" }
+
+You are now ready for the user input:
+
+What are the toplevel functions in src/main.ts?

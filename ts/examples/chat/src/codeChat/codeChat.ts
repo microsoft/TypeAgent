@@ -31,10 +31,12 @@ import {
     loadTypescriptCode,
     sampleFiles,
 } from "./common.js";
+import { createCommandTransformer, copyMetadataToCommandTransformer } from "./commandTransformer.js";
 
 export async function runCodeChat(): Promise<void> {
     const model = openai.createChatModel();
     const codeReviewer = createCodeReviewer(model);
+    const commandTransformer = createCommandTransformer(model);
     // For answer/code indexing examples
     const folderPath = "/data/code";
     const vectorModel = openai.createEmbeddingModel();
@@ -61,10 +63,22 @@ export async function runCodeChat(): Promise<void> {
         handlers,
     });
 
+    // Handles input not starting with @,
+    // Transforming it into a regular @ command (which it then calls)
+    // or printing an error message.
     async function inputHandler(
         line: string,
         io: InteractiveIo,
-    ): Promise<void> {}
+    ): Promise<void> {
+        // Try to pass it to an LLM for transformation in a regular @ command
+        const transformed = await commandTransformer.transform(line, io);
+        if (transformed) {
+            io.writer.writeLine(transformed);
+        }
+        else {
+            io.writer.writeLine("Sorry, only commands prefixed with @ are supported.");
+        }
+    }
 
     function onStart(io: InteractiveIo): void {
         printer = new CodePrinter(io);
@@ -436,4 +450,6 @@ export async function runCodeChat(): Promise<void> {
             }
         }
     }
+
+    copyMetadataToCommandTransformer(handlers, commandTransformer);
 }
