@@ -67,6 +67,18 @@ const api: ClientAPI = {
     getDynamicDisplay(source: string, id: string) {
         return ipcRenderer.invoke("get-dynamic-display", source, id);
     },
+    getTemplateSchema: (
+        appAgentName: string,
+        templateName: string,
+        data: unknown,
+    ) => {
+        return ipcRenderer.invoke(
+            "get-template-schema",
+            appAgentName,
+            templateName,
+            data,
+        );
+    },
     onUpdateDisplay(callback) {
         ipcRenderer.on("updateDisplay", callback);
     },

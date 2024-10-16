@@ -24,8 +24,7 @@ import {
     Dispatcher,
 } from "agent-dispatcher";
 
-import { IAgentMessage } from "../../../dispatcher/dist/handlers/common/interactiveIO.js";
-import { ActionTemplateSequence } from "../preload/electronTypes.js";
+import { IAgentMessage, TemplateEditConfig } from "agent-dispatcher";
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
@@ -333,7 +332,7 @@ async function askYesNo(
 
 let maxProposeActionId = 0;
 async function proposeAction(
-    actionTemplates: ActionTemplateSequence,
+    actionTemplates: TemplateEditConfig,
     requestId: RequestId,
     source: string,
 ) {
@@ -569,10 +568,18 @@ app.whenReady().then(async () => {
     ipcMain.handle("get-partial-completion", async (_event, prefix: string) => {
         return dispatcher.getPartialCompletion(prefix);
     });
+    ipcMain.handle("get-dynamic-display", async (_event, appAgentName, id) =>
+        dispatcher.getDynamicDisplay(appAgentName, "html", id),
+    );
     ipcMain.handle(
-        "get-dynamic-display",
-        async (_event, appAgentName: string, id: string) =>
-            dispatcher.getDynamicDisplay(appAgentName, "html", id),
+        "get-template-schema",
+        async (_event, appAgentName, templateName, data) => {
+            return dispatcher.getTemplateSchema(
+                appAgentName,
+                templateName,
+                data,
+            );
+        },
     );
     ipcMain.on("dom ready", async () => {
         settingSummary = dispatcher.getSettingSummary();

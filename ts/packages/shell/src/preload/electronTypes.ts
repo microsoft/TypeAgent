@@ -6,9 +6,14 @@ import {
     AppAgentEvent,
     DisplayAppendMode,
     DynamicDisplay,
+    TemplateSchema,
 } from "@typeagent/agent-sdk";
 import { ShellSettings } from "../main/shellSettings.js";
-import { IAgentMessage, PartialCompletionResult } from "agent-dispatcher";
+import {
+    TemplateEditConfig,
+    IAgentMessage,
+    PartialCompletionResult,
+} from "agent-dispatcher";
 import { RequestMetrics } from "agent-dispatcher";
 
 export type SpeechToken = {
@@ -16,67 +21,6 @@ export type SpeechToken = {
     expire: number;
     endpoint: string;
     region: string;
-};
-
-// TODO: remove duplicate types due to package circular dependencies (commonUtils/command.ts is other source)
-
-export type SearchMenuItem = {
-    matchText: string;
-    selectedText: string;
-    emojiChar?: string;
-    groupName?: string;
-};
-export type ActionInfo = {
-    actionTemplates: ActionTemplateSequence;
-    requestId: string;
-};
-
-export type TemplateParamPrimitive = {
-    type: "string" | "number" | "boolean";
-};
-
-export type TemplateParamStringUnion = {
-    type: "string-union";
-    typeEnum: string[];
-};
-
-export type TemplateParamScalar =
-    | TemplateParamPrimitive
-    | TemplateParamStringUnion;
-
-export type TemplateParamArray = {
-    type: "array";
-    elementType: TemplateParamField;
-};
-
-export type TemplateParamObject = {
-    type: "object";
-    fields: {
-        [key: string]: TemplateParamFieldOpt;
-    };
-};
-
-export type TemplateParamFieldOpt = {
-    optional?: boolean;
-    field: TemplateParamField;
-};
-
-export type TemplateParamField =
-    | TemplateParamScalar
-    | TemplateParamObject
-    | TemplateParamArray;
-
-export type ActionTemplate = {
-    agent: string;
-    name: string;
-    parameterStructure: TemplateParamObject;
-};
-
-export type ActionTemplateSequence = {
-    templates: ActionTemplate[];
-    actions: unknown;
-    prefaceSingle?: string;
-    prefaceMultiple?: string;
 };
 
 export enum NotifyCommands {
@@ -114,6 +58,11 @@ export interface ClientAPI {
         input: string,
     ) => Promise<PartialCompletionResult | undefined>;
     getDynamicDisplay: (source: string, id: string) => Promise<DynamicDisplay>;
+    getTemplateSchema: (
+        appAgentName: string,
+        templateName: string,
+        data: unknown,
+    ) => Promise<TemplateSchema>;
     onUpdateDisplay(
         callback: (
             e: Electron.IpcRendererEvent,
@@ -174,7 +123,7 @@ export interface ClientAPI {
         callback: (
             e: Electron.IpcRendererEvent,
             proposeActionId: number,
-            actionTemplates: ActionTemplateSequence,
+            actionTemplates: TemplateEditConfig,
             requestId: string,
             source: string,
         ) => void,

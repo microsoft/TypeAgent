@@ -98,12 +98,13 @@ export async function runCodeMemory(): Promise<void> {
     handlers.codeReview.metadata = codeReviewDef();
     async function codeReview(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, codeReviewDef());
-        const codeName = codeBlockNameFromFilePath(namedArgs.sourceFile);
-        console.log(codeBlockNameToString(codeName));
-        printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
+        const sourceFilePath = getSourcePath(namedArgs.sourceFile);
+        const codeName = codeBlockNameFromFilePath(sourceFilePath);
+        printer.writeLine(codeBlockNameToString(codeName));
+        printer.writeLine(`Source file:\n${sourceFilePath}`);
 
         // Load file to review
-        const code = await loadTypescriptCode(namedArgs.sourceFile);
+        const code = await loadTypescriptCode(sourceFilePath);
         if (namedArgs.verbose) {
             printer.writeCodeLines(code.sourceText);
         }
@@ -132,8 +133,10 @@ export async function runCodeMemory(): Promise<void> {
     handlers.codeDocument.metadata = codeDocumentDef();
     async function codeDocument(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, codeDocumentDef());
-        const functions = await loadCodeChunks(namedArgs.sourceFile);
+        const sourceFilePath = getSourcePath(namedArgs.sourceFile);
+        const functions = await loadCodeChunks(sourceFilePath);
         const concurrency = namedArgs.concurrency;
+        printer.writeLine(`${functions.length} function/s found.`);
         for (let i = 0; i < functions.length; i += concurrency) {
             let slice = functions.slice(i, i + concurrency);
             if (slice.length === 0) {

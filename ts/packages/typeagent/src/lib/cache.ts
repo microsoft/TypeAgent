@@ -13,6 +13,7 @@ export interface Cache<N, V> {
     get(name: N): V | undefined;
     put(name: N, value: V): void;
     remove(name: N): void;
+    removeLRU(): V | undefined;
     purge(): void;
     all(): NameValue<V, N>[];
 }
@@ -45,6 +46,7 @@ export function createLRUCache<N, V>(
         get,
         put,
         remove,
+        removeLRU,
         purge,
     };
 
@@ -86,13 +88,27 @@ export function createLRUCache<N, V>(
         }
     }
 
+    function removeLRU(): V | undefined {
+        if (kvTable.size >= maxEntries) {
+            const lru = <CacheEntry>mruList.tail;
+            if (lru) {
+                removeNode(lru);
+                if (onPurged) {
+                    onPurged(lru.name, lru.value);
+                }
+                return lru.value;
+            }    
+        }
+        return undefined;
+    }
+
     function removeNode(entry: CacheEntry): void {
         kvTable.delete(entry.name);
         mruList.removeNode(entry);
     }
 
     function purge(): void {
-        while (kvTable.size > maxEntries) {
+        while (kvTable.size >= maxEntries) {
             const tail = <CacheEntry>mruList.tail;
             if (tail) {
                 removeNode(tail);

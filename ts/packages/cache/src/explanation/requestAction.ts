@@ -3,15 +3,6 @@
 
 import { PromptSection } from "typechat";
 import { Entity } from "@typeagent/agent-sdk";
-import {
-    ActionTemplate,
-    ActionTemplateSequence,
-    ActionInfo,
-    TemplateParamField,
-    TemplateParamFieldOpt,
-    TemplateParamObject,
-} from "common-utils";
-
 export type HistoryContext = {
     promptSections: PromptSection[];
     entities: Entity[];
@@ -190,51 +181,6 @@ export class Actions {
         return Array.isArray(this.actions)
             ? this.actions.map((a) => a.toJSON())
             : this.actions.toJSON();
-    }
-
-    public toTemplateSequence(
-        prefaceSingle: string,
-        prefaceMultiple: string,
-        parameterStructures: Map<string, ActionInfo>,
-    ): ActionTemplateSequence {
-        const templates: ActionTemplate[] = [];
-        if (Array.isArray(this.actions)) {
-            for (const action of this.actions) {
-                const actionInfo = parameterStructures.get(
-                    action.fullActionName,
-                );
-                if (actionInfo === undefined) {
-                    throw new Error(
-                        `Action ${action.fullActionName} not found in parameterStructures`,
-                    );
-                }
-                templates.push({
-                    parameterStructure: actionInfo.template!.parameterStructure,
-                    name: action.actionName,
-                    agent: action.translatorNameString,
-                });
-            }
-        } else {
-            const actionInfo = parameterStructures.get(
-                this.actions.fullActionName,
-            );
-            if (actionInfo === undefined) {
-                throw new Error(
-                    `Action ${this.actions.fullActionName} not found in parameterStructures`,
-                );
-            }
-            templates.push({
-                parameterStructure: actionInfo.template!.parameterStructure,
-                name: this.actions.actionName,
-                agent: this.actions.translatorNameString,
-            });
-        }
-        return {
-            prefaceSingle,
-            prefaceMultiple,
-            actions: this.toFullActions(),
-            templates,
-        };
     }
 
     public toIAction() {

@@ -12,6 +12,7 @@ import { SearchAction } from "./knowledgeSearchWebSchema.js";
 import { dateTime, loadSchema } from "typeagent";
 import { DateTime, DateTimeRange } from "./dateTimeSchema.js";
 import { SearchTermsAction } from "./knowledgeTermSearchSchema.js";
+import { SearchTermsActionV2 } from "./knowledgeTermSearchSchema2.js";
 
 export interface KnowledgeActionTranslator {
     translateSearch(
@@ -22,6 +23,10 @@ export interface KnowledgeActionTranslator {
         userRequest: string,
         context?: PromptSection[],
     ): Promise<Result<SearchTermsAction>>;
+    translateSearchTermsV2(
+        userRequest: string,
+        context?: PromptSection[],
+    ): Promise<Result<SearchTermsActionV2>>;
 }
 
 export enum KnowledgeSearchMode {
@@ -59,10 +64,21 @@ export function createKnowledgeActionTranslator(
             "SearchTermsAction",
         ),
     );
+    const searchTermsTranslatorV2 = createJsonTranslator<SearchTermsActionV2>(
+        model,
+        createTypeScriptJsonValidator<SearchTermsActionV2>(
+            loadSchema(
+                ["dateTimeSchema.ts", "knowledgeTermSearchSchema2.ts"],
+                import.meta.url,
+            ),
+            "SearchTermsActionV2",
+        ),
+    );
 
     return {
         translateSearch,
         translateSearchTerms,
+        translateSearchTermsV2,
     };
 
     async function translateSearch(
@@ -77,6 +93,13 @@ export function createKnowledgeActionTranslator(
         context?: PromptSection[],
     ): Promise<Result<SearchTermsAction>> {
         return searchTermsTranslator.translate(userRequest, context);
+    }
+
+    async function translateSearchTermsV2(
+        userRequest: string,
+        context?: PromptSection[],
+    ): Promise<Result<SearchTermsActionV2>> {
+        return searchTermsTranslatorV2.translate(userRequest, context);
     }
 
     function createRequestPrompt(request: string) {

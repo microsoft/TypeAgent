@@ -27,6 +27,7 @@ import {
     TopicSearchResult,
     createTopicIndex,
     createTopicMerger,
+    createTopicSearchOptions,
 } from "./topics.js";
 import {
     TextIndexSettings,
@@ -38,11 +39,11 @@ import {
     EntitySearchOptions,
     EntitySearchResult,
     createEntityIndex,
+    createEntitySearchOptions,
     mergeEntities,
 } from "./entities.js";
 import { ExtractedKnowledge } from "./knowledge.js";
 import { Filter, SearchAction } from "./knowledgeSearchWebSchema.js";
-import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
 import {
     intersectSets,
@@ -58,14 +59,22 @@ import {
     ActionSearchOptions,
     ActionSearchResult,
     createActionIndex,
+    createActionSearchOptions,
 } from "./actions.js";
 import { SearchTermsAction, TermFilter } from "./knowledgeTermSearchSchema.js";
+import {
+    SearchTermsActionV2,
+    TermFilterV2,
+} from "./knowledgeTermSearchSchema2.js";
+import { getAllTermsInFilter } from "./searchProcessor.js";
+import { TypeChatLanguageModel } from "typechat";
 
 export interface RecentItems<T> {
     readonly entries: collections.CircularArray<T>;
     push(items: T | T[]): void;
     getContext(maxContextLength: number): string[];
     getUnique(): T[];
+    reset(): void;
 }
 
 export function createRecentItemsWindow<T>(
@@ -78,6 +87,9 @@ export function createRecentItemsWindow<T>(
         push,
         getContext,
         getUnique,
+        reset() {
+            entries.reset();
+        },
     };
 
     function push(items: T | T[]): void {
@@ -158,6 +170,10 @@ export interface Conversation<
         filters: TermFilter[],
         options: ConversationSearchOptions,
     ): Promise<SearchResponse>;
+    searchTermsV2(
+        filters: TermFilterV2[],
+        options?: ConversationSearchOptions | undefined,
+    ): Promise<SearchResponse>;
     searchMessages(
         query: string,
         options: SearchOptions,
@@ -215,7 +231,7 @@ export interface SearchResponse<
     allEntities(): IterableIterator<ConcreteEntity>;
     allEntityIds(): IterableIterator<TEntityId>;
     allEntityNames(): string[];
-    mergeAllEntities(topK: number): CompositeEntity[];
+    getCompositeEntities(topK: number): CompositeEntity[];
     entityTimeRanges(): (dateTime.DateRange | undefined)[];
 
     allActions(): IterableIterator<Action>;
@@ -248,7 +264,7 @@ export function createSearchResponse<
             allEntities,
             allEntityIds,
             allEntityNames,
-            mergeAllEntities,
+            getCompositeEntities: mergeAllEntities,
             entityTimeRanges,
             allActions,
             allActionIds,
@@ -413,6 +429,20 @@ export type ConversationSearchOptions = {
     loadMessages?: boolean;
 };
 
+export function createConversationSearchOptions(
+    topLevelSummary: boolean = false,
+): ConversationSearchOptions {
+    const topicLevel = topLevelSummary ? 2 : 1;
+    const searchOptions: ConversationSearchOptions = {
+        entity: createEntitySearchOptions(true),
+        topic: createTopicSearchOptions(topLevelSummary),
+        action: createActionSearchOptions(true),
+        topicLevel,
+        loadMessages: !topLevelSummary,
+    };
+    return searchOptions;
+}
+
 /**
  * Create or load a persistent conversation, using the given rootPath as the storage root.
  * - The conversation is stored in folders below the given root path
@@ -435,7 +465,10 @@ export async function createConversation(
     type ActionId = string;
 
     settings.indexActions ??= true;
-
+    folderSettings ??= {
+        cacheNames: true,
+        useWeakRefs: true,
+    };
     const messages = await createTextStore(
         { concurrency: settings.indexSettings.concurrency },
         path.join(rootPath, "messages"),
@@ -475,6 +508,7 @@ export async function createConversation(
         addKnowledgeToIndex,
         search,
         searchTerms,
+        searchTermsV2,
         searchMessages,
         findMessage,
 
@@ -826,6 +860,51 @@ export async function createConversation(
         return results;
     }
 
+    async function searchTermsV2(
+        filters: TermFilterV2[],
+        searchOptions?: ConversationSearchOptions | undefined,
+    ): Promise<SearchResponse> {
+        const options = searchOptions ?? createConversationSearchOptions();
+        const [entityIndex, topicIndex, actionIndex] = await Promise.all([
+            getEntityIndex(),
+            getTopicsIndex(options.topicLevel),
+            getActionIndex(),
+        ]);
+        const results = createSearchResponse<MessageId, TopicId, EntityId>();
+        for (let filter of filters) {
+            const actionResult = options.action
+                ? await actionIndex.searchTermsV2(filter, options.action)
+                : undefined;
+            const hasActionMatches =
+                actionResult &&
+                actionResult.actionIds &&
+                actionResult.actionIds.length > 0;
+            // Search entities
+            filter = {
+                searchTerms: getAllTermsInFilter(filter, !hasActionMatches),
+            };
+            const tasks = [
+                topicIndex.searchTermsV2(filter, options.topic),
+                entityIndex.searchTermsV2(filter, options.entity),
+            ];
+            const [topicResult, entityResult] = await Promise.all(tasks);
+            results.topics.push(topicResult);
+            results.entities.push(entityResult);
+            if (actionResult) {
+                results.actions.push(actionResult);
+            }
+        }
+        if (options.loadMessages) {
+            await resolveMessages(
+                results,
+                topicIndex,
+                entityIndex,
+                actionIndex,
+            );
+        }
+        return results;
+    }
+
     async function searchMessages(
         query: string,
         options: SearchOptions,
@@ -936,23 +1015,40 @@ export async function createConversation(
     }
 }
 
+export interface ConversationTopicMerger extends TopicMerger {
+    reset(): Promise<void>;
+}
+
 export async function createConversationTopicMerger(
-    mergeModel: ChatModel,
+    mergeModel: TypeChatLanguageModel,
     conversation: Conversation,
     baseTopicLevel: number,
-    mergeWindow: number,
-): Promise<TopicMerger> {
-    const baseTopics = await conversation.getTopicsIndex(baseTopicLevel);
-    const topLevelTopics = await conversation.getTopicsIndex(
-        baseTopicLevel + 1,
-    );
-    const topicMerger = await createTopicMerger(
-        mergeModel,
-        baseTopics,
-        mergeWindow,
-        topLevelTopics,
-    );
-    return topicMerger;
+    mergeWindowSize: number = 4,
+): Promise<ConversationTopicMerger> {
+    let baseTopics: TopicIndex | undefined;
+    let topLevelTopics: TopicIndex | undefined;
+    let topicMerger: TopicMerger | undefined;
+    await init();
+
+    return {
+        ...topicMerger!,
+        reset,
+    };
+
+    async function reset(): Promise<void> {
+        await init();
+    }
+
+    async function init() {
+        baseTopics = await conversation.getTopicsIndex(baseTopicLevel);
+        topLevelTopics = await conversation.getTopicsIndex(baseTopicLevel + 1);
+        topicMerger = await createTopicMerger(
+            mergeModel,
+            baseTopics,
+            { mergeWindowSize, trackRecent: true },
+            topLevelTopics,
+        );
+    }
 }
 
 export interface RecentConversation {
@@ -979,5 +1075,10 @@ export type SearchActionResponse = {
 
 export type SearchTermsActionResponse = {
     action: SearchTermsAction;
+    response?: SearchResponse | undefined;
+};
+
+export type SearchTermsActionResponseV2 = {
+    action: SearchTermsActionV2;
     response?: SearchResponse | undefined;
 };

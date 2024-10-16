@@ -20,6 +20,11 @@ export interface MessageIndex<TMessageId> extends SemanticIndex<TMessageId> {
         maxMatches: number,
         minScore?: number,
     ): Promise<ScoredItem<TMessageId>[]>;
+
+    putMultiple(
+        items: [string, TMessageId][],
+        onlyIfNew?: boolean,
+    ): Promise<void>;
 }
 
 export async function createMessageIndex(
@@ -41,8 +46,21 @@ export async function createMessageIndex(
     );
     return {
         ...semanticIndex,
+        putMultiple,
         nearestNeighborsInSubset,
     };
+
+    async function putMultiple(
+        items: [string, MessageId][],
+        onlyIfNew?: boolean,
+        concurrency?: number,
+    ): Promise<void> {
+        return semanticIndex.putMultiple(
+            items,
+            onlyIfNew,
+            settings.concurrency,
+        );
+    }
 
     async function nearestNeighborsInSubset(
         value: string,

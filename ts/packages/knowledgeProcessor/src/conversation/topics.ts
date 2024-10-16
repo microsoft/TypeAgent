@@ -49,6 +49,8 @@ import {
 } from "../setOperations.js";
 import { createRecentItemsWindow } from "./conversation.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
+import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
+import { getAllTermsInFilter } from "./searchProcessor.js";
 
 export interface TopicExtractor {
     nextTopic(
@@ -59,7 +61,7 @@ export interface TopicExtractor {
     ): Promise<TopicResponse | undefined>;
     mergeTopics(
         topics: Topic[],
-        pastTopics?: Topic[],
+        pastTopics?: Topic[] | undefined,
     ): Promise<AggregateTopicResponse | undefined>;
 }
 
@@ -177,91 +179,148 @@ export function createTopicExtractor(
     }
 }
 
+export type TopicMergerSettings = {
+    mergeWindowSize: number;
+    trackRecent: boolean;
+};
+
 export interface TopicMerger<TTopicId = any> {
+    readonly settings: TopicMergerSettings;
+    /**
+     * If enough prior topics to fill settings.mergeWindowSize are available then:
+     *  - Merge topics into a higher level topic
+     *  - Return the  merged topic
+     *  - Optionally update indexes
+     * @param updateIndex if true, add newly merged topic into topic index
+     */
     next(
-        updateSequence: boolean,
+        lastTopics: TextBlock[],
+        lastTopicIds: TTopicId[],
+        timestamp: Date | undefined,
         updateIndex: boolean,
     ): Promise<dateTime.Timestamped<TextBlock<TTopicId>> | undefined>;
-    mergeWindow(): Promise<
-        dateTime.Timestamped<TextBlock<TTopicId>> | undefined
-    >;
+    mergeWindow(
+        lastTopics: TextBlock[],
+        lastTopicIds: TTopicId[],
+        timestamp: Date | undefined,
+        windowSize: number,
+        updateIndex: boolean,
+    ): Promise<dateTime.Timestamped<TextBlock<TTopicId>> | undefined>;
+    clearRecent(): void;
 }
 
 export async function createTopicMerger<TTopicId = string>(
     model: TypeChatLanguageModel,
     childIndex: TopicIndex<TTopicId>,
-    windowSize: number,
+    settings: TopicMergerSettings,
     topicIndex?: TopicIndex<TTopicId, TTopicId>,
 ): Promise<TopicMerger<TTopicId>> {
     const topicExtractor = createTopicExtractor(model);
     let childSize: number = await childIndex.sequence.size();
-    const recentTopics = createRecentItemsWindow<Topic>(windowSize);
+    let recentTopics = createRecentItemsWindow<Topic>(settings.mergeWindowSize);
     return {
+        settings,
         next,
         mergeWindow,
+        clearRecent,
     };
 
     async function next(
-        updateSequence: boolean,
+        lastTopics: TextBlock[],
+        lastTopicIds: TTopicId[],
+        timestamp: Date | undefined,
         updateIndex: boolean,
     ): Promise<dateTime.Timestamped<TextBlock<TTopicId>> | undefined> {
         ++childSize;
-        if (childSize % windowSize > 0) {
+        if (childSize % settings.mergeWindowSize > 0) {
             return undefined;
         }
-        const aggregateTopic = await mergeWindow();
-        if (aggregateTopic) {
-            if (topicIndex) {
-                if (updateSequence) {
-                    await topicIndex.putNext(
-                        [aggregateTopic.value],
-                        aggregateTopic.timestamp,
-                    );
-                }
-                if (updateIndex) {
-                    await topicIndex.put(aggregateTopic.value);
-                }
-            }
-            recentTopics.push(aggregateTopic.value.value);
-        }
-        return aggregateTopic;
+        return await mergeWindow(
+            lastTopics,
+            lastTopicIds,
+            timestamp,
+            settings.mergeWindowSize,
+            updateIndex,
+        );
     }
 
-    async function mergeWindow(): Promise<
-        dateTime.Timestamped<TextBlock<TTopicId>> | undefined
-    > {
-        const topicWindow = await childIndex.sequence.getNewest(windowSize);
-        if (topicWindow.length === 0) {
-            return undefined;
+    async function mergeWindow(
+        lastTopics: TextBlock[],
+        lastTopicIds: TTopicId[],
+        timestamp: Date | undefined,
+        windowSize: number,
+        updateIndex: boolean,
+    ): Promise<dateTime.Timestamped<TextBlock<TTopicId>> | undefined> {
+        const topics: Topic[] =
+            windowSize === 1 ? lastTopics.map((t) => t.value) : [];
+        const allTopicIds: TTopicId[] = windowSize === 1 ? lastTopicIds : [];
+        if (windowSize > 1) {
+            const topicWindow = await childIndex.sequence.getNewest(windowSize);
+            if (topicWindow.length === 0) {
+                return undefined;
+            }
+            timestamp = topicWindow[0].timestamp;
+            for (const entry of topicWindow) {
+                const topicsText = await childIndex.getMultipleText(
+                    entry.value,
+                );
+                topics.push(topicsText.join("\n"));
+                allTopicIds.push(...entry.value);
+            }
+        } else {
+            timestamp ??= new Date();
         }
-        const timestamp = topicWindow[0].timestamp;
-        const topics: Topic[] = [];
-        const allTopicIds: TTopicId[] = [];
-        for (const entry of topicWindow) {
-            const topicsText = await childIndex.getMultipleText(entry.value);
-            topics.push(topicsText.join("\n"));
-            allTopicIds.push(...entry.value);
+        if (topics.length === 0) {
+            return undefined;
         }
         let topicsResponse = await topicExtractor.mergeTopics(
             topics,
-            recentTopics.getUnique(),
+            settings.trackRecent ? recentTopics.getUnique() : undefined,
         );
-        if (topicsResponse) {
-            return {
-                timestamp,
-                value: {
-                    type: TextBlockType.Sentence,
-                    value: topicsResponse.topic,
-                    sourceIds: uniqueFrom(allTopicIds),
-                },
-            };
+        if (!topicsResponse) {
+            return undefined;
         }
-        return undefined;
+        const aggregateTopic = {
+            timestamp,
+            value: {
+                type: TextBlockType.Sentence,
+                value: topicsResponse.topic,
+                sourceIds: uniqueFrom(allTopicIds),
+            },
+        };
+        if (topicIndex) {
+            if (updateIndex) {
+                await topicIndex.putNext(
+                    [aggregateTopic.value],
+                    aggregateTopic.timestamp,
+                );
+                await topicIndex.put(aggregateTopic.value);
+            }
+        }
+        if (settings.trackRecent) {
+            recentTopics.push(aggregateTopic.value.value);
+        }
+
+        return aggregateTopic;
+    }
+
+    function clearRecent() {
+        recentTopics.reset();
     }
 }
 
 export interface TopicSearchOptions extends SearchOptions {
     loadTopics?: boolean;
+}
+
+export function createTopicSearchOptions(
+    isTopicSummary: boolean = false,
+): TopicSearchOptions {
+    return {
+        maxMatches: isTopicSummary ? Number.MAX_SAFE_INTEGER : 2,
+        minScore: 0.8,
+        loadTopics: true,
+    };
 }
 
 export interface TopicSearchResult<TTopicId = any> {
@@ -312,6 +371,10 @@ export interface TopicIndex<TTopicId = any, TSourceId = any> {
         filter: TermFilter,
         options: TopicSearchOptions,
     ): Promise<TopicSearchResult<TTopicId>>;
+    searchTermsV2(
+        filter: TermFilterV2,
+        options: TopicSearchOptions,
+    ): Promise<TopicSearchResult<TTopicId>>;
     loadSourceIds(
         sourceIdLog: TemporalLog<TSourceId>,
         results: TopicSearchResult<TTopicId>[],
@@ -358,6 +421,7 @@ export async function createTopicIndex<TSourceId = any>(
         putMultiple,
         search,
         searchTerms,
+        searchTermsV2,
         loadSourceIds,
     };
 
@@ -499,6 +563,21 @@ export async function createTopicIndex<TSourceId = any>(
             filter.terms && filter.terms.length > 0
                 ? filter.terms.join(" ")
                 : "*";
+        const topicFilter: TopicFilter = {
+            filterType: "Topic",
+            topics,
+            timeRange: filter.timeRange,
+        };
+        return search(topicFilter, options);
+    }
+
+    async function searchTermsV2(
+        filter: TermFilterV2,
+        options: TopicSearchOptions,
+    ): Promise<TopicSearchResult<TopicId>> {
+        // We will just use the standard topic stuff for now, since that does the same thing
+        const terms = getAllTermsInFilter(filter);
+        const topics = terms && terms.length > 0 ? terms.join(" ") : "*";
         const topicFilter: TopicFilter = {
             filterType: "Topic",
             topics,

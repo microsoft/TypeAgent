@@ -17,7 +17,7 @@ import {
     removeDir,
 } from "typeagent";
 import {
-    FrequencyTable,
+    HitTable,
     SetOp,
     intersectMultiple,
     intersectUnionMultiple,
@@ -25,12 +25,13 @@ import {
     union,
     unionArrays,
     unionMultiple,
+    unionMultipleScored,
 } from "./setOperations.js";
 import { TextBlock, TextBlockType } from "./text.js";
 import { TemporalLog, createTemporalLog } from "./temporal.js";
 import { TextEmbeddingModel } from "aiclient";
 
-export interface KeyValueIndex<TKeyId, TValueId> {
+export interface KeyValueIndex<TKeyId = any, TValueId = any> {
     get(id: TKeyId): Promise<TValueId[] | undefined>;
     getMultiple(ids: TKeyId[], concurrency?: number): Promise<TValueId[][]>;
     put(postings: TValueId[], id?: TKeyId): Promise<TKeyId>;
@@ -114,13 +115,13 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
     ): Promise<TSourceId[]>;
     getNearestHits(
         value: string,
-        hitCounter: FrequencyTable<TSourceId>,
+        hitTable: HitTable<TSourceId>,
         maxMatches?: number,
         minScore?: number,
     ): Promise<void>;
     getNearestHitsMultiple(
         values: string[],
-        hitCounter: FrequencyTable<TSourceId>,
+        hitTable: HitTable<TSourceId>,
         maxMatches?: number,
         minScore?: number,
     ): Promise<void>;
@@ -139,6 +140,11 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         maxMatches: number,
         minScore?: number,
     ): Promise<TTextId[]>;
+    getNearestTextScored(
+        text: string,
+        maxMatches: number,
+        minScore?: number,
+    ): Promise<ScoredItem<TTextId>[]>;
     getNearestTextMultiple(
         values: string[],
         orMatches: boolean,
@@ -211,6 +217,7 @@ export async function createTextIndex<TSourceId = any>(
         getNearestMultiple,
         getNearestText,
         getNearestTextMultiple,
+        getNearestTextScored,
         nearestNeighbors,
         nearestNeighborsText,
         remove,
@@ -375,41 +382,52 @@ export async function createTextIndex<TSourceId = any>(
 
     async function getNearestHits(
         value: string,
-        hitCounter: FrequencyTable<TSourceId>,
+        hitTable: HitTable<TSourceId>,
         maxMatches?: number,
         minScore?: number,
     ): Promise<void> {
         maxMatches ??= 1;
         // Check exact match first
-        let postings = await get(value);
+        let postingsExact = await get(value);
         let postingsNearest:
-            | TSourceId[]
-            | IterableIterator<TSourceId>
+            | ScoredItem<TSourceId>[]
+            | IterableIterator<ScoredItem<TSourceId>>
             | undefined;
         if (maxMatches > 1) {
-            const nearestPostings = await getNearestPostings(
+            const scoredPostings = await getNearestPostingsWithScore(
                 value,
                 maxMatches,
                 minScore,
             );
-            postingsNearest = unionMultiple(...nearestPostings);
-        } else if (semanticIndex && (!postings || postings.length === 0)) {
+            postingsNearest = unionMultipleScored(...scoredPostings);
+        } else if (
+            semanticIndex &&
+            (!postingsExact || postingsExact.length === 0)
+        ) {
             const textId = await semanticIndex.nearestNeighbor(value, minScore);
             if (textId) {
-                postingsNearest = await postingFolder.get(textId.item);
+                const postings = await postingFolder.get(textId.item);
+                if (postings) {
+                    postingsNearest = scorePostings(postings, textId.score);
+                }
             }
         }
-        hitCounter.addMultiple(unionMultiple(postings, postingsNearest));
+        hitTable.addMultipleScored(
+            unionMultipleScored(
+                postingsExact ? scorePostings(postingsExact, 1.0) : undefined,
+                postingsNearest,
+            ),
+        );
     }
 
     async function getNearestHitsMultiple(
         values: string[],
-        hitCounter: FrequencyTable<TSourceId>,
+        hitTable: HitTable<TSourceId>,
         maxMatches?: number,
         minScore?: number,
     ): Promise<void> {
         return asyncArray.forEachAsync(values, settings.concurrency, (v) =>
-            getNearestHits(v, hitCounter, maxMatches, minScore),
+            getNearestHits(v, hitTable, maxMatches, minScore),
         );
     }
 
@@ -448,7 +466,7 @@ export async function createTextIndex<TSourceId = any>(
             case SetOp.Intersect:
                 return intersectMultiple(...matches);
             case SetOp.IntersectUnion:
-                return intersectUnionMultiple(...matches);
+                return intersectUnionMultiple(...matches) ?? [];
         }
     }
 
@@ -473,6 +491,35 @@ export async function createTextIndex<TSourceId = any>(
             if (nearestMatches.length > 0) {
                 const nearestIds = nearestMatches.map((m) => m.item).sort();
                 matchedIds = unionArrays(matchedIds, nearestIds) as TextId[];
+            }
+        }
+        return matchedIds;
+    }
+
+    async function getNearestTextScored(
+        value: string,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<ScoredItem<TextId>[]> {
+        maxMatches ??= 1;
+        // Check exact match first
+        let matchedIds: ScoredItem<TextId>[] = [];
+        let exactMatchId = textToId(value);
+        if (exactMatchId) {
+            matchedIds.push({ item: exactMatchId, score: 1.0 });
+        }
+        if (semanticIndex && maxMatches > 1) {
+            const nearestMatches = await semanticIndex.nearestNeighbors(
+                value,
+                maxMatches,
+                minScore,
+            );
+            if (nearestMatches.length > 0) {
+                for (const match of nearestMatches) {
+                    if (match.item !== exactMatchId) {
+                        matchedIds.push(match);
+                    }
+                }
             }
         }
         return matchedIds;
@@ -576,6 +623,54 @@ export async function createTextIndex<TSourceId = any>(
         return asyncArray.mapAsync(nearestText, settings.concurrency, (m) =>
             postingFolder.get(m.item),
         );
+    }
+
+    async function getNearestPostingsWithScore(
+        value: string,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<IterableIterator<ScoredItem<TSourceId>>[]> {
+        if (!semanticIndex) {
+            return [];
+        }
+        maxMatches ??= 1;
+        const nearestText = await semanticIndex.nearestNeighbors(
+            value,
+            maxMatches,
+            minScore,
+        );
+        const nearestPostings = await asyncArray.mapAsync(
+            nearestText,
+            settings.concurrency,
+            (m) => postingFolder.get(m.item),
+        );
+        const scoredPostings: IterableIterator<ScoredItem<TSourceId>>[] = [];
+        for (let i = 0; i < nearestPostings.length; ++i) {
+            const posting = nearestPostings[i];
+            if (posting) {
+                scoredPostings.push(
+                    scorePostings(posting, nearestText[i].score),
+                );
+            }
+        }
+        return scoredPostings;
+    }
+
+    function* scorePostings(
+        postings: TSourceId[],
+        score: number,
+    ): IterableIterator<ScoredItem<TSourceId>> {
+        /*
+        return postings.map((item) => {
+            return {
+                item,
+                score,
+            };
+        });
+        */
+        for (const item of postings) {
+            yield { item, score };
+        }
     }
 
     function textToId(
@@ -724,5 +819,26 @@ export async function createKnowledgeStore<T>(
 
     async function add(item: T, id?: TId): Promise<TId> {
         return id ? id : await entries.put(item, id);
+    }
+}
+
+export interface TermMap {
+    get(term: string): string | undefined;
+    put(term: string, value: string): void;
+}
+
+export function createTermMap(caseSensitive: boolean = false) {
+    const map = new Map<string, string>();
+    return {
+        get(term: string) {
+            return map.get(prepareTerm(term));
+        },
+        put(term: string, value: string) {
+            map.set(prepareTerm(term), value);
+        },
+    };
+
+    function prepareTerm(term: string): string {
+        return caseSensitive ? term : term.toLowerCase();
     }
 }

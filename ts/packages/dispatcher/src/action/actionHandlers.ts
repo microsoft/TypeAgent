@@ -10,8 +10,6 @@ import {
     AppAgentEvent,
     SessionContext,
     ActionResult,
-    DynamicDisplay,
-    DisplayType,
     DisplayContent,
     ActionContext,
     DisplayAppendMode,
@@ -163,20 +161,6 @@ export function createSessionContext<T = unknown>(
     };
     (sessionContext as any).conversationManager = context.conversationManager;
     return sessionContext;
-}
-
-export async function getDynamicDisplay(
-    context: CommandHandlerContext,
-    appAgentName: string,
-    type: DisplayType,
-    displayId: string,
-): Promise<DynamicDisplay> {
-    const appAgent = context.agents.getAppAgent(appAgentName);
-    if (appAgent.getDynamicDisplay === undefined) {
-        throw new Error(`Dynamic display not supported by '${appAgentName}'`);
-    }
-    const sessionContext = context.agents.getSessionContext(appAgentName);
-    return appAgent.getDynamicDisplay(type, displayId, sessionContext);
 }
 
 async function executeAction(

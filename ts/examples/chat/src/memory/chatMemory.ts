@@ -17,6 +17,7 @@ import {
 } from "interactive-app";
 import {
     asyncArray,
+    collections,
     dateTime,
     getFileName,
     isDirectoryPath,
@@ -100,14 +101,6 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         conversationPath,
         conversationSettings,
     );
-    const emailStorePath = path.join(
-        storePath,
-        ReservedConversationNames.outlook,
-    );
-    const emailConversation = await createConversation(
-        emailStorePath,
-        conversationSettings,
-    );
     const context: ChatContext = {
         storePath,
         chatModel,
@@ -128,12 +121,11 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         conversation,
         entityTopK: 16,
         searcher: createSearchProcessor(conversation, chatModel, true, 16),
-        emailMemory: await knowLib.conversation.createConversationManager(
+        emailMemory: await knowLib.email.createEmailMemory(
+            chatModel,
             ReservedConversationNames.outlook,
-            emailStorePath,
-            false,
-            emailConversation,
-            knowLib.email.createEmailTopicMerger(),
+            storePath,
+            conversationSettings,
         ),
     };
     context.searchMemory = await createSearchMemory(context);
@@ -257,6 +249,7 @@ export async function runChatMemory(): Promise<void> {
         actions,
         searchQuery,
         search,
+        searchV2Debug,
         makeTestSet,
         runTestSet,
     };
@@ -445,7 +438,7 @@ export async function runChatMemory(): Promise<void> {
                 sourcePath: argSourceFileOrFolder(),
             },
             options: {
-                concurrency: argConcurrency(2),
+                concurrency: argConcurrency(1),
                 clean: argClean(),
             },
         };
@@ -469,15 +462,24 @@ export async function runChatMemory(): Promise<void> {
                 namedArgs.concurrency,
             );
             let i = 0;
-            for (const email of emails) {
+            for (const emailBatch of collections.slices(
+                emails,
+                namedArgs.concurrency,
+            )) {
                 ++i;
-                printer.writeProgress(i, emails.length);
-                if (email.sourcePath) {
-                    printer.writeLine(email.sourcePath);
-                }
+                printer.writeBatchProgress(
+                    emailBatch,
+                    undefined,
+                    emails.length,
+                );
+                emailBatch.value.forEach((e) =>
+                    printer.writeLine(
+                        `${e.sourcePath}\n${knowLib.email.emailToString(e).length} chars`,
+                    ),
+                );
                 await knowLib.email.addEmailToConversation(
                     context.emailMemory,
-                    email,
+                    emailBatch.value,
                 );
             }
         }
@@ -611,7 +613,7 @@ export async function runChatMemory(): Promise<void> {
             namedArgs.maxTurns,
         );
         let messageIndex = await context.conversation.getMessageIndex();
-        cm.topicMerger.mergeWindow = namedArgs.mergeWindow;
+        cm.topicMerger.settings.mergeWindowSize = namedArgs.mergeWindow;
 
         let count = 0;
         const concurrency = namedArgs.concurrency;
@@ -642,10 +644,20 @@ export async function runChatMemory(): Promise<void> {
                         message,
                         knowledge,
                     );
-                const mergedTopic = await cm.topicMerger.next(true, true);
-                if (mergedTopic) {
-                    printer.writeTitle("Merged Topic:");
-                    printer.writeTemporalBlock(chalk.blueBright, mergedTopic);
+                if (knowledgeIds.topicIds && knowledgeIds.topicIds.length > 0) {
+                    const mergedTopic = await cm.topicMerger.next(
+                        knowledge.topics!,
+                        knowledgeIds.topicIds,
+                        undefined,
+                        true,
+                    );
+                    if (mergedTopic) {
+                        printer.writeTitle("Merged Topic:");
+                        printer.writeTemporalBlock(
+                            chalk.blueBright,
+                            mergedTopic,
+                        );
+                    }
                 }
                 await cm.conversation.addKnowledgeToIndex(
                     knowledge,
@@ -674,7 +686,7 @@ export async function runChatMemory(): Promise<void> {
                 exact: argBool("Exact match?"),
                 count: argNum("Num matches", 3),
                 minScore: argMinScore(0),
-                showMessages: argBool(),
+                showSource: argBool("Show the sources of this topic"),
                 level: argNum("Topics at this level", 1),
             },
         };
@@ -707,8 +719,12 @@ export async function runChatMemory(): Promise<void> {
             return;
         }
 
+        const sourceIndex =
+            namedArgs.level > 1
+                ? await context.conversation.getTopicsIndex(namedArgs.level - 1)
+                : undefined;
         for await (const topic of index.entries()) {
-            await writeExtractedTopic(topic, namedArgs.showMessages);
+            await writeExtractedTopic(topic, namedArgs.showSource, sourceIndex);
         }
     }
 
@@ -730,7 +746,7 @@ export async function runChatMemory(): Promise<void> {
     handlers.entities.metadata = entitiesDef();
     async function entities(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, entitiesDef());
-        let query = namedArgs.name ?? namedArgs.type;
+        let query = namedArgs.name ?? namedArgs.type ?? namedArgs.facet;
         if (query) {
             const isMultipart =
                 namedArgs.facet || (namedArgs.name && namedArgs.type);
@@ -774,13 +790,14 @@ export async function runChatMemory(): Promise<void> {
                     conversation.NoEntityName,
                 ),
                 object: arg("Object to search for"),
+                indirectObject: arg("Indirect object to search for"),
                 verb: arg(
                     "Verb to search for. Compound verbs are comma separated",
                 ),
                 tense: arg("Verb tense: past | present | future", "past"),
                 count: argNum("Num action matches", 1),
                 verbCount: argNum("Num verb matches", 1),
-                nameCount: argNum("Num name matches", 2),
+                nameCount: argNum("Num name matches", 3),
                 showMessages: argBool("display messages", false),
             },
         };
@@ -808,7 +825,7 @@ export async function runChatMemory(): Promise<void> {
             if (verbs.length === 0) {
                 verbs = undefined;
             } else if (verbs[0] === "*") {
-                const allVerbs = [...index.verbIndex.text()].sort();
+                const allVerbs = await index.getAllVerbs();
                 printer.writeList(allVerbs, { type: "ul" });
                 return;
             }
@@ -818,6 +835,7 @@ export async function runChatMemory(): Promise<void> {
             filterType: "Action",
             subjectEntityName: namedArgs.subject,
             objectEntityName: namedArgs.object,
+            indirectObjectEntityName: namedArgs.indirectObject,
         };
         if (verbs && verbs.length > 0) {
             filter.verbFilter = {
@@ -825,19 +843,15 @@ export async function runChatMemory(): Promise<void> {
                 verbTense,
             };
         }
-        const matches = await index.search(filter, {
-            maxMatches: namedArgs.count,
-            verbSearchOptions: {
-                maxMatches: namedArgs.verbCount,
-            },
-            nameSearchOptions: {
-                maxMatches: namedArgs.nameCount,
-            },
-            loadActions: true,
-        });
+        const searchOptions = conversation.createActionSearchOptions(true);
+        searchOptions.verbSearchOptions!.maxMatches = namedArgs.verbCount;
+        searchOptions.maxMatches = namedArgs.nameCount;
+        const matches = await index.search(filter, searchOptions);
         if (matches.actions) {
-            for (const action of matches.actions) {
-                printer.writeLine(conversation.actionToString(action));
+            for (let i = 0; i < matches.actions.length; ++i) {
+                printer.writeLine(
+                    `${i + 1}, ${conversation.actionToString(matches.actions[i])}`,
+                );
             }
             if (namedArgs.showMessages && matches.actionIds) {
                 const messages = await loadMessages(
@@ -860,8 +874,9 @@ export async function runChatMemory(): Promise<void> {
                 fallback: argBool("Fallback to message search", true),
                 action: argBool("Include actions"),
                 eval: argBool("Evaluate search query", true),
-                debug: argBool("Show debug info", true),
-                save: argBool("Save the search", true),
+                debug: argBool("Show debug info", false),
+                save: argBool("Save the search", false),
+                v2: argBool("Run V2 match", false),
             },
         };
     }
@@ -882,7 +897,6 @@ export async function runChatMemory(): Promise<void> {
             maxMatches,
             minScore,
             maxMessages: 15,
-            combinationSetOp: knowLib.sets.SetOp.IntersectUnion,
             progress: (value) => printer.writeJson(value),
         };
         if (namedArgs.fallback) {
@@ -942,6 +956,33 @@ export async function runChatMemory(): Promise<void> {
     handlers.search.metadata = searchDef();
     async function search(args: string[], io: InteractiveIo): Promise<void> {
         await searchConversation(context.searcher, true, args);
+    }
+
+    function searchV2DebugDef(): CommandMetadata {
+        return {
+            description: "Search by terms V2",
+            args: {
+                query: arg("Query to run"),
+            },
+        };
+    }
+    handlers.searchV2Debug.metadata = searchV2DebugDef();
+    async function searchV2Debug(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, searchV2DebugDef());
+        const result = await context.searcher.actions.translateSearchTermsV2(
+            namedArgs.query,
+        );
+        if (!result.success) {
+            printer.writeError(result.message);
+            return;
+        }
+        printer.writeJson(result.data, true);
+        if (result.data.actionName === "getAnswer") {
+            const searchResponse = await context.conversation.searchTermsV2(
+                result.data.parameters.filters,
+            );
+            printer.writeSearchResponse(searchResponse);
+        }
     }
 
     async function searchNoEval(
@@ -1036,7 +1077,6 @@ export async function runChatMemory(): Promise<void> {
         recordAnswer: boolean,
         args: string[],
     ): Promise<void> {
-        const timestampQ = new Date();
         const namedArgs = parseNamedArguments(args, searchDef());
         const maxMatches = namedArgs.maxMatches;
         const minScore = namedArgs.minScore;
@@ -1047,8 +1087,7 @@ export async function runChatMemory(): Promise<void> {
         const searchOptions: conversation.SearchProcessingOptions = {
             maxMatches,
             minScore,
-            maxMessages: 15,
-            combinationSetOp: knowLib.sets.SetOp.IntersectUnion,
+            maxMessages: 10,
             progress: (value) => printer.writeJson(value),
         };
         if (namedArgs.fallback) {
@@ -1065,11 +1104,24 @@ export async function runChatMemory(): Promise<void> {
             return;
         }
 
-        const result = await searcher.searchTerms(
-            query,
-            undefined,
-            searchOptions,
-        );
+        const timestampQ = new Date();
+        let result:
+            | conversation.SearchTermsActionResponse
+            | conversation.SearchTermsActionResponseV2
+            | undefined;
+        if (namedArgs.v2) {
+            result = await searcher.searchTermsV2(
+                query,
+                undefined,
+                searchOptions,
+            );
+        } else {
+            result = await searcher.searchTerms(
+                query,
+                undefined,
+                searchOptions,
+            );
+        }
         if (!result) {
             printer.writeError("No result");
             return;
@@ -1089,13 +1141,13 @@ export async function runChatMemory(): Promise<void> {
     }
 
     async function writeSearchTermsResult(
-        result: conversation.SearchTermsActionResponse,
-        stats: boolean,
+        result:
+            | conversation.SearchTermsActionResponse
+            | conversation.SearchTermsActionResponseV2,
+        debug: boolean,
     ) {
         if (result.response && result.response.answer) {
-            if (stats) {
-                writeResultStats(result.response);
-            }
+            writeResultStats(result.response);
             if (result.response.answer.answer) {
                 const answer = result.response.answer.answer;
                 printer.writeInColor(chalk.green, answer);
@@ -1104,6 +1156,12 @@ export async function runChatMemory(): Promise<void> {
                 printer.writeInColor(chalk.red, answer);
             }
             printer.writeLine();
+            if (debug) {
+                printer.writeSearchResponse(
+                    result.response,
+                    context.searcher.answers.settings,
+                );
+            }
         }
     }
 
@@ -1198,17 +1256,7 @@ export async function runChatMemory(): Promise<void> {
     ) {
         printer.writeTitle("DEBUG INFORMATION");
         if (rr.response) {
-            if (rr.response.topics) {
-                await writeTopicResults(topicIndex, rr.response, false, false);
-            }
-            if (rr.response.entities) {
-                await writeEntityResults(
-                    entityIndex,
-                    rr.response,
-                    false,
-                    false,
-                );
-            }
+            printer.writeSearchResponse(rr.response);
             if (rr.response.messages) {
                 printer.writeTitle("Messages");
                 printer.writeTemporalBlocks(
@@ -1239,7 +1287,9 @@ export async function runChatMemory(): Promise<void> {
                 const topicIds = new Set(response.allTopicIds());
                 printer.writeLine(`Topic Hit Count: ${topicIds.size}`);
             }
-            const allEntities = response.mergeAllEntities(16);
+            const allEntities = response.getCompositeEntities(
+                context.searcher.answers.settings.topKEntities,
+            );
             if (allEntities && allEntities.length > 0) {
                 printer.writeLine(`Entity Hit Count: ${allEntities.length}`);
             } else {
@@ -1390,14 +1440,22 @@ export async function runChatMemory(): Promise<void> {
 
     async function writeExtractedTopic(
         topic: knowLib.TextBlock,
-        showMessages: boolean,
+        showSource: boolean,
+        sourceIndex?: conversation.TopicIndex | undefined,
     ) {
-        if (showMessages) {
-            const messages = await loadMessages(topic.sourceIds);
-            printer.writeTemporalBlocks(chalk.greenBright, messages);
+        printer.writeBullet(topic.value);
+        if (showSource) {
+            if (sourceIndex) {
+                const textBlocks = await loadTopics(
+                    sourceIndex,
+                    topic.sourceIds,
+                );
+                printer.writeListInColor(chalk.greenBright, textBlocks);
+            } else {
+                const textBlocks = await loadMessages(topic.sourceIds);
+                printer.writeTemporalBlocks(chalk.greenBright, textBlocks);
+            }
         }
-        printer.writeLine(topic.value);
-        printer.writeLine();
     }
 
     function writeExtractedAction(
@@ -1466,103 +1524,25 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    async function writeTopicResults(
-        topicIndex: knowLib.conversation.TopicIndex,
-        response: conversation.SearchResponse,
-        logMode: boolean,
-        showMessages: boolean,
-    ) {
-        if (!logMode) {
-            const topics = [...response.allTopics()].sort();
-            if (topics.length > 0) {
-                printer.writeListInColor(chalk.blueBright, topics, {
-                    type: "ul",
-                });
-            }
-            return;
-        }
-
-        const results = response.topics;
-        printer.writeTitle("Topics");
-        const topicIds = [];
-        for (let i = 0; i < results.length; ++i) {
-            const result = results[i];
-            if (result.temporalSequence) {
-                for (const entry of result.temporalSequence) {
-                    const topics = await topicIndex.getMultiple(entry.value);
-                    printer.writeLine();
-                    printer.writeTimestamp(entry.timestamp);
-                    await writeExtractedTopics(topics, showMessages);
-                    topicIds.push(...entry.value);
-                }
-            } else if (result.topicIds) {
-                const topics = await topicIndex.getMultiple(result.topicIds);
-                await writeExtractedTopics(topics, false);
-                topicIds.push(...result.topicIds);
-            }
-            if (showMessages && topicIds.length > 0) {
-                const messages = await loadMessages(
-                    await topicIndex.getSourceIds(topicIds),
-                );
-                printer.writeTemporalBlocks(chalk.cyan, messages);
-            }
-        }
-        printer.writeLine();
-    }
-
-    async function writeEntityResults(
-        entityIndex: knowLib.conversation.EntityIndex,
-        response: conversation.SearchResponse,
-        logMode: boolean,
-        showMessages: boolean,
-    ) {
-        if (!logMode) {
-            const entities = response.mergeAllEntities(3);
-            if (entities.length > 0) {
-                printer.writeListInColor(
-                    chalk.green,
-                    entities.map((e) => conversation.entityToString(e)),
-                    { type: "ul" },
-                );
-            }
-            return;
-        }
-
-        const results = response.entities;
-        printer.writeTitle("Entities");
-        const entityIds = [];
-        for (let i = 0; i < results.length; ++i) {
-            const result = results[i];
-            if (result.temporalSequence) {
-                for (const entry of result.temporalSequence) {
-                    const entities = await entityIndex.getMultiple(entry.value);
-                    printer.writeLine();
-                    printer.writeTimestamp(entry.timestamp);
-                    printer.writeExtractedEntities(entities);
-                    entityIds.push(...entry.value);
-                }
-            } else if (result.entityIds) {
-                const entities = await entityIndex.getMultiple(
-                    result.entityIds,
-                );
-                printer.writeExtractedEntities(entities);
-                entityIds.push(...result.entityIds);
-            }
-            if (showMessages && entityIds.length > 0) {
-                const messages = await loadMessages(
-                    await entityIndex.getSourceIds(entityIds),
-                );
-                printer.writeTemporalBlocks(chalk.cyan, messages);
-            }
-        }
-        printer.writeLine();
-    }
-
     async function loadMessages(
         ids?: string[],
     ): Promise<(dateTime.Timestamped<knowLib.TextBlock> | undefined)[]> {
         if (ids && ids.length > 0) {
             return await context.conversation.messages.getMultiple(ids);
+        }
+        return [];
+    }
+
+    async function loadTopics(
+        topicLevel: conversation.TopicIndex | number,
+        ids?: string[],
+    ) {
+        if (ids && ids.length > 0) {
+            const index =
+                typeof topicLevel === "number"
+                    ? await context.conversation.getTopicsIndex(topicLevel - 1)
+                    : topicLevel;
+            return index.getMultipleText(ids);
         }
         return [];
     }
