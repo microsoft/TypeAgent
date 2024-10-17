@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createChatTranslator, dateTime, loadSchema } from "typeagent";
+import {
+    asyncArray,
+    createChatTranslator,
+    dateTime,
+    loadSchema,
+} from "typeagent";
 import { PromptSection } from "typechat";
 import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
@@ -11,6 +16,7 @@ import registerDebug from "debug";
 import { CompositeEntity } from "./entities.js";
 import { Action } from "./knowledgeSchema.js";
 import { splitLargeTextIntoChunks } from "../textChunker.js";
+import assert from "assert";
 
 const answerError = registerDebug("knowledge-processor:answerGenerator:error");
 
@@ -29,16 +35,18 @@ export interface AnswerGenerator {
 export type AnswerGeneratorSettings = {
     topKEntities: number;
     maxContextLength?: number | undefined;
-    maxChunkSize?: number | undefined;
+    maxCharsPerChunk?: number | undefined;
+    concurrency?: number;
 };
 
 export function createAnswerGenerator(
     model: ChatModel,
-    settings?: AnswerGeneratorSettings,
+    generatorSettings?: AnswerGeneratorSettings,
 ): AnswerGenerator {
-    settings ??= {
+    const settings = generatorSettings ?? {
         topKEntities: 8,
     };
+    const maxContextLength = settings?.maxContextLength ?? 1000 * 30;
     const translator = createChatTranslator<AnswerResponse>(
         model,
         loadSchema(["answerSchema.ts"], import.meta.url),
@@ -70,45 +78,86 @@ export function createAnswerGenerator(
         response: SearchResponse,
         higherPrecision: boolean,
     ): Promise<AnswerResponse | undefined> {
-        const maxContextLength = settings?.maxContextLength ?? 1000 * 30;
-        const context: AnswerContext = {
-            entities: {
-                timeRanges: response.entityTimeRanges(),
-                values: response.getCompositeEntities(settings!.topKEntities),
-            },
-            topics: {
-                timeRanges: response.topicTimeRanges(),
-                values: response.mergeAllTopics(),
-            },
-            messages:
-                response.messages && response.messages.length > 0
-                    ? flatten(response.messages, (m) => {
-                          return {
-                              timestamp: m.timestamp,
-                              value: m.value.value,
-                          };
-                      })
-                    : [],
-        };
-        const actions = [...response.allActions()];
-        if (actions.length > 0) {
-            context.actions = {
-                timeRanges: response.actionTimeRanges(),
-                values: actions,
-            };
-        }
-        let prompt = createAnswerPrompt(question, higherPrecision, answerStyle);
+        const context: AnswerContext = createContext(response);
 
+        if (
+            isContextTooBig(context, response) &&
+            settings.maxCharsPerChunk &&
+            settings.maxCharsPerChunk > 0
+        ) {
+            // Run answer generation in chunks
+            return await getAnswerInChunks(
+                question,
+                answerStyle,
+                higherPrecision,
+                context,
+            );
+        }
+        // Context is small enough
+        return getAnswer(question, answerStyle, higherPrecision, context);
+    }
+
+    async function getAnswer(
+        question: string,
+        answerStyle: AnswerStyle | undefined,
+        higherPrecision: boolean,
+        context: AnswerContext,
+    ): Promise<AnswerResponse | undefined> {
         let contextContent = answerContextToString(context);
         if (contextContent.length > maxContextLength) {
             contextContent = trimContext(contextContent, maxContextLength);
         }
-        let contextSection: PromptSection = {
+        const contextSection: PromptSection = {
             role: "user",
             content: `[CONVERSATION HISTORY]\n${contextContent}`,
         };
+
+        const prompt = createAnswerPrompt(
+            question,
+            higherPrecision,
+            answerStyle,
+        );
         const result = await translator.translate(prompt, [contextSection]);
         return result.success ? result.data : undefined;
+    }
+
+    async function getAnswerInChunks(
+        question: string,
+        answerStyle: AnswerStyle | undefined,
+        higherPrecision: boolean,
+        context: AnswerContext,
+    ): Promise<AnswerResponse | undefined> {
+        assert(settings.maxCharsPerChunk && settings.maxCharsPerChunk > 0);
+        const chunks = [
+            ...splitAnswerContext(context, settings.maxCharsPerChunk!),
+        ];
+        const partialAnswers = await asyncArray.mapAsync(
+            chunks,
+            settings.concurrency ?? 2,
+            (chunk) => getAnswer(question, answerStyle, higherPrecision, chunk),
+        );
+        let answer = "";
+        let whyNoAnswer: string | undefined;
+        for (const partialAnswer of partialAnswers) {
+            if (partialAnswer) {
+                if (partialAnswer.type === "Answered") {
+                    answer += partialAnswer.answer;
+                } else {
+                    whyNoAnswer ??= partialAnswer.whyNoAnswer;
+                }
+            }
+        }
+        if (answer.length > 0) {
+            return {
+                type: "Answered",
+                answer,
+            };
+        }
+        whyNoAnswer ??= "";
+        return {
+            type: "NoAnswer",
+            whyNoAnswer,
+        };
     }
 
     function createAnswerPrompt(
@@ -143,6 +192,36 @@ export function createAnswerGenerator(
         }
     }
 
+    function createContext(response: SearchResponse) {
+        const context: AnswerContext = {
+            entities: {
+                timeRanges: response.entityTimeRanges(),
+                values: response.getCompositeEntities(settings!.topKEntities),
+            },
+            topics: {
+                timeRanges: response.topicTimeRanges(),
+                values: response.mergeAllTopics(),
+            },
+            messages:
+                response.messages && response.messages.length > 0
+                    ? flatten(response.messages, (m) => {
+                          return {
+                              timestamp: m.timestamp,
+                              value: m.value.value,
+                          };
+                      })
+                    : [],
+        };
+        const actions = [...response.allActions()];
+        if (actions.length > 0) {
+            context.actions = {
+                timeRanges: response.actionTimeRanges(),
+                values: actions,
+            };
+        }
+        return context;
+    }
+
     function trimContext(content: string, maxLength: number): string {
         if (content.length > maxLength) {
             content = content.slice(0, maxLength);
@@ -152,6 +231,11 @@ export function createAnswerGenerator(
             );
         }
         return content;
+    }
+
+    function isContextTooBig(context: AnswerContext, response: SearchResponse) {
+        const totalMessageLength = response.getTotalMessageLength();
+        return totalMessageLength > maxContextLength;
     }
 }
 
