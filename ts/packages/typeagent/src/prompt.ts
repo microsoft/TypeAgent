@@ -334,42 +334,79 @@ export function createPromptSectionBuilder(
 
 export interface JSONPromptBuilder {
     readonly length: number;
+
+    isFull(): boolean;
     add(name: string, value: any): boolean;
+    addArray(name: string, array: any[]): number;
     toString(): string;
     clear(): void;
 }
 
-export function createJSONBuilder(maxChunkLength: number): JSONPromptBuilder {
-    let json: any = {};
+export function createJSONPromptBuilder(
+    maxChunkLength: number,
+): JSONPromptBuilder {
+    let jsonObj: any = {};
     let curLength = 0;
     return {
         get length() {
             return curLength;
         },
+        isFull,
         add,
+        addArray,
         toString,
         clear,
     };
 
+    function isFull(): boolean {
+        return curLength >= maxChunkLength;
+    }
+
     function add(name: string, value: any): boolean {
-        if (curLength >= maxChunkLength) {
+        if (isFull()) {
             return false;
         }
         let str = stringify(value);
         if (str.length + curLength > maxChunkLength) {
             return false;
         }
-        json[name] = value;
+        jsonObj[name] = value;
+        curLength += str.length;
         return true;
     }
 
+    function addArray(name: string, array: any[]): number {
+        if (isFull()) {
+            return 0;
+        }
+        let i = 0;
+        for (; i < array.length; ++i) {
+            let str = stringify(array[i]);
+            if (str.length > maxChunkLength) {
+                // Can't possibly do this one. Skip it
+                continue;
+            }
+            if (str.length + curLength > maxChunkLength) {
+                break;
+            }
+            let existing: any[] | undefined = jsonObj[name];
+            if (existing === undefined) {
+                existing = [];
+                jsonObj[name] = existing;
+            }
+            existing.push(array[i]);
+            curLength += str.length;
+        }
+        return i;
+    }
+
     function toString() {
-        return stringify(json);
+        return stringify(jsonObj);
     }
 
     function clear(): void {
         curLength = 0;
-        json = {};
+        jsonObj = {};
     }
 
     function stringify(value: any): string {
@@ -377,27 +414,57 @@ export function createJSONBuilder(maxChunkLength: number): JSONPromptBuilder {
     }
 }
 
-export function* createJsonChunks(
+export function* JSONStringifyInChunks(
     obj: any,
     maxChunkLength: number,
 ): IterableIterator<string> {
-    const jsonBuilder = createJSONBuilder(maxChunkLength);
-    for (const key of obj) {
-        const value = obj[key];
+    const builder = createJSONPromptBuilder(maxChunkLength);
+    const keys = Object.keys(obj);
+    let i = 0;
+    let prevPos = -1;
+    let key: any;
+    let value: any;
+    while (i < keys.length) {
+        // if i === prevPos, means we are retrying the current key
+        if (i !== prevPos) {
+            key = keys[i];
+            value = obj[key];
+        }
+        prevPos = i;
         if (value === undefined) {
+            ++i;
             continue;
         }
-        if (!jsonBuilder.add(key, value)) {
-            // Can't append any more JSON. Time to yield a chunk
-            if (jsonBuilder.length > 0) {
-                yield jsonBuilder.toString();
-                jsonBuilder.clear();
-            } else {
-                break;
+        if (Array.isArray(value)) {
+            const lastIndex = builder.addArray(key, value);
+            if (lastIndex === value.length) {
+                // The entire array went into the current chunk
+                // Try the next value
+                ++i;
+                continue;
+            } else if (lastIndex > 0) {
+                // Only could manage a partial array.
+                // Retry remaining array
+                value = value.slice(lastIndex);
             }
+        } else if (builder.add(key, value)) {
+            // Entire value fits in current chunk. Try next key
+            ++i;
+            continue;
+        }
+
+        // Can't append any more to current chunk, so lets yield it
+        // The current key, value will be tried again
+        if (builder.length > 0) {
+            yield builder.toString();
+            builder.clear();
+        } else {
+            // We tried to append, but could not. This means that either the value yields
+            // an empty json string OR its too big. Skip it
+            ++i;
         }
     }
-    if (jsonBuilder.length > 0) {
-        yield jsonBuilder.toString();
+    if (builder.length > 0) {
+        yield builder.toString();
     }
 }
