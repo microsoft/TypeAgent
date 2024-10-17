@@ -26,6 +26,12 @@ export default defineConfig({
   renderer: {
     build: {
       sourcemap: true,
+      rollupOptions: {
+        input: {
+          index: resolve(__dirname, "src/renderer/index.html"),
+          viewHost: resolve(__dirname, "src/renderer/viewHost.html"),
+        },
+      },
     },
   },
 });

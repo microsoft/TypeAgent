@@ -63,6 +63,11 @@ function createWindow(): void {
         height: ShellSettings.getinstance().height,
         show: false,
         autoHideMenuBar: true,
+        webPreferences: {
+            preload: join(__dirname, "../preload/index.mjs"),
+            sandbox: false,
+            zoomFactor: ShellSettings.getinstance().zoomLevel,
+        },
         x: ShellSettings.getinstance().x,
         y: ShellSettings.getinstance().y,
     });
@@ -86,6 +91,11 @@ function createWindow(): void {
         width: ShellSettings.getinstance().width! - 20,
         height: ShellSettings.getinstance().height! - 50,
     });
+
+    mainWindow.webContents.send(
+        "chat-view-resized",
+        ShellSettings.getinstance().width! - 20,
+    );
 
     mainWindow.setBrowserView(chatView);
 
@@ -113,9 +123,6 @@ function createWindow(): void {
 
             ShellSettings.getinstance().closeInlineBrowser();
             ShellSettings.getinstance().size = mainWindow.getSize();
-            console.log(
-                "Closing size: " + JSON.stringify(mainWindow.getSize()),
-            );
         }
     });
 
@@ -160,6 +167,8 @@ function createWindow(): void {
                     height: bounds.height - 50,
                 });
             }
+
+            mainWindow.webContents.send("chat-view-resized", newWidth);
         }
     });
 
@@ -171,9 +180,37 @@ function createWindow(): void {
         chatView.webContents.loadURL(join(__dirname, "../renderer/index.html"));
     }
 
+    mainWindow.webContents.loadURL(
+        join(__dirname, "../renderer/viewHost.html"),
+    );
+
     mainWindow.removeMenu();
 
     setupZoomHandlers(mainWindow);
+
+    ipcMain.on("views-resized-by-user", (_, newX: number) => {
+        if (mainWindow) {
+            const chatBounds = chatView?.getBounds();
+            const bounds = mainWindow.getBounds();
+            let newWidth = newX;
+
+            chatView?.setBounds({
+                x: 0,
+                y: 0,
+                width: newWidth,
+                height: chatBounds?.height!,
+            });
+
+            if (inlineBrowserView) {
+                inlineBrowserView?.setBounds({
+                    x: chatBounds!.width + 4,
+                    y: 0,
+                    width: bounds.width - newWidth - 20,
+                    height: bounds.height - 50,
+                });
+            }
+        }
+    });
 
     // Notify renderer process whenever settings are modified
     ShellSettings.getinstance().onSettingsChanged = (): void => {
@@ -223,6 +260,7 @@ function createWindow(): void {
             });
 
             mainWindow?.addBrowserView(inlineBrowserView);
+            mainWindow?.webContents.send("chat-view-resized", chatSize.width);
         }
 
         inlineBrowserView?.webContents.loadURL(targetUrl.toString());
@@ -242,6 +280,7 @@ function createWindow(): void {
             inlineBrowserView.webContents.close();
             mainWindow?.removeBrowserView(inlineBrowserView);
             inlineBrowserView = null;
+            mainWindow?.webContents.send("chat-view-resized", chatSize.width);
         }
     };
 }
