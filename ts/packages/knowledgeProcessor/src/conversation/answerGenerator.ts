@@ -1,13 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createChatTranslator, loadSchema } from "typeagent";
+import { createChatTranslator, dateTime, loadSchema } from "typeagent";
 import { PromptSection } from "typechat";
 import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
 import { flatten } from "../setOperations.js";
 import { SearchResponse } from "./conversation.js";
 import registerDebug from "debug";
+import { CompositeEntity } from "./entities.js";
+import { Action } from "./knowledgeSchema.js";
+import { splitLargeTextIntoChunks } from "../textChunker.js";
 
 const answerError = registerDebug("knowledge-processor:answerGenerator:error");
 
@@ -25,7 +28,9 @@ export interface AnswerGenerator {
 
 export type AnswerGeneratorSettings = {
     topKEntities: number;
-    maxContextLength?: number | number;
+    maxContextLength?: number | undefined;
+    useChunking?: boolean | undefined;
+    maxChunkSize?: number | undefined;
 };
 
 export function createAnswerGenerator(
@@ -137,4 +142,68 @@ export function createAnswerGenerator(
 function log(where: string, message: string) {
     const errorText = `${where}\n${message}`;
     answerError(errorText);
+}
+
+export type AnswerContextItem<T> = {
+    timeRanges: (dateTime.DateRange | undefined)[];
+    values: T[];
+};
+
+export type AnswerContext = {
+    entities?: AnswerContextItem<CompositeEntity> | undefined;
+    topics?: AnswerContextItem<string> | undefined;
+    actions?: AnswerContextItem<Action> | undefined;
+    messages?: dateTime.Timestamped<string>[] | undefined;
+};
+
+export function* splitAnswerContext(
+    context: AnswerContext,
+    maxCharsPerChunk: number,
+    autoTrim: boolean = true,
+): IterableIterator<AnswerContext> {
+    let curChunk: AnswerContext = {};
+    let curChunkLength = 0;
+    // TODO: split entities, topics, actions
+    if (context.entities) {
+        curChunk.entities = context.entities;
+    }
+    if (context.topics) {
+        curChunk.topics = context.topics;
+    }
+    if (context.actions) {
+        curChunk.actions = context.actions;
+    }
+    curChunkLength = stringify(curChunk).length;
+    if (curChunkLength >= maxCharsPerChunk) {
+        yield curChunk;
+        newChunk();
+    }
+    if (context.messages) {
+        for (const message of context.messages) {
+            for (const messageChunk of splitLargeTextIntoChunks(
+                message.value,
+                maxCharsPerChunk,
+            )) {
+                curChunk.messages ??= [];
+                curChunk.messages.push({
+                    timestamp: message.timestamp,
+                    value: messageChunk,
+                });
+                yield curChunk;
+                newChunk();
+            }
+        }
+    }
+    if (curChunkLength > 0) {
+        yield curChunk;
+    }
+
+    function stringify(value: any): string {
+        return typeof value === "string" ? value : JSON.stringify(value);
+    }
+
+    function newChunk() {
+        curChunk = {};
+        curChunkLength = 0;
+    }
 }

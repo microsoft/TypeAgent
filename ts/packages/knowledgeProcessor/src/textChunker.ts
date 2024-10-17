@@ -153,7 +153,7 @@ export function splitLargeTextIntoChunks(
             };
         });
     }
-    return mergeBlocks(textBlocks, maxCharsPerChunk, autoTruncate);
+    return blocksToChunks(textBlocks, maxCharsPerChunk, autoTruncate);
 }
 
 /**
@@ -163,7 +163,7 @@ export function splitLargeTextIntoChunks(
  * @param maxCharsPerChunk
  * @param autoTruncate
  */
-function* mergeBlocks(
+function* blocksToChunks(
     text: TextBlock[],
     maxCharsPerChunk: number,
     autoTruncate: boolean = true,
@@ -177,10 +177,12 @@ function* mergeBlocks(
     while (i < blockQueue.length) {
         const block = blockQueue[i];
         if (chunk.length + block.value.length > maxCharsPerChunk) {
-            const splitBlocks = splitTextBlock(block);
-            if (splitBlocks) {
-                blockQueue.splice(i, 1, ...splitBlocks);
-                continue;
+            if (block.type !== TextBlockType.Word) {
+                const splitBlocks = splitTextBlock(block);
+                if (splitBlocks) {
+                    blockQueue.splice(i, 1, ...splitBlocks);
+                    continue;
+                }
             }
             yield chunk;
             chunk = "";
