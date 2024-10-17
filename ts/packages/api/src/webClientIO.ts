@@ -3,7 +3,6 @@
 
 import { DisplayAppendMode } from "@typeagent/agent-sdk";
 import { ActionTemplateSequence, ClientIO, IAgentMessage, RequestId, RequestMetrics } from "agent-dispatcher";
-import { request } from "http";
 import WebSocket from "ws";
 
 export class WebAPIClientIO implements ClientIO 

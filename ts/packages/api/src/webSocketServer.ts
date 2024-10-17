@@ -9,9 +9,7 @@ import { WebAPIClientIO } from "./webClientIO.js";
 
 export class TypeAgentAPIWebSocketServer {
     private server: WebSocketServer;
-    //private debug = registerDebug("typeagent:api");
     private settingSummary: string = "";
-    private currentws: WebSocket | undefined;
 
     constructor(endpoint: URL, dispatcher: Dispatcher, webClientIO: WebAPIClientIO) {
         this.server = new WebSocketServer({
