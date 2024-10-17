@@ -62,19 +62,18 @@ export class TypeAgentAPIWebSocketServer {
                     if (newSettingSummary !== this.settingSummary) {
                         this.settingSummary = newSettingSummary;
             
-                        this.currentws?.send(JSON.stringify({
-                            message: "setting-summary-changed",
-                            data: {
-                            summary: newSettingSummary,
-                            registeredAgents: [...dispatcher.getTranslatorNameToEmojiMap()],
-                            }
-                        }));
+                        webClientIO.updateSettingsSummary(this.settingSummary, [...dispatcher.getTranslatorNameToEmojiMap()]);
                     }
             
                     switch(msgObj.message) {
-                        case "shellrequest":
-                            const metrics = await dispatcher.processCommand(msgObj.data.request, msgObj.data.id, msgObj.data.images);
-                            console.log(metrics);
+                        case "process-shell-request":
+                            try {
+                                const metrics = await dispatcher.processCommand(msgObj.data.request, msgObj.data.id, msgObj.data.images);
+                                console.log(metrics);
+                                webClientIO.sendSuccessfulCommandResult(msgObj.data.id, metrics);
+                            } catch (error: any) {
+                                webClientIO.sendFailedCommandResult(msgObj.data.id, error);
+                            }
                             break;
                         case "askYesNoResponse":
                             // user said Yes (or no)!

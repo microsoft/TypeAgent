@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import { DisplayAppendMode } from "@typeagent/agent-sdk";
-import { ActionTemplateSequence, ClientIO, IAgentMessage, RequestId } from "agent-dispatcher";
+import { ActionTemplateSequence, ClientIO, IAgentMessage, RequestId, RequestMetrics } from "agent-dispatcher";
+import { request } from "http";
 import WebSocket from "ws";
 
 export class WebAPIClientIO implements ClientIO 
@@ -183,5 +184,35 @@ export class WebAPIClientIO implements ClientIO
         message: "take-action",
         data: action
       }));
+    }
+
+    updateSettingsSummary(summary: string, registeredAgents: [string, string][]) {
+        this.currentws?.send(JSON.stringify({
+          message: "setting-summary-changed",
+          data: {
+          summary,
+          registeredAgents,
+          }
+      }));      
+    }
+
+    sendSuccessfulCommandResult(requestId: RequestId, metrics?: RequestMetrics) {
+      this.currentws?.send(JSON.stringify({
+        message: "process-shell-request-done",
+        data: {
+          requestId,
+          metrics,
+        }
+    })); 
+    }
+
+    sendFailedCommandResult(requestId: RequestId, error: any) {
+      this.currentws?.send(JSON.stringify({
+        message: "process-shell-request-error",
+        data: {
+          requestId,
+          error,
+        }
+    })); 
     }
   };

@@ -20,7 +20,7 @@ export const webapi: ClientAPI = {
 
         // call server websocket and send request
         globalThis.ws.send(JSON.stringify({    
-            message: "shellrequest",
+            message: "process-shell-request",
             data: {
                 request,
                 id,
@@ -28,10 +28,9 @@ export const webapi: ClientAPI = {
             }
         }));
 
-        // TODO: is this needed?
-        return new Promise<RequestMetrics | undefined>((resolve, reject) => {
-            placeHolder(id, { resolve, reject });
-            placeHolder4("process-shell-request", request, id, images);
+        return new Promise<RequestMetrics | undefined>(() => {
+            // this promise isn't ever listened to (ATM) so no need to resolve/reject
+            // resolution/rejection comes through as a separate web socket message
         });
     },
     getPartialCompletion: (prefix: string) => {
@@ -115,16 +114,16 @@ export const webapi: ClientAPI = {
         });
     },
     onSendInputText(callback) {
-        // TODO: figure out if this is still ued
-        placeHolder("send-input-text", callback);
+        // TODO: figure out if this is still used
+        fnMap.set("send-input-text", callback);
     },
     onSendDemoEvent(callback) {
         // doesn't apply on mobile
-        placeHolder("send-demo-event", callback);
+        fnMap.set("send-demo-event", callback);
     },
     onHelpRequested(callback) {
         // no longer supported (i.e. F1 key)
-        placeHolder("help-requested", callback);
+        fnMap.set("help-requested", callback);
     },
     onRandomMessageRequested(callback) {
         fnMap.set("random-message-requested", callback);
@@ -132,12 +131,12 @@ export const webapi: ClientAPI = {
     onShowDialog(callback) {
         // not supported without @shell command
         // TODO: inject replacement on mobile?
-        placeHolder("show-dialog", callback);
+        fnMap.set("show-dialog", callback);
     },
     onSettingsChanged(callback) {
         // only applies if we make the mobile agent for settings
-        // TODO: figure out resolution
-        placeHolder("settings-changed", callback);
+        // TODO: figure out solution for mobile
+        fnMap.set("settings-changed", callback);
     },
     onNotificationCommand(callback) {
         fnMap.set("notification-command", callback);
@@ -158,10 +157,6 @@ function placeHolder1(category: any) {
 
 function placeHolder(category: string, callback: any) {
     console.log(category + "\n" + callback);
-}
-
-function placeHolder4(category: string, data: any, data2: any, data3: any) {
-    console.log(category + "\n" + data + data2 + data3);
 }
 
 export async function createWebSocket(endpoint: string = "ws://localhost:8080", autoReconnect: boolean = true) {
@@ -212,8 +207,13 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080", 
                 case "question":
                     fnMap.get("question")(msgObj.data.currentQuestionId, msgObj.data.message, msgObj.data.requestId);
                     break;
+                case "process-shell-request-done":
+                    // ignored
+                    break;
+                case "process-shell-request-error":
+                    // ignored
+                    break;                    
               }
-
         };
         webSocket.onclose = (event: object) => {
             console.log("websocket connection closed" + event);
@@ -233,7 +233,6 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080", 
         function notify(msg: any) {
             switch (msg.data.event) {
                 case "explained":
-                    // TODO: verify
                     if (msg.data.requestId === undefined) {
                         console.warn("markRequestExplained: requestId is undefined");
                         return;
@@ -244,7 +243,6 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080", 
                 case "randomCommandSelected":
                     fnMap.get("update-random-command")(undefined, msg.data.requestId, msg.data.data.message);
                     break;
-                    // TODO: implement
                 case "showNotifications":
                     fnMap.get("notification-command")(undefined, msg.data.requestId, msg.data.data);
                     break;
@@ -255,7 +253,7 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080", 
                     fnMap.get("notification-arrived")(undefined, msg.data.event, msg.data.requestId, msg.data.source, msg.data.data);
                     break;
                 default:
-                // ignore
+                    // ignore
             }            
         }
     });
