@@ -73,7 +73,7 @@ export async function runCodeChat(): Promise<void> {
         const transformed = (await commandTransformer.transform(line, io)) as
             | NamedArgs
             | undefined;
-        if (transformed && transformed.name != "Undefined") {
+        if (transformed && transformed.name != "Unknown") {
             // io.writer.writeLine("[Transformed]: " + JSON.stringify(transformed));
             const name = transformed.name as string;
             if (name in handlers) {
