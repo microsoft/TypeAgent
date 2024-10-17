@@ -151,25 +151,27 @@ export class CameraView {
         this.mainContainer.append(buttonDiv);
 
         // List cameras and microphones.
-        navigator.mediaDevices
-            .enumerateDevices()
-            .then((devices) => {
-                devices.forEach((device) => {
-                    if (device.kind === "videoinput") {
-                        console.log(
-                            `${device.kind}: ${device.label} id = ${device.deviceId}`,
-                        );
-                        this.cameras.push(device);
-                    }
-                });
+        if (navigator.mediaDevices !== undefined) {
+            navigator.mediaDevices
+                .enumerateDevices()
+                .then((devices) => {
+                    devices.forEach((device) => {
+                        if (device.kind === "videoinput") {
+                            console.log(
+                                `${device.kind}: ${device.label} id = ${device.deviceId}`,
+                            );
+                            this.cameras.push(device);
+                        }
+                    });
 
-                if (devices.length < 2) {
-                    this.swapCameras.classList.add("single-camera");
-                }
-            })
-            .catch((err) => {
-                console.error(`${err.name}: ${err.message}`);
-            });
+                    if (devices.length < 2) {
+                        this.swapCameras.classList.add("single-camera");
+                    }
+                })
+                .catch((err) => {
+                    console.error(`${err.name}: ${err.message}`);
+                });
+        }
     }
 
     // Capture a photo by fetching the current contents of the video
@@ -217,26 +219,30 @@ export class CameraView {
     }
 
     public startCamera() {
-        navigator.mediaDevices
-            .getUserMedia({
-                video: { deviceId: this.cameras[this.cameraIndex].deviceId },
-                audio: false,
-            })
-            .then((stream) => {
-                this.snapButton.classList.remove("camera-hidden");
-                this.swapCameras.classList.remove("camera-hidden");
-                this.cameraStatus.classList.add("camera-hidden");
-                this.mediaStream = stream;
-                this.video.srcObject = stream;
-                this.video.play();
-            })
-            .catch((err) => {
-                console.error(`An error occurred: ${err}`);
-                this.cameraStatus.innerText = "Error starting camera...";
-                this.cameraStatus.classList.remove("camera-hidden");
-                this.video.classList.add("camera-hidden");
-                this.snapButton.classList.add("camera-hidden");
-            });
+        if (navigator.mediaDevices !== undefined) {
+            navigator.mediaDevices
+                .getUserMedia({
+                    video: {
+                        deviceId: this.cameras[this.cameraIndex].deviceId,
+                    },
+                    audio: false,
+                })
+                .then((stream) => {
+                    this.snapButton.classList.remove("camera-hidden");
+                    this.swapCameras.classList.remove("camera-hidden");
+                    this.cameraStatus.classList.add("camera-hidden");
+                    this.mediaStream = stream;
+                    this.video.srcObject = stream;
+                    this.video.play();
+                })
+                .catch((err) => {
+                    console.error(`An error occurred: ${err}`);
+                    this.cameraStatus.innerText = "Error starting camera...";
+                    this.cameraStatus.classList.remove("camera-hidden");
+                    this.video.classList.add("camera-hidden");
+                    this.snapButton.classList.add("camera-hidden");
+                });
+        }
 
         this.clearPhoto();
     }

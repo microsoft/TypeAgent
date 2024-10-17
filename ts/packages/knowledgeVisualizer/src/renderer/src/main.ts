@@ -107,5 +107,7 @@ document.addEventListener("DOMContentLoaded", function () {
         wordCloud,
     );
 
-    (window as any).electron.ipcRenderer.send("dom ready");
+    if ((window as any).electron) {
+        (window as any).electron.ipcRenderer.send("dom ready");
+    }
 });
