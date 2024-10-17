@@ -29,7 +29,6 @@ export interface AnswerGenerator {
 export type AnswerGeneratorSettings = {
     topKEntities: number;
     maxContextLength?: number | undefined;
-    useChunking?: boolean | undefined;
     maxChunkSize?: number | undefined;
 };
 
@@ -72,7 +71,7 @@ export function createAnswerGenerator(
         higherPrecision: boolean,
     ): Promise<AnswerResponse | undefined> {
         const maxContextLength = settings?.maxContextLength ?? 1000 * 30;
-        const context: any = {
+        const context: AnswerContext = {
             entities: {
                 timeRanges: response.entityTimeRanges(),
                 values: response.getCompositeEntities(settings!.topKEntities),
@@ -98,6 +97,25 @@ export function createAnswerGenerator(
                 values: actions,
             };
         }
+        let prompt = createAnswerPrompt(question, higherPrecision, answerStyle);
+
+        let contextContent = answerContextToString(context);
+        if (contextContent.length > maxContextLength) {
+            contextContent = trimContext(contextContent, maxContextLength);
+        }
+        let contextSection: PromptSection = {
+            role: "user",
+            content: `[CONVERSATION HISTORY]\n${contextContent}`,
+        };
+        const result = await translator.translate(prompt, [contextSection]);
+        return result.success ? result.data : undefined;
+    }
+
+    function createAnswerPrompt(
+        question: string,
+        higherPrecision: boolean,
+        answerStyle: AnswerStyle | undefined,
+    ): string {
         let prompt = `The following is a user question about a conversation:\n${question}\n\n`;
         prompt +=
             "Answer the question using only the relevant topics, entities, actions, messages and time ranges/timestamps found in CONVERSATION HISTORY.\n";
@@ -112,20 +130,7 @@ export function createAnswerGenerator(
             prompt += "List ALL entities if query intent implies that.\n";
         }
         prompt += `Your answer is readable and complete, with suitable formatting (line breaks, bullet points etc).`;
-        // TODO: Switch to using a Prompt Builder here, to avoid truncation
-        let contextSection: PromptSection = {
-            role: "user",
-            content: `[CONVERSATION HISTORY]\n${JSON.stringify(context, undefined, 0)}`,
-        };
-        if (prompt.length > maxContextLength) {
-            prompt = prompt.slice(0, maxContextLength);
-            log(
-                "generateAnswerWithModel",
-                `Prompt exceeds ${maxContextLength} chars. Trimmed.`,
-            );
-        }
-        const result = await translator.translate(prompt, [contextSection]);
-        return result.success ? result.data : undefined;
+        return prompt;
     }
 
     function answerStyleToHint(answerStyle: AnswerStyle): string {
@@ -136,6 +141,17 @@ export function createAnswerGenerator(
             case "List_Entities":
                 return "List ALL relevant entities";
         }
+    }
+
+    function trimContext(content: string, maxLength: number): string {
+        if (content.length > maxLength) {
+            content = content.slice(0, maxLength);
+            log(
+                "generateAnswerWithModel",
+                `Context exceeds ${maxLength} chars. Trimmed.`,
+            );
+        }
+        return content;
     }
 }
 
@@ -173,7 +189,7 @@ export function* splitAnswerContext(
     if (context.actions) {
         curChunk.actions = context.actions;
     }
-    curChunkLength = stringify(curChunk).length;
+    curChunkLength = answerContextToString(curChunk).length;
     if (curChunkLength >= maxCharsPerChunk) {
         yield curChunk;
         newChunk();
@@ -198,12 +214,34 @@ export function* splitAnswerContext(
         yield curChunk;
     }
 
-    function stringify(value: any): string {
-        return typeof value === "string" ? value : JSON.stringify(value);
-    }
-
     function newChunk() {
         curChunk = {};
         curChunkLength = 0;
+    }
+}
+
+export function answerContextToString(context: AnswerContext): string {
+    let json = "{\n";
+    let propertyCount = 0;
+    if (context.entities) {
+        json += add("entities", context.entities);
+    }
+    if (context.topics) {
+        json += add("topics", context.topics);
+    }
+    if (context.actions) {
+        json += add("actions", context.actions);
+    }
+    json += "\n}";
+    return json;
+
+    function add(name: string, value: any): string {
+        let text = "";
+        if (propertyCount > 0) {
+            text += ",\n";
+        }
+        text += `"${name}": ${JSON.stringify(context.entities)}`;
+        propertyCount++;
+        return text;
     }
 }

@@ -226,8 +226,10 @@ export interface SearchResponse<
 
     allTopics(): IterableIterator<string>;
     allTopicIds(): IterableIterator<TTopicId>;
+
     mergeAllTopics(): string[];
     topicTimeRanges(): (dateTime.DateRange | undefined)[];
+
     allEntities(): IterableIterator<ConcreteEntity>;
     allEntityIds(): IterableIterator<TEntityId>;
     allEntityNames(): string[];
@@ -237,6 +239,8 @@ export interface SearchResponse<
     allActions(): IterableIterator<Action>;
     allActionIds(): IterableIterator<TActionId>;
     actionTimeRanges(): (dateTime.DateRange | undefined)[];
+
+    getTotalMessageLength(): number;
 
     hasTopics(): boolean;
     hasEntities(): boolean;
@@ -269,6 +273,7 @@ export function createSearchResponse<
             allActions,
             allActionIds,
             actionTimeRanges,
+            getTotalMessageLength,
             hasTopics,
             hasEntities,
             hasActions,
@@ -381,6 +386,16 @@ export function createSearchResponse<
                   getRangeOfTemporalSequence(a.temporalSequence),
               )
             : [];
+    }
+
+    function getTotalMessageLength(): number {
+        let length = 0;
+        if (response.messages) {
+            for (const message of response.messages) {
+                length += message.value.value.length;
+            }
+        }
+        return length;
     }
 
     function hasTopics(): boolean {

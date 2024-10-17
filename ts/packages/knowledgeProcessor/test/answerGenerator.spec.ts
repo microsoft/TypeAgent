@@ -5,27 +5,17 @@ import { readAllText } from "typeagent";
 import { CompositeEntity } from "../src/conversation/entities.js";
 import {
     AnswerContext,
+    answerContextToString,
     splitAnswerContext,
 } from "../src/conversation/answerGenerator.js";
 
 describe("AnswerGenerator", () => {
     test("splitContext", async () => {
-        const author: CompositeEntity = {
-            name: "Jane Austen",
-            type: ["author", "person"],
-            facets: [
-                'book="Pride and Prejudice"',
-                'book="Mansfield Park"',
-                'book="Sense and Sensibility"',
-                'book="Emma"',
-            ],
-        };
         const messageText = await readAllText("test/data/longText.txt");
         const timestamp = new Date();
-        const context: AnswerContext = {
-            entities: { timeRanges: [], values: [author] },
-            messages: [{ timestamp, value: messageText }],
-        };
+        const context: AnswerContext = createContext();
+
+        context.messages = [{ timestamp, value: messageText }];
         const maxCharsPerChunk = 256;
         let chunkCount = 0;
         for (const chunk of splitAnswerContext(
@@ -37,11 +27,47 @@ describe("AnswerGenerator", () => {
             if (chunkCount === 1) {
                 expect(chunk.entities).toBeDefined();
                 expect(chunk.entities?.values).toHaveLength(1);
+                expect(chunk.topics).toBeDefined();
+                expect(chunk.topics?.values).toHaveLength(1);
             } else {
                 expect(chunk.entities).not.toBeDefined();
+                expect(chunk.messages).toBeDefined();
             }
-            expect(chunk.messages).toBeDefined();
-            console.log(chunk);
         }
     });
+
+    test("answerContextToString", () => {
+        const author = createAuthor();
+        const context: AnswerContext = {
+            entities: { timeRanges: [], values: [author] },
+            topics: { timeRanges: [], values: createTopics() },
+        };
+        const j1 = answerContextToString(context);
+        JSON.parse(j1);
+    });
+
+    function createContext() {
+        const context: AnswerContext = {
+            entities: { timeRanges: [], values: [createAuthor()] },
+            topics: { timeRanges: [], values: createTopics() },
+        };
+        return context;
+    }
+
+    function createTopics() {
+        return ["Classic English Literature"];
+    }
+
+    function createAuthor(): CompositeEntity {
+        return {
+            name: "Jane Austen",
+            type: ["author", "person"],
+            facets: [
+                'book="Pride and Prejudice"',
+                'book="Mansfield Park"',
+                'book="Sense and Sensibility"',
+                'book="Emma"',
+            ],
+        };
+    }
 });
