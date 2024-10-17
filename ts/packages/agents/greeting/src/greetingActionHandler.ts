@@ -94,7 +94,7 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
             ) as ActionResultSuccess;
             context.actionIO.setDisplay(result.literalText!);
         } else {
-            context.actionIO.appendDisplay("Unale to generate greeting.");
+            context.actionIO.appendDisplay("Unable to generate greeting.");
         }
     }
 

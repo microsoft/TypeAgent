@@ -279,7 +279,7 @@ class InteractiveApp {
     private writeWelcome() {
         if (this._settings.stopCommands) {
             this._stdio.stdout.write(
-                `Type ${this._settings.stopCommands.join(" OR ")} to exit\n`,
+                `Type ${this._settings.stopCommands.map((s) => this._settings.commandPrefix + s).join(" OR ")} to exit.\n`,
             );
         }
         if (this._settings.commandPrefix) {

@@ -20,6 +20,8 @@ import {
     createTypeChat,
     getContextFromHistory,
     promptLib,
+    lookupAnswersOnWeb,
+    WebLookupAnswer,
 } from "typeagent";
 import { PromptSection } from "typechat";
 import * as fs from "fs";
@@ -136,8 +138,31 @@ async function runPlayground(): Promise<void> {
             const response = chatResponse.data;
             io.writer.writeLine(response.message);
             if (response.lookups && response.lookups.length > 0) {
-                io.writer.writeLine("Lookups");
-                io.writer.writeList(response.lookups);
+                io.writer.writeLine(
+                    `[Doing ${response.lookups.length} Lookups]`,
+                );
+                for (let i = 0; i < response.lookups.length; i++) {
+                    io.writer.writeLine(
+                        `\n[Lookup ${i + 1}: ${response.lookups[i]}]`,
+                    );
+                    const answer: WebLookupAnswer = await lookupAnswersOnWeb(
+                        chatModel,
+                        response.lookups[i],
+                        5,
+                        {
+                            maxCharsPerChunk: 2000,
+                            maxTextLengthToSearch: 10000,
+                        },
+                        undefined,
+                        undefined,
+                        (item, index, result) => true,
+                    );
+                    if (answer.answer.answer) {
+                        io.writer.writeLine(
+                            "\n" + answer.answer.answer.trimEnd(),
+                        );
+                    }
+                }
             }
         } else {
             io.writer.writeLine(chatResponse.message);
@@ -332,7 +357,7 @@ async function runPlayground(): Promise<void> {
         io.writer.writeLine("@help for a list of available commands.");
         io.writer.writeLine();
         io.writer.writeLine(
-            "To start, type something like 'hello and hit return.",
+            "To start, type something like 'hello' and hit Enter.",
         );
     }
 }

@@ -16,6 +16,16 @@ export function getFileExtensionForMimeType(mime: string): string {
 
 export function getMimeTypeFromFileExtension(fileExtension: string): string {
     switch (fileExtension) {
+        case ".css":
+            return "text/css";
+        case ".htm":
+        case ".html":
+            return "text/html";
+        case ".js":
+            return "text/javascript";
+        case ".json":
+        case ".map":
+            return "application/json";
         case ".jpg":
         case ".jpeg":
             return "image/jpeg";

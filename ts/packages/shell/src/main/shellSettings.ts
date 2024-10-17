@@ -41,6 +41,8 @@ export class ShellSettings
     public onShowSettingsDialog: ((dialogName: string) => void) | null;
     public onRunDemo: ((interactive: boolean) => void) | null;
     public onToggleTopMost: EmptyFunction | null;
+    public onOpenInlineBrowser: ((targetUrl: URL) => void) | null;
+    public onCloseInlineBrowser: EmptyFunction | null;
 
     public get width(): number | undefined {
         return this.size[0];
@@ -85,6 +87,8 @@ export class ShellSettings
         this.onShowSettingsDialog = null;
         this.onRunDemo = null;
         this.onToggleTopMost = null;
+        this.onOpenInlineBrowser = null;
+        this.onCloseInlineBrowser = null;
     }
 
     public static get filePath(): string {
@@ -181,5 +185,17 @@ export class ShellSettings
         }
 
         return false;
+    }
+
+    public openInlineBrowser(targetUrl: URL) {
+        if (ShellSettings.getinstance().onOpenInlineBrowser != null) {
+            ShellSettings.getinstance().onOpenInlineBrowser!(targetUrl);
+        }
+    }
+
+    public closeInlineBrowser() {
+        if (ShellSettings.getinstance().onCloseInlineBrowser != null) {
+            ShellSettings.getinstance().onCloseInlineBrowser!();
+        }
     }
 }
