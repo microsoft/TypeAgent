@@ -357,7 +357,7 @@ async function runPlayground(): Promise<void> {
         io.writer.writeLine("@help for a list of available commands.");
         io.writer.writeLine();
         io.writer.writeLine(
-            "To start, type something like 'hello and hit return.",
+            "To start, type something like 'hello' and hit Enter.",
         );
     }
 }
