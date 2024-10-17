@@ -26,6 +26,9 @@ import {
     AzureTokenScopes,
     createAzureTokenProvider,
 } from "./auth";
+import registerDebug from "debug";
+
+const debugOpenAI = registerDebug("typeagent:openai");
 
 const IdentityApiKey = "identity";
 
@@ -58,6 +61,7 @@ export type ApiSettings = {
     maxConcurrency?: number | undefined;
     throttler?: FetchThrottler;
     azureSettings?: AzureApiSettings | undefined;
+    maxPromptChars?: number | undefined; // Maximum # of allowed prompt chars to send
 };
 
 export type AzureApiSettings = {
@@ -82,6 +86,7 @@ export enum EnvVars {
     AZURE_OPENAI_ENDPOINT = "AZURE_OPENAI_ENDPOINT",
     AZURE_OPENAI_RESPONSE_FORMAT = "AZURE_OPENAI_RESPONSE_FORMAT",
     AZURE_OPENAI_MAX_CONCURRENCY = "AZURE_OPENAI_MAX_CONCURRENCY",
+    AZURE_OPENAI_MAX_CHARS = "AZURE_OPENAI_MAX_CHARS",
 
     AZURE_OPENAI_API_KEY_EMBEDDING = "AZURE_OPENAI_API_KEY_EMBEDDING",
     AZURE_OPENAI_ENDPOINT_EMBEDDING = "AZURE_OPENAI_ENDPOINT_EMBEDDING",
@@ -226,6 +231,11 @@ function azureChatApiSettingsFromEnv(
             EnvVars.AZURE_OPENAI_MAX_CONCURRENCY,
             endpointName,
         ),
+        maxPromptChars: getIntFromEnv(
+            env,
+            EnvVars.AZURE_OPENAI_MAX_CHARS,
+            endpointName,
+        ),
     };
 }
 
@@ -246,6 +256,20 @@ function getMaxConcurrencyFromEnv(
         throw new Error(`Invalid value for ${envName}: ${maxConcurrencyEnv}`);
     }
     return maxConcurrency;
+}
+
+function getIntFromEnv(
+    env: Record<string, string | undefined>,
+    envName: string,
+    endpointName?: string,
+): number | undefined {
+    const numString = getEnvSetting(env, envName, endpointName, "");
+    const num = numString ? parseInt(numString) : undefined;
+
+    if (num !== undefined && num <= 0) {
+        throw new Error(`Invalid value for ${envName}`);
+    }
+    return num;
 }
 
 /**
@@ -540,6 +564,8 @@ export function createChatModel(
     async function complete(
         prompt: string | PromptSection[] | ChatMessage[],
     ): Promise<Result<string>> {
+        verifyPromptLength(settings, prompt);
+
         const headerResult = await createApiHeaders(settings);
         if (!headerResult.success) {
             return headerResult;
@@ -584,6 +610,8 @@ export function createChatModel(
     async function completeStream(
         prompt: string | PromptSection[] | ChatMessage[],
     ): Promise<Result<AsyncIterableIterator<string>>> {
+        verifyPromptLength(settings, prompt);
+
         const headerResult = await createApiHeaders(settings);
         if (!headerResult.success) {
             return headerResult;
@@ -838,4 +866,30 @@ export function createImageModel(apiSettings?: ApiSettings): ImageModel {
 
         return true;
     }
+}
+
+function verifyPromptLength(
+    settings: ApiSettings,
+    prompt: string | PromptSection[],
+) {
+    if (settings.maxPromptChars && settings.maxPromptChars > 0) {
+        const promptLength = getPromptLength(prompt);
+        if (promptLength > settings.maxPromptChars) {
+            const errorMsg = `REQUEST NOT SENT:\nTotal prompt length ${promptLength} chars EXCEEDS AZURE_OPENAI_MAX_CHARS=${settings.maxPromptChars}`;
+            debugOpenAI(errorMsg);
+            throw new Error(errorMsg);
+        }
+    }
+}
+
+function getPromptLength(prompt: string | PromptSection[]) {
+    if (typeof prompt === "string") {
+        return prompt.length;
+    }
+
+    let length = 0;
+    for (const section of prompt) {
+        length += section.content.length;
+    }
+    return length;
 }

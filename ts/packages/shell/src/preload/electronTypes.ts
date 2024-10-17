@@ -6,10 +6,11 @@ import {
     AppAgentEvent,
     DisplayAppendMode,
     DynamicDisplay,
+    TemplateSchema,
 } from "@typeagent/agent-sdk";
 import { ShellSettings } from "../main/shellSettings.js";
 import {
-    ActionTemplateSequence,
+    TemplateEditConfig,
     IAgentMessage,
     PartialCompletionResult,
 } from "agent-dispatcher";
@@ -57,6 +58,11 @@ export interface ClientAPI {
         input: string,
     ) => Promise<PartialCompletionResult | undefined>;
     getDynamicDisplay: (source: string, id: string) => Promise<DynamicDisplay>;
+    getTemplateSchema: (
+        appAgentName: string,
+        templateName: string,
+        data: unknown,
+    ) => Promise<TemplateSchema>;
     onUpdateDisplay(
         callback: (
             e: Electron.IpcRendererEvent,
@@ -117,7 +123,7 @@ export interface ClientAPI {
         callback: (
             e: Electron.IpcRendererEvent,
             proposeActionId: number,
-            actionTemplates: ActionTemplateSequence,
+            actionTemplates: TemplateEditConfig,
             requestId: string,
             source: string,
         ) => void,

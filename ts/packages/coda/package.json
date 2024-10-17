@@ -36,6 +36,11 @@
         "command": "coda-shell.start",
         "title": "Start you typeagent experience ...",
         "category": "Coda Shell"
+      },
+      {
+        "command": "coda-shell.listCommands",
+        "title": "List commands to a file ...",
+        "category": "Coda Shell"
       }
     ]
   },
@@ -49,7 +54,6 @@
     "cors": "^2.8.5",
     "debug": "^4.3.4",
     "dotenv": "^16.3.1",
-    "express": "^4.20.0",
     "open": "^7.0.4",
     "ws": "^8.17.1"
   },

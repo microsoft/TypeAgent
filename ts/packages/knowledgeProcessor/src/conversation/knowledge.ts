@@ -20,6 +20,7 @@ import { SourceTextBlock, TextBlock, TextBlockType } from "../text.js";
 import { facetToString, mergeEntityFacet } from "./entities.js";
 
 export interface KnowledgeExtractor {
+    readonly settings: KnowledgeExtractorSettings;
     extract(message: string): Promise<KnowledgeResponse | undefined>;
 }
 
@@ -36,6 +37,7 @@ export function createKnowledgeExtractor(
     const settings = extractorSettings ?? createKnowledgeExtractorSettings();
     const translator = createTranslator(model);
     return {
+        settings,
         extract,
     };
 

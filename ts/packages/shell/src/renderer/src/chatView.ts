@@ -10,7 +10,7 @@ import {
     DynamicDisplay,
 } from "@typeagent/agent-sdk";
 import { TTS } from "./tts/tts";
-import { IAgentMessage, ActionTemplateSequence } from "agent-dispatcher";
+import { IAgentMessage, TemplateEditConfig } from "agent-dispatcher";
 
 import { PartialCompletion } from "./partial";
 import { InputChoice } from "./choicePanel";
@@ -496,7 +496,7 @@ export class ChatView {
 
     public proposeAction(
         proposeActionId: number,
-        actionTemplates: ActionTemplateSequence,
+        actionTemplates: TemplateEditConfig,
         requestId: string,
         source: string,
     ) {

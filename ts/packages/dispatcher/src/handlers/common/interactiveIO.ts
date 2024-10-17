@@ -3,7 +3,7 @@
 
 import { askYesNo } from "../../utils/interactive.js";
 import readline from "readline/promises";
-import { ActionTemplateSequence } from "../../translation/actionTemplate.js";
+import { TemplateEditConfig } from "../../translation/actionTemplate.js";
 import chalk from "chalk";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
 import {
@@ -54,7 +54,7 @@ export interface ClientIO {
         defaultValue?: boolean,
     ): Promise<boolean>;
     proposeAction(
-        actionTemplates: ActionTemplateSequence,
+        actionTemplates: TemplateEditConfig,
         requestId: RequestId,
         source: string,
     ): Promise<unknown>;
@@ -110,7 +110,7 @@ export interface RequestIO {
     isInputEnabled(): boolean;
     askYesNo(message: string, defaultValue?: boolean): Promise<boolean>;
     proposeAction(
-        actionTemplates: ActionTemplateSequence,
+        actionTemplates: TemplateEditConfig,
         source: string,
     ): Promise<unknown>;
     // returns undefined if input is disabled
@@ -213,7 +213,7 @@ export function getConsoleRequestIO(
             return await askYesNo(message, stdio, defaultValue);
         },
         proposeAction: async (
-            actionTemplates: ActionTemplateSequence,
+            actionTemplates: TemplateEditConfig,
             source: string,
         ) => {
             // TODO: Not implemented
@@ -306,7 +306,7 @@ export function getRequestIO(
         askYesNo: async (message: string, defaultValue?: boolean) =>
             clientIO.askYesNo(message, requestId, defaultValue),
         proposeAction: async (
-            actionTemplates: ActionTemplateSequence,
+            actionTemplates: TemplateEditConfig,
             source: string,
         ) => clientIO.proposeAction(actionTemplates, requestId, source),
         question: async (message: string) =>

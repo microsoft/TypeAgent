@@ -17,11 +17,11 @@ import {
     ConversationMessage,
     createConversationManager,
 } from "../conversation/conversationManager.js";
-import { TopicMerger } from "../conversation/topics.js";
 import {
     ConversationSettings,
     createConversation,
 } from "../conversation/conversation.js";
+import { TypeChatLanguageModel } from "typechat";
 
 export function emailAddressToString(address: EmailAddress): string {
     if (address.displayName) {
@@ -252,17 +252,6 @@ export async function loadEmailFolder(
     return removeUndefined(emails);
 }
 
-export function createEmailTopicMerger(): TopicMerger {
-    return {
-        next(updateSequence, updateIndex) {
-            return Promise.resolve(undefined);
-        },
-        mergeWindow() {
-            return Promise.resolve(undefined);
-        },
-    };
-}
-
 /**
  * Create email memory at the given root path
  * @param name
@@ -271,6 +260,7 @@ export function createEmailTopicMerger(): TopicMerger {
  * @returns
  */
 export async function createEmailMemory(
+    model: TypeChatLanguageModel,
     name: string,
     rootPath: string,
     settings: ConversationSettings,
@@ -283,13 +273,15 @@ export async function createEmailMemory(
     actions.verbTermMap.put("talk", EmailVerbs.send);
     actions.verbTermMap.put("get", EmailVerbs.receive);
 
-    return createConversationManager(
+    const cm = await createConversationManager(
         name,
         rootPath,
         false,
         emailConversation,
-        createEmailTopicMerger(),
     );
+    cm.topicMerger.settings.mergeWindowSize = 1;
+    cm.topicMerger.settings.trackRecent = false;
+    return cm;
 }
 /**
  * Add an email message to an email conversation
@@ -302,13 +294,7 @@ export async function addEmailToConversation(
 ): Promise<void> {
     if (Array.isArray(emails)) {
         const messages: ConversationMessage[] = emails.map<ConversationMessage>(
-            (email) => {
-                return {
-                    text: emailToTextBlock(email),
-                    knowledge: emailToKnowledge(email),
-                    timestamp: dateTime.stringToDate(email.sentOn),
-                };
-            },
+            (email) => emailToMessage(email),
         );
         await cm.addMessageBatch(messages);
     } else {
@@ -321,6 +307,14 @@ export async function addEmailToConversation(
             dateTime.stringToDate(email.sentOn),
         );
     }
+}
+
+function emailToMessage(email: Email): ConversationMessage {
+    return {
+        text: emailToTextBlock(email),
+        knowledge: emailToKnowledge(email),
+        timestamp: dateTime.stringToDate(email.sentOn),
+    };
 }
 
 function makeHeader(name: string, text: string | undefined): string {

@@ -929,6 +929,23 @@ export async function lookupAnswersOnWebPages(
     return partialAnswer;
 }
 
+/**
+ * lookupAnswersOnWeb answers a question using information from the Internet
+ * - Takes a model and a query..
+ * - Searches the web using Bing
+ * - Takes the top K matches, fetches the HTML for each one, extracts text
+ * - Runs through the text chunk by chunk... passing each chunk to the LLM
+ * - If a chunk answered the question (fully or partially), collects the answer
+ * - Collects up all the sub-answers, then rewrites them into a more cogent response, also using the LLM.
+ * @param model Language model to use
+ * @param query The query for which we should get an answer
+ * @param maxSearchResults maximum search results to get from Bing. This impacts how many web pages we look at
+ * @param options
+ * @param concurrency
+ * @param context
+ * @param progress
+ * @returns
+ */
 export async function lookupAnswersOnWeb(
     model: TypeChatLanguageModel,
     query: string,

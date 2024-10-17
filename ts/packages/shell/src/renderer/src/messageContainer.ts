@@ -3,13 +3,13 @@
 
 import { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
 import { TTS, TTSMetrics } from "./tts/tts";
-import { ActionTemplateSequence, PhaseTiming } from "agent-dispatcher";
+import { TemplateEditConfig, PhaseTiming } from "agent-dispatcher";
 
 import { ChoicePanel, InputChoice } from "./choicePanel";
 import { setContent } from "./setContent";
 import { ChatView } from "./chatView";
 import { iconCheckMarkCircle, iconRoadrunner, iconX } from "./icon";
-import { FieldEditor } from "./fieldEditor";
+import { TemplateEditor } from "./templateEditor";
 import { getClientAPI } from "./main";
 import { SettingsView } from "./settingsView";
 
@@ -233,14 +233,17 @@ export class MessageContainer {
 
     public proposeAction(
         proposeActionId: number,
-        actionTemplates: ActionTemplateSequence,
+        actionTemplates: TemplateEditConfig,
     ) {
         // use this div to show the proposed action
         const actionContainer = document.createElement("div");
         actionContainer.className = "action-container";
         this.messageDiv.appendChild(actionContainer);
 
-        const actionCascade = new FieldEditor(actionContainer, actionTemplates);
+        const actionCascade = new TemplateEditor(
+            actionContainer,
+            actionTemplates,
+        );
 
         const createTextSpan = (text: string) => {
             const span = document.createElement("span");

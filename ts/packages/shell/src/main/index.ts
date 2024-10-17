@@ -11,6 +11,7 @@ import {
     dialog,
     DevicePermissionHandlerHandlerDetails,
     WebContents,
+    BrowserView,
 } from "electron";
 import { join } from "node:path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
@@ -24,7 +25,7 @@ import {
     Dispatcher,
 } from "agent-dispatcher";
 
-import { IAgentMessage, ActionTemplateSequence } from "agent-dispatcher";
+import { IAgentMessage, TemplateEditConfig } from "agent-dispatcher";
 import { ShellSettings } from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
@@ -48,6 +49,8 @@ process.argv.forEach((arg) => {
 });
 
 let mainWindow: BrowserWindow | null = null;
+let inlineBrowserView: BrowserView | null = null;
+let chatView: BrowserView | null = null;
 
 const time = performance.now();
 debugShell("Starting...");
@@ -60,15 +63,31 @@ function createWindow(): void {
         height: ShellSettings.getinstance().height,
         show: false,
         autoHideMenuBar: true,
+        x: ShellSettings.getinstance().x,
+        y: ShellSettings.getinstance().y,
+    });
 
+    mainWindow.setBounds({
+        width: ShellSettings.getinstance().width,
+        height: ShellSettings.getinstance().height,
+    });
+
+    chatView = new BrowserView({
         webPreferences: {
             preload: join(__dirname, "../preload/index.mjs"),
             sandbox: false,
             zoomFactor: ShellSettings.getinstance().zoomLevel,
         },
-        x: ShellSettings.getinstance().x,
-        y: ShellSettings.getinstance().y,
     });
+
+    chatView.setBounds({
+        x: 0,
+        y: 0,
+        width: ShellSettings.getinstance().width! - 20,
+        height: ShellSettings.getinstance().height! - 50,
+    });
+
+    mainWindow.setBrowserView(chatView);
 
     setupDevicePermissions(mainWindow);
 
@@ -76,7 +95,7 @@ function createWindow(): void {
         mainWindow!.show();
 
         if (ShellSettings.getinstance().devTools) {
-            mainWindow?.webContents.openDevTools();
+            chatView?.webContents.openDevTools();
         }
     });
 
@@ -91,6 +110,12 @@ function createWindow(): void {
                 mainWindow.webContents.zoomLevel;
             ShellSettings.getinstance().devTools =
                 mainWindow.webContents.isDevToolsOpened();
+
+            ShellSettings.getinstance().closeInlineBrowser();
+            ShellSettings.getinstance().size = mainWindow.getSize();
+            console.log(
+                "Closing size: " + JSON.stringify(mainWindow.getSize()),
+            );
         }
     });
 
@@ -108,12 +133,42 @@ function createWindow(): void {
         }
     });
 
+    mainWindow.on("will-resize", (_event, bounds) => {
+        if (mainWindow) {
+            const chatBounds = chatView?.getBounds();
+            let newWidth = chatBounds!.width;
+            if (bounds.width < newWidth) {
+                newWidth = bounds.width - 20;
+            } else {
+                if (!inlineBrowserView) {
+                    newWidth = bounds.width - 20;
+                }
+            }
+
+            chatView?.setBounds({
+                x: 0,
+                y: 0,
+                width: newWidth,
+                height: bounds.height - 50,
+            });
+
+            if (inlineBrowserView) {
+                inlineBrowserView?.setBounds({
+                    x: chatBounds!.width + 4,
+                    y: 0,
+                    width: bounds.width - newWidth - 20,
+                    height: bounds.height - 50,
+                });
+            }
+        }
+    });
+
     // HMR for renderer base on electron-vite cli.
     // Load the remote URL for development or the local html file for production.
     if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-        mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
+        chatView.webContents.loadURL(process.env["ELECTRON_RENDERER_URL"]);
     } else {
-        mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
+        chatView.webContents.loadURL(join(__dirname, "../renderer/index.html"));
     }
 
     mainWindow.removeMenu();
@@ -122,7 +177,7 @@ function createWindow(): void {
 
     // Notify renderer process whenever settings are modified
     ShellSettings.getinstance().onSettingsChanged = (): void => {
-        mainWindow?.webContents.send(
+        chatView?.webContents.send(
             "settings-changed",
             ShellSettings.getinstance().getSerializable(),
         );
@@ -131,7 +186,7 @@ function createWindow(): void {
     ShellSettings.getinstance().onShowSettingsDialog = (
         dialogName: string,
     ): void => {
-        mainWindow?.webContents.send("show-dialog", dialogName);
+        chatView?.webContents.send("show-dialog", dialogName);
     };
 
     ShellSettings.getinstance().onRunDemo = (interactive: boolean): void => {
@@ -140,6 +195,54 @@ function createWindow(): void {
 
     ShellSettings.getinstance().onToggleTopMost = () => {
         mainWindow?.setAlwaysOnTop(!mainWindow?.isAlwaysOnTop());
+    };
+
+    ShellSettings.getinstance().onOpenInlineBrowser = (
+        targetUrl: URL,
+    ): void => {
+        const currSize = mainWindow?.getBounds();
+        const chatSize = chatView?.getBounds();
+
+        if (!inlineBrowserView && currSize && chatSize) {
+            mainWindow?.setBounds({
+                width: chatSize.width + 1020,
+            });
+
+            inlineBrowserView = new BrowserView({
+                webPreferences: {
+                    preload: join(__dirname, "../preload/webview.mjs"),
+                    sandbox: false,
+                },
+            });
+
+            inlineBrowserView.setBounds({
+                x: chatSize.width + 4,
+                y: 0,
+                width: 1000,
+                height: currSize.height,
+            });
+
+            mainWindow?.addBrowserView(inlineBrowserView);
+        }
+
+        inlineBrowserView?.webContents.loadURL(targetUrl.toString());
+        inlineBrowserView?.webContents.on("did-finish-load", () => {
+            inlineBrowserView?.webContents.send("setupSiteAgent");
+        });
+    };
+
+    ShellSettings.getinstance().onCloseInlineBrowser = (): void => {
+        const chatSize = chatView?.getBounds();
+
+        if (inlineBrowserView && chatSize) {
+            mainWindow?.setBounds({
+                width: chatSize.width + 20,
+            });
+
+            inlineBrowserView.webContents.close();
+            mainWindow?.removeBrowserView(inlineBrowserView);
+            inlineBrowserView = null;
+        }
     };
 }
 
@@ -249,7 +352,7 @@ async function triggerRecognitionOnce(dispatcher: Dispatcher) {
     const speechToken = await getSpeechToken();
     const useLocalWhisper =
         typeof dispatcher.getContext().localWhisper !== "undefined";
-    mainWindow?.webContents.send(
+    chatView?.webContents.send(
         "listen-event",
         "Alt+M",
         speechToken,
@@ -263,7 +366,7 @@ function updateDisplay(message: IAgentMessage, mode?: DisplayAppendMode) {
         console.warn("updateDisplay: requestId is undefined");
         return;
     }
-    mainWindow?.webContents.send("updateDisplay", message, mode);
+    chatView?.webContents.send("updateDisplay", message, mode);
 }
 
 function markRequestExplained(
@@ -277,7 +380,7 @@ function markRequestExplained(
         console.warn("markRequestExplained: requestId is undefined");
         return;
     }
-    mainWindow?.webContents.send(
+    chatView?.webContents.send(
         "mark-explained",
         requestId,
         timestamp,
@@ -293,7 +396,7 @@ function updateRandomCommandSelected(requestId: RequestId, message: string) {
         return;
     }
 
-    mainWindow?.webContents.send("update-random-command", requestId, message);
+    chatView?.webContents.send("update-random-command", requestId, message);
 }
 
 let maxAskYesNoId = 0;
@@ -321,7 +424,7 @@ async function askYesNo(
             resolve(response);
         };
         ipcMain.on("askYesNoResponse", callback);
-        mainWindow?.webContents.send(
+        chatView?.webContents.send(
             "askYesNo",
             currentAskYesNoId,
             message,
@@ -332,7 +435,7 @@ async function askYesNo(
 
 let maxProposeActionId = 0;
 async function proposeAction(
-    actionTemplates: ActionTemplateSequence,
+    actionTemplates: TemplateEditConfig,
     requestId: RequestId,
     source: string,
 ) {
@@ -350,7 +453,7 @@ async function proposeAction(
             resolve(replacement);
         };
         ipcMain.on("proposeActionResponse", callback);
-        mainWindow?.webContents.send(
+        chatView?.webContents.send(
             "proposeAction",
             currentProposeActionId,
             actionTemplates,
@@ -381,7 +484,7 @@ async function question(message: string, requestId: RequestId) {
             resolve(response);
         };
         ipcMain.on("questionResponse", callback);
-        mainWindow?.webContents.send(
+        chatView?.webContents.send(
             "question",
             currentQuestionId,
             message,
@@ -392,7 +495,7 @@ async function question(message: string, requestId: RequestId) {
 
 const clientIO: ClientIO = {
     clear: () => {
-        mainWindow?.webContents.send("clear");
+        chatView?.webContents.send("clear");
     },
     setDisplay: updateDisplay,
     appendDisplay: (message, mode) => updateDisplay(message, mode ?? "inline"),
@@ -414,7 +517,7 @@ const clientIO: ClientIO = {
                 updateRandomCommandSelected(requestId, data.message);
                 break;
             case "showNotifications":
-                mainWindow?.webContents.send(
+                chatView?.webContents.send(
                     "notification-command",
                     requestId,
                     data,
@@ -424,7 +527,7 @@ const clientIO: ClientIO = {
             case AppAgentEvent.Warning:
             case AppAgentEvent.Info:
                 console.log(`[${event}] ${source}: ${data}`);
-                mainWindow?.webContents.send(
+                chatView?.webContents.send(
                     "notification-arrived",
                     event,
                     requestId,
@@ -440,7 +543,7 @@ const clientIO: ClientIO = {
         app.quit();
     },
     takeAction: (action: string) => {
-        mainWindow?.webContents.send("take-action", action);
+        chatView?.webContents.send("take-action", action);
     },
 };
 
@@ -451,7 +554,7 @@ async function setDynamicDisplay(
     displayId: string,
     nextRefreshMs: number,
 ) {
-    mainWindow?.webContents.send(
+    chatView?.webContents.send(
         "set-dynamic-action-display",
         source,
         requestId,
@@ -527,14 +630,18 @@ app.whenReady().then(async () => {
         debugShell(dispatcher.getPrompt(), text);
 
         const metrics = await dispatcher.processCommand(text, id, images);
-        mainWindow?.webContents.send("send-demo-event", "CommandProcessed");
+        chatView?.webContents.send("send-demo-event", "CommandProcessed");
         const newSettingSummary = dispatcher.getSettingSummary();
         if (newSettingSummary !== settingSummary) {
             settingSummary = newSettingSummary;
-            mainWindow?.webContents.send(
+            chatView?.webContents.send(
                 "setting-summary-changed",
                 newSettingSummary,
                 dispatcher.getTranslatorNameToEmojiMap(),
+            );
+
+            mainWindow?.setTitle(
+                `${newSettingSummary} Zoom: ${ShellSettings.getinstance().zoomLevel * 100}%`,
             );
         }
 
@@ -550,14 +657,14 @@ app.whenReady().then(async () => {
         (_event, text: string, id: string, images: string[]) => {
             processShellRequest(text, id, images)
                 .then((metrics) =>
-                    mainWindow?.webContents.send(
+                    chatView?.webContents.send(
                         "process-shell-request-done",
                         id,
                         metrics,
                     ),
                 )
                 .catch((error) => {
-                    mainWindow?.webContents.send(
+                    chatView?.webContents.send(
                         "process-shell-request-error",
                         id,
                         error.message,
@@ -568,18 +675,31 @@ app.whenReady().then(async () => {
     ipcMain.handle("get-partial-completion", async (_event, prefix: string) => {
         return dispatcher.getPartialCompletion(prefix);
     });
+    ipcMain.handle("get-dynamic-display", async (_event, appAgentName, id) =>
+        dispatcher.getDynamicDisplay(appAgentName, "html", id),
+    );
     ipcMain.handle(
-        "get-dynamic-display",
-        async (_event, appAgentName: string, id: string) =>
-            dispatcher.getDynamicDisplay(appAgentName, "html", id),
+        "get-template-schema",
+        async (_event, appAgentName, templateName, data) => {
+            return dispatcher.getTemplateSchema(
+                appAgentName,
+                templateName,
+                data,
+            );
+        },
     );
     ipcMain.on("dom ready", async () => {
         settingSummary = dispatcher.getSettingSummary();
-        mainWindow?.webContents.send(
+        chatView?.webContents.send(
             "setting-summary-changed",
             settingSummary,
             dispatcher.getTranslatorNameToEmojiMap(),
         );
+
+        mainWindow?.setTitle(
+            `${settingSummary} Zoom: ${ShellSettings.getinstance().zoomLevel * 100}%`,
+        );
+        mainWindow?.show();
 
         // Send settings asap
         ShellSettings.getinstance().onSettingsChanged!();
@@ -603,7 +723,7 @@ app.whenReady().then(async () => {
     });
 
     globalShortcut.register("Alt+Right", () => {
-        mainWindow?.webContents.send("send-demo-event", "Alt+Right");
+        chatView?.webContents.send("send-demo-event", "Alt+Right");
     });
 
     // Default open or close DevTools by F12 in development

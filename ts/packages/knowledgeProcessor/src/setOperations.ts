@@ -54,10 +54,10 @@ export function intersectUnionMultiple<T>(
     ...arrays: (Iterator<T> | IterableIterator<T> | Array<T> | undefined)[]
 ): T[] | undefined {
     // We can to do this more optimally...
-    let combined: FrequencyTable<T> | undefined;
+    let combined: HitTable<T> | undefined;
     for (const array of arrays) {
         if (array) {
-            combined ??= createFrequencyTable<T>();
+            combined ??= createHitTable<T>();
             combined.addMultiple(array);
         }
     }
@@ -153,6 +153,23 @@ export function* unionScored<T = any>(
         yield yVal.value;
         yVal = y.next();
     }
+}
+
+export function unionMultipleScored<T>(
+    ...arrays: (
+        | Iterator<ScoredItem<T>>
+        | IterableIterator<ScoredItem<T>>
+        | Array<ScoredItem<T>>
+        | undefined
+    )[]
+): IterableIterator<ScoredItem<T>> {
+    let combined: any | undefined;
+    for (const array of arrays) {
+        if (array) {
+            combined = combined ? union(combined, array) : array;
+        }
+    }
+    return combined ?? [];
 }
 
 export function* unique<T>(x: Iterator<T>): IterableIterator<T> {
@@ -288,7 +305,7 @@ export function intersectUnionSets<T = any>(
     y?: Set<T>,
 ): Set<T> | undefined {
     // We can to do this more optimally...
-    let combined = createFrequencyTable<T>();
+    let combined = createHitTable<T>();
     if (x) {
         combined.addMultiple(x.values());
     }
@@ -330,76 +347,104 @@ export type WithFrequency<T = any> = {
     count: number;
 };
 
-export interface FrequencyTable<T> {
+export interface HitTable<T> {
     readonly size: number;
-    get(value: T): WithFrequency<T> | undefined;
-    getFrequency(value: T): number;
-    add(value: T): number;
-    addMultiple(values: Iterator<T> | IterableIterator<T> | Array<T>): void;
+    get(value: T): ScoredItem<T> | undefined;
+    getScore(value: T): number;
+    add(value: T, score?: number | undefined): number;
+    addMultiple(
+        values: Iterator<T> | IterableIterator<T> | Array<T>,
+        score?: number | undefined,
+    ): void;
+    addMultipleScored(
+        values:
+            | Iterator<ScoredItem<T>>
+            | IterableIterator<ScoredItem<T>>
+            | Array<ScoredItem<T>>,
+    ): void;
     keys(): IterableIterator<T>;
-    byFrequency(): WithFrequency<T>[];
+    byHighestScore(): ScoredItem<T>[];
     getTop(): T[];
     getTopK(k: number): T[];
 }
 
-export function createFrequencyTable<T>(
+export function createHitTable<T>(
     keyAccessor?: (value: T) => any,
-): FrequencyTable<T> {
-    const map = new Map<any, WithFrequency<T>>();
+): HitTable<T> {
+    const map = new Map<any, ScoredItem<T>>();
     return {
         get size() {
             return map.size;
         },
         get,
-        getFrequency,
+        getScore,
         add,
         addMultiple,
+        addMultipleScored,
         keys: () => map.keys(),
-        byFrequency,
+        byHighestScore,
         getTop,
         getTopK,
     };
 
-    function get(value: T): WithFrequency<T> | undefined {
+    function get(value: T): ScoredItem<T> | undefined {
         const key = getKey(value);
         return map.get(key);
     }
 
-    function getFrequency(value: T): number {
+    function getScore(value: T): number {
         const key = getKey(value);
-        const freq = map.get(key);
-        return freq ? freq.count : 0;
+        const scoredItem = map.get(key);
+        return scoredItem ? scoredItem.score : 0;
     }
 
-    function add(value: T): number {
+    function add(value: T, score?: number | undefined): number {
+        score ??= 1.0;
         const key = getKey(value);
-        let freq = map.get(key);
-        if (freq) {
-            freq.count++;
+        let scoredItem = map.get(key);
+        if (scoredItem) {
+            scoredItem.score += score;
         } else {
-            freq = { value, count: 1 };
-            map.set(key, freq);
+            scoredItem = { item: value, score };
+            map.set(key, scoredItem);
         }
-        return freq.count;
+        return scoredItem.score;
     }
 
     function addMultiple(
         values: Iterator<T> | IterableIterator<T> | Array<T>,
+        score?: number | undefined,
     ): void {
         const x: Iterator<T> = Array.isArray(values) ? values.values() : values;
         let xValue = x.next();
         while (!xValue.done) {
-            add(xValue.value);
+            add(xValue.value, score);
             xValue = x.next();
         }
     }
 
-    function byFrequency(): WithFrequency<T>[] {
+    function addMultipleScored(
+        values:
+            | Iterator<ScoredItem<T>>
+            | IterableIterator<ScoredItem<T>>
+            | Array<ScoredItem<T>>,
+    ): void {
+        const x: Iterator<ScoredItem<T>> = Array.isArray(values)
+            ? values.values()
+            : values;
+        let xValue = x.next();
+        while (!xValue.done) {
+            add(xValue.value.item, xValue.value.score);
+            xValue = x.next();
+        }
+    }
+
+    function byHighestScore(): ScoredItem<T>[] {
         if (map.size === 0) {
             return [];
         }
         // Descending order
-        return [...map.values()].sort((x, y) => y.count - x.count);
+        return [...map.values()].sort((x, y) => y.score - x.score);
     }
 
     // TODO: Optimize.
@@ -407,11 +452,11 @@ export function createFrequencyTable<T>(
         if (map.size === 0) {
             return [];
         }
-        let maxFreq = mathLib.max(map.values(), (v) => v.count)!.count;
+        let maxScore = mathLib.max(map.values(), (v) => v.score)!.score;
         let top: T[] = [];
         for (const value of map.values()) {
-            if (value.count === maxFreq) {
-                top.push(value.value);
+            if (value.score === maxScore) {
+                top.push(value.item);
             }
         }
         return top;
@@ -419,23 +464,24 @@ export function createFrequencyTable<T>(
 
     // TODO: Optimize.
     function getTopK(k: number): T[] {
-        const byFreq = byFrequency();
+        const topItems = byHighestScore();
         const topK: T[] = [];
-        if (k < 1 || byFreq.length === 0) {
+        if (k < 1 || topItems.length === 0) {
             return topK;
         }
-        // Find the k'th lowest hit count
-        let prevFreq = byFreq[0].count;
+        // Stop when we have matched k highest scores
+        let prevScore = topItems[0].score;
         let kCount = 1;
-        for (let i = 0; i < byFreq.length; ++i) {
-            if (byFreq[i].count < prevFreq) {
+        for (let i = 0; i < topItems.length; ++i) {
+            const score = topItems[i].score;
+            if (score < prevScore) {
                 kCount++;
                 if (kCount > k) {
                     break;
                 }
-                prevFreq = byFreq[i].count;
+                prevScore = score;
             }
-            topK.push(byFreq[i].value);
+            topK.push(topItems[i].item);
         }
         return topK;
     }

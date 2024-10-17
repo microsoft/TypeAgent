@@ -45,6 +45,17 @@ export {
     ActionResult,
 } from "./action.js";
 
+export type {
+    TemplateFieldPrimitive,
+    TemplateFieldStringUnion,
+    TemplateFieldScalar,
+    TemplateFieldArray,
+    TemplateFieldObject,
+    TemplateFieldOpt,
+    TemplateField,
+    TemplateSchema,
+} from "./templateInput.js";
+
 export { Entity } from "./memory.js";
 
 export { Profiler } from "./profiler.js";

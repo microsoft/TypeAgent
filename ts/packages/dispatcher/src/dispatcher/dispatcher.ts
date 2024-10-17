@@ -15,9 +15,9 @@ import {
     initializeCommandHandlerContext,
     InitializeCommandHandlerContextOptions,
 } from "../handlers/common/commandHandlerContext.js";
-import { getDynamicDisplay } from "../action/actionHandlers.js";
 import { RequestId } from "../handlers/common/interactiveIO.js";
 import { RequestMetrics } from "../utils/metrics.js";
+import { TemplateSchema } from "../../../agentSdk/dist/templateInput.js";
 
 export type PartialCompletionResult = {
     partial: string; // The head part of the completion
@@ -40,6 +40,11 @@ export interface Dispatcher {
         type: DisplayType,
         id: string,
     ): Promise<DynamicDisplay>;
+    getTemplateSchema(
+        appAgentName: string,
+        templateName: string,
+        data: unknown,
+    ): TemplateSchema;
     close(): Promise<void>;
 
     // TODO: Review these APIs
@@ -49,6 +54,34 @@ export interface Dispatcher {
 
     // TODO: Remove access to context
     getContext(): CommandHandlerContext;
+}
+
+async function getDynamicDisplay(
+    context: CommandHandlerContext,
+    appAgentName: string,
+    type: DisplayType,
+    displayId: string,
+): Promise<DynamicDisplay> {
+    const appAgent = context.agents.getAppAgent(appAgentName);
+    if (appAgent.getDynamicDisplay === undefined) {
+        throw new Error(`Dynamic display not supported by '${appAgentName}'`);
+    }
+    const sessionContext = context.agents.getSessionContext(appAgentName);
+    return appAgent.getDynamicDisplay(type, displayId, sessionContext);
+}
+
+function getTemplateSchema(
+    context: CommandHandlerContext,
+    appAgentName: string,
+    templateName: string,
+    data: unknown,
+): TemplateSchema {
+    const appAgent = context.agents.getAppAgent(appAgentName);
+    if (appAgent.getTemplateSchema === undefined) {
+        throw new Error(`Template schema not supported by '${appAgentName}'`);
+    }
+    const sessionContext = context.agents.getSessionContext(appAgentName);
+    return appAgent.getTemplateSchema(templateName, data, sessionContext);
 }
 
 export type DispatcherOptions = InitializeCommandHandlerContextOptions;
@@ -66,6 +99,9 @@ export async function createDispatcher(
         },
         getDynamicDisplay(appAgentName, type, id) {
             return getDynamicDisplay(context, appAgentName, type, id);
+        },
+        getTemplateSchema(appAgentName, templateName, data) {
+            return getTemplateSchema(context, appAgentName, templateName, data);
         },
         async close() {
             await closeCommandHandlerContext(context);

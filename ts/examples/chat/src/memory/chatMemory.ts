@@ -122,6 +122,7 @@ export async function createChatMemoryContext(): Promise<ChatContext> {
         entityTopK: 16,
         searcher: createSearchProcessor(conversation, chatModel, true, 16),
         emailMemory: await knowLib.email.createEmailMemory(
+            chatModel,
             ReservedConversationNames.outlook,
             storePath,
             conversationSettings,
@@ -437,7 +438,7 @@ export async function runChatMemory(): Promise<void> {
                 sourcePath: argSourceFileOrFolder(),
             },
             options: {
-                concurrency: argConcurrency(2),
+                concurrency: argConcurrency(1),
                 clean: argClean(),
             },
         };
@@ -472,7 +473,9 @@ export async function runChatMemory(): Promise<void> {
                     emails.length,
                 );
                 emailBatch.value.forEach((e) =>
-                    printer.writeLine(e.sourcePath),
+                    printer.writeLine(
+                        `${e.sourcePath}\n${knowLib.email.emailToString(e).length} chars`,
+                    ),
                 );
                 await knowLib.email.addEmailToConversation(
                     context.emailMemory,
@@ -610,7 +613,7 @@ export async function runChatMemory(): Promise<void> {
             namedArgs.maxTurns,
         );
         let messageIndex = await context.conversation.getMessageIndex();
-        cm.topicMerger.mergeWindow = namedArgs.mergeWindow;
+        cm.topicMerger.settings.mergeWindowSize = namedArgs.mergeWindow;
 
         let count = 0;
         const concurrency = namedArgs.concurrency;
@@ -641,10 +644,20 @@ export async function runChatMemory(): Promise<void> {
                         message,
                         knowledge,
                     );
-                const mergedTopic = await cm.topicMerger.next(true, true);
-                if (mergedTopic) {
-                    printer.writeTitle("Merged Topic:");
-                    printer.writeTemporalBlock(chalk.blueBright, mergedTopic);
+                if (knowledgeIds.topicIds && knowledgeIds.topicIds.length > 0) {
+                    const mergedTopic = await cm.topicMerger.next(
+                        knowledge.topics!,
+                        knowledgeIds.topicIds,
+                        undefined,
+                        true,
+                    );
+                    if (mergedTopic) {
+                        printer.writeTitle("Merged Topic:");
+                        printer.writeTemporalBlock(
+                            chalk.blueBright,
+                            mergedTopic,
+                        );
+                    }
                 }
                 await cm.conversation.addKnowledgeToIndex(
                     knowledge,
@@ -673,7 +686,7 @@ export async function runChatMemory(): Promise<void> {
                 exact: argBool("Exact match?"),
                 count: argNum("Num matches", 3),
                 minScore: argMinScore(0),
-                showMessages: argBool(),
+                showSource: argBool("Show the sources of this topic"),
                 level: argNum("Topics at this level", 1),
             },
         };
@@ -706,8 +719,12 @@ export async function runChatMemory(): Promise<void> {
             return;
         }
 
+        const sourceIndex =
+            namedArgs.level > 1
+                ? await context.conversation.getTopicsIndex(namedArgs.level - 1)
+                : undefined;
         for await (const topic of index.entries()) {
-            await writeExtractedTopic(topic, namedArgs.showMessages);
+            await writeExtractedTopic(topic, namedArgs.showSource, sourceIndex);
         }
     }
 
@@ -858,7 +875,7 @@ export async function runChatMemory(): Promise<void> {
                 action: argBool("Include actions"),
                 eval: argBool("Evaluate search query", true),
                 debug: argBool("Show debug info", false),
-                save: argBool("Save the search", true),
+                save: argBool("Save the search", false),
                 v2: argBool("Run V2 match", false),
             },
         };
@@ -1070,7 +1087,7 @@ export async function runChatMemory(): Promise<void> {
         const searchOptions: conversation.SearchProcessingOptions = {
             maxMatches,
             minScore,
-            maxMessages: 15,
+            maxMessages: 10,
             progress: (value) => printer.writeJson(value),
         };
         if (namedArgs.fallback) {
@@ -1423,14 +1440,22 @@ export async function runChatMemory(): Promise<void> {
 
     async function writeExtractedTopic(
         topic: knowLib.TextBlock,
-        showMessages: boolean,
+        showSource: boolean,
+        sourceIndex?: conversation.TopicIndex | undefined,
     ) {
-        if (showMessages) {
-            const messages = await loadMessages(topic.sourceIds);
-            printer.writeTemporalBlocks(chalk.greenBright, messages);
+        printer.writeBullet(topic.value);
+        if (showSource) {
+            if (sourceIndex) {
+                const textBlocks = await loadTopics(
+                    sourceIndex,
+                    topic.sourceIds,
+                );
+                printer.writeListInColor(chalk.greenBright, textBlocks);
+            } else {
+                const textBlocks = await loadMessages(topic.sourceIds);
+                printer.writeTemporalBlocks(chalk.greenBright, textBlocks);
+            }
         }
-        printer.writeLine(topic.value);
-        printer.writeLine();
     }
 
     function writeExtractedAction(
@@ -1504,6 +1529,20 @@ export async function runChatMemory(): Promise<void> {
     ): Promise<(dateTime.Timestamped<knowLib.TextBlock> | undefined)[]> {
         if (ids && ids.length > 0) {
             return await context.conversation.messages.getMultiple(ids);
+        }
+        return [];
+    }
+
+    async function loadTopics(
+        topicLevel: conversation.TopicIndex | number,
+        ids?: string[],
+    ) {
+        if (ids && ids.length > 0) {
+            const index =
+                typeof topicLevel === "number"
+                    ? await context.conversation.getTopicsIndex(topicLevel - 1)
+                    : topicLevel;
+            return index.getMultipleText(ids);
         }
         return [];
     }

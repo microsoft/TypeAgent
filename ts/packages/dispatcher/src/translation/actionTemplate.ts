@@ -1,54 +1,128 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Actions } from "agent-cache";
-import { ActionParamObject, getTranslatorActionInfos } from "./actionInfo.js";
-import { TranslatorConfigProvider } from "./agentTranslators.js";
+import { Action, Actions } from "agent-cache";
+import { getTranslatorActionInfos } from "./actionInfo.js";
+import { CommandHandlerContext } from "../internal.js";
+import { getActiveTranslatorList } from "../handlers/common/commandHandlerContext.js";
+import {
+    TemplateFieldStringUnion,
+    TemplateSchema,
+    SessionContext,
+} from "@typeagent/agent-sdk";
 
-export type ActionTemplate = {
-    agent: string;
-    name: string;
-    parameterStructure?: ActionParamObject | undefined;
+export type TemplateData = {
+    schema: TemplateSchema;
+    data: unknown;
 };
-
-export type ActionTemplateSequence = {
-    templates: ActionTemplate[];
-    actions: unknown;
+export type TemplateEditConfig = {
+    templateAppAgent: string;
+    templateName: string;
+    templateData: TemplateData | TemplateData[];
+    defaultTemplate: TemplateSchema;
     preface?: string;
     editPreface?: string;
 };
 
-export function toTemplateSequence(
-    provider: TranslatorConfigProvider,
+function getDefaultActionTemplate(
+    translators: string[],
+    discrimintator?: string,
+): TemplateSchema {
+    const translatorName: TemplateFieldStringUnion = {
+        type: "string-union",
+        typeEnum: translators,
+    };
+    const template: TemplateSchema = {
+        type: "object",
+        fields: {
+            translatorName: {
+                field: translatorName,
+            },
+        },
+    };
+    if (discrimintator) {
+        translatorName.discriminator = discrimintator;
+    }
+    return template;
+}
+
+function toTemplate(
+    context: CommandHandlerContext,
+    translators: string[],
+    action: Action,
+) {
+    const config = context.agents.getTranslatorConfig(action.translatorName);
+
+    if (config === undefined) {
+        return getDefaultActionTemplate(translators);
+    }
+    const template = getDefaultActionTemplate(
+        translators,
+        action.translatorName,
+    );
+    const actionInfos = getTranslatorActionInfos(config, action.translatorName);
+    const actionName: TemplateFieldStringUnion = {
+        type: "string-union",
+        typeEnum: Array.from(actionInfos.keys()),
+    };
+    template.fields.actionName = {
+        field: actionName,
+    };
+
+    const actionInfo = actionInfos.get(action.actionName);
+    if (actionInfo === undefined) {
+        return template;
+    }
+    actionName.discriminator = action.actionName;
+
+    if (actionInfo.parameters) {
+        template.fields.parameters = {
+            // ActionParam types are compatible with TemplateFields
+            field: actionInfo.parameters,
+        };
+    }
+    return template;
+}
+
+export function getActionTemplateEditConfig(
+    context: CommandHandlerContext,
     actions: Actions,
     preface: string,
     editPreface: string,
-): ActionTemplateSequence {
-    const templates: ActionTemplate[] = [];
+): TemplateEditConfig {
+    const templateData: TemplateData[] = [];
 
+    const translators = getActiveTranslatorList(context);
     for (const action of actions) {
-        const config = provider.getTranslatorConfig(action.translatorName);
-        const actionInfos = getTranslatorActionInfos(
-            config,
-            action.translatorName,
-        );
-        const actionInfo = actionInfos.get(action.actionName);
-        if (actionInfo === undefined) {
-            throw new Error(
-                `ActionInfo for '${action.fullActionName}' not found`,
-            );
-        }
-        templates.push({
-            parameterStructure: actionInfo.parameters,
-            name: action.actionName,
-            agent: action.translatorNameString,
+        templateData.push({
+            schema: toTemplate(context, translators, action),
+            data: action.toFullAction(),
         });
     }
 
     return {
+        templateAppAgent: "system",
+        templateName: "action",
         preface,
         editPreface,
-        actions: actions.toFullActions(),
-        templates,
+        templateData,
+        defaultTemplate: getDefaultActionTemplate(translators),
     };
+}
+
+export function getSystemTemplateSchema(
+    templateName: string,
+    data: any,
+    context: SessionContext<CommandHandlerContext>,
+): TemplateSchema {
+    if (templateName !== "action") {
+        throw new Error(`Unknown template name: ${templateName}`);
+    }
+
+    const systemContext = context.agentContext;
+    return toTemplate(
+        systemContext,
+        getActiveTranslatorList(systemContext),
+        data,
+    );
 }

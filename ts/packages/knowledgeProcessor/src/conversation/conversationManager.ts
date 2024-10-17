@@ -13,6 +13,7 @@ import { SourceTextBlock, TextBlock } from "../text.js";
 import {
     Conversation,
     ConversationSettings,
+    ConversationTopicMerger,
     createConversation,
     createConversationTopicMerger,
     SearchTermsActionResponse,
@@ -164,15 +165,12 @@ export async function createConversationManager(
     conversationPath: string,
     createNew: boolean,
     existingConversation?: Conversation | undefined,
-    topicMerger?: TopicMerger | undefined,
 ): Promise<ConversationManager<string, string>> {
     const conversationSettings = createConversationSettings();
     const knowledgeModel = openai.createChatModel();
     const answerModel = openai.createChatModel();
 
     const folderSettings = defaultFolderSettings();
-    const topicMergeWindowSize = 4;
-    const maxCharsPerChunk = 2048;
 
     const conversation =
         existingConversation === undefined
@@ -187,10 +185,10 @@ export async function createConversationManager(
     }
     const knowledgeExtractor = createKnowledgeExtractor(
         knowledgeModel,
-        createKnowledgeExtractorSettings(maxCharsPerChunk),
+        createKnowledgeExtractorSettings(),
     );
 
-    topicMerger ??= await createMerger();
+    let topicMerger = await createMerger();
 
     const searchProcessor = createSearchProcessor(
         conversation,
@@ -231,8 +229,8 @@ export async function createConversationManager(
             knowledgeExtractor,
             topicMerger,
             message,
-            knowledge,
             timestamp,
+            knowledge,
         );
     }
 
@@ -276,8 +274,8 @@ export async function createConversationManager(
                         knowledgeExtractor,
                         topicMerger,
                         addTask.message.text,
-                        addTask.message.knowledge,
                         addTask.message.timestamp,
+                        addTask.message.knowledge,
                     );
                     break;
             }
@@ -341,15 +339,14 @@ export async function createConversationManager(
 
     async function clear(removeMessages: boolean): Promise<void> {
         await conversation.clear(removeMessages);
-        topicMerger = await createMerger();
+        await topicMerger!.reset();
     }
 
-    async function createMerger(): Promise<TopicMerger> {
+    async function createMerger(): Promise<ConversationTopicMerger> {
         return await createConversationTopicMerger(
             knowledgeModel,
             conversation,
             1, // Merge base topic level 1 into a higher level
-            topicMergeWindowSize,
         );
     }
 
@@ -412,8 +409,8 @@ export async function addMessageToConversation(
     knowledgeExtractor: KnowledgeExtractor,
     topicMerger: TopicMerger | undefined,
     message: string | TextBlock,
+    timestamp: Date | undefined,
     knownKnowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
-    timestamp?: Date | undefined,
 ): Promise<void> {
     const messageBlock = await conversation.addMessage(message, timestamp);
 
@@ -431,6 +428,7 @@ export async function addMessageToConversation(
             topicMerger,
             messageBlock,
             extractedKnowledge,
+            timestamp,
         );
     }
 }
@@ -452,7 +450,10 @@ export async function addMessageBatchToConversation(
             return [m.value, m.blockId];
         }),
     );
-
+    //
+    // Knowledge extraction can be done in parallel
+    // But we update the knowledge index sequentially
+    //
     const concurrency = conversation.settings.indexSettings.concurrency;
     const extractedKnowledge = await asyncArray.mapAsync(
         messageBlocks,
@@ -475,6 +476,7 @@ export async function addMessageBatchToConversation(
                 topicMerger,
                 messageBlocks[i],
                 knowledge,
+                messages[i].timestamp,
             );
         }
     }
@@ -515,16 +517,26 @@ async function indexKnowledge(
     topicMerger: TopicMerger | undefined,
     message: SourceTextBlock,
     knowledge: ExtractedKnowledge,
+    timestamp: Date | undefined,
 ): Promise<void> {
     // Add next message... this updates the "sequence"
     const knowledgeIds = await conversation.addKnowledgeForMessage(
         message,
         knowledge,
     );
-    if (topicMerger) {
-        await topicMerger.next(true, true);
-    }
     await conversation.addKnowledgeToIndex(knowledge, knowledgeIds);
+    if (
+        topicMerger &&
+        knowledgeIds.topicIds &&
+        knowledgeIds.topicIds.length > 0
+    ) {
+        await topicMerger.next(
+            knowledge.topics!,
+            knowledgeIds.topicIds,
+            timestamp,
+            true,
+        );
+    }
 }
 
 function mergeKnowledge(
