@@ -111,9 +111,10 @@ export const webapi: ClientAPI = {
           }));        
     },
     getSpeechToken: () => {
-        // TODO: implement
-        return new Promise<SpeechToken | undefined>((resolve, reject) => {
-            placeHolder1({resolve, reject});
+        // TODO: implement client side token acquisition
+        // Depends on implementing client side EntraID Auth first
+        return new Promise<SpeechToken | undefined>((resolve) => {
+            resolve(undefined); // currently not supported
         });
     },
     getLocalWhisperStatus: () => {        

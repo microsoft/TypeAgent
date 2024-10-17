@@ -48,6 +48,10 @@ export class TypeAgentAPIWebSocketServer {
             }
             
             console.log(`Connection count: ${this.server.clients.size}`);
+
+            // intialize client
+            webClientIO.updateSettingsSummary(this.settingSummary, [...dispatcher.getTranslatorNameToEmojiMap()]);
+            // TODO: send agent greeting!? 
             
             // messages from web clients arrive here
             ws.on("message", async (message: string) => {
@@ -55,6 +59,7 @@ export class TypeAgentAPIWebSocketServer {
                     const msgObj = JSON.parse(message);
                     console.log(`Received ${msgObj.message} message`);
             
+                    // update client summary if it has changed
                     const newSettingSummary = dispatcher.getSettingSummary();
                     if (newSettingSummary !== this.settingSummary) {
                         this.settingSummary = newSettingSummary;
