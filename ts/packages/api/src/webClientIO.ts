@@ -264,7 +264,11 @@ export class WebAPIClientIO implements ClientIO {
         );
     }
 
-    sendFailedCommandResult(messageId: number, requestId: RequestId, error: any) {
+    sendFailedCommandResult(
+        messageId: number,
+        requestId: RequestId,
+        error: any,
+    ) {
         this.sendMessage("process-shell-request-error", {
             messageId,
             requestId,

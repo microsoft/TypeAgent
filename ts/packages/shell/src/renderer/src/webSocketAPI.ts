@@ -49,7 +49,6 @@ export const webapi: ClientAPI = {
         );
     },
     getDynamicDisplay(source: string, id: string) {
-        
         globalThis.ws.send(
             JSON.stringify({
                 message: "get-dynamic-display",
@@ -298,13 +297,25 @@ export async function createWebSocket(
                     );
                     break;
                 case "process-shell-request-done":
-                    completeMessagePromise(msgObj.data.messageId, true, msgObj.data.metrics);
+                    completeMessagePromise(
+                        msgObj.data.messageId,
+                        true,
+                        msgObj.data.metrics,
+                    );
                     break;
                 case "process-shell-request-error":
-                    completeMessagePromise(msgObj.data.messageId, false, msgObj.data.error);
+                    completeMessagePromise(
+                        msgObj.data.messageId,
+                        false,
+                        msgObj.data.error,
+                    );
                     break;
                 case "set-template-schema":
-                    completeMessagePromise(msgObj.data.messageId, true, msgObj.data.data.schema);
+                    completeMessagePromise(
+                        msgObj.data.messageId,
+                        true,
+                        msgObj.data.data.schema,
+                    );
                     break;
             }
         };
@@ -325,11 +336,12 @@ export async function createWebSocket(
             resolve(undefined);
         };
 
-        function completeMessagePromise(messageId: number, success: boolean, result: any) {
-            if (
-                messageId &&
-                msgPromiseMap.has(messageId)
-            ) {
+        function completeMessagePromise(
+            messageId: number,
+            success: boolean,
+            result: any,
+        ) {
+            if (messageId && msgPromiseMap.has(messageId)) {
                 const promise = msgPromiseMap.get(messageId);
                 if (success) {
                     promise?.resolve(result);
@@ -338,9 +350,7 @@ export async function createWebSocket(
                 }
                 msgPromiseMap.delete(messageId);
             } else {
-                console.log(
-                    `Unknown message ID: ${messageId}`,
-                );
+                console.log(`Unknown message ID: ${messageId}`);
             }
         }
 
