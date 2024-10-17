@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import WebSocket, { WebSocketServer } from "ws";
-//import registerDebug from "debug";
 import { Dispatcher } from "agent-dispatcher";
 import { IncomingMessage } from "node:http";
 import { WebAPIClientIO } from "./webClientIO.js";
@@ -59,7 +58,6 @@ export class TypeAgentAPIWebSocketServer {
                     const newSettingSummary = dispatcher.getSettingSummary();
                     if (newSettingSummary !== this.settingSummary) {
                         this.settingSummary = newSettingSummary;
-            
                         webClientIO.updateSettingsSummary(this.settingSummary, [...dispatcher.getTranslatorNameToEmojiMap()]);
                     }
             
@@ -82,6 +80,9 @@ export class TypeAgentAPIWebSocketServer {
                             break;
                         case "questionResponse":
                             webClientIO.resolveQuestionPromise(msgObj.data.questionId, msgObj.data.answer);
+                            break;
+                        case "get-dynamic-display":
+                            dispatcher.getDynamicDisplay(msgObj.data.appAgentName, msgObj.data.displayType, msgObj.data.requestId);
                             break;
                     }
                 } catch {

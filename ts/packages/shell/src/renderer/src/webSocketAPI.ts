@@ -41,10 +41,19 @@ export const webapi: ClientAPI = {
         });
     },
     getDynamicDisplay(source: string, id: string) {
-        // TODO: implement
-        return new Promise<DynamicDisplay>((resolve, reject) => {
-            placeHolder(source, id);
-            placeHolder1({resolve, reject});
+
+        globalThis.ws.send(JSON.stringify({    
+            message: "get-dynamic-display",
+            data: {
+                appAgentName: source,
+                displayType: "html",
+                requestId: id,
+            }
+        }));
+
+        return new Promise<DynamicDisplay>(() => {
+            // this promise isn't ever listened to (ATM) so no need to resolve/reject
+            // resolution/rejection comes through as a separate web socket message
         });
     },
     onUpdateDisplay(callback) {
@@ -114,7 +123,7 @@ export const webapi: ClientAPI = {
         });
     },
     onSendInputText(callback) {
-        // TODO: figure out if this is still used
+        // doesn't apply on mobile
         fnMap.set("send-input-text", callback);
     },
     onSendDemoEvent(callback) {
