@@ -89,6 +89,10 @@ export class TypeAgentAPIWebSocketServer {
                         case "get-dynamic-display":
                             dispatcher.getDynamicDisplay(msgObj.data.appAgentName, msgObj.data.displayType, msgObj.data.requestId);
                             break;
+                        case "get-template-schema":
+                            let schema = dispatcher.getTemplateSchema(msgObj.data.appAgentName, msgObj.data.templateName, msgObj.data.data);
+                            webClientIO.sendTemplateSchema(msgObj.data.messageId, schema);
+                            break;
                     }
                 } catch {
                     console.log("WebSocket message not parsed.");

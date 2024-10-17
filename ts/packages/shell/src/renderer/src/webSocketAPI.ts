@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AppAgentEvent, DynamicDisplay } from "@typeagent/agent-sdk";
+import { AppAgentEvent, DynamicDisplay, TemplateSchema } from "@typeagent/agent-sdk";
 import { PartialCompletionResult, RequestMetrics } from "agent-dispatcher";
 import { ClientAPI, SpeechToken } from "../../preload/electronTypes";
 
@@ -55,6 +55,24 @@ export const webapi: ClientAPI = {
             // this promise isn't ever listened to (ATM) so no need to resolve/reject
             // resolution/rejection comes through as a separate web socket message
         });
+    },
+    getTemplateSchema(appAgentName: string, templateName: string, data: unknown) {
+
+      return new Promise<TemplateSchema>((resolve, reject) => {
+
+            globalThis.ws.send(JSON.stringify({    
+                message: "get-template-schema",
+                data: {
+                    messageId: maxWebAPIMessageId++,
+                    appAgentName,
+                    templateName,
+                    data,
+                }
+            }));
+            
+            // callbacks saved for later resolution
+            msgPromiseMap.set(maxWebAPIMessageId, { resolve, reject });
+      });  
     },
     onUpdateDisplay(callback) {
         fnMap.set("update-display", callback);
@@ -160,6 +178,8 @@ export const webapi: ClientAPI = {
 };
 
 let fnMap: Map<string, any> = new Map<string, any>();
+let maxWebAPIMessageId: number = 0;
+let msgPromiseMap = new Map<number, { resolve: (result?: any) => void, reject: (reason?: any) => void }>();
 
 function placeHolder1(category: any) {
     console.log(category);
@@ -222,7 +242,17 @@ export async function createWebSocket(endpoint: string = "ws://localhost:8080", 
                     break;
                 case "process-shell-request-error":
                     // ignored
-                    break;                    
+                    break;
+                case "set-template-schema":
+                    // resolve promise
+                    if (msgObj.data.messageId && msgPromiseMap.has(msgObj.data.messageId)) {
+                        const promise = msgPromiseMap.get(msgObj.data.messageId);
+                        promise?.resolve(msgObj.data.data.schema);
+                        msgPromiseMap.delete(msgObj.data.messageId);
+                    } else {
+                        console.log(`Unknown message ID: ${msgObj.data.messageId}`)
+                    }
+                    break;
               }
         };
         webSocket.onclose = (event: object) => {
