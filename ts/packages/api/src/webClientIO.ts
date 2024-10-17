@@ -248,6 +248,7 @@ export class WebAPIClientIO implements ClientIO {
     }
 
     sendSuccessfulCommandResult(
+        messageId: number,
         requestId: RequestId,
         metrics?: RequestMetrics,
     ) {
@@ -255,6 +256,7 @@ export class WebAPIClientIO implements ClientIO {
             JSON.stringify({
                 message: "process-shell-request-done",
                 data: {
+                    messageId,
                     requestId,
                     metrics,
                 },
@@ -262,8 +264,9 @@ export class WebAPIClientIO implements ClientIO {
         );
     }
 
-    sendFailedCommandResult(requestId: RequestId, error: any) {
+    sendFailedCommandResult(messageId: number, requestId: RequestId, error: any) {
         this.sendMessage("process-shell-request-error", {
+            messageId,
             requestId,
             error,
         });

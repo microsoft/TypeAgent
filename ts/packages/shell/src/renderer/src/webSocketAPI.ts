@@ -21,21 +21,22 @@ export const webapi: ClientAPI = {
     ) => placeHolder("listen-event", callback),
 
     processShellRequest: (request: string, id: string, images: string[]) => {
-        // call server websocket and send request
-        globalThis.ws.send(
-            JSON.stringify({
-                message: "process-shell-request",
-                data: {
-                    request,
-                    id,
-                    images,
-                },
-            }),
-        );
-
-        return new Promise<RequestMetrics | undefined>(() => {
-            // this promise isn't ever listened to (ATM) so no need to resolve/reject
-            // resolution/rejection comes through as a separate web socket message
+        return new Promise<RequestMetrics | undefined>((resolve, reject) => {
+            let currentMessageId: number = ++maxWebAPIMessageId;
+            // call server websocket and send request
+            globalThis.ws.send(
+                JSON.stringify({
+                    message: "process-shell-request",
+                    data: {
+                        messageId: currentMessageId,
+                        request,
+                        id,
+                        images,
+                    },
+                }),
+            );
+            // callbacks saved for later resolution
+            msgPromiseMap.set(currentMessageId, { resolve, reject });
         });
     },
     getPartialCompletion: (prefix: string) => {
@@ -48,6 +49,7 @@ export const webapi: ClientAPI = {
         );
     },
     getDynamicDisplay(source: string, id: string) {
+        
         globalThis.ws.send(
             JSON.stringify({
                 message: "get-dynamic-display",
@@ -60,7 +62,7 @@ export const webapi: ClientAPI = {
         );
 
         return new Promise<DynamicDisplay>(() => {
-            // this promise isn't ever listened to (ATM) so no need to resolve/reject
+            // currently this promise isn't listened so no need to resolve/reject
             // resolution/rejection comes through as a separate web socket message
         });
     },
@@ -70,11 +72,12 @@ export const webapi: ClientAPI = {
         data: unknown,
     ) {
         return new Promise<TemplateSchema>((resolve, reject) => {
+            let currentMessageId: number = ++maxWebAPIMessageId;
             globalThis.ws.send(
                 JSON.stringify({
                     message: "get-template-schema",
                     data: {
-                        messageId: maxWebAPIMessageId++,
+                        messageId: currentMessageId,
                         appAgentName,
                         templateName,
                         data,
@@ -83,7 +86,7 @@ export const webapi: ClientAPI = {
             );
 
             // callbacks saved for later resolution
-            msgPromiseMap.set(maxWebAPIMessageId, { resolve, reject });
+            msgPromiseMap.set(currentMessageId, { resolve, reject });
         });
     },
     onUpdateDisplay(callback) {
@@ -295,27 +298,13 @@ export async function createWebSocket(
                     );
                     break;
                 case "process-shell-request-done":
-                    // ignored
+                    completeMessagePromise(msgObj.data.messageId, true, msgObj.data.metrics);
                     break;
                 case "process-shell-request-error":
-                    // ignored
+                    completeMessagePromise(msgObj.data.messageId, false, msgObj.data.error);
                     break;
                 case "set-template-schema":
-                    // resolve promise
-                    if (
-                        msgObj.data.messageId &&
-                        msgPromiseMap.has(msgObj.data.messageId)
-                    ) {
-                        const promise = msgPromiseMap.get(
-                            msgObj.data.messageId,
-                        );
-                        promise?.resolve(msgObj.data.data.schema);
-                        msgPromiseMap.delete(msgObj.data.messageId);
-                    } else {
-                        console.log(
-                            `Unknown message ID: ${msgObj.data.messageId}`,
-                        );
-                    }
+                    completeMessagePromise(msgObj.data.messageId, true, msgObj.data.data.schema);
                     break;
             }
         };
@@ -335,6 +324,25 @@ export async function createWebSocket(
             console.log("websocket error" + event);
             resolve(undefined);
         };
+
+        function completeMessagePromise(messageId: number, success: boolean, result: any) {
+            if (
+                messageId &&
+                msgPromiseMap.has(messageId)
+            ) {
+                const promise = msgPromiseMap.get(messageId);
+                if (success) {
+                    promise?.resolve(result);
+                } else {
+                    promise?.reject(result);
+                }
+                msgPromiseMap.delete(messageId);
+            } else {
+                console.log(
+                    `Unknown message ID: ${messageId}`,
+                );
+            }
+        }
 
         function notify(msg: any) {
             switch (msg.data.event) {

@@ -84,11 +84,13 @@ export class TypeAgentAPIWebSocketServer {
                                 );
                                 console.log(metrics);
                                 webClientIO.sendSuccessfulCommandResult(
+                                    msgObj.data.messageId,
                                     msgObj.data.id,
                                     metrics,
                                 );
                             } catch (error: any) {
                                 webClientIO.sendFailedCommandResult(
+                                    msgObj.data.messageId,
                                     msgObj.data.id,
                                     error,
                                 );
