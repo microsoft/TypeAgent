@@ -16,13 +16,12 @@ import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { CameraView } from "./cameraView";
 import { createWebSocket, webapi } from "./webSocketAPI";
 
-export function getClientAPI(): ClientAPI {    
+export function getClientAPI(): ClientAPI {
     if (globalThis.api !== undefined) {
         return globalThis.api;
     } else {
         return getWebSocketAPI();
     }
-    
 }
 
 export function getWebSocketAPI(): ClientAPI {
@@ -31,7 +30,9 @@ export function getWebSocketAPI(): ClientAPI {
 
         // TODO: update ws URI
         let url = window.location;
-       createWebSocket(`ws://${url.hostname}:3030`, true).then((ws) => globalThis.ws = ws);
+        createWebSocket(`ws://${url.hostname}:3030`, true).then(
+            (ws) => (globalThis.ws = ws),
+        );
     }
 
     return globalThis.webApi;

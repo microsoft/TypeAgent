@@ -3,7 +3,7 @@
 
 import { DisplayAppendMode, TemplateSchema } from "@typeagent/agent-sdk";
 import {
-  TemplateEditConfig,
+    TemplateEditConfig,
     ClientIO,
     IAgentMessage,
     RequestId,
@@ -270,10 +270,10 @@ export class WebAPIClientIO implements ClientIO {
     }
 
     sendTemplateSchema(messageId: number, schema: TemplateSchema) {
-      this.sendMessage("set-template-schema", {
-        messageId,
-        schema
-      });
+        this.sendMessage("set-template-schema", {
+            messageId,
+            schema,
+        });
     }
 
     sendMessage(messageType: string, payload: any) {

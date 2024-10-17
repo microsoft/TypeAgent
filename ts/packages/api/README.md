@@ -2,7 +2,7 @@
 
 ## Overview
 
-TypeAgent API is a HTTP+WS API server for **TypeAgent sample code**. It  explores architectures for building distributed _interactive agents_ with _natural language interfaces_ using [TypeChat](https://github.com/microsoft/typechat). This interface shows devlopers one way of broadening the reach of Agents to web-enabled devices such as internet browsers, mobile phones, and IOT connected devices.
+TypeAgent API is a HTTP+WS API server for **TypeAgent sample code**. It explores architectures for building distributed _interactive agents_ with _natural language interfaces_ using [TypeChat](https://github.com/microsoft/typechat). This interface shows devlopers one way of broadening the reach of Agents to web-enabled devices such as internet browsers, mobile phones, and IOT connected devices.
 
 ## Running
 
@@ -39,4 +39,3 @@ Other more convenient ways to start the server with slightly more overhead:
 
 - Running thru package.json's bin: `npx .` or `npx agent-http-dev` (development version)
 - Running thru package.json's script: `npm run start`
-

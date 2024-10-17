@@ -171,8 +171,8 @@ export class CameraView {
                 .catch((err) => {
                     console.error(`${err.name}: ${err.message}`);
                 });
-            }
         }
+    }
 
     // Capture a photo by fetching the current contents of the video
     // and drawing it into a canvas, then converting that to a PNG
@@ -220,26 +220,28 @@ export class CameraView {
 
     public startCamera() {
         if (navigator.mediaDevices !== undefined) {
-        navigator.mediaDevices
-            .getUserMedia({
-                video: { deviceId: this.cameras[this.cameraIndex].deviceId },
-                audio: false,
-            })
-            .then((stream) => {
-                this.snapButton.classList.remove("camera-hidden");
-                this.swapCameras.classList.remove("camera-hidden");
-                this.cameraStatus.classList.add("camera-hidden");
-                this.mediaStream = stream;
-                this.video.srcObject = stream;
-                this.video.play();
-            })
-            .catch((err) => {
-                console.error(`An error occurred: ${err}`);
-                this.cameraStatus.innerText = "Error starting camera...";
-                this.cameraStatus.classList.remove("camera-hidden");
-                this.video.classList.add("camera-hidden");
-                this.snapButton.classList.add("camera-hidden");
-            });
+            navigator.mediaDevices
+                .getUserMedia({
+                    video: {
+                        deviceId: this.cameras[this.cameraIndex].deviceId,
+                    },
+                    audio: false,
+                })
+                .then((stream) => {
+                    this.snapButton.classList.remove("camera-hidden");
+                    this.swapCameras.classList.remove("camera-hidden");
+                    this.cameraStatus.classList.add("camera-hidden");
+                    this.mediaStream = stream;
+                    this.video.srcObject = stream;
+                    this.video.play();
+                })
+                .catch((err) => {
+                    console.error(`An error occurred: ${err}`);
+                    this.cameraStatus.innerText = "Error starting camera...";
+                    this.cameraStatus.classList.remove("camera-hidden");
+                    this.video.classList.add("camera-hidden");
+                    this.snapButton.classList.add("camera-hidden");
+                });
         }
 
         this.clearPhoto();

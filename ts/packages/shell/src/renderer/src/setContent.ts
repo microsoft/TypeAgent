@@ -136,7 +136,7 @@ export function setContent(
         // use the same stylesheets as the main page
         let css: string = "";
         const links = document.head.getElementsByTagName("link");
-        for(let i = 0; i < links.length; i++) {
+        for (let i = 0; i < links.length; i++) {
             if (links[i].rel.toLowerCase() == "stylesheet") {
                 css += links[i].outerHTML;
             }

@@ -370,7 +370,7 @@ export class ChatView {
             this.agents,
             this.hideMetrics,
         );
-        
+
         if (hidden) {
             mg.hideUserMessage();
         }
