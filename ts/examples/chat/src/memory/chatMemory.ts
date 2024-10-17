@@ -295,7 +295,10 @@ export async function runChatMemory(): Promise<void> {
     //--------------------
 
     handlers.history.metadata = "Display search history.";
-    async function history(args: string[] | NamedArgs, io: InteractiveIo): Promise<void> {
+    async function history(
+        args: string[] | NamedArgs,
+        io: InteractiveIo,
+    ): Promise<void> {
         if (context.searchMemory) {
             await writeHistory(context.searchMemory.conversation);
         } else {
@@ -955,7 +958,10 @@ export async function runChatMemory(): Promise<void> {
     }
 
     handlers.search.metadata = searchDef();
-    async function search(args: string[] | NamedArgs, io: InteractiveIo): Promise<void> {
+    async function search(
+        args: string[] | NamedArgs,
+        io: InteractiveIo,
+    ): Promise<void> {
         await searchConversation(context.searcher, true, args);
     }
 

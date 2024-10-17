@@ -4,8 +4,16 @@
 // Use TypeChat to translate a natural languagecommand to a command structure.
 // The command structure is given by some schema.
 
-import { CommandHandler, CommandMetadata, InteractiveIo } from "interactive-app";
-import { TypeChatLanguageModel, TypeChatJsonTranslator, createJsonTranslator } from "typechat";
+import {
+    CommandHandler,
+    CommandMetadata,
+    InteractiveIo,
+} from "interactive-app";
+import {
+    TypeChatLanguageModel,
+    TypeChatJsonTranslator,
+    createJsonTranslator,
+} from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 
 // console.log("[codeProcessor.js loading]");
@@ -18,11 +26,13 @@ export interface CommandTransformer {
     transform(command: string, io: InteractiveIo): Promise<object | undefined>;
 }
 
-export function createCommandTransformer(model: TypeChatLanguageModel): CommandTransformer {
+export function createCommandTransformer(
+    model: TypeChatLanguageModel,
+): CommandTransformer {
     const transformer: CommandTransformer = {
         model,
         transform,
-    }
+    };
 
     async function transform(command: string): Promise<object | undefined> {
         const result = await transformer.translator!.translate(command);
@@ -71,7 +81,10 @@ export function completeCommandTransformer(
     // console.log("[schema text end]");
 
     // Now construct the translator and add it
-    const validator = createTypeScriptJsonValidator<any>(commandTransformer.schemaText, "Command");
+    const validator = createTypeScriptJsonValidator<any>(
+        commandTransformer.schemaText,
+        "Command",
+    );
     const translator = createJsonTranslator<any>(
         commandTransformer.model,
         validator,
@@ -86,12 +99,14 @@ function makeClassDef(name: string, metadata: CommandMetadata): string {
     const options = metadata.options;
     for (const key in options) {
         const option = options[key];
-        let tp: string | undefined = option.type ? String(option.type) : undefined;
+        let tp: string | undefined = option.type
+            ? String(option.type)
+            : undefined;
         if (tp === "path") {
             tp = "string";
         }
         if (!tp) {
-            tp = "string";  // Or any?
+            tp = "string";
         }
         if (option.defaultValue === undefined) {
             def += `  ${key}: ${tp}`;
@@ -106,7 +121,7 @@ function makeClassDef(name: string, metadata: CommandMetadata): string {
             def += `  // default: ${JSON.stringify(option.defaultValue)}`;
         }
         def += "\n";
-    }   
+    }
     def += "}\n\n";
     return def;
 }

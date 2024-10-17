@@ -70,7 +70,9 @@ export async function runCodeChat(): Promise<void> {
         io: InteractiveIo,
     ): Promise<void> {
         // Try to pass it to an LLM for transformation in a regular @ command
-        const transformed = await commandTransformer.transform(line, io) as NamedArgs | undefined;
+        const transformed = (await commandTransformer.transform(line, io)) as
+            | NamedArgs
+            | undefined;
         if (transformed && transformed.name != "Undefined") {
             // io.writer.writeLine("[Transformed]: " + JSON.stringify(transformed));
             const name = transformed.name as string;
@@ -79,14 +81,19 @@ export async function runCodeChat(): Promise<void> {
                     const handler = handlers[name] as NewCommandHandler;
                     await handler(transformed, io);
                 } else {
-                    io.writer.writeLine(`Sorry, transformation for ${name} failed; try @help`);
+                    io.writer.writeLine(
+                        `Sorry, transformation for ${name} failed; try @help`,
+                    );
                 }
             } else {
-                io.writer.writeLine(`Sorry, I don't know anything about ${name}; try @help`);
+                io.writer.writeLine(
+                    `Sorry, I don't know anything about ${name}; try @help`,
+                );
             }
-        }
-        else {
-            io.writer.writeLine("Sorry, I didn't get that (or the server is down); try @help");
+        } else {
+            io.writer.writeLine(
+                "Sorry, I didn't get that (or the server is down); try @help",
+            );
         }
     }
 
@@ -159,7 +166,10 @@ export async function runCodeChat(): Promise<void> {
     }
     handlers.codeDebug.metadata = debugDef();
     async function codeDebug(args: string[] | NamedArgs): Promise<void> {
-        const namedArgs = args instanceof Array ? parseNamedArguments(args, debugDef()) : args;
+        const namedArgs =
+            args instanceof Array
+                ? parseNamedArguments(args, debugDef())
+                : args;
 
         printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
         printer.writeLine(`Bug Description:\n${namedArgs.bug}\n`);
@@ -398,7 +408,10 @@ export async function runCodeChat(): Promise<void> {
 
     handlers.regex.metadata =
         "Generate a regular expression from the given requirements.";
-    async function regex(args: string[] | NamedArgs, io: InteractiveIo): Promise<void> {
+    async function regex(
+        args: string[] | NamedArgs,
+        io: InteractiveIo,
+    ): Promise<void> {
         if (args instanceof Array && args.length > 0) {
             const prompt = `Return a Typescript regular expression for the following:\n ${args.join(" ")}`;
             const result = await codeReviewer.model.complete(prompt);

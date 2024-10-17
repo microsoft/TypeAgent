@@ -482,7 +482,8 @@ export function parseNamedArguments(
     namePrefix: string = "--",
     shortNamePrefix: string = "-",
 ): NamedArgs {
-    if (typeof args === "object" && !(args instanceof Array)) {  // TODO: use type guard
+    if (typeof args === "object" && !(args instanceof Array)) {
+        // TODO: use type guard
         return args;
     }
     const rawArgs = typeof args === "string" ? parseCommandLine(args) : args;
