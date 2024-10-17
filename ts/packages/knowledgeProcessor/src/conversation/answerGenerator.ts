@@ -110,7 +110,7 @@ export function createAnswerGenerator(
         // TODO: Switch to using a Prompt Builder here, to avoid truncation
         let contextSection: PromptSection = {
             role: "user",
-            content: `[CONVERSATION HISTORY]\n${JSON.stringify(context, undefined, 1)}`,
+            content: `[CONVERSATION HISTORY]\n${JSON.stringify(context, undefined, 0)}`,
         };
         if (prompt.length > maxContextLength) {
             prompt = prompt.slice(0, maxContextLength);

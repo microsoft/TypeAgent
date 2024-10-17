@@ -137,61 +137,6 @@ export type PromptSections = {
 };
 
 /**
- * Agents can include additional context relevant to the given request: the "RAG" pattern
- * Context providers return context in the form of prompt sections.
- */
-export interface ContextPromptSectionProvider {
-    /**
-     * Return prompt sections relevant to the given request
-     * @param request
-     * @param maxContextLength Indicate the character or token budget
-     */
-    getContext(
-        request: string,
-        maxContextLength: number,
-    ): Promise<PromptSections>;
-}
-
-/**
- * Given a request text and a list of context provider, loop over providers in order,
- * collecting context
- * @param request user request
- * @param providers array of context providers
- * @param maxContextLength maximum context length
- * @returns
- */
-export async function createContextFromProviders(
-    request: string,
-    providers: (ContextPromptSectionProvider | PromptSections)[],
-    maxContextLength: number,
-): Promise<PromptSections> {
-    let totalContextLength = 0;
-    let contextSections: PromptSection[] = [];
-    for (const provider of providers) {
-        if (totalContextLength >= maxContextLength) {
-            break;
-        }
-        let contextSection: PromptSections;
-        if (isContextProvider(provider)) {
-            contextSection = await provider.getContext(
-                request,
-                maxContextLength - totalContextLength,
-            );
-        } else {
-            contextSection = provider;
-        }
-        if (contextSection.length > 0) {
-            totalContextLength += contextSection.length;
-            contextSections.push(...contextSection.sections);
-        }
-    }
-    return {
-        length: totalContextLength,
-        sections: contextSections,
-    };
-}
-
-/**
  * PromptBuilder builds prompts that can meet a given character/token budget.
  * A prompt consists of multiple prompt sections. Builders can be reused
  *
@@ -387,6 +332,72 @@ export function createPromptSectionBuilder(
     }
 }
 
-function isContextProvider(obj: any): obj is ContextPromptSectionProvider {
-    return obj.hasOwnProperty("getContext");
+export interface JSONPromptBuilder {
+    readonly length: number;
+    add(name: string, value: any): boolean;
+    toString(): string;
+    clear(): void;
+}
+
+export function createJSONBuilder(maxChunkLength: number): JSONPromptBuilder {
+    let json: any = {};
+    let curLength = 0;
+    return {
+        get length() {
+            return curLength;
+        },
+        add,
+        toString,
+        clear,
+    };
+
+    function add(name: string, value: any): boolean {
+        if (curLength >= maxChunkLength) {
+            return false;
+        }
+        let str = stringify(value);
+        if (str.length + curLength > maxChunkLength) {
+            return false;
+        }
+        json[name] = value;
+        return true;
+    }
+
+    function toString() {
+        return stringify(json);
+    }
+
+    function clear(): void {
+        curLength = 0;
+        json = {};
+    }
+
+    function stringify(value: any): string {
+        return JSON.stringify(value);
+    }
+}
+
+export function* createJsonChunks(
+    obj: any,
+    maxChunkLength: number,
+): IterableIterator<string> {
+    const jsonBuilder = createJSONBuilder(maxChunkLength);
+    for (const key of obj) {
+        const value = obj[key];
+        if (value === undefined) {
+            continue;
+        }
+        if (!jsonBuilder.add(key, value)) {
+            // Can't append any more JSON. Time to yield a chunk
+            if (jsonBuilder.length > 0) {
+                yield jsonBuilder.toString();
+                jsonBuilder.clear();
+            } else {
+                break;
+            }
+        }
+    }
+    if (jsonBuilder.length > 0) {
+        yield jsonBuilder.toString();
+    }
 }

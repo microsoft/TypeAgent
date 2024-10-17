@@ -86,9 +86,15 @@ function getReservedConversation(
     return undefined;
 }
 
-export async function createChatMemoryContext(): Promise<ChatContext> {
+export async function createChatMemoryContext(
+    completionCallback?: (req: any, resp: any) => void,
+): Promise<ChatContext> {
     const storePath = "/data/testChat";
-    const chatModel = openai.createStandardAzureChatModel("GPT_4");
+    const chatModel = openai.createChatModel(
+        undefined,
+        undefined,
+        completionCallback,
+    );
     const embeddingModel = knowLib.createEmbeddingCache(
         openai.createEmbeddingModel(),
         64,
@@ -232,7 +238,8 @@ export async function loadConversation(
 }
 
 export async function runChatMemory(): Promise<void> {
-    let context = await createChatMemoryContext();
+    let context = await createChatMemoryContext(printStats);
+    let showTokenStats = true;
     let printer: ChatMemoryPrinter;
     const handlers: Record<string, CommandHandler> = {
         importPlay,
@@ -252,6 +259,7 @@ export async function runChatMemory(): Promise<void> {
         searchV2Debug,
         makeTestSet,
         runTestSet,
+        tokenLog,
     };
     addStandardHandlers(handlers);
 
@@ -287,6 +295,11 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
+    function printStats(req: any, response: any): void {
+        if (showTokenStats) {
+            printer.writeCompletionStats(response.usage);
+        }
+    }
     //--------------------
     //
     // COMMANDS
@@ -1061,6 +1074,20 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
+    function tokenLogDef(): CommandMetadata {
+        return {
+            description: "Enable token logging",
+            options: {
+                enable: argBool(),
+            },
+        };
+    }
+    handlers.tokenLog.metadata = tokenLogDef();
+    async function tokenLog(args: string[]) {
+        const namedArgs = parseNamedArguments(args, tokenLogDef());
+        showTokenStats =
+            namedArgs.enable !== undefined ? namedArgs.enable : showTokenStats;
+    }
     //--------------------
     // END COMMANDS
     //--------------------
