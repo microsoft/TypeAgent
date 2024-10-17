@@ -8,6 +8,7 @@ import {
     CommandMetadata,
     InteractiveIo,
     NamedArgs,
+    NewCommandHandler,
     addStandardHandlers,
     parseNamedArguments,
     runConsole,
@@ -60,12 +61,6 @@ export async function runCodeChat(): Promise<void> {
         regex,
         cwd,
     };
-    addStandardHandlers(handlers);
-    await runConsole({
-        onStart,
-        inputHandler,
-        handlers,
-    });
 
     // Handles input not starting with @,
     // Transforming it into a regular @ command (which it then calls)
@@ -80,13 +75,18 @@ export async function runCodeChat(): Promise<void> {
             // io.writer.writeLine("[Transformed]: " + JSON.stringify(transformed));
             const name = transformed.name as string;
             if (name in handlers) {
-                await handlers[name](transformed, io);
+                if (typeof transformed === "object") {
+                    const handler = handlers[name] as NewCommandHandler;
+                    await handler(transformed, io);
+                } else {
+                    io.writer.writeLine(`Sorry, transformation for ${name} failed; try @help`);
+                }
             } else {
                 io.writer.writeLine(`Sorry, I don't know anything about ${name}; try @help`);
             }
         }
         else {
-            io.writer.writeLine("Sorry, I didn't get that; try @help");
+            io.writer.writeLine("Sorry, I didn't get that (or the server is down); try @help");
         }
     }
 
@@ -464,4 +464,11 @@ export async function runCodeChat(): Promise<void> {
     }
 
     completeCommandTransformer(handlers, commandTransformer);
+
+    addStandardHandlers(handlers);
+    await runConsole({
+        onStart,
+        inputHandler,
+        handlers,
+    });
 }

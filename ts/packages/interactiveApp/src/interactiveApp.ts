@@ -101,7 +101,7 @@ export async function runBatch(settings: InteractiveAppSettings) {
         };
     }
     settings.handlers.batch.metadata = batchDef();
-    async function batch(args: string[] | NamedArgs, io: InteractiveIo): Promise<void> {
+    async function batch(args: string[], io: InteractiveIo): Promise<void> {
         const namedArgs = parseNamedArguments(args, batchDef());
         const lines = (
             await fs.promises.readFile(namedArgs.filePath, "utf-8")
@@ -539,17 +539,26 @@ export type CommandResult = string | undefined | void;
 /**
  * Command handler
  */
-export interface CommandHandler {
+export type CommandHandler = OldCommandHandler | NewCommandHandler;
+export interface OldCommandHandler {
+    acceptsNamedArgs?: false;
+    (args: string[], io: InteractiveIo): Promise<CommandResult>;
+    metadata?: string | CommandMetadata;
+    usage?: string | { (io: InteractiveIo): void };
+}
+export interface NewCommandHandler {
+    acceptsNamedArgs: true;
     (args: string[] | NamedArgs, io: InteractiveIo): Promise<CommandResult>;
     metadata?: string | CommandMetadata;
     usage?: string | { (io: InteractiveIo): void };
 }
 
+// TODO: add a createNewCommand() returning a NewCommandHandler
 export function createCommand(
-    fn: (args: string[] | NamedArgs, io: InteractiveIo) => Promise<CommandResult>,
+    fn: (args: string[], io: InteractiveIo) => Promise<CommandResult>,
     metadata?: string | CommandMetadata,
     usage?: string,
-): CommandHandler {
+): OldCommandHandler {
     const handler: CommandHandler = fn;
     if (metadata) {
         handler.metadata = metadata;
@@ -706,19 +715,15 @@ export function addStandardHandlers(
     handlers.cls = cls;
     handlers.cls.metadata = "Clear the screen";
 
-    async function help(args: string[] | NamedArgs, io: InteractiveIo): Promise<void> {
-        if (args instanceof Array) {
-            displayHelp(args, handlers, io);
-        } else {
-            displayHelp([], handlers, io);
-        }
+    async function help(args: string[], io: InteractiveIo): Promise<void> {
+        displayHelp(args, handlers, io);
     }
 
-    async function commands(args: string[] | NamedArgs, io: InteractiveIo): Promise<void> {
+    async function commands(args: string[], io: InteractiveIo): Promise<void> {
         displayCommands(handlers, io);
     }
 
-    async function cls(args: string[] | NamedArgs, io: InteractiveIo): Promise<void> {
+    async function cls(args: string[], io: InteractiveIo): Promise<void> {
         console.clear();
     }
 }

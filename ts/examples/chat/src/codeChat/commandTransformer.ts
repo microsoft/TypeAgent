@@ -1,6 +1,7 @@
-// TODO: Copyright
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
 
-// Use an LLM to translate a command in English to a command structure.
+// Use TypeChat to translate a natural languagecommand to a command structure.
 // The command structure is given by some schema.
 
 import { CommandHandler, CommandMetadata, InteractiveIo } from "interactive-app";
