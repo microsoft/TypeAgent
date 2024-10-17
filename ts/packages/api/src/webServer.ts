@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { getMimeType } from "common-utils";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { createServer, Server } from "node:http";
 import path from "node:path";
 
@@ -18,12 +18,21 @@ export class TypeAgentAPIWebServer {
         // web server
         this.server = createServer(async (req, res) => {
             // serve up the requested file if we have it
-            const requestedFile: string = path.join(
-                config.wwwroot,
+            let root: string = path.resolve(config.wwwroot);
+            let requestedFile: string = 
                 req.url == "/" || req.url === undefined
                     ? "index.html"
-                    : req.url,
-            );
+                    : req.url;
+
+            // make sure requested file falls under web root
+            requestedFile = realpathSync(path.resolve(path.join(root, requestedFile)));
+            if (!requestedFile.startsWith(root)) {
+              res.statusCode = 403;
+              res.end();
+              return;
+            }
+
+            // serve requested file
             if (existsSync(requestedFile)) {
                 res.writeHead(200, {
                     "Content-Type": getMimeType(path.extname(requestedFile)),
