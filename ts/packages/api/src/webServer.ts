@@ -19,17 +19,19 @@ export class TypeAgentAPIWebServer {
         this.server = createServer(async (req, res) => {
             // serve up the requested file if we have it
             let root: string = path.resolve(config.wwwroot);
-            let requestedFile: string = 
+            let requestedFile: string =
                 req.url == "/" || req.url === undefined
                     ? "index.html"
                     : req.url;
 
             // make sure requested file falls under web root
-            requestedFile = realpathSync(path.resolve(path.join(root, requestedFile)));
+            requestedFile = realpathSync(
+                path.resolve(path.join(root, requestedFile)),
+            );
             if (!requestedFile.startsWith(root)) {
-              res.statusCode = 403;
-              res.end();
-              return;
+                res.statusCode = 403;
+                res.end();
+                return;
             }
 
             // serve requested file
