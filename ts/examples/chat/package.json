@@ -14,10 +14,10 @@
   "type": "module",
   "scripts": {
     "build": "npm run tsc",
+    "postbuild": "copyfiles -u 1 \"src/**/*Schema.ts\" \"src/**/*.txt\" dist",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
-    "postbuild": "copyfiles -u 1 \"src/**/*Schema.ts\" \"src/**/*.txt\" dist",
     "runchat": "node dist/main.js memory",
     "runcode": "node dist/main.js code",
     "runcodememory": "node dist/main.js codeMemory",
