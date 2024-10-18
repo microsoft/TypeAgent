@@ -1,0 +1,4 @@
+{
+  "wwwroot": "../shell/out/renderer",
+  "broadcast": true
+}

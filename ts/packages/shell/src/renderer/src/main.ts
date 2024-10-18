@@ -14,9 +14,28 @@ import { MetricsView } from "./metricsView";
 import { ShellSettings } from "../../main/shellSettings";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { CameraView } from "./cameraView";
+import { createWebSocket, webapi } from "./webSocketAPI";
 
 export function getClientAPI(): ClientAPI {
-    return globalThis.api;
+    if (globalThis.api !== undefined) {
+        return globalThis.api;
+    } else {
+        return getWebSocketAPI();
+    }
+}
+
+export function getWebSocketAPI(): ClientAPI {
+    if (globalThis.webApi === undefined) {
+        globalThis.webApi = webapi;
+
+        // TODO: update ws URI
+        let url = window.location;
+        createWebSocket(`ws://${url.hostname}:3030`, true).then(
+            (ws) => (globalThis.ws = ws),
+        );
+    }
+
+    return globalThis.webApi;
 }
 
 function addEvents(
@@ -27,6 +46,12 @@ function addEvents(
     cameraView: CameraView,
 ) {
     const api = getClientAPI();
+
+    if (api === undefined) {
+        console.log("No API available...on mobile!?");
+        return;
+    }
+
     api.onListenEvent((_, name, token, useLocalWhisper) => {
         console.log(`listen event: ${name}`);
         if (useLocalWhisper) {
@@ -317,5 +342,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     chatView.chatInputFocus();
 
-    (window as any).electron.ipcRenderer.send("dom ready");
+    if ((window as any).electron) {
+        (window as any).electron.ipcRenderer.send("dom ready");
+    }
 });
