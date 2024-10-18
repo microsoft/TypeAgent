@@ -60,7 +60,7 @@ function setContentSize() {
         const newHeight = newBounds.height;
         let newWidth = newBounds.width;
         let chatWidth = chatView.getBounds().width;
-        
+
         if (inlineBrowserView) {
             let browserWidth = newWidth - chatWidth;
             inlineBrowserView?.setBounds({
