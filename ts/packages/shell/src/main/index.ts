@@ -63,7 +63,7 @@ function setContentSize() {
         if (inlineBrowserView) {
             newWidth -= inlineBrowserSize;
             inlineBrowserView?.setBounds({
-                x: newWidth,
+                x: newWidth + 4,
                 y: 0,
                 width: inlineBrowserSize,
                 height: newBounds.height,
