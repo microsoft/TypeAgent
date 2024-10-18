@@ -60,8 +60,6 @@ AZURE_OPENAI_RESPONSE_FORMAT=1
 
 AZURE_OPENAI_API_KEY_EMBEDDING=<service key>
 AZURE_OPENAI_ENDPOINT_EMBEDDING=<endpoint URL for text-embedding-ada-002 or equivalent
-
-BING_API_KEY=<service key>
 ```
 
 Here is an example of the minimal `.env` file targeting OpenAI:
@@ -70,13 +68,11 @@ Here is an example of the minimal `.env` file targeting OpenAI:
 OPENAI_ORGANIZATION=<organization id>
 OPENAI_API_KEY=<service key>
 OPENAI_ENDPOINT=https://api.openai.com/v1/chat/completions
-OPENAI_MODEL=gpt-4o
+OPENAI_MODEL=gpt-4
 OPENAI_RESPONSE_FORMAT=1
 
 OPENAI_ENDPOINT_EMBEDDING=https://api.openai.com/v1/embeddings
 OPENAI_MODEL_EMBEDDING=text-embedding-ada-002
-
-BING_API_KEY=<service key>
 ```
 
 The follow set of functionality will need the services keys. Please read the links for details about the variables needed. It is possible to use "keyless" configuration for some APIs. See [Keyless API Access](#keyless-api-access) below.
@@ -86,7 +82,7 @@ The follow set of functionality will need the services keys. Please read the lin
 | Requirements              | Functionality                                                                         | Variables                                                                                                                                                                                               | Instructions                                                                                                                        | Keyless Access Supported |
 | ------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
 | LLM (GPT-4 or equivalent) | Request translation                                                                   | AZURE_OPENAI_API_KEY<br>AZURE_OPENAI_ENDPOINT<br>AZURE_OPENAI_RESPONSE_FORMAT<br>or<br>OPENAI_API_KEY<br>OPENAI_ORGANIZATION<br>OPENAI_ENDPOINT<br>OPENAI_MODEL<br>OPENAI_RESPONSE_FORMAT               | [TypeChat instruction](https://github.com/microsoft/TypeChat/tree/main/typescript/examples#step-3-configure-environment-variables). | Yes                      |
-| Embeddings                | Conversation Memory<br><br>[Desktop](./packages/agents/desktop/) App name Fuzzy match | AZURE_OPENAI_API_KEY_EMBEDDING<br>AZURE_OPENAI_ENDPOINT_EMBEDDING<br>or<br> OPENAI_ENDPOINT_EMBEDDING<br>OPENAI_MODEL_EMBEDDING<br>OPENAI_API_KEY_EMBEDDING (optional if different then OPENAI_API_KEY) |                                                                                                                                     | Yes                      |
+| Embeddings                | Conversation Memory<br><br>[Desktop](./packages/agents/desktop/) App name Fuzzy match | AZURE_OPENAI_API_KEY_EMBEDDING<br>AZURE_OPENAI_ENDPOINT_EMBEDDING<br>or<br> OPENAI_ENDPOINT_EMBEDDING<br>OPENAI_MODEL_EMBEDDING<br>OPENAI_API_KEY_EMBEDDING (optional if different from OPENAI_API_KEY) |                                                                                                                                     | Yes                      |
 
 **Optional requirements**
 
