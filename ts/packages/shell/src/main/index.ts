@@ -55,29 +55,36 @@ let chatView: BrowserView | null = null;
 const inlineBrowserSize = 1000;
 
 function setContentSize() {
-    if (mainWindow) {
+    if (mainWindow && chatView) {
         const newBounds = mainWindow.getContentBounds();
         const newHeight = newBounds.height;
         let newWidth = newBounds.width;
-
+        let chatWidth = chatView.getBounds().width;
+        
         if (inlineBrowserView) {
-            newWidth -= inlineBrowserSize;
+            let browserWidth = newWidth - chatWidth;
             inlineBrowserView?.setBounds({
-                x: newWidth + 4,
+                x: chatWidth + 4,
                 y: 0,
-                width: inlineBrowserSize,
-                height: newBounds.height,
+                width: browserWidth,
+                height: newHeight,
             });
+
+            if (browserWidth <= 0) {
+                chatWidth = newWidth;
+            }
+        } else {
+            chatWidth = newWidth;
         }
 
         chatView?.setBounds({
             x: 0,
             y: 0,
-            width: newWidth,
+            width: chatWidth,
             height: newHeight,
         });
 
-        mainWindow.webContents.send("chat-view-resized", newWidth);
+        mainWindow.webContents.send("chat-view-resized", chatWidth);
     }
 }
 
@@ -99,6 +106,11 @@ function createWindow(): void {
         },
         x: ShellSettings.getinstance().x,
         y: ShellSettings.getinstance().y,
+    });
+
+    mainWindow.setBounds({
+        width: ShellSettings.getinstance().width,
+        height: ShellSettings.getinstance().height,
     });
 
     chatView = new BrowserView({
@@ -253,12 +265,13 @@ function createWindow(): void {
         const mainWindowSize = mainWindow?.getBounds();
 
         if (inlineBrowserView && mainWindowSize) {
+            const browserBounds = inlineBrowserView.getBounds();
             inlineBrowserView.webContents.close();
             mainWindow?.removeBrowserView(inlineBrowserView);
             inlineBrowserView = null;
 
             mainWindow?.setBounds({
-                width: mainWindowSize.width - 1000,
+                width: mainWindowSize.width - browserBounds.width,
             });
 
             setContentSize();
