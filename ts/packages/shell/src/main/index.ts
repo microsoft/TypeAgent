@@ -213,7 +213,6 @@ function createWindow(): void {
                 webPreferences: {
                     preload: join(__dirname, "../preload/webview.mjs"),
                     sandbox: false,
-                    devTools: true,
                 },
             });
 
