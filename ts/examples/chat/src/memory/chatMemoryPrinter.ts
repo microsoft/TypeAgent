@@ -194,5 +194,8 @@ export class ChatMemoryPrinter extends ChatPrinter {
             ),
         );
         this.writeActions([...response.allActions()]);
+        if (response.messages) {
+            this.writeTemporalBlocks(chalk.cyan, response.messages);
+        }
     }
 }

@@ -533,11 +533,21 @@ export type CommandMetadata = {
 
 export type CommandResult = string | undefined | void;
 
+export type CommandHandler = CommandHandler1 | CommandHandler2;
 /**
  * Command handler
  */
-export interface CommandHandler {
+export interface CommandHandler1 {
     (args: string[], io: InteractiveIo): Promise<CommandResult>;
+    metadata?: string | CommandMetadata;
+    usage?: string | { (io: InteractiveIo): void };
+}
+
+/**
+ * Command handler
+ */
+export interface CommandHandler2 {
+    (args: string[] | NamedArgs, io: InteractiveIo): Promise<CommandResult>;
     metadata?: string | CommandMetadata;
     usage?: string | { (io: InteractiveIo): void };
 }

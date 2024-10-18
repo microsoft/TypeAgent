@@ -5,6 +5,7 @@ import { InteractiveIo } from "interactive-app";
 import { Result } from "typechat";
 import chalk from "chalk";
 import { ChalkWriter } from "./chalkWriter.js";
+import { openai } from "aiclient";
 
 export class ChatPrinter extends ChalkWriter {
     constructor(io: InteractiveIo) {
@@ -30,5 +31,13 @@ export class ChatPrinter extends ChalkWriter {
         if (value) {
             this.writeLine(chalk.gray(value));
         }
+    }
+
+    public writeCompletionStats(stats: openai.CompletionUsageStats) {
+        this.writeInColor(chalk.gray, () => {
+            this.writeLine(`Prompt tokens: ${stats.prompt_tokens}`);
+            this.writeLine(`Completion tokens: ${stats.completion_tokens}`);
+            this.writeLine(`Total tokens: ${stats.total_tokens}`);
+        });
     }
 }
