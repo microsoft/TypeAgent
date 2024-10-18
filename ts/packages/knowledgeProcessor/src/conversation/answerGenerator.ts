@@ -96,9 +96,10 @@ export function createAnswerGenerator(
         answerStyle: AnswerStyle | undefined,
         higherPrecision: boolean,
         context: AnswerContext,
+        trim: boolean = true,
     ): Promise<AnswerResponse | undefined> {
         let contextContent = answerContextToString(context);
-        if (contextContent.length > getMaxContextLength()) {
+        if (trim && contextContent.length > getMaxContextLength()) {
             contextContent = trimContext(contextContent, getMaxContextLength());
         }
         const contextSection: PromptSection = {
@@ -127,20 +128,22 @@ export function createAnswerGenerator(
         const partialAnswers = await asyncArray.mapAsync(
             chunks,
             settings.concurrency ?? 2,
-            (chunk) => getAnswer(question, answerStyle, higherPrecision, chunk),
+            (chunk) =>
+                getAnswer(question, answerStyle, higherPrecision, chunk, false),
         );
         let answer = "";
         let whyNoAnswer: string | undefined;
         for (const partialAnswer of partialAnswers) {
             if (partialAnswer) {
                 if (partialAnswer.type === "Answered") {
-                    answer += partialAnswer.answer;
+                    answer += partialAnswer.answer + "\n";
                 } else {
                     whyNoAnswer ??= partialAnswer.whyNoAnswer;
                 }
             }
         }
         if (answer.length > 0) {
+            answer = (await rewriteAnswer(question, answer)) ?? answer;
             return {
                 type: "Answered",
                 answer,
@@ -151,6 +154,22 @@ export function createAnswerGenerator(
             type: "NoAnswer",
             whyNoAnswer,
         };
+    }
+
+    async function rewriteAnswer(
+        question: string,
+        text: string,
+    ): Promise<string | undefined> {
+        let prompt = `The following text answers the QUESTION "${question}".`;
+        prompt +=
+            " Rewrite it to remove all redundancy, duplication, contradiction, or anything that does not answer the question.";
+        prompt += `\n"""\n${text}\n"""\n`;
+        const result = await model.complete(prompt);
+        if (result.success) {
+            return result.data;
+        }
+
+        return undefined;
     }
 
     function createAnswerPrompt(
@@ -270,14 +289,11 @@ export function* splitAnswerContext(
     if (context.actions) {
         curChunk.actions = context.actions;
     }
-    curChunkLength = answerContextToString(curChunk).length;
-    if (curChunkLength >= maxCharsPerChunk) {
-        yield curChunk;
-        newChunk();
-    }
+    yield curChunk;
+    newChunk();
     if (context.messages) {
-        for (const message of context.messages) {
-            if (splitMessages) {
+        if (splitMessages) {
+            for (const message of context.messages) {
                 for (const messageChunk of splitLargeTextIntoChunks(
                     message.value,
                     maxCharsPerChunk,
@@ -289,12 +305,20 @@ export function* splitAnswerContext(
                     });
                     yield curChunk;
                 }
-            } else {
+                newChunk();
+            }
+        } else {
+            for (const message of context.messages) {
+                if (message.value.length + curChunkLength > maxCharsPerChunk) {
+                    if (curChunkLength > 0) {
+                        yield curChunk;
+                    }
+                    newChunk();
+                }
                 curChunk.messages ??= [];
                 curChunk.messages.push(message);
-                yield curChunk;
+                curChunkLength += message.value.length;
             }
-            newChunk();
         }
     }
     if (curChunkLength > 0) {
