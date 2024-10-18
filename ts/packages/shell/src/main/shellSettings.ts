@@ -44,12 +44,12 @@ export class ShellSettings
     public onOpenInlineBrowser: ((targetUrl: URL) => void) | null;
     public onCloseInlineBrowser: EmptyFunction | null;
 
-    public get width(): number | undefined {
-        return this.size[0];
+    public get width(): number {
+        return this.size[0] ?? defaultSettings.size[0];
     }
 
-    public get height(): number | undefined {
-        return this.size[1];
+    public get height(): number {
+        return this.size[1] ?? defaultSettings.size[1];
     }
 
     public get x(): number | undefined {
