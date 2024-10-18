@@ -890,6 +890,7 @@ export async function runChatMemory(): Promise<void> {
                 debug: argBool("Show debug info", false),
                 save: argBool("Save the search", false),
                 v2: argBool("Run V2 match", false),
+                chunkSize: argNum("Chunk size", undefined),
             },
         };
     }
@@ -1130,6 +1131,8 @@ export async function runChatMemory(): Promise<void> {
             await searchNoEval(query, searchOptions);
             return;
         }
+
+        searcher.answers.settings.maxCharsPerChunk = namedArgs.chunkSize;
 
         const timestampQ = new Date();
         let result:

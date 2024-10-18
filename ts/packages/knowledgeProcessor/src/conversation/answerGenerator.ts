@@ -235,7 +235,9 @@ export function createAnswerGenerator(
 
     function isContextTooBig(context: AnswerContext, response: SearchResponse) {
         const totalMessageLength = response.getTotalMessageLength();
-        return totalMessageLength > maxContextLength;
+        return settings.maxCharsPerChunk
+            ? totalMessageLength > settings.maxCharsPerChunk
+            : totalMessageLength > maxContextLength;
     }
 }
 
@@ -315,6 +317,9 @@ export function answerContextToString(context: AnswerContext): string {
     }
     if (context.actions) {
         json += add("actions", context.actions);
+    }
+    if (context.messages) {
+        json += add("messages", context.messages);
     }
     json += "\n}";
     return json;
