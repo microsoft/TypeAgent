@@ -21,6 +21,12 @@ const answerError = registerDebug("knowledge-processor:answerGenerator:error");
 
 export type AnswerStyle = "List" | "List_Entities" | "Paragraph";
 
+export type AnswerSettings = {
+    maxCharsPerChunk: number;
+    answerStyle: AnswerStyle | undefined;
+    higherPrecision: boolean;
+};
+
 export interface AnswerGenerator {
     settings: AnswerGeneratorSettings;
     generateAnswer(
@@ -29,11 +35,20 @@ export interface AnswerGenerator {
         response: SearchResponse,
         higherPrecision: boolean,
     ): Promise<AnswerResponse | undefined>;
+    generateAnswerInChunks(
+        question: string,
+        response: SearchResponse,
+        settings: AnswerSettings,
+        progress?: asyncArray.ProcessProgress<
+            AnswerContext,
+            AnswerResponse | undefined
+        >,
+    ): Promise<AnswerResponse | undefined>;
 }
 
 export type AnswerGeneratorSettings = {
     topKEntities: number;
-    maxContextLength?: number | undefined;
+    maxCharsInContext?: number | undefined;
     useChunking?: boolean | undefined;
     concurrency?: number;
 };
@@ -54,23 +69,23 @@ export function createAnswerGenerator(
     return {
         settings,
         generateAnswer,
+        generateAnswerInChunks,
     };
 
-    async function generateAnswer(
+    async function generateAnswerInChunks(
         question: string,
-        style: AnswerStyle | undefined,
         response: SearchResponse,
-        higherPrecision: boolean,
+        settings: AnswerSettings,
+        progress?: asyncArray.ProcessProgress<
+            AnswerContext,
+            AnswerResponse | undefined
+        >,
     ): Promise<AnswerResponse | undefined> {
-        return generateAnswerWithModel(
-            question,
-            style,
-            response,
-            higherPrecision,
-        );
+        const context: AnswerContext = createContext(response);
+        return getAnswerInChunks(question, context, settings, progress);
     }
 
-    async function generateAnswerWithModel(
+    async function generateAnswer(
         question: string,
         answerStyle: AnswerStyle | undefined,
         response: SearchResponse,
@@ -80,56 +95,40 @@ export function createAnswerGenerator(
 
         if (isContextTooBig(context, response) && settings.useChunking) {
             // Run answer generation in chunks
-            return await getAnswerInChunks(
-                question,
+            return await getAnswerInChunks(question, context, {
+                maxCharsPerChunk: settings.maxCharsInContext!,
                 answerStyle,
                 higherPrecision,
-                context,
-            );
+            });
         }
         // Context is small enough
         return getAnswer(question, answerStyle, higherPrecision, context);
     }
 
-    async function getAnswer(
-        question: string,
-        answerStyle: AnswerStyle | undefined,
-        higherPrecision: boolean,
-        context: AnswerContext,
-        trim: boolean = true,
-    ): Promise<AnswerResponse | undefined> {
-        let contextContent = answerContextToString(context);
-        if (trim && contextContent.length > getMaxContextLength()) {
-            contextContent = trimContext(contextContent, getMaxContextLength());
-        }
-        const contextSection: PromptSection = {
-            role: "user",
-            content: `[CONVERSATION HISTORY]\n${contextContent}`,
-        };
-
-        const prompt = createAnswerPrompt(
-            question,
-            higherPrecision,
-            answerStyle,
-        );
-        const result = await translator.translate(prompt, [contextSection]);
-        return result.success ? result.data : undefined;
-    }
-
     async function getAnswerInChunks(
         question: string,
-        answerStyle: AnswerStyle | undefined,
-        higherPrecision: boolean,
         context: AnswerContext,
+        answerSettings: AnswerSettings,
+        progress?: asyncArray.ProcessProgress<
+            AnswerContext,
+            AnswerResponse | undefined
+        >,
     ): Promise<AnswerResponse | undefined> {
         const chunks = [
-            ...splitAnswerContext(context, settings.maxContextLength!),
+            ...splitAnswerContext(context, answerSettings.maxCharsPerChunk),
         ];
         const partialAnswers = await asyncArray.mapAsync(
             chunks,
             settings.concurrency ?? 2,
             (chunk) =>
-                getAnswer(question, answerStyle, higherPrecision, chunk, false),
+                getAnswer(
+                    question,
+                    answerSettings.answerStyle,
+                    answerSettings.higherPrecision,
+                    chunk,
+                    false,
+                ),
+            progress,
         );
         let answer = "";
         let whyNoAnswer: string | undefined;
@@ -156,13 +155,42 @@ export function createAnswerGenerator(
         };
     }
 
+    async function getAnswer(
+        question: string,
+        answerStyle: AnswerStyle | undefined,
+        higherPrecision: boolean,
+        context: AnswerContext,
+        trim: boolean = true,
+    ): Promise<AnswerResponse | undefined> {
+        // Currently always use a model to transform the search response into an answer
+        // Future: some answers may be rendered using local templates, code etc.
+        let contextContent = answerContextToString(context);
+        if (trim && contextContent.length > getMaxContextLength()) {
+            contextContent = trimContext(contextContent, getMaxContextLength());
+        }
+        const contextSection: PromptSection = {
+            role: "user",
+            content: `[CONVERSATION HISTORY]\n${contextContent}`,
+        };
+
+        const prompt = createAnswerPrompt(
+            question,
+            higherPrecision,
+            answerStyle,
+        );
+        const result = await translator.translate(prompt, [contextSection]);
+        return result.success ? result.data : undefined;
+    }
+
     async function rewriteAnswer(
         question: string,
         text: string,
     ): Promise<string | undefined> {
+        text = trim(text, settings.maxCharsInContext);
         let prompt = `The following text answers the QUESTION "${question}".`;
         prompt +=
             " Rewrite it to remove all redundancy, duplication, contradiction, or anything that does not answer the question.";
+        prompt += "\nImprove formatting";
         prompt += `\n"""\n${text}\n"""\n`;
         const result = await model.complete(prompt);
         if (result.success) {
@@ -245,13 +273,20 @@ export function createAnswerGenerator(
         return content;
     }
 
+    function trim(text: string, maxLength: number | undefined): string {
+        if (maxLength && text.length > maxLength) {
+            return text.slice(0, maxLength);
+        }
+        return text;
+    }
+
     function isContextTooBig(context: AnswerContext, response: SearchResponse) {
         const totalMessageLength = response.getTotalMessageLength();
         return totalMessageLength > getMaxContextLength();
     }
 
     function getMaxContextLength(): number {
-        return settings?.maxContextLength ?? 1000 * 30;
+        return settings?.maxCharsInContext ?? 1000 * 30;
     }
 }
 

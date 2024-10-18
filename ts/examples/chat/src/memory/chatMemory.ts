@@ -1133,10 +1133,10 @@ export async function runChatMemory(): Promise<void> {
         }
 
         if (namedArgs.chunkSize) {
-            searcher.answers.settings.maxContextLength = namedArgs.chunkSize;
+            searcher.answers.settings.maxCharsInContext = namedArgs.chunkSize;
             searcher.answers.settings.useChunking = namedArgs.chunkSize > 0;
         } else {
-            searcher.answers.settings.maxContextLength = undefined;
+            searcher.answers.settings.maxCharsInContext = undefined;
             searcher.answers.settings.useChunking = false;
         }
 
