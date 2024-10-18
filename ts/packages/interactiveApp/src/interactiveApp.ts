@@ -536,29 +536,30 @@ export type CommandMetadata = {
 
 export type CommandResult = string | undefined | void;
 
+export type CommandHandler = CommandHandler1 | CommandHandler2;
 /**
  * Command handler
  */
-export type CommandHandler = OldCommandHandler | NewCommandHandler;
-export interface OldCommandHandler {
-    acceptsNamedArgs?: false;
+export interface CommandHandler1 {
     (args: string[], io: InteractiveIo): Promise<CommandResult>;
     metadata?: string | CommandMetadata;
     usage?: string | { (io: InteractiveIo): void };
 }
-export interface NewCommandHandler {
-    acceptsNamedArgs: true;
+
+/**
+ * Command handler
+ */
+export interface CommandHandler2 {
     (args: string[] | NamedArgs, io: InteractiveIo): Promise<CommandResult>;
     metadata?: string | CommandMetadata;
     usage?: string | { (io: InteractiveIo): void };
 }
 
-// TODO: add a createNewCommand() returning a NewCommandHandler
 export function createCommand(
     fn: (args: string[], io: InteractiveIo) => Promise<CommandResult>,
     metadata?: string | CommandMetadata,
     usage?: string,
-): OldCommandHandler {
+): CommandHandler1 {
     const handler: CommandHandler = fn;
     if (metadata) {
         handler.metadata = metadata;

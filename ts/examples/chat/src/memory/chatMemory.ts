@@ -87,9 +87,15 @@ function getReservedConversation(
     return undefined;
 }
 
-export async function createChatMemoryContext(): Promise<ChatContext> {
+export async function createChatMemoryContext(
+    completionCallback?: (req: any, resp: any) => void,
+): Promise<ChatContext> {
     const storePath = "/data/testChat";
-    const chatModel = openai.createStandardAzureChatModel("GPT_4");
+    const chatModel = openai.createChatModel(
+        undefined,
+        undefined,
+        completionCallback,
+    );
     const embeddingModel = knowLib.createEmbeddingCache(
         openai.createEmbeddingModel(),
         64,
@@ -233,7 +239,8 @@ export async function loadConversation(
 }
 
 export async function runChatMemory(): Promise<void> {
-    let context = await createChatMemoryContext();
+    let context = await createChatMemoryContext(printStats);
+    let showTokenStats = true;
     let printer: ChatMemoryPrinter;
     const handlers: Record<string, CommandHandler> = {
         importPlay,
@@ -253,6 +260,7 @@ export async function runChatMemory(): Promise<void> {
         searchV2Debug,
         makeTestSet,
         runTestSet,
+        tokenLog,
     };
     addStandardHandlers(handlers);
 
@@ -288,6 +296,11 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
+    function printStats(req: any, response: any): void {
+        if (showTokenStats) {
+            printer.writeCompletionStats(response.usage);
+        }
+    }
     //--------------------
     //
     // COMMANDS
@@ -881,6 +894,7 @@ export async function runChatMemory(): Promise<void> {
                 debug: argBool("Show debug info", false),
                 save: argBool("Save the search", false),
                 v2: argBool("Run V2 match", false),
+                chunkSize: argNum("Chunk size", undefined),
             },
         };
     }
@@ -1068,6 +1082,20 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
+    function tokenLogDef(): CommandMetadata {
+        return {
+            description: "Enable token logging",
+            options: {
+                enable: argBool(),
+            },
+        };
+    }
+    handlers.tokenLog.metadata = tokenLogDef();
+    async function tokenLog(args: string[]) {
+        const namedArgs = parseNamedArguments(args, tokenLogDef());
+        showTokenStats =
+            namedArgs.enable !== undefined ? namedArgs.enable : showTokenStats;
+    }
     //--------------------
     // END COMMANDS
     //--------------------
@@ -1109,6 +1137,14 @@ export async function runChatMemory(): Promise<void> {
         if (!namedArgs.eval) {
             await searchNoEval(query, searchOptions);
             return;
+        }
+
+        if (namedArgs.chunkSize) {
+            searcher.answers.settings.maxCharsInContext = namedArgs.chunkSize;
+            searcher.answers.settings.useChunking = namedArgs.chunkSize > 0;
+        } else {
+            searcher.answers.settings.maxCharsInContext = undefined;
+            searcher.answers.settings.useChunking = false;
         }
 
         const timestampQ = new Date();

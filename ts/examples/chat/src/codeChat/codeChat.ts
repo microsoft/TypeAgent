@@ -8,7 +8,7 @@ import {
     CommandMetadata,
     InteractiveIo,
     NamedArgs,
-    NewCommandHandler,
+    CommandHandler2,
     addStandardHandlers,
     parseNamedArguments,
     runConsole,
@@ -93,7 +93,7 @@ export async function runCodeChat(): Promise<void> {
                     await handler(transformed.args, io);
                 } else {
                     // Otherwise: handler takes a NamedArgs as well (best case)
-                    const handler = handlers[name] as NewCommandHandler;
+                    const handler = handlers[name] as CommandHandler2;
                     await handler(transformed, io);
                 }
             } else {
