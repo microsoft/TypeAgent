@@ -668,10 +668,6 @@ input[type="file"] {
 .action-text div {
   display: inline-block;
 }
-.left-button-div {
-  position: absolute;
-  left: -10px;
-}
 
 .action-text td.name-cell {
   width: 30%;
@@ -695,15 +691,16 @@ input[type="file"] {
 }
 
 .action-text tr.missing {
-  font-style: italic;
-  color: lightgray;
+  display: none;
 }
 
-.action-edit-button,
-.action-editing-button,
-.action-text-editable table.editing .action-edit-button,
-.action-text-editable table.editing tr:hover .action-edit-button,
-.action-text-editable tr.editing:hover .action-edit-button {
+.action-text-editable tr.missing {
+  font-style: italic;
+  color: lightgray;
+  display: table-row;
+}
+
+.action-button {
   padding: 4px;
   border: lightgray;
   background-color: transparent;
@@ -711,15 +708,19 @@ input[type="file"] {
   opacity: 0;
   width: 100%;
 }
-.action-text-editable .action-edit-button {
+.action-text-editable .action-button {
   display: block;
   opacity: 0.25;
 }
 
-.action-text-editable tr:hover .action-edit-button,
-.action-text-editable tr.editing .action-editing-button {
+.action-text-editable tr:hover .action-button,
+.action-text-editable tr.editing .action-button {
   display: block;
   opacity: 1;
+}
+
+.action-text-editable tr.missing .delete-button {
+  display: none;
 }
 
 .action-text tr.error,
