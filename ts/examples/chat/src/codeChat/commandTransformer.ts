@@ -43,7 +43,7 @@ export function createCommandTransformer(
             console.log("[Error]:", result.message);
             return undefined;
         } else {
-            console.log("[Success]:", JSON.stringify(result, null, 2));
+            // console.log("[Success]:", JSON.stringify(result, null, 2));
             return result.data;
         }
     }
@@ -83,9 +83,7 @@ export function completeCommandTransformer(
     schemaText += "  | { name: 'Unknown', query: string }  // Fallback\n";
     schemaText += ";\n";
     commandTransformer.schemaText = schemaText;
-    // console.log("[schema text begin]");
-    console.log(schemaText);
-    // console.log("[schema text end]");
+    // console.log(schemaText);
 
     // Now construct the translator and add it
     const validator = createTypeScriptJsonValidator<any>(
