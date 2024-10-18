@@ -1132,7 +1132,13 @@ export async function runChatMemory(): Promise<void> {
             return;
         }
 
-        searcher.answers.settings.maxCharsPerChunk = namedArgs.chunkSize;
+        if (namedArgs.chunkSize) {
+            searcher.answers.settings.maxContextLength = namedArgs.chunkSize;
+            searcher.answers.settings.useChunking = namedArgs.chunkSize > 0;
+        } else {
+            searcher.answers.settings.maxContextLength = undefined;
+            searcher.answers.settings.useChunking = false;
+        }
 
         const timestampQ = new Date();
         let result:

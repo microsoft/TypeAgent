@@ -16,7 +16,6 @@ import registerDebug from "debug";
 import { CompositeEntity } from "./entities.js";
 import { Action } from "./knowledgeSchema.js";
 import { splitLargeTextIntoChunks } from "../textChunker.js";
-import assert from "assert";
 
 const answerError = registerDebug("knowledge-processor:answerGenerator:error");
 
@@ -35,7 +34,7 @@ export interface AnswerGenerator {
 export type AnswerGeneratorSettings = {
     topKEntities: number;
     maxContextLength?: number | undefined;
-    maxCharsPerChunk?: number | undefined;
+    useChunking?: boolean | undefined;
     concurrency?: number;
 };
 
@@ -46,7 +45,6 @@ export function createAnswerGenerator(
     const settings = generatorSettings ?? {
         topKEntities: 8,
     };
-    const maxContextLength = settings?.maxContextLength ?? 1000 * 30;
     const translator = createChatTranslator<AnswerResponse>(
         model,
         loadSchema(["answerSchema.ts"], import.meta.url),
@@ -80,11 +78,7 @@ export function createAnswerGenerator(
     ): Promise<AnswerResponse | undefined> {
         const context: AnswerContext = createContext(response);
 
-        if (
-            isContextTooBig(context, response) &&
-            settings.maxCharsPerChunk &&
-            settings.maxCharsPerChunk > 0
-        ) {
+        if (isContextTooBig(context, response) && settings.useChunking) {
             // Run answer generation in chunks
             return await getAnswerInChunks(
                 question,
@@ -104,8 +98,8 @@ export function createAnswerGenerator(
         context: AnswerContext,
     ): Promise<AnswerResponse | undefined> {
         let contextContent = answerContextToString(context);
-        if (contextContent.length > maxContextLength) {
-            contextContent = trimContext(contextContent, maxContextLength);
+        if (contextContent.length > getMaxContextLength()) {
+            contextContent = trimContext(contextContent, getMaxContextLength());
         }
         const contextSection: PromptSection = {
             role: "user",
@@ -127,9 +121,8 @@ export function createAnswerGenerator(
         higherPrecision: boolean,
         context: AnswerContext,
     ): Promise<AnswerResponse | undefined> {
-        assert(settings.maxCharsPerChunk && settings.maxCharsPerChunk > 0);
         const chunks = [
-            ...splitAnswerContext(context, settings.maxCharsPerChunk!),
+            ...splitAnswerContext(context, settings.maxContextLength!),
         ];
         const partialAnswers = await asyncArray.mapAsync(
             chunks,
@@ -235,9 +228,11 @@ export function createAnswerGenerator(
 
     function isContextTooBig(context: AnswerContext, response: SearchResponse) {
         const totalMessageLength = response.getTotalMessageLength();
-        return settings.maxCharsPerChunk
-            ? totalMessageLength > settings.maxCharsPerChunk
-            : totalMessageLength > maxContextLength;
+        return totalMessageLength > getMaxContextLength();
+    }
+
+    function getMaxContextLength(): number {
+        return settings?.maxContextLength ?? 1000 * 30;
     }
 }
 
@@ -261,7 +256,7 @@ export type AnswerContext = {
 export function* splitAnswerContext(
     context: AnswerContext,
     maxCharsPerChunk: number,
-    autoTrim: boolean = true,
+    splitMessages: boolean = false,
 ): IterableIterator<AnswerContext> {
     let curChunk: AnswerContext = {};
     let curChunkLength = 0;
@@ -282,18 +277,24 @@ export function* splitAnswerContext(
     }
     if (context.messages) {
         for (const message of context.messages) {
-            for (const messageChunk of splitLargeTextIntoChunks(
-                message.value,
-                maxCharsPerChunk,
-            )) {
+            if (splitMessages) {
+                for (const messageChunk of splitLargeTextIntoChunks(
+                    message.value,
+                    maxCharsPerChunk,
+                )) {
+                    curChunk.messages ??= [];
+                    curChunk.messages.push({
+                        timestamp: message.timestamp,
+                        value: messageChunk,
+                    });
+                    yield curChunk;
+                }
+            } else {
                 curChunk.messages ??= [];
-                curChunk.messages.push({
-                    timestamp: message.timestamp,
-                    value: messageChunk,
-                });
+                curChunk.messages.push(message);
                 yield curChunk;
-                newChunk();
             }
+            newChunk();
         }
     }
     if (curChunkLength > 0) {
@@ -329,7 +330,7 @@ export function answerContextToString(context: AnswerContext): string {
         if (propertyCount > 0) {
             text += ",\n";
         }
-        text += `"${name}": ${JSON.stringify(context.entities)}`;
+        text += `"${name}": ${JSON.stringify(value)}`;
         propertyCount++;
         return text;
     }
