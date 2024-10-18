@@ -52,6 +52,35 @@ let mainWindow: BrowserWindow | null = null;
 let inlineBrowserView: BrowserView | null = null;
 let chatView: BrowserView | null = null;
 
+const inlineBrowserSize = 1000;
+
+function setContentSize() {
+    if (mainWindow) {
+        const newBounds = mainWindow.getContentBounds();
+        const newHeight = newBounds.height;
+        let newWidth = newBounds.width;
+
+        if (inlineBrowserView) {
+            newWidth -= inlineBrowserSize;
+            inlineBrowserView?.setBounds({
+                x: newWidth,
+                y: 0,
+                width: inlineBrowserSize,
+                height: newBounds.height,
+            });
+        }
+
+        chatView?.setBounds({
+            x: 0,
+            y: 0,
+            width: newWidth,
+            height: newHeight,
+        });
+
+        mainWindow.webContents.send("chat-view-resized", newWidth);
+    }
+}
+
 const time = performance.now();
 debugShell("Starting...");
 function createWindow(): void {
@@ -72,11 +101,6 @@ function createWindow(): void {
         y: ShellSettings.getinstance().y,
     });
 
-    mainWindow.setBounds({
-        width: ShellSettings.getinstance().width,
-        height: ShellSettings.getinstance().height,
-    });
-
     chatView = new BrowserView({
         webPreferences: {
             preload: join(__dirname, "../preload/index.mjs"),
@@ -85,17 +109,7 @@ function createWindow(): void {
         },
     });
 
-    chatView.setBounds({
-        x: 0,
-        y: 0,
-        width: ShellSettings.getinstance().width! - 20,
-        height: ShellSettings.getinstance().height! - 50,
-    });
-
-    mainWindow.webContents.send(
-        "chat-view-resized",
-        ShellSettings.getinstance().width! - 20,
-    );
+    setContentSize();
 
     mainWindow.setBrowserView(chatView);
 
@@ -140,37 +154,11 @@ function createWindow(): void {
         }
     });
 
-    mainWindow.on("will-resize", (_event, bounds) => {
-        if (mainWindow) {
-            const chatBounds = chatView?.getBounds();
-            let newWidth = chatBounds!.width;
-            if (bounds.width < newWidth) {
-                newWidth = bounds.width - 20;
-            } else {
-                if (!inlineBrowserView) {
-                    newWidth = bounds.width - 20;
-                }
-            }
-
-            chatView?.setBounds({
-                x: 0,
-                y: 0,
-                width: newWidth,
-                height: bounds.height - 50,
-            });
-
-            if (inlineBrowserView) {
-                inlineBrowserView?.setBounds({
-                    x: chatBounds!.width + 4,
-                    y: 0,
-                    width: bounds.width - newWidth - 20,
-                    height: bounds.height - 50,
-                });
-            }
-
-            mainWindow.webContents.send("chat-view-resized", newWidth);
-        }
-    });
+    if (isLinux) {
+        mainWindow.on("resize", setContentSize);
+    } else {
+        mainWindow.on("will-resize", setContentSize);
+    }
 
     // HMR for renderer base on electron-vite cli.
     // Load the remote URL for development or the local html file for production.
@@ -238,14 +226,9 @@ function createWindow(): void {
     ShellSettings.getinstance().onOpenInlineBrowser = (
         targetUrl: URL,
     ): void => {
-        const currSize = mainWindow?.getBounds();
-        const chatSize = chatView?.getBounds();
+        const mainWindowSize = mainWindow?.getBounds();
 
-        if (!inlineBrowserView && currSize && chatSize) {
-            mainWindow?.setBounds({
-                width: chatSize.width + 1020,
-            });
-
+        if (!inlineBrowserView && mainWindowSize) {
             inlineBrowserView = new BrowserView({
                 webPreferences: {
                     preload: join(__dirname, "../preload/webview.mjs"),
@@ -253,17 +236,15 @@ function createWindow(): void {
                 },
             });
 
-            inlineBrowserView.setBounds({
-                x: chatSize.width + 4,
-                y: 0,
-                width: 1000,
-                height: currSize.height,
-            });
-
             mainWindow?.addBrowserView(inlineBrowserView);
+
             setupDevToolsHandlers(inlineBrowserView);
             setupZoomHandlers(inlineBrowserView);
-            mainWindow?.webContents.send("chat-view-resized", chatSize.width);
+
+            mainWindow?.setBounds({
+                width: mainWindowSize.width + inlineBrowserSize,
+            });
+            setContentSize();
         }
 
         inlineBrowserView?.webContents.loadURL(targetUrl.toString());
@@ -273,17 +254,18 @@ function createWindow(): void {
     };
 
     ShellSettings.getinstance().onCloseInlineBrowser = (): void => {
-        const chatSize = chatView?.getBounds();
+        const mainWindowSize = mainWindow?.getBounds();
 
-        if (inlineBrowserView && chatSize) {
-            mainWindow?.setBounds({
-                width: chatSize.width + 20,
-            });
-
+        if (inlineBrowserView && mainWindowSize) {
             inlineBrowserView.webContents.close();
             mainWindow?.removeBrowserView(inlineBrowserView);
             inlineBrowserView = null;
-            mainWindow?.webContents.send("chat-view-resized", chatSize.width);
+
+            mainWindow?.setBounds({
+                width: mainWindowSize.width - 1000,
+            });
+
+            setContentSize();
         }
     };
 }
@@ -825,6 +807,7 @@ function zoomOut(chatView: BrowserView) {
 }
 
 const isMac = process.platform === "darwin";
+const isLinux = process.platform === "linux";
 
 function setupZoomHandlers(chatView: BrowserView) {
     chatView.webContents.on("before-input-event", (_event, input) => {
