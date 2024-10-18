@@ -271,25 +271,19 @@ abstract class FieldBase extends FieldRow {
     public insertAfter(row: HTMLTableRowElement) {
         this.row.after(row);
     }
-    public get isVisible() {
-        return !this.row.classList.contains("hidden");
-    }
     public remove() {
         if (!this.isValid) {
             this.data.errorCount--;
         }
         super.remove();
     }
-    protected updateValueDisplay() {
+    public updateValueDisplay(parent: boolean = false) {
         const valueDisplay = this.getValueDisplay();
-        if (valueDisplay === undefined && this.optional) {
-            this.setVisibility(false);
-            return false;
-        }
-        this.setValid(valueDisplay !== undefined);
+        this.setMissing(valueDisplay === undefined);
         this.valueCell.innerText = valueDisplay ?? "";
-        this.setVisibility(true);
-        return true;
+        if (parent) {
+            this.parent?.updateValueDisplay();
+        }
     }
 
     protected setValid(valid: boolean) {
@@ -311,18 +305,21 @@ abstract class FieldBase extends FieldRow {
     }
     protected setValue(value: any) {
         this.data.setProperty(this.fullPropertyName, value);
+        this.updateValueDisplay(true);
     }
     public deleteValue() {
-        // Only optional is deletable. so just visibility to false
-        this.setVisibility(false);
         this.setValue(undefined);
     }
 
-    private setVisibility(visible: boolean) {
-        if (visible) {
-            this.row.classList.remove("hidden");
+    private setMissing(missing: boolean) {
+        if (this.optional) {
+            if (missing) {
+                this.row.classList.add("missing");
+            } else {
+                this.row.classList.remove("missing");
+            }
         } else {
-            this.row.classList.add("hidden");
+            this.setValid(!missing);
         }
     }
 }
@@ -330,6 +327,16 @@ abstract class FieldBase extends FieldRow {
 abstract class FieldGroup extends FieldBase {
     protected readonly fields: FieldBase[] = [];
 
+    constructor(
+        data: FieldContainer,
+        fullPropertyName: string,
+        label: string,
+        optional: boolean,
+        level: number,
+        parent: FieldGroup | undefined,
+    ) {
+        super(data, fullPropertyName, label, optional, level, parent);
+    }
     public insertAfter(row: HTMLTableRowElement) {
         if (this.fields.length === 0) {
             super.insertAfter(row);
@@ -357,14 +364,6 @@ abstract class FieldGroup extends FieldBase {
         );
         this.fields.push(field);
         return field;
-    }
-
-    protected updateValueDisplay(): boolean {
-        if (super.updateValueDisplay()) {
-            this.createChildFields();
-            return true;
-        }
-        return false;
     }
 
     public remove() {
@@ -436,7 +435,6 @@ class FieldScalar extends FieldBase {
                     data.table.classList.remove("editing");
                     row.classList.remove("editing");
                     this.setValue(newValue);
-                    valueCell.innerText = input.value;
 
                     if (
                         fieldType.type === "string-union" &&
@@ -524,7 +522,6 @@ class FieldScalar extends FieldBase {
                 this.setValue(this.fieldType.typeEnum[0]);
                 break;
         }
-        this.updateValueDisplay();
     }
 
     public getValueDisplay() {
@@ -532,31 +529,6 @@ class FieldScalar extends FieldBase {
         return isValidValue(this.fieldType, value)
             ? value.toString()
             : undefined;
-    }
-}
-
-class FieldObjectOptionalField extends FieldRow {
-    private readonly select: HTMLSelectElement;
-    constructor(
-        label: string,
-        level: number,
-        parent: FieldGroup,
-        fields: Iterable<string>,
-    ) {
-        super(label, level, parent);
-        this.row.cells[0].classList.add("temp");
-        const select = document.createElement("select");
-        this.select = select;
-
-        for (const field of fields) {
-            select.options.add(new Option(field));
-        }
-        this.valueCell.appendChild(select);
-        this.row.classList.add("editing");
-    }
-
-    public get value() {
-        return this.select.value;
     }
 }
 
@@ -586,6 +558,7 @@ class FieldObject extends FieldGroup {
             fields.length === 0 ||
             Object.values(fields).some((f) => !f.optional);
         this.updateValueDisplay();
+        this.createChildFields();
     }
 
     public getValueDisplay() {
@@ -598,87 +571,25 @@ class FieldObject extends FieldGroup {
 
     public setDefaultValue() {
         this.setValue({});
-        this.updateValueDisplay();
     }
 
     protected createChildFields() {
         this.clearChildFields();
-        const missingFields = new Map<string, FieldBase>();
-        let hasMissingFieldButton = false;
-        const updateMissingFieldButton = () => {
-            if (missingFields.size === 0) {
-                if (!hasMissingFieldButton) {
-                    return;
-                }
-                hasMissingFieldButton = false;
-                this.removeButton(ButtonIndex.add);
-                return;
-            }
-            if (hasMissingFieldButton) {
-                return;
-            }
-            hasMissingFieldButton = true;
-            this.addButton(ButtonIndex.add, "➕", "action-edit-button", () => {
-                this.data.table.classList.add("editing");
-                // create a temporary row
-                const inputRow = new FieldObjectOptionalField(
-                    "<field name>",
-                    this.level + 1,
-                    this,
-                    missingFields.keys(),
-                );
-                inputRow.addButton(
-                    ButtonIndex.save,
-                    "💾",
-                    "action-editing-button",
-                    () => {
-                        const fieldName = inputRow.value;
-
-                        const field = missingFields.get(fieldName);
-                        if (field === undefined) {
-                            return;
-                        }
-                        missingFields.delete(fieldName);
-                        field.setDefaultValue();
-                        inputRow.remove();
-                        this.data.table.classList.remove("editing");
-                        updateMissingFieldButton();
-                    },
-                );
-
-                inputRow.addButton(
-                    ButtonIndex.cancel,
-                    "🛇",
-                    "action-editing-button",
-                    () => {
-                        inputRow.remove();
-                        this.data.table.classList.remove("editing");
-                    },
-                );
-            });
-        };
         for (const [k, v] of Object.entries(this.fieldTypes)) {
             const optional = v.optional ?? false;
             const field = this.createChildField(k, k, v.field, optional);
 
             if (this.data.enableEdit && optional) {
-                if (!field.isVisible) {
-                    // Optional field without a value.
-                    missingFields.set(k, field);
-                }
                 field.addButton(
                     ButtonIndex.delete,
                     "✕",
                     "action-edit-button",
                     () => {
                         field.deleteValue();
-                        missingFields.set(k, field);
-                        updateMissingFieldButton();
                     },
                 );
             }
         }
-        updateMissingFieldButton();
     }
 
     public getSchemaValue() {
@@ -724,9 +635,7 @@ abstract class FieldArrayBase extends FieldGroup {
     public setDefaultValue() {
         // Add at least one element to start with.
         this.setValue([undefined]);
-        if (this.updateValueDisplay()) {
-            this.createChildFields();
-        }
+        this.createChildFields();
     }
 
     public getSchemaValue() {
@@ -798,6 +707,7 @@ class FieldArray extends FieldArrayBase {
     ) {
         super(data, fullPropertyName, paramName, optional, level, parent);
         this.updateValueDisplay();
+        this.createChildFields();
     }
 
     protected appendNewValue() {
@@ -840,6 +750,7 @@ class FieldRootArray extends FieldArrayBase {
     ) {
         super(data, "", label, false, 0, undefined);
         this.updateValueDisplay();
+        this.createChildFields();
     }
     protected appendNewValue() {
         const value = this.getArray();
