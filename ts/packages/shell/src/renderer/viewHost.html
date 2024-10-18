@@ -1,0 +1,59 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resizable Views</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+      .divider {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 400px;
+        width: 5px;
+        cursor: ew-resize;
+        background-color: #ddd;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="divider" id="divider"></div>
+    <script>
+      const ipcRenderer = window.electron.ipcRenderer;
+
+      const divider = document.getElementById("divider");
+      let isDragging = false;
+
+      divider.addEventListener("mousedown", () => {
+        isDragging = true;
+      });
+
+      window.addEventListener("mousemove", (e) => {
+        if (!isDragging) return;
+        const newX = e.clientX;
+        divider.style.left = `${newX}px`;
+        ipcRenderer.send("views-resized-by-user", newX);
+      });
+
+      window.addEventListener("mouseup", () => {
+        isDragging = false;
+      });
+
+      ipcRenderer.on("chat-view-resized", (_, newX) => {
+        divider.style.left = `${newX}px`;
+        if (Math.abs(document.body.clientWidth - newX) < 10) {
+          divider.style.visibility = "hidden";
+        } else {
+          divider.style.visibility = "visible";
+        }
+      });
+    </script>
+  </body>
+</html>
