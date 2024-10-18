@@ -52,6 +52,42 @@ let mainWindow: BrowserWindow | null = null;
 let inlineBrowserView: BrowserView | null = null;
 let chatView: BrowserView | null = null;
 
+const inlineBrowserSize = 1000;
+
+function setContentSize() {
+    if (mainWindow && chatView) {
+        const newBounds = mainWindow.getContentBounds();
+        const newHeight = newBounds.height;
+        let newWidth = newBounds.width;
+        let chatWidth = chatView.getBounds().width;
+
+        if (inlineBrowserView) {
+            let browserWidth = newWidth - chatWidth;
+            inlineBrowserView?.setBounds({
+                x: chatWidth + 4,
+                y: 0,
+                width: browserWidth,
+                height: newHeight,
+            });
+
+            if (browserWidth <= 0) {
+                chatWidth = newWidth;
+            }
+        } else {
+            chatWidth = newWidth;
+        }
+
+        chatView?.setBounds({
+            x: 0,
+            y: 0,
+            width: chatWidth,
+            height: newHeight,
+        });
+
+        mainWindow.webContents.send("chat-view-resized", chatWidth);
+    }
+}
+
 const time = performance.now();
 debugShell("Starting...");
 function createWindow(): void {
@@ -63,10 +99,18 @@ function createWindow(): void {
         height: ShellSettings.getinstance().height,
         show: false,
         autoHideMenuBar: true,
+        webPreferences: {
+            preload: join(__dirname, "../preload/index.mjs"),
+            sandbox: false,
+            zoomFactor: ShellSettings.getinstance().zoomLevel,
+        },
         x: ShellSettings.getinstance().x,
         y: ShellSettings.getinstance().y,
     });
 
+    // This (seemingly redundant) call is needed when we use a BrowserView.
+    // Without this call, the mainWindow opens using default width/height, not the
+    // values saved in ShellSettings
     mainWindow.setBounds({
         width: ShellSettings.getinstance().width,
         height: ShellSettings.getinstance().height,
@@ -80,12 +124,7 @@ function createWindow(): void {
         },
     });
 
-    chatView.setBounds({
-        x: 0,
-        y: 0,
-        width: ShellSettings.getinstance().width! - 20,
-        height: ShellSettings.getinstance().height! - 50,
-    });
+    setContentSize();
 
     mainWindow.setBrowserView(chatView);
 
@@ -113,9 +152,6 @@ function createWindow(): void {
 
             ShellSettings.getinstance().closeInlineBrowser();
             ShellSettings.getinstance().size = mainWindow.getSize();
-            console.log(
-                "Closing size: " + JSON.stringify(mainWindow.getSize()),
-            );
         }
     });
 
@@ -133,23 +169,36 @@ function createWindow(): void {
         }
     });
 
-    mainWindow.on("will-resize", (_event, bounds) => {
+    mainWindow.on("resize", setContentSize);
+
+    // HMR for renderer base on electron-vite cli.
+    // Load the remote URL for development or the local html file for production.
+    if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
+        chatView.webContents.loadURL(process.env["ELECTRON_RENDERER_URL"]);
+    } else {
+        chatView.webContents.loadURL(join(__dirname, "../renderer/index.html"));
+    }
+
+    mainWindow.webContents.loadURL(
+        join(__dirname, "../renderer/viewHost.html"),
+    );
+
+    mainWindow.removeMenu();
+
+    setupZoomHandlers(chatView);
+    setupDevToolsHandlers(chatView);
+
+    ipcMain.on("views-resized-by-user", (_, newX: number) => {
         if (mainWindow) {
             const chatBounds = chatView?.getBounds();
-            let newWidth = chatBounds!.width;
-            if (bounds.width < newWidth) {
-                newWidth = bounds.width - 20;
-            } else {
-                if (!inlineBrowserView) {
-                    newWidth = bounds.width - 20;
-                }
-            }
+            const bounds = mainWindow.getBounds();
+            let newWidth = newX;
 
             chatView?.setBounds({
                 x: 0,
                 y: 0,
                 width: newWidth,
-                height: bounds.height - 50,
+                height: chatBounds?.height!,
             });
 
             if (inlineBrowserView) {
@@ -162,18 +211,6 @@ function createWindow(): void {
             }
         }
     });
-
-    // HMR for renderer base on electron-vite cli.
-    // Load the remote URL for development or the local html file for production.
-    if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-        chatView.webContents.loadURL(process.env["ELECTRON_RENDERER_URL"]);
-    } else {
-        chatView.webContents.loadURL(join(__dirname, "../renderer/index.html"));
-    }
-
-    mainWindow.removeMenu();
-
-    setupZoomHandlers(mainWindow);
 
     // Notify renderer process whenever settings are modified
     ShellSettings.getinstance().onSettingsChanged = (): void => {
@@ -200,14 +237,9 @@ function createWindow(): void {
     ShellSettings.getinstance().onOpenInlineBrowser = (
         targetUrl: URL,
     ): void => {
-        const currSize = mainWindow?.getBounds();
-        const chatSize = chatView?.getBounds();
+        const mainWindowSize = mainWindow?.getBounds();
 
-        if (!inlineBrowserView && currSize && chatSize) {
-            mainWindow?.setBounds({
-                width: chatSize.width + 1020,
-            });
-
+        if (!inlineBrowserView && mainWindowSize) {
             inlineBrowserView = new BrowserView({
                 webPreferences: {
                     preload: join(__dirname, "../preload/webview.mjs"),
@@ -215,14 +247,15 @@ function createWindow(): void {
                 },
             });
 
-            inlineBrowserView.setBounds({
-                x: chatSize.width + 4,
-                y: 0,
-                width: 1000,
-                height: currSize.height,
-            });
-
             mainWindow?.addBrowserView(inlineBrowserView);
+
+            setupDevToolsHandlers(inlineBrowserView);
+            setupZoomHandlers(inlineBrowserView);
+
+            mainWindow?.setBounds({
+                width: mainWindowSize.width + inlineBrowserSize,
+            });
+            setContentSize();
         }
 
         inlineBrowserView?.webContents.loadURL(targetUrl.toString());
@@ -232,16 +265,19 @@ function createWindow(): void {
     };
 
     ShellSettings.getinstance().onCloseInlineBrowser = (): void => {
-        const chatSize = chatView?.getBounds();
+        const mainWindowSize = mainWindow?.getBounds();
 
-        if (inlineBrowserView && chatSize) {
-            mainWindow?.setBounds({
-                width: chatSize.width + 20,
-            });
-
+        if (inlineBrowserView && mainWindowSize) {
+            const browserBounds = inlineBrowserView.getBounds();
             inlineBrowserView.webContents.close();
             mainWindow?.removeBrowserView(inlineBrowserView);
             inlineBrowserView = null;
+
+            mainWindow?.setBounds({
+                width: mainWindowSize.width - browserBounds.width,
+            });
+
+            setContentSize();
         }
     };
 }
@@ -763,51 +799,71 @@ app.on("window-all-closed", () => {
     }
 });
 
-function zoomIn(mainWindow: BrowserWindow) {
-    const curr = mainWindow.webContents.zoomLevel;
-    mainWindow.webContents.zoomLevel = Math.min(curr + 0.5, 9);
+function zoomIn(chatView: BrowserView) {
+    const curr = chatView.webContents.zoomLevel;
+    chatView.webContents.zoomLevel = Math.min(curr + 0.5, 9);
 
     ShellSettings.getinstance().set(
         "zoomLevel",
-        mainWindow.webContents.zoomLevel,
+        chatView.webContents.zoomLevel,
     );
 }
 
-function zoomOut(mainWindow: BrowserWindow) {
-    const curr = mainWindow.webContents.zoomLevel;
-    mainWindow.webContents.zoomLevel = Math.max(curr - 0.5, -8);
+function zoomOut(chatView: BrowserView) {
+    const curr = chatView.webContents.zoomLevel;
+    chatView.webContents.zoomLevel = Math.max(curr - 0.5, -8);
     ShellSettings.getinstance().set(
         "zoomLevel",
-        mainWindow.webContents.zoomLevel,
+        chatView.webContents.zoomLevel,
     );
 }
 
 const isMac = process.platform === "darwin";
-
-function setupZoomHandlers(mainWindow: BrowserWindow) {
-    mainWindow.webContents.on("before-input-event", (_event, input) => {
+function setupZoomHandlers(chatView: BrowserView) {
+    chatView.webContents.on("before-input-event", (_event, input) => {
         if ((isMac ? input.meta : input.control) && input.type === "keyDown") {
             if (
                 input.key === "NumpadAdd" ||
                 input.key === "+" ||
                 input.key === "="
             ) {
-                zoomIn(mainWindow);
+                zoomIn(chatView);
             } else if (input.key === "-" || input.key === "NumpadMinus") {
-                zoomOut(mainWindow);
+                zoomOut(chatView);
             } else if (input.key === "0") {
-                mainWindow.webContents.zoomLevel = 0;
+                chatView.webContents.zoomLevel = 0;
                 ShellSettings.getinstance().set("zoomLevel", 0);
             }
         }
     });
 
     // Register mouse wheel as well.
-    mainWindow.webContents.on("zoom-changed", (_event, zoomDirection) => {
+    chatView.webContents.on("zoom-changed", (_event, zoomDirection) => {
         if (zoomDirection === "in") {
-            zoomIn(mainWindow);
+            zoomIn(chatView);
         } else {
-            zoomOut(mainWindow);
+            zoomOut(chatView);
+        }
+    });
+}
+
+function setupDevToolsHandlers(view: BrowserView) {
+    view.webContents.on("before-input-event", (_event, input) => {
+        if (input.type === "keyDown") {
+            if (!is.dev) {
+                // Ignore CommandOrControl + R
+                if (input.code === "KeyR" && (input.control || input.meta))
+                    _event.preventDefault();
+            } else {
+                // Toggle devtool(F12)
+                if (input.code === "F12") {
+                    if (view.webContents.isDevToolsOpened()) {
+                        view.webContents.closeDevTools();
+                    } else {
+                        view.webContents.openDevTools({ mode: "undocked" });
+                    }
+                }
+            }
         }
     });
 }
