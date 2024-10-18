@@ -50,13 +50,43 @@ If you want to use a local whisper service for voice input in the [TypeAgent She
 ### Service Keys
 
 Multiple services are required to run the scenarios. Put the necessary keys in the `.env` file at this directory (TypeAgent repo's `./ts` directory).
+
+Here is an example of the minimal `.env` file targeting Azure:
+
+```
+AZURE_OPENAI_API_KEY=<service key>
+AZURE_OPENAI_ENDPOINT=<endpoint URL for GPT4 or equivalent model>
+AZURE_OPENAI_RESPONSE_FORMAT=1
+
+AZURE_OPENAI_API_KEY_EMBEDDING=<service key>
+AZURE_OPENAI_ENDPOINT_EMBEDDING=<endpoint URL for text-embedding-ada-002 or equivalent
+
+BING_API_KEY=<service key>
+```
+
+Here is an example of the minimal `.env` file targeting OpenAI:
+
+```
+OPENAI_ORGANIZATION=<organization id>
+OPENAI_API_KEY=<service key>
+OPENAI_ENDPOINT=https://api.openai.com/v1/chat/completions
+OPENAI_MODEL=gpt-4o
+OPENAI_RESPONSE_FORMAT=1
+
+OPENAI_ENDPOINT_EMBEDDING=https://api.openai.com/v1/embeddings
+OPENAI_MODEL_EMBEDDING=text-embedding-ada-002
+
+BING_API_KEY=<service key>
+```
+
 The follow set of functionality will need the services keys. Please read the links for details about the variables needed. It is possible to use "keyless" configuration for some APIs. See [Keyless API Access](#keyless-api-access) below.
 
 **Minimum requirements** to try out the experience with the [List](./packages/agents/list/README.md) TypeAgent:
 
-| Requirements              | Functionality       | Variables                                                                     | Instructions                                                                                                                        | Keyless Access Supported |
-| ------------------------- | ------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| LLM (GPT-4 or equivalent) | Request translation | AZURE_OPENAI_API_KEY<br>AZURE_OPENAI_ENDPOINT<br>AZURE_OPENAI_RESPONSE_FORMAT | [TypeChat instruction](https://github.com/microsoft/TypeChat/tree/main/typescript/examples#step-3-configure-environment-variables). | Yes                      |
+| Requirements              | Functionality                                                                         | Variables                                                                                                                                                                                               | Instructions                                                                                                                        | Keyless Access Supported |
+| ------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| LLM (GPT-4 or equivalent) | Request translation                                                                   | AZURE_OPENAI_API_KEY<br>AZURE_OPENAI_ENDPOINT<br>AZURE_OPENAI_RESPONSE_FORMAT<br>or<br>OPENAI_API_KEY<br>OPENAI_ORGANIZATION<br>OPENAI_ENDPOINT<br>OPENAI_MODEL<br>OPENAI_RESPONSE_FORMAT               | [TypeChat instruction](https://github.com/microsoft/TypeChat/tree/main/typescript/examples#step-3-configure-environment-variables). | Yes                      |
+| Embeddings                | Conversation Memory<br><br>[Desktop](./packages/agents/desktop/) App name Fuzzy match | AZURE_OPENAI_API_KEY_EMBEDDING<br>AZURE_OPENAI_ENDPOINT_EMBEDDING<br>or<br> OPENAI_ENDPOINT_EMBEDDING<br>OPENAI_MODEL_EMBEDDING<br>OPENAI_API_KEY_EMBEDDING (optional if different then OPENAI_API_KEY) |                                                                                                                                     | Yes                      |
 
 **Optional requirements**
 
@@ -64,7 +94,7 @@ The follow set of functionality will need the services keys. Please read the lin
 | ----------------------------------------------------------------------------------------------------------------- | ------------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------ |
 | [Speech to Text service](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/index-speech-to-text) | Voice input (shell only) | SPEECH_SDK_ENDPOINT<br>SPEECH_SDK_KEY<br>SPEECH_SDK_REGION | [Shell setup instruction](./packages/shell/README.md#azure-speech-to-text-service-optional) | Yes                      |
 
-**Additional keys required per TypeAgent** (Optional if not using these TypeAgent)
+**Additional keys required for individual AppAgents** (Optional if not using these AppAgents)
 
 | Requirements                                                                                                                 | Functionality                                                               | Variables                                                                | Instructions                                                              | Keyless Access Supported |
 | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------- | ------------------------ |
@@ -72,7 +102,6 @@ The follow set of functionality will need the services keys. Please read the lin
 | GPT-3.5 Turbo                                                                                                                | Fast Chat Response<br>[Email](./packages/agents/email) content generation   | AZURE_OPENAI_API_KEY_GPT_35_TURBO<br>AZURE_OPENAI_ENDPOINT_GPT_35_TURBO  |                                                                           | Yes                      |
 | [Spotify Web API](https://developer.spotify.com/documentation/web-api)                                                       | [Music player](./packages/agents/player/)                                   | SPOTIFY_APP_CLI<br>SPOTIFY_APP_CLISEC<br>SPOTIFY_APP_PORT                | [Music player setup](./packages/agents/player/README.md#application-keys) | No                       |
 | [Graph Application](https://developer.microsoft.com/en-us/graph)                                                             | [Calendar](./packages/agents/calendar/)/[Email](./packages/agents/email)    | MSGRAPH_APP_CLIENTID<br>MSGRAPH_APP_CLIENTSECRET<br>MSGRAPH_APP_TENANTID |                                                                           | No                       |
-| Embeddings                                                                                                                   | [Desktop](./packages/agents/desktop/) App name Fuzzy match                  | AZURE_OPENAI_API_KEY_EMBEDDING<br>AZURE_OPENAI_ENDPOINT_EMBEDDING        |                                                                           | Yes                      |
 | GPT-4o                                                                                                                       | [Browser](./packages/agents/browser/) - Crossword Page                      | AZURE_OPENAI_API_KEY_GPT_4_O<br>AZURE_OPENAI_ENDPOINT_GPT_4_O            |                                                                           | Yes                      |
 | [Bing Maps Location Rest API](https://learn.microsoft.com/en-us/bingmaps/rest-services/locations/find-a-location-by-address) | [Browser](./packages/agents/browser/) - PaleoBioDB set Lat/Longitude action | BING_MAPS_API_KEY                                                        |                                                                           | No                       |
 
