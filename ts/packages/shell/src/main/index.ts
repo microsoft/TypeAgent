@@ -108,6 +108,9 @@ function createWindow(): void {
         y: ShellSettings.getinstance().y,
     });
 
+    // This (seemingly redundant) call is needed when we use a BrowserView.
+    // Without this call, the mainWindow opens using default width/height, not the
+    // values saved in ShellSettings
     mainWindow.setBounds({
         width: ShellSettings.getinstance().width,
         height: ShellSettings.getinstance().height,
