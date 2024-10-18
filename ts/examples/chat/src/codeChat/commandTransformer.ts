@@ -16,11 +16,9 @@ import {
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 
-// console.log("[codeProcessor.js loading]");
-
 export interface CommandTransformer {
     model: TypeChatLanguageModel;
-    metadata?: Record<string, CommandMetadata>;
+    metadata?: Record<string, string | CommandMetadata>;
     schemaText?: string;
     translator?: TypeChatJsonTranslator<any>;
     transform(command: string, io: InteractiveIo): Promise<object | undefined>;
@@ -35,12 +33,17 @@ export function createCommandTransformer(
     };
 
     async function transform(command: string): Promise<object | undefined> {
-        const result = await transformer.translator!.translate(command);
+        const promptPreamble =
+            "If no value is given for a parameter, use the default from the comment, if any.";
+        const result = await transformer.translator!.translate(
+            command,
+            promptPreamble,
+        );
         if (result.success === false) {
-            // console.log("Error:", result.message);
+            console.log("[Error]:", result.message);
             return undefined;
         } else {
-            // console.log(JSON.stringify(result, null, 2));
+            console.log("[Success]:", JSON.stringify(result, null, 2));
             return result.data;
         }
     }
@@ -54,11 +57,15 @@ export function completeCommandTransformer(
     commandTransformer: CommandTransformer,
 ): void {
     // Copy the handlers' metadata into the command transformer
-    const cmdMetadata: Record<string, CommandMetadata> = {};
+    const cmdMetadata: Record<string, string | CommandMetadata> = {};
     for (const key in handlers) {
-        // TODO: Some handlers have no metadata, only a description?
+        if (!/^\w+/.test(key)) {
+            continue;
+        }
         const metadata = handlers[key].metadata;
-        if (metadata && typeof metadata === "object") {
+        if (typeof metadata === "undefined") {
+            cmdMetadata[key] = key;
+        } else {
             cmdMetadata[key] = metadata;
         }
     }
@@ -77,7 +84,7 @@ export function completeCommandTransformer(
     schemaText += ";\n";
     commandTransformer.schemaText = schemaText;
     // console.log("[schema text begin]");
-    // console.log(schemaText);
+    console.log(schemaText);
     // console.log("[schema text end]");
 
     // Now construct the translator and add it
@@ -92,10 +99,20 @@ export function completeCommandTransformer(
     commandTransformer.translator = translator;
 }
 
-function makeClassDef(name: string, metadata: CommandMetadata): string {
+function makeClassDef(
+    name: string,
+    metadata: string | CommandMetadata,
+): string {
+    if (typeof metadata === "string") {
+        return (
+            `// ${metadata}\n` +
+            `export interface ${name} { name: '${name}'; args: string[]; }\n\n`
+        );
+    }
     let def = `// ${metadata.description}\n`;
     def += `export interface ${name} {\n`;
     def += "  name: '" + name + "';\n";
+    // TODO: the same for args (currently not used by code chat)
     const options = metadata.options;
     for (const key in options) {
         const option = options[key];

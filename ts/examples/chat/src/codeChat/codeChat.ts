@@ -73,27 +73,35 @@ export async function runCodeChat(): Promise<void> {
         const transformed = (await commandTransformer.transform(line, io)) as
             | NamedArgs
             | undefined;
-        if (transformed && transformed.name != "Unknown") {
-            // io.writer.writeLine("[Transformed]: " + JSON.stringify(transformed));
-            const name = transformed.name as string;
-            if (name in handlers) {
-                if (typeof transformed === "object") {
-                    const handler = handlers[name] as NewCommandHandler;
-                    await handler(transformed, io);
-                } else {
-                    io.writer.writeLine(
-                        `Sorry, transformation for ${name} failed; try @help`,
-                    );
-                }
-            } else {
-                io.writer.writeLine(
-                    `Sorry, I don't know anything about ${name}; try @help`,
-                );
-            }
-        } else {
+        // io.writer.writeLine("[Transformed]: " + JSON.stringify(transformed));
+        if (!transformed) {
             io.writer.writeLine(
                 "Sorry, I didn't get that (or the server is down); try @help",
             );
+        } else if (transformed.name === "Unknown") {
+            io.writer.writeLine("Sorry, I didn't get that; try @help");
+        } else {
+            const name = transformed.name as string;
+            if (name in handlers) {
+                if (!handlers[name].metadata) {
+                    // Missing metadata: handler ignores arguments
+                    const handler = handlers[name];
+                    await handler([], io);
+                } else if (typeof handlers[name].metadata === "string") {
+                    // Metadata is a string: handler only takes a list of strings
+                    const handler = handlers[name];
+                    await handler(transformed.args, io);
+                } else {
+                    // Otherwise: handler takes a NamedArgs as well (best case)
+                    const handler = handlers[name] as NewCommandHandler;
+                    await handler(transformed, io);
+                }
+            } else {
+                // Should never get this if the schema is correct
+                io.writer.writeLine(
+                    `Sorry, I don't know how to handle ${name}; try @help`,
+                );
+            }
         }
     }
 
@@ -166,10 +174,7 @@ export async function runCodeChat(): Promise<void> {
     }
     handlers.codeDebug.metadata = debugDef();
     async function codeDebug(args: string[] | NamedArgs): Promise<void> {
-        const namedArgs =
-            args instanceof Array
-                ? parseNamedArguments(args, debugDef())
-                : args;
+        const namedArgs = parseNamedArguments(args, debugDef());
 
         printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
         printer.writeLine(`Bug Description:\n${namedArgs.bug}\n`);
@@ -402,17 +407,14 @@ export async function runCodeChat(): Promise<void> {
     }
 
     handlers.clearCodeIndex.metadata = "Clear the code index";
-    async function clearCodeIndex(args: string[] | NamedArgs): Promise<void> {
+    async function clearCodeIndex(): Promise<void> {
         codeIndex = await ensureCodeIndex(true);
     }
 
     handlers.regex.metadata =
         "Generate a regular expression from the given requirements.";
-    async function regex(
-        args: string[] | NamedArgs,
-        io: InteractiveIo,
-    ): Promise<void> {
-        if (args instanceof Array && args.length > 0) {
+    async function regex(args: string[], io: InteractiveIo): Promise<void> {
+        if (args.length > 0) {
             const prompt = `Return a Typescript regular expression for the following:\n ${args.join(" ")}`;
             const result = await codeReviewer.model.complete(prompt);
             if (result.success) {
@@ -476,9 +478,9 @@ export async function runCodeChat(): Promise<void> {
         }
     }
 
+    addStandardHandlers(handlers);
     completeCommandTransformer(handlers, commandTransformer);
 
-    addStandardHandlers(handlers);
     await runConsole({
         onStart,
         inputHandler,
