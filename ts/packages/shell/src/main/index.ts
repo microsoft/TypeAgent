@@ -173,7 +173,8 @@ function createWindow(): void {
 
     mainWindow.removeMenu();
 
-    setupZoomHandlers(mainWindow);
+    setupZoomHandlers(chatView);
+    setupDevToolsHandlers(chatView);
 
     // Notify renderer process whenever settings are modified
     ShellSettings.getinstance().onSettingsChanged = (): void => {
@@ -212,6 +213,7 @@ function createWindow(): void {
                 webPreferences: {
                     preload: join(__dirname, "../preload/webview.mjs"),
                     sandbox: false,
+                    devTools: true,
                 },
             });
 
@@ -223,6 +225,8 @@ function createWindow(): void {
             });
 
             mainWindow?.addBrowserView(inlineBrowserView);
+            setupDevToolsHandlers(inlineBrowserView);
+            setupZoomHandlers(inlineBrowserView);
         }
 
         inlineBrowserView?.webContents.loadURL(targetUrl.toString());
@@ -763,51 +767,72 @@ app.on("window-all-closed", () => {
     }
 });
 
-function zoomIn(mainWindow: BrowserWindow) {
-    const curr = mainWindow.webContents.zoomLevel;
-    mainWindow.webContents.zoomLevel = Math.min(curr + 0.5, 9);
+function zoomIn(chatView: BrowserView) {
+    const curr = chatView.webContents.zoomLevel;
+    chatView.webContents.zoomLevel = Math.min(curr + 0.5, 9);
 
     ShellSettings.getinstance().set(
         "zoomLevel",
-        mainWindow.webContents.zoomLevel,
+        chatView.webContents.zoomLevel,
     );
 }
 
-function zoomOut(mainWindow: BrowserWindow) {
-    const curr = mainWindow.webContents.zoomLevel;
-    mainWindow.webContents.zoomLevel = Math.max(curr - 0.5, -8);
+function zoomOut(chatView: BrowserView) {
+    const curr = chatView.webContents.zoomLevel;
+    chatView.webContents.zoomLevel = Math.max(curr - 0.5, -8);
     ShellSettings.getinstance().set(
         "zoomLevel",
-        mainWindow.webContents.zoomLevel,
+        chatView.webContents.zoomLevel,
     );
 }
 
 const isMac = process.platform === "darwin";
 
-function setupZoomHandlers(mainWindow: BrowserWindow) {
-    mainWindow.webContents.on("before-input-event", (_event, input) => {
+function setupZoomHandlers(chatView: BrowserView) {
+    chatView.webContents.on("before-input-event", (_event, input) => {
         if ((isMac ? input.meta : input.control) && input.type === "keyDown") {
             if (
                 input.key === "NumpadAdd" ||
                 input.key === "+" ||
                 input.key === "="
             ) {
-                zoomIn(mainWindow);
+                zoomIn(chatView);
             } else if (input.key === "-" || input.key === "NumpadMinus") {
-                zoomOut(mainWindow);
+                zoomOut(chatView);
             } else if (input.key === "0") {
-                mainWindow.webContents.zoomLevel = 0;
+                chatView.webContents.zoomLevel = 0;
                 ShellSettings.getinstance().set("zoomLevel", 0);
             }
         }
     });
 
     // Register mouse wheel as well.
-    mainWindow.webContents.on("zoom-changed", (_event, zoomDirection) => {
+    chatView.webContents.on("zoom-changed", (_event, zoomDirection) => {
         if (zoomDirection === "in") {
-            zoomIn(mainWindow);
+            zoomIn(chatView);
         } else {
-            zoomOut(mainWindow);
+            zoomOut(chatView);
+        }
+    });
+}
+
+function setupDevToolsHandlers(view: BrowserView) {
+    view.webContents.on("before-input-event", (_event, input) => {
+        if (input.type === "keyDown") {
+            if (!is.dev) {
+                // Ignore CommandOrControl + R
+                if (input.code === "KeyR" && (input.control || input.meta))
+                    _event.preventDefault();
+            } else {
+                // Toggle devtool(F12)
+                if (input.code === "F12") {
+                    if (view.webContents.isDevToolsOpened()) {
+                        view.webContents.closeDevTools();
+                    } else {
+                        view.webContents.openDevTools({ mode: "undocked" });
+                    }
+                }
+            }
         }
     });
 }
