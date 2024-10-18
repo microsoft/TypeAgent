@@ -500,15 +500,14 @@ export async function runChatMemory(): Promise<void> {
                     namedArgs.chunkSize,
                 );
             }
-        } else if (isJson && fs.existsSync(sourcePath)) {
-            const email = await knowLib.email.loadEmail(sourcePath);
-            if (email) {
-                await knowLib.email.addEmailToConversation(
+        } else if (isJson) {
+            if (
+                !(await knowLib.email.addEmailFileToConversation(
                     context.emailMemory,
-                    email,
+                    sourcePath,
                     namedArgs.chunkSize,
-                );
-            } else {
+                ))
+            ) {
                 printer.writeLine(`Could not load ${sourcePath}`);
             }
         }

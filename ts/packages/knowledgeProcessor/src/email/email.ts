@@ -233,7 +233,14 @@ function emailToKnowledge(email: Email): KnowledgeResponse {
     };
 }
 
-export async function loadEmail(filePath: string): Promise<Email | undefined> {
+/**
+ * Load a JSON file containing an Email object
+ * @param filePath
+ * @returns
+ */
+export async function loadEmailFile(
+    filePath: string,
+): Promise<Email | undefined> {
     return readJsonFile<Email>(filePath);
 }
 
@@ -247,7 +254,7 @@ export async function loadEmailFolder(
     const emails = await asyncArray.mapAsync(
         filePaths,
         concurrency,
-        (filePath) => loadEmail(filePath),
+        (filePath) => loadEmailFile(filePath),
         progress,
     );
     return removeUndefined(emails);
@@ -284,6 +291,7 @@ export async function createEmailMemory(
     cm.topicMerger.settings.trackRecent = false;
     return cm;
 }
+
 /**
  * Add an email message to an email conversation
  * @param cm
@@ -303,6 +311,21 @@ export async function addEmailToConversation(
         messages.push(...emailToMessages(emails, maxCharsPerChunk));
     }
     await cm.addMessageBatch(messages);
+}
+
+export async function addEmailFileToConversation(
+    cm: ConversationManager,
+    sourcePath: string,
+    maxCharsPerChunk: number,
+): Promise<boolean> {
+    if (fs.existsSync(sourcePath)) {
+        const email = await loadEmailFile(sourcePath);
+        if (email) {
+            await addEmailToConversation(cm, email, maxCharsPerChunk);
+        }
+        return true;
+    }
+    return false;
 }
 
 export function emailToMessage(email: Email): ConversationMessage {
