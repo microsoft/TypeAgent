@@ -154,11 +154,7 @@ function createWindow(): void {
         }
     });
 
-    if (isLinux) {
-        mainWindow.on("resize", setContentSize);
-    } else {
-        mainWindow.on("will-resize", setContentSize);
-    }
+    mainWindow.on("resize", setContentSize);
 
     // HMR for renderer base on electron-vite cli.
     // Load the remote URL for development or the local html file for production.
@@ -807,8 +803,6 @@ function zoomOut(chatView: BrowserView) {
 }
 
 const isMac = process.platform === "darwin";
-const isLinux = process.platform === "linux";
-
 function setupZoomHandlers(chatView: BrowserView) {
     chatView.webContents.on("before-input-event", (_event, input) => {
         if ((isMac ? input.meta : input.control) && input.type === "keyDown") {
