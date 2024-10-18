@@ -7,6 +7,8 @@ import {
     CommandHandler,
     CommandMetadata,
     InteractiveIo,
+    NamedArgs,
+    NewCommandHandler,
     addStandardHandlers,
     parseNamedArguments,
     runConsole,
@@ -31,10 +33,15 @@ import {
     loadTypescriptCode,
     sampleFiles,
 } from "./common.js";
+import {
+    createCommandTransformer,
+    completeCommandTransformer,
+} from "./commandTransformer.js";
 
 export async function runCodeChat(): Promise<void> {
     const model = openai.createChatModel();
     const codeReviewer = createCodeReviewer(model);
+    const commandTransformer = createCommandTransformer(model);
     // For answer/code indexing examples
     const folderPath = "/data/code";
     const vectorModel = openai.createEmbeddingModel();
@@ -54,17 +61,41 @@ export async function runCodeChat(): Promise<void> {
         regex,
         cwd,
     };
-    addStandardHandlers(handlers);
-    await runConsole({
-        onStart,
-        inputHandler,
-        handlers,
-    });
 
+    // Handles input not starting with @,
+    // Transforming it into a regular @ command (which it then calls)
+    // or printing an error message.
     async function inputHandler(
         line: string,
         io: InteractiveIo,
-    ): Promise<void> {}
+    ): Promise<void> {
+        // Try to pass it to an LLM for transformation in a regular @ command
+        const transformed = (await commandTransformer.transform(line, io)) as
+            | NamedArgs
+            | undefined;
+        if (transformed && transformed.name != "Unknown") {
+            // io.writer.writeLine("[Transformed]: " + JSON.stringify(transformed));
+            const name = transformed.name as string;
+            if (name in handlers) {
+                if (typeof transformed === "object") {
+                    const handler = handlers[name] as NewCommandHandler;
+                    await handler(transformed, io);
+                } else {
+                    io.writer.writeLine(
+                        `Sorry, transformation for ${name} failed; try @help`,
+                    );
+                }
+            } else {
+                io.writer.writeLine(
+                    `Sorry, I don't know anything about ${name}; try @help`,
+                );
+            }
+        } else {
+            io.writer.writeLine(
+                "Sorry, I didn't get that (or the server is down); try @help",
+            );
+        }
+    }
 
     function onStart(io: InteractiveIo): void {
         printer = new CodePrinter(io);
@@ -92,7 +123,7 @@ export async function runCodeChat(): Promise<void> {
         };
     }
     handlers.codeReview.metadata = reviewDef();
-    async function codeReview(args: string[]): Promise<void> {
+    async function codeReview(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, reviewDef());
 
         printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
@@ -134,8 +165,11 @@ export async function runCodeChat(): Promise<void> {
         };
     }
     handlers.codeDebug.metadata = debugDef();
-    async function codeDebug(args: string[]): Promise<void> {
-        const namedArgs = parseNamedArguments(args, debugDef());
+    async function codeDebug(args: string[] | NamedArgs): Promise<void> {
+        const namedArgs =
+            args instanceof Array
+                ? parseNamedArguments(args, debugDef())
+                : args;
 
         printer.writeLine(`Source file:\n${namedArgs.sourceFile}`);
         printer.writeLine(`Bug Description:\n${namedArgs.bug}\n`);
@@ -183,7 +217,7 @@ export async function runCodeChat(): Promise<void> {
         };
     }
     handlers.codeBreakpoints.metadata = breakpointDef();
-    async function codeBreakpoints(args: string[]): Promise<void> {
+    async function codeBreakpoints(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, breakpointDef());
         const code = await loadTypescriptCode(
             namedArgs.sourceFile,
@@ -221,7 +255,7 @@ export async function runCodeChat(): Promise<void> {
         };
     }
     handlers.codeAnswer.metadata = answerDef();
-    async function codeAnswer(args: string[]): Promise<void> {
+    async function codeAnswer(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, answerDef());
         const question =
             namedArgs.question ??
@@ -264,7 +298,7 @@ export async function runCodeChat(): Promise<void> {
         };
     }
     handlers.codeDocument.metadata = documentDef();
-    async function codeDocument(args: string[]): Promise<void> {
+    async function codeDocument(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, documentDef());
         const functions = await loadCodeChunks(namedArgs.sourceFile);
         await asyncArray.mapAsync(
@@ -301,7 +335,7 @@ export async function runCodeChat(): Promise<void> {
         };
     }
     handlers.indexCode.metadata = indexDef();
-    async function indexCode(args: string[]): Promise<void> {
+    async function indexCode(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, indexDef());
         const fullPath = getSourcePath(namedArgs.sourceFile);
         const moduleName =
@@ -352,7 +386,7 @@ export async function runCodeChat(): Promise<void> {
         };
     }
     handlers.findCode.metadata = findCodeDef();
-    async function findCode(args: string[]): Promise<void> {
+    async function findCode(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, findCodeDef());
         const matches = await codeIndex.find(
             namedArgs.query,
@@ -368,21 +402,26 @@ export async function runCodeChat(): Promise<void> {
     }
 
     handlers.clearCodeIndex.metadata = "Clear the code index";
-    async function clearCodeIndex(args: string[]): Promise<void> {
+    async function clearCodeIndex(args: string[] | NamedArgs): Promise<void> {
         codeIndex = await ensureCodeIndex(true);
     }
 
     handlers.regex.metadata =
         "Generate a regular expression from the given requirements.";
-    async function regex(args: string[], io: InteractiveIo): Promise<void> {
-        if (args.length > 0) {
-            const prompt = `Return a Typescript regular expression for the following:\n ${args[0]}`;
+    async function regex(
+        args: string[] | NamedArgs,
+        io: InteractiveIo,
+    ): Promise<void> {
+        if (args instanceof Array && args.length > 0) {
+            const prompt = `Return a Typescript regular expression for the following:\n ${args.join(" ")}`;
             const result = await codeReviewer.model.complete(prompt);
             if (result.success) {
                 io.writer.writeLine(result.data);
             } else {
                 io.writer.writeLine(result.message);
             }
+        } else {
+            io.writer.writeLine("Usage: @regex <requirements>");
         }
     }
 
@@ -436,4 +475,13 @@ export async function runCodeChat(): Promise<void> {
             }
         }
     }
+
+    completeCommandTransformer(handlers, commandTransformer);
+
+    addStandardHandlers(handlers);
+    await runConsole({
+        onStart,
+        inputHandler,
+        handlers,
+    });
 }

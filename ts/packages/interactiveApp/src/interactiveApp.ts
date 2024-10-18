@@ -477,11 +477,15 @@ export function createNamedArgs(): NamedArgs {
  * @returns An JSON object, where property name is the key, and value is the argument value
  */
 export function parseNamedArguments(
-    args: string | string[],
+    args: string | string[] | NamedArgs,
     argDefs?: CommandMetadata,
     namePrefix: string = "--",
     shortNamePrefix: string = "-",
 ): NamedArgs {
+    if (typeof args === "object" && !(args instanceof Array)) {
+        // TODO: use type guard
+        return args;
+    }
     const rawArgs = typeof args === "string" ? parseCommandLine(args) : args;
     let namedArgs = createNamedArgs();
     if (!rawArgs) {
@@ -536,17 +540,26 @@ export type CommandResult = string | undefined | void;
 /**
  * Command handler
  */
-export interface CommandHandler {
+export type CommandHandler = OldCommandHandler | NewCommandHandler;
+export interface OldCommandHandler {
+    acceptsNamedArgs?: false;
     (args: string[], io: InteractiveIo): Promise<CommandResult>;
     metadata?: string | CommandMetadata;
     usage?: string | { (io: InteractiveIo): void };
 }
+export interface NewCommandHandler {
+    acceptsNamedArgs: true;
+    (args: string[] | NamedArgs, io: InteractiveIo): Promise<CommandResult>;
+    metadata?: string | CommandMetadata;
+    usage?: string | { (io: InteractiveIo): void };
+}
 
+// TODO: add a createNewCommand() returning a NewCommandHandler
 export function createCommand(
     fn: (args: string[], io: InteractiveIo) => Promise<CommandResult>,
     metadata?: string | CommandMetadata,
     usage?: string,
-): CommandHandler {
+): OldCommandHandler {
     const handler: CommandHandler = fn;
     if (metadata) {
         handler.metadata = metadata;
