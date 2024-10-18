@@ -90,3 +90,11 @@ export function argPause(): ArgDef {
         description: "Throttle calls to model",
     };
 }
+
+export function argChunkSize(defaultValue?: number | undefined): ArgDef {
+    return {
+        type: "number",
+        defaultValue,
+        description: "Text chunk size",
+    };
+}

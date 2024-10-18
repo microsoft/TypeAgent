@@ -235,6 +235,14 @@ export async function createConversationManager(
     }
 
     function addMessageBatch(messages: ConversationMessage[]): Promise<void> {
+        if (messages.length === 1) {
+            const message = messages[0];
+            return addMessage(
+                message.text,
+                message.knowledge,
+                message.timestamp,
+            );
+        }
         return addMessageBatchToConversation(
             conversation,
             knowledgeExtractor,
