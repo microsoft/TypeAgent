@@ -12,12 +12,6 @@ import { TemplateData, TemplateEditConfig } from "agent-dispatcher";
 import { getClientAPI } from "./main";
 import { SearchMenu } from "./search";
 
-function isValidValue(paramField: TemplateFieldScalar, value: any) {
-    return paramField.type === "string-union"
-        ? paramField.typeEnum.includes(value)
-        : typeof value === paramField.type && value !== "";
-}
-
 function cloneTemplateData(
     templateData: TemplateData | TemplateData[],
 ): TemplateData[] {
@@ -102,6 +96,7 @@ class FieldContainer {
         }
         return curr[lastName];
     }
+
     public setProperty(name: string, value: any) {
         const properties = name.split(".");
         let lastName: string | number = "current";
@@ -168,17 +163,13 @@ class FieldRow {
     private readonly buttonCells: HTMLElement[] = [];
     protected readonly row: HTMLTableRowElement;
     protected readonly valueCell: HTMLTableCellElement;
-    constructor(
-        label: string,
-        protected readonly level: number,
-        parent: FieldGroup | undefined,
-    ) {
+    constructor(label: string, level: number, parent: FieldGroup | undefined) {
         const row = document.createElement("tr");
         const nameCell = row.insertCell();
         nameCell.className = "name-cell";
 
         const labelDiv = document.createElement("div");
-        labelDiv.style.paddingLeft = `${this.level * 20}px`;
+        labelDiv.style.paddingLeft = `${level * 20}px`;
         labelDiv.innerText = label;
         labelDiv.className = "name-div";
         nameCell.appendChild(labelDiv);
@@ -238,8 +229,8 @@ abstract class FieldBase extends FieldRow {
         protected readonly data: FieldContainer,
         public readonly fullPropertyName: string,
         label: string,
-        protected readonly optional: boolean,
-        protected readonly level: number,
+        private readonly optional: boolean,
+        level: number,
         private readonly parent: FieldGroup | undefined,
     ) {
         super(label, level, parent);
@@ -331,6 +322,51 @@ abstract class FieldBase extends FieldRow {
     }
 }
 
+function createUIForField(
+    data: FieldContainer,
+    fullPropertyName: string,
+    paramName: string,
+    paramField: TemplateField,
+    optional: boolean,
+    level: number,
+    parent: FieldGroup | undefined,
+) {
+    switch (paramField.type) {
+        case "array":
+            return new FieldArray(
+                data,
+                fullPropertyName,
+                paramName,
+                paramField,
+                optional,
+                level,
+                parent,
+            );
+
+        case "object":
+            return new FieldObject(
+                data,
+                fullPropertyName,
+                paramName,
+                paramField.fields,
+                optional,
+                level,
+                parent,
+            );
+
+        default:
+            return new FieldScalar(
+                data,
+                fullPropertyName,
+                paramName,
+                paramField,
+                optional,
+                level,
+                parent,
+            );
+    }
+}
+
 abstract class FieldGroup extends FieldBase {
     protected readonly fields: FieldBase[] = [];
 
@@ -339,7 +375,7 @@ abstract class FieldGroup extends FieldBase {
         fullPropertyName: string,
         label: string,
         optional: boolean,
-        level: number,
+        private readonly level: number,
         parent: FieldGroup | undefined,
     ) {
         super(data, fullPropertyName, label, optional, level, parent);
@@ -408,15 +444,12 @@ abstract class FieldGroup extends FieldBase {
         }
     }
 
-    protected abstract createChildFields(): void;
-
     public deleteValue() {
         super.deleteValue();
         this.clearChildFields();
     }
 }
 
-const defaultTemplatParamScalar = { type: "string" } as const;
 class FieldScalar extends FieldBase {
     private editUI?: {
         div: HTMLDivElement;
@@ -427,7 +460,7 @@ class FieldScalar extends FieldBase {
         data: FieldContainer,
         fullPropertyName: string,
         label: string,
-        private readonly fieldType: TemplateFieldScalar = defaultTemplatParamScalar,
+        private readonly fieldType: TemplateFieldScalar,
         optional: boolean = false,
         level: number = 0,
         parent?: FieldGroup,
@@ -436,7 +469,7 @@ class FieldScalar extends FieldBase {
 
         this.updateValueDisplay();
 
-        if (data.enableEdit && this.fieldType !== defaultTemplatParamScalar) {
+        if (data.enableEdit) {
             const div = document.createElement("div");
             div.style.position = "relative";
 
@@ -622,7 +655,6 @@ class FieldScalar extends FieldBase {
     public getScalarField(): FieldScalar | undefined {
         return this;
     }
-
     public getSchemaValue() {
         return this.getValue();
     }
@@ -641,7 +673,10 @@ class FieldScalar extends FieldBase {
     }
 
     protected isValidValue(value: any) {
-        return isValidValue(this.fieldType, value);
+        const fieldType = this.fieldType;
+        return fieldType.type === "string-union"
+            ? fieldType.typeEnum.includes(value)
+            : typeof value === fieldType.type && value !== "";
     }
 }
 
@@ -680,7 +715,7 @@ class FieldObject extends FieldGroup {
         );
     }
 
-    protected createChildFields() {
+    private createChildFields() {
         this.clearChildFields();
         for (const [k, v] of Object.entries(this.fieldTypes)) {
             const optional = v.optional ?? false;
@@ -763,6 +798,15 @@ abstract class FieldArrayBase extends FieldGroup {
     private swap(indexA: number, indexB: number) {
         const value = this.getArray();
         if (value) {
+            if (
+                indexA < 0 ||
+                indexA >= value.length ||
+                indexB < 0 ||
+                indexB >= value.length
+            ) {
+                return;
+            }
+
             // Stop current editing first
             const editingField = this.data.setEditing(undefined);
 
@@ -800,7 +844,8 @@ abstract class FieldArrayBase extends FieldGroup {
             }
         }
     }
-    protected createChildIndex(index: number) {
+
+    private createChildIndex(index: number) {
         const field = this.createChildIndexField(index);
         field.addButton(ButtonIndex.up, "⬆", "action-button", () => {
             this.swap(index, index - 1);
@@ -927,51 +972,6 @@ class FieldRootArray extends FieldArrayBase {
 
     public refresh() {
         this.createChildFields();
-    }
-}
-
-function createUIForField(
-    data: FieldContainer,
-    fullPropertyName: string,
-    paramName: string,
-    paramField: TemplateField,
-    optional: boolean,
-    level: number,
-    parent: FieldGroup | undefined,
-) {
-    switch (paramField.type) {
-        case "array":
-            return new FieldArray(
-                data,
-                fullPropertyName,
-                paramName,
-                paramField,
-                optional,
-                level,
-                parent,
-            );
-
-        case "object":
-            return new FieldObject(
-                data,
-                fullPropertyName,
-                paramName,
-                paramField.fields,
-                optional,
-                level,
-                parent,
-            );
-
-        default:
-            return new FieldScalar(
-                data,
-                fullPropertyName,
-                paramName,
-                paramField,
-                optional,
-                level,
-                parent,
-            );
     }
 }
 
