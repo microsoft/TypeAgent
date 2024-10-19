@@ -19,7 +19,7 @@ import {
     createTermMap,
     createTextIndex,
 } from "../knowledgeIndex.js";
-import { Action, VerbTense } from "./knowledgeSchema.js";
+import { Action, ActionParam, VerbTense } from "./knowledgeSchema.js";
 import path from "path";
 import { ActionFilter } from "./knowledgeSearchSchema.js";
 import {
@@ -38,13 +38,14 @@ import {
 } from "../setOperations.js";
 import {
     ExtractedAction,
+    knowledgeValueToString,
     NoEntityName,
-    actionVerbsToString,
 } from "./knowledge.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { toStopDate, toStartDate } from "./knowledgeActions.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
 import { TermFilterV2, ActionTerm } from "./knowledgeTermSearchSchema2.js";
+import { facetToString } from "./entities.js";
 
 export interface ActionSearchOptions extends SearchOptions {
     verbSearchOptions?: SearchOptions | undefined;
@@ -548,3 +549,93 @@ export async function createActionIndex<TSourceId = any>(
         return unique.size === 0 ? undefined : unique;
     }
 }
+
+export function actionToString(action: Action): string {
+    let text = "";
+    text = appendEntityName(text, action.subjectEntityName);
+    text += ` [${action.verbs.join(", ")}]`;
+    text = appendEntityName(text, action.objectEntityName);
+    text = appendEntityName(text, action.indirectObjectEntityName);
+    text += ` {${action.verbTense}}`;
+    if (action.subjectEntityFacet) {
+        text += ` <${facetToString(action.subjectEntityFacet)}>`;
+    }
+    return text;
+
+    function appendEntityName(text: string, name: string): string {
+        if (name !== NoEntityName) {
+            text += " ";
+            text += name;
+        }
+        return text;
+    }
+}
+
+export function actionVerbsToString(
+    verbs: string[],
+    verbTense?: VerbTense,
+): string {
+    const text = verbTense
+        ? `${verbs.join(" ")} {${verbTense}}`
+        : verbs.join(" ");
+    return text;
+}
+
+function actionParamToString(param: string | ActionParam): string {
+    return typeof param === "string"
+        ? param
+        : `${param.name}="${knowledgeValueToString(param.value)}"`;
+}
+
+export type CompositeAction = {
+    verbs: string;
+    subject?: string | undefined;
+    object?: string | undefined;
+    indirectObject?: string | undefined;
+    params?: string[] | undefined;
+};
+
+export function toCompositeAction(action: Action) {
+    const composite: CompositeAction = {
+        verbs: actionVerbsToString(action.verbs, action.verbTense),
+    };
+    if (action.subjectEntityName && action.subjectEntityName !== NoEntityName) {
+        composite.subject = action.subjectEntityName;
+    }
+    if (action.objectEntityName && action.objectEntityName !== NoEntityName) {
+        composite.object = action.objectEntityName;
+    }
+    if (
+        action.indirectObjectEntityName &&
+        action.indirectObjectEntityName !== NoEntityName
+    ) {
+        composite.indirectObject = action.indirectObjectEntityName;
+    }
+    if (action.params) {
+        composite.params = action.params.map((a) => actionParamToString(a));
+    }
+    return composite;
+}
+
+export function compositeActionToString(action: CompositeAction): string {
+    let text = "";
+    text = appendName(text, action.subject);
+    text += ` [${action.verbs}]`;
+    text = appendName(text, action.object);
+    text = appendName(text, action.indirectObject);
+    if (action.params) {
+        text += "\n";
+        text += action.params.join("\n");
+    }
+    return text;
+
+    function appendName(text: string, name: string | undefined): string {
+        if (name !== undefined) {
+            text += " ";
+            text += name;
+        }
+        return text;
+    }
+}
+
+export function mergeCompositeActions(actions: Iterable<CompositeAction>) {}

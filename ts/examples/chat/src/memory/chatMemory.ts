@@ -834,10 +834,9 @@ export async function runChatMemory(): Promise<void> {
     async function actions(args: string[], io: InteractiveIo) {
         const index = await context.conversation.getActionIndex();
         if (args.length === 0) {
-            // Just dump all actions
-            for await (const action of index.entries()) {
-                writeExtractedAction(action);
-            }
+            const actions: conversation.ExtractedAction[] =
+                await asyncArray.toArray(index.entries());
+            printer.writeExtractedActions(actions);
             return;
         }
 
@@ -1507,12 +1506,6 @@ export async function runChatMemory(): Promise<void> {
                 printer.writeTemporalBlocks(chalk.greenBright, textBlocks);
             }
         }
-    }
-
-    function writeExtractedAction(
-        action: knowLib.conversation.ExtractedAction,
-    ) {
-        printer.writeLine(conversation.actionToString(action.value));
     }
 
     async function writeExtractedEntity(
