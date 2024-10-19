@@ -22,6 +22,7 @@ import {
     createConversation,
 } from "../conversation/conversation.js";
 import { TypeChatLanguageModel } from "typechat";
+import { isValidChunkSize, splitLargeTextIntoChunks } from "../textChunker.js";
 
 export function emailAddressToString(address: EmailAddress): string {
     if (address.displayName) {
@@ -232,7 +233,14 @@ function emailToKnowledge(email: Email): KnowledgeResponse {
     };
 }
 
-export async function loadEmail(filePath: string): Promise<Email | undefined> {
+/**
+ * Load a JSON file containing an Email object
+ * @param filePath
+ * @returns
+ */
+export async function loadEmailFile(
+    filePath: string,
+): Promise<Email | undefined> {
     return readJsonFile<Email>(filePath);
 }
 
@@ -246,7 +254,7 @@ export async function loadEmailFolder(
     const emails = await asyncArray.mapAsync(
         filePaths,
         concurrency,
-        (filePath) => loadEmail(filePath),
+        (filePath) => loadEmailFile(filePath),
         progress,
     );
     return removeUndefined(emails);
@@ -283,6 +291,7 @@ export async function createEmailMemory(
     cm.topicMerger.settings.trackRecent = false;
     return cm;
 }
+
 /**
  * Add an email message to an email conversation
  * @param cm
@@ -291,30 +300,59 @@ export async function createEmailMemory(
 export async function addEmailToConversation(
     cm: ConversationManager,
     emails: Email | Email[],
+    maxCharsPerChunk: number,
 ): Promise<void> {
+    const messages: ConversationMessage[] = [];
     if (Array.isArray(emails)) {
-        const messages: ConversationMessage[] = emails.map<ConversationMessage>(
-            (email) => emailToMessage(email),
-        );
-        await cm.addMessageBatch(messages);
+        for (const email of emails) {
+            messages.push(...emailToMessages(email, maxCharsPerChunk));
+        }
     } else {
-        const email = emails;
-        const block = emailToTextBlock(email);
-        const knowledge = emailToKnowledge(email);
-        await cm.addMessage(
-            block,
-            knowledge,
-            dateTime.stringToDate(email.sentOn),
-        );
+        messages.push(...emailToMessages(emails, maxCharsPerChunk));
     }
+    await cm.addMessageBatch(messages);
 }
 
-function emailToMessage(email: Email): ConversationMessage {
+export async function addEmailFileToConversation(
+    cm: ConversationManager,
+    sourcePath: string,
+    maxCharsPerChunk: number,
+): Promise<boolean> {
+    if (fs.existsSync(sourcePath)) {
+        const email = await loadEmailFile(sourcePath);
+        if (email) {
+            await addEmailToConversation(cm, email, maxCharsPerChunk);
+        }
+        return true;
+    }
+    return false;
+}
+
+export function emailToMessage(email: Email): ConversationMessage {
     return {
         text: emailToTextBlock(email),
         knowledge: emailToKnowledge(email),
         timestamp: dateTime.stringToDate(email.sentOn),
     };
+}
+
+export function emailToMessages(
+    email: Email,
+    maxCharsPerChunk?: number | undefined,
+): ConversationMessage[] {
+    if (!isValidChunkSize(maxCharsPerChunk)) {
+        return [emailToMessage(email)];
+    }
+
+    const messages: ConversationMessage[] = [];
+    const text = emailToString(email);
+    for (const chunk of splitLargeTextIntoChunks(text, maxCharsPerChunk!)) {
+        const emailChunk: Email = { ...email };
+        emailChunk.body = chunk;
+        messages.push(emailToMessage(emailChunk));
+    }
+
+    return messages;
 }
 
 function makeHeader(name: string, text: string | undefined): string {

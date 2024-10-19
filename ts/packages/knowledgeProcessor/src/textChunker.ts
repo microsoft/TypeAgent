@@ -284,3 +284,11 @@ export function splitTextBlock(
         };
     });
 }
+
+export function isValidChunkSize(maxCharsPerChunk: number | undefined) {
+    return (
+        maxCharsPerChunk &&
+        maxCharsPerChunk > 0 &&
+        maxCharsPerChunk < Number.MAX_SAFE_INTEGER
+    );
+}

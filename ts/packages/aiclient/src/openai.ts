@@ -95,6 +95,8 @@ export enum EnvVars {
     AZURE_OPENAI_ENDPOINT_DALLE = "AZURE_OPENAI_ENDPOINT_DALLE",
 }
 
+export const MAX_PROMPT_LENGTH_DEFAULT = 1000 * 60;
+
 /**
  * Initialize settings from environment variables
  * @param modelType
@@ -872,13 +874,18 @@ function verifyPromptLength(
     settings: ApiSettings,
     prompt: string | PromptSection[],
 ) {
+    const promptLength = getPromptLength(prompt);
     if (settings.maxPromptChars && settings.maxPromptChars > 0) {
-        const promptLength = getPromptLength(prompt);
         if (promptLength > settings.maxPromptChars) {
             const errorMsg = `REQUEST NOT SENT:\nTotal prompt length ${promptLength} chars EXCEEDS AZURE_OPENAI_MAX_CHARS=${settings.maxPromptChars}`;
             debugOpenAI(errorMsg);
             throw new Error(errorMsg);
         }
+    } else if (promptLength > MAX_PROMPT_LENGTH_DEFAULT) {
+        // Approx 20K tokens
+        const errorMsg = `LARGE REQUEST:\nTotal prompt length ${promptLength} chars. Set AZURE_OPENAI_MAX_CHARS env variable to block.`;
+        console.log(errorMsg);
+        debugOpenAI(errorMsg);
     }
 }
 
