@@ -55,7 +55,7 @@ Here is an example of the minimal `.env` file targeting Azure:
 
 ```
 AZURE_OPENAI_API_KEY=<service key>
-AZURE_OPENAI_ENDPOINT=<endpoint URL for GPT4 or equivalent model>
+AZURE_OPENAI_ENDPOINT=<endpoint URL for LLM model, e.g. GPT-4o>
 AZURE_OPENAI_RESPONSE_FORMAT=1
 
 AZURE_OPENAI_API_KEY_EMBEDDING=<service key>
@@ -68,7 +68,7 @@ Here is an example of the minimal `.env` file targeting OpenAI:
 OPENAI_ORGANIZATION=<organization id>
 OPENAI_API_KEY=<service key>
 OPENAI_ENDPOINT=https://api.openai.com/v1/chat/completions
-OPENAI_MODEL=gpt-4
+OPENAI_MODEL=gpt-4o
 OPENAI_RESPONSE_FORMAT=1
 
 OPENAI_ENDPOINT_EMBEDDING=https://api.openai.com/v1/embeddings
