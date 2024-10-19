@@ -10,6 +10,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { TemplateData, TemplateEditConfig } from "agent-dispatcher";
 import { getClientAPI } from "./main";
+import { SearchMenu } from "./search";
 
 function isValidValue(paramField: TemplateFieldScalar, value: any) {
     return paramField.type === "string-union"
@@ -417,7 +418,11 @@ abstract class FieldGroup extends FieldBase {
 
 const defaultTemplatParamScalar = { type: "string" } as const;
 class FieldScalar extends FieldBase {
-    private input?: HTMLInputElement;
+    private editUI?: {
+        div: HTMLDivElement;
+        input: HTMLInputElement;
+        searchMenu?: SearchMenu;
+    };
     constructor(
         data: FieldContainer,
         fullPropertyName: string,
@@ -428,11 +433,16 @@ class FieldScalar extends FieldBase {
         parent?: FieldGroup,
     ) {
         super(data, fullPropertyName, label, optional, level, parent);
+
         this.updateValueDisplay();
 
         if (data.enableEdit && this.fieldType !== defaultTemplatParamScalar) {
+            const div = document.createElement("div");
+            div.style.position = "relative";
+
             const input = this.createInputElement();
-            this.input = input;
+            div.appendChild(input);
+
             const valueCell = this.valueCell;
             valueCell.onclick = () => {
                 if (!this.data.editMode) {
@@ -442,21 +452,48 @@ class FieldScalar extends FieldBase {
                 this.data.setEditing(this);
             };
 
-            if (input.tagName.toLowerCase() === "input") {
-                (input as HTMLInputElement).addEventListener(
-                    "keydown",
-                    (event) => {
-                        switch (event.key) {
-                            case "Enter":
-                                event.preventDefault();
-                                this.data.setEditing(
-                                    this.getNextField()?.getScalarField(),
-                                );
-                                break;
-                        }
-                    },
+            let searchMenu: SearchMenu | undefined = undefined;
+            if (fieldType.type === "string-union") {
+                searchMenu = new SearchMenu((item) => {
+                    input.value = item.matchText;
+                    this.cancelSearchMenu();
+                }, false);
+                searchMenu.setChoices(
+                    fieldType.typeEnum.map((e) => ({
+                        matchText: e,
+                        selectedText: e,
+                    })),
                 );
+                input.addEventListener("input", () => {
+                    this.updateSearchMenu();
+                });
+                input.addEventListener("focus", () => {
+                    this.updateSearchMenu();
+                });
+                input.addEventListener("blur", () => {
+                    this.cancelSearchMenu();
+                });
             }
+
+            input.addEventListener("keydown", (event) => {
+                if (this.handleSearchMenuKeys(event)) {
+                    return;
+                }
+                switch (event.key) {
+                    case "Enter":
+                        event.preventDefault();
+                        this.data.setEditing(
+                            this.getNextField()?.getScalarField(),
+                        );
+                        break;
+                }
+            });
+
+            this.editUI = {
+                div,
+                input,
+                searchMenu,
+            };
         }
     }
     public startEditingField(propertyName: string) {
@@ -481,25 +518,88 @@ class FieldScalar extends FieldBase {
         return inputValue === "" ? undefined : inputValue;
     }
 
-    public startEditing() {
-        const input = this.input;
-        if (input === undefined) {
+    private cancelSearchMenu() {
+        if (this.editUI === undefined) {
             return;
         }
+        const searchMenu = this.editUI.searchMenu;
+        if (searchMenu === undefined) {
+            return;
+        }
+        if (searchMenu.isActive()) {
+            searchMenu.getContainer().remove();
+        }
+    }
 
+    private updateSearchMenu() {
+        if (this.editUI === undefined) {
+            return;
+        }
+        const searchMenu = this.editUI.searchMenu;
+        if (searchMenu === undefined) {
+            return;
+        }
+        const value = this.editUI.input.value;
+        const items = searchMenu.completePrefix(value);
+        if (
+            items.length !== 0 &&
+            (items.length !== 1 || items[0].matchText !== value)
+        ) {
+            if (!searchMenu.isActive()) {
+                const rect = this.editUI.input.getBoundingClientRect();
+                if (rect) {
+                    this.editUI.div.appendChild(searchMenu.getContainer());
+                }
+            }
+        } else {
+            this.cancelSearchMenu();
+        }
+    }
+    private handleSearchMenuKeys(event: KeyboardEvent): boolean {
+        if (this.editUI === undefined) {
+            return false;
+        }
+        const searchMenu = this.editUI.searchMenu;
+        if (searchMenu === undefined) {
+            return false;
+        }
+        if (!searchMenu.isActive()) {
+            return false;
+        }
+        if (event.key === "Escape") {
+            this.cancelSearchMenu();
+            event.preventDefault();
+            return true;
+        }
+        if (searchMenu.handleSpecialKeys(event, this.editUI.input.value)) {
+            event.preventDefault();
+            return true;
+        }
+        return false;
+    }
+
+    public startEditing() {
+        if (this.editUI === undefined) {
+            return;
+        }
+        const { div, input } = this.editUI;
         this.row.classList.add("editing");
 
         const valueCell = this.valueCell;
         input.value = valueCell.innerText;
-        valueCell.replaceChildren(input);
+        valueCell.replaceChildren(div);
         input.focus();
+
+        this.updateSearchMenu();
     }
 
     public stopEditing() {
-        const input = this.input;
+        const input = this.editUI?.input;
         if (input === undefined) {
             return true;
         }
+        this.cancelSearchMenu();
+
         const fieldType = this.fieldType;
         const newValue = this.getInputValue(fieldType.type, input);
         this.row.classList.remove("editing");
@@ -531,22 +631,11 @@ class FieldScalar extends FieldBase {
         switch (this.fieldType.type) {
             case "string":
             case "number":
+            case "string-union":
                 element.type = "text";
                 return element;
             case "boolean":
                 element.type = "checkbox";
-                return element;
-            case "string-union":
-                element.type = "text";
-                const typeEnum = this.fieldType.typeEnum;
-                element.oninput = () => {
-                    const value = element.value;
-                    if (typeEnum.includes(value)) {
-                        this.setValid(true);
-                    } else {
-                        this.setValid(false);
-                    }
-                };
                 return element;
         }
     }
@@ -557,11 +646,10 @@ class FieldScalar extends FieldBase {
 }
 
 const enum ButtonIndex {
-    add = 2,
     up = 0,
     down = 1,
+    add = 2,
     delete = 3,
-    cancel = 3,
 }
 
 class FieldObject extends FieldGroup {
