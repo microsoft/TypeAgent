@@ -685,16 +685,6 @@ input[type="file"] {
   height: 100%;
 }
 
-.action-text tr.missing {
-  display: none;
-}
-
-.action-text-editable tr.missing {
-  font-style: italic;
-  color: lightgray;
-  display: table-row;
-}
-
 .action-button {
   padding: 4px;
   border: lightgray;
@@ -722,4 +712,17 @@ input[type="file"] {
 .action-text tr.error input {
   color: red;
   font-weight: bold;
+}
+
+.action-text tr.missing {
+  display: none;
+}
+
+.action-text-editable tr.missing {
+  display: table-row;
+}
+
+.action-text-editable tr.missing td.name-cell {
+  font-style: italic;
+  color: lightgray;
 }

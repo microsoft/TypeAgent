@@ -135,6 +135,9 @@ class FieldContainer {
     }
 
     public async refreshSchema(index: number) {
+        const editingPropertyName = this.editingField?.getPropertyNameSuffix(
+            this.root,
+        );
         this.editingField = undefined;
 
         this.current[index].schema = await getClientAPI().getTemplateSchema(
@@ -143,6 +146,18 @@ class FieldContainer {
             this.current[index].data,
         );
         this.root.refresh();
+
+        if (editingPropertyName) {
+            const field = this.root.findPrefixField(editingPropertyName);
+            if (field) {
+                const scalarField = field.getScalarField();
+                if (scalarField === field) {
+                    this.setEditing(scalarField.getNextScalarField());
+                } else {
+                    this.setEditing(scalarField);
+                }
+            }
+        }
     }
 
     public getSchemaValue(): any {
@@ -227,7 +242,7 @@ abstract class FieldBase extends FieldRow {
     private isValid: boolean = true;
     constructor(
         protected readonly data: FieldContainer,
-        public readonly fullPropertyName: string,
+        protected readonly fullPropertyName: string,
         label: string,
         private readonly optional: boolean,
         level: number,
@@ -240,21 +255,35 @@ abstract class FieldBase extends FieldRow {
     }
 
     public isAncestor(field: FieldBase): boolean {
-        let parent: FieldBase | undefined = this;
+        return this.fullPropertyName.startsWith(field.fullPropertyName);
+    }
+
+    // Return the suffix of the property name if field is an ancestor, undefined otherwise
+    public getPropertyNameSuffix(field: FieldBase): string | undefined {
+        return this.isAncestor(field)
+            ? this.fullPropertyName.substring(field.fullPropertyName.length)
+            : undefined;
+    }
+
+    public getNextScalarField(): FieldScalar | undefined {
+        let curr: FieldBase | undefined = this;
+        let parent = curr.parent;
         while (parent) {
-            if (parent === field) {
-                return true;
+            curr = parent.findNextField(curr);
+            while (curr) {
+                const scalarField = curr.getScalarField();
+                if (scalarField !== undefined) {
+                    return scalarField;
+                }
+                curr = parent.findNextField(curr);
             }
-            parent = parent.parent;
+            curr = parent;
+            parent = curr.parent;
         }
-        return false;
+        return undefined;
     }
 
-    public getNextField(): FieldBase | undefined {
-        return this.parent?.findNextField(this);
-    }
-
-    public abstract startEditingField(propertyName: string);
+    public abstract findPrefixField(name: string): FieldBase | undefined;
     public abstract getScalarField(): FieldScalar | undefined;
     public abstract getSchemaValue(): any;
     protected abstract isValidValue(value: any): boolean;
@@ -381,19 +410,26 @@ abstract class FieldGroup extends FieldBase {
         super(data, fullPropertyName, label, optional, level, parent);
     }
 
-    public startEditingField(propertyName: string) {
+    public findPrefixField(propertyName: string): FieldBase | undefined {
         if (!propertyName.startsWith(this.fullPropertyName)) {
-            return false;
+            return undefined;
         }
         for (const field of this.fields) {
-            if (field.startEditingField(propertyName)) {
-                return true;
+            const found = field.findPrefixField(propertyName);
+            if (found !== undefined) {
+                return found;
             }
         }
-        return false;
+        return this;
     }
     public getScalarField() {
-        return this.fields[0]?.getScalarField();
+        for (const field of this.fields) {
+            const scalarField = field.getScalarField();
+            if (scalarField) {
+                return scalarField;
+            }
+        }
+        return undefined;
     }
 
     public findNextField(field: FieldBase): FieldBase | undefined {
@@ -401,7 +437,7 @@ abstract class FieldGroup extends FieldBase {
         if (index !== -1 && index + 1 < this.fields.length) {
             return this.fields[index + 1];
         }
-        return super.getNextField();
+        return undefined;
     }
     public insertAfter(row: HTMLTableRowElement) {
         if (this.fields.length === 0) {
@@ -489,7 +525,7 @@ class FieldScalar extends FieldBase {
             if (fieldType.type === "string-union") {
                 searchMenu = new SearchMenu((item) => {
                     input.value = item.matchText;
-                    this.cancelSearchMenu();
+                    this.data.setEditing(this.getNextScalarField());
                 }, false);
                 searchMenu.setChoices(
                     fieldType.typeEnum.map((e) => ({
@@ -504,7 +540,10 @@ class FieldScalar extends FieldBase {
                     this.updateSearchMenu();
                 });
                 input.addEventListener("blur", () => {
-                    this.cancelSearchMenu();
+                    // Delay in case there is a mouse click on the search menu
+                    setTimeout(() => {
+                        this.cancelSearchMenu();
+                    }, 250);
                 });
             }
 
@@ -515,9 +554,7 @@ class FieldScalar extends FieldBase {
                 switch (event.key) {
                     case "Enter":
                         event.preventDefault();
-                        this.data.setEditing(
-                            this.getNextField()?.getScalarField(),
-                        );
+                        this.data.setEditing(this.getNextScalarField());
                         break;
                 }
             });
@@ -529,37 +566,17 @@ class FieldScalar extends FieldBase {
             };
         }
     }
-    public startEditingField(propertyName: string) {
-        if (this.fullPropertyName === propertyName) {
-            this.data.setEditing(this);
-            return true;
-        }
-        return false;
-    }
 
-    private getInputValue(type: string, input: HTMLInputElement) {
-        if (type === "boolean") {
-            return input.checked;
+    public findPrefixField(propertyName: string) {
+        if (this.fullPropertyName.startsWith(propertyName)) {
+            return this;
         }
-        const inputValue = input.value;
-        if (type === "number") {
-            const value = parseInt(inputValue);
-            if (value.toString() === inputValue) {
-                return value;
-            }
-        }
-        return inputValue === "" ? undefined : inputValue;
+        return undefined;
     }
 
     private cancelSearchMenu() {
-        if (this.editUI === undefined) {
-            return;
-        }
-        const searchMenu = this.editUI.searchMenu;
-        if (searchMenu === undefined) {
-            return;
-        }
-        if (searchMenu.isActive()) {
+        const searchMenu = this.editUI?.searchMenu;
+        if (searchMenu?.isActive()) {
             searchMenu.getContainer().remove();
         }
     }
@@ -579,10 +596,7 @@ class FieldScalar extends FieldBase {
             (items.length !== 1 || items[0].matchText !== value)
         ) {
             if (!searchMenu.isActive()) {
-                const rect = this.editUI.input.getBoundingClientRect();
-                if (rect) {
-                    this.editUI.div.appendChild(searchMenu.getContainer());
-                }
+                this.editUI.div.appendChild(searchMenu.getContainer());
             }
         } else {
             this.cancelSearchMenu();
@@ -624,6 +638,20 @@ class FieldScalar extends FieldBase {
         input.focus();
 
         this.updateSearchMenu();
+    }
+
+    private getInputValue(type: string, input: HTMLInputElement) {
+        if (type === "boolean") {
+            return input.checked;
+        }
+        const inputValue = input.value;
+        if (type === "number") {
+            const value = parseInt(inputValue);
+            if (value.toString() === inputValue) {
+                return value;
+            }
+        }
+        return inputValue === "" ? undefined : inputValue;
     }
 
     public stopEditing() {
@@ -814,21 +842,16 @@ abstract class FieldArrayBase extends FieldGroup {
             let editingFieldName: string | undefined;
             if (editingField) {
                 const fieldA = this.fields[indexA];
-
-                if (editingField?.isAncestor(fieldA)) {
-                    const selectedSuffix =
-                        editingField.fullPropertyName.substring(
-                            fieldA.fullPropertyName.length,
-                        );
-                    editingFieldName = `${this.fullPropertyName}.${indexB}${selectedSuffix}`;
+                const selectedSuffixA =
+                    editingField?.getPropertyNameSuffix(fieldA);
+                if (selectedSuffixA) {
+                    editingFieldName = `${this.fullPropertyName}.${indexB}${selectedSuffixA}`;
                 } else {
                     const fieldB = this.fields[indexB];
-                    if (editingField?.isAncestor(fieldB)) {
-                        const selectedSuffix =
-                            editingField.fullPropertyName.substring(
-                                fieldB.fullPropertyName.length,
-                            );
-                        editingFieldName = `${this.fullPropertyName}.${indexA}${selectedSuffix}`;
+                    const selectedSuffixB =
+                        editingField?.getPropertyNameSuffix(fieldB);
+                    if (selectedSuffixB) {
+                        editingFieldName = `${this.fullPropertyName}.${indexA}${selectedSuffixB}`;
                     }
                 }
             }
@@ -840,7 +863,10 @@ abstract class FieldArrayBase extends FieldGroup {
 
             // reselecting the editing field
             if (editingFieldName) {
-                this.startEditingField(editingFieldName);
+                const prefixField = this.findPrefixField(editingFieldName);
+                if (prefixField !== undefined) {
+                    this.data.setEditing(prefixField.getScalarField());
+                }
             }
         }
     }

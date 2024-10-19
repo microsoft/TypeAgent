@@ -172,6 +172,11 @@ export class SearchMenu {
                 resultSpan.innerText = suffix;
                 li.appendChild(resultSpan);
                 this.completions.appendChild(li);
+
+                li.onclick = () => {
+                    this.onCompletion(item);
+                };
+
                 if (i === this.items.length - 1) {
                     break;
                 }
