@@ -47,6 +47,10 @@ export class SearchMenu {
         return this.searchContainer;
     }
 
+    public isActive() {
+        return this.searchContainer.parentElement !== null;
+    }
+
     public selectCompletion(index: number) {
         if (index >= 0 && index < this.items.length) {
             this.onCompletion(this.items[index]);

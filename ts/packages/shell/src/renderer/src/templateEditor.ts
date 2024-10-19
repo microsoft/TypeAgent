@@ -10,29 +10,12 @@ import {
 } from "@typeagent/agent-sdk";
 import { TemplateData, TemplateEditConfig } from "agent-dispatcher";
 import { getClientAPI } from "./main";
+import { SearchMenu } from "./search";
 
 function isValidValue(paramField: TemplateFieldScalar, value: any) {
     return paramField.type === "string-union"
         ? paramField.typeEnum.includes(value)
-        : typeof value === paramField.type;
-}
-function toValueType(paramField: TemplateFieldScalar, value: string) {
-    switch (paramField.type) {
-        case "string":
-            return value;
-        case "string-union":
-            return paramField.typeEnum.includes(value) ? value : undefined;
-        case "number":
-            const mayBeInt = parseInt(value);
-            return mayBeInt.toString() === value ? mayBeInt : undefined;
-
-        case "boolean":
-            return value === "true"
-                ? true
-                : value === "false"
-                  ? false
-                  : undefined;
-    }
+        : typeof value === paramField.type && value !== "";
 }
 
 function cloneTemplateData(
@@ -54,6 +37,7 @@ class FieldContainer {
     private root: FieldRootArray;
     public errorCount = 0;
     public editMode = false;
+    private editingField: FieldScalar | undefined;
 
     constructor(
         public readonly actionTemplates: TemplateEditConfig,
@@ -69,7 +53,7 @@ class FieldContainer {
     }
 
     public reset() {
-        this.table.classList.remove("editing");
+        this.editingField = undefined;
         this.errorCount = 0;
 
         this.current = cloneTemplateData(this.actionTemplates.templateData);
@@ -156,17 +140,27 @@ class FieldContainer {
     }
 
     public async refreshSchema(index: number) {
+        this.editingField = undefined;
+
         this.current[index].schema = await getClientAPI().getTemplateSchema(
             this.actionTemplates.templateAppAgent,
             this.actionTemplates.templateName,
             this.current[index].data,
         );
-
         this.root.refresh();
     }
 
     public getSchemaValue(): any {
         return this.root.getSchemaValue();
+    }
+    public setEditing(field: FieldScalar | undefined) {
+        const editingField = this.editingField;
+        if (editingField === field || editingField?.stopEditing() === false) {
+            return undefined;
+        }
+        this.editingField = field;
+        field?.startEditing();
+        return editingField;
     }
 }
 
@@ -182,23 +176,12 @@ class FieldRow {
         const row = document.createElement("tr");
         const nameCell = row.insertCell();
         nameCell.className = "name-cell";
-        const buttonDiv = document.createElement("div");
-        nameCell.appendChild(buttonDiv);
-        buttonDiv.className = "left-button-div";
 
         const labelDiv = document.createElement("div");
         labelDiv.style.paddingLeft = `${this.level * 20}px`;
         labelDiv.innerText = label;
         labelDiv.className = "name-div";
         nameCell.appendChild(labelDiv);
-
-        const button0Div = document.createElement("div");
-        buttonDiv.appendChild(button0Div);
-        this.buttonCells.push(button0Div);
-
-        const button1Div = document.createElement("div");
-        buttonDiv.appendChild(button1Div);
-        this.buttonCells.push(button1Div);
 
         const valueCell = row.insertCell();
         valueCell.className = "value-cell";
@@ -253,11 +236,11 @@ abstract class FieldBase extends FieldRow {
     private isValid: boolean = true;
     constructor(
         protected readonly data: FieldContainer,
-        protected readonly fullPropertyName: string,
+        public readonly fullPropertyName: string,
         label: string,
-        private readonly optional: boolean,
+        protected readonly optional: boolean,
         protected readonly level: number,
-        protected readonly parent: FieldGroup | undefined,
+        private readonly parent: FieldGroup | undefined,
     ) {
         super(label, level, parent);
         if (parent === undefined) {
@@ -265,14 +248,28 @@ abstract class FieldBase extends FieldRow {
         }
     }
 
+    public isAncestor(field: FieldBase): boolean {
+        let parent: FieldBase | undefined = this;
+        while (parent) {
+            if (parent === field) {
+                return true;
+            }
+            parent = parent.parent;
+        }
+        return false;
+    }
+
+    public getNextField(): FieldBase | undefined {
+        return this.parent?.findNextField(this);
+    }
+
+    public abstract startEditingField(propertyName: string);
+    public abstract getScalarField(): FieldScalar | undefined;
     public abstract getSchemaValue(): any;
-    public abstract setDefaultValue();
-    public abstract getValueDisplay(): string | undefined;
+    protected abstract isValidValue(value: any): boolean;
+
     public insertAfter(row: HTMLTableRowElement) {
         this.row.after(row);
-    }
-    public get isVisible() {
-        return !this.row.classList.contains("hidden");
     }
     public remove() {
         if (!this.isValid) {
@@ -280,16 +277,22 @@ abstract class FieldBase extends FieldRow {
         }
         super.remove();
     }
-    protected updateValueDisplay() {
-        const valueDisplay = this.getValueDisplay();
-        if (valueDisplay === undefined && this.optional) {
-            this.setVisibility(false);
-            return false;
+    public updateValueDisplay(updateParent: boolean = false) {
+        const value = this.getValue();
+        if (value !== undefined) {
+            this.setMissing(false);
+            this.setValid(this.isValidValue(value));
+            this.valueCell.innerText =
+                typeof value === "object" ? "" : value.toString();
+        } else {
+            this.setMissing(true);
+            this.setValid(this.optional);
+            this.valueCell.innerText = "";
         }
-        this.setValid(valueDisplay !== undefined);
-        this.valueCell.innerText = valueDisplay ?? "";
-        this.setVisibility(true);
-        return true;
+
+        if (updateParent) {
+            this.parent?.updateValueDisplay();
+        }
     }
 
     protected setValid(valid: boolean) {
@@ -306,30 +309,64 @@ abstract class FieldBase extends FieldRow {
         }
     }
 
+    private setMissing(missing: boolean) {
+        if (this.optional) {
+            if (missing) {
+                this.row.classList.add("missing");
+            } else {
+                this.row.classList.remove("missing");
+            }
+        }
+    }
+
     protected getValue() {
         return this.data.getProperty(this.fullPropertyName);
     }
     protected setValue(value: any) {
         this.data.setProperty(this.fullPropertyName, value);
+        this.updateValueDisplay(true);
     }
     public deleteValue() {
-        // Only optional is deletable. so just visibility to false
-        this.setVisibility(false);
         this.setValue(undefined);
-    }
-
-    private setVisibility(visible: boolean) {
-        if (visible) {
-            this.row.classList.remove("hidden");
-        } else {
-            this.row.classList.add("hidden");
-        }
     }
 }
 
 abstract class FieldGroup extends FieldBase {
     protected readonly fields: FieldBase[] = [];
 
+    constructor(
+        data: FieldContainer,
+        fullPropertyName: string,
+        label: string,
+        optional: boolean,
+        level: number,
+        parent: FieldGroup | undefined,
+    ) {
+        super(data, fullPropertyName, label, optional, level, parent);
+    }
+
+    public startEditingField(propertyName: string) {
+        if (!propertyName.startsWith(this.fullPropertyName)) {
+            return false;
+        }
+        for (const field of this.fields) {
+            if (field.startEditingField(propertyName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    public getScalarField() {
+        return this.fields[0]?.getScalarField();
+    }
+
+    public findNextField(field: FieldBase): FieldBase | undefined {
+        const index = this.fields.indexOf(field);
+        if (index !== -1 && index + 1 < this.fields.length) {
+            return this.fields[index + 1];
+        }
+        return super.getNextField();
+    }
     public insertAfter(row: HTMLTableRowElement) {
         if (this.fields.length === 0) {
             super.insertAfter(row);
@@ -359,14 +396,6 @@ abstract class FieldGroup extends FieldBase {
         return field;
     }
 
-    protected updateValueDisplay(): boolean {
-        if (super.updateValueDisplay()) {
-            this.createChildFields();
-            return true;
-        }
-        return false;
-    }
-
     public remove() {
         super.remove();
         this.clearChildFields();
@@ -389,6 +418,11 @@ abstract class FieldGroup extends FieldBase {
 
 const defaultTemplatParamScalar = { type: "string" } as const;
 class FieldScalar extends FieldBase {
+    private editUI?: {
+        div: HTMLDivElement;
+        input: HTMLInputElement;
+        searchMenu?: SearchMenu;
+    };
     constructor(
         data: FieldContainer,
         fullPropertyName: string,
@@ -399,174 +433,223 @@ class FieldScalar extends FieldBase {
         parent?: FieldGroup,
     ) {
         super(data, fullPropertyName, label, optional, level, parent);
+
         this.updateValueDisplay();
 
         if (data.enableEdit && this.fieldType !== defaultTemplatParamScalar) {
+            const div = document.createElement("div");
+            div.style.position = "relative";
+
             const input = this.createInputElement();
-            const row = this.row;
+            div.appendChild(input);
+
             const valueCell = this.valueCell;
             valueCell.onclick = () => {
-                if (
-                    !this.data.editMode ||
-                    this.data.table.classList.contains("editing")
-                ) {
-                    // If another field is being edited, don't start editing this one.
+                if (!this.data.editMode) {
                     return;
                 }
 
-                data.table.classList.add("editing");
-                row.classList.add("editing");
-                input.value = valueCell.innerText;
-                valueCell.replaceChildren(input);
-                input.focus();
+                this.data.setEditing(this);
             };
 
-            const saveButton = this.addButton(
-                ButtonIndex.save,
-                "💾",
-                "action-editing-button",
-                () => {
-                    const newValue = toValueType(fieldType, input.value);
-                    if (newValue === undefined) {
-                        this.setValid(false);
-                        return;
-                    }
-
-                    this.setValid(true);
-                    data.table.classList.remove("editing");
-                    row.classList.remove("editing");
-                    this.setValue(newValue);
-                    valueCell.innerText = input.value;
-
-                    if (
-                        fieldType.type === "string-union" &&
-                        fieldType.discriminator !== newValue
-                    ) {
-                        // Need to refresh the schema
-                        this.data.refreshSchema(
-                            parseInt(this.fullPropertyName.split(".")[0]),
-                        );
-                        return;
-                    }
-                },
-            );
-
-            const cancelButton = this.addButton(
-                ButtonIndex.cancel,
-                "🛇",
-                "action-editing-button",
-                () => {
-                    data.table.classList.remove("editing");
-                    row.classList.remove("editing");
-                    this.updateValueDisplay();
-                },
-            );
-
-            if (input.tagName.toLowerCase() === "input") {
-                (input as HTMLInputElement).addEventListener(
-                    "keydown",
-                    (event) => {
-                        switch (event.key) {
-                            case "Enter":
-                                event.preventDefault();
-                                saveButton.click();
-                                break;
-                            case "Escape":
-                                event.preventDefault();
-                                cancelButton.click();
-                                break;
-                        }
-                    },
+            let searchMenu: SearchMenu | undefined = undefined;
+            if (fieldType.type === "string-union") {
+                searchMenu = new SearchMenu((item) => {
+                    input.value = item.matchText;
+                    this.cancelSearchMenu();
+                }, false);
+                searchMenu.setChoices(
+                    fieldType.typeEnum.map((e) => ({
+                        matchText: e,
+                        selectedText: e,
+                    })),
                 );
+                input.addEventListener("input", () => {
+                    this.updateSearchMenu();
+                });
+                input.addEventListener("focus", () => {
+                    this.updateSearchMenu();
+                });
+                input.addEventListener("blur", () => {
+                    this.cancelSearchMenu();
+                });
+            }
+
+            input.addEventListener("keydown", (event) => {
+                if (this.handleSearchMenuKeys(event)) {
+                    return;
+                }
+                switch (event.key) {
+                    case "Enter":
+                        event.preventDefault();
+                        this.data.setEditing(
+                            this.getNextField()?.getScalarField(),
+                        );
+                        break;
+                }
+            });
+
+            this.editUI = {
+                div,
+                input,
+                searchMenu,
+            };
+        }
+    }
+    public startEditingField(propertyName: string) {
+        if (this.fullPropertyName === propertyName) {
+            this.data.setEditing(this);
+            return true;
+        }
+        return false;
+    }
+
+    private getInputValue(type: string, input: HTMLInputElement) {
+        if (type === "boolean") {
+            return input.checked;
+        }
+        const inputValue = input.value;
+        if (type === "number") {
+            const value = parseInt(inputValue);
+            if (value.toString() === inputValue) {
+                return value;
             }
         }
+        return inputValue === "" ? undefined : inputValue;
+    }
+
+    private cancelSearchMenu() {
+        if (this.editUI === undefined) {
+            return;
+        }
+        const searchMenu = this.editUI.searchMenu;
+        if (searchMenu === undefined) {
+            return;
+        }
+        if (searchMenu.isActive()) {
+            searchMenu.getContainer().remove();
+        }
+    }
+
+    private updateSearchMenu() {
+        if (this.editUI === undefined) {
+            return;
+        }
+        const searchMenu = this.editUI.searchMenu;
+        if (searchMenu === undefined) {
+            return;
+        }
+        const value = this.editUI.input.value;
+        const items = searchMenu.completePrefix(value);
+        if (
+            items.length !== 0 &&
+            (items.length !== 1 || items[0].matchText !== value)
+        ) {
+            if (!searchMenu.isActive()) {
+                const rect = this.editUI.input.getBoundingClientRect();
+                if (rect) {
+                    this.editUI.div.appendChild(searchMenu.getContainer());
+                }
+            }
+        } else {
+            this.cancelSearchMenu();
+        }
+    }
+    private handleSearchMenuKeys(event: KeyboardEvent): boolean {
+        if (this.editUI === undefined) {
+            return false;
+        }
+        const searchMenu = this.editUI.searchMenu;
+        if (searchMenu === undefined) {
+            return false;
+        }
+        if (!searchMenu.isActive()) {
+            return false;
+        }
+        if (event.key === "Escape") {
+            this.cancelSearchMenu();
+            event.preventDefault();
+            return true;
+        }
+        if (searchMenu.handleSpecialKeys(event, this.editUI.input.value)) {
+            event.preventDefault();
+            return true;
+        }
+        return false;
+    }
+
+    public startEditing() {
+        if (this.editUI === undefined) {
+            return;
+        }
+        const { div, input } = this.editUI;
+        this.row.classList.add("editing");
+
+        const valueCell = this.valueCell;
+        input.value = valueCell.innerText;
+        valueCell.replaceChildren(div);
+        input.focus();
+
+        this.updateSearchMenu();
+    }
+
+    public stopEditing() {
+        const input = this.editUI?.input;
+        if (input === undefined) {
+            return true;
+        }
+        this.cancelSearchMenu();
+
+        const fieldType = this.fieldType;
+        const newValue = this.getInputValue(fieldType.type, input);
+        this.row.classList.remove("editing");
+        this.setValue(newValue);
+
+        if (
+            fieldType.type === "string-union" &&
+            fieldType.discriminator !== undefined &&
+            fieldType.discriminator !== newValue
+        ) {
+            // Need to refresh the schema
+            this.data.refreshSchema(
+                parseInt(this.fullPropertyName.split(".")[0]),
+            );
+            return false;
+        }
+        return true;
+    }
+
+    public getScalarField(): FieldScalar | undefined {
+        return this;
     }
 
     public getSchemaValue() {
         return this.getValue();
     }
     private createInputElement() {
-        let element: HTMLSelectElement | HTMLInputElement;
+        const element: HTMLInputElement = document.createElement("input");
         switch (this.fieldType.type) {
             case "string":
-                element = document.createElement("input");
+            case "number":
+            case "string-union":
                 element.type = "text";
                 return element;
-            case "number":
-                element = document.createElement("input");
-                element.type = "number";
-                return element;
             case "boolean":
-                element = document.createElement("select");
-                element.options.add(new Option("true"));
-                element.options.add(new Option("false"));
-                return element;
-            case "string-union":
-                element = document.createElement("select");
-                for (const value of this.fieldType.typeEnum) {
-                    element.options.add(new Option(value));
-                }
+                element.type = "checkbox";
                 return element;
         }
     }
-    public setDefaultValue() {
-        switch (this.fieldType.type) {
-            case "string":
-                this.setValue("");
-                break;
-            case "number":
-                this.setValue(0);
-                break;
-            case "boolean":
-                this.setValue(false);
-                break;
-            case "string-union":
-                this.setValue(this.fieldType.typeEnum[0]);
-                break;
-        }
-        this.updateValueDisplay();
-    }
 
-    public getValueDisplay() {
-        const value = this.getValue();
-        return isValidValue(this.fieldType, value)
-            ? value.toString()
-            : undefined;
-    }
-}
-
-class FieldObjectOptionalField extends FieldRow {
-    private readonly select: HTMLSelectElement;
-    constructor(
-        label: string,
-        level: number,
-        parent: FieldGroup,
-        fields: Iterable<string>,
-    ) {
-        super(label, level, parent);
-        this.row.cells[0].classList.add("temp");
-        const select = document.createElement("select");
-        this.select = select;
-
-        for (const field of fields) {
-            select.options.add(new Option(field));
-        }
-        this.valueCell.appendChild(select);
-        this.row.classList.add("editing");
-    }
-
-    public get value() {
-        return this.select.value;
+    protected isValidValue(value: any) {
+        return isValidValue(this.fieldType, value);
     }
 }
 
 const enum ButtonIndex {
-    add = 2,
     up = 0,
     down = 1,
+    add = 2,
     delete = 3,
-    save = 2,
-    cancel = 3,
 }
 
 class FieldObject extends FieldGroup {
@@ -586,99 +669,34 @@ class FieldObject extends FieldGroup {
             fields.length === 0 ||
             Object.values(fields).some((f) => !f.optional);
         this.updateValueDisplay();
+        this.createChildFields();
     }
 
-    public getValueDisplay() {
-        const value = this.getValue();
+    protected isValidValue(value: any) {
         // Missing required fields will count as errors already
-        return this.hasRequiredFields || typeof value === "object"
-            ? ""
-            : undefined;
-    }
-
-    public setDefaultValue() {
-        this.setValue({});
-        this.updateValueDisplay();
+        return (
+            this.hasRequiredFields ||
+            (typeof value === "object" && !Array.isArray(value))
+        );
     }
 
     protected createChildFields() {
         this.clearChildFields();
-        const missingFields = new Map<string, FieldBase>();
-        let hasMissingFieldButton = false;
-        const updateMissingFieldButton = () => {
-            if (missingFields.size === 0) {
-                if (!hasMissingFieldButton) {
-                    return;
-                }
-                hasMissingFieldButton = false;
-                this.removeButton(ButtonIndex.add);
-                return;
-            }
-            if (hasMissingFieldButton) {
-                return;
-            }
-            hasMissingFieldButton = true;
-            this.addButton(ButtonIndex.add, "➕", "action-edit-button", () => {
-                this.data.table.classList.add("editing");
-                // create a temporary row
-                const inputRow = new FieldObjectOptionalField(
-                    "<field name>",
-                    this.level + 1,
-                    this,
-                    missingFields.keys(),
-                );
-                inputRow.addButton(
-                    ButtonIndex.save,
-                    "💾",
-                    "action-editing-button",
-                    () => {
-                        const fieldName = inputRow.value;
-
-                        const field = missingFields.get(fieldName);
-                        if (field === undefined) {
-                            return;
-                        }
-                        missingFields.delete(fieldName);
-                        field.setDefaultValue();
-                        inputRow.remove();
-                        this.data.table.classList.remove("editing");
-                        updateMissingFieldButton();
-                    },
-                );
-
-                inputRow.addButton(
-                    ButtonIndex.cancel,
-                    "🛇",
-                    "action-editing-button",
-                    () => {
-                        inputRow.remove();
-                        this.data.table.classList.remove("editing");
-                    },
-                );
-            });
-        };
         for (const [k, v] of Object.entries(this.fieldTypes)) {
             const optional = v.optional ?? false;
             const field = this.createChildField(k, k, v.field, optional);
 
             if (this.data.enableEdit && optional) {
-                if (!field.isVisible) {
-                    // Optional field without a value.
-                    missingFields.set(k, field);
-                }
                 field.addButton(
                     ButtonIndex.delete,
                     "✕",
-                    "action-edit-button",
+                    "action-button delete-button",
                     () => {
                         field.deleteValue();
-                        missingFields.set(k, field);
-                        updateMissingFieldButton();
                     },
                 );
             }
         }
-        updateMissingFieldButton();
     }
 
     public getSchemaValue() {
@@ -705,7 +723,7 @@ abstract class FieldArrayBase extends FieldGroup {
         super(data, fullPropertyName, paramName, optional, level, parent);
 
         if (data.enableEdit) {
-            this.addButton(ButtonIndex.add, "➕", "action-edit-button", () => {
+            this.addButton(ButtonIndex.add, "➕", "action-button", () => {
                 const index = this.appendNewValue();
                 this.createChildIndex(index);
 
@@ -716,17 +734,8 @@ abstract class FieldArrayBase extends FieldGroup {
         }
     }
 
-    public getValueDisplay() {
-        const value = this.getValue();
-        return Array.isArray(value) && value.length !== 0 ? "" : undefined;
-    }
-
-    public setDefaultValue() {
-        // Add at least one element to start with.
-        this.setValue([undefined]);
-        if (this.updateValueDisplay()) {
-            this.createChildFields();
-        }
+    protected isValidValue(value: any) {
+        return Array.isArray(value) && value.length !== 0;
     }
 
     public getSchemaValue() {
@@ -744,43 +753,94 @@ abstract class FieldArrayBase extends FieldGroup {
 
     protected abstract appendNewValue();
     protected abstract getArray();
-    protected abstract createChildIndexField(index: number);
+    protected abstract createChildIndexField(index: number): FieldBase;
 
     private updateArrows(field: FieldBase, index: number) {
         field.showButton(0, index !== 0);
         field.showButton(1, index + 1 !== this.getArray()?.length);
     }
 
+    private swap(indexA: number, indexB: number) {
+        const value = this.getArray();
+        if (value) {
+            // Stop current editing first
+            const editingField = this.data.setEditing(undefined);
+
+            // Determine if we need to reselect the editing field
+            let editingFieldName: string | undefined;
+            if (editingField) {
+                const fieldA = this.fields[indexA];
+
+                if (editingField?.isAncestor(fieldA)) {
+                    const selectedSuffix =
+                        editingField.fullPropertyName.substring(
+                            fieldA.fullPropertyName.length,
+                        );
+                    editingFieldName = `${this.fullPropertyName}.${indexB}${selectedSuffix}`;
+                } else {
+                    const fieldB = this.fields[indexB];
+                    if (editingField?.isAncestor(fieldB)) {
+                        const selectedSuffix =
+                            editingField.fullPropertyName.substring(
+                                fieldB.fullPropertyName.length,
+                            );
+                        editingFieldName = `${this.fullPropertyName}.${indexA}${selectedSuffix}`;
+                    }
+                }
+            }
+
+            // Swap the value and recreate the fiels.
+            const item = value.splice(indexA, 1)[0];
+            value.splice(indexB, 0, item);
+            this.createChildFields();
+
+            // reselecting the editing field
+            if (editingFieldName) {
+                this.startEditingField(editingFieldName);
+            }
+        }
+    }
     protected createChildIndex(index: number) {
         const field = this.createChildIndexField(index);
-        field.addButton(ButtonIndex.up, "⬆", "action-edit-button", () => {
-            const value = this.getArray();
-            if (value) {
-                const item = value.splice(index, 1)[0];
-                value.splice(index - 1, 0, item);
-                this.createChildFields();
-            }
+        field.addButton(ButtonIndex.up, "⬆", "action-button", () => {
+            this.swap(index, index - 1);
         });
-        field.addButton(ButtonIndex.down, "⬇", "action-edit-button", () => {
-            const value = this.getArray();
-            if (value) {
-                const item = value.splice(index, 1)[0];
-                value.splice(index + 1, 0, item);
-                this.createChildFields();
-            }
+        field.addButton(ButtonIndex.down, "⬇", "action-button", () => {
+            this.swap(index, index + 1);
         });
 
         this.updateArrows(field, index);
-        field.addButton(ButtonIndex.delete, "✕", "action-edit-button", () => {
-            const value = this.getArray();
-            if (value) {
-                value.splice(index, 1);
-                this.createChildFields();
-                if (value.length === 0) {
-                    this.setValid(false);
+        field.addButton(
+            ButtonIndex.delete,
+            "✕",
+            "action-button delete-button",
+            () => {
+                const value = this.getArray();
+                if (value) {
+                    const editingField = this.data.setEditing(undefined);
+                    let isEditing = editingField?.isAncestor(field);
+
+                    value.splice(index, 1);
+                    this.createChildFields();
+
+                    if (value.length === 0) {
+                        this.setValid(false);
+                    } else if (isEditing) {
+                        if (index < this.fields.length) {
+                            this.data.setEditing(
+                                this.fields[index].getScalarField(),
+                            );
+                        } else {
+                            this.data.setEditing(
+                                this.fields[
+                                    this.fields.length - 1
+                                ].getScalarField(),
+                            );
+                        }
+                    }
                 }
-            }
-        });
+            },
+        );
 
         return field;
     }
@@ -798,6 +858,7 @@ class FieldArray extends FieldArrayBase {
     ) {
         super(data, fullPropertyName, paramName, optional, level, parent);
         this.updateValueDisplay();
+        this.createChildFields();
     }
 
     protected appendNewValue() {
@@ -840,6 +901,7 @@ class FieldRootArray extends FieldArrayBase {
     ) {
         super(data, "", label, false, 0, undefined);
         this.updateValueDisplay();
+        this.createChildFields();
     }
     protected appendNewValue() {
         const value = this.getArray();

@@ -194,6 +194,11 @@ body {
   margin-left: 10px;
 }
 
+// Make sure that the popup search menu is on top of other messages
+.chat-message-container-agent:has(.autocomplete-container) {
+  z-index: 100;
+}
+
 .chat-message-container-user {
   .chat-message-container;
   margin-right: 10px;
@@ -253,7 +258,7 @@ body {
   border-radius: 0px 0px 8px 8px;
   font-size: 10px;
   font-style: normal;
-  z-index: 100;
+  z-index: 50;
   text-align: right;
 }
 
@@ -505,14 +510,6 @@ body {
   margin-right: 5px;
 }
 
-.overlay {
-  height: 100%;
-  width: 100%;
-  position: absolute;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: 100;
-}
-
 span.ansi-black-fg {
   color: black;
 }
@@ -660,19 +657,13 @@ input[type="file"] {
   border-bottom: 1px solid lightgray;
 }
 .action-text td {
-  padding-left: 10px;
-  padding-right: 10px;
+  padding: 1px 10px 1px 10px;
   height: 22px;
 }
 
-.action-text div {
-  display: inline-block;
+.action-text .autocomplete-container {
+  bottom: 25px;
 }
-.left-button-div {
-  position: absolute;
-  left: -10px;
-}
-
 .action-text td.name-cell {
   width: 30%;
 }
@@ -694,21 +685,17 @@ input[type="file"] {
   height: 100%;
 }
 
-.action-text .temp {
-  text-align: right;
-  font-style: italic;
-  color: lightgray;
-}
-
-.action-text tr.hidden {
+.action-text tr.missing {
   display: none;
 }
 
-.action-edit-button,
-.action-editing-button,
-.action-text-editable table.editing .action-edit-button,
-.action-text-editable table.editing tr:hover .action-edit-button,
-.action-text-editable tr.editing:hover .action-edit-button {
+.action-text-editable tr.missing {
+  font-style: italic;
+  color: lightgray;
+  display: table-row;
+}
+
+.action-button {
   padding: 4px;
   border: lightgray;
   background-color: transparent;
@@ -716,18 +703,22 @@ input[type="file"] {
   opacity: 0;
   width: 100%;
 }
-.action-text-editable .action-edit-button {
+.action-text-editable .action-button {
   display: block;
   opacity: 0.25;
 }
 
-.action-text-editable tr:hover .action-edit-button,
-.action-text-editable tr.editing .action-editing-button {
+.action-text-editable tr:hover .action-button,
+.action-text-editable tr.editing .action-button {
   display: block;
   opacity: 1;
 }
 
-.action-text tr.error,
+.action-text-editable tr.missing .delete-button {
+  display: none;
+}
+
+.action-text tr.error td.name-cell,
 .action-text tr.error input {
   color: red;
   font-weight: bold;

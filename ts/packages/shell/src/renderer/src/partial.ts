@@ -207,10 +207,6 @@ export class PartialCompletion {
         });
     }
 
-    private isSearchMenuActive() {
-        return this.searchMenu.getContainer().parentElement !== null;
-    }
-
     private showCompletionMenu() {
         const prefix = this.getCompletionPrefix(
             this.getCurrentInputForCompletion(),
@@ -220,7 +216,7 @@ export class PartialCompletion {
             debugError(`Partial completion prefix not found`);
             return;
         }
-        if (this.isSearchMenuActive() && prefix !== "") {
+        if (this.searchMenu.isActive() && prefix !== "") {
             return;
         }
         const r = document.createRange();
@@ -238,13 +234,13 @@ export class PartialCompletion {
         const x = rects[0].left;
         const leftBound = this.container.getBoundingClientRect().left;
         this.searchMenu.getContainer().style.left = `${x - leftBound}px`;
-        if (!this.isSearchMenuActive()) {
+        if (!this.searchMenu.isActive()) {
             this.container.appendChild(this.searchMenu.getContainer());
         }
     }
 
     private cancelCompletionMenu() {
-        if (this.isSearchMenuActive()) {
+        if (this.searchMenu.isActive()) {
             this.container.removeChild(this.searchMenu.getContainer());
         }
     }
@@ -265,7 +261,7 @@ export class PartialCompletion {
     }
 
     public handleSpecialKeys(event: KeyboardEvent) {
-        if (!this.isSearchMenuActive()) {
+        if (!this.searchMenu.isActive()) {
             return false;
         }
         if (event.key === "Escape") {
