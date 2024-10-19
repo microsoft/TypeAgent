@@ -163,19 +163,27 @@ export class ChatMemoryPrinter extends ChatPrinter {
         action: conversation.CompositeAction | undefined,
     ): void {
         if (action) {
+            this.writeRecord(action);
+        }
+    }
+
+    public writeActionGroups(actions: conversation.ActionGroup[]) {
+        for (const action of actions) {
+            const group: Record<string, string> = {};
             if (action.subject) {
-                this.write(action.subject + " ");
+                group.subject = action.subject;
             }
-            this.write(`[${action.verbs}]`);
-            if (action.object) {
-                this.write(" " + action.object);
+            if (action.verbs) {
+                group.verbs = action.verbs;
             }
-            if (action.indirectObject) {
-                this.write(" " + action.indirectObject);
-            }
-            if (action.params) {
+            this.writeRecord(group);
+            if (action.args) {
+                for (let i = 0; i < action.args.length; ++i) {
+                    this.writeRecord(action.args[i], false, undefined, "  ");
+                    this.writeLine();
+                }
+            } else {
                 this.writeLine();
-                this.writeList(action.params, { type: "ul" });
             }
         }
     }

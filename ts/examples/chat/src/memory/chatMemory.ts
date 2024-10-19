@@ -834,9 +834,11 @@ export async function runChatMemory(): Promise<void> {
     async function actions(args: string[], io: InteractiveIo) {
         const index = await context.conversation.getActionIndex();
         if (args.length === 0) {
-            const actions: conversation.ExtractedAction[] =
-                await asyncArray.toArray(index.entries());
-            printer.writeExtractedActions(actions);
+            const actions = (await asyncArray.toArray(index.entries())).map(
+                (a) => a.value,
+            );
+            const merged = conversation.toCompositeActions(actions);
+            printer.writeActionGroups(merged);
             return;
         }
 

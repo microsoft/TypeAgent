@@ -349,6 +349,7 @@ export type WithFrequency<T = any> = {
 
 export interface HitTable<T> {
     readonly size: number;
+
     get(value: T): ScoredItem<T> | undefined;
     getScore(value: T): number;
     add(value: T, score?: number | undefined): number;
@@ -362,10 +363,13 @@ export interface HitTable<T> {
             | IterableIterator<ScoredItem<T>>
             | Array<ScoredItem<T>>,
     ): void;
-    keys(): IterableIterator<T>;
+    keys(): IterableIterator<any>;
     byHighestScore(): ScoredItem<T>[];
     getTop(): T[];
     getTopK(k: number): T[];
+
+    getByKey(key: any): ScoredItem<T> | undefined;
+    set(key: any, value: ScoredItem<T>): void;
 }
 
 export function createHitTable<T>(
@@ -377,6 +381,7 @@ export function createHitTable<T>(
             return map.size;
         },
         get,
+        set,
         getScore,
         add,
         addMultiple,
@@ -385,11 +390,16 @@ export function createHitTable<T>(
         byHighestScore,
         getTop,
         getTopK,
+        getByKey,
     };
 
     function get(value: T): ScoredItem<T> | undefined {
         const key = getKey(value);
         return map.get(key);
+    }
+
+    function set(key: any, value: ScoredItem<T>): void {
+        map.set(key, value);
     }
 
     function getScore(value: T): number {
@@ -484,6 +494,10 @@ export function createHitTable<T>(
             topK.push(topItems[i].item);
         }
         return topK;
+    }
+
+    function getByKey(key: any): ScoredItem<T> | undefined {
+        return map.get(key);
     }
 
     function getKey(value: T): any {

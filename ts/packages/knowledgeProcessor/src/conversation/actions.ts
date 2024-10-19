@@ -4,6 +4,7 @@
 import {
     FileSystem,
     ObjectFolderSettings,
+    ScoredItem,
     SearchOptions,
     asyncArray,
     dateTime,
@@ -35,6 +36,7 @@ import {
     unionMultiple,
     uniqueFrom,
     intersectMultiple,
+    createHitTable,
 } from "../setOperations.js";
 import {
     ExtractedAction,
@@ -257,7 +259,7 @@ export async function createActionIndex<TSourceId = any>(
         name: string,
         actionIds: ActionId[],
     ): Promise<void> {
-        if (name && name !== NoEntityName) {
+        if (isEntityName(name)) {
             const nameId = await names.getId(name);
             if (nameId) {
                 await nameIndex.put(actionIds, nameId);
@@ -434,10 +436,10 @@ export async function createActionIndex<TSourceId = any>(
         name: string | undefined,
         options: ActionSearchOptions,
     ): Promise<IterableIterator<ActionId> | undefined> {
-        if (name && name !== NoEntityName) {
+        if (isEntityName(name)) {
             // Possible names of entities
             const nameIds = await names.getNearestText(
-                name,
+                name!,
                 options.maxMatches,
                 options.minScore,
             );
@@ -563,7 +565,7 @@ export function actionToString(action: Action): string {
     return text;
 
     function appendEntityName(text: string, name: string): string {
-        if (name !== NoEntityName) {
+        if (isEntityName(name)) {
             text += " ";
             text += name;
         }
@@ -588,27 +590,30 @@ function actionParamToString(param: string | ActionParam): string {
 }
 
 export type CompositeAction = {
-    verbs: string;
     subject?: string | undefined;
+    verbs?: string | undefined;
     object?: string | undefined;
     indirectObject?: string | undefined;
     params?: string[] | undefined;
 };
 
+export type ActionGroupKey = Pick<CompositeAction, "subject" | "verbs">;
+export type ActionGroupValue = Omit<CompositeAction, "subject" | "verbs">;
+export interface ActionGroup extends ActionGroupKey {
+    args?: ActionGroupValue[] | undefined;
+}
+
 export function toCompositeAction(action: Action) {
     const composite: CompositeAction = {
         verbs: actionVerbsToString(action.verbs, action.verbTense),
     };
-    if (action.subjectEntityName && action.subjectEntityName !== NoEntityName) {
+    if (isEntityName(action.subjectEntityName)) {
         composite.subject = action.subjectEntityName;
     }
-    if (action.objectEntityName && action.objectEntityName !== NoEntityName) {
+    if (isEntityName(action.objectEntityName)) {
         composite.object = action.objectEntityName;
     }
-    if (
-        action.indirectObjectEntityName &&
-        action.indirectObjectEntityName !== NoEntityName
-    ) {
+    if (isEntityName(action.indirectObjectEntityName)) {
         composite.indirectObject = action.indirectObjectEntityName;
     }
     if (action.params) {
@@ -617,25 +622,83 @@ export function toCompositeAction(action: Action) {
     return composite;
 }
 
-export function compositeActionToString(action: CompositeAction): string {
-    let text = "";
-    text = appendName(text, action.subject);
-    text += ` [${action.verbs}]`;
-    text = appendName(text, action.object);
-    text = appendName(text, action.indirectObject);
-    if (action.params) {
-        text += "\n";
-        text += action.params.join("\n");
+export function toCompositeActions(
+    actions: Action[],
+    fullActionsOnly: boolean = true,
+): ActionGroup[] {
+    if (fullActionsOnly) {
+        actions = getFullActions(actions);
     }
-    return text;
+    const merged = mergeCompositeActions(
+        actions.map((a) => toCompositeAction(a)),
+    );
+    return merged.map((a) => a.item);
+}
 
-    function appendName(text: string, name: string | undefined): string {
-        if (name !== undefined) {
-            text += " ";
-            text += name;
+export function mergeCompositeActions(
+    actions: Iterable<CompositeAction>,
+): ScoredItem<ActionGroup>[] {
+    const merged = createHitTable<ActionGroup>((k) => groupKey(k));
+    for (const action of actions) {
+        const key = groupKey(action);
+        let existing = merged.get(action);
+        if (!existing) {
+            const group: ActionGroup = {};
+            if (action.subject) {
+                group.subject = action.subject;
+            }
+            if (action.verbs) {
+                group.verbs = action.verbs;
+            }
+            existing = { item: group, score: 0 };
+            merged.set(key, existing);
         }
-        return text;
+        if (appendToActionGroup(existing.item, action)) {
+            existing.score += 1;
+        }
+    }
+    return merged.byHighestScore();
+
+    function groupKey(group: ActionGroupKey): string {
+        let key = "";
+        if (group.subject) {
+            key += group.subject;
+            key += " ";
+        }
+        key += group.verbs;
+        return key;
     }
 }
 
-export function mergeCompositeActions(actions: Iterable<CompositeAction>) {}
+function appendToActionGroup(x: ActionGroup, y: CompositeAction): boolean {
+    if (x.subject !== y.subject || x.verbs !== y.verbs) {
+        return false;
+    }
+    x.args ??= [];
+    const obj: ActionGroupValue = {};
+    if (y.object) {
+        obj.object = y.object;
+    }
+    if (y.indirectObject) {
+        obj.indirectObject = y.indirectObject;
+    }
+    if (y.params) {
+        obj.params = y.params;
+    }
+    x.args.push(obj);
+    return true;
+}
+
+function getFullActions(actions: Action[]): Action[] {
+    return actions.filter(
+        (a) =>
+            isEntityName(a.subjectEntityName) &&
+            a.verbs &&
+            a.verbs.length > 0 &&
+            isEntityName(a.objectEntityName),
+    );
+}
+
+function isEntityName(name: string | undefined): boolean {
+    return name !== undefined && name.length > 0 && name !== NoEntityName;
+}
