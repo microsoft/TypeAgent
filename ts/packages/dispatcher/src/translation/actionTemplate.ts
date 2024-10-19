@@ -26,11 +26,12 @@ export type TemplateEditConfig = {
 
 function getDefaultActionTemplate(
     translators: string[],
-    discrimintator?: string,
+    discriminator: string = "",
 ): TemplateSchema {
     const translatorName: TemplateFieldStringUnion = {
         type: "string-union",
         typeEnum: translators,
+        discriminator,
     };
     const template: TemplateSchema = {
         type: "object",
@@ -40,9 +41,6 @@ function getDefaultActionTemplate(
             },
         },
     };
-    if (discrimintator) {
-        translatorName.discriminator = discrimintator;
-    }
     return template;
 }
 
@@ -51,8 +49,7 @@ function toTemplate(
     translators: string[],
     action: Action,
 ) {
-    const config = context.agents.getTranslatorConfig(action.translatorName);
-
+    const config = context.agents.tryGetTranslatorConfig(action.translatorName);
     if (config === undefined) {
         return getDefaultActionTemplate(translators);
     }
@@ -64,6 +61,7 @@ function toTemplate(
     const actionName: TemplateFieldStringUnion = {
         type: "string-union",
         typeEnum: Array.from(actionInfos.keys()),
+        discriminator: "",
     };
     template.fields.actionName = {
         field: actionName,
@@ -120,9 +118,17 @@ export function getSystemTemplateSchema(
     }
 
     const systemContext = context.agentContext;
-    return toTemplate(
-        systemContext,
-        getActiveTranslatorList(systemContext),
-        data,
-    );
+
+    // check user input to make sure it is an action
+
+    if (typeof data.translatorName !== "string") {
+        data.translatorName = "";
+    }
+
+    if (typeof data.actionName !== "string") {
+        data.actionName = "";
+    }
+
+    const translators = getActiveTranslatorList(systemContext);
+    return toTemplate(systemContext, translators, data);
 }

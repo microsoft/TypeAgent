@@ -165,8 +165,11 @@ export class AppAgentManager implements TranslatorConfigProvider {
         }
     }
 
+    public tryGetTranslatorConfig(mayBeTranslatorName: string) {
+        return this.translatorConfigs.get(mayBeTranslatorName);
+    }
     public getTranslatorConfig(translatorName: string) {
-        const config = this.translatorConfigs.get(translatorName);
+        const config = this.tryGetTranslatorConfig(translatorName);
         if (config === undefined) {
             throw new Error(`Unknown translator: ${translatorName}`);
         }

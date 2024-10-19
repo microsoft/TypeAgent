@@ -12,12 +12,6 @@ import { TemplateData, TemplateEditConfig } from "agent-dispatcher";
 import { getClientAPI } from "./main";
 import { SearchMenu } from "./search";
 
-function isValidValue(paramField: TemplateFieldScalar, value: any) {
-    return paramField.type === "string-union"
-        ? paramField.typeEnum.includes(value)
-        : typeof value === paramField.type && value !== "";
-}
-
 function cloneTemplateData(
     templateData: TemplateData | TemplateData[],
 ): TemplateData[] {
@@ -102,6 +96,7 @@ class FieldContainer {
         }
         return curr[lastName];
     }
+
     public setProperty(name: string, value: any) {
         const properties = name.split(".");
         let lastName: string | number = "current";
@@ -140,6 +135,9 @@ class FieldContainer {
     }
 
     public async refreshSchema(index: number) {
+        const editingPropertyName = this.editingField?.getPropertyNameSuffix(
+            this.root,
+        );
         this.editingField = undefined;
 
         this.current[index].schema = await getClientAPI().getTemplateSchema(
@@ -148,6 +146,18 @@ class FieldContainer {
             this.current[index].data,
         );
         this.root.refresh();
+
+        if (editingPropertyName) {
+            const field = this.root.findPrefixField(editingPropertyName);
+            if (field) {
+                const scalarField = field.getScalarField();
+                if (scalarField === field) {
+                    this.setEditing(scalarField.getNextScalarField());
+                } else {
+                    this.setEditing(scalarField);
+                }
+            }
+        }
     }
 
     public getSchemaValue(): any {
@@ -168,17 +178,13 @@ class FieldRow {
     private readonly buttonCells: HTMLElement[] = [];
     protected readonly row: HTMLTableRowElement;
     protected readonly valueCell: HTMLTableCellElement;
-    constructor(
-        label: string,
-        protected readonly level: number,
-        parent: FieldGroup | undefined,
-    ) {
+    constructor(label: string, level: number, parent: FieldGroup | undefined) {
         const row = document.createElement("tr");
         const nameCell = row.insertCell();
         nameCell.className = "name-cell";
 
         const labelDiv = document.createElement("div");
-        labelDiv.style.paddingLeft = `${this.level * 20}px`;
+        labelDiv.style.paddingLeft = `${level * 20}px`;
         labelDiv.innerText = label;
         labelDiv.className = "name-div";
         nameCell.appendChild(labelDiv);
@@ -236,10 +242,10 @@ abstract class FieldBase extends FieldRow {
     private isValid: boolean = true;
     constructor(
         protected readonly data: FieldContainer,
-        public readonly fullPropertyName: string,
+        protected readonly fullPropertyName: string,
         label: string,
-        protected readonly optional: boolean,
-        protected readonly level: number,
+        private readonly optional: boolean,
+        level: number,
         private readonly parent: FieldGroup | undefined,
     ) {
         super(label, level, parent);
@@ -249,21 +255,35 @@ abstract class FieldBase extends FieldRow {
     }
 
     public isAncestor(field: FieldBase): boolean {
-        let parent: FieldBase | undefined = this;
+        return this.fullPropertyName.startsWith(field.fullPropertyName);
+    }
+
+    // Return the suffix of the property name if field is an ancestor, undefined otherwise
+    public getPropertyNameSuffix(field: FieldBase): string | undefined {
+        return this.isAncestor(field)
+            ? this.fullPropertyName.substring(field.fullPropertyName.length)
+            : undefined;
+    }
+
+    public getNextScalarField(): FieldScalar | undefined {
+        let curr: FieldBase | undefined = this;
+        let parent = curr.parent;
         while (parent) {
-            if (parent === field) {
-                return true;
+            curr = parent.findNextField(curr);
+            while (curr) {
+                const scalarField = curr.getScalarField();
+                if (scalarField !== undefined) {
+                    return scalarField;
+                }
+                curr = parent.findNextField(curr);
             }
-            parent = parent.parent;
+            curr = parent;
+            parent = curr.parent;
         }
-        return false;
+        return undefined;
     }
 
-    public getNextField(): FieldBase | undefined {
-        return this.parent?.findNextField(this);
-    }
-
-    public abstract startEditingField(propertyName: string);
+    public abstract findPrefixField(name: string): FieldBase | undefined;
     public abstract getScalarField(): FieldScalar | undefined;
     public abstract getSchemaValue(): any;
     protected abstract isValidValue(value: any): boolean;
@@ -331,6 +351,51 @@ abstract class FieldBase extends FieldRow {
     }
 }
 
+function createUIForField(
+    data: FieldContainer,
+    fullPropertyName: string,
+    paramName: string,
+    paramField: TemplateField,
+    optional: boolean,
+    level: number,
+    parent: FieldGroup | undefined,
+) {
+    switch (paramField.type) {
+        case "array":
+            return new FieldArray(
+                data,
+                fullPropertyName,
+                paramName,
+                paramField,
+                optional,
+                level,
+                parent,
+            );
+
+        case "object":
+            return new FieldObject(
+                data,
+                fullPropertyName,
+                paramName,
+                paramField.fields,
+                optional,
+                level,
+                parent,
+            );
+
+        default:
+            return new FieldScalar(
+                data,
+                fullPropertyName,
+                paramName,
+                paramField,
+                optional,
+                level,
+                parent,
+            );
+    }
+}
+
 abstract class FieldGroup extends FieldBase {
     protected readonly fields: FieldBase[] = [];
 
@@ -339,25 +404,32 @@ abstract class FieldGroup extends FieldBase {
         fullPropertyName: string,
         label: string,
         optional: boolean,
-        level: number,
+        private readonly level: number,
         parent: FieldGroup | undefined,
     ) {
         super(data, fullPropertyName, label, optional, level, parent);
     }
 
-    public startEditingField(propertyName: string) {
+    public findPrefixField(propertyName: string): FieldBase | undefined {
         if (!propertyName.startsWith(this.fullPropertyName)) {
-            return false;
+            return undefined;
         }
         for (const field of this.fields) {
-            if (field.startEditingField(propertyName)) {
-                return true;
+            const found = field.findPrefixField(propertyName);
+            if (found !== undefined) {
+                return found;
             }
         }
-        return false;
+        return this;
     }
     public getScalarField() {
-        return this.fields[0]?.getScalarField();
+        for (const field of this.fields) {
+            const scalarField = field.getScalarField();
+            if (scalarField) {
+                return scalarField;
+            }
+        }
+        return undefined;
     }
 
     public findNextField(field: FieldBase): FieldBase | undefined {
@@ -365,7 +437,7 @@ abstract class FieldGroup extends FieldBase {
         if (index !== -1 && index + 1 < this.fields.length) {
             return this.fields[index + 1];
         }
-        return super.getNextField();
+        return undefined;
     }
     public insertAfter(row: HTMLTableRowElement) {
         if (this.fields.length === 0) {
@@ -408,15 +480,12 @@ abstract class FieldGroup extends FieldBase {
         }
     }
 
-    protected abstract createChildFields(): void;
-
     public deleteValue() {
         super.deleteValue();
         this.clearChildFields();
     }
 }
 
-const defaultTemplatParamScalar = { type: "string" } as const;
 class FieldScalar extends FieldBase {
     private editUI?: {
         div: HTMLDivElement;
@@ -427,7 +496,7 @@ class FieldScalar extends FieldBase {
         data: FieldContainer,
         fullPropertyName: string,
         label: string,
-        private readonly fieldType: TemplateFieldScalar = defaultTemplatParamScalar,
+        private readonly fieldType: TemplateFieldScalar,
         optional: boolean = false,
         level: number = 0,
         parent?: FieldGroup,
@@ -436,7 +505,7 @@ class FieldScalar extends FieldBase {
 
         this.updateValueDisplay();
 
-        if (data.enableEdit && this.fieldType !== defaultTemplatParamScalar) {
+        if (data.enableEdit) {
             const div = document.createElement("div");
             div.style.position = "relative";
 
@@ -456,7 +525,7 @@ class FieldScalar extends FieldBase {
             if (fieldType.type === "string-union") {
                 searchMenu = new SearchMenu((item) => {
                     input.value = item.matchText;
-                    this.cancelSearchMenu();
+                    this.data.setEditing(this.getNextScalarField());
                 }, false);
                 searchMenu.setChoices(
                     fieldType.typeEnum.map((e) => ({
@@ -471,7 +540,10 @@ class FieldScalar extends FieldBase {
                     this.updateSearchMenu();
                 });
                 input.addEventListener("blur", () => {
-                    this.cancelSearchMenu();
+                    // Delay in case there is a mouse click on the search menu
+                    setTimeout(() => {
+                        this.cancelSearchMenu();
+                    }, 250);
                 });
             }
 
@@ -482,9 +554,7 @@ class FieldScalar extends FieldBase {
                 switch (event.key) {
                     case "Enter":
                         event.preventDefault();
-                        this.data.setEditing(
-                            this.getNextField()?.getScalarField(),
-                        );
+                        this.data.setEditing(this.getNextScalarField());
                         break;
                 }
             });
@@ -496,37 +566,17 @@ class FieldScalar extends FieldBase {
             };
         }
     }
-    public startEditingField(propertyName: string) {
-        if (this.fullPropertyName === propertyName) {
-            this.data.setEditing(this);
-            return true;
-        }
-        return false;
-    }
 
-    private getInputValue(type: string, input: HTMLInputElement) {
-        if (type === "boolean") {
-            return input.checked;
+    public findPrefixField(propertyName: string) {
+        if (this.fullPropertyName.startsWith(propertyName)) {
+            return this;
         }
-        const inputValue = input.value;
-        if (type === "number") {
-            const value = parseInt(inputValue);
-            if (value.toString() === inputValue) {
-                return value;
-            }
-        }
-        return inputValue === "" ? undefined : inputValue;
+        return undefined;
     }
 
     private cancelSearchMenu() {
-        if (this.editUI === undefined) {
-            return;
-        }
-        const searchMenu = this.editUI.searchMenu;
-        if (searchMenu === undefined) {
-            return;
-        }
-        if (searchMenu.isActive()) {
+        const searchMenu = this.editUI?.searchMenu;
+        if (searchMenu?.isActive()) {
             searchMenu.getContainer().remove();
         }
     }
@@ -546,10 +596,7 @@ class FieldScalar extends FieldBase {
             (items.length !== 1 || items[0].matchText !== value)
         ) {
             if (!searchMenu.isActive()) {
-                const rect = this.editUI.input.getBoundingClientRect();
-                if (rect) {
-                    this.editUI.div.appendChild(searchMenu.getContainer());
-                }
+                this.editUI.div.appendChild(searchMenu.getContainer());
             }
         } else {
             this.cancelSearchMenu();
@@ -593,6 +640,20 @@ class FieldScalar extends FieldBase {
         this.updateSearchMenu();
     }
 
+    private getInputValue(type: string, input: HTMLInputElement) {
+        if (type === "boolean") {
+            return input.checked;
+        }
+        const inputValue = input.value;
+        if (type === "number") {
+            const value = parseInt(inputValue);
+            if (value.toString() === inputValue) {
+                return value;
+            }
+        }
+        return inputValue === "" ? undefined : inputValue;
+    }
+
     public stopEditing() {
         const input = this.editUI?.input;
         if (input === undefined) {
@@ -622,7 +683,6 @@ class FieldScalar extends FieldBase {
     public getScalarField(): FieldScalar | undefined {
         return this;
     }
-
     public getSchemaValue() {
         return this.getValue();
     }
@@ -641,7 +701,10 @@ class FieldScalar extends FieldBase {
     }
 
     protected isValidValue(value: any) {
-        return isValidValue(this.fieldType, value);
+        const fieldType = this.fieldType;
+        return fieldType.type === "string-union"
+            ? fieldType.typeEnum.includes(value)
+            : typeof value === fieldType.type && value !== "";
     }
 }
 
@@ -680,7 +743,7 @@ class FieldObject extends FieldGroup {
         );
     }
 
-    protected createChildFields() {
+    private createChildFields() {
         this.clearChildFields();
         for (const [k, v] of Object.entries(this.fieldTypes)) {
             const optional = v.optional ?? false;
@@ -763,6 +826,15 @@ abstract class FieldArrayBase extends FieldGroup {
     private swap(indexA: number, indexB: number) {
         const value = this.getArray();
         if (value) {
+            if (
+                indexA < 0 ||
+                indexA >= value.length ||
+                indexB < 0 ||
+                indexB >= value.length
+            ) {
+                return;
+            }
+
             // Stop current editing first
             const editingField = this.data.setEditing(undefined);
 
@@ -770,21 +842,16 @@ abstract class FieldArrayBase extends FieldGroup {
             let editingFieldName: string | undefined;
             if (editingField) {
                 const fieldA = this.fields[indexA];
-
-                if (editingField?.isAncestor(fieldA)) {
-                    const selectedSuffix =
-                        editingField.fullPropertyName.substring(
-                            fieldA.fullPropertyName.length,
-                        );
-                    editingFieldName = `${this.fullPropertyName}.${indexB}${selectedSuffix}`;
+                const selectedSuffixA =
+                    editingField?.getPropertyNameSuffix(fieldA);
+                if (selectedSuffixA) {
+                    editingFieldName = `${this.fullPropertyName}.${indexB}${selectedSuffixA}`;
                 } else {
                     const fieldB = this.fields[indexB];
-                    if (editingField?.isAncestor(fieldB)) {
-                        const selectedSuffix =
-                            editingField.fullPropertyName.substring(
-                                fieldB.fullPropertyName.length,
-                            );
-                        editingFieldName = `${this.fullPropertyName}.${indexA}${selectedSuffix}`;
+                    const selectedSuffixB =
+                        editingField?.getPropertyNameSuffix(fieldB);
+                    if (selectedSuffixB) {
+                        editingFieldName = `${this.fullPropertyName}.${indexA}${selectedSuffixB}`;
                     }
                 }
             }
@@ -796,11 +863,15 @@ abstract class FieldArrayBase extends FieldGroup {
 
             // reselecting the editing field
             if (editingFieldName) {
-                this.startEditingField(editingFieldName);
+                const prefixField = this.findPrefixField(editingFieldName);
+                if (prefixField !== undefined) {
+                    this.data.setEditing(prefixField.getScalarField());
+                }
             }
         }
     }
-    protected createChildIndex(index: number) {
+
+    private createChildIndex(index: number) {
         const field = this.createChildIndexField(index);
         field.addButton(ButtonIndex.up, "⬆", "action-button", () => {
             this.swap(index, index - 1);
@@ -927,51 +998,6 @@ class FieldRootArray extends FieldArrayBase {
 
     public refresh() {
         this.createChildFields();
-    }
-}
-
-function createUIForField(
-    data: FieldContainer,
-    fullPropertyName: string,
-    paramName: string,
-    paramField: TemplateField,
-    optional: boolean,
-    level: number,
-    parent: FieldGroup | undefined,
-) {
-    switch (paramField.type) {
-        case "array":
-            return new FieldArray(
-                data,
-                fullPropertyName,
-                paramName,
-                paramField,
-                optional,
-                level,
-                parent,
-            );
-
-        case "object":
-            return new FieldObject(
-                data,
-                fullPropertyName,
-                paramName,
-                paramField.fields,
-                optional,
-                level,
-                parent,
-            );
-
-        default:
-            return new FieldScalar(
-                data,
-                fullPropertyName,
-                paramName,
-                paramField,
-                optional,
-                level,
-                parent,
-            );
     }
 }
 
