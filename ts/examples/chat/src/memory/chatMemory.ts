@@ -29,6 +29,7 @@ import { importMsgFiles, timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
 import {
+    argChunkSize,
     argClean,
     argConcurrency,
     argDestFile,
@@ -453,6 +454,7 @@ export async function runChatMemory(): Promise<void> {
             options: {
                 concurrency: argConcurrency(1),
                 clean: argClean(),
+                chunkSize: argChunkSize(4096),
             },
         };
     }
@@ -460,12 +462,14 @@ export async function runChatMemory(): Promise<void> {
     async function importEmail(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, importEmailDef());
         let sourcePath: string = namedArgs.sourcePath;
-        if (!sourcePath.endsWith("json")) {
+        let isDir = isDirectoryPath(sourcePath);
+        let isJson = sourcePath.endsWith("json");
+        if (isDir && !isJson) {
             printer.writeInColor(chalk.cyan, "Converting message files");
             await importMsgFiles(sourcePath, io);
             sourcePath = path.join(sourcePath, "json");
         }
-        if (isDirectoryPath(sourcePath)) {
+        if (isDir) {
             printer.writeInColor(chalk.cyan, "Adding emails to memory");
             if (namedArgs.clean) {
                 await context.emailMemory.clear(true);
@@ -493,7 +497,18 @@ export async function runChatMemory(): Promise<void> {
                 await knowLib.email.addEmailToConversation(
                     context.emailMemory,
                     emailBatch.value,
+                    namedArgs.chunkSize,
                 );
+            }
+        } else if (isJson) {
+            if (
+                !(await knowLib.email.addEmailFileToConversation(
+                    context.emailMemory,
+                    sourcePath,
+                    namedArgs.chunkSize,
+                ))
+            ) {
+                printer.writeLine(`Could not load ${sourcePath}`);
             }
         }
     }
@@ -890,7 +905,7 @@ export async function runChatMemory(): Promise<void> {
                 debug: argBool("Show debug info", false),
                 save: argBool("Save the search", false),
                 v2: argBool("Run V2 match", false),
-                chunkSize: argNum("Chunk size", undefined),
+                chunkSize: argChunkSize(),
             },
         };
     }

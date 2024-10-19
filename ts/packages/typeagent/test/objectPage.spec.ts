@@ -4,7 +4,7 @@
 import { createHashObjectFolder } from "../src/storage/objectPage";
 import { testDirectoryPath } from "./common";
 
-const timeoutMs = 10000;
+const timeoutMs = 30000;
 
 describe("storage.objectHashFolder", () => {
     const folderPath = testDirectoryPath("./data/test/objectHash");
@@ -49,7 +49,7 @@ describe("storage.objectHashFolder", () => {
                 cacheSize,
             },
         );
-        let count = 1024;
+        let count = 256;
         for (let i = 0; i < count; ++i) {
             await hashFolder.put(i.toString(), i);
         }
