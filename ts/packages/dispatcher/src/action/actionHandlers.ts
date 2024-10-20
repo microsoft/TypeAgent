@@ -386,4 +386,3 @@ export async function executeCommand(
         closeActionContext();
     }
 }
-
