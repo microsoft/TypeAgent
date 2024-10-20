@@ -176,6 +176,9 @@ export class ChatMemoryPrinter extends ChatPrinter {
             if (action.verbs) {
                 group.verbs = action.verbs;
             }
+            if (action.object) {
+                group.object = action.object;
+            }
             this.writeRecord(group);
             if (action.args) {
                 for (let i = 0; i < action.args.length; ++i) {

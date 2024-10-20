@@ -597,8 +597,14 @@ export type CompositeAction = {
     params?: string[] | undefined;
 };
 
-export type ActionGroupKey = Pick<CompositeAction, "subject" | "verbs">;
-export type ActionGroupValue = Omit<CompositeAction, "subject" | "verbs">;
+export type ActionGroupKey = Pick<
+    CompositeAction,
+    "subject" | "verbs" | "object"
+>;
+export type ActionGroupValue = Pick<
+    CompositeAction,
+    "object" | "indirectObject" | "params"
+>;
 export interface ActionGroup extends ActionGroupKey {
     args?: ActionGroupValue[] | undefined;
 }
@@ -638,36 +644,45 @@ export function toCompositeActions(
 export function mergeCompositeActions(
     actions: Iterable<CompositeAction>,
 ): ScoredItem<ActionGroup>[] {
-    const merged = createHitTable<ActionGroup>((k) => groupKey(k));
+    const merged = createHitTable<ActionGroup>((k) => actionGroupKey(k));
     for (const action of actions) {
-        const key = groupKey(action);
+        const key = actionGroupKey(action);
         let existing = merged.get(action);
         if (!existing) {
-            const group: ActionGroup = {};
-            if (action.subject) {
-                group.subject = action.subject;
-            }
-            if (action.verbs) {
-                group.verbs = action.verbs;
-            }
-            existing = { item: group, score: 0 };
+            existing = { item: actionToActionGroup(action), score: 0 };
             merged.set(key, existing);
         }
         if (appendToActionGroup(existing.item, action)) {
             existing.score += 1;
         }
     }
-    return merged.byHighestScore();
+    const groups = merged.byHighestScore();
+    groups.forEach((g) => mergeActionGroup(g.item));
+    return groups;
+}
 
-    function groupKey(group: ActionGroupKey): string {
-        let key = "";
-        if (group.subject) {
-            key += group.subject;
-            key += " ";
-        }
-        key += group.verbs;
-        return key;
+function actionGroupKey(group: ActionGroupKey): string {
+    let key = "";
+    if (group.subject) {
+        key += group.subject;
+        key += " ";
     }
+    key += group.verbs;
+    if (group.object) {
+        key += " " + group.object;
+    }
+    return key;
+}
+
+function actionToActionGroup(action: CompositeAction): ActionGroup {
+    const group: ActionGroup = {};
+    if (action.subject) {
+        group.subject = action.subject;
+    }
+    if (action.verbs) {
+        group.verbs = action.verbs;
+    }
+    return group;
 }
 
 function appendToActionGroup(x: ActionGroup, y: CompositeAction): boolean {
@@ -687,6 +702,32 @@ function appendToActionGroup(x: ActionGroup, y: CompositeAction): boolean {
     }
     x.args.push(obj);
     return true;
+}
+
+function mergeActionGroup(
+    group: ActionGroup,
+    mergeLength: number = 3,
+): ActionGroup {
+    // Simple merge for now: if all the objects are the same, merge them
+    const args = group.args;
+    if (!args || args.length < mergeLength) {
+        return group;
+    }
+    const obj = args[0].object;
+    if (!obj) {
+        return group;
+    }
+    for (let i = 1; i < args.length; ++i) {
+        if (obj !== args[i].object) {
+            return group;
+        }
+    }
+    group.object = obj;
+    for (let i = 0; i < args.length; ++i) {
+        delete args[i].object;
+    }
+
+    return group;
 }
 
 function getFullActions(actions: Action[]): Action[] {
