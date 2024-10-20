@@ -443,7 +443,7 @@ export async function runCodeChat(): Promise<void> {
         // Pass it to TypeChat to transform and dispatch as an @ command
         const error = await commandTransformer.transformAndDispatch(line, io);
         if (error) {
-            io.writer.writeLine("[Error:] " + error);
+            io.writer.writeLine("[Error:] " + error + "; try @help");
             return;
         }
     }

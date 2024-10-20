@@ -66,7 +66,7 @@ export function createCommandTransformer(
         namedArgs: NamedArgs,
         io: InteractiveIo,
     ): Promise<string | undefined> {
-        // io.writer.writeLine("[Transformed]: " + JSON.stringify(transformed));
+        // io.writer.writeLine("[Transformed:] " + JSON.stringify(transformed));
         if (!namedArgs) {
             return "Sorry, I didn't get that (or the server is down)";
         } else if (namedArgs.name === "Unknown") {
