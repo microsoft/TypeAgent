@@ -160,6 +160,11 @@ export async function getSystemTemplateCompletion(
     if (actionIndex.toString() !== actionIndexStr) {
         return [];
     }
+
+    const dataProperty = split.shift();
+    if (dataProperty !== "data" || split.length === 0) {
+        return [];
+    }
     const action = data[actionIndex];
     const systemContext = context.agentContext;
     const translatorName = action.translatorName;

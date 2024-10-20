@@ -191,10 +191,10 @@ async function getPlayerActionComplete(
     if (userData === undefined) {
         return [];
     }
-    if (!propertyName.startsWith("parameters.query")) {
+    if (!propertyName.startsWith("parameters.query.")) {
         return [];
     }
-    const suffix = propertyName.substring("parameters.query".length);
+    const suffix = propertyName.substring("parameters.query.".length);
     if (suffix === "") {
         return [];
     }
@@ -205,15 +205,16 @@ async function getPlayerActionComplete(
         return [];
     }
     const index = parseInt(split[0]);
-    if (index.toString() !== split[0]) {
+    if (index.toString() !== split[0] || split[1] !== "text") {
         // Not a valid index
         return [];
     }
 
+    const playAction = action as Partial<PlayAction>;
     let track: boolean = true;
     let album: boolean = true;
     let artist: boolean = true;
-    switch (action?.parameters?.query?.[0]?.contraint) {
+    switch (playAction.parameters?.query?.[index]?.constraint) {
         case "track":
             album = false;
             artist = false;
