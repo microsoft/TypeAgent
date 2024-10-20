@@ -3,6 +3,7 @@
 
 import {
     ActionResult,
+    AppAction,
     AppAgentEvent,
     CommandDescriptors,
     DisplayAppendMode,
@@ -12,6 +13,7 @@ import {
     ParameterDefinitions,
     ParsedCommandParams,
     StorageListOptions,
+    TemplateSchema,
 } from "@typeagent/agent-sdk";
 import { JSONAction } from "agent-cache";
 
@@ -117,6 +119,25 @@ export type AgentInvokeFunctions = {
             params: ParsedCommandParams<ParameterDefinitions> | undefined;
         },
     ): Promise<void>;
+    getTemplateSchema(
+        param: Partial<ContextParams> & {
+            templateName: string;
+            data: unknown;
+        },
+    ): Promise<TemplateSchema>;
+    getTemplateCompletion(
+        param: Partial<ContextParams> & {
+            templateName: string;
+            data: unknown;
+            propertyName: string;
+        },
+    ): Promise<string[]>;
+    getActionCompletion(
+        param: Partial<ContextParams> & {
+            partialAction: AppAction;
+            propertyName: string;
+        },
+    ): Promise<string[]>;
 };
 
 export type InitializeMessage = {

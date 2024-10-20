@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { PartialCompletionResult } from "agent-dispatcher";
+import { CommandCompletionResult } from "agent-dispatcher";
 import { getClientAPI } from "./main";
 import { SearchMenu, SearchMenuItem } from "./search";
 
@@ -17,7 +17,7 @@ export class PartialCompletion {
     private space: boolean = false;
     private noCompletion: boolean = false;
     private completionP:
-        | Promise<PartialCompletionResult | undefined>
+        | Promise<CommandCompletionResult | undefined>
         | undefined;
 
     constructor(
@@ -158,7 +158,7 @@ export class PartialCompletion {
         this.noCompletion = false;
         // Clear the choices
         this.searchMenu.setChoices([]);
-        const completionP = getClientAPI().getPartialCompletion(input);
+        const completionP = getClientAPI().getCommandCompletion(input);
         this.completionP = completionP;
         completionP.then((result) => {
             if (this.completionP !== completionP) {

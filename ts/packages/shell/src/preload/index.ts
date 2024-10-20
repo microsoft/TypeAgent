@@ -61,20 +61,34 @@ const api: ClientAPI = {
     ) => ipcRenderer.on("listen-event", callback),
 
     processShellRequest: getProcessShellRequest(),
-    getPartialCompletion: (prefix: string) => {
-        return ipcRenderer.invoke("get-partial-completion", prefix);
+    getCommandCompletion: (prefix: string) => {
+        return ipcRenderer.invoke("getCommandCompletion", prefix);
+    },
+    getTemplateCompletion: (
+        templateAgentName: string,
+        templateName: string,
+        data: unknown,
+        propertyName: string,
+    ) => {
+        return ipcRenderer.invoke(
+            "getTemplateCompletion",
+            templateAgentName,
+            templateName,
+            data,
+            propertyName,
+        );
     },
     getDynamicDisplay(source: string, id: string) {
         return ipcRenderer.invoke("get-dynamic-display", source, id);
     },
     getTemplateSchema: (
-        appAgentName: string,
+        templateAgentName: string,
         templateName: string,
         data: unknown,
     ) => {
         return ipcRenderer.invoke(
             "get-template-schema",
-            appAgentName,
+            templateAgentName,
             templateName,
             data,
         );

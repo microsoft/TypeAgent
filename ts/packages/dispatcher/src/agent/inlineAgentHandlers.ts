@@ -43,7 +43,10 @@ import {
 import { RequestCommandHandler } from "../handlers/requestCommandHandler.js";
 import { DisplayCommandHandler } from "../handlers/displayCommandHandler.js";
 import { getHandlerTableUsage, getUsage } from "../dispatcher/commandHelp.js";
-import { getSystemTemplateSchema } from "../translation/actionTemplate.js";
+import {
+    getSystemTemplateCompletion,
+    getSystemTemplateSchema,
+} from "../translation/actionTemplate.js";
 
 function executeSystemAction(
     action: AppAction,
@@ -197,6 +200,7 @@ const inlineHandlers: { [key: string]: AppAgent } = {
     },
     system: {
         getTemplateSchema: getSystemTemplateSchema,
+        getTemplateCompletion: getSystemTemplateCompletion,
         executeAction: executeSystemAction,
         ...getCommandInterface(systemHandlers),
     },
