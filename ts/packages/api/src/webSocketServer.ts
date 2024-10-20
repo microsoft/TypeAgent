@@ -123,8 +123,8 @@ export class TypeAgentAPIWebSocketServer {
                             );
                             break;
                         case "get-template-schema":
-                            let schema = dispatcher.getTemplateSchema(
-                                msgObj.data.appAgentName,
+                            let schema = await dispatcher.getTemplateSchema(
+                                msgObj.data.templateAgentName,
                                 msgObj.data.templateName,
                                 msgObj.data.data,
                             );

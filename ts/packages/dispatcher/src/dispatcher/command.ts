@@ -26,7 +26,7 @@ import {
     resolveFlag,
 } from "@typeagent/agent-sdk/helpers/command";
 import { RequestMetrics } from "../utils/metrics.js";
-import { PartialCompletionResult } from "./dispatcher.js";
+import { CommandCompletionResult } from "./dispatcher.js";
 import { parseParams } from "./parameters.js";
 import { getHandlerTableUsage, getUsage } from "./commandHelp.js";
 
@@ -360,10 +360,10 @@ function getPartialCompletedCommand(input: string) {
     };
 }
 
-export async function getPartialCompletion(
+export async function getCommandCompletion(
     input: string,
     context: CommandHandlerContext,
-): Promise<PartialCompletionResult | undefined> {
+): Promise<CommandCompletionResult | undefined> {
     const partialCompletedCommand = getPartialCompletedCommand(input);
 
     if (partialCompletedCommand === undefined) {

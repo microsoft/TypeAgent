@@ -10,7 +10,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { TemplateData, TemplateEditConfig } from "agent-dispatcher";
 import { getClientAPI } from "./main";
-import { SearchMenu } from "./search";
+import { SearchMenu, SearchMenuItem } from "./search";
 
 function cloneTemplateData(
     templateData: TemplateData | TemplateData[],
@@ -141,7 +141,7 @@ class FieldContainer {
         this.editingField = undefined;
 
         this.current[index].schema = await getClientAPI().getTemplateSchema(
-            this.actionTemplates.templateAppAgent,
+            this.actionTemplates.templateAgentName,
             this.actionTemplates.templateName,
             this.current[index].data,
         );
@@ -521,32 +521,6 @@ class FieldScalar extends FieldBase {
                 this.data.setEditing(this);
             };
 
-            let searchMenu: SearchMenu | undefined = undefined;
-            if (fieldType.type === "string-union") {
-                searchMenu = new SearchMenu((item) => {
-                    input.value = item.matchText;
-                    this.data.setEditing(this.getNextScalarField());
-                }, false);
-                searchMenu.setChoices(
-                    fieldType.typeEnum.map((e) => ({
-                        matchText: e,
-                        selectedText: e,
-                    })),
-                );
-                input.addEventListener("input", () => {
-                    this.updateSearchMenu();
-                });
-                input.addEventListener("focus", () => {
-                    this.updateSearchMenu();
-                });
-                input.addEventListener("blur", () => {
-                    // Delay in case there is a mouse click on the search menu
-                    setTimeout(() => {
-                        this.cancelSearchMenu();
-                    }, 250);
-                });
-            }
-
             input.addEventListener("keydown", (event) => {
                 if (this.handleSearchMenuKeys(event)) {
                     return;
@@ -562,9 +536,32 @@ class FieldScalar extends FieldBase {
             this.editUI = {
                 div,
                 input,
-                searchMenu,
             };
         }
+    }
+
+    private createSearchMenu(
+        input: HTMLInputElement,
+        choices: SearchMenuItem[],
+    ) {
+        const searchMenu = new SearchMenu((item) => {
+            input.value = item.matchText;
+            this.data.setEditing(this.getNextScalarField());
+        }, false);
+        searchMenu.setChoices(choices);
+        input.addEventListener("input", () => {
+            this.updateSearchMenu();
+        });
+        input.addEventListener("focus", () => {
+            this.updateSearchMenu();
+        });
+        input.addEventListener("blur", () => {
+            // Delay in case there is a mouse click on the search menu
+            setTimeout(() => {
+                this.cancelSearchMenu();
+            }, 250);
+        });
+        return searchMenu;
     }
 
     public findPrefixField(propertyName: string) {
@@ -589,6 +586,7 @@ class FieldScalar extends FieldBase {
         if (searchMenu === undefined) {
             return;
         }
+
         const value = this.editUI.input.value;
         const items = searchMenu.completePrefix(value);
         if (
@@ -637,7 +635,44 @@ class FieldScalar extends FieldBase {
         valueCell.replaceChildren(div);
         input.focus();
 
-        this.updateSearchMenu();
+        this.cancelSearchMenu();
+
+        const fieldType = this.fieldType;
+        if (fieldType.type === "string-union") {
+            this.editUI.searchMenu = this.createSearchMenu(
+                input,
+                fieldType.typeEnum.map((e) => ({
+                    matchText: e,
+                    selectedText: e,
+                })),
+            );
+            this.updateSearchMenu();
+        } else if (fieldType.type === "string") {
+            const templateConfig = this.data.actionTemplates;
+            if (templateConfig.completion === true) {
+                const searchMenu = this.createSearchMenu(input, []);
+                this.editUI.searchMenu = searchMenu;
+                getClientAPI()
+                    .getTemplateCompletion(
+                        this.data.actionTemplates.templateAgentName,
+                        this.data.actionTemplates.templateName,
+                        this.data.getSchemaValue(),
+                        this.fullPropertyName,
+                    )
+                    .then((items) => {
+                        if (searchMenu !== this.editUI?.searchMenu) {
+                            return;
+                        }
+                        searchMenu.setChoices(
+                            items.map((e) => ({
+                                matchText: e,
+                                selectedText: e,
+                            })),
+                        );
+                        this.updateSearchMenu();
+                    });
+            }
+        }
     }
 
     private getInputValue(type: string, input: HTMLInputElement) {
@@ -655,11 +690,15 @@ class FieldScalar extends FieldBase {
     }
 
     public stopEditing() {
-        const input = this.editUI?.input;
+        if (this.editUI === undefined) {
+            return;
+        }
+        const input = this.editUI.input;
         if (input === undefined) {
             return true;
         }
         this.cancelSearchMenu();
+        this.editUI.searchMenu == undefined;
 
         const fieldType = this.fieldType;
         const newValue = this.getInputValue(fieldType.type, input);

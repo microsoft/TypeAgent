@@ -9,19 +9,22 @@ import {
     TemplateFieldStringUnion,
     TemplateSchema,
     SessionContext,
+    AppAction,
 } from "@typeagent/agent-sdk";
+import { getAppAgentName } from "./agentTranslators.js";
 
 export type TemplateData = {
     schema: TemplateSchema;
     data: unknown;
 };
 export type TemplateEditConfig = {
-    templateAppAgent: string;
+    templateAgentName: string;
     templateName: string;
     templateData: TemplateData | TemplateData[];
     defaultTemplate: TemplateSchema;
     preface?: string;
     editPreface?: string;
+    completion?: boolean;
 };
 
 function getDefaultActionTemplate(
@@ -99,20 +102,21 @@ export function getActionTemplateEditConfig(
     }
 
     return {
-        templateAppAgent: "system",
+        templateAgentName: "system",
         templateName: "action",
         preface,
         editPreface,
         templateData,
+        completion: true,
         defaultTemplate: getDefaultActionTemplate(translators),
     };
 }
 
-export function getSystemTemplateSchema(
+export async function getSystemTemplateSchema(
     templateName: string,
     data: any,
     context: SessionContext<CommandHandlerContext>,
-): TemplateSchema {
+): Promise<TemplateSchema> {
     if (templateName !== "action") {
         throw new Error(`Unknown template name: ${templateName}`);
     }
@@ -131,4 +135,61 @@ export function getSystemTemplateSchema(
 
     const translators = getActiveTranslatorList(systemContext);
     return toTemplate(systemContext, translators, data);
+}
+
+export async function getSystemTemplateCompletion(
+    templateName: string,
+    data: any,
+    propertyName: string,
+    context: SessionContext<CommandHandlerContext>,
+): Promise<string[]> {
+    if (templateName !== "action") {
+        throw new Error(`Unknown template name: ${templateName}`);
+    }
+
+    if (!Array.isArray(data)) {
+        return [];
+    }
+
+    const split = propertyName.split(".");
+    const actionIndexStr = split.shift();
+    if (actionIndexStr === undefined || split.length === 0) {
+        return [];
+    }
+    const actionIndex = parseInt(actionIndexStr);
+    if (actionIndex.toString() !== actionIndexStr) {
+        return [];
+    }
+    const action = data[actionIndex];
+    const systemContext = context.agentContext;
+    const translatorName = action.translatorName;
+    const actionName = action.actionName;
+    if (translatorName === undefined || actionName === undefined) {
+        return [];
+    }
+    const config = systemContext.agents.tryGetTranslatorConfig(translatorName);
+    if (config === undefined) {
+        return [];
+    }
+
+    const actionInfos = getTranslatorActionInfos(config, translatorName);
+    if (actionInfos === undefined) {
+        return [];
+    }
+    const actionInfo = actionInfos.get(actionName);
+    if (actionInfo === undefined) {
+        return [];
+    }
+    const appAgentName = getAppAgentName(translatorName);
+    const appAgent = systemContext.agents.getAppAgent(appAgentName);
+    if (appAgent.getActionCompletion === undefined) {
+        return [];
+    }
+
+    const sessionContext = systemContext.agents.getSessionContext(appAgentName);
+    return appAgent.getActionCompletion(
+        action as AppAction,
+        split.join("."),
+        sessionContext,
+    );
 }
