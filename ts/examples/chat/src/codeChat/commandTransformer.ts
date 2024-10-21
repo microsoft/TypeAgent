@@ -22,7 +22,7 @@ export interface CommandTransformer {
     model: TypeChatLanguageModel;
     metadata?: Record<string, string | CommandMetadata>;
     schemaText?: string;
-    translator?: TypeChatJsonTranslator<any>;
+    translator?: TypeChatJsonTranslator<NamedArgs>;
     transform(command: string): Promise<NamedArgs | undefined>;
     dispatch(namedArgs: NamedArgs, io: InteractiveIo): Promise<string | void>; // String gives an error message
     transformAndDispatch(
@@ -46,7 +46,7 @@ export function createCommandTransformer(
 
     async function transform(command: string): Promise<NamedArgs | undefined> {
         const promptPreamble =
-            "If no value is given for a parameter, use the default from the comment, if any.";
+            "If no value is given for a parameter, use the default from the comment, if present.";
         const result = await transformer.translator!.translate(
             command,
             promptPreamble,
@@ -143,11 +143,11 @@ export function completeCommandTransformer(
     // console.log(schemaText);
 
     // Now construct the translator and add it
-    const validator = createTypeScriptJsonValidator<any>(
+    const validator = createTypeScriptJsonValidator<NamedArgs>(
         commandTransformer.schemaText,
         "Command",
     );
-    const translator = createJsonTranslator<any>(
+    const translator = createJsonTranslator<NamedArgs>(
         commandTransformer.model,
         validator,
     );
