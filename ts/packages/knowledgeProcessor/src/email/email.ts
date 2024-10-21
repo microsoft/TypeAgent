@@ -21,8 +21,8 @@ import {
     ConversationSettings,
     createConversation,
 } from "../conversation/conversation.js";
-import { TypeChatLanguageModel } from "typechat";
 import { isValidChunkSize, splitLargeTextIntoChunks } from "../textChunker.js";
+import { ChatModel } from "aiclient";
 
 export function emailAddressToString(address: EmailAddress): string {
     if (address.displayName) {
@@ -72,7 +72,7 @@ export function emailAddressToEntities(
     return entities;
 }
 
-export function emailToString(
+export function emailHeadersToString(
     email: Email,
     includeBody: boolean = true,
 ): string {
@@ -101,6 +101,14 @@ export function emailToString(
     if (email.importance) {
         text += makeHeader("Importance", email.importance);
     }
+    return text;
+}
+
+export function emailToString(
+    email: Email,
+    includeBody: boolean = true,
+): string {
+    let text = emailHeadersToString(email);
     if (includeBody && email.body) {
         text += "\n";
         text += email.body;
@@ -268,13 +276,14 @@ export async function loadEmailFolder(
  * @returns
  */
 export async function createEmailMemory(
-    model: TypeChatLanguageModel,
+    model: ChatModel,
     name: string,
     rootPath: string,
     settings: ConversationSettings,
 ) {
     const storePath = path.join(rootPath, name);
     const emailConversation = await createConversation(settings, storePath);
+
     const actions = await emailConversation.getActionIndex();
     actions.verbTermMap.put("say", EmailVerbs.send);
     actions.verbTermMap.put("discuss", EmailVerbs.send);
@@ -286,9 +295,12 @@ export async function createEmailMemory(
         rootPath,
         false,
         emailConversation,
+        model,
     );
     cm.topicMerger.settings.mergeWindowSize = 1;
     cm.topicMerger.settings.trackRecent = false;
+
+    cm.searchProcessor.answers.settings.hints = `messages are *emails*. Use email headers (to, subject. etc) to determine if message is highly relevant to the question`;
     return cm;
 }
 
@@ -345,7 +357,7 @@ export function emailToMessages(
     }
 
     const messages: ConversationMessage[] = [];
-    const text = emailToString(email);
+    const text = email.body;
     for (const chunk of splitLargeTextIntoChunks(text, maxCharsPerChunk!)) {
         const emailChunk: Email = { ...email };
         emailChunk.body = chunk;
