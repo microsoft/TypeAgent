@@ -11,6 +11,7 @@ export type Email = {
     receivedOn?: string | undefined;
     importance?: string | undefined;
     sourcePath?: string | undefined;
+    threadId?: string | undefined;
     body: string;
 };
 

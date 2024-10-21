@@ -457,6 +457,7 @@ export function entityToString(entity: CompositeEntity): string {
     return text;
 }
 
+// TODO: rewrite to return ranked by hit order
 export function mergeEntities(
     entities: Iterable<ConcreteEntity>,
 ): Map<string, WithFrequency<CompositeEntity>> {

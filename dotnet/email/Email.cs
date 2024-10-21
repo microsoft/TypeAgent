@@ -35,6 +35,8 @@ public class Email
     public DateTime ReceivedOn { get; set; }
     [JsonPropertyName("importance")]
     public string Importance { get; set; }
+    [JsonPropertyName("threadId")]
+    public string ThreadId { get; set; }
 
     [JsonPropertyName("sourcePath")]
     public string SourcePath { get; set; }
@@ -106,6 +108,7 @@ public class Email
         SentOn = item.SentOn;
         ReceivedOn = item.ReceivedTime;
         Importance = GetImportance(item);
+        ThreadId = item.ConversationID;
         LoadBody(item);
     }
 

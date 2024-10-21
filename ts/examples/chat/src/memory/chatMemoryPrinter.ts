@@ -159,6 +159,46 @@ export class ChatMemoryPrinter extends ChatPrinter {
         }
     }
 
+    public writeCompositeAction(
+        action: conversation.CompositeAction | undefined,
+    ): void {
+        if (action) {
+            this.writeRecord(action);
+        }
+    }
+
+    public writeActionGroups(actions: conversation.ActionGroup[]) {
+        if (actions.length > 0) {
+            this.writeTitle("Actions");
+            for (const action of actions) {
+                const group: Record<string, string> = {};
+                if (action.subject) {
+                    group.subject = action.subject;
+                }
+                if (action.verbs) {
+                    group.verbs = action.verbs;
+                }
+                if (action.object) {
+                    group.object = action.object;
+                }
+                this.writeRecord(group);
+                if (action.values) {
+                    for (let i = 0; i < action.values.length; ++i) {
+                        this.writeRecord(
+                            action.values[i],
+                            false,
+                            undefined,
+                            "  ",
+                        );
+                        this.writeLine();
+                    }
+                } else {
+                    this.writeLine();
+                }
+            }
+        }
+    }
+
     public writeActions(actions: conversation.Action[] | undefined): void {
         if (actions && actions.length > 0) {
             this.writeTitle("Actions");
@@ -174,11 +214,14 @@ export class ChatMemoryPrinter extends ChatPrinter {
     ) {
         if (actions && actions.length > 0) {
             this.writeTitle("Actions");
-            this.writeList(
-                actions.map((a) =>
-                    a ? conversation.actionToString(a.value) : "",
-                ),
-            );
+            for (const a of actions) {
+                if (a) {
+                    this.writeCompositeAction(
+                        conversation.toCompositeAction(a.value),
+                    );
+                }
+                this.writeLine();
+            }
             this.writeLine();
         }
     }
@@ -189,11 +232,15 @@ export class ChatMemoryPrinter extends ChatPrinter {
     ) {
         this.writeTopics([...response.allTopics()]);
         this.writeCompositeEntities(
-            response.getCompositeEntities(
+            response.mergeAllEntities(
                 settings?.topKEntities ?? Number.MAX_SAFE_INTEGER,
             ),
         );
-        this.writeActions([...response.allActions()]);
+        this.writeActionGroups(
+            response.mergeAllActions(
+                settings?.topKActions ?? Number.MAX_SAFE_INTEGER,
+            ),
+        );
         if (response.messages) {
             this.writeTemporalBlocks(chalk.cyan, response.messages);
         }
