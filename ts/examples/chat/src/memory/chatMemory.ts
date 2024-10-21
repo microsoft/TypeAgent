@@ -8,7 +8,6 @@ import {
     CommandHandler,
     CommandMetadata,
     InteractiveIo,
-    NamedArgs,
     addStandardHandlers,
     arg,
     argBool,
@@ -114,7 +113,7 @@ export async function createChatMemoryContext(
         storePath,
         chatModel,
         embeddingModel,
-        maxCharsPerChunk: 2048,
+        maxCharsPerChunk: 4096,
         topicWindowSize: 8,
         searchConcurrency: 2,
         minScore: 0.9,
@@ -313,10 +312,7 @@ export async function runChatMemory(): Promise<void> {
     //--------------------
 
     handlers.history.metadata = "Display search history.";
-    async function history(
-        args: string[] | NamedArgs,
-        io: InteractiveIo,
-    ): Promise<void> {
+    async function history(args: string[], io: InteractiveIo): Promise<void> {
         if (context.searchMemory) {
             await writeHistory(context.searchMemory.conversation);
         } else {
@@ -326,7 +322,7 @@ export async function runChatMemory(): Promise<void> {
 
     handlers.importTranscript.metadata = importChatDef();
     async function importTranscript(
-        args: string[] | NamedArgs,
+        args: string[],
         io: InteractiveIo,
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, importChatDef());
@@ -385,7 +381,7 @@ export async function runChatMemory(): Promise<void> {
     }
     handlers.importPlay.metadata = importChatDef();
     async function importPlay(
-        args: string[] | NamedArgs,
+        args: string[],
         io: InteractiveIo,
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, importChatDef());
@@ -427,7 +423,7 @@ export async function runChatMemory(): Promise<void> {
     }
     handlers.importMessage.metadata = importMessageDef();
     async function importMessage(
-        args: string[] | NamedArgs,
+        args: string[],
         io: InteractiveIo,
     ): Promise<void> {
         // Temporary: safeguard here to prevent demo issues
@@ -462,12 +458,12 @@ export async function runChatMemory(): Promise<void> {
             options: {
                 concurrency: argConcurrency(1),
                 clean: argClean(),
-                chunkSize: argChunkSize(4096),
+                chunkSize: argChunkSize(context.maxCharsPerChunk),
             },
         };
     }
     handlers.importEmail.metadata = importEmailDef();
-    async function importEmail(args: string[] | NamedArgs, io: InteractiveIo) {
+    async function importEmail(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, importEmailDef());
         let sourcePath: string = namedArgs.sourcePath;
         let isDir = isDirectoryPath(sourcePath);
@@ -522,7 +518,7 @@ export async function runChatMemory(): Promise<void> {
     }
 
     handlers.replay.metadata = "Replay the chat";
-    async function replay(args: string[] | NamedArgs, io: InteractiveIo) {
+    async function replay(args: string[], io: InteractiveIo) {
         await writeHistory(context.conversation);
     }
 
@@ -540,7 +536,7 @@ export async function runChatMemory(): Promise<void> {
         };
     }
     handlers.load.metadata = loadDef();
-    async function load(args: string[] | NamedArgs, io: InteractiveIo) {
+    async function load(args: string[], io: InteractiveIo) {
         if (args.length > 0) {
             const namedArgs = parseNamedArguments(args, loadDef());
             let name = namedArgs.name;
@@ -583,7 +579,7 @@ export async function runChatMemory(): Promise<void> {
         };
     }
     handlers.knowledge.metadata = knowledgeDef();
-    async function knowledge(args: string[] | NamedArgs, io: InteractiveIo) {
+    async function knowledge(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, knowledgeDef());
         const extractor = conversation.createKnowledgeExtractor(
             context.chatModel,
@@ -637,7 +633,7 @@ export async function runChatMemory(): Promise<void> {
     }
     handlers.buildIndex.metadata = buildIndexDef();
     async function buildIndex(
-        args: string[] | NamedArgs,
+        args: string[],
         io: InteractiveIo,
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, buildIndexDef());
@@ -728,7 +724,7 @@ export async function runChatMemory(): Promise<void> {
         };
     }
     handlers.topics.metadata = topicsDef();
-    async function topics(args: string[] | NamedArgs, io: InteractiveIo) {
+    async function topics(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, topicsDef());
         const index = await context.conversation.getTopicsIndex(
             namedArgs.level,
@@ -780,7 +776,7 @@ export async function runChatMemory(): Promise<void> {
         };
     }
     handlers.entities.metadata = entitiesDef();
-    async function entities(args: string[] | NamedArgs, io: InteractiveIo) {
+    async function entities(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, entitiesDef());
         let query = namedArgs.name ?? namedArgs.type ?? namedArgs.facet;
         if (query) {
@@ -839,7 +835,7 @@ export async function runChatMemory(): Promise<void> {
         };
     }
     handlers.actions.metadata = actionsDef();
-    async function actions(args: string[] | NamedArgs, io: InteractiveIo) {
+    async function actions(args: string[], io: InteractiveIo) {
         const index = await context.conversation.getActionIndex();
         if (args.length === 0) {
             const actions = (await asyncArray.toArray(index.entries())).map(
@@ -914,13 +910,13 @@ export async function runChatMemory(): Promise<void> {
                 debug: argBool("Show debug info", false),
                 save: argBool("Save the search", false),
                 v2: argBool("Run V2 match", false),
-                chunkSize: argChunkSize(),
+                chunkSize: argChunkSize(context.maxCharsPerChunk * 2),
             },
         };
     }
     handlers.searchQuery.metadata = searchDef();
     async function searchQuery(
-        args: string[] | NamedArgs,
+        args: string[],
         io: InteractiveIo,
     ): Promise<void> {
         const timestampQ = new Date();
@@ -992,10 +988,7 @@ export async function runChatMemory(): Promise<void> {
     }
 
     handlers.search.metadata = searchDef();
-    async function search(
-        args: string[] | NamedArgs,
-        io: InteractiveIo,
-    ): Promise<void> {
+    async function search(args: string[], io: InteractiveIo): Promise<void> {
         await searchConversation(context.searcher, true, args);
     }
 
@@ -1008,7 +1001,7 @@ export async function runChatMemory(): Promise<void> {
         };
     }
     handlers.searchV2Debug.metadata = searchV2DebugDef();
-    async function searchV2Debug(args: string[] | NamedArgs): Promise<void> {
+    async function searchV2Debug(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, searchV2DebugDef());
         const result = await context.searcher.actions.translateSearchTermsV2(
             namedArgs.query,
@@ -1050,7 +1043,7 @@ export async function runChatMemory(): Promise<void> {
         };
     }
     handlers.makeTestSet.metadata = makeTestSetDef();
-    async function makeTestSet(args: string[] | NamedArgs): Promise<void> {
+    async function makeTestSet(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, makeTestSetDef());
         await conversation.testData.searchBatchFile(
             context.conversationManager,
@@ -1074,7 +1067,7 @@ export async function runChatMemory(): Promise<void> {
         };
     }
     handlers.runTestSet.metadata = runTestSetDef();
-    async function runTestSet(args: string[] | NamedArgs): Promise<void> {
+    async function runTestSet(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, runTestSetDef());
         const comparisons = await conversation.testData.compareQueryBatchFile(
             context.conversationManager,
@@ -1130,7 +1123,7 @@ export async function runChatMemory(): Promise<void> {
     async function searchConversation(
         searcher: conversation.ConversationSearchProcessor,
         recordAnswer: boolean,
-        args: string[] | NamedArgs,
+        args: string[],
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, searchDef());
         const maxMatches = namedArgs.maxMatches;
@@ -1163,7 +1156,6 @@ export async function runChatMemory(): Promise<void> {
             searcher.answers.settings.maxCharsInContext = namedArgs.chunkSize;
             searcher.answers.settings.useChunking = namedArgs.chunkSize > 0;
         } else {
-            searcher.answers.settings.maxCharsInContext = undefined;
             searcher.answers.settings.useChunking = false;
         }
 
@@ -1361,10 +1353,17 @@ export async function runChatMemory(): Promise<void> {
                     `Entity to Message Hit Count: ${entityIds.size}`,
                 );
             }
-            const allActions = knowLib.sets.uniqueFrom(response.allActionIds());
+            const allActions = response.mergeAllEntities(
+                context.searcher.answers.settings.topKActions,
+            );
             //const allActions = [...response.allActionIds()];
             if (allActions && allActions.length > 0) {
                 printer.writeLine(`Action Hit Count: ${allActions.length}`);
+            } else {
+                const actionIds = new Set(response.allActionIds());
+                printer.writeLine(
+                    `Action to Message Hit Count: ${actionIds.size}`,
+                );
             }
             if (response.messages) {
                 printer.writeLine(

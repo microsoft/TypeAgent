@@ -54,14 +54,19 @@ export type AnswerGeneratorSettings = {
     concurrency?: number;
 };
 
+export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
+    return {
+        topKEntities: 8,
+        topKActions: 8,
+        maxCharsInContext: 4096,
+    };
+}
+
 export function createAnswerGenerator(
     model: ChatModel,
     generatorSettings?: AnswerGeneratorSettings,
 ): AnswerGenerator {
-    const settings = generatorSettings ?? {
-        topKEntities: 8,
-        topKActions: 8,
-    };
+    const settings = generatorSettings ?? createAnswerGeneratorSettings();
     const translator = createChatTranslator<AnswerResponse>(
         model,
         loadSchema(["answerSchema.ts"], import.meta.url),
