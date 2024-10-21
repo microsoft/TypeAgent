@@ -257,7 +257,8 @@ export async function createAgentProcessShim(
         AgentContextCallFunctions
     >(process, agentContextInvokeHandlers, agentContextCallHandlers);
 
-    const agent: AppAgent = {
+    // The shim needs to implement all the APIs
+    const agent: Required<AppAgent> = {
         initializeAgentContext() {
             return rpc.invoke("initializeAgentContext", undefined);
         },
@@ -339,8 +340,45 @@ export async function createAgentProcessShim(
                 }),
             );
         },
+        getTemplateSchema(
+            templateName,
+            data,
+            context: SessionContext<ShimContext>,
+        ) {
+            return rpc.invoke("getTemplateSchema", {
+                ...getContextParam(context),
+                templateName,
+                data,
+            });
+        },
+
+        getTemplateCompletion(
+            templateName,
+            data,
+            propertyName,
+            context: SessionContext<ShimContext>,
+        ) {
+            return rpc.invoke("getTemplateCompletion", {
+                ...getContextParam(context),
+                templateName,
+                data,
+                propertyName,
+            });
+        },
+        getActionCompletion(
+            partialAction,
+            propertyName,
+            context: SessionContext<ShimContext>,
+        ) {
+            return rpc.invoke("getActionCompletion", {
+                ...getContextParam(context),
+                partialAction,
+                propertyName,
+            });
+        },
     };
 
+    // Now pick out the one that is actually implemented
     const result: AppAgent = Object.fromEntries(
         agentInterface.map((name) => [name, agent[name]]),
     );

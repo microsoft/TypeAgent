@@ -73,8 +73,19 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
         templateName: string,
         data: unknown,
         context: SessionContext,
-    ): TemplateSchema;
+    ): Promise<TemplateSchema>;
 
+    getTemplateCompletion?(
+        templateName: string,
+        data: unknown,
+        propertyName: string,
+        context: SessionContext,
+    ): Promise<string[]>;
+    getActionCompletion?(
+        partialAction: AppAction, // action translatorName and actionName are validated by the dispatcher.
+        propertyName: string,
+        context: SessionContext,
+    ): Promise<string[]>;
     // Output
     getDynamicDisplay?(
         type: DisplayType,

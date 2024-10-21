@@ -6,7 +6,7 @@ import {
     DynamicDisplay,
     TemplateSchema,
 } from "@typeagent/agent-sdk";
-import { PartialCompletionResult, RequestMetrics } from "agent-dispatcher";
+import { CommandCompletionResult, RequestMetrics } from "agent-dispatcher";
 import { ClientAPI, SpeechToken } from "../../preload/electronTypes";
 
 export const webapi: ClientAPI = {
@@ -39,14 +39,32 @@ export const webapi: ClientAPI = {
             msgPromiseMap.set(currentMessageId, { resolve, reject });
         });
     },
-    getPartialCompletion: (prefix: string) => {
+    getCommandCompletion: (prefix: string) => {
         // TODO: implement
-        return new Promise<PartialCompletionResult | undefined>(
+        return new Promise<CommandCompletionResult | undefined>(
             (resolve, reject) => {
                 placeHolder1({ resolve, reject });
-                placeHolder("process-shell-request", prefix);
+                placeHolder("getCommandCompletion", prefix);
             },
         );
+    },
+
+    getTemplateCompletion: (
+        templateAgentName,
+        templateName,
+        data,
+        propertyName,
+    ) => {
+        // TODO: implement
+        return new Promise<string[]>((resolve, reject) => {
+            placeHolder1({ resolve, reject });
+            placeHolder("getActionCompletion", {
+                templateAgentName,
+                templateName,
+                data,
+                propertyName,
+            });
+        });
     },
     getDynamicDisplay(source: string, id: string) {
         globalThis.ws.send(
@@ -66,7 +84,7 @@ export const webapi: ClientAPI = {
         });
     },
     getTemplateSchema(
-        appAgentName: string,
+        templateAgentName: string,
         templateName: string,
         data: unknown,
     ) {
@@ -77,7 +95,7 @@ export const webapi: ClientAPI = {
                     message: "get-template-schema",
                     data: {
                         messageId: currentMessageId,
-                        appAgentName,
+                        templateAgentName,
                         templateName,
                         data,
                     },
@@ -209,7 +227,7 @@ function placeHolder1(category: any) {
 }
 
 function placeHolder(category: string, callback: any) {
-    console.log(category + "\n" + callback);
+    console.log(category + "\n" + JSON.stringify(callback));
 }
 
 export async function createWebSocket(

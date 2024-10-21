@@ -4,7 +4,7 @@
 export {
     createDispatcher,
     Dispatcher,
-    PartialCompletionResult,
+    CommandCompletionResult,
 } from "./dispatcher/dispatcher.js";
 export type { AppAgentProvider } from "./agent/agentProvider.js";
 export type {

@@ -708,17 +708,34 @@ app.whenReady().then(async () => {
                 });
         },
     );
-    ipcMain.handle("get-partial-completion", async (_event, prefix: string) => {
-        return dispatcher.getPartialCompletion(prefix);
+    ipcMain.handle("getCommandCompletion", async (_event, prefix: string) => {
+        return dispatcher.getCommandCompletion(prefix);
     });
+    ipcMain.handle(
+        "getTemplateCompletion",
+        async (
+            _event,
+            templateAgentName: string,
+            templateName: string,
+            data: unknown,
+            propertyName: string,
+        ) => {
+            return dispatcher.getTemplateCompletion(
+                templateAgentName,
+                templateName,
+                data,
+                propertyName,
+            );
+        },
+    );
     ipcMain.handle("get-dynamic-display", async (_event, appAgentName, id) =>
         dispatcher.getDynamicDisplay(appAgentName, "html", id),
     );
     ipcMain.handle(
         "get-template-schema",
-        async (_event, appAgentName, templateName, data) => {
+        async (_event, templateAgentName, templateName, data) => {
             return dispatcher.getTemplateSchema(
-                appAgentName,
+                templateAgentName,
                 templateName,
                 data,
             );

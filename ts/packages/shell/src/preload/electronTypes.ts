@@ -12,7 +12,7 @@ import { ShellSettings } from "../main/shellSettings.js";
 import {
     TemplateEditConfig,
     IAgentMessage,
-    PartialCompletionResult,
+    CommandCompletionResult,
 } from "agent-dispatcher";
 import { RequestMetrics } from "agent-dispatcher";
 
@@ -54,12 +54,18 @@ export interface ClientAPI {
         id: string,
         images: string[],
     ) => Promise<RequestMetrics | undefined>;
-    getPartialCompletion: (
+    getCommandCompletion: (
         input: string,
-    ) => Promise<PartialCompletionResult | undefined>;
+    ) => Promise<CommandCompletionResult | undefined>;
+    getTemplateCompletion: (
+        templateAgentName: string,
+        templateName: string,
+        data: unknown,
+        propertyName: string,
+    ) => Promise<string[]>;
     getDynamicDisplay: (source: string, id: string) => Promise<DynamicDisplay>;
     getTemplateSchema: (
-        appAgentName: string,
+        templateAgentName: string,
         templateName: string,
         data: unknown,
     ) => Promise<TemplateSchema>;
