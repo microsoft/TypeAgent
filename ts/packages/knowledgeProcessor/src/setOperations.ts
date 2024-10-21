@@ -342,6 +342,28 @@ export function removeUndefined<T = any>(src: Array<T | undefined>): T[] {
     return src.filter((item) => item !== undefined) as T[];
 }
 
+export function removeDuplicates<T = any>(
+    src: T[] | undefined,
+    comparer: (x: T, y: T) => number,
+): T[] | undefined {
+    if (src === undefined || src.length <= 1) {
+        return src;
+    }
+
+    src.sort(comparer);
+    let prev = src[0];
+    let i = 1;
+    while (i < src.length) {
+        if (comparer(prev, src[i]) === 0) {
+            src.splice(i, 1);
+        } else {
+            prev = src[i];
+            i++;
+        }
+    }
+    return src;
+}
+
 export type WithFrequency<T = any> = {
     value: T;
     count: number;
@@ -504,3 +526,81 @@ export function createHitTable<T>(
         return keyAccessor ? keyAccessor(value) : value;
     }
 }
+
+/*
+export type PropertyRecord = Record<string, string | undefined>;
+
+export type PropertyGroup = {
+    group: PropertyRecord;
+    values: PropertyRecord[];
+};
+export function compareRecord(
+    x: PropertyRecord,
+    y: PropertyRecord,
+    keys: string[],
+): number {
+    let cmp = 0;
+    for (let i = 0; i < keys.length; ++i) {
+        const key = keys[i];
+        cmp = collections.stringCompare(x[key], y[key], true);
+        if (cmp === 0) {
+            break;
+        }
+    }
+    return cmp;
+}
+
+export function sortPropertyRecords(
+    records: PropertyRecord[],
+    keys: string[],
+): PropertyRecord[] {
+    records.sort((x, y) => compareRecord(x, y, keys));
+    return records;
+}
+
+export function groupPropertyRecords(
+    records: PropertyRecord[],
+    keys: string[],
+): PropertyGroup[] {
+    records = sortPropertyRecords(records, keys);
+
+    let record = records[0];
+    let groups: PropertyGroup[] = [];
+    let group = beginGroup(record, keys);
+    groups.push(group);
+    group.values.push(removeKeys(record, keys));
+    for (let i = 1; i < records.length; ++i) {
+        record = records[i];
+        const cmp = compareRecord(group.group, record, keys);
+        if (cmp !== 0) {
+            group = beginGroup(record, keys);
+            groups.push(group);
+        }
+        group.values.push(removeKeys(record, keys));
+    }
+    return groups;
+}
+
+function beginGroup(record: PropertyRecord, keys: string[]): PropertyGroup {
+    return {
+        group: copyKeys(record, keys),
+        values: [],
+    };
+}
+
+function copyKeys(record: PropertyRecord, keys: string[]): PropertyRecord {
+    const copy: PropertyRecord = {};
+    for (let i = 0; i < keys.length; ++i) {
+        const key = keys[i];
+        copy[key] = record[key];
+    }
+    return copy;
+}
+
+function removeKeys(record: PropertyRecord, keys: string[]): PropertyRecord {
+    for (let i = 0; i < keys.length; ++i) {
+        delete record[keys[i]];
+    }
+    return record;
+}
+*/

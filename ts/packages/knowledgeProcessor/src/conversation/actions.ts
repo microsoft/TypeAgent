@@ -7,6 +7,7 @@ import {
     ScoredItem,
     SearchOptions,
     asyncArray,
+    collections,
     dateTime,
 } from "typeagent";
 import {
@@ -37,6 +38,7 @@ import {
     uniqueFrom,
     intersectMultiple,
     createHitTable,
+    removeDuplicates,
 } from "../setOperations.js";
 import {
     ExtractedAction,
@@ -606,7 +608,7 @@ export type ActionGroupValue = Pick<
     "object" | "indirectObject" | "params"
 >;
 export interface ActionGroup extends ActionGroupKey {
-    args?: ActionGroupValue[] | undefined;
+    values?: ActionGroupValue[] | undefined;
 }
 
 export function toCompositeAction(action: Action) {
@@ -657,7 +659,10 @@ export function mergeCompositeActions(
         }
     }
     const groups = merged.byHighestScore();
-    groups.forEach((g) => mergeActionGroup(g.item));
+    groups.forEach((g) => {
+        removeDuplicates(g.item.values, compareActionGroupValue);
+        mergeActionGroup(g.item);
+    });
     return groups;
 }
 
@@ -689,7 +694,7 @@ function appendToActionGroup(x: ActionGroup, y: CompositeAction): boolean {
     if (x.subject !== y.subject || x.verbs !== y.verbs) {
         return false;
     }
-    x.args ??= [];
+    x.values ??= [];
     const obj: ActionGroupValue = {};
     if (y.object) {
         obj.object = y.object;
@@ -700,34 +705,59 @@ function appendToActionGroup(x: ActionGroup, y: CompositeAction): boolean {
     if (y.params) {
         obj.params = y.params;
     }
-    x.args.push(obj);
+    x.values.push(obj);
     return true;
 }
 
 function mergeActionGroup(
     group: ActionGroup,
-    mergeLength: number = 3,
+    mergeLength: number = 2,
 ): ActionGroup {
     // Simple merge for now: if all the objects are the same, merge them
-    const args = group.args;
-    if (!args || args.length < mergeLength) {
+    const values = group.values;
+    if (!values || values.length <= mergeLength) {
         return group;
     }
-    const obj = args[0].object;
+    values.sort();
+
+    const obj = values[0].object;
     if (!obj) {
         return group;
     }
-    for (let i = 1; i < args.length; ++i) {
-        if (obj !== args[i].object) {
+    for (let i = 1; i < values.length; ++i) {
+        if (obj !== values[i].object) {
             return group;
         }
     }
     group.object = obj;
-    for (let i = 0; i < args.length; ++i) {
-        delete args[i].object;
+    for (let i = 0; i < values.length; ++i) {
+        delete values[i].object;
     }
 
     return group;
+}
+
+function compareActionGroupValue(
+    x: ActionGroupValue,
+    y: ActionGroupValue,
+    caseSensitive: boolean = true,
+): number {
+    let cmp = collections.stringCompare(x.object, y.object, caseSensitive);
+    if (cmp === 0) {
+        cmp = collections.stringCompare(
+            x.indirectObject,
+            y.indirectObject,
+            caseSensitive,
+        );
+        if (cmp === 0) {
+            cmp = collections.stringCompareArray(
+                x.params,
+                y.params,
+                caseSensitive,
+            );
+        }
+    }
+    return cmp;
 }
 
 function getFullActions(actions: Action[]): Action[] {

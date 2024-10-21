@@ -180,9 +180,9 @@ export class ChatMemoryPrinter extends ChatPrinter {
                 group.object = action.object;
             }
             this.writeRecord(group);
-            if (action.args) {
-                for (let i = 0; i < action.args.length; ++i) {
-                    this.writeRecord(action.args[i], false, undefined, "  ");
+            if (action.values) {
+                for (let i = 0; i < action.values.length; ++i) {
+                    this.writeRecord(action.values[i], false, undefined, "  ");
                     this.writeLine();
                 }
             } else {

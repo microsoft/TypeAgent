@@ -34,11 +34,19 @@ export function lowerAndSort(values: string[] | undefined): void {
     }
 }
 
-export function stringCompare(x: string, y: string, caseSensitive: boolean): number {
-    return caseSensitive ? x.localeCompare(y) : x.localeCompare(y, undefined, { sensitivity: 'base' });    
+const caseInsensitiveOptions: Intl.CollatorOptions = { sensitivity: 'base' };  
+
+export function stringCompare(x: string | undefined, y: string | undefined, caseSensitive: boolean): number {
+    if (x === undefined) {
+         return y === undefined ? 0 : -1;  
+    }
+    if (y === undefined) {
+        return 1;
+    }       
+    return caseSensitive ? x.localeCompare(y) : x.localeCompare(y, undefined, caseInsensitiveOptions);    
 }
 
-export function stringEquals(x: string, y: string, caseSensitive: boolean): boolean {
+export function stringEquals(x: string | undefined, y: string | undefined, caseSensitive: boolean): boolean {
     return caseSensitive ? x === y : stringCompare(x, y, caseSensitive) === 0;    
 }
 
@@ -49,4 +57,28 @@ export function stringHashCode(value: string): number {
         hash = (hash * 33) ^ value.charCodeAt(i);  
     }  
     return hash >>> 0; // Ensure the hash is a positive 32-bit integer  
-}  
+}
+
+export function stringCompareArray(  
+    x: string[] | undefined,  
+    y: string[] | undefined,  
+    caseSensitive: boolean  
+): number {  
+    if (x === undefined) {
+        return y === undefined ? 0 : -1;  
+   }
+   if (y === undefined) {
+       return 1;
+   }       
+    const xLength = x.length;  
+    const yLength = y.length;  
+    const minLength = Math.min(xLength, yLength);  
+    for (let i = 0; i < minLength; i++) {  
+        const cmp = stringCompare(x[i], y[i], caseSensitive);  
+        if (cmp !== 0) {  
+            return cmp;  
+        }  
+    }  
+    // If items are equal, then shorter string is less in ascending order 
+    return (xLength === yLength) ? 0 : (xLength < yLength) ? -1 : 1;
+} 
