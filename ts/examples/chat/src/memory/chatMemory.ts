@@ -310,7 +310,7 @@ export async function runChatMemory(): Promise<void> {
 
     handlers.history.metadata = "Display search history.";
     async function history(
-        args: string[] | NamedArgs,
+        args: string[],
         io: InteractiveIo,
     ): Promise<void> {
         if (context.searchMemory) {
@@ -518,7 +518,7 @@ export async function runChatMemory(): Promise<void> {
     }
 
     handlers.replay.metadata = "Replay the chat";
-    async function replay(args: string[] | NamedArgs, io: InteractiveIo) {
+    async function replay(args: string[], io: InteractiveIo) {
         await writeHistory(context.conversation);
     }
 

@@ -8,7 +8,6 @@ import {
     CommandMetadata,
     InteractiveIo,
     NamedArgs,
-    CommandHandler2,
     addStandardHandlers,
     parseNamedArguments,
     runConsole,
@@ -33,15 +32,11 @@ import {
     loadTypescriptCode,
     sampleFiles,
 } from "./common.js";
-import {
-    createCommandTransformer,
-    completeCommandTransformer,
-} from "./commandTransformer.js";
+import { createCommandTransformer } from "./commandTransformer.js";
 
 export async function runCodeChat(): Promise<void> {
     const model = openai.createChatModel();
     const codeReviewer = createCodeReviewer(model);
-    const commandTransformer = createCommandTransformer(model);
     // For answer/code indexing examples
     const folderPath = "/data/code";
     const vectorModel = openai.createEmbeddingModel();
@@ -61,49 +56,6 @@ export async function runCodeChat(): Promise<void> {
         regex,
         cwd,
     };
-
-    // Handles input not starting with @,
-    // Transforming it into a regular @ command (which it then calls)
-    // or printing an error message.
-    async function inputHandler(
-        line: string,
-        io: InteractiveIo,
-    ): Promise<void> {
-        // Try to pass it to an LLM for transformation in a regular @ command
-        const transformed = (await commandTransformer.transform(line, io)) as
-            | NamedArgs
-            | undefined;
-        // io.writer.writeLine("[Transformed]: " + JSON.stringify(transformed));
-        if (!transformed) {
-            io.writer.writeLine(
-                "Sorry, I didn't get that (or the server is down); try @help",
-            );
-        } else if (transformed.name === "Unknown") {
-            io.writer.writeLine("Sorry, I didn't get that; try @help");
-        } else {
-            const name = transformed.name as string;
-            if (name in handlers) {
-                if (!handlers[name].metadata) {
-                    // Missing metadata: handler ignores arguments
-                    const handler = handlers[name];
-                    await handler([], io);
-                } else if (typeof handlers[name].metadata === "string") {
-                    // Metadata is a string: handler only takes a list of strings
-                    const handler = handlers[name];
-                    await handler(transformed.args, io);
-                } else {
-                    // Otherwise: handler takes a NamedArgs as well (best case)
-                    const handler = handlers[name] as CommandHandler2;
-                    await handler(transformed, io);
-                }
-            } else {
-                // Should never get this if the schema is correct
-                io.writer.writeLine(
-                    `Sorry, I don't know how to handle ${name}; try @help`,
-                );
-            }
-        }
-    }
 
     function onStart(io: InteractiveIo): void {
         printer = new CodePrinter(io);
@@ -479,7 +431,22 @@ export async function runCodeChat(): Promise<void> {
     }
 
     addStandardHandlers(handlers);
-    completeCommandTransformer(handlers, commandTransformer);
+    const commandTransformer = createCommandTransformer(model, handlers);
+
+    // Handles input not starting with @,
+    // Transforming it into a regular @ command (which it then calls)
+    // or printing an error message.
+    async function inputHandler(
+        line: string,
+        io: InteractiveIo,
+    ): Promise<void> {
+        // Pass it to TypeChat to transform and dispatch as an @ command
+        const error = await commandTransformer.transformAndDispatch(line, io);
+        if (error) {
+            io.writer.writeLine("[Error:] " + error + "; try @help");
+            return;
+        }
+    }
 
     await runConsole({
         onStart,
