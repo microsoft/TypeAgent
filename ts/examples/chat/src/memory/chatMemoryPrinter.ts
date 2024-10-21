@@ -168,25 +168,33 @@ export class ChatMemoryPrinter extends ChatPrinter {
     }
 
     public writeActionGroups(actions: conversation.ActionGroup[]) {
-        for (const action of actions) {
-            const group: Record<string, string> = {};
-            if (action.subject) {
-                group.subject = action.subject;
-            }
-            if (action.verbs) {
-                group.verbs = action.verbs;
-            }
-            if (action.object) {
-                group.object = action.object;
-            }
-            this.writeRecord(group);
-            if (action.values) {
-                for (let i = 0; i < action.values.length; ++i) {
-                    this.writeRecord(action.values[i], false, undefined, "  ");
+        if (actions.length > 0) {
+            this.writeTitle("Actions");
+            for (const action of actions) {
+                const group: Record<string, string> = {};
+                if (action.subject) {
+                    group.subject = action.subject;
+                }
+                if (action.verbs) {
+                    group.verbs = action.verbs;
+                }
+                if (action.object) {
+                    group.object = action.object;
+                }
+                this.writeRecord(group);
+                if (action.values) {
+                    for (let i = 0; i < action.values.length; ++i) {
+                        this.writeRecord(
+                            action.values[i],
+                            false,
+                            undefined,
+                            "  ",
+                        );
+                        this.writeLine();
+                    }
+                } else {
                     this.writeLine();
                 }
-            } else {
-                this.writeLine();
             }
         }
     }
@@ -224,11 +232,15 @@ export class ChatMemoryPrinter extends ChatPrinter {
     ) {
         this.writeTopics([...response.allTopics()]);
         this.writeCompositeEntities(
-            response.getCompositeEntities(
+            response.mergeAllEntities(
                 settings?.topKEntities ?? Number.MAX_SAFE_INTEGER,
             ),
         );
-        this.writeActions([...response.allActions()]);
+        this.writeActionGroups(
+            response.mergeAllActions(
+                settings?.topKActions ?? Number.MAX_SAFE_INTEGER,
+            ),
+        );
         if (response.messages) {
             this.writeTemporalBlocks(chalk.cyan, response.messages);
         }

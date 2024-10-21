@@ -630,17 +630,29 @@ export function toCompositeAction(action: Action) {
     return composite;
 }
 
-export function toCompositeActions(
-    actions: Action[],
+/**
+ * Action groups are sorted by relevance
+ * @param actions
+ * @param fullActionsOnly
+ * @returns
+ */
+export function mergeActions(
+    actions: Iterable<Action>,
     fullActionsOnly: boolean = true,
 ): ActionGroup[] {
     if (fullActionsOnly) {
         actions = getFullActions(actions);
     }
-    const merged = mergeCompositeActions(
-        actions.map((a) => toCompositeAction(a)),
-    );
+    const merged = mergeCompositeActions(toCompositeActions(actions));
     return merged.map((a) => a.item);
+}
+
+function* toCompositeActions(
+    actions: Iterable<Action>,
+): IterableIterator<CompositeAction> {
+    for (const a of actions) {
+        yield toCompositeAction(a);
+    }
 }
 
 export function mergeCompositeActions(
@@ -760,14 +772,17 @@ function compareActionGroupValue(
     return cmp;
 }
 
-function getFullActions(actions: Action[]): Action[] {
-    return actions.filter(
-        (a) =>
+function* getFullActions(actions: Iterable<Action>): IterableIterator<Action> {
+    for (const a of actions) {
+        if (
             isEntityName(a.subjectEntityName) &&
             a.verbs &&
             a.verbs.length > 0 &&
-            isEntityName(a.objectEntityName),
-    );
+            isEntityName(a.objectEntityName)
+        ) {
+            yield a;
+        }
+    }
 }
 
 function isEntityName(name: string | undefined): boolean {

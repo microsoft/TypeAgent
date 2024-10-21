@@ -48,6 +48,7 @@ export interface AnswerGenerator {
 
 export type AnswerGeneratorSettings = {
     topKEntities: number;
+    topKActions: number;
     maxCharsInContext?: number | undefined;
     useChunking?: boolean | undefined;
     concurrency?: number;
@@ -59,6 +60,7 @@ export function createAnswerGenerator(
 ): AnswerGenerator {
     const settings = generatorSettings ?? {
         topKEntities: 8,
+        topKActions: 8,
     };
     const translator = createChatTranslator<AnswerResponse>(
         model,
@@ -236,7 +238,7 @@ export function createAnswerGenerator(
         const context: AnswerContext = {
             entities: {
                 timeRanges: response.entityTimeRanges(),
-                values: response.getCompositeEntities(settings!.topKEntities),
+                values: response.mergeAllEntities(settings!.topKEntities),
             },
             topics: {
                 timeRanges: response.topicTimeRanges(),

@@ -49,6 +49,7 @@ export type ChatContext = {
     searchConcurrency: number;
     minScore: number;
     entityTopK: number;
+    actionTopK: number;
     conversationName: string;
     conversationSettings: knowLib.conversation.ConversationSettings;
     conversation: knowLib.conversation.Conversation;
@@ -127,7 +128,8 @@ export async function createChatMemoryContext(
         conversationSettings,
         conversation,
         entityTopK: 16,
-        searcher: createSearchProcessor(conversation, chatModel, true, 16),
+        actionTopK: 16,
+        searcher: createSearchProcessor(conversation, chatModel, true, 16, 16),
         emailMemory: await knowLib.email.createEmailMemory(
             chatModel,
             ReservedConversationNames.outlook,
@@ -167,6 +169,7 @@ export function createSearchProcessor(
     model: ChatModel,
     includeActions: boolean,
     entityTopK: number,
+    actionTopK: number,
 ) {
     const searcher = conversation.createSearchProcessor(
         c,
@@ -177,6 +180,7 @@ export function createSearchProcessor(
             : conversation.KnowledgeSearchMode.Default,
     );
     searcher.answers.settings.topKEntities = entityTopK;
+    searcher.answers.settings.topKActions = actionTopK;
     return searcher;
 }
 
@@ -837,7 +841,7 @@ export async function runChatMemory(): Promise<void> {
             const actions = (await asyncArray.toArray(index.entries())).map(
                 (a) => a.value,
             );
-            const merged = conversation.toCompositeActions(actions);
+            const merged = conversation.mergeActions(actions);
             printer.writeActionGroups(merged);
             return;
         }
@@ -1339,7 +1343,7 @@ export async function runChatMemory(): Promise<void> {
                 const topicIds = new Set(response.allTopicIds());
                 printer.writeLine(`Topic Hit Count: ${topicIds.size}`);
             }
-            const allEntities = response.getCompositeEntities(
+            const allEntities = response.mergeAllEntities(
                 context.searcher.answers.settings.topKEntities,
             );
             if (allEntities && allEntities.length > 0) {

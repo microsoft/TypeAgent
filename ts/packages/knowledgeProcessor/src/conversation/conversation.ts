@@ -55,11 +55,13 @@ import { getRangeOfTemporalSequence } from "../temporal.js";
 import { Action, ConcreteEntity } from "./knowledgeSchema.js";
 import { MessageIndex, createMessageIndex } from "./messages.js";
 import {
+    ActionGroup,
     ActionIndex,
     ActionSearchOptions,
     ActionSearchResult,
     createActionIndex,
     createActionSearchOptions,
+    mergeActions,
 } from "./actions.js";
 import { SearchTermsAction, TermFilter } from "./knowledgeTermSearchSchema.js";
 import {
@@ -233,12 +235,13 @@ export interface SearchResponse<
     allEntities(): IterableIterator<ConcreteEntity>;
     allEntityIds(): IterableIterator<TEntityId>;
     allEntityNames(): string[];
-    getCompositeEntities(topK: number): CompositeEntity[];
     entityTimeRanges(): (dateTime.DateRange | undefined)[];
+    mergeAllEntities(topK: number): CompositeEntity[];
 
     allActions(): IterableIterator<Action>;
     allActionIds(): IterableIterator<TActionId>;
     actionTimeRanges(): (dateTime.DateRange | undefined)[];
+    mergeAllActions(topK: number): ActionGroup[];
 
     getTotalMessageLength(): number;
 
@@ -268,11 +271,12 @@ export function createSearchResponse<
             allEntities,
             allEntityIds,
             allEntityNames,
-            getCompositeEntities: mergeAllEntities,
+            mergeAllEntities,
             entityTimeRanges,
             allActions,
             allActionIds,
             actionTimeRanges,
+            mergeAllActions,
             getTotalMessageLength,
             hasTopics,
             hasEntities,
@@ -386,6 +390,12 @@ export function createSearchResponse<
                   getRangeOfTemporalSequence(a.temporalSequence),
               )
             : [];
+    }
+
+    function mergeAllActions(topK: number = 3): ActionGroup[] {
+        // Returned ranked by most relevant
+        const actionGroups = mergeActions(allActions(), false);
+        return topK > 0 ? actionGroups.slice(0, topK) : actionGroups;
     }
 
     function getTotalMessageLength(): number {
