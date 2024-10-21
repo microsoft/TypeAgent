@@ -327,12 +327,14 @@ function azureImageApiSettingsFromEnv(
 
 /**
  * Loads settings that support local services supporting the Open AI API spec
+ * @param tags Tags for tracking usage of this model instance 
  * @param modelType Type of setting
  * @param env Environment variables
  * @param endpointName
  * @returns API settings, or undefined if endpoint was not defined
  */
 export function localOpenAIApiSettingsFromEnv(
+    tags: string[],
     modelType: ModelType,
     env?: Record<string, string | undefined>,
     endpointName?: string,
@@ -745,6 +747,7 @@ export function createLocalChatModel(
     completionSettings?: CompletionSettings,
 ): ChatModel | undefined {
     const settings = localOpenAIApiSettingsFromEnv(
+        tags,
         ModelType.Chat,
         undefined,
         endpointName,

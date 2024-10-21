@@ -15,6 +15,7 @@ export class TokenCounter {
     private numSamples: number = 0;
     private maxUsage: CompletionUsageStats = { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0};
 
+    // TODO: intermittently cache these with the session
     private constructor() {
         this.counters = new Map<string, CompletionUsageStats>(); 
     }
@@ -63,5 +64,13 @@ export class TokenCounter {
         }
 
         console.log("Token Odometer: " + JSON.stringify(this.totals) + "\nAverage Tokens per call: " + (this.totals.total_tokens / this.numSamples).toFixed(0));
+    }
+
+    public get total(): CompletionUsageStats {
+        return { completion_tokens: this.totals.completion_tokens, prompt_tokens: this.totals.prompt_tokens, total_tokens: this.totals.total_tokens };
+    }
+
+    public get average(): CompletionUsageStats {
+        return { completion_tokens: this.totals.completion_tokens / this.numSamples, prompt_tokens: this.totals.prompt_tokens / this.numSamples, total_tokens: this.totals.total_tokens / this.numSamples };
     }
 }

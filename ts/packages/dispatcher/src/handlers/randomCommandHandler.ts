@@ -98,6 +98,7 @@ class RandomOnlineCommandHandler implements CommandHandlerNoParams {
         let maxWindowLength = 30;
         let chatHistory: PromptSection[] = [];
 
+        // TODO: replace with openai lib calls instead of typechat calls
         const chat = createTypeChat<UserRequestList>(
             chatModel,
             UserRequestSchema,

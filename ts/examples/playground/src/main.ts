@@ -251,6 +251,7 @@ async function runPlayground(): Promise<void> {
         let apiSettings: openai.ApiSettings | undefined;
         if (preferLocal) {
             apiSettings = openai.localOpenAIApiSettingsFromEnv(
+                [ "playground" ],
                 openai.ModelType.Chat,
             );
         }

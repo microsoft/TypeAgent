@@ -10,7 +10,6 @@ import {
 } from "@typeagent/agent-sdk";
 import { createTypeChat, promptLib } from "typeagent";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
-import Path from "path";
 
 import {
     GreetingAction,
@@ -77,6 +76,7 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
         let maxWindowLength = 30;
         let chatHistory: PromptSection[] = [];
 
+        // TODO: replace with openai lib calls instead of typechat calls
         const chat = createTypeChat<GreetingAction>(
             chatModel,
             personalizedGreetingSchema,
@@ -104,6 +104,7 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
         if (!apiSettings) {
             if (fastModel) {
                 apiSettings = openai.localOpenAIApiSettingsFromEnv(
+                    [ "greeting" ],
                     openai.ModelType.Chat,
                     undefined,
                     "GPT_35_TURBO",
@@ -121,7 +122,7 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
             completionSettings.response_format = { type: "json_object" };
         }
         const chatModel = openai.createChatModel(
-            [ Path.parse(__filename).name ],
+            [ "greeting" ],
             apiSettings,
             completionSettings,
         );
