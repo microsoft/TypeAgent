@@ -69,7 +69,7 @@
     "greeting": {
         "type": "module",
         "name": "greeting-agent",
-        "execMode": "separate"
+        "execMode": "dispatcher"
     },
     "image": {
       "type": "module",

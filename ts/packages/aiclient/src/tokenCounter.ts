@@ -73,4 +73,8 @@ export class TokenCounter {
     public get average(): CompletionUsageStats {
         return { completion_tokens: this.totals.completion_tokens / this.numSamples, prompt_tokens: this.totals.prompt_tokens / this.numSamples, total_tokens: this.totals.total_tokens / this.numSamples };
     }
+
+    public get maximum(): CompletionUsageStats {
+        return { completion_tokens: this.maxUsage.completion_tokens, prompt_tokens: this.maxUsage.prompt_tokens, total_tokens: this.maxUsage.total_tokens };
+    }
 }
