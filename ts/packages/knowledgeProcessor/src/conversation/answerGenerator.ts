@@ -51,13 +51,15 @@ export type AnswerGeneratorSettings = {
     topKActions: number;
     maxCharsInContext?: number | undefined;
     useChunking?: boolean | undefined;
+    maxChunks?: number | undefined;
     concurrency?: number;
+    hints?: string | undefined;
 };
 
 export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
     return {
         topKEntities: 8,
-        topKActions: 8,
+        topKActions: 0,
         maxCharsInContext: 4096,
     };
 }
@@ -74,7 +76,9 @@ export function createAnswerGenerator(
     );
 
     return {
-        settings,
+        get settings() {
+            return settings;
+        },
         generateAnswer,
         generateAnswerInChunks,
     };
@@ -121,9 +125,12 @@ export function createAnswerGenerator(
             AnswerResponse | undefined
         >,
     ): Promise<AnswerResponse | undefined> {
-        const chunks = [
+        let chunks = [
             ...splitAnswerContext(context, answerSettings.maxCharsPerChunk),
         ];
+        if (settings.maxChunks && settings.maxChunks) {
+            chunks = chunks.slice(0, settings.maxChunks);
+        }
         const partialAnswers = await asyncArray.mapAsync(
             chunks,
             settings.concurrency ?? 2,
@@ -216,6 +223,9 @@ export function createAnswerGenerator(
         prompt +=
             "Answer the question using only the relevant topics, entities, actions, messages and time ranges/timestamps found in CONVERSATION HISTORY.\n";
         prompt += "Entities and topics are case-insensitive\n";
+        if (settings.hints) {
+            prompt += "\n" + settings.hints;
+        }
         if (higherPrecision) {
             prompt +=
                 "Don't answer if the topics and entity names/types in the question are not in the conversation history.\n";
@@ -249,10 +259,6 @@ export function createAnswerGenerator(
                 timeRanges: response.topicTimeRanges(),
                 values: response.mergeAllTopics(),
             },
-            actions: {
-                timeRanges: response.actionTimeRanges(),
-                values: response.mergeAllActions(settings!.topKActions),
-            },
             messages:
                 response.messages && response.messages.length > 0
                     ? flatten(response.messages, (m) => {
@@ -263,6 +269,15 @@ export function createAnswerGenerator(
                       })
                     : [],
         };
+        if (settings.topKActions > 0 && response.hasActions()) {
+            const actions = response.mergeAllActions(settings!.topKActions);
+            if (actions.length > 0) {
+                context.actions = {
+                    timeRanges: response.actionTimeRanges(),
+                    values: response.mergeAllActions(settings!.topKActions),
+                };
+            }
+        }
         return context;
     }
 

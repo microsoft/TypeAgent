@@ -124,6 +124,7 @@ export async function createChatMemoryContext(
                 conversationPath,
                 false,
                 conversation,
+                chatModel,
             ),
         conversationSettings,
         conversation,
@@ -222,20 +223,21 @@ export async function loadConversation(
                 false,
                 context.conversation,
             );
+        context.searcher = conversation.createSearchProcessor(
+            context.conversation,
+            context.chatModel,
+            context.chatModel,
+            includeActions
+                ? conversation.KnowledgeSearchMode.WithActions
+                : conversation.KnowledgeSearchMode.Default,
+        );
     } else {
         context.conversation = reservedCm.conversation;
         context.conversationName = name;
         context.conversationManager = reservedCm;
+        context.searcher = reservedCm.searchProcessor;
         exists = true;
     }
-    context.searcher = conversation.createSearchProcessor(
-        context.conversation,
-        context.chatModel,
-        context.chatModel,
-        includeActions
-            ? conversation.KnowledgeSearchMode.WithActions
-            : conversation.KnowledgeSearchMode.Default,
-    );
     if (name !== "search") {
         context.searchMemory = await createSearchMemory(context);
     }
@@ -267,7 +269,6 @@ export async function runChatMemory(): Promise<void> {
         tokenLog,
     };
     addStandardHandlers(handlers);
-
     await runConsole({
         onStart,
         inputHandler,
@@ -303,6 +304,7 @@ export async function runChatMemory(): Promise<void> {
     function printStats(req: any, response: any): void {
         if (showTokenStats) {
             printer.writeCompletionStats(response.usage);
+            printer.writeLine();
         }
     }
     //--------------------
@@ -910,7 +912,7 @@ export async function runChatMemory(): Promise<void> {
                 debug: argBool("Show debug info", false),
                 save: argBool("Save the search", false),
                 v2: argBool("Run V2 match", false),
-                chunkSize: argChunkSize(context.maxCharsPerChunk * 2),
+                chunk: argBool("Use chunking", true),
             },
         };
     }
@@ -1152,12 +1154,7 @@ export async function runChatMemory(): Promise<void> {
             return;
         }
 
-        if (namedArgs.chunkSize) {
-            searcher.answers.settings.maxCharsInContext = namedArgs.chunkSize;
-            searcher.answers.settings.useChunking = namedArgs.chunkSize > 0;
-        } else {
-            searcher.answers.settings.useChunking = false;
-        }
+        searcher.answers.settings.useChunking = namedArgs.chunk === true;
 
         const timestampQ = new Date();
         let result:
