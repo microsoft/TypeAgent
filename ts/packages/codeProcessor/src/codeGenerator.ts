@@ -6,6 +6,7 @@ import { CodeGenResponse } from "./codeGenSchema.js";
 import { openai } from "aiclient";
 import { getData, PromptSection, TypeChatLanguageModel } from "typechat";
 import { Api, createApiSection } from "./code.js";
+import Path from "path";
 
 export type CodeType = "Function" | "Class" | string;
 export type CodeDefinition = {
@@ -38,7 +39,7 @@ export interface CodeGenerator {
 export function createCodeGenerator(
     model?: TypeChatLanguageModel | undefined,
 ): CodeGenerator {
-    model ??= openai.createChatModel();
+    model ??= openai.createChatModel([ Path.parse(__filename).name ]);
     const codeGenSchema = ["codeGenSchema.ts"];
     const codeGenTranslator = createTranslator<CodeGenResponse>(
         model,

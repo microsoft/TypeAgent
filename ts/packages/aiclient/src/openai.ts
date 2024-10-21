@@ -27,6 +27,7 @@ import {
     createAzureTokenProvider,
 } from "./auth";
 import registerDebug from "debug";
+import { TokenCounter } from "./tokenCounter";
 
 const debugOpenAI = registerDebug("typeagent:openai");
 
@@ -380,16 +381,6 @@ async function createApiHeaders(settings: ApiSettings): Promise<Result<any>> {
     return success(apiHeaders);
 }
 
-// Statistics returned by the OAI api
-export type CompletionUsageStats = {
-    // Number of tokens in the generated completion
-    completion_tokens: number;
-    // Number of tokens in the prompt
-    prompt_tokens: number;
-    // Total tokens (prompt + completion)
-    total_tokens: number;
-};
-
 // Parse the endpoint name with the following naming conventions
 //
 // - By default, if endpoint name is not specified, it defaults to `OPENAI_ENDPOINT` if it exists, and `AZURE_OPENAI_ENDPOINT` otherwise.
@@ -463,6 +454,9 @@ export function supportsStreaming(
 
 type FilterResult = {
     hate?: Filter;
+    jailbreak?: Filter;
+    protected_material_code?: Filter;
+    protected_material_text?: Filter;
     self_harm?: Filter;
     sexual?: Filter;
     violence?: Filter;
@@ -477,12 +471,14 @@ type FilterError = {
 type Filter = {
     filtered: boolean;
     severity: string;
+    detected?: boolean;
 };
 
 // NOTE: these are not complete
 type ChatCompletion = {
     id: string;
     choices: ChatCompletionChoice[];
+    usage: CompletionUsageStats;
 };
 
 type ChatCompletionChoice = {
@@ -519,6 +515,16 @@ type ImageData = {
     url: string;
 };
 
+// Statistics returned by the OAI api
+export type CompletionUsageStats = {
+    // Number of tokens in the generated completion
+    completion_tokens: number;
+    // Number of tokens in the prompt
+    prompt_tokens: number;
+    // Total tokens (prompt + completion)
+    total_tokens: number;
+};
+
 /**
  * Create a client for an Open AI chat model
  *  createChatModel()
@@ -530,10 +536,12 @@ type ImageData = {
  *     You supply API settings
  *  createChatModel(apiSettings)
  *     You supply API settings
+ * @param tags Tags for tracking usage of this model instance 
  * @param endpoint The name of the API endpoint OR explicit API settings with which to create a client
  * @returns ChatModel
  */
 export function createChatModel(
+    tags: string[],
     endpoint?: string | ApiSettings,
     completionSettings?: CompletionSettings,
     responseCallback?: (request: any, response: any) => void,
@@ -605,6 +613,9 @@ export function createChatModel(
         if (responseCallback) {
             responseCallback(params, data);
         }
+
+        // track token usage
+        TokenCounter.getInstance().add(data.usage);
 
         return success(data.choices[0].message?.content ?? "");
     }
@@ -708,24 +719,28 @@ function verifyFilterResults(filterResult: FilterResult) {
 /**
  * Return a Chat model that returns JSON
  * Uses the type: json_object flag
+ * @param tags - Tags for tracking this model's usage
  * @param endpoint
  * @returns ChatModel
  */
 export function createJsonChatModel(
+    tags: string[],
     endpoint?: string | ApiSettings,
 ): ChatModel {
-    return createChatModel(endpoint, {
+    return createChatModel(tags, endpoint, {
         response_format: { type: "json_object" },
     });
 }
 
 /**
  * Model that supports OpenAI api, but running locally
+ * @param tags - Tags for tracking this model's usage
  * @param endpointName
  * @param completionSettings
  * @returns If no local Api settings found, return undefined
  */
 export function createLocalChatModel(
+    tags: string[],
     endpointName?: string,
     completionSettings?: CompletionSettings,
 ): ChatModel | undefined {
@@ -734,20 +749,22 @@ export function createLocalChatModel(
         undefined,
         endpointName,
     );
-    return settings ? createChatModel(settings, completionSettings) : undefined;
+    return settings ? createChatModel(tags, settings, completionSettings) : undefined;
 }
 
 export type AzureChatModelName = "GPT_4" | "GPT_35_TURBO" | "GPT_4_O";
 /**
  * Create one of AI System's standard Chat Models
+ * @param tags - Tags for tracking this model's usage
  * @param modelName
  * @returns
  */
 export function createStandardAzureChatModel(
+    tags: string[],
     modelName: AzureChatModelName,
 ): ChatModel {
     const endpointName = modelName === "GPT_4" ? undefined : modelName; // GPT_4 is the default model
-    return createJsonChatModel(endpointName);
+    return createJsonChatModel(tags, endpointName);
 }
 
 /**

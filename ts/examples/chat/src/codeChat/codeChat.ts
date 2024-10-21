@@ -37,9 +37,10 @@ import {
     createCommandTransformer,
     completeCommandTransformer,
 } from "./commandTransformer.js";
+import Path from "path";
 
 export async function runCodeChat(): Promise<void> {
-    const model = openai.createChatModel();
+    const model = openai.createChatModel([ Path.parse(__filename).name ]);
     const codeReviewer = createCodeReviewer(model);
     const commandTransformer = createCommandTransformer(model);
     // For answer/code indexing examples

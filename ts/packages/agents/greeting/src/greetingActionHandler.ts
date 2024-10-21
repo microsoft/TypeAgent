@@ -10,6 +10,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { createTypeChat, promptLib } from "typeagent";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
+import Path from "path";
 
 import {
     GreetingAction,
@@ -120,6 +121,7 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
             completionSettings.response_format = { type: "json_object" };
         }
         const chatModel = openai.createChatModel(
+            [ Path.parse(__filename).name ],
             apiSettings,
             completionSettings,
         );

@@ -266,6 +266,7 @@ async function runPlayground(): Promise<void> {
             completionSettings.response_format = { type: "json_object" };
         }
         const chatModel = openai.createChatModel(
+            [ "playground" ],
             apiSettings,
             completionSettings,
         );

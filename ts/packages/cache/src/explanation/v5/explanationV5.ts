@@ -62,6 +62,8 @@ import {
 } from "../../constructions/matchPart.js";
 import { Transforms } from "../../constructions/transforms.js";
 
+import Path from 'path';
+
 type Explanation = PropertyExplanation &
     SubPhraseExplanation &
     AlternativesExplanation;
@@ -307,7 +309,7 @@ async function augmentExplanation(
             if (paramRange) {
                 const subPhrases = param.propertySubPhrases;
                 if (subPhrases.length === 1) {
-                    const model = openai.createChatModel(undefined, {
+                    const model = openai.createChatModel([ Path.parse(__filename).name ], undefined, {
                         response_format: { type: "json_object" },
                     });
                     const subPhrase = subPhrases[0];
