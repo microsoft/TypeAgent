@@ -18,6 +18,10 @@
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "runchat": "node dist/main.js memory",
+    "runcode": "node dist/main.js code",
+    "runcodememory": "node dist/main.js codeMemory",
+    "runtests": "node dist/main.js tests",
     "tsc": "tsc -p src"
   },
   "dependencies": {

@@ -79,9 +79,7 @@ const agentInvokeHandlers: AgentInvokeFunctions = {
             getActionContextShim(param),
         );
     },
-    async validateWildcardMatch(
-        param: Partial<ContextParams> & { action: JSONAction },
-    ): Promise<any> {
+    async validateWildcardMatch(param): Promise<any> {
         if (agent.validateWildcardMatch === undefined) {
             throw new Error("Invalid invocation of validateWildcardMatch");
         }
@@ -90,12 +88,7 @@ const agentInvokeHandlers: AgentInvokeFunctions = {
             getSessionContextShim(param),
         );
     },
-    async getDynamicDisplay(
-        param: Partial<ContextParams> & {
-            type: DisplayType;
-            displayId: string;
-        },
-    ): Promise<any> {
+    async getDynamicDisplay(param): Promise<any> {
         if (agent.getDynamicDisplay === undefined) {
             throw new Error("Invalid invocation of getDynamicDisplay");
         }
@@ -105,7 +98,7 @@ const agentInvokeHandlers: AgentInvokeFunctions = {
             getSessionContextShim(param),
         );
     },
-    async closeAgentContext(param: Partial<ContextParams>): Promise<any> {
+    async closeAgentContext(param): Promise<any> {
         const result = await agent.closeAgentContext?.(
             getSessionContextShim(param),
         );
@@ -113,18 +106,13 @@ const agentInvokeHandlers: AgentInvokeFunctions = {
         return result;
     },
 
-    async getCommands(param: Partial<ContextParams>): Promise<any> {
+    async getCommands(param): Promise<any> {
         if (agent.getCommands === undefined) {
             throw new Error("Invalid invocation of getCommands");
         }
         return agent.getCommands(getSessionContextShim(param));
     },
-    async executeCommand(
-        param: Partial<ActionContextParams> & {
-            commands: string[];
-            params: ParsedCommandParams<ParameterDefinitions> | undefined;
-        },
-    ) {
+    async executeCommand(param) {
         if (agent.executeCommand === undefined) {
             throw new Error("Invalid invocation of executeCommand");
         }
@@ -132,6 +120,37 @@ const agentInvokeHandlers: AgentInvokeFunctions = {
             param.commands,
             param.params,
             getActionContextShim(param),
+        );
+    },
+    async getTemplateSchema(param) {
+        if (agent.getTemplateSchema === undefined) {
+            throw new Error("Invalid invocation of getTemplateSchema");
+        }
+        return agent.getTemplateSchema(
+            param.templateName,
+            param.data,
+            getSessionContextShim(param),
+        );
+    },
+    async getTemplateCompletion(param) {
+        if (agent.getTemplateCompletion === undefined) {
+            throw new Error("Invalid invocation of getTemplateCompletion");
+        }
+        return agent.getTemplateCompletion(
+            param.templateName,
+            param.data,
+            param.propertyName,
+            getSessionContextShim(param),
+        );
+    },
+    async getActionCompletion(param) {
+        if (agent.getActionCompletion === undefined) {
+            throw new Error("Invalid invocation of getActionCompletion");
+        }
+        return agent.getActionCompletion(
+            param.partialAction,
+            param.propertyName,
+            getSessionContextShim(param),
         );
     },
 };

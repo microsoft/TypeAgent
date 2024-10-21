@@ -17,6 +17,7 @@ import {
     DisplayType,
     AppAgentEvent,
     DynamicDisplay,
+    AppActionWithParameters,
 } from "@typeagent/agent-sdk";
 import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import { searchAlbum, searchArtists, searchTracks } from "../client.js";
@@ -31,6 +32,7 @@ export function instantiate(): AppAgent {
         validateWildcardMatch: validatePlayerWildcardMatch,
         getDynamicDisplay: getPlayerDynamicDisplay,
         ...getPlayerCommandInterface(),
+        getActionCompletion: getPlayerActionComplete,
     };
 }
 
@@ -175,4 +177,76 @@ async function getPlayerDynamicDisplay(
         };
     }
     throw new Error(`Invalid displayId ${displayId}`);
+}
+
+async function getPlayerActionComplete(
+    action: AppActionWithParameters,
+    propertyName: string,
+    context: SessionContext<PlayerActionContext>,
+): Promise<string[]> {
+    if (action.actionName !== "play") {
+        return [];
+    }
+    const userData = context.agentContext.spotify?.userData;
+    if (userData === undefined) {
+        return [];
+    }
+    if (!propertyName.startsWith("parameters.query.")) {
+        return [];
+    }
+    const suffix = propertyName.substring("parameters.query.".length);
+    if (suffix === "") {
+        return [];
+    }
+
+    const split = suffix.split(".");
+    if (split.length > 2) {
+        // Not a valid property.
+        return [];
+    }
+    const index = parseInt(split[0]);
+    if (index.toString() !== split[0] || split[1] !== "text") {
+        // Not a valid index
+        return [];
+    }
+
+    const playAction = action as Partial<PlayAction>;
+    let track: boolean = true;
+    let album: boolean = true;
+    let artist: boolean = true;
+    switch (playAction.parameters?.query?.[index]?.constraint) {
+        case "track":
+            album = false;
+            artist = false;
+            break;
+        case "album":
+            track = false;
+            artist = false;
+            break;
+        case "artist":
+            track = false;
+            album = false;
+            break;
+    }
+
+    const result: string[] = [];
+
+    if (track) {
+        for (const track of userData.data.tracks.values()) {
+            result.push(track.name);
+        }
+    }
+
+    if (artist) {
+        for (const artist of userData.data.artists.values()) {
+            result.push(artist.name);
+        }
+    }
+
+    if (album) {
+        for (const album of userData.data.albums.values()) {
+            result.push(album.name);
+        }
+    }
+    return result;
 }

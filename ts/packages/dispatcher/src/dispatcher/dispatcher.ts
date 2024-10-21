@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DisplayType, DynamicDisplay } from "@typeagent/agent-sdk";
+import { AppAction, DisplayType, DynamicDisplay } from "@typeagent/agent-sdk";
 import {
-    getPartialCompletion,
+    getCommandCompletion,
     getPrompt,
     getSettingSummary,
     getTranslatorNameToEmojiMap,
@@ -18,8 +18,10 @@ import {
 import { RequestId } from "../handlers/common/interactiveIO.js";
 import { RequestMetrics } from "../utils/metrics.js";
 import { TemplateSchema } from "../../../agentSdk/dist/templateInput.js";
+import { getTranslatorActionInfos } from "../translation/actionInfo.js";
+import { getAppAgentName } from "../translation/agentTranslators.js";
 
-export type PartialCompletionResult = {
+export type CommandCompletionResult = {
     partial: string; // The head part of the completion
     space: boolean; // require space between partial and prefix
     prefix: string; // the prefix for completion match
@@ -32,19 +34,28 @@ export interface Dispatcher {
         requestId?: RequestId,
         attachments?: string[],
     ): Promise<RequestMetrics | undefined>;
-    getPartialCompletion(
-        prefix: string,
-    ): Promise<PartialCompletionResult | undefined>;
+
     getDynamicDisplay(
         appAgentName: string,
         type: DisplayType,
         id: string,
     ): Promise<DynamicDisplay>;
     getTemplateSchema(
-        appAgentName: string,
+        templateAgentName: string,
         templateName: string,
         data: unknown,
-    ): TemplateSchema;
+    ): Promise<TemplateSchema>;
+
+    getTemplateCompletion(
+        templateAgentName: string,
+        templateName: string,
+        data: unknown,
+        propertyName: string,
+    ): Promise<string[] | undefined>;
+
+    getCommandCompletion(
+        prefix: string,
+    ): Promise<CommandCompletionResult | undefined>;
     close(): Promise<void>;
 
     // TODO: Review these APIs
@@ -72,16 +83,40 @@ async function getDynamicDisplay(
 
 function getTemplateSchema(
     context: CommandHandlerContext,
-    appAgentName: string,
+    templateAgentName: string,
     templateName: string,
     data: unknown,
-): TemplateSchema {
-    const appAgent = context.agents.getAppAgent(appAgentName);
+): Promise<TemplateSchema> {
+    const appAgent = context.agents.getAppAgent(templateAgentName);
     if (appAgent.getTemplateSchema === undefined) {
-        throw new Error(`Template schema not supported by '${appAgentName}'`);
+        throw new Error(
+            `Template schema not supported by '${templateAgentName}'`,
+        );
     }
-    const sessionContext = context.agents.getSessionContext(appAgentName);
+    const sessionContext = context.agents.getSessionContext(templateAgentName);
     return appAgent.getTemplateSchema(templateName, data, sessionContext);
+}
+
+async function getTemplateCompletion(
+    templateAgentName: string,
+    templateName: string,
+    data: unknown,
+    propertyName: string,
+    context: CommandHandlerContext,
+) {
+    const appAgent = context.agents.getAppAgent(templateAgentName);
+    if (appAgent.getTemplateCompletion === undefined) {
+        throw new Error(
+            `Template schema not supported by '${templateAgentName}'`,
+        );
+    }
+    const sessionContext = context.agents.getSessionContext(templateAgentName);
+    return appAgent.getTemplateCompletion(
+        templateName,
+        data,
+        propertyName,
+        sessionContext,
+    );
 }
 
 export type DispatcherOptions = InitializeCommandHandlerContextOptions;
@@ -94,14 +129,34 @@ export async function createDispatcher(
         processCommand(command, requestId, attachments) {
             return processCommand(command, context, requestId, attachments);
         },
-        getPartialCompletion(prefix) {
-            return getPartialCompletion(prefix, context);
+        getCommandCompletion(prefix) {
+            return getCommandCompletion(prefix, context);
         },
+
         getDynamicDisplay(appAgentName, type, id) {
             return getDynamicDisplay(context, appAgentName, type, id);
         },
-        getTemplateSchema(appAgentName, templateName, data) {
-            return getTemplateSchema(context, appAgentName, templateName, data);
+        getTemplateSchema(templateAgentName, templateName, data) {
+            return getTemplateSchema(
+                context,
+                templateAgentName,
+                templateName,
+                data,
+            );
+        },
+        getTemplateCompletion(
+            templateAgentName,
+            templateName,
+            data,
+            propertyName,
+        ) {
+            return getTemplateCompletion(
+                templateAgentName,
+                templateName,
+                data,
+                propertyName,
+                context,
+            );
         },
         async close() {
             await closeCommandHandlerContext(context);

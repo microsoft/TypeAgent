@@ -47,6 +47,10 @@ export class SearchMenu {
         return this.searchContainer;
     }
 
+    public isActive() {
+        return this.searchContainer.parentElement !== null;
+    }
+
     public selectCompletion(index: number) {
         if (index >= 0 && index < this.items.length) {
             this.onCompletion(this.items[index]);
@@ -168,6 +172,11 @@ export class SearchMenu {
                 resultSpan.innerText = suffix;
                 li.appendChild(resultSpan);
                 this.completions.appendChild(li);
+
+                li.onclick = () => {
+                    this.onCompletion(item);
+                };
+
                 if (i === this.items.length - 1) {
                     break;
                 }

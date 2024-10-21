@@ -477,11 +477,14 @@ export function createNamedArgs(): NamedArgs {
  * @returns An JSON object, where property name is the key, and value is the argument value
  */
 export function parseNamedArguments(
-    args: string | string[],
+    args: string | string[] | NamedArgs,
     argDefs?: CommandMetadata,
     namePrefix: string = "--",
     shortNamePrefix: string = "-",
 ): NamedArgs {
+    if (typeof args === "object" && !(args instanceof Array)) {
+        return args;
+    }
     const rawArgs = typeof args === "string" ? parseCommandLine(args) : args;
     let namedArgs = createNamedArgs();
     if (!rawArgs) {
@@ -556,7 +559,7 @@ export function createCommand(
     fn: (args: string[], io: InteractiveIo) => Promise<CommandResult>,
     metadata?: string | CommandMetadata,
     usage?: string,
-): CommandHandler {
+): CommandHandler1 {
     const handler: CommandHandler = fn;
     if (metadata) {
         handler.metadata = metadata;
