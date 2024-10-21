@@ -14,8 +14,8 @@ import { flatten } from "../setOperations.js";
 import { SearchResponse } from "./conversation.js";
 import registerDebug from "debug";
 import { CompositeEntity } from "./entities.js";
-import { Action } from "./knowledgeSchema.js";
 import { splitLargeTextIntoChunks } from "../textChunker.js";
+import { ActionGroup } from "./actions.js";
 
 const answerError = registerDebug("knowledge-processor:answerGenerator:error");
 
@@ -244,6 +244,10 @@ export function createAnswerGenerator(
                 timeRanges: response.topicTimeRanges(),
                 values: response.mergeAllTopics(),
             },
+            actions: {
+                timeRanges: response.actionTimeRanges(),
+                values: response.mergeAllActions(settings!.topKActions),
+            },
             messages:
                 response.messages && response.messages.length > 0
                     ? flatten(response.messages, (m) => {
@@ -254,13 +258,6 @@ export function createAnswerGenerator(
                       })
                     : [],
         };
-        const actions = [...response.allActions()];
-        if (actions.length > 0) {
-            context.actions = {
-                timeRanges: response.actionTimeRanges(),
-                values: actions,
-            };
-        }
         return context;
     }
 
@@ -305,7 +302,7 @@ export type AnswerContextItem<T> = {
 export type AnswerContext = {
     entities?: AnswerContextItem<CompositeEntity> | undefined;
     topics?: AnswerContextItem<string> | undefined;
-    actions?: AnswerContextItem<Action> | undefined;
+    actions?: AnswerContextItem<ActionGroup> | undefined;
     messages?: dateTime.Timestamped<string>[] | undefined;
 };
 
