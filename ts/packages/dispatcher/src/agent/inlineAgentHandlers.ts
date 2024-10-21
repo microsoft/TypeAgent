@@ -47,6 +47,7 @@ import {
     getSystemTemplateCompletion,
     getSystemTemplateSchema,
 } from "../translation/actionTemplate.js";
+import { Action } from "agent-cache";
 
 function executeSystemAction(
     action: AppAction,
@@ -165,6 +166,7 @@ const dispatcherHandlers: CommandHandlerTable = {
 const systemHandlers: CommandHandlerTable = {
     description: "Type Agent System Commands",
     commands: {
+        action: new ActionCommandHandler(),
         session: getSessionCommandHandlers(),
         history: getHistoryCommandHandlers(),
         const: getConstructionCommandHandlers(),
@@ -193,6 +195,42 @@ const systemHandlers: CommandHandlerTable = {
         notify: getNotifyCommandHandlers(),
     },
 };
+
+class ActionCommandHandler implements CommandHandler {
+    parameters: {
+        args: {
+            translatorName: {
+                description: "Action translator name",
+            };
+            actionName: {
+                description: "Action name",
+            }
+        },
+        flags: {
+            parameter: {
+                description: "Action parameter",
+                optional: true,
+                multiple: true,
+            }
+        }
+    },
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const { translatorName, actionName } = params.args;
+        const pararmeters = params.flags.parameter?.map((p) => {
+            const [key, value] = p.split("=");
+            return [ key, value];
+        });
+        const action: Action = {
+            translatorName,
+            actionName,
+            parameters: 
+        }
+        return executeSystemAction(action, context);
+    }
+}
 
 const inlineHandlers: { [key: string]: AppAgent } = {
     dispatcher: {
