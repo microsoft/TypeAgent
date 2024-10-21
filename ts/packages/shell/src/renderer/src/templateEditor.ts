@@ -299,14 +299,15 @@ abstract class FieldBase extends FieldRow {
     }
     public updateValueDisplay(updateParent: boolean = false) {
         const value = this.getValue();
+        const valid = this.isValidValue(value);
         if (value !== undefined) {
             this.setMissing(false);
-            this.setValid(this.isValidValue(value));
+            this.setValid(valid);
             this.valueCell.innerText =
                 typeof value === "object" ? "" : value.toString();
         } else {
             this.setMissing(true);
-            this.setValid(this.optional);
+            this.setValid(valid || this.optional);
             this.valueCell.innerText = "";
         }
 
@@ -755,7 +756,6 @@ const enum ButtonIndex {
 }
 
 class FieldObject extends FieldGroup {
-    private readonly hasRequiredFields: boolean;
     constructor(
         data: FieldContainer,
         fullPropertyName: string,
@@ -766,20 +766,14 @@ class FieldObject extends FieldGroup {
         parent?: FieldGroup,
     ) {
         super(data, fullPropertyName, paramName, optional, level, parent);
-        const fields = Object.values(fieldTypes);
-        this.hasRequiredFields =
-            fields.length === 0 ||
-            Object.values(fields).some((f) => !f.optional);
         this.updateValueDisplay();
         this.createChildFields();
     }
 
-    protected isValidValue(value: any) {
-        // Missing required fields will count as errors already
-        return (
-            this.hasRequiredFields ||
-            (typeof value === "object" && !Array.isArray(value))
-        );
+    protected isValidValue(_value: any) {
+        // Object are always valid whether the actual value is correct,
+        // The fields will be invalid if the value isn't
+        return true;
     }
 
     private createChildFields() {
