@@ -23,6 +23,7 @@ export {
 } from "./command.js";
 
 export {
+    ObjectValue,
     FlagValueTypes,
     ParameterDefinitions,
     ParsedCommandParams,

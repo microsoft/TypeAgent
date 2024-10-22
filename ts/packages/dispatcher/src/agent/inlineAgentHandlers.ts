@@ -47,7 +47,7 @@ import {
     getSystemTemplateCompletion,
     getSystemTemplateSchema,
 } from "../translation/actionTemplate.js";
-import { Action, Actions, FullAction } from "agent-cache";
+import { Actions, FullAction } from "agent-cache";
 import { getTranslatorActionInfos } from "../translation/actionInfo.js";
 import { executeActions } from "../action/actionHandlers.js";
 
@@ -178,10 +178,9 @@ class ActionCommandHandler implements CommandHandler {
         },
         flags: {
             parameter: {
-                char: "p",
                 description: "Action parameter",
                 optional: true,
-                multiple: true,
+                type: "json",
             },
         },
     } as const;
@@ -199,18 +198,12 @@ class ActionCommandHandler implements CommandHandler {
                 `Invalid action name ${actionName} for translator ${translatorName}`,
             );
         }
-        const parameters: Record<string, any> = {};
-        if (params.flags.parameter) {
-            for (const parameter of params.flags.parameter) {
-                const split = parameter.split("=");
-            }
-        }
 
-        // TODO: needs to validate
+        // TODO: needs to validate the type
         const action: FullAction = {
             translatorName,
             actionName,
-            parameters,
+            parameters: (params.flags.parameter as any) ?? {},
         };
 
         return executeActions(Actions.fromFullActions([action]), context);

@@ -327,6 +327,17 @@ export async function createAgentProcessShim(
         ): Promise<CommandDescriptors> {
             return rpc.invoke("getCommands", getContextParam(context));
         },
+        getCommandCompletion(
+            commands: string[],
+            params: ParsedCommandParams<ParameterDefinitions> | undefined,
+            context: SessionContext<ShimContext>,
+        ) {
+            return rpc.invoke("getCommandCompletion", {
+                ...getContextParam(context),
+                commands,
+                params,
+            });
+        },
         executeCommand(
             commands: string[],
             params: ParsedCommandParams<ParameterDefinitions> | undefined,

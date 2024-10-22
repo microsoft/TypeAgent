@@ -112,6 +112,16 @@ const agentInvokeHandlers: AgentInvokeFunctions = {
         }
         return agent.getCommands(getSessionContextShim(param));
     },
+    async getCommandCompletion(param): Promise<string[]> {
+        if (agent.getCommandCompletion === undefined) {
+            throw new Error("Invalid invocation of getCommandCompletion");
+        }
+        return agent.getCommandCompletion(
+            param.commands,
+            param.params,
+            getSessionContextShim(param),
+        );
+    },
     async executeCommand(param) {
         if (agent.executeCommand === undefined) {
             throw new Error("Invalid invocation of executeCommand");
