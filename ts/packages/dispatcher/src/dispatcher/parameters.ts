@@ -3,6 +3,7 @@
 
 import {
     FlagValueTypes,
+    ObjectValue,
     ParameterDefinitions,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk";
@@ -11,6 +12,7 @@ import {
     getFlagType,
     resolveFlag,
 } from "@typeagent/agent-sdk/helpers/command";
+import { setObjectProperty } from "common-utils";
 
 function parseIntParameter(
     valueStr: string,
@@ -42,6 +44,11 @@ function parseJsonParameter(
             `Invalid JSON value for ${kind} '${name}': ${e.message}`,
         );
     }
+}
+
+function parseJsonProperty(valueStr: string, curr: ObjectValue, name: string) {
+    const data = { obj: curr };
+    setObjectProperty(data, "obj", name, valueStr, true);
 }
 
 function stripQuoteFromToken(term: string) {
@@ -133,7 +140,12 @@ export function parseParams<T extends ParameterDefinitions>(
                     if (valueType === "number") {
                         value = parseIntParameter(stripped, "flag", next);
                     } else if (valueType === "json") {
-                        value = parseJsonParameter(stripped, "flag", next);
+                        if (next.startsWith(`--${name}.`)) {
+                            value = (parsedFlags[name] as ObjectValue) ?? {};
+                            parseJsonProperty(stripped, value, next);
+                        } else {
+                            value = parseJsonParameter(stripped, "flag", next);
+                        }
                     } else {
                         value = stripped;
                     }
