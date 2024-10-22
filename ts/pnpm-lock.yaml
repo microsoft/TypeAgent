@@ -1272,9 +1272,6 @@ importers:
       rimraf:
         specifier: ^5.0.5
         version: 5.0.5
-      type-fest:
-        specifier: ^4.26.1
-        version: 4.26.1
       typescript:
         specifier: ^5.4.2
         version: 5.4.3
