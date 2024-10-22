@@ -47,7 +47,7 @@ import {
     getSystemTemplateCompletion,
     getSystemTemplateSchema,
 } from "../translation/actionTemplate.js";
-import { Action } from "agent-cache";
+import { Action, Actions, FullAction } from "agent-cache";
 import { getTranslatorActionInfos } from "../translation/actionInfo.js";
 import { executeActions } from "../action/actionHandlers.js";
 
@@ -205,13 +205,15 @@ class ActionCommandHandler implements CommandHandler {
                 const split = parameter.split("=");
             }
         }
-        const _action: AppAction = {
+
+        // TODO: needs to validate
+        const action: FullAction = {
             translatorName,
             actionName,
             parameters,
         };
-        // return executeActions(action, context);
-        return;
+
+        return executeActions(Actions.fromFullActions([action]), context);
     }
 }
 

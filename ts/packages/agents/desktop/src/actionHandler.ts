@@ -9,6 +9,7 @@ import {
     runDesktopActions,
     setupDesktopActionContext,
 } from "./connector.js";
+import { DesktopActions } from "./actionsSchema.js";
 export function instantiate() {
     return {
         initializeAgentContext: initializeDesktopContext,
@@ -43,7 +44,7 @@ async function executeDesktopAction(
     context: ActionContext<DesktopActionContext>,
 ) {
     const message = await runDesktopActions(
-        action,
+        action as DesktopActions,
         context.sessionContext.agentContext,
     );
     return createActionResult(message);
