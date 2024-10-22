@@ -64,6 +64,8 @@ export async function runCodeMemory(): Promise<void> {
         codeSearch,
         bugs,
         comments,
+        cwd,
+        cd,
     };
     addStandardHandlers(handlers);
 
@@ -79,7 +81,7 @@ export async function runCodeMemory(): Promise<void> {
             options: {
                 sourceFile: argSourceFile(),
                 verbose: argVerbose(),
-                save: argSave(),
+                save: argSave(true),
             },
         };
     }
@@ -202,13 +204,13 @@ export async function runCodeMemory(): Promise<void> {
         const sourceFile = await tsCode.loadSourceFile(fullPath);
         // Currently, we only import top level statements from the file
         let statements = tsCode.getTopLevelStatements(sourceFile);
+        statements = statements.filter(
+            (s) => tsCode.getStatementName(s) !== undefined,
+        );
         if (statements.length === 0) {
             printer.writeLine("No top level statements.");
             return;
         }
-        statements = statements.filter(
-            (s) => tsCode.getStatementName(s) !== undefined,
-        );
         const concurrency = namedArgs.concurrency;
         for (let i = 0; i < statements.length; i += concurrency) {
             let slice = statements.slice(i, i + concurrency);
@@ -318,6 +320,20 @@ export async function runCodeMemory(): Promise<void> {
                 printer.writeComment(l),
             );
         }
+    }
+
+    async function cwd() {
+        printer.writeLine(process.cwd());
+    }
+
+    handlers.cd.metadata = "Change current directory";
+    async function cd(args: string[]) {
+        if (args.length === 0) {
+            printer.writeLine("No directory specified.");
+            return;
+        }
+        process.chdir(args[0]);
+        printer.writeLine(process.cwd());
     }
 
     async function saveGeneratedCode(
