@@ -56,6 +56,7 @@ export async function runCodeChat(): Promise<void> {
         regex,
         cwd,
     };
+    addStandardHandlers(handlers);
 
     function onStart(io: InteractiveIo): void {
         printer = new CodePrinter(io);
@@ -430,7 +431,6 @@ export async function runCodeChat(): Promise<void> {
         }
     }
 
-    addStandardHandlers(handlers);
     const commandTransformer = createCommandTransformer(model, handlers);
 
     // Handles input not starting with @,
