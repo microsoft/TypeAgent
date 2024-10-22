@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { PromptSection } from "typechat";
-import { Entity } from "@typeagent/agent-sdk";
+import { AppAction, Entity } from "@typeagent/agent-sdk";
 export type HistoryContext = {
     promptSections: PromptSection[];
     entities: Entity[];
@@ -33,15 +33,11 @@ export type ParamObjectType = {
     [key: string]: ParamFieldType;
 };
 
-export interface IAction {
-    actionName: string;
+export interface IAction extends AppAction {
     parameters: ParamObjectType;
 }
 
-export interface FullAction extends IAction {
-    translatorName: string;
-}
-
+export type FullAction = Required<IAction>;
 export interface JSONAction {
     fullActionName: string;
     parameters: ParamObjectType;

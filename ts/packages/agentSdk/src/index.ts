@@ -23,9 +23,12 @@ export {
 } from "./command.js";
 
 export {
+    ObjectValue,
     FlagValueTypes,
     ParameterDefinitions,
     ParsedCommandParams,
+    PartialParsedCommandParams,
+    FlagDefinitions,
 } from "./parameters.js";
 export {
     ActionIO,
@@ -38,7 +41,6 @@ export {
 
 export {
     AppAction,
-    AppActionWithParameters,
     ActionResultError,
     ActionResultSuccessNoDisplay,
     ActionResultSuccess,

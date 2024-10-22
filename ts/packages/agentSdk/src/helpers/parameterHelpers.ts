@@ -21,7 +21,11 @@ function getTypeFromValue(value?: FlagValueTypes) {
         return getTypeFromValue(element);
     }
 
-    return typeof value as "string" | "number" | "boolean";
+    const type = typeof value;
+    if (type === "object") {
+        return "json";
+    }
+    return type as "string" | "number" | "boolean";
 }
 
 export function getFlagMultiple(def: FlagDefinition) {

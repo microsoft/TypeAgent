@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AppAction, DisplayType, DynamicDisplay } from "@typeagent/agent-sdk";
+import { DisplayType, DynamicDisplay } from "@typeagent/agent-sdk";
 import {
     getCommandCompletion,
     getPrompt,
@@ -18,8 +18,6 @@ import {
 import { RequestId } from "../handlers/common/interactiveIO.js";
 import { RequestMetrics } from "../utils/metrics.js";
 import { TemplateSchema } from "../../../agentSdk/dist/templateInput.js";
-import { getTranslatorActionInfos } from "../translation/actionInfo.js";
-import { getAppAgentName } from "../translation/agentTranslators.js";
 
 export type CommandCompletionResult = {
     partial: string; // The head part of the completion

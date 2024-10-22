@@ -4,8 +4,9 @@
 import child_process from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ProgramNameIndex, loadProgramNameIndex } from "./programNameIndex.js";
-import { AppActionWithParameters, Storage } from "@typeagent/agent-sdk";
+import { Storage } from "@typeagent/agent-sdk";
 import registerDebug from "debug";
+import { DesktopActions } from "./actionsSchema.js";
 
 const debug = registerDebug("typeagent:desktop");
 const debugData = registerDebug("typeagent:desktop:data");
@@ -60,7 +61,7 @@ async function ensureAutomationProcess(agentContext: DesktopActionContext) {
 }
 
 export async function runDesktopActions(
-    action: AppActionWithParameters,
+    action: DesktopActions,
     agentContext: DesktopActionContext,
 ) {
     let confirmationMessage = "OK";

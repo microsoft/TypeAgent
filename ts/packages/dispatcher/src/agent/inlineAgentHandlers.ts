@@ -8,6 +8,9 @@ import {
     AppAction,
     ActionContext,
     ParsedCommandParams,
+    ParameterDefinitions,
+    SessionContext,
+    PartialParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
@@ -47,6 +50,10 @@ import {
     getSystemTemplateCompletion,
     getSystemTemplateSchema,
 } from "../translation/actionTemplate.js";
+import { Actions, FullAction } from "agent-cache";
+import { getTranslatorActionInfos } from "../translation/actionInfo.js";
+import { executeActions } from "../action/actionHandlers.js";
+import { DeepPartialUndefined } from "common-utils";
 
 function executeSystemAction(
     action: AppAction,
@@ -162,9 +169,83 @@ const dispatcherHandlers: CommandHandlerTable = {
     },
 };
 
+class ActionCommandHandler implements CommandHandler {
+    public readonly description = "Execute an action";
+    public readonly parameters = {
+        args: {
+            translatorName: {
+                description: "Action translator name",
+            },
+            actionName: {
+                description: "Action name",
+            },
+        },
+        flags: {
+            parameter: {
+                description: "Action parameter",
+                optional: true,
+                type: "json",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const { translatorName, actionName } = params.args;
+        const config = systemContext.agents.getTranslatorConfig(translatorName);
+        const actionInfos = getTranslatorActionInfos(config, translatorName);
+        const actionInfo = actionInfos.get(actionName);
+        if (actionInfo === undefined) {
+            throw new Error(
+                `Invalid action name ${actionName} for translator ${translatorName}`,
+            );
+        }
+
+        // TODO: needs to validate the type
+        const action: FullAction = {
+            translatorName,
+            actionName,
+            parameters: (params.flags.parameter as any) ?? {},
+        };
+
+        return executeActions(Actions.fromFullActions([action]), context);
+    }
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        params: PartialParsedCommandParams<typeof this.parameters>,
+        name: string,
+    ): Promise<string[] | undefined> {
+        const systemContext = context.agentContext;
+        if (name === "translatorName") {
+            const translators = systemContext.agents.getTranslatorNames();
+            return translators;
+        }
+
+        if (name === "actionName") {
+            const translatorName = params.args?.translatorName;
+            if (translatorName === undefined) {
+                return undefined;
+            }
+            const config =
+                systemContext.agents.getTranslatorConfig(translatorName);
+
+            const actionInfos = getTranslatorActionInfos(
+                config,
+                translatorName,
+            );
+
+            return Array.from(actionInfos.keys());
+        }
+        return undefined;
+    }
+}
+
 const systemHandlers: CommandHandlerTable = {
     description: "Type Agent System Commands",
     commands: {
+        action: new ActionCommandHandler(),
         session: getSessionCommandHandlers(),
         history: getHistoryCommandHandlers(),
         const: getConstructionCommandHandlers(),
