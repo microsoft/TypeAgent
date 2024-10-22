@@ -32,7 +32,7 @@ export function instantiate(): AppAgent {
         validateWildcardMatch: validatePlayerWildcardMatch,
         getDynamicDisplay: getPlayerDynamicDisplay,
         ...getPlayerCommandInterface(),
-        getActionCompletion: getPlayerActionComplete,
+        getActionCompletion: getPlayerActionCompletion,
     };
 }
 
@@ -179,7 +179,7 @@ async function getPlayerDynamicDisplay(
     throw new Error(`Invalid displayId ${displayId}`);
 }
 
-async function getPlayerActionComplete(
+async function getPlayerActionCompletion(
     action: AppActionWithParameters,
     propertyName: string,
     context: SessionContext<PlayerActionContext>,

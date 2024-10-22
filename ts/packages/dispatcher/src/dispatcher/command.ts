@@ -389,7 +389,7 @@ export async function getCommandCompletion(
             result.suffix.length === 0 &&
             table?.defaultSubCommand === result.descriptor
         ) {
-            // Match the default sub command.  Includes additiona subcommand names
+            // Match the default sub command.  Includes additional subcommand names
             completions.push(...Object.keys(table.commands));
         }
 

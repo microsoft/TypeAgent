@@ -8,6 +8,7 @@ import {
     AppAction,
     ActionContext,
     ParsedCommandParams,
+    AppActionWithParameters,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
@@ -48,6 +49,8 @@ import {
     getSystemTemplateSchema,
 } from "../translation/actionTemplate.js";
 import { Action } from "agent-cache";
+import { getTranslatorActionInfos } from "../translation/actionInfo.js";
+import { executeActions } from "../action/actionHandlers.js";
 
 function executeSystemAction(
     action: AppAction,
@@ -163,6 +166,56 @@ const dispatcherHandlers: CommandHandlerTable = {
     },
 };
 
+class ActionCommandHandler implements CommandHandler {
+    public readonly description = "Execute an action";
+    public readonly parameters = {
+        args: {
+            translatorName: {
+                description: "Action translator name",
+            },
+            actionName: {
+                description: "Action name",
+            },
+        },
+        flags: {
+            parameter: {
+                char: "p",
+                description: "Action parameter",
+                optional: true,
+                multiple: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const { translatorName, actionName } = params.args;
+        const config = systemContext.agents.getTranslatorConfig(translatorName);
+        const actionInfos = getTranslatorActionInfos(config, translatorName);
+        const actionInfo = actionInfos.get(actionName);
+        if (actionInfo === undefined) {
+            throw new Error(
+                `Invalid action name ${actionName} for translator ${translatorName}`,
+            );
+        }
+        const parameters: Record<string, any> = {};
+        if (params.flags.parameter) {
+            for (const parameter of params.flags.parameter) {
+                const split = parameter.split("=");
+            }
+        }
+        const _action: AppActionWithParameters = {
+            translatorName,
+            actionName,
+            parameters,
+        };
+        // return executeActions(action, context);
+        return;
+    }
+}
+
 const systemHandlers: CommandHandlerTable = {
     description: "Type Agent System Commands",
     commands: {
@@ -195,42 +248,6 @@ const systemHandlers: CommandHandlerTable = {
         notify: getNotifyCommandHandlers(),
     },
 };
-
-class ActionCommandHandler implements CommandHandler {
-    parameters: {
-        args: {
-            translatorName: {
-                description: "Action translator name",
-            };
-            actionName: {
-                description: "Action name",
-            }
-        },
-        flags: {
-            parameter: {
-                description: "Action parameter",
-                optional: true,
-                multiple: true,
-            }
-        }
-    },
-    public async run(
-        context: ActionContext<CommandHandlerContext>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ) {
-        const { translatorName, actionName } = params.args;
-        const pararmeters = params.flags.parameter?.map((p) => {
-            const [key, value] = p.split("=");
-            return [ key, value];
-        });
-        const action: Action = {
-            translatorName,
-            actionName,
-            parameters: 
-        }
-        return executeSystemAction(action, context);
-    }
-}
 
 const inlineHandlers: { [key: string]: AppAgent } = {
     dispatcher: {

@@ -154,17 +154,21 @@ export async function getSystemTemplateCompletion(
     const split = propertyName.split(".");
     const actionIndexStr = split.shift();
     if (actionIndexStr === undefined || split.length === 0) {
+        // Not a valid property.
         return [];
     }
     const actionIndex = parseInt(actionIndexStr);
     if (actionIndex.toString() !== actionIndexStr) {
+        // Not a valid number for action Index
         return [];
     }
 
+    // TemplateData has the actual action in in the 'data' property
     const dataProperty = split.shift();
     if (dataProperty !== "data" || split.length === 0) {
         return [];
     }
+
     const action = data[actionIndex];
     const systemContext = context.agentContext;
     const translatorName = action.translatorName;
@@ -178,9 +182,6 @@ export async function getSystemTemplateCompletion(
     }
 
     const actionInfos = getTranslatorActionInfos(config, translatorName);
-    if (actionInfos === undefined) {
-        return [];
-    }
     const actionInfo = actionInfos.get(actionName);
     if (actionInfo === undefined) {
         return [];

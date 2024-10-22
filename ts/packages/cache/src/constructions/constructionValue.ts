@@ -200,13 +200,3 @@ export function createActionProps(
     }
     return actionProps;
 }
-
-export function patchActionProperty(
-    actionProps: JSONAction | JSONAction[],
-    name: string,
-    value: ParamValueType,
-) {
-    const object = { actionProps };
-    setActionProperty(object, name, value);
-    return object;
-}
