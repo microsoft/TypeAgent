@@ -90,23 +90,20 @@ export async function resolveCommand(
     const actualAppAgentName = parsedAppAgentName ?? "system";
     const appAgent = context.agents.getAppAgent(actualAppAgentName);
     const sessionContext = context.agents.getSessionContext(actualAppAgentName);
-    const commandDescriptors = await appAgent.getCommands?.(sessionContext);
+    const descriptors = await appAgent.getCommands?.(sessionContext);
     const commands: string[] = [];
-    if (
-        commandDescriptors === undefined ||
-        !isCommandDescriptorTable(commandDescriptors)
-    ) {
+    if (descriptors === undefined || !isCommandDescriptorTable(descriptors)) {
         return {
             parsedAppAgentName,
             actualAppAgentName,
             commands,
             suffix: curr.trim(),
             table: undefined,
-            descriptor: commandDescriptors,
+            descriptor: descriptors,
         };
     }
 
-    let table = commandDescriptors;
+    let table = descriptors;
     let descriptor: CommandDescriptor | undefined;
     while (true) {
         const subcommand = nextTerm();

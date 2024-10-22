@@ -40,7 +40,6 @@ export type CommandHandler = CommandDescriptor & {
     getCompletion?(
         context: SessionContext<unknown>,
         params: PartialParsedCommandParams<ParameterDefinitions>,
-
         name: string,
     ): Promise<string[] | undefined>;
 };
