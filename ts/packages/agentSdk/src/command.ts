@@ -56,8 +56,9 @@ export interface AppAgentCommandInterface {
     getCommandCompletion?(
         commands: string[], // path to the command descriptors
         params: ParsedCommandParams<ParameterDefinitions> | undefined,
+        name: string, // <argName> or --<flagName>
         context: SessionContext<unknown>,
-    ): Promise<string[]>;
+    ): Promise<string[] | undefined>;
 
     // Execute a resolved command
     executeCommand(

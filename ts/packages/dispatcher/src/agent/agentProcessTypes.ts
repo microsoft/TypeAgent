@@ -116,9 +116,10 @@ export type AgentInvokeFunctions = {
     getCommandCompletion(
         param: Partial<ContextParams> & {
             commands: string[];
-            params: ParsedCommandParams<ParameterDefinitions> | undefined;
+            params: ParsedCommandParams<ParameterDefinitions>;
+            name: string;
         },
-    ): Promise<string[]>;
+    ): Promise<string[] | undefined>;
     executeCommand(
         param: Partial<ActionContextParams> & {
             commands: string[];

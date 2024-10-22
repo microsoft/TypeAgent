@@ -27,6 +27,8 @@ export {
     FlagValueTypes,
     ParameterDefinitions,
     ParsedCommandParams,
+    PartialParsedCommandParams,
+    FlagDefinitions,
 } from "./parameters.js";
 export {
     ActionIO,

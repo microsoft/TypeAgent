@@ -8,6 +8,9 @@ import {
     AppAction,
     ActionContext,
     ParsedCommandParams,
+    ParameterDefinitions,
+    SessionContext,
+    PartialParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
@@ -50,6 +53,7 @@ import {
 import { Actions, FullAction } from "agent-cache";
 import { getTranslatorActionInfos } from "../translation/actionInfo.js";
 import { executeActions } from "../action/actionHandlers.js";
+import { DeepPartialUndefined } from "common-utils";
 
 function executeSystemAction(
     action: AppAction,
@@ -207,6 +211,34 @@ class ActionCommandHandler implements CommandHandler {
         };
 
         return executeActions(Actions.fromFullActions([action]), context);
+    }
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        params: PartialParsedCommandParams<typeof this.parameters>,
+        name: string,
+    ): Promise<string[] | undefined> {
+        const systemContext = context.agentContext;
+        if (name === "translatorName") {
+            const translators = systemContext.agents.getTranslatorNames();
+            return translators;
+        }
+
+        if (name === "actionName") {
+            const translatorName = params.args?.translatorName;
+            if (translatorName === undefined) {
+                return undefined;
+            }
+            const config =
+                systemContext.agents.getTranslatorConfig(translatorName);
+
+            const actionInfos = getTranslatorActionInfos(
+                config,
+                translatorName,
+            );
+
+            return Array.from(actionInfos.keys());
+        }
+        return undefined;
     }
 }
 

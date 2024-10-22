@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { JsonObject } from "type-fest";
+import type {
+    JsonObject,
+    PartialDeep,
+    UndefinedOnPartialDeep,
+} from "type-fest";
 
 //===========================================
 // Parameter definitions
@@ -140,4 +144,8 @@ export type ParsedCommandParams<T extends ParameterDefinitions> = {
     args: ArgsOutput<T["args"]>;
     flags: FlagsOutput<T["flags"]>;
     tokens: string[];
+    nextArgs: string[];
 };
+
+export type PartialParsedCommandParams<T extends ParameterDefinitions> =
+    UndefinedOnPartialDeep<PartialDeep<ParsedCommandParams<T>>>;

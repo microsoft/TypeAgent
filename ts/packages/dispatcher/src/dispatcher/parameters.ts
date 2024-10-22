@@ -206,28 +206,36 @@ export function parseParams<T extends ParameterDefinitions>(
                 }
             }
         }
-        if (argDefs !== undefined) {
-            // Detect missing arguments
-            if (argDefIndex !== argDefs.length) {
-                for (let i = argDefIndex; i < argDefs.length; i++) {
-                    const [name, argDef] = argDefs[i];
-                    if (argDef.optional === true) {
-                        continue;
-                    }
-                    if (
-                        argDef.multiple === true &&
-                        parsedArgs[name] !== undefined
-                    ) {
-                        continue;
-                    }
-                    throw new Error(`Missing argument '${name}'`);
+    }
+    let nextArgs: string[] = [];
+    if (argDefs !== undefined) {
+        // Detect missing arguments
+        if (argDefIndex !== argDefs.length) {
+            for (let i = argDefIndex; i < argDefs.length; i++) {
+                const [name, argDef] = argDefs[i];
+                nextArgs.push(name);
+
+                if (argDef.optional === true) {
+                    continue;
                 }
+                if (
+                    argDef.multiple === true &&
+                    parsedArgs[name] !== undefined
+                ) {
+                    continue;
+                }
+                if (partial) {
+                    break;
+                }
+                throw new Error(`Missing argument '${name}'`);
             }
         }
     }
+
     return {
         args: argDefs !== undefined ? parsedArgs : undefined,
         flags: flagDefs !== undefined ? parsedFlags : undefined,
         tokens: parsedTokens,
+        nextArgs,
     };
 }

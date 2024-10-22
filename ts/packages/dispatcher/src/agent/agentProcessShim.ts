@@ -329,13 +329,15 @@ export async function createAgentProcessShim(
         },
         getCommandCompletion(
             commands: string[],
-            params: ParsedCommandParams<ParameterDefinitions> | undefined,
+            params: ParsedCommandParams<ParameterDefinitions>,
+            name: string,
             context: SessionContext<ShimContext>,
         ) {
             return rpc.invoke("getCommandCompletion", {
                 ...getContextParam(context),
                 commands,
                 params,
+                name,
             });
         },
         executeCommand(
