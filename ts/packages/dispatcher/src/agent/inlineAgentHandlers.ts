@@ -8,7 +8,6 @@ import {
     AppAction,
     ActionContext,
     ParsedCommandParams,
-    AppActionWithParameters,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
@@ -206,7 +205,7 @@ class ActionCommandHandler implements CommandHandler {
                 const split = parameter.split("=");
             }
         }
-        const _action: AppActionWithParameters = {
+        const _action: AppAction = {
             translatorName,
             actionName,
             parameters,

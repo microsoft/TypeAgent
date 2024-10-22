@@ -38,7 +38,6 @@ export {
 
 export {
     AppAction,
-    AppActionWithParameters,
     ActionResultError,
     ActionResultSuccessNoDisplay,
     ActionResultSuccess,

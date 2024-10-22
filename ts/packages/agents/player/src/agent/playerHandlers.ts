@@ -17,7 +17,6 @@ import {
     DisplayType,
     AppAgentEvent,
     DynamicDisplay,
-    AppActionWithParameters,
 } from "@typeagent/agent-sdk";
 import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import { searchAlbum, searchArtists, searchTracks } from "../client.js";
@@ -180,7 +179,7 @@ async function getPlayerDynamicDisplay(
 }
 
 async function getPlayerActionCompletion(
-    action: AppActionWithParameters,
+    action: AppAction,
     propertyName: string,
     context: SessionContext<PlayerActionContext>,
 ): Promise<string[]> {

@@ -7,9 +7,6 @@ import { Entity } from "./memory.js";
 export interface AppAction {
     actionName: string;
     translatorName?: string | undefined;
-}
-
-export interface AppActionWithParameters extends AppAction {
     parameters: { [key: string]: any };
 }
 
