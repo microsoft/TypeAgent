@@ -53,6 +53,7 @@ import {
 import { getTokenCommandHandlers } from "../handlers/tokenCommandHandler.js";
 import { Actions } from "agent-cache";
 import {
+    getActionInfo,
     getParameterNames,
     getParameterType,
     getTranslatorActionInfos,
@@ -60,7 +61,6 @@ import {
 } from "../translation/actionInfo.js";
 import { executeActions } from "../action/actionHandlers.js";
 import { getObjectProperty } from "common-utils";
-import { getAppAgentName } from "../translation/agentTranslators.js";
 
 function executeSystemAction(
     action: AppAction,
@@ -255,13 +255,18 @@ class ActionCommandHandler implements CommandHandler {
 
             if (name === "--parameters.") {
                 // complete the flag name for json properties
-                const actionInfo = this.getActionInfo(systemContext, params);
+                const action = {
+                    translatorName: params.args?.translatorName,
+                    actionName: params.args?.actionName,
+                    parameters: params.flags?.parameters,
+                };
+                const actionInfo = getActionInfo(action, systemContext);
                 if (actionInfo === undefined) {
                     continue;
                 }
-                const data = { obj: { parameters: params.flags?.parameters } };
+                const data = { action };
                 const getCurrentValue = (name: string) =>
-                    getObjectProperty(data, "obj", name);
+                    getObjectProperty(data, "action", name);
                 const parameterNames = getParameterNames(
                     actionInfo,
                     getCurrentValue,
@@ -276,25 +281,23 @@ class ActionCommandHandler implements CommandHandler {
 
             if (name.startsWith("--parameters.")) {
                 // complete the flag values for json properties
-                const propertyName = name.substring(2);
-                const actionInfo = this.getActionInfo(systemContext, params);
-                if (actionInfo === undefined) {
-                    continue;
-                }
-                const fieldType = getParameterType(
-                    actionInfo,
-                    name.substring(2),
-                );
-                if (fieldType?.type === "string-union") {
-                    completions.push(...fieldType.typeEnum);
-                    continue;
-                }
 
                 const action = {
                     translatorName: params.args?.translatorName,
                     actionName: params.args?.actionName,
                     parameters: params.flags?.parameters,
                 };
+
+                const actionInfo = getActionInfo(action, systemContext);
+                if (actionInfo === undefined) {
+                    continue;
+                }
+                const propertyName = name.substring(2);
+                const fieldType = getParameterType(actionInfo, propertyName);
+                if (fieldType?.type === "string-union") {
+                    completions.push(...fieldType.typeEnum);
+                    continue;
+                }
 
                 completions.push(
                     ...(await getActionCompletion(
@@ -308,33 +311,6 @@ class ActionCommandHandler implements CommandHandler {
             }
         }
         return completions;
-    }
-
-    private getActionInfo(
-        systemContext: CommandHandlerContext,
-        params: PartialParsedCommandParams<typeof this.parameters>,
-    ) {
-        if (params.args === undefined) {
-            return undefined;
-        }
-        // complete the flag name for json properties
-        const { translatorName, actionName } = params.args;
-        if (translatorName === undefined || actionName === undefined) {
-            return undefined;
-        }
-        const config =
-            systemContext.agents.tryGetTranslatorConfig(translatorName);
-        if (config === undefined) {
-            return undefined;
-        }
-        const actionInfos = getTranslatorActionInfos(config, translatorName);
-        const actionInfo = actionInfos.get(actionName);
-        if (actionInfo === undefined) {
-            throw new Error(
-                `Invalid action name ${actionName} for translator ${translatorName}`,
-            );
-        }
-        return actionInfo;
     }
 }
 
