@@ -24,11 +24,27 @@
 """
 
 import ast
-from collections import deque
 from dataclasses import dataclass
 import datetime
 import json
 from typing import Iterator
+
+
+@dataclass
+class Blob:
+    """A sequence of text lines plus some metadata."""
+
+    lines: list[str]
+    lineno: int  # 1-based
+    col_offset: int  # 0-based; may be needed for other languages
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "lines": self.lines,
+            "lineno": self.lineno,
+            "col_offset": self.col_offset,
+        }
+
 
 IdType = str
 
@@ -39,7 +55,7 @@ class Chunk:
 
     id: IdType
     treeName: str  # AST node name
-    blobs: list[str]  # Blobs around the placeholders  # TODO: list[list[str]]
+    blobs: list[Blob]  # Blobs around the placeholders
 
     # For inner chunks:
     parent_id: IdType
@@ -49,7 +65,7 @@ class Chunk:
     children: list[IdType]  # len() is one less than len(blobs)
 
     # Used by custo_json() below.
-    def to_dict(self) -> dict[str, any]:
+    def to_dict(self) -> dict[str, object]:
         return {
             "id": self.id,
             "treeName": self.treeName,
@@ -71,9 +87,9 @@ class Chunk:
 # Support for JSON serialization of Chunks
 
 
-def custom_json(obj):
-    if isinstance(obj, Chunk):
-        return obj.to_dict()
+def custom_json(obj: object) -> dict[str, object]:
+    if hasattr(obj, "to_dict"):
+        return obj.to_dict()  # type: ignore
     else:
         raise TypeError(f"Cannot JSON serialize object of type {type(obj)}")
 
@@ -141,35 +157,41 @@ def ast_iter_child_statement_nodes(node: ast.AST) -> Iterator[ast.AST]:
             if name in COMPOUND_STATEMENT_NODES:
                 yield field
         elif isinstance(field, list):
-            for item in field:
+            for item in field:  # type: ignore
                 if isinstance(item, ast.AST):
                     if item.__class__.__name__ in COMPOUND_STATEMENT_NODES:
                         yield item
 
 
-def extract_text(text: str, node: ast.AST) -> str:
-    """Extract the text of a node from the source code."""
-    lines = text.splitlines(keepends=True)  # TODO: pre-compute this earlier
-    # TODO: Include immediately preceding decorators and comment blocks?
-    # (Where are the decorators in the ast?)
-    return "".join(lines[node.lineno - 1 : node.end_lineno])
+def extract_blob(lines: list[str], node: ast.AST) -> Blob:
+    """Extract the text of a node from the source code (as list of lines)."""
+    # TODO: Include immediately preceding comment blocks.
+    # NOTE: We ignore complaints about lineno/end_lineno being Undefined.
+    start: int = node.lineno - 1  # type: ignore
+    end: int = node.end_lineno  # type: ignore
+    if hasattr(node, "decorator_list"):
+        decorators: list[ast.AST] = node.decorator_list  # type: ignore
+        if decorators:
+            start = decorators[0].lineno - 1  # type: ignore
+    return Blob(lines[start:end], start, 0)  # type: ignore
 
 
-def create_chunks_recursively(text: str, tree: ast.AST, parent: Chunk) -> list[Chunk]:
+def create_chunks_recursively(lines: list[str], tree: ast.AST, parent: Chunk) -> list[Chunk]:
     """Recursively create chunks for the AST."""
-    chunks = []
+    chunks: list[Chunk] = []
     parent_slot: int = 0
 
     for node in ast_iter_child_statement_nodes(tree):
         if isinstance(node, ast.FunctionDef) or isinstance(node, ast.ClassDef):
+            node_name = node.__class__.__name__
             node_id = generate_id()
-            node_blob = extract_text(text, node)
+            node_blob = extract_blob(lines, node)
             node_blobs = [node_blob]
             chunk = Chunk(
-                node_id, node.__class__.__name__, node_blobs, parent.id, parent_slot, []
+                node_id, node_name, node_blobs, parent.id, parent_slot, []
             )
             chunks.append(chunk)
-            chunks.extend(create_chunks_recursively(text, node, chunk))
+            chunks.extend(create_chunks_recursively(lines, node, chunk))
             parent_slot += 1
             parent.children.append(node_id)
             assert len(parent.children) == parent_slot
@@ -181,13 +203,14 @@ def create_chunks_recursively(text: str, tree: ast.AST, parent: Chunk) -> list[C
 def chunker(text: str) -> list[Chunk]:
     """Chunker for Python code."""
     tree = ast.parse(text)  # TODO: Error handling
-    # print(ast.dump(tree, indent=4))
+    lines = text.splitlines(keepends=True)
+    # print(ast.dump(tree, indent=4, include_attributes=True))
 
     # Handcraft the root node
     root_id = generate_id()
-    root = Chunk(root_id, tree.__class__.__name__, [text], "", 0, [])
+    root = Chunk(root_id, tree.__class__.__name__, [Blob(lines, 1, 0)], "", 0, [])
 
-    chunks = create_chunks_recursively(text, tree, root)
+    chunks = create_chunks_recursively(lines, tree, root)
     chunks.insert(0, root)
     return chunks
 
