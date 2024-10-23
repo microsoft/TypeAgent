@@ -3,7 +3,6 @@
 
 import {
     FlagValueTypes,
-    ObjectValue,
     ParameterDefinitions,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk";
@@ -13,7 +12,6 @@ import {
     resolveFlag,
 } from "@typeagent/agent-sdk/helpers/command";
 import { setObjectProperty } from "common-utils";
-import { parse } from "path";
 
 function parseIntParameter(
     valueStr: string,
