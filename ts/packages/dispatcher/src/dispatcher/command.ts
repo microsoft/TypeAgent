@@ -17,6 +17,7 @@ import {
 import { unicodeChar } from "../utils/interactive.js";
 import {
     CommandDescriptor,
+    CommandDescriptors,
     CommandDescriptorTable,
     FlagDefinitions,
     ParameterDefinitions,
@@ -24,6 +25,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { executeCommand } from "../action/actionHandlers.js";
 import {
+    getFlagMultiple,
     getFlagType,
     isCommandDescriptorTable,
     resolveFlag,
@@ -34,6 +36,7 @@ import { parseParams } from "./parameters.js";
 import { getHandlerTableUsage, getUsage } from "./commandHelp.js";
 
 const debugCommand = registerDebug("typeagent:dispatcher:command");
+const debugCommandError = registerDebug("typeagent:dispatcher:command:error");
 
 type ResolveCommandResult = {
     // The resolved app agent name
@@ -61,7 +64,7 @@ export async function resolveCommand(
 
     let prev: string | undefined = undefined;
     let curr = input;
-    const nextTerm = () => {
+    const nextToken = () => {
         const result = curr.match(/^\s*\S+/);
         if (result === null || result.length !== 1) {
             return undefined;
@@ -71,7 +74,7 @@ export async function resolveCommand(
         curr = curr.substring(result[0].length);
         return result[0].trim();
     };
-    const revertTerm = () => {
+    const rollbackToken = () => {
         if (prev === undefined) {
             throw new Error("No previous term to revert to.");
         }
@@ -79,12 +82,12 @@ export async function resolveCommand(
         prev = undefined;
     };
 
-    const first = nextTerm();
+    const first = nextToken();
     if (first !== undefined) {
         if (context.agents.isCommandEnabled(first)) {
             parsedAppAgentName = first;
         } else {
-            revertTerm();
+            rollbackToken();
         }
     }
     const actualAppAgentName = parsedAppAgentName ?? "system";
@@ -92,42 +95,40 @@ export async function resolveCommand(
     const sessionContext = context.agents.getSessionContext(actualAppAgentName);
     const descriptors = await appAgent.getCommands?.(sessionContext);
     const commands: string[] = [];
-    if (descriptors === undefined || !isCommandDescriptorTable(descriptors)) {
-        return {
-            parsedAppAgentName,
-            actualAppAgentName,
-            commands,
-            suffix: curr.trim(),
-            table: undefined,
-            descriptor: descriptors,
-        };
-    }
 
-    let table = descriptors;
+    let table: CommandDescriptorTable | undefined;
     let descriptor: CommandDescriptor | undefined;
-    while (true) {
-        const subcommand = nextTerm();
-        if (subcommand === undefined) {
-            descriptor = table.defaultSubCommand;
-            break;
+    if (descriptors === undefined || !isCommandDescriptorTable(descriptors)) {
+        descriptor = descriptors;
+    } else {
+        table = descriptors;
+        while (true) {
+            const subcommand = nextToken();
+            if (subcommand === undefined) {
+                descriptor = table.defaultSubCommand;
+                break;
+            }
+
+            const current: CommandDescriptors = table.commands[subcommand];
+            if (current === undefined) {
+                // Unknown command
+                descriptor = table.defaultSubCommand;
+                rollbackToken();
+                break;
+            }
+            commands.push(subcommand);
+            if (!isCommandDescriptorTable(current)) {
+                descriptor = current;
+                break;
+            }
+            table = current;
         }
 
-        const current = table.commands[subcommand];
-        if (current === undefined) {
-            // Unknown command
-            descriptor = table.defaultSubCommand;
-            revertTerm();
-            break;
-        }
-        commands.push(subcommand);
-        if (!isCommandDescriptorTable(current)) {
-            descriptor = current;
-            break;
-        }
-        table = current;
+        table = table;
+        descriptor = descriptor;
     }
 
-    return {
+    const result: ResolveCommandResult = {
         parsedAppAgentName,
         actualAppAgentName,
         commands,
@@ -135,6 +136,16 @@ export async function resolveCommand(
         table,
         descriptor,
     };
+
+    if (debugCommand.enabled) {
+        debugCommand(`Resolved command:`, {
+            ...result,
+            table: result.table !== undefined,
+            descriptor: result.descriptor !== undefined,
+        });
+    }
+
+    return result;
 }
 
 async function parseCommand(
@@ -222,7 +233,7 @@ export async function processCommandNoLock(
             DispatcherName,
             "block",
         );
-        debugCommand(e.stack);
+        debugCommandError(e.stack);
     }
 }
 
@@ -363,7 +374,7 @@ function getPartialCompletedCommand(input: string) {
     };
 }
 
-function getFlagNeedsValue(
+function getPendingFlag(
     params: ParsedCommandParams<ParameterDefinitions>,
     flags: FlagDefinitions | undefined,
 ) {
@@ -421,35 +432,24 @@ export async function getCommandCompletion(
             result.actualAppAgentName,
         );
 
-        const collectionCompletion = agent.getCommandCompletion
-            ? async (name: string) => {
-                  const argCompletion = await agent.getCommandCompletion!(
-                      result.commands,
-                      params,
-                      name,
-                      sessionContext,
-                  );
-                  if (argCompletion !== undefined) {
-                      completions.push(...argCompletion);
-                  }
-              }
-            : undefined;
+        const pendingFlag = getPendingFlag(params, flags);
 
-        const flagNeedsValue = getFlagNeedsValue(params, flags);
-
-        if (flagNeedsValue === undefined) {
-            if (collectionCompletion) {
-                const nextArgs = params.nextArgs;
-                for (const arg of nextArgs) {
-                    await collectionCompletion(arg);
-                }
-            }
+        const pendingCompletions: string[] = [];
+        if (pendingFlag === undefined) {
+            pendingCompletions.push(...params.nextArgs);
             if (flags !== undefined) {
                 const parsedFlags = params.flags;
                 for (const [key, value] of Object.entries(flags)) {
-                    if (!value.multiple && parsedFlags?.[key] !== undefined) {
-                        // filter out non-multiple flags that is already set.
-                        continue;
+                    const multiple = getFlagMultiple(value);
+                    if (!multiple) {
+                        if (getFlagType(value) === "json") {
+                            // JSON property flags
+                            pendingCompletions.push(`--${key}.`);
+                        }
+                        if (parsedFlags?.[key] !== undefined) {
+                            // filter out non-multiple flags that is already set.
+                            continue;
+                        }
                     }
                     completions.push(`--${key}`);
                     if (value.char !== undefined) {
@@ -457,8 +457,20 @@ export async function getCommandCompletion(
                     }
                 }
             }
-        } else if (collectionCompletion) {
-            await collectionCompletion(`--${flagNeedsValue}`);
+        } else {
+            // get the potential values for the pending flag
+            pendingCompletions.push(`--${pendingFlag}`);
+        }
+
+        if (agent.getCommandCompletion) {
+            completions.push(
+                ...(await agent.getCommandCompletion(
+                    result.commands,
+                    params,
+                    pendingCompletions,
+                    sessionContext,
+                )),
+            );
         }
     } else {
         if (result.suffix.length !== 0) {

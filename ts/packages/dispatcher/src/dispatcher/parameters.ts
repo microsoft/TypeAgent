@@ -13,6 +13,7 @@ import {
     resolveFlag,
 } from "@typeagent/agent-sdk/helpers/command";
 import { setObjectProperty } from "common-utils";
+import { parse } from "path";
 
 function parseIntParameter(
     valueStr: string,
@@ -46,11 +47,6 @@ function parseJsonParameter(
     }
 }
 
-function parseJsonProperty(valueStr: string, curr: ObjectValue, name: string) {
-    const data = { obj: curr };
-    setObjectProperty(data, "obj", name, valueStr, true);
-}
-
 function stripQuoteFromToken(term: string) {
     if (term.length !== 0 && (term[0] === "'" || term[0] === '"')) {
         const lastChar = term[term.length - 1];
@@ -60,6 +56,67 @@ function stripQuoteFromToken(term: string) {
         return term.substring(1, term.length - 1);
     }
     return term;
+}
+
+function invalidValueToken(valueToken: string) {
+    // for strings, value that starts with '--' needs to be quoted.
+    if (valueToken.startsWith("--")) {
+        return true;
+    }
+
+    if (
+        valueToken.length === 2 &&
+        valueToken[0] === "-" &&
+        valueToken.charCodeAt(1) < 48 /* "0" */ &&
+        valueToken.charCodeAt(1) > 57 /* "9" */
+    ) {
+        return true;
+    }
+    return false;
+}
+function parseValueToken(
+    flagToken: string,
+    flag: string,
+    parsedFlags: any,
+    valueType: "string" | "number" | "json",
+    valueToken?: string,
+) {
+    if (valueToken === undefined || invalidValueToken(valueToken)) {
+        throw new Error(`Missing value for flag '${flag}'`);
+    }
+
+    // stripped any quotes
+    const stripped = stripQuoteFromToken(valueToken);
+
+    if (valueType === "number") {
+        return parseIntParameter(stripped, "flag", flag);
+    }
+
+    if (valueType === "string") {
+        // It is a string, just return the value stripped of quote.
+        return stripped;
+    }
+
+    // valueType === "json"
+
+    const prefix = `--${flag}.`;
+    if (!flagToken.startsWith(prefix)) {
+        // Full json object
+        return parseJsonParameter(stripped, "flag", flag);
+    }
+
+    // Json object property
+    const existing = parsedFlags[flag];
+    if (Array.isArray(existing)) {
+        throw new Error(
+            `Invalid flag '${flag}': multiple json value cannot use property syntax`,
+        );
+    }
+    parsedFlags[flag] = undefined; // avoid duplicate flag error, this will be assigned back later
+    const propertyName = flagToken.substring(prefix.length);
+    const data = { obj: existing ?? {} };
+    setObjectProperty(data, "obj", propertyName, stripped, true);
+    return data.obj;
 }
 
 export function parseParams<T extends ParameterDefinitions>(
@@ -127,27 +184,22 @@ export function parseParams<T extends ParameterDefinitions>(
                     value = true;
                 } else {
                     const rollback = curr;
-                    const valueStr = nextToken();
-                    if (valueStr === undefined || valueStr.startsWith("-")) {
+                    const valueToken = nextToken();
+                    try {
+                        value = parseValueToken(
+                            next,
+                            name,
+                            parsedFlags,
+                            valueType,
+                            valueToken,
+                        );
+                    } catch (e) {
                         // rollback to continue with partial
-                        if (valueStr !== undefined) {
+                        if (valueToken !== undefined) {
                             curr = rollback;
                             parsedTokens.pop();
                         }
-                        throw new Error(`Missing value for flag '${next}'`);
-                    }
-                    const stripped = stripQuoteFromToken(valueStr);
-                    if (valueType === "number") {
-                        value = parseIntParameter(stripped, "flag", next);
-                    } else if (valueType === "json") {
-                        if (next.startsWith(`--${name}.`)) {
-                            value = (parsedFlags[name] as ObjectValue) ?? {};
-                            parseJsonProperty(stripped, value, next);
-                        } else {
-                            value = parseJsonParameter(stripped, "flag", next);
-                        }
-                    } else {
-                        value = stripped;
+                        throw e;
                     }
                 }
                 const multiple = getFlagMultiple(flag);
