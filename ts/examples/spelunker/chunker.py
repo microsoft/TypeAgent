@@ -38,10 +38,8 @@ class Chunk:
     """A chunk at any level of nesting (root, inner, leaf)."""
 
     id: IdType
-    tree: ast.AST  # The AST node for this chunk
-    blobs: list[str]  # Blobs around the placeholders
-
-    # The rest is metadata
+    treeName: str  # AST node name
+    blobs: list[str]  # Blobs around the placeholders  # TODO: list[list[str]]
 
     # For inner chunks:
     parent_id: IdType
@@ -50,17 +48,20 @@ class Chunk:
     # For outer chunks:
     children: list[IdType]  # len() is one less than len(blobs)
 
-    # For JSON serialization:
-
+    # Used by custo_json() below.
     def to_dict(self) -> dict[str, any]:
         return {
             "id": self.id,
-            "tree": "",  # TODO
+            "treeName": self.treeName,
             "blobs": self.blobs,
             "parent_id": self.parent_id,
             "parent_slot": self.parent_slot,
             "children": self.children,
         }
+
+    # Just for fun.
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), default=custom_json, indent=2)
 
     # For pydantic:
     # class Config:
@@ -68,6 +69,7 @@ class Chunk:
 
 
 # Support for JSON serialization of Chunks
+
 
 def custom_json(obj):
     if isinstance(obj, Chunk):
@@ -81,9 +83,10 @@ def custom_json(obj):
 last_timestamp: IdType = ""
 last_counter: int = 0
 
+
 def generate_id() -> IdType:
     """Generate a new unique ID.
-    
+
     IDs are really timestamps formatted as YYYY-MM-DD-HH-MM-SS.UUUUUU[-NNN],
     where UUUUUU is microseconds and NNN is optionally added to make IDs unique.
 
@@ -116,15 +119,36 @@ representing that tree in pre-order (parents preceding children).
 
 # TODO: Turn the recursive chunk creation into a class
 
+COMPOUND_STATEMENT_NODES = [
+    # Nodes that can contain statement nodes.
+    # See https://docs.python.org/3/library/ast.html
+    "Module",
+    "Interactive",
+    "If",
+    "For",
+    "While",
+    "Try",
+    "TryStar",
+    "ExceptHandler",
+    "With",
+    "Match",
+    "match_case",
+    "FunctionDef",
+    "ClassDef",
+]
+
 def ast_iter_child_statement_nodes(node: ast.AST) -> Iterator[ast.AST]:
     """Iterate over the children of a node."""
     for name, field in ast.iter_fields(node):
         if isinstance(field, ast.AST):
-            yield field
+            if name in COMPOUND_STATEMENT_NODES:
+                yield field
         elif isinstance(field, list):
             for item in field:
                 if isinstance(item, ast.AST):
-                    yield item
+                    if item.__class__.__name__ in COMPOUND_STATEMENT_NODES:
+                        yield item
+
 
 def ast_walk(node: ast.AST) -> Iterator[ast.AST]:
     """
@@ -142,42 +166,49 @@ def extract_text(text: str, node: ast.AST) -> str:
     """Extract the text of a node from the source code."""
     lines = text.splitlines(keepends=True)  # TODO: pre-compute this earlier
     # TODO: Include immediately preceding comment block?
-    return "".join(lines[node.lineno - 1 : node.end_lineno - 1])
+    return "".join(lines[node.lineno - 1 : node.end_lineno])
 
 
-def create_chunks_recursively(text: str, tree: ast.AST, parent_id: IdType, parent_slot: int) -> list[Chunk]:
+def create_chunks_recursively(
+    text: str, tree: ast.AST, parent: Chunk
+) -> list[Chunk]:
     """Recursively create chunks for the AST."""
     chunks = []
+    parent_slot: int = 0
     for node in ast_walk(tree):
         if node is tree:
-            continue
+            continue  # Skip the root or else we'd never make progress
         if isinstance(node, ast.FunctionDef) or isinstance(node, ast.ClassDef):
             node_id = generate_id()
-            node_text = extract_text(text, node)
-            node_blobs = [node_text]
-            chunk = Chunk(node_id, node, node_blobs, parent_id, parent_slot, [])
+            node_blob = extract_text(text, node)
+            node_blobs = [node_blob]
+            chunk = Chunk(node_id, node.__class__.__name__, node_blobs, parent.id, parent_slot, [])
             chunks.append(chunk)
-            chunks.extend(create_chunks_recursively(text, node, node_id, parent_slot))
+            chunks.extend(create_chunks_recursively(text, node, chunk))
             parent_slot += 1
+            parent.children.append(node_id)
+            assert len(parent.children) == parent_slot
             # TODO: Remove from parent blob
+
     return chunks
 
 
-def chunker(text: str) -> list[Chunk]:  # Returns a toplevel chunk for the whole file
+def chunker(text: str) -> list[Chunk]:
     """Chunker for Python code."""
     tree = ast.parse(text)  # TODO: Error handling
     # Universal attributes: lineno, col_offset, end_lineno, end_col_offset
     # print(ast.dump(tree, indent=4))
+    # Handcraft the root node
     root_id = generate_id()
-    root = Chunk(root_id, tree, [text], "", 0, [])  # Children filled in below
-    chunks = create_chunks_recursively(text, tree, root_id, 0)
-    root.children = [chunk.id for chunk in chunks]
+    root = Chunk(root_id, tree.__class__.__name__, [text], "", 0, [])
+    chunks = create_chunks_recursively(text, tree, root)
     chunks.insert(0, root)
     return chunks
 
 
 def test():
     import sys
+
     if len(sys.argv) != 2:
         print("Usage: python chunker.py <filename>")
         sys.exit(1)
