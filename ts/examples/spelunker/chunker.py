@@ -80,29 +80,25 @@ def custom_json(obj):
 
 # TODO: Make this a singleton class?
 
-last_timestamp: IdType = ""
-last_counter: int = 0
+last_ts: datetime.datetime = datetime.datetime.now()
 
 
 def generate_id() -> IdType:
     """Generate a new unique ID.
 
-    IDs are really timestamps formatted as YYYY-MM-DD-HH-MM-SS.UUUUUU[-NNN],
-    where UUUUUU is microseconds and NNN is optionally added to make IDs unique.
+    IDs are really timestamps formatted as YYYY_MM_DD-HH_MM_SS.UUUUUU,
+    where UUUUUU is microseconds.
 
-    TODO: Tweak the usecs instead of adding another counter.
+    To ensure IDs are unique, if the next timestamp isn't greater than the last one,
+    we add 1 usec to the last one. This has the advantage of "gracefully" handling
+    time going backwards.
     """
-    global last_timestamp, last_counter
-    now = datetime.datetime.now()
-    new_timestamp = now.strftime("%Y-%m-%d-%H-%M-%S.%f")
-    assert new_timestamp >= last_timestamp, "Clock went backwards!"
-    if new_timestamp == last_timestamp:
-        assert last_counter < 999, "Too many IDs in one timestamp!"
-        last_counter += 1
-        return f"{last_timestamp}-{last_counter:03}"
-    last_timestamp = new_timestamp
-    last_counter = 0
-    return last_timestamp
+    global last_ts
+    next_ts = datetime.datetime.now()  # Local time, for now
+    if next_ts <= last_ts:
+        next_ts = last_ts + datetime.timedelta(microseconds=1)
+    last_ts = next_ts
+    return next_ts.strftime("%Y_%m_%d-%H_%M_%S.%f")
 
 
 """Design for recursive chunking.
@@ -154,7 +150,8 @@ def ast_iter_child_statement_nodes(node: ast.AST) -> Iterator[ast.AST]:
 def extract_text(text: str, node: ast.AST) -> str:
     """Extract the text of a node from the source code."""
     lines = text.splitlines(keepends=True)  # TODO: pre-compute this earlier
-    # TODO: Include immediately preceding comment block?
+    # TODO: Include immediately preceding decorators and comment blocks?
+    # (Where are the decorators in the ast?)
     return "".join(lines[node.lineno - 1 : node.end_lineno])
 
 
@@ -184,11 +181,12 @@ def create_chunks_recursively(text: str, tree: ast.AST, parent: Chunk) -> list[C
 def chunker(text: str) -> list[Chunk]:
     """Chunker for Python code."""
     tree = ast.parse(text)  # TODO: Error handling
-    # Universal attributes: lineno, col_offset, end_lineno, end_col_offset
     # print(ast.dump(tree, indent=4))
+
     # Handcraft the root node
     root_id = generate_id()
     root = Chunk(root_id, tree.__class__.__name__, [text], "", 0, [])
+
     chunks = create_chunks_recursively(text, tree, root)
     chunks.insert(0, root)
     return chunks
