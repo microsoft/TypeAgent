@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 """Display the tree structure of a given directory tree."""
 
 import binascii
