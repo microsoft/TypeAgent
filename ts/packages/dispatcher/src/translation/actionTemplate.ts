@@ -171,6 +171,14 @@ export async function getSystemTemplateCompletion(
 
     const action = data[actionIndex];
     const systemContext = context.agentContext;
+    return getActionCompletion(systemContext, action, split.join("."));
+}
+
+export async function getActionCompletion(
+    systemContext: CommandHandlerContext,
+    action: Partial<AppAction>,
+    propertyName: string,
+): Promise<string[]> {
     const translatorName = action.translatorName;
     const actionName = action.actionName;
     if (translatorName === undefined || actionName === undefined) {
@@ -195,7 +203,7 @@ export async function getSystemTemplateCompletion(
     const sessionContext = systemContext.agents.getSessionContext(appAgentName);
     return appAgent.getActionCompletion(
         action as AppAction,
-        split.join("."),
+        propertyName,
         sessionContext,
     );
 }
