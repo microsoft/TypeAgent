@@ -36,14 +36,12 @@ class Blob:
     """A sequence of text lines plus some metadata."""
 
     lines: list[str]
-    lineno: int  # 1-based
-    col_offset: int  # 0-based; may be needed for other languages
+    lineno: int  # 0-based!
 
     def to_dict(self) -> dict[str, object]:
         return {
             "lines": self.lines,
             "lineno": self.lineno,
-            "col_offset": self.col_offset,
         }
 
 
@@ -95,8 +93,6 @@ def custom_json(obj: object) -> dict[str, object]:
         raise TypeError(f"Cannot JSON serialize object of type {type(obj)}")
 
 
-# TODO: Make this a singleton class?
-
 last_ts: datetime.datetime = datetime.datetime.now()
 
 
@@ -129,8 +125,6 @@ When we identify a non-splittable node, we create a Chunk out of it.
 There's a recursive function that takes in text and a tree, and returns a list of Chunks,
 representing that tree in pre-order (parents preceding children).
 """
-
-# TODO: Turn the recursive chunk creation into a class
 
 COMPOUND_STATEMENT_NODES = [
     # Nodes that can contain statement nodes.
@@ -174,7 +168,7 @@ def extract_blob(lines: list[str], node: ast.AST) -> Blob:
         decorators: list[ast.AST] = node.decorator_list  # type: ignore
         if decorators:
             start = decorators[0].lineno - 1  # type: ignore
-    return Blob(lines[start:end], start, 0)  # type: ignore
+    return Blob(lines[start:end], start)  # type: ignore
 
 
 def create_chunks_recursively(
@@ -193,10 +187,21 @@ def create_chunks_recursively(
             chunk = Chunk(node_id, node_name, node_blobs, parent.id, parent_slot, [])
             chunks.append(chunk)
             chunks.extend(create_chunks_recursively(lines, node, chunk))
-            parent_slot += 1
             parent.children.append(node_id)
+            parent_slot += 1
             assert len(parent.children) == parent_slot
-            # TODO: Remove from parent blob
+
+            # Split last parent.blobs[-1] into two, leaving a gap for the new Chunk
+            parent_blob: Blob = parent.blobs.pop()
+            parent_start: int = parent_blob.lineno
+            parent_end: int = parent_blob.lineno + len(parent_blob.lines)
+            first_blob, last_blob = chunk.blobs[0], chunk.blobs[-1]
+            first_start = first_blob.lineno
+            last_end = last_blob.lineno + len(last_blob.lines)
+            if parent_start <= last_end and last_end <= parent_end:
+                parent.blobs.append(Blob(lines[parent_start:first_start], parent_start))
+                parent.blobs.append(Blob(lines[last_end:parent_end], last_end))
+                assert len(parent.blobs) == parent_slot + 1
 
     return chunks
 
@@ -210,7 +215,7 @@ def chunker(text: str, tree: ast.AST) -> list[Chunk]:
     # Handcraft the root node
     root_id = generate_id()
     root_name = tree.__class__.__name__
-    root = Chunk(root_id, root_name, [Blob(lines, 1, 0)], "", 0, [])
+    root = Chunk(root_id, root_name, [Blob(lines, 0)], "", 0, [])
 
     chunks = create_chunks_recursively(lines, tree, root)
     chunks.insert(0, root)
