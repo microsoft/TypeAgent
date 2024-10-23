@@ -9,6 +9,7 @@ import {
     TemplateSchema,
 } from "@typeagent/agent-sdk";
 import { TemplateData, TemplateEditConfig } from "agent-dispatcher";
+import { getObjectProperty, setObjectProperty } from "common-utils";
 import { getClientAPI } from "./main";
 import { SearchMenu, SearchMenuItem } from "./search";
 
@@ -60,78 +61,11 @@ class FieldContainer {
     }
 
     public getProperty(name: string) {
-        if (name === "") {
-            return this.current;
-        }
-        const properties = name.split(".");
-        let lastName: string | number = "current";
-        let curr: any = this;
-        for (let i = 0; i < properties.length; i++) {
-            const name = properties[i];
-            // Protect against prototype pollution
-            if (
-                name === "__proto__" ||
-                name === "constructor" ||
-                name === "prototype"
-            ) {
-                throw new Error(`Invalid property name: ${name}`);
-            }
-            const maybeIndex = parseInt(name);
-            if (maybeIndex.toString() === name) {
-                // Array index
-                const next = curr[lastName];
-                if (next === undefined || !Array.isArray(next)) {
-                    return undefined;
-                }
-                curr = next;
-                lastName = maybeIndex;
-            } else {
-                const next = curr[lastName];
-                if (next === undefined || typeof next !== "object") {
-                    return undefined;
-                }
-                curr = next;
-                lastName = name;
-            }
-        }
-        return curr[lastName];
+        return getObjectProperty(this, "current", name);
     }
 
     public setProperty(name: string, value: any) {
-        const properties = name.split(".");
-        let lastName: string | number = "current";
-        let curr = this;
-        for (let i = 0; i < properties.length; i++) {
-            const name = properties[i];
-            // Protect against prototype pollution
-            if (
-                name === "__proto__" ||
-                name === "constructor" ||
-                name === "prototype"
-            ) {
-                throw new Error(`Invalid property name: ${name}`);
-            }
-            const maybeIndex = parseInt(name);
-            if (maybeIndex.toString() === name) {
-                // Array index
-                let next = curr[lastName];
-                if (next === undefined || !Array.isArray(next)) {
-                    next = [];
-                    curr[lastName] = next;
-                }
-                curr = next;
-                lastName = maybeIndex;
-            } else {
-                let next = curr[lastName];
-                if (next === undefined || typeof next !== "object") {
-                    next = {};
-                    curr[lastName] = next;
-                }
-                curr = next;
-                lastName = name;
-            }
-        }
-        curr[lastName] = value;
+        setObjectProperty(this, "current", name, value, true);
     }
 
     public async refreshSchema(index: number) {
