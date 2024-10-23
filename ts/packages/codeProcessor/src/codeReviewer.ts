@@ -22,6 +22,7 @@ import {
 } from "./code.js";
 import { CodeAnswer } from "./codeAnswerSchema.js";
 import { CodeDocumentation } from "./codeDocSchema.js";
+import Path from "path";
 
 /**
  * A code reviewer
@@ -53,7 +54,7 @@ export interface CodeReviewer {
 export function createCodeReviewer(
     model?: ChatModel | undefined,
 ): CodeReviewer {
-    model ??= openai.createChatModel();
+    model ??= openai.createChatModel([Path.parse(__filename).name]);
     const codeReviewSchema = ["codeReviewSchema.ts"];
     const reviewTranslator = createReviewTranslator<CodeReview>(
         model,

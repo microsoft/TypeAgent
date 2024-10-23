@@ -33,9 +33,10 @@ import {
     sampleFiles,
 } from "./common.js";
 import { createCommandTransformer } from "./commandTransformer.js";
+import Path from "path";
 
 export async function runCodeChat(): Promise<void> {
-    const model = openai.createChatModel();
+    const model = openai.createChatModel([Path.parse(__filename).name]);
     const codeReviewer = createCodeReviewer(model);
     // For answer/code indexing examples
     const folderPath = "/data/code";

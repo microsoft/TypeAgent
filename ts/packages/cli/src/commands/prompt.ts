@@ -31,6 +31,7 @@ export default class Prompt extends Command {
     async run(): Promise<void> {
         const { args, flags } = await this.parse(Prompt);
         const model = openai.createChatModel(
+            ["cli"],
             flags.model,
             flags.json
                 ? {

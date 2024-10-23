@@ -14,6 +14,7 @@ import {
     CommandHandlerTable,
 } from "@typeagent/agent-sdk/helpers/command";
 import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
+import Path from "path";
 
 export type UserRequestList = {
     messages: UserRequest[];
@@ -160,6 +161,7 @@ class RandomOnlineCommandHandler implements CommandHandlerNoParams {
             completionSettings.response_format = { type: "json_object" };
         }
         const chatModel = openai.createChatModel(
+            [Path.parse(__filename).name],
             apiSettings,
             completionSettings,
         );

@@ -6,3 +6,4 @@ export * as openai from "./openai";
 export * as bing from "./bing";
 export * from "./restClient";
 export * from "./auth";
+export * from "./tokenCounter";

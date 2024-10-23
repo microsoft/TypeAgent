@@ -39,6 +39,7 @@ import {
     argSourceFileOrFolder,
     getMessagesAndCount,
 } from "./common.js";
+import Path from "path";
 
 export type ChatContext = {
     storePath: string;
@@ -93,6 +94,7 @@ export async function createChatMemoryContext(
 ): Promise<ChatContext> {
     const storePath = "/data/testChat";
     const chatModel = openai.createChatModel(
+        [Path.parse(__filename).name],
         undefined,
         undefined,
         completionCallback,

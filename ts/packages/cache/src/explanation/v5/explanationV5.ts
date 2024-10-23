@@ -62,6 +62,8 @@ import {
 } from "../../constructions/matchPart.js";
 import { Transforms } from "../../constructions/transforms.js";
 
+import Path from "path";
+
 type Explanation = PropertyExplanation &
     SubPhraseExplanation &
     AlternativesExplanation;
@@ -307,9 +309,13 @@ async function augmentExplanation(
             if (paramRange) {
                 const subPhrases = param.propertySubPhrases;
                 if (subPhrases.length === 1) {
-                    const model = openai.createChatModel(undefined, {
-                        response_format: { type: "json_object" },
-                    });
+                    const model = openai.createChatModel(
+                        [Path.parse(__filename).name],
+                        undefined,
+                        {
+                            response_format: { type: "json_object" },
+                        },
+                    );
                     const subPhrase = subPhrases[0];
                     const prompt = `You are a service that translates user requests into JSON objects of type "ParameterVariationResult" according to the following TypeScript definitions:
 interface ParameterVariation {

@@ -49,6 +49,7 @@ import {
     getSystemTemplateCompletion,
     getSystemTemplateSchema,
 } from "../translation/actionTemplate.js";
+import { getTokenCommandHandlers } from "../handlers/tokenCommandHandler.js";
 import { Actions } from "agent-cache";
 import {
     getParameterNames,
@@ -349,6 +350,7 @@ const systemHandlers: CommandHandlerTable = {
         },
         random: getRandomCommandHandlers(),
         notify: getNotifyCommandHandlers(),
+        token: getTokenCommandHandlers(),
     },
 };
 
