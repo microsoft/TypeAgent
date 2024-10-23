@@ -358,11 +358,16 @@ export function createSearchResponse<
     }
 
     function topicTimeRanges(): (dateTime.DateRange | undefined)[] {
-        return response.topics.length > 0
-            ? response.topics.map((t) =>
-                  getRangeOfTemporalSequence(t.temporalSequence),
-              )
-            : [];
+        let ranges: dateTime.DateRange[] = [];
+        for (let i = 0; i < response.topics.length; ++i) {
+            const range = getRangeOfTemporalSequence(
+                response.topics[i].temporalSequence,
+            );
+            if (range !== undefined) {
+                ranges.push(range);
+            }
+        }
+        return ranges;
     }
 
     function* allActions(): IterableIterator<Action> {
@@ -917,6 +922,7 @@ export async function createConversation(
             // Search entities
             filter = {
                 searchTerms: getAllTermsInFilter(filter, false),
+                timeRange: filter.timeRange,
             };
             const tasks = [
                 topicIndex.searchTermsV2(filter, options.topic),

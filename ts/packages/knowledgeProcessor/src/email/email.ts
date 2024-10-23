@@ -299,6 +299,7 @@ export async function createEmailMemory(
 
     const entityIndex = await cm.conversation.getEntityIndex();
     entityIndex.noiseTerms.put("email");
+    entityIndex.noiseTerms.put("message");
 
     cm.searchProcessor.answers.settings.hints = `messages are *emails*. Use email headers (to, subject. etc) to determine if message is highly relevant to the question`;
     return cm;

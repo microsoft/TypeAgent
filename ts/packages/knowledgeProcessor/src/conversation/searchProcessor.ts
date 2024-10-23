@@ -585,7 +585,7 @@ export function createSearchProcessor(
         topLevelTopicSummary: boolean,
         options: SearchProcessingOptions,
         loadActions: boolean = false,
-    ) {
+    ): ConversationSearchOptions {
         const topicLevel = topLevelTopicSummary ? 2 : 1;
         const topicOptions = createTopicSearchOptions(topLevelTopicSummary);
         topicOptions.minScore = options.minScore;
