@@ -137,6 +137,7 @@ COMPOUND_STATEMENT_NODES = [
     "ClassDef",
 ]
 
+
 def ast_iter_child_statement_nodes(node: ast.AST) -> Iterator[ast.AST]:
     """Iterate over the children of a node."""
     for name, field in ast.iter_fields(node):
@@ -150,18 +151,6 @@ def ast_iter_child_statement_nodes(node: ast.AST) -> Iterator[ast.AST]:
                         yield item
 
 
-def ast_walk(node: ast.AST) -> Iterator[ast.AST]:
-    """
-    Recursively yield all statement-ish nodes in the tree starting at *node*
-    (including *node* itself). (Adapted from ast.walk() in the Python stdlib.)
-    """
-    todo = deque([node])
-    while todo:
-        node = todo.popleft()
-        todo.extend(ast_iter_child_statement_nodes(node))
-        yield node  # Yield in pre-order
-
-
 def extract_text(text: str, node: ast.AST) -> str:
     """Extract the text of a node from the source code."""
     lines = text.splitlines(keepends=True)  # TODO: pre-compute this earlier
@@ -169,20 +158,19 @@ def extract_text(text: str, node: ast.AST) -> str:
     return "".join(lines[node.lineno - 1 : node.end_lineno])
 
 
-def create_chunks_recursively(
-    text: str, tree: ast.AST, parent: Chunk
-) -> list[Chunk]:
+def create_chunks_recursively(text: str, tree: ast.AST, parent: Chunk) -> list[Chunk]:
     """Recursively create chunks for the AST."""
     chunks = []
     parent_slot: int = 0
-    for node in ast_walk(tree):
-        if node is tree:
-            continue  # Skip the root or else we'd never make progress
+
+    for node in ast_iter_child_statement_nodes(tree):
         if isinstance(node, ast.FunctionDef) or isinstance(node, ast.ClassDef):
             node_id = generate_id()
             node_blob = extract_text(text, node)
             node_blobs = [node_blob]
-            chunk = Chunk(node_id, node.__class__.__name__, node_blobs, parent.id, parent_slot, [])
+            chunk = Chunk(
+                node_id, node.__class__.__name__, node_blobs, parent.id, parent_slot, []
+            )
             chunks.append(chunk)
             chunks.extend(create_chunks_recursively(text, node, chunk))
             parent_slot += 1
