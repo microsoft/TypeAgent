@@ -38,20 +38,22 @@ export class TypeAgentAPIWebServer {
                 // serve requested file
                 if (existsSync(requestedFile)) {
                     res.writeHead(200, {
-                        "Content-Type": getMimeType(path.extname(requestedFile)),
+                        "Content-Type": getMimeType(
+                            path.extname(requestedFile),
+                        ),
                         "Access-Control-Allow-Origin": "*",
                     });
                     res.end(readFileSync(requestedFile).toString());
 
                     console.log(`Served '${requestedFile}' as '${req.url}'`);
                 }
-            } catch(error) {
+            } catch (error) {
                 res.writeHead(404, { "Content-Type": "text/plain" });
                 res.end("File Not Found!\n");
 
                 console.log(`Unable to serve '${req.url}', 404. ${error}`);
-                }
-            });
+            }
+        });
     }
 
     start() {

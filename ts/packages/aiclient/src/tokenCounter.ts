@@ -78,7 +78,7 @@ export class TokenCounter {
             this.maxUsage.prompt_tokens = tokens.prompt_tokens;
             this.maxUsage.total_tokens = tokens.total_tokens;
         }
-        
+
         debugTokens(
             "Token Odometer: " +
                 JSON.stringify(this.totals) +
