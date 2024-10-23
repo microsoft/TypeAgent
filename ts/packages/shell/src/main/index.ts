@@ -90,7 +90,7 @@ function setContentSize() {
 
 const time = performance.now();
 debugShell("Starting...");
-function createWindow(): void {
+function createWindow(dispatcher: Dispatcher): void {
     debugShell("Creating window", performance.now() - time);
 
     // Create the browser window.
@@ -153,6 +153,8 @@ function createWindow(): void {
             ShellSettings.getinstance().closeInlineBrowser();
             ShellSettings.getinstance().size = mainWindow.getSize();
         }
+
+        dispatcher.getContext().session.save();
     });
 
     mainWindow.on("closed", () => {
@@ -793,12 +795,12 @@ app.whenReady().then(async () => {
         });
     });
 
-    createWindow();
+    createWindow(dispatcher);
 
     app.on("activate", function () {
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.
-        if (BrowserWindow.getAllWindows().length === 0) createWindow();
+        if (BrowserWindow.getAllWindows().length === 0) createWindow(dispatcher);
     });
 });
 

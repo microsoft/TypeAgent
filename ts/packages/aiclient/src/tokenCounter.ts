@@ -14,6 +14,8 @@ export class TokenCounter {
     private totals: CompletionUsageStats = { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0};
     private numSamples: number = 0;
     private maxUsage: CompletionUsageStats = { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0};
+    private _tags: string[] = [];
+    private _stats: CompletionUsageStats[] = [];
 
     // TODO: intermittently cache these with the session
     private constructor() {
@@ -53,6 +55,8 @@ export class TokenCounter {
             }
 
             this.counters.set(t, updatedCount)
+            this._tags = Array.from(this.counters.keys());
+            this._stats = Array.from(this.counters.values());
         });
 
         this.numSamples++;
@@ -79,8 +83,29 @@ export class TokenCounter {
         }
     }
 
+    /**
+     * Sets the token counter to a specific state (i.e. continuing from a previously stored state)
+     * @param data the token counter data to load
+     */
+    public static load(data: TokenCounter) {
+        this.instance = new TokenCounter();
+        this.instance.numSamples = data.numSamples;
+        this.instance._stats = Array.from(data._stats);
+        this.instance._tags = Array.from(data._tags);
+        this.instance.maxUsage = data.maxUsage;
+        this.instance.totals = data.totals;
+
+        this.instance._tags.forEach((tag, index) => {
+            this.instance.counters.set(tag, this.instance._stats[index]);
+          });
+    }
+
     public get tags(): string[] {
-        return Array.from(this.counters.keys());
+        return this._tags;
+    }
+
+    public get stats(): CompletionUsageStats[] {
+        return this._stats;
     }
 
     public get total(): CompletionUsageStats {
