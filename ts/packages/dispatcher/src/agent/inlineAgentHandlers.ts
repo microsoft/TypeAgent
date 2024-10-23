@@ -46,6 +46,7 @@ import { RequestCommandHandler } from "../handlers/requestCommandHandler.js";
 import { DisplayCommandHandler } from "../handlers/displayCommandHandler.js";
 import { getHandlerTableUsage, getUsage } from "../dispatcher/commandHelp.js";
 import {
+    getActionCompletion,
     getSystemTemplateCompletion,
     getSystemTemplateSchema,
 } from "../translation/actionTemplate.js";
@@ -58,6 +59,7 @@ import {
 } from "../translation/actionInfo.js";
 import { executeActions } from "../action/actionHandlers.js";
 import { getObjectProperty } from "common-utils";
+import { getAppAgentName } from "../translation/agentTranslators.js";
 
 function executeSystemAction(
     action: AppAction,
@@ -213,7 +215,6 @@ class ActionCommandHandler implements CommandHandler {
             parameters: (params.flags.parameters as any) ?? {},
         };
 
-        console.log(action);
         validateAction(actionInfo, action, true);
         return executeActions(Actions.fromFullActions([action]), context);
     }
@@ -252,7 +253,7 @@ class ActionCommandHandler implements CommandHandler {
             }
 
             if (name === "--parameters.") {
-                // complete the fclag name for json properties
+                // complete the flag name for json properties
                 const actionInfo = this.getActionInfo(systemContext, params);
                 if (actionInfo === undefined) {
                     continue;
@@ -274,6 +275,7 @@ class ActionCommandHandler implements CommandHandler {
 
             if (name.startsWith("--parameters.")) {
                 // complete the flag values for json properties
+                const propertyName = name.substring(2);
                 const actionInfo = this.getActionInfo(systemContext, params);
                 if (actionInfo === undefined) {
                     continue;
@@ -284,7 +286,23 @@ class ActionCommandHandler implements CommandHandler {
                 );
                 if (fieldType?.type === "string-union") {
                     completions.push(...fieldType.typeEnum);
+                    continue;
                 }
+
+                const action = {
+                    translatorName: params.args?.translatorName,
+                    actionName: params.args?.actionName,
+                    parameters: params.flags?.parameters,
+                };
+
+                completions.push(
+                    ...(await getActionCompletion(
+                        systemContext,
+                        action as Partial<AppAction>,
+                        propertyName,
+                    )),
+                );
+
                 continue;
             }
         }
