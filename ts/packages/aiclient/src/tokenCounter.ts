@@ -2,6 +2,9 @@
 // Licensed under the MIT License.
 
 import { CompletionUsageStats } from "./openai.js";
+import registerDebug from "debug";
+
+const debugTokens = registerDebug("typeagent:tokenCounter");
 
 /**
  *  Token counter for LLM calls.
@@ -75,8 +78,8 @@ export class TokenCounter {
             this.maxUsage.prompt_tokens = tokens.prompt_tokens;
             this.maxUsage.total_tokens = tokens.total_tokens;
         }
-
-        console.log(
+        
+        debugTokens(
             "Token Odometer: " +
                 JSON.stringify(this.totals) +
                 "\nAverage Tokens per call: " +

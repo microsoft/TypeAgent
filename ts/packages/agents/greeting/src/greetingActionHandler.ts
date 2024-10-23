@@ -16,9 +16,6 @@ import {
     PersonalizedGreetingAction,
 } from "./greetingActionSchema.js";
 import { randomInt } from "node:crypto";
-//import { getLookupInstructions, getLookupSettings, LookupSettings, searchWeb } from "chat-agent/agent/handlers";
-//import { StopWatch } from "common-utils";
-//import { generateAnswerFromWebPages } from "typeagent";
 import {
     CommandHandlerNoParams,
     CommandHandlerTable,
@@ -76,7 +73,6 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
         let maxWindowLength = 30;
         let chatHistory: PromptSection[] = [];
 
-        // TODO: replace with openai lib calls instead of typechat calls
         const chat = createTypeChat<GreetingAction>(
             chatModel,
             personalizedGreetingSchema,
