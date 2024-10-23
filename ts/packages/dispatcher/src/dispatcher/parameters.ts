@@ -26,6 +26,24 @@ function parseIntParameter(
     return value;
 }
 
+function parseJsonParameter(
+    valueStr: string,
+    kind: "flag" | "argument",
+    name: string,
+) {
+    try {
+        const v = JSON.parse(valueStr);
+        if (v === null || typeof v !== "object") {
+            throw new Error("Not an object");
+        }
+        return v;
+    } catch (e: any) {
+        throw new Error(
+            `Invalid JSON value for ${kind} '${name}': ${e.message}`,
+        );
+    }
+}
+
 function stripQuoteFromToken(term: string) {
     if (term.length !== 0 && (term[0] === "'" || term[0] === '"')) {
         const lastChar = term[term.length - 1];
@@ -114,6 +132,8 @@ export function parseParams<T extends ParameterDefinitions>(
                     const stripped = stripQuoteFromToken(valueStr);
                     if (valueType === "number") {
                         value = parseIntParameter(stripped, "flag", next);
+                    } else if (valueType === "json") {
+                        value = parseJsonParameter(stripped, "flag", next);
                     } else {
                         value = stripped;
                     }
@@ -150,7 +170,9 @@ export function parseParams<T extends ParameterDefinitions>(
                 const argValue =
                     argDef.type === "number"
                         ? parseIntParameter(arg, "argument", name)
-                        : arg;
+                        : argDef.type === "json"
+                          ? parseJsonParameter(arg, "argument", name)
+                          : arg;
                 if (argDef.multiple !== true) {
                     argDefIndex++;
                     parsedArgs[name] = argValue;
@@ -184,28 +206,36 @@ export function parseParams<T extends ParameterDefinitions>(
                 }
             }
         }
-        if (argDefs !== undefined) {
-            // Detect missing arguments
-            if (argDefIndex !== argDefs.length) {
-                for (let i = argDefIndex; i < argDefs.length; i++) {
-                    const [name, argDef] = argDefs[i];
-                    if (argDef.optional === true) {
-                        continue;
-                    }
-                    if (
-                        argDef.multiple === true &&
-                        parsedArgs[name] !== undefined
-                    ) {
-                        continue;
-                    }
-                    throw new Error(`Missing argument '${name}'`);
+    }
+    let nextArgs: string[] = [];
+    if (argDefs !== undefined) {
+        // Detect missing arguments
+        if (argDefIndex !== argDefs.length) {
+            for (let i = argDefIndex; i < argDefs.length; i++) {
+                const [name, argDef] = argDefs[i];
+                nextArgs.push(name);
+
+                if (argDef.optional === true) {
+                    continue;
                 }
+                if (
+                    argDef.multiple === true &&
+                    parsedArgs[name] !== undefined
+                ) {
+                    continue;
+                }
+                if (partial) {
+                    break;
+                }
+                throw new Error(`Missing argument '${name}'`);
             }
         }
     }
+
     return {
         args: argDefs !== undefined ? parsedArgs : undefined,
         flags: flagDefs !== undefined ? parsedFlags : undefined,
         tokens: parsedTokens,
+        nextArgs,
     };
 }

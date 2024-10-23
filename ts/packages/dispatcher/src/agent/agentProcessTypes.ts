@@ -113,6 +113,13 @@ export type AgentInvokeFunctions = {
     ) => Promise<DynamicDisplay>;
     closeAgentContext: (param: Partial<ContextParams>) => Promise<void>;
     getCommands: (param: Partial<ContextParams>) => Promise<CommandDescriptors>;
+    getCommandCompletion(
+        param: Partial<ContextParams> & {
+            commands: string[];
+            params: ParsedCommandParams<ParameterDefinitions>;
+            name: string;
+        },
+    ): Promise<string[] | undefined>;
     executeCommand(
         param: Partial<ActionContextParams> & {
             commands: string[];

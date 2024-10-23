@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import path from "path";
-import { openai } from "aiclient";
+import { ChatModel, openai } from "aiclient";
 import {
     ObjectFolderSettings,
     SearchOptions,
@@ -165,16 +165,12 @@ export async function createConversationManager(
     conversationPath: string,
     createNew: boolean,
     existingConversation?: Conversation | undefined,
+    model?: ChatModel,
 ): Promise<ConversationManager<string, string>> {
     const conversationSettings = createConversationSettings();
-    const knowledgeModel = openai.createChatModel([
-        "conversationManager",
-        "knowledgeModel",
-    ]);
-    const answerModel = openai.createChatModel([
-        "conversationManager",
-        "answerModel",
-    ]);
+    const chatModel = model ?? openai.createChatModel("conversationManager");
+    const knowledgeModel = chatModel;
+    const answerModel = chatModel;
 
     const folderSettings = defaultFolderSettings();
 

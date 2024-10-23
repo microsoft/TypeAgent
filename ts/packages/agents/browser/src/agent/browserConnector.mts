@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { WebSocketMessage } from "common-utils";
-import { AppActionWithParameters, SessionContext } from "@typeagent/agent-sdk";
+import { AppAction, SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "./actionHandler.mjs";
 
 export class BrowserConnector {
@@ -12,10 +12,7 @@ export class BrowserConnector {
     this.webSocket = context.agentContext.webSocket;
   }
 
-  async sendActionToBrowser(
-    action: AppActionWithParameters,
-    messageType?: string,
-  ) {
+  async sendActionToBrowser(action: AppAction, messageType?: string) {
     return new Promise<any | undefined>((resolve, reject) => {
       if (this.webSocket) {
         try {

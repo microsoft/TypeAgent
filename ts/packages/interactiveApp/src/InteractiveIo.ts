@@ -119,6 +119,9 @@ export class ConsoleWriter {
         if (indent) {
             this.write(indent);
         }
+        if (Array.isArray(value)) {
+            value = value.join("; ");
+        }
         const line = `${paddedNameLength ? name.padEnd(paddedNameLength) : name}  ${value}`;
         this.writeLine(line);
     }
@@ -128,7 +131,7 @@ export class ConsoleWriter {
         sort: boolean = false,
         stringifyValue?: (value: T) => string | string[],
         indent?: string,
-    ): void {
+    ): number {
         const keys = Object.keys(record);
         if (sort) {
             keys.sort();
@@ -146,6 +149,7 @@ export class ConsoleWriter {
                 this.writeNameValue(key, strValues, maxLength, indent);
             }
         }
+        return maxLength;
     }
 
     public writeLink(url: string): void {

@@ -17,7 +17,6 @@ import {
     DisplayType,
     AppAgentEvent,
     DynamicDisplay,
-    AppActionWithParameters,
 } from "@typeagent/agent-sdk";
 import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
 import { searchAlbum, searchArtists, searchTracks } from "../client.js";
@@ -32,7 +31,7 @@ export function instantiate(): AppAgent {
         validateWildcardMatch: validatePlayerWildcardMatch,
         getDynamicDisplay: getPlayerDynamicDisplay,
         ...getPlayerCommandInterface(),
-        getActionCompletion: getPlayerActionComplete,
+        getActionCompletion: getPlayerActionCompletion,
     };
 }
 
@@ -179,8 +178,8 @@ async function getPlayerDynamicDisplay(
     throw new Error(`Invalid displayId ${displayId}`);
 }
 
-async function getPlayerActionComplete(
-    action: AppActionWithParameters,
+async function getPlayerActionCompletion(
+    action: AppAction,
     propertyName: string,
     context: SessionContext<PlayerActionContext>,
 ): Promise<string[]> {

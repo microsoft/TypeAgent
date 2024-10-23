@@ -6,11 +6,8 @@ import { Entity } from "./memory.js";
 
 export interface AppAction {
     actionName: string;
-    translatorName?: string | undefined;
-}
-
-export interface AppActionWithParameters extends AppAction {
-    parameters: { [key: string]: any };
+    translatorName?: string;
+    parameters: Record<string, unknown>; // the type of the parameters are defined by the AppAgent
 }
 
 export type ActionResultError = {

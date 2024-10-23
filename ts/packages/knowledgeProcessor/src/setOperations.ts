@@ -342,6 +342,28 @@ export function removeUndefined<T = any>(src: Array<T | undefined>): T[] {
     return src.filter((item) => item !== undefined) as T[];
 }
 
+export function removeDuplicates<T = any>(
+    src: T[] | undefined,
+    comparer: (x: T, y: T) => number,
+): T[] | undefined {
+    if (src === undefined || src.length <= 1) {
+        return src;
+    }
+
+    src.sort(comparer);
+    let prev = src[0];
+    let i = 1;
+    while (i < src.length) {
+        if (comparer(prev, src[i]) === 0) {
+            src.splice(i, 1);
+        } else {
+            prev = src[i];
+            i++;
+        }
+    }
+    return src;
+}
+
 export type WithFrequency<T = any> = {
     value: T;
     count: number;
@@ -349,6 +371,7 @@ export type WithFrequency<T = any> = {
 
 export interface HitTable<T> {
     readonly size: number;
+
     get(value: T): ScoredItem<T> | undefined;
     getScore(value: T): number;
     add(value: T, score?: number | undefined): number;
@@ -362,10 +385,13 @@ export interface HitTable<T> {
             | IterableIterator<ScoredItem<T>>
             | Array<ScoredItem<T>>,
     ): void;
-    keys(): IterableIterator<T>;
+    keys(): IterableIterator<any>;
     byHighestScore(): ScoredItem<T>[];
     getTop(): T[];
     getTopK(k: number): T[];
+
+    getByKey(key: any): ScoredItem<T> | undefined;
+    set(key: any, value: ScoredItem<T>): void;
 }
 
 export function createHitTable<T>(
@@ -377,6 +403,7 @@ export function createHitTable<T>(
             return map.size;
         },
         get,
+        set,
         getScore,
         add,
         addMultiple,
@@ -385,11 +412,16 @@ export function createHitTable<T>(
         byHighestScore,
         getTop,
         getTopK,
+        getByKey,
     };
 
     function get(value: T): ScoredItem<T> | undefined {
         const key = getKey(value);
         return map.get(key);
+    }
+
+    function set(key: any, value: ScoredItem<T>): void {
+        map.set(key, value);
     }
 
     function getScore(value: T): number {
@@ -484,6 +516,10 @@ export function createHitTable<T>(
             topK.push(topItems[i].item);
         }
         return topK;
+    }
+
+    function getByKey(key: any): ScoredItem<T> | undefined {
+        return map.get(key);
     }
 
     function getKey(value: T): any {

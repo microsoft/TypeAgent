@@ -25,7 +25,9 @@
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "tsc": "tsc -b"
   },
-  "dependencies": {},
+  "dependencies": {
+    "type-fest": "^4.26.1"
+  },
   "devDependencies": {
     "@types/jest": "^29.5.7",
     "jest": "^29.7.0",

@@ -14,8 +14,8 @@ import { flatten } from "../setOperations.js";
 import { SearchResponse } from "./conversation.js";
 import registerDebug from "debug";
 import { CompositeEntity } from "./entities.js";
-import { Action } from "./knowledgeSchema.js";
 import { splitLargeTextIntoChunks } from "../textChunker.js";
+import { ActionGroup } from "./actions.js";
 
 const answerError = registerDebug("knowledge-processor:answerGenerator:error");
 
@@ -48,18 +48,27 @@ export interface AnswerGenerator {
 
 export type AnswerGeneratorSettings = {
     topKEntities: number;
+    topKActions: number;
     maxCharsInContext?: number | undefined;
     useChunking?: boolean | undefined;
+    maxChunks?: number | undefined;
     concurrency?: number;
+    hints?: string | undefined;
 };
+
+export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
+    return {
+        topKEntities: 8,
+        topKActions: 0,
+        maxCharsInContext: 4096,
+    };
+}
 
 export function createAnswerGenerator(
     model: ChatModel,
     generatorSettings?: AnswerGeneratorSettings,
 ): AnswerGenerator {
-    const settings = generatorSettings ?? {
-        topKEntities: 8,
-    };
+    const settings = generatorSettings ?? createAnswerGeneratorSettings();
     const translator = createChatTranslator<AnswerResponse>(
         model,
         loadSchema(["answerSchema.ts"], import.meta.url),
@@ -67,7 +76,9 @@ export function createAnswerGenerator(
     );
 
     return {
-        settings,
+        get settings() {
+            return settings;
+        },
         generateAnswer,
         generateAnswerInChunks,
     };
@@ -114,9 +125,12 @@ export function createAnswerGenerator(
             AnswerResponse | undefined
         >,
     ): Promise<AnswerResponse | undefined> {
-        const chunks = [
+        let chunks = [
             ...splitAnswerContext(context, answerSettings.maxCharsPerChunk),
         ];
+        if (settings.maxChunks && settings.maxChunks) {
+            chunks = chunks.slice(0, settings.maxChunks);
+        }
         const partialAnswers = await asyncArray.mapAsync(
             chunks,
             settings.concurrency ?? 2,
@@ -209,6 +223,9 @@ export function createAnswerGenerator(
         prompt +=
             "Answer the question using only the relevant topics, entities, actions, messages and time ranges/timestamps found in CONVERSATION HISTORY.\n";
         prompt += "Entities and topics are case-insensitive\n";
+        if (settings.hints) {
+            prompt += "\n" + settings.hints;
+        }
         if (higherPrecision) {
             prompt +=
                 "Don't answer if the topics and entity names/types in the question are not in the conversation history.\n";
@@ -236,7 +253,7 @@ export function createAnswerGenerator(
         const context: AnswerContext = {
             entities: {
                 timeRanges: response.entityTimeRanges(),
-                values: response.getCompositeEntities(settings!.topKEntities),
+                values: response.mergeAllEntities(settings!.topKEntities),
             },
             topics: {
                 timeRanges: response.topicTimeRanges(),
@@ -252,12 +269,14 @@ export function createAnswerGenerator(
                       })
                     : [],
         };
-        const actions = [...response.allActions()];
-        if (actions.length > 0) {
-            context.actions = {
-                timeRanges: response.actionTimeRanges(),
-                values: actions,
-            };
+        if (settings.topKActions > 0 && response.hasActions()) {
+            const actions = response.mergeAllActions(settings!.topKActions);
+            if (actions.length > 0) {
+                context.actions = {
+                    timeRanges: response.actionTimeRanges(),
+                    values: response.mergeAllActions(settings!.topKActions),
+                };
+            }
         }
         return context;
     }
@@ -303,7 +322,7 @@ export type AnswerContextItem<T> = {
 export type AnswerContext = {
     entities?: AnswerContextItem<CompositeEntity> | undefined;
     topics?: AnswerContextItem<string> | undefined;
-    actions?: AnswerContextItem<Action> | undefined;
+    actions?: AnswerContextItem<ActionGroup> | undefined;
     messages?: dateTime.Timestamped<string>[] | undefined;
 };
 

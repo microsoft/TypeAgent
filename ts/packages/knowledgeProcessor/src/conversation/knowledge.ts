@@ -1,14 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { asyncArray, collections, loadSchema } from "typeagent";
+import { asyncArray, loadSchema } from "typeagent";
 import {
     Action,
-    ActionParam,
     ConcreteEntity,
     KnowledgeResponse,
     Value,
-    VerbTense,
 } from "./knowledgeSchema.js";
 import {
     TypeChatJsonTranslator,
@@ -17,7 +15,7 @@ import {
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { SourceTextBlock, TextBlock, TextBlockType } from "../text.js";
-import { facetToString, mergeEntityFacet } from "./entities.js";
+import { mergeEntityFacet } from "./entities.js";
 
 export interface KnowledgeExtractor {
     readonly settings: KnowledgeExtractorSettings;
@@ -242,54 +240,4 @@ export function knowledgeValueToString(value: Value): string {
         return `${value.amount} ${value.units}`;
     }
     return value.toString();
-}
-
-export function actionToString(action: Action): string {
-    let text = "";
-    text = appendEntityName(text, action.subjectEntityName);
-    text += ` [${action.verbs.join(", ")}]`;
-    text = appendEntityName(text, action.objectEntityName);
-    text = appendEntityName(text, action.indirectObjectEntityName);
-    text += ` {${action.verbTense}}`;
-    if (action.subjectEntityFacet) {
-        text += ` <${facetToString(action.subjectEntityFacet)}>`;
-    }
-    return text;
-
-    function appendEntityName(text: string, name: string): string {
-        if (name !== NoEntityName) {
-            text += " ";
-            text += name;
-        }
-        return text;
-    }
-}
-
-export function actionVerbsToString(
-    verbs: string[],
-    verbTense?: VerbTense,
-): string {
-    const text = verbTense
-        ? `${verbs.join(" ")} {In ${verbTense}}`
-        : verbs.join(" ");
-    return text;
-}
-
-export function actionParamsToString(action: Action): string {
-    return action.params
-        ? action.params.map((p) => actionParamToString(p)).join("; ")
-        : "";
-}
-
-function actionParamToString(param: string | ActionParam): string {
-    return typeof param === "string"
-        ? param
-        : `${param.name}="${knowledgeValueToString(param.value)}"`;
-}
-
-export function actionToLowerCase(action: Action): Action {
-    action.subjectEntityName = action.subjectEntityName.toLowerCase();
-    action.objectEntityName = action.objectEntityName.toLowerCase();
-    collections.lowerAndSort(action.verbs);
-    return action;
 }

@@ -4,8 +4,10 @@
 import {
     FileSystem,
     ObjectFolderSettings,
+    ScoredItem,
     SearchOptions,
     asyncArray,
+    collections,
     dateTime,
 } from "typeagent";
 import {
@@ -19,7 +21,7 @@ import {
     createTermMap,
     createTextIndex,
 } from "../knowledgeIndex.js";
-import { Action, VerbTense } from "./knowledgeSchema.js";
+import { Action, ActionParam, VerbTense } from "./knowledgeSchema.js";
 import path from "path";
 import { ActionFilter } from "./knowledgeSearchSchema.js";
 import {
@@ -35,16 +37,19 @@ import {
     unionMultiple,
     uniqueFrom,
     intersectMultiple,
+    createHitTable,
+    removeDuplicates,
 } from "../setOperations.js";
 import {
     ExtractedAction,
+    knowledgeValueToString,
     NoEntityName,
-    actionVerbsToString,
 } from "./knowledge.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { toStopDate, toStartDate } from "./knowledgeActions.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
 import { TermFilterV2, ActionTerm } from "./knowledgeTermSearchSchema2.js";
+import { facetToString } from "./entities.js";
 
 export interface ActionSearchOptions extends SearchOptions {
     verbSearchOptions?: SearchOptions | undefined;
@@ -256,7 +261,7 @@ export async function createActionIndex<TSourceId = any>(
         name: string,
         actionIds: ActionId[],
     ): Promise<void> {
-        if (name && name !== NoEntityName) {
+        if (isEntityName(name)) {
             const nameId = await names.getId(name);
             if (nameId) {
                 await nameIndex.put(actionIds, nameId);
@@ -433,10 +438,10 @@ export async function createActionIndex<TSourceId = any>(
         name: string | undefined,
         options: ActionSearchOptions,
     ): Promise<IterableIterator<ActionId> | undefined> {
-        if (name && name !== NoEntityName) {
+        if (isEntityName(name)) {
             // Possible names of entities
             const nameIds = await names.getNearestText(
-                name,
+                name!,
                 options.maxMatches,
                 options.minScore,
             );
@@ -547,4 +552,239 @@ export async function createActionIndex<TSourceId = any>(
         );
         return unique.size === 0 ? undefined : unique;
     }
+}
+
+export function actionToString(action: Action): string {
+    let text = "";
+    text = appendEntityName(text, action.subjectEntityName);
+    text += ` [${action.verbs.join(", ")}]`;
+    text = appendEntityName(text, action.objectEntityName);
+    text = appendEntityName(text, action.indirectObjectEntityName);
+    text += ` {${action.verbTense}}`;
+    if (action.subjectEntityFacet) {
+        text += ` <${facetToString(action.subjectEntityFacet)}>`;
+    }
+    return text;
+
+    function appendEntityName(text: string, name: string): string {
+        if (isEntityName(name)) {
+            text += " ";
+            text += name;
+        }
+        return text;
+    }
+}
+
+export function actionVerbsToString(
+    verbs: string[],
+    verbTense?: VerbTense,
+): string {
+    const text = verbTense
+        ? `${verbs.join(" ")} {${verbTense}}`
+        : verbs.join(" ");
+    return text;
+}
+
+function actionParamToString(param: string | ActionParam): string {
+    return typeof param === "string"
+        ? param
+        : `${param.name}="${knowledgeValueToString(param.value)}"`;
+}
+
+export type CompositeAction = {
+    subject?: string | undefined;
+    verbs?: string | undefined;
+    object?: string | undefined;
+    indirectObject?: string | undefined;
+    params?: string[] | undefined;
+};
+
+export type ActionGroupKey = Pick<
+    CompositeAction,
+    "subject" | "verbs" | "object"
+>;
+export type ActionGroupValue = Pick<
+    CompositeAction,
+    "object" | "indirectObject" | "params"
+>;
+export interface ActionGroup extends ActionGroupKey {
+    values?: ActionGroupValue[] | undefined;
+}
+
+export function toCompositeAction(action: Action) {
+    const composite: CompositeAction = {
+        verbs: actionVerbsToString(action.verbs, action.verbTense),
+    };
+    if (isEntityName(action.subjectEntityName)) {
+        composite.subject = action.subjectEntityName;
+    }
+    if (isEntityName(action.objectEntityName)) {
+        composite.object = action.objectEntityName;
+    }
+    if (isEntityName(action.indirectObjectEntityName)) {
+        composite.indirectObject = action.indirectObjectEntityName;
+    }
+    if (action.params) {
+        composite.params = action.params.map((a) => actionParamToString(a));
+    }
+    return composite;
+}
+
+/**
+ * Action groups are sorted by relevance
+ * @param actions
+ * @param fullActionsOnly
+ * @returns
+ */
+export function mergeActions(
+    actions: Iterable<Action>,
+    fullActionsOnly: boolean = true,
+): ActionGroup[] {
+    if (fullActionsOnly) {
+        actions = getFullActions(actions);
+    }
+    const merged = mergeCompositeActions(toCompositeActions(actions));
+    return merged.map((a) => a.item);
+}
+
+function* toCompositeActions(
+    actions: Iterable<Action>,
+): IterableIterator<CompositeAction> {
+    for (const a of actions) {
+        yield toCompositeAction(a);
+    }
+}
+
+export function mergeCompositeActions(
+    actions: Iterable<CompositeAction>,
+): ScoredItem<ActionGroup>[] {
+    const merged = createHitTable<ActionGroup>((k) => actionGroupKey(k));
+    for (const action of actions) {
+        const key = actionGroupKey(action);
+        let existing = merged.get(action);
+        if (!existing) {
+            existing = { item: actionToActionGroup(action), score: 0 };
+            merged.set(key, existing);
+        }
+        if (appendToActionGroup(existing.item, action)) {
+            existing.score += 1;
+        }
+    }
+    const groups = merged.byHighestScore();
+    groups.forEach((g) => {
+        removeDuplicates(g.item.values, compareActionGroupValue);
+        mergeActionGroup(g.item);
+    });
+    return groups;
+}
+
+function actionGroupKey(group: ActionGroupKey): string {
+    let key = "";
+    if (group.subject) {
+        key += group.subject;
+        key += " ";
+    }
+    key += group.verbs;
+    if (group.object) {
+        key += " " + group.object;
+    }
+    return key;
+}
+
+function actionToActionGroup(action: CompositeAction): ActionGroup {
+    const group: ActionGroup = {};
+    if (action.subject) {
+        group.subject = action.subject;
+    }
+    if (action.verbs) {
+        group.verbs = action.verbs;
+    }
+    return group;
+}
+
+function appendToActionGroup(x: ActionGroup, y: CompositeAction): boolean {
+    if (x.subject !== y.subject || x.verbs !== y.verbs) {
+        return false;
+    }
+    x.values ??= [];
+    const obj: ActionGroupValue = {};
+    if (y.object) {
+        obj.object = y.object;
+    }
+    if (y.indirectObject) {
+        obj.indirectObject = y.indirectObject;
+    }
+    if (y.params) {
+        obj.params = y.params;
+    }
+    x.values.push(obj);
+    return true;
+}
+
+function mergeActionGroup(
+    group: ActionGroup,
+    mergeLength: number = 2,
+): ActionGroup {
+    // Simple merge for now: if all the objects are the same, merge them
+    const values = group.values;
+    if (!values || values.length <= mergeLength) {
+        return group;
+    }
+    values.sort();
+
+    const obj = values[0].object;
+    if (!obj) {
+        return group;
+    }
+    for (let i = 1; i < values.length; ++i) {
+        if (obj !== values[i].object) {
+            return group;
+        }
+    }
+    group.object = obj;
+    for (let i = 0; i < values.length; ++i) {
+        delete values[i].object;
+    }
+
+    return group;
+}
+
+function compareActionGroupValue(
+    x: ActionGroupValue,
+    y: ActionGroupValue,
+    caseSensitive: boolean = true,
+): number {
+    let cmp = collections.stringCompare(x.object, y.object, caseSensitive);
+    if (cmp === 0) {
+        cmp = collections.stringCompare(
+            x.indirectObject,
+            y.indirectObject,
+            caseSensitive,
+        );
+        if (cmp === 0) {
+            cmp = collections.stringCompareArray(
+                x.params,
+                y.params,
+                caseSensitive,
+            );
+        }
+    }
+    return cmp;
+}
+
+function* getFullActions(actions: Iterable<Action>): IterableIterator<Action> {
+    for (const a of actions) {
+        if (
+            isEntityName(a.subjectEntityName) &&
+            a.verbs &&
+            a.verbs.length > 0 &&
+            isEntityName(a.objectEntityName)
+        ) {
+            yield a;
+        }
+    }
+}
+
+function isEntityName(name: string | undefined): boolean {
+    return name !== undefined && name.length > 0 && name !== NoEntityName;
 }
