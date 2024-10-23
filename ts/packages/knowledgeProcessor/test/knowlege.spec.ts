@@ -5,17 +5,20 @@ import dotenv from "dotenv";
 dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 
 import {
-    createContext,
+    createTestModels,
     loadData,
     shouldSkip,
     skipTest,
-    TestContext,
+    TestModels,
 } from "./testCore.js";
 import { conversation } from "../src/index.js";
 import { asyncArray } from "typeagent";
 
-let g_context: TestContext | undefined;
 const testTimeout = 120000;
+interface TestContext {
+    models: TestModels;
+}
+let g_context: TestContext | undefined;
 
 describe("KnowledgeExtractor", () => {
     beforeAll(() => {
@@ -54,4 +57,10 @@ function getContext(): TestContext {
         g_context = createContext();
     }
     return g_context;
+}
+
+export function createContext(): TestContext {
+    return {
+        models: createTestModels(),
+    };
 }

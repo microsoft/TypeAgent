@@ -70,6 +70,7 @@ import {
 } from "./knowledgeTermSearchSchema2.js";
 import { getAllTermsInFilter } from "./searchProcessor.js";
 import { TypeChatLanguageModel } from "typechat";
+import { TextEmbeddingModel } from "aiclient";
 
 export interface RecentItems<T> {
     readonly entries: collections.CircularArray<T>;
@@ -444,6 +445,19 @@ export type ConversationSettings = {
     indexSettings: TextIndexSettings;
     indexActions?: boolean;
 };
+
+export function createConversationSettings(
+    embeddingModel?: TextEmbeddingModel,
+): ConversationSettings {
+    return {
+        indexSettings: {
+            caseSensitive: false,
+            concurrency: 2,
+            embeddingModel,
+            semanticIndex: true,
+        },
+    };
+}
 
 export type ConversationSearchOptions = {
     entity: EntitySearchOptions;
@@ -900,13 +914,9 @@ export async function createConversation(
             const actionResult = options.action
                 ? await actionIndex.searchTermsV2(filter, options.action)
                 : undefined;
-            const hasActionMatches =
-                actionResult &&
-                actionResult.actionIds &&
-                actionResult.actionIds.length > 0;
             // Search entities
             filter = {
-                searchTerms: getAllTermsInFilter(filter, !hasActionMatches),
+                searchTerms: getAllTermsInFilter(filter, false),
             };
             const tasks = [
                 topicIndex.searchTermsV2(filter, options.topic),

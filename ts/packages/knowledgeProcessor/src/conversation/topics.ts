@@ -317,7 +317,7 @@ export function createTopicSearchOptions(
     isTopicSummary: boolean = false,
 ): TopicSearchOptions {
     return {
-        maxMatches: isTopicSummary ? Number.MAX_SAFE_INTEGER : 2,
+        maxMatches: isTopicSummary ? Number.MAX_SAFE_INTEGER : 8,
         minScore: 0.8,
         loadTopics: true,
     };

@@ -51,7 +51,7 @@ export function emailAddressToEntities(
     if (emailAddress.displayName) {
         const entity: ConcreteEntity = {
             name: emailAddress.displayName,
-            type: ["person", "email"],
+            type: ["person"],
         };
         entities.push(entity);
         if (emailAddress.address) {
@@ -65,17 +65,14 @@ export function emailAddressToEntities(
     if (emailAddress.address) {
         entities.push({
             name: emailAddress.address,
-            type: ["email_alias"],
+            type: ["email", "email_alias"],
         });
     }
 
     return entities;
 }
 
-export function emailHeadersToString(
-    email: Email,
-    includeBody: boolean = true,
-): string {
+export function emailHeadersToString(email: Email): string {
     let text = "";
     if (email.from) {
         text += makeHeader("From", emailAddressToString(email.from));
@@ -89,9 +86,6 @@ export function emailHeadersToString(
     if (email.bcc) {
         text += makeHeader("Bcc", emailAddressListToString(email.bcc));
     }
-    if (email.subject) {
-        text += makeHeader("Subject", email.subject);
-    }
     if (email.sentOn) {
         text += makeHeader("Sent", email.sentOn.toString());
     }
@@ -100,6 +94,9 @@ export function emailHeadersToString(
     }
     if (email.importance) {
         text += makeHeader("Importance", email.importance);
+    }
+    if (email.subject) {
+        text += makeHeader("Subject", email.subject);
     }
     return text;
 }
@@ -110,7 +107,7 @@ export function emailToString(
 ): string {
     let text = emailHeadersToString(email);
     if (includeBody && email.body) {
-        text += "\n";
+        text += "\n\n";
         text += email.body;
     }
     return text;
@@ -299,6 +296,9 @@ export async function createEmailMemory(
     );
     cm.topicMerger.settings.mergeWindowSize = 1;
     cm.topicMerger.settings.trackRecent = false;
+
+    const entityIndex = await cm.conversation.getEntityIndex();
+    entityIndex.noiseTerms.put("email");
 
     cm.searchProcessor.answers.settings.hints = `messages are *emails*. Use email headers (to, subject. etc) to determine if message is highly relevant to the question`;
     return cm;
