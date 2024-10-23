@@ -27,6 +27,7 @@ import ast
 from dataclasses import dataclass
 import datetime
 import json
+import sys
 from typing import Iterator
 
 
@@ -176,7 +177,9 @@ def extract_blob(lines: list[str], node: ast.AST) -> Blob:
     return Blob(lines[start:end], start, 0)  # type: ignore
 
 
-def create_chunks_recursively(lines: list[str], tree: ast.AST, parent: Chunk) -> list[Chunk]:
+def create_chunks_recursively(
+    lines: list[str], tree: ast.AST, parent: Chunk
+) -> list[Chunk]:
     """Recursively create chunks for the AST."""
     chunks: list[Chunk] = []
     parent_slot: int = 0
@@ -187,9 +190,7 @@ def create_chunks_recursively(lines: list[str], tree: ast.AST, parent: Chunk) ->
             node_id = generate_id()
             node_blob = extract_blob(lines, node)
             node_blobs = [node_blob]
-            chunk = Chunk(
-                node_id, node_name, node_blobs, parent.id, parent_slot, []
-            )
+            chunk = Chunk(node_id, node_name, node_blobs, parent.id, parent_slot, [])
             chunks.append(chunk)
             chunks.extend(create_chunks_recursively(lines, node, chunk))
             parent_slot += 1
@@ -200,15 +201,16 @@ def create_chunks_recursively(lines: list[str], tree: ast.AST, parent: Chunk) ->
     return chunks
 
 
-def chunker(text: str) -> list[Chunk]:
+def chunker(text: str, tree: ast.AST) -> list[Chunk]:
     """Chunker for Python code."""
-    tree = ast.parse(text)  # TODO: Error handling
+
     lines = text.splitlines(keepends=True)
     # print(ast.dump(tree, indent=4, include_attributes=True))
 
     # Handcraft the root node
     root_id = generate_id()
-    root = Chunk(root_id, tree.__class__.__name__, [Blob(lines, 1, 0)], "", 0, [])
+    root_name = tree.__class__.__name__
+    root = Chunk(root_id, root_name, [Blob(lines, 1, 0)], "", 0, [])
 
     chunks = create_chunks_recursively(lines, tree, root)
     chunks.insert(0, root)
@@ -216,19 +218,31 @@ def chunker(text: str) -> list[Chunk]:
 
 
 def test():
-    import sys
-
     if len(sys.argv) != 2:
         print("Usage: python chunker.py <filename>")
-        sys.exit(1)
+        return 2
+
     filename = sys.argv[1]
-    with open(filename, "r") as f:
-        text = f.read()
-    chunks = chunker(text)
+    try:
+        with open(filename, "r") as f:
+            text = f.read()
+    except OSError as e:
+        print({"error": e})
+        return 1
+
+    try:
+        tree = ast.parse(text, filename=filename)
+    except SyntaxError as e:
+        print({"error": e})
+        return 1
+
+    chunks = chunker(text, tree)
     # for chunk in chunks:
     #     print(chunk)
     print(json.dumps(chunks, indent=4, default=custom_json))
+    return 0
 
 
 if __name__ == "__main__":
-    test()
+    exit_code = test()
+    sys.exit(exit_code)
