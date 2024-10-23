@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Action, Actions } from "agent-cache";
-import { getTranslatorActionInfos } from "./actionInfo.js";
+import { getActionInfo, getTranslatorActionInfos } from "./actionInfo.js";
 import { CommandHandlerContext } from "../internal.js";
 import { getActiveTranslatorList } from "../handlers/common/commandHandlerContext.js";
 import {
@@ -12,6 +12,7 @@ import {
     AppAction,
 } from "@typeagent/agent-sdk";
 import { getAppAgentName } from "./agentTranslators.js";
+import { DeepPartialUndefined } from "common-utils";
 
 export type TemplateData = {
     schema: TemplateSchema;
@@ -176,25 +177,14 @@ export async function getSystemTemplateCompletion(
 
 export async function getActionCompletion(
     systemContext: CommandHandlerContext,
-    action: Partial<AppAction>,
+    action: DeepPartialUndefined<AppAction>,
     propertyName: string,
 ): Promise<string[]> {
-    const translatorName = action.translatorName;
-    const actionName = action.actionName;
-    if (translatorName === undefined || actionName === undefined) {
-        return [];
-    }
-    const config = systemContext.agents.tryGetTranslatorConfig(translatorName);
-    if (config === undefined) {
-        return [];
-    }
-
-    const actionInfos = getTranslatorActionInfos(config, translatorName);
-    const actionInfo = actionInfos.get(actionName);
+    const actionInfo = getActionInfo(action, systemContext);
     if (actionInfo === undefined) {
         return [];
     }
-    const appAgentName = getAppAgentName(translatorName);
+    const appAgentName = getAppAgentName(actionInfo.translatorName);
     const appAgent = systemContext.agents.getAppAgent(appAgentName);
     if (appAgent.getActionCompletion === undefined) {
         return [];
