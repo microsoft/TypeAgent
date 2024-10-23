@@ -80,14 +80,14 @@ function parseValueToken(
     valueToken?: string,
 ) {
     if (valueToken === undefined || invalidValueToken(valueToken)) {
-        throw new Error(`Missing value for flag '${flag}'`);
+        throw new Error(`Missing value for flag '${flagToken}'`);
     }
 
     // stripped any quotes
     const stripped = stripQuoteFromToken(valueToken);
 
     if (valueType === "number") {
-        return parseIntParameter(stripped, "flag", flag);
+        return parseIntParameter(stripped, "flag", flagToken);
     }
 
     if (valueType === "string") {
@@ -100,7 +100,7 @@ function parseValueToken(
     const prefix = `--${flag}.`;
     if (!flagToken.startsWith(prefix)) {
         // Full json object
-        return parseJsonParameter(stripped, "flag", flag);
+        return parseJsonParameter(stripped, "flag", flagToken);
     }
 
     // Json object property
