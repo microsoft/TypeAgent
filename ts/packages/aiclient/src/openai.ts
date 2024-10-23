@@ -327,7 +327,7 @@ function azureImageApiSettingsFromEnv(
 
 /**
  * Loads settings that support local services supporting the Open AI API spec
- * @param tags Tags for tracking usage of this model instance 
+ * @param tags Tags for tracking usage of this model instance
  * @param modelType Type of setting
  * @param env Environment variables
  * @param endpointName
@@ -538,7 +538,7 @@ export type CompletionUsageStats = {
  *     You supply API settings
  *  createChatModel(apiSettings)
  *     You supply API settings
- * @param tags Tags for tracking usage of this model instance 
+ * @param tags Tags for tracking usage of this model instance
  * @param endpoint The name of the API endpoint OR explicit API settings with which to create a client
  * @returns ChatModel
  */
@@ -752,7 +752,9 @@ export function createLocalChatModel(
         undefined,
         endpointName,
     );
-    return settings ? createChatModel(tags, settings, completionSettings) : undefined;
+    return settings
+        ? createChatModel(tags, settings, completionSettings)
+        : undefined;
 }
 
 export type AzureChatModelName = "GPT_4" | "GPT_35_TURBO" | "GPT_4_O";

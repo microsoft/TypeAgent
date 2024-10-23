@@ -257,7 +257,7 @@ export class Session {
         // rehydrate token stats
         if (sessionData.tokens) {
             TokenCounter.load(sessionData.tokens);
-        }        
+        }
     }
 
     public get explainerName() {

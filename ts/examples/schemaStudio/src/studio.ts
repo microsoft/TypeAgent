@@ -11,7 +11,11 @@ export interface SchemaStudio {
 }
 
 export async function createStudio(): Promise<SchemaStudio> {
-    const model = openai.createChatModel([ Path.parse(__filename).name ], undefined, { temperature: 0.3 });
+    const model = openai.createChatModel(
+        [Path.parse(__filename).name],
+        undefined,
+        { temperature: 0.3 },
+    );
     const studio = {
         model,
         commands: {

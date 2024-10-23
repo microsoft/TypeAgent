@@ -48,7 +48,7 @@ import chalk from "chalk";
 import Path from "path";
 
 export async function runCodeMemory(): Promise<void> {
-    const model = openai.createChatModel([ Path.parse(__filename).name ]);
+    const model = openai.createChatModel([Path.parse(__filename).name]);
     const memoryFolderPath = "/data/code/memory";
     const codeReviewer = createCodeReviewer(model);
     const codeGenerator = createCodeGenerator(model);

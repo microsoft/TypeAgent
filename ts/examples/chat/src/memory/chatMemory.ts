@@ -94,7 +94,7 @@ export async function createChatMemoryContext(
 ): Promise<ChatContext> {
     const storePath = "/data/testChat";
     const chatModel = openai.createChatModel(
-        [ Path.parse(__filename).name ],
+        [Path.parse(__filename).name],
         undefined,
         undefined,
         completionCallback,

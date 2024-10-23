@@ -162,7 +162,7 @@ class RandomOnlineCommandHandler implements CommandHandlerNoParams {
             completionSettings.response_format = { type: "json_object" };
         }
         const chatModel = openai.createChatModel(
-            [ Path.parse(__filename).name ],
+            [Path.parse(__filename).name],
             apiSettings,
             completionSettings,
         );

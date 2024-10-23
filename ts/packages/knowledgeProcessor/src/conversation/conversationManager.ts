@@ -167,8 +167,14 @@ export async function createConversationManager(
     existingConversation?: Conversation | undefined,
 ): Promise<ConversationManager<string, string>> {
     const conversationSettings = createConversationSettings();
-    const knowledgeModel = openai.createChatModel([ "conversationManager", "knowledgeModel" ]);
-    const answerModel = openai.createChatModel([ "conversationManager", "answerModel" ]);
+    const knowledgeModel = openai.createChatModel([
+        "conversationManager",
+        "knowledgeModel",
+    ]);
+    const answerModel = openai.createChatModel([
+        "conversationManager",
+        "answerModel",
+    ]);
 
     const folderSettings = defaultFolderSettings();
 

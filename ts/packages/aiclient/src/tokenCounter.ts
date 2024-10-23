@@ -6,20 +6,28 @@ import { CompletionUsageStats } from "./openai.js";
 /**
  *  Token counter for LLM calls.
  *  Counter has total counts and counts grouped by tags
- *  along with other stats like max, min, average, etc. 
+ *  along with other stats like max, min, average, etc.
  */
 export class TokenCounter {
     private static instance: TokenCounter;
     private counters: Map<string, CompletionUsageStats>;
-    private totals: CompletionUsageStats = { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0};
+    private totals: CompletionUsageStats = {
+        completion_tokens: 0,
+        prompt_tokens: 0,
+        total_tokens: 0,
+    };
     private numSamples: number = 0;
-    private maxUsage: CompletionUsageStats = { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0};
+    private maxUsage: CompletionUsageStats = {
+        completion_tokens: 0,
+        prompt_tokens: 0,
+        total_tokens: 0,
+    };
     private _tags: string[] = [];
     private _stats: CompletionUsageStats[] = [];
 
     // TODO: intermittently cache these with the session
     private constructor() {
-        this.counters = new Map<string, CompletionUsageStats>(); 
+        this.counters = new Map<string, CompletionUsageStats>();
     }
 
     public static getInstance = (): TokenCounter => {
@@ -28,10 +36,10 @@ export class TokenCounter {
         }
 
         return TokenCounter.instance;
-    }
+    };
 
     /**
-     * Counts the supplied totken counts 
+     * Counts the supplied totken counts
      * @param tokens - the tokens to count
      * @param tags - the tags to which the tokens apply (if any)
      */
@@ -43,9 +51,10 @@ export class TokenCounter {
 
         // bump the counts for the supplied tags
         tags?.map((t) => {
-            let updatedCount: CompletionUsageStats = { completion_tokens: tokens.completion_tokens, 
-                prompt_tokens: tokens.prompt_tokens, 
-                total_tokens: tokens.total_tokens
+            let updatedCount: CompletionUsageStats = {
+                completion_tokens: tokens.completion_tokens,
+                prompt_tokens: tokens.prompt_tokens,
+                total_tokens: tokens.total_tokens,
             };
 
             if (this.counters.has(t)) {
@@ -54,7 +63,7 @@ export class TokenCounter {
                 updatedCount.total_tokens += tokens.total_tokens;
             }
 
-            this.counters.set(t, updatedCount)
+            this.counters.set(t, updatedCount);
             this._tags = Array.from(this.counters.keys());
             this._stats = Array.from(this.counters.values());
         });
@@ -67,7 +76,12 @@ export class TokenCounter {
             this.maxUsage.total_tokens = tokens.total_tokens;
         }
 
-        console.log("Token Odometer: " + JSON.stringify(this.totals) + "\nAverage Tokens per call: " + (this.totals.total_tokens / this.numSamples).toFixed(0));
+        console.log(
+            "Token Odometer: " +
+                JSON.stringify(this.totals) +
+                "\nAverage Tokens per call: " +
+                (this.totals.total_tokens / this.numSamples).toFixed(0),
+        );
     }
 
     /**
@@ -97,7 +111,7 @@ export class TokenCounter {
 
         this.instance._tags.forEach((tag, index) => {
             this.instance.counters.set(tag, this.instance._stats[index]);
-          });
+        });
     }
 
     public get tags(): string[] {
@@ -109,14 +123,26 @@ export class TokenCounter {
     }
 
     public get total(): CompletionUsageStats {
-        return { completion_tokens: this.totals.completion_tokens, prompt_tokens: this.totals.prompt_tokens, total_tokens: this.totals.total_tokens };
+        return {
+            completion_tokens: this.totals.completion_tokens,
+            prompt_tokens: this.totals.prompt_tokens,
+            total_tokens: this.totals.total_tokens,
+        };
     }
 
     public get average(): CompletionUsageStats {
-        return { completion_tokens: this.totals.completion_tokens / this.numSamples, prompt_tokens: this.totals.prompt_tokens / this.numSamples, total_tokens: this.totals.total_tokens / this.numSamples };
+        return {
+            completion_tokens: this.totals.completion_tokens / this.numSamples,
+            prompt_tokens: this.totals.prompt_tokens / this.numSamples,
+            total_tokens: this.totals.total_tokens / this.numSamples,
+        };
     }
 
     public get maximum(): CompletionUsageStats {
-        return { completion_tokens: this.maxUsage.completion_tokens, prompt_tokens: this.maxUsage.prompt_tokens, total_tokens: this.maxUsage.total_tokens };
+        return {
+            completion_tokens: this.maxUsage.completion_tokens,
+            prompt_tokens: this.maxUsage.prompt_tokens,
+            total_tokens: this.maxUsage.total_tokens,
+        };
     }
 }

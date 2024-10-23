@@ -133,7 +133,10 @@ async function handleEmailAction(
                     let result = await generateNotes(
                         query,
                         4096,
-                        openai.createChatModel([ Path.parse(__filename).name ], "GPT_35_TURBO"),
+                        openai.createChatModel(
+                            [Path.parse(__filename).name],
+                            "GPT_35_TURBO",
+                        ),
                         undefined,
                     );
 
