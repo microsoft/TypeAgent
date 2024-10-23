@@ -51,3 +51,5 @@ export {
     getMimeTypeFromFileExtension as getMimeType,
     isMimeTypeSupported,
 } from "./mimeTypes.js";
+
+export { getObjectProperty, setObjectProperty } from "./objectProperty.js";

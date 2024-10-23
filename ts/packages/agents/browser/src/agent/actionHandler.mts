@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { WebSocketMessage, createWebSocket } from "common-utils";
+import { WebSocketMessage, createWebSocket } from "common-utils/ws";
 import { WebSocket } from "ws";
 import {
   ActionContext,

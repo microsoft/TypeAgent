@@ -117,9 +117,9 @@ export type AgentInvokeFunctions = {
         param: Partial<ContextParams> & {
             commands: string[];
             params: ParsedCommandParams<ParameterDefinitions>;
-            name: string;
+            names: string[];
         },
-    ): Promise<string[] | undefined>;
+    ): Promise<string[]>;
     executeCommand(
         param: Partial<ActionContextParams> & {
             commands: string[];

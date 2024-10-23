@@ -38,6 +38,7 @@ export interface IAction extends AppAction {
 }
 
 export type FullAction = Required<IAction>;
+
 export interface JSONAction {
     fullActionName: string;
     parameters: ParamObjectType;

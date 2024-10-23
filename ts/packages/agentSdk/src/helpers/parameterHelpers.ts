@@ -42,7 +42,17 @@ export function resolveFlag(
     if (flag.startsWith("--")) {
         const key = flag.substring(2);
         const def = definitions[key];
-        return def !== undefined ? [key, def] : undefined;
+        if (def !== undefined) {
+            return [key, def];
+        }
+        const split = key.split(".");
+        if (split.length > 1) {
+            const def = definitions[split[0]];
+            if (def?.type === "json") {
+                return [split[0], def];
+            }
+        }
+        return undefined;
     }
     if (flag.startsWith("-")) {
         const alias = flag.substring(1);
