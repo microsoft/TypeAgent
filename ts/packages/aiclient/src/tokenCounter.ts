@@ -66,6 +66,23 @@ export class TokenCounter {
         console.log("Token Odometer: " + JSON.stringify(this.totals) + "\nAverage Tokens per call: " + (this.totals.total_tokens / this.numSamples).toFixed(0));
     }
 
+    /**
+     * Gets the # of tokens for the supplied tag.
+     * @param tag The tag for which to get the token counts
+     * @returns The token usage stats
+     */
+    public getTokenUsage(tag: string): CompletionUsageStats | undefined {
+        if (this.counters.has(tag)) {
+            return this.counters.get(tag);
+        } else {
+            return undefined;
+        }
+    }
+
+    public get tags(): string[] {
+        return Array.from(this.counters.keys());
+    }
+
     public get total(): CompletionUsageStats {
         return { completion_tokens: this.totals.completion_tokens, prompt_tokens: this.totals.prompt_tokens, total_tokens: this.totals.total_tokens };
     }

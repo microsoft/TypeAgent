@@ -617,7 +617,7 @@ export function createChatModel(
         }
 
         // track token usage
-        TokenCounter.getInstance().add(data.usage);
+        TokenCounter.getInstance().add(data.usage, tags);
 
         return success(data.choices[0].message?.content ?? "");
     }
