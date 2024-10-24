@@ -51,7 +51,6 @@ import {
     unionSets,
     uniqueFrom,
 } from "../setOperations.js";
-import { getRangeOfTemporalSequence } from "../temporal.js";
 import { Action, ConcreteEntity } from "./knowledgeSchema.js";
 import { MessageIndex, createMessageIndex } from "./messages.js";
 import {
@@ -353,21 +352,18 @@ export function createSearchResponse<
 
     function entityTimeRanges(): (dateTime.DateRange | undefined)[] {
         return response.entities.length > 0
-            ? response.entities.map((e) => e.getTemporalRange())
+            ? collections.mapAndFilter(response.entities, (e) =>
+                  e.getTemporalRange(),
+              )
             : [];
     }
 
     function topicTimeRanges(): (dateTime.DateRange | undefined)[] {
-        let ranges: dateTime.DateRange[] = [];
-        for (let i = 0; i < response.topics.length; ++i) {
-            const range = getRangeOfTemporalSequence(
-                response.topics[i].temporalSequence,
-            );
-            if (range !== undefined) {
-                ranges.push(range);
-            }
-        }
-        return ranges;
+        return response.topics.length > 0
+            ? collections.mapAndFilter(response.topics, (t) =>
+                  t.getTemporalRange(),
+              )
+            : [];
     }
 
     function* allActions(): IterableIterator<Action> {
@@ -392,8 +388,8 @@ export function createSearchResponse<
 
     function actionTimeRanges(): (dateTime.DateRange | undefined)[] {
         return response.actions.length > 0
-            ? response.actions.map((a) =>
-                  getRangeOfTemporalSequence(a.temporalSequence),
+            ? collections.mapAndFilter(response.actions, (a) =>
+                  a.getTemporalRange(),
               )
             : [];
     }

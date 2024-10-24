@@ -181,6 +181,18 @@ export function removeItemFromArray<T>(array: T[], items: T | T[]): T[] {
     return array;
 }
 
+export function mapAndFilter<T=any, R=any>(array: T[], callbackfn: (value: T, index: number, array: T[]) => R | undefined, predicate?: (value: R, index: number, array: T[]) => boolean): R[] {
+    let results: R[] = [];
+    for (let i = 0; i < array.length; ++i) {
+        const result = callbackfn(array[i], i, array);
+        if (!result || (predicate && !predicate(result, i, array))) {
+            continue;
+        }
+        results.push(result);
+    }
+    return results;
+}
+
 export type Slice<T=any> = {
     startAt: number;
     value: T[];
