@@ -63,11 +63,19 @@ fun Browser() {
             //val wv = WebView(it)
             wvv = WebView(it)
             wvv!!.apply {
+                // web view settings
                 settings.javaScriptEnabled = true
+
+                // web view layout
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
+
+                // javascript callback
+                addJavascriptInterface(JavaScriptInterface(it), "Android")
+
+                // url/client
                 webViewClient = WebViewClient()
                 loadUrl(url)
             }

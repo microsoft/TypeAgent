@@ -38,6 +38,8 @@ export interface ClientSettingsProvider {
 
 export type DisplayType = "html" | "iframe" | "text";
 
+export type ClientActions = "show-camera" | "open-app" | "show-notification" | "start-intent";
+
 // end duplicate type section
 
 export interface ClientAPI {

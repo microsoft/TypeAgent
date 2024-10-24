@@ -32,6 +32,7 @@ export {
 } from "./parameters.js";
 export {
     ActionIO,
+    ClientAction,
     DisplayType,
     DynamicDisplay,
     DisplayContent,
