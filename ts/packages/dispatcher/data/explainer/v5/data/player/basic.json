@@ -198,6 +198,9 @@
       }
     },
     {
+      "request": "Can you play Nocturne by Chopin"
+    },
+    {
       "request": "Can you play some Bach for me please?",
       "action": {
         "fullActionName": "player.play",

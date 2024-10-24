@@ -10,8 +10,10 @@ import {
     GetFavoritesAction,
     GetPlaylistAction,
     PlayAlbumAction,
+    PlayAlbumTrackAction,
     PlayArtistAction,
     PlayerAction,
+    PlayGenreAction,
     PlayTrackAction,
     SearchTracksAction,
     SelectDeviceAction,
@@ -49,6 +51,7 @@ import {
     shuffle,
     getAlbumTracks,
     getQueue,
+    getGenreSeeds,
 } from "./endpoints.js";
 import {
     htmlStatus,
@@ -494,6 +497,7 @@ async function playTracks(
 async function playAlbums(
     albums: SpotifyApi.AlbumObjectSimplified[],
     quantity: number,
+    trackSpec: string | number[] | undefined,
     clientContext: IClientContext,
 ): Promise<ActionResult> {
     // Play the albums found with the quantity specified
@@ -515,13 +519,25 @@ async function playAlbums(
                 ?.items,
         };
     });
-    const albumTracks = (await Promise.all(albumTracksP))
+    let albumTracks = (await Promise.all(albumTracksP))
         .filter((result) => result.tracks !== undefined)
         .flatMap((result) =>
             result.tracks!.map((item) => toTrackObjectFull(item, result.album)),
         );
 
     if (albumTracks && albumTracks.length > 0) {
+        if (trackSpec !== undefined) {
+            if (typeof trackSpec === "string") {
+                // TODO: better heuristic match
+                albumTracks = albumTracks.filter((track) =>
+                    track.name.toLowerCase().includes(trackSpec.toLowerCase()),
+                );
+            } else {
+                albumTracks = albumTracks.filter((track) =>
+                    trackSpec.includes(track.track_number),
+                );
+            }
+        }
         // Play the tracks from these album.
         const collection = new TrackCollection(albumTracks, albumTracks.length);
         return playTracks(collection, 0, albumTracks.length, clientContext);
@@ -531,18 +547,20 @@ async function playAlbums(
 }
 
 type SpotifyQuery = {
-    track: string[];
-    album: string[];
-    artist: string[];
-    query: string[];
+    track?: string[] | undefined;
+    album?: string[] | undefined;
+    artist?: string[] | undefined;
+    genre?: string[] | undefined;
+    query?: string[] | undefined;
 };
 
 function toQueryString(query: SpotifyQuery) {
     const queryParts: string[] = [];
-    query.track.forEach((track) => queryParts.push(`track:"${track}"`));
-    query.album.forEach((album) => queryParts.push(`album:"${album}"`));
-    query.artist.forEach((artist) => queryParts.push(`artist:"${artist}"`));
-    query.query.forEach((query) => queryParts.push(query));
+    query.track?.forEach((track) => queryParts.push(`track:"${track}"`));
+    query.album?.forEach((album) => queryParts.push(`album:"${album}"`));
+    query.artist?.forEach((artist) => queryParts.push(`artist:"${artist}"`));
+    query.genre?.forEach((genre) => queryParts.push(`genre:"${genre}"`));
+    query.query?.forEach((query) => queryParts.push(query));
     return queryParts.join(" ");
 }
 
@@ -569,7 +587,9 @@ async function playTracksWithQuery(
     // TODO: if there is not exact match for artist, might want to consider popularity of
     // the artist too.
     let tracks: SpotifyApi.TrackObjectFull[];
-    if (query.query.length === 0 && query.track.length === 0) {
+    const hasQuery = query.query !== undefined && query.query.length > 0;
+    const hasTrack = query.track !== undefined && query.track.length > 0;
+    if (!hasQuery && !hasTrack) {
         // No search term for track name, just play what we found sorted by popularity
         tracks = trackResult.items.sort((a, b) => b.popularity - a.popularity);
     } else {
@@ -659,12 +679,10 @@ async function playTrackAction(
     // query specified
     const query: SpotifyQuery = {
         track: [playAction.parameters.trackName],
-        album: [],
         artist: await resolveArtists(
             clientContext,
             playAction.parameters.artists,
         ),
-        query: [],
     };
     return await playTracksWithQuery(query, 1, clientContext);
 }
@@ -675,13 +693,11 @@ async function playAlbumAction(
 ): Promise<ActionResult> {
     // query specified
     const query: SpotifyQuery = {
-        track: [],
         album: [playAction.parameters.albumName],
         artist: await resolveArtists(
             clientContext,
             playAction.parameters.artists,
         ),
-        query: [],
     };
     const queryString = toQueryString(query);
     // Look for the albums
@@ -697,7 +713,48 @@ async function playAlbumAction(
     if (albums === undefined || albums.length === 0) {
         return createNotFoundActionResult("albums", queryString);
     }
-    return playAlbums(albums, 1, clientContext);
+
+    return playAlbums(
+        albums,
+        1,
+        playAction.parameters.trackNumber,
+        clientContext,
+    );
+}
+
+async function playAlbumTrackAction(
+    clientContext: IClientContext,
+    playAction: PlayAlbumTrackAction,
+): Promise<ActionResult> {
+    // query specified
+    const query: SpotifyQuery = {
+        track: [],
+        album: [playAction.parameters.albumName],
+        artist: await resolveArtists(
+            clientContext,
+            playAction.parameters.artists,
+        ),
+    };
+    const queryString = toQueryString(query);
+    // Look for the albums
+    const searchQuery: SpotifyApi.SearchForItemParameterObject = {
+        q: queryString,
+        type: "album",
+        limit: 1,
+        offset: 0,
+    };
+    const result = await search(searchQuery, clientContext.service);
+    const albums = result?.albums?.items;
+
+    if (albums === undefined || albums.length === 0) {
+        return createNotFoundActionResult("albums", queryString);
+    }
+    return playAlbums(
+        albums,
+        1,
+        playAction.parameters.trackName,
+        clientContext,
+    );
 }
 
 async function playArtistAction(
@@ -706,13 +763,36 @@ async function playArtistAction(
 ): Promise<ActionResult> {
     // query specified
     const query: SpotifyQuery = {
-        track: [],
-        album: [],
         artist: await resolveArtists(clientContext, [
             playAction.parameters.artist,
         ]),
-        query: [],
     };
+    return await playTracksWithQuery(
+        query,
+        playAction.parameters.quantity ?? 0,
+        clientContext,
+    );
+}
+
+async function playGenreAction(
+    clientContext: IClientContext,
+    playAction: PlayGenreAction,
+): Promise<ActionResult> {
+    // TODO: cache this.
+
+    const genreSeed = await getGenreSeeds(clientContext.service);
+
+    const genre = genreSeed?.genres.find(
+        (g) => g === playAction.parameters.genre,
+    );
+
+    const query: SpotifyQuery = genre
+        ? {
+              genre: [genre],
+          }
+        : {
+              query: [playAction.parameters.genre],
+          };
     return await playTracksWithQuery(
         query,
         playAction.parameters.quantity ?? 0,
@@ -839,9 +919,12 @@ export async function handleCall(
             return playTrackAction(clientContext, action);
         case "playAlbum":
             return playAlbumAction(clientContext, action);
+        case "playAlbumTrack":
+            return playAlbumTrackAction(clientContext, action);
         case "playArtist":
             return playArtistAction(clientContext, action);
-
+        case "playGenre":
+            return playGenreAction(clientContext, action);
         case "status": {
             await printStatus(clientContext);
             return htmlStatus(clientContext);

@@ -1,9 +1,28 @@
 {
   "paramSpec": {
-    "play": {
-      "query.*.text": "wildcard",
-      "query.*.constraint": "literal",
-      "trackNumber": "ordinal",
+    "playRandom": {
+      "quantity": "number"
+    },
+    "playTrack": {
+      "trackName": "wildcard",
+      "artists.*": "wildcard"
+    },
+    "playAlbum": {
+      "albumName": "wildcard",
+      "artists.*": "wildcard",
+      "trackNumber": "ordinal"
+    },
+    "playAlbumTrack": {
+      "albumName": "wildcard",
+      "trackName": "wildcard",
+      "trackNumber.*": "ordinal"
+    },
+    "playArtist": {
+      "artistName": "wildcard",
+      "quantity": "number"
+    },
+    "playGenre": {
+      "genre": "wildcard",
       "quantity": "number"
     },
     "setVolume": {
