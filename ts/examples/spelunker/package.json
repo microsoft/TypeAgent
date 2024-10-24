@@ -22,7 +22,8 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
-    "aiclient": "workspace:*"
+    "aiclient": "workspace:*",
+    "typescript": "^5.4.2"
   },
   "devDependencies": {
     "@types/node": "^18.18.7",
