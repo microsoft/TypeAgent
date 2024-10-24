@@ -21,6 +21,7 @@ import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action
 import { searchAlbum, searchArtists, searchTracks } from "../client.js";
 import { htmlStatus } from "../playback.js";
 import { getPlayerCommandInterface } from "./playerCommands.js";
+import { getGenreSeeds } from "../endpoints.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -101,6 +102,15 @@ async function validateArtistWildcardMatch(
     }
     return true;
 }
+
+async function validateGenre(genre: string, context: IClientContext) {
+    const genreSeeds = await getGenreSeeds(context.service);
+    if (genreSeeds) {
+        return genreSeeds.genres.includes(genre);
+    }
+    return false;
+}
+
 async function validatePlayerWildcardMatch(
     action: PlayerAction,
     context: SessionContext<PlayerActionContext>,
@@ -150,10 +160,9 @@ async function validatePlayerWildcardMatch(
                 ))
             );
         case "playArtist":
-            return await validateArtist(
-                action.parameters.artist,
-                clientContext,
-            );
+            return validateArtist(action.parameters.artist, clientContext);
+        case "playGenre":
+            return await validateGenre(action.parameters.genre, clientContext);
     }
     return true;
 }
@@ -216,7 +225,11 @@ async function getPlayerActionCompletion(
     propertyName: string,
     context: SessionContext<PlayerActionContext>,
 ): Promise<string[]> {
-    const userData = context.agentContext.spotify?.userData;
+    const clientContext = context.agentContext.spotify;
+    if (clientContext === undefined) {
+        return [];
+    }
+    const userData = clientContext.userData;
     if (userData === undefined) {
         return [];
     }
@@ -224,6 +237,7 @@ async function getPlayerActionCompletion(
     let track = false;
     let artist = false;
     let album = false;
+    let genre = false;
     switch (action.actionName) {
         case "playTrack":
             if (propertyName === "parameters.trackName") {
@@ -253,6 +267,11 @@ async function getPlayerActionCompletion(
                 artist = true;
             }
             break;
+        case "playGenre":
+            if (propertyName === "parameters.genre") {
+                genre = true;
+            }
+            break;
     }
 
     const result: string[] = [];
@@ -269,6 +288,12 @@ async function getPlayerActionCompletion(
     if (artist) {
         for (const artist of userData.data.artists.values()) {
             result.push(artist.name);
+        }
+    }
+    if (genre) {
+        const genreSeeds = await getGenreSeeds(clientContext.service);
+        if (genreSeeds) {
+            result.push(...genreSeeds.genres);
         }
     }
     return result;
