@@ -250,9 +250,11 @@ async function runPlayground(): Promise<void> {
         // First see if there is a local model
         let apiSettings: openai.ApiSettings | undefined;
         if (preferLocal) {
-            apiSettings = openai.localOpenAIApiSettingsFromEnv(
-                ["playground"],
+            apiSettings = openai.localOpenAIApiSettingsFromEnv(                
                 openai.ModelType.Chat,
+                undefined,
+                undefined,
+                ["playground"],
             );
         }
         if (!apiSettings) {
@@ -266,10 +268,11 @@ async function runPlayground(): Promise<void> {
         if (apiSettings.supportsResponseFormat) {
             completionSettings.response_format = { type: "json_object" };
         }
-        const chatModel = openai.createChatModel(
-            ["playground"],
+        const chatModel = openai.createChatModel(            
             apiSettings,
             completionSettings,
+            undefined,
+            ["playground"],
         );
 
         return [apiSettings, chatModel, completionSettings];

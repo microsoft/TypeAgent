@@ -92,11 +92,11 @@ export async function createChatMemoryContext(
     completionCallback?: (req: any, resp: any) => void,
 ): Promise<ChatContext> {
     const storePath = "/data/testChat";
-    const chatModel = openai.createChatModel(
-        ["chatMemory"],
+    const chatModel = openai.createChatModel(        
         undefined,
         undefined,
         completionCallback,
+        ["chatMemory"],
     );
     const embeddingModel = knowLib.createEmbeddingCache(
         openai.createEmbeddingModel(),

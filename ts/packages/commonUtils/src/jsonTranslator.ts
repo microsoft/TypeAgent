@@ -166,9 +166,11 @@ export function createJsonTranslatorFromSchemaDef<T extends object>(
     model?: string | TypeChatLanguageModel, // optional
 ) {
     if (typeof model !== "object") {
-        model = ai.createChatModel(["translator"], model, {
+        model = ai.createChatModel(model, {
             response_format: { type: "json_object" },
-        });
+        },
+        undefined,
+        ["translator"]);
     }
 
     const complete = model.complete.bind(model);
