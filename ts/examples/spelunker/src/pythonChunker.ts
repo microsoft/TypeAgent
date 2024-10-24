@@ -6,18 +6,20 @@ import { promisify } from "util";
 
 const execPromise = promisify(exec);
 
-export async function chunkifyPythonFile(
-    filename: string,
-): Promise<Object | undefined> {
-    let output, errors, success = false;
+export async function chunkifyPythonFile(filename: string): Promise<Object> {
+    let output,
+        errors,
+        success = false;
     try {
-        let { stdout, stderr } = await execPromise(`python3 chunker.py ${filename}`);
+        let { stdout, stderr } = await execPromise(
+            `python3 chunker.py ${filename}`,
+        );
         output = stdout;
         errors = stderr;
         success = true;
     } catch (error: any) {
         output = error?.stdout || "";
-        errors = error?.stderr || error.message || "Unknown error";   
+        errors = error?.stderr || error.message || "Unknown error";
     }
     if (!success) {
         return { error: errors, output: output };
