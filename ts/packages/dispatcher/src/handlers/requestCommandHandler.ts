@@ -586,11 +586,6 @@ export async function translateRequest(
     return requestAction;
 }
 
-// remove whitespace from a string, except for whitespace within quotes
-function removeUnquotedWhitespace(str: string) {
-    return str.replace(/\s(?=(?:(?:[^"]*"){2})*[^"]*$)/g, "");
-}
-
 function canExecute(
     requestAction: RequestAction,
     context: ActionContext<CommandHandlerContext>,

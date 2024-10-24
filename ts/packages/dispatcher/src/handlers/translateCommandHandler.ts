@@ -5,7 +5,8 @@ import { CommandHandlerContext } from "./common/commandHandlerContext.js";
 import { translateRequest } from "./requestCommandHandler.js";
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
-import { displaySuccess } from "@typeagent/agent-sdk/helpers/display";
+import { displayResult } from "@typeagent/agent-sdk/helpers/display";
+import { getColorElapsedString } from "common-utils";
 
 export class TranslateCommandHandler implements CommandHandler {
     public readonly description = "Translate a request";
@@ -21,10 +22,19 @@ export class TranslateCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const requestAction = await translateRequest(
+        const translationResult = await translateRequest(
             params.args.request,
             context,
         );
-        displaySuccess(`${requestAction}`, context);
+        if (translationResult) {
+            displayResult(
+                `${translationResult.requestAction} ${getColorElapsedString(translationResult.elapsedMs)}\n\nJSON:\n${JSON.stringify(
+                    translationResult.requestAction.actions,
+                    undefined,
+                    2,
+                )}`,
+                context,
+            );
+        }
     }
 }

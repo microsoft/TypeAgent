@@ -44,6 +44,7 @@ window.addEventListener("message", async (event) => {
                 "www.homedepot.com",
                 "www.target.com",
                 "www.walmart.com",
+                "www.instacart.com",
             ];
 
             if (commerceHosts.includes(host)) {
