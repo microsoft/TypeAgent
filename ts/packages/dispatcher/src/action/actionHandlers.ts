@@ -29,6 +29,7 @@ import { getStorage } from "./storageImpl.js";
 import { getUserProfileDir } from "../utils/userData.js";
 import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
 import { ProfileNames } from "../utils/profileNames.js";
+import { conversation } from "knowledge-processor";
 
 const debugAgent = registerDebug("typeagent:agent");
 const debugActions = registerDebug("typeagent:actions");
@@ -233,9 +234,12 @@ async function executeAction(
             systemContext.conversationManager
         ) {
             // TODO: convert entity values to facets
+            // Ensure we don't immediately put back the entities pulled directly from storage
             systemContext.conversationManager.queueAddMessage(
                 returnedResult.literalText,
-                returnedResult.entities,
+                returnedResult.entities.filter(
+                    (e) => !conversation.isStoredEntity(e.type),
+                ),
                 new Date(),
             );
         }

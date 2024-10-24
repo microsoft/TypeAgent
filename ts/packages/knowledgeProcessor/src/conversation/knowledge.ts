@@ -241,3 +241,15 @@ export function knowledgeValueToString(value: Value): string {
     }
     return value.toString();
 }
+
+export enum KnownEntityTypes {
+    Person = "person",
+    Email = "email",
+    Email_Alias = "email_alias",
+    Stored = "__stored",
+    Message = "message",
+}
+
+export function isStoredEntity(entityType: string[]): boolean {
+    return entityType.findIndex((t) => t === KnownEntityTypes.Stored) >= 0;
+}
