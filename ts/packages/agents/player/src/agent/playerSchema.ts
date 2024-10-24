@@ -29,6 +29,7 @@ export type PlayerAction =
     | GetQueueAction
     | UnknownAction;
 
+// Use playRandom when the user asks for some music to play
 export interface PlayRandomAction {
     actionName: "playRandom";
     parameters: {
