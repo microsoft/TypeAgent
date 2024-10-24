@@ -39,7 +39,6 @@ import {
     argSourceFileOrFolder,
     getMessagesAndCount,
 } from "./common.js";
-import Path from "path";
 
 export type ChatContext = {
     storePath: string;
@@ -94,7 +93,7 @@ export async function createChatMemoryContext(
 ): Promise<ChatContext> {
     const storePath = "/data/testChat";
     const chatModel = openai.createChatModel(
-        [Path.parse(__filename).name],
+        ["chatMemory.ts"],
         undefined,
         undefined,
         completionCallback,
@@ -175,8 +174,8 @@ export function createSearchProcessor(
             ? conversation.KnowledgeSearchMode.WithActions
             : conversation.KnowledgeSearchMode.Default,
     );
-    searcher.answers.settings.topKEntities = entityTopK;
-    searcher.answers.settings.topKActions = actionTopK;
+    searcher.answers.settings.topK.entitiesTopK = entityTopK;
+    searcher.answers.settings.topK.actionsTopK = actionTopK;
     return searcher;
 }
 
@@ -189,7 +188,8 @@ export async function createSearchMemory(
         context.storePath,
         true,
     );
-    memory.searchProcessor.answers.settings.topKEntities = context.entityTopK;
+    memory.searchProcessor.answers.settings.topK.entitiesTopK =
+        context.entityTopK;
     return memory;
 }
 
@@ -1204,10 +1204,7 @@ export async function runChatMemory(): Promise<void> {
             }
             printer.writeLine();
             if (debug) {
-                printer.writeSearchResponse(
-                    result.response,
-                    context.searcher.answers.settings,
-                );
+                printer.writeSearchResponse(result.response);
             }
         }
     }
@@ -1327,16 +1324,14 @@ export async function runChatMemory(): Promise<void> {
         response: conversation.SearchResponse | undefined,
     ): void {
         if (response !== undefined) {
-            const allTopics = response.mergeAllTopics();
+            const allTopics = response.getTopics();
             if (allTopics && allTopics.length > 0) {
                 printer.writeLine(`Topic Hit Count: ${allTopics.length}`);
             } else {
                 const topicIds = new Set(response.allTopicIds());
                 printer.writeLine(`Topic Hit Count: ${topicIds.size}`);
             }
-            const allEntities = response.mergeAllEntities(
-                context.searcher.answers.settings.topKEntities,
-            );
+            const allEntities = response.getEntities();
             if (allEntities && allEntities.length > 0) {
                 printer.writeLine(`Entity Hit Count: ${allEntities.length}`);
             } else {
@@ -1345,9 +1340,7 @@ export async function runChatMemory(): Promise<void> {
                     `Entity to Message Hit Count: ${entityIds.size}`,
                 );
             }
-            const allActions = response.mergeAllEntities(
-                context.searcher.answers.settings.topKActions,
-            );
+            const allActions = response.getActions();
             //const allActions = [...response.allActionIds()];
             if (allActions && allActions.length > 0) {
                 printer.writeLine(`Action Hit Count: ${allActions.length}`);

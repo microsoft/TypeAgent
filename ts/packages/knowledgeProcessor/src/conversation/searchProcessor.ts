@@ -6,11 +6,10 @@ import {
     Conversation,
     ConversationSearchOptions,
     SearchActionResponse,
-    SearchResponse,
     SearchTermsActionResponse,
     SearchTermsActionResponseV2,
-    createSearchResponse,
 } from "./conversation.js";
+import { SearchResponse, createSearchResponse } from "./searchResponse.js";
 import {
     Filter,
     GetAnswerAction,
@@ -317,6 +316,7 @@ export function createSearchProcessor(
             searchOptions,
         );
         await adjustMessages(query, response, searchOptions, options);
+        response.topKSettings = answers.settings.topK;
         if (!options.skipAnswerGeneration) {
             await generateAnswerForSearchTerms(
                 query,
@@ -344,6 +344,7 @@ export function createSearchProcessor(
             searchOptions,
         );
         await adjustMessages(query, response, searchOptions, options);
+        response.topKSettings = answers.settings.topK;
         if (!options.skipAnswerGeneration) {
             await generateAnswerForSearchTerms(query, response, options);
         }

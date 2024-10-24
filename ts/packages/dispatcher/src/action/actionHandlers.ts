@@ -233,7 +233,7 @@ async function executeAction(
             systemContext.conversationManager
         ) {
             // TODO: convert entity values to facets
-            systemContext.conversationManager.addMessage(
+            systemContext.conversationManager.queueAddMessage(
                 returnedResult.literalText,
                 returnedResult.entities,
                 new Date(),

@@ -465,7 +465,6 @@ export function entityToString(entity: CompositeEntity): string {
     return text;
 }
 
-// TODO: rewrite to return ranked by hit order
 export function mergeEntities(
     entities: Iterable<ConcreteEntity>,
 ): Map<string, WithFrequency<CompositeEntity>> {
@@ -475,6 +474,22 @@ export function mergeEntities(
             yield toCompositeEntity(entity);
         }
     }
+}
+
+export function getTopMergedEntities(
+    rawEntities: Iterable<ConcreteEntity>,
+    topK: number = -1,
+): CompositeEntity[] | undefined {
+    const mergedEntities = mergeEntities(rawEntities);
+    let entities: CompositeEntity[] | undefined;
+    if (mergedEntities.size > 0) {
+        // Sort in hit count order
+        let entities = [...mergedEntities.values()]
+            .sort((x, y) => y.count - x.count)
+            .map((e) => e.value);
+        entities = topK > 0 ? entities.slice(0, topK) : entities;
+    }
+    return entities;
 }
 
 export type CompositeEntity = {

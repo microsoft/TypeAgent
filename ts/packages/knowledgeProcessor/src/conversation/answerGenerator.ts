@@ -11,7 +11,7 @@ import { PromptSection } from "typechat";
 import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
 import { flatten } from "../setOperations.js";
-import { SearchResponse } from "./conversation.js";
+import { SearchResponse, TopKSettings } from "./searchResponse.js";
 import registerDebug from "debug";
 import { CompositeEntity } from "./entities.js";
 import { splitLargeTextIntoChunks } from "../textChunker.js";
@@ -28,8 +28,7 @@ export type AnswerSettings = {
 };
 
 export type AnswerGeneratorSettings = {
-    topKEntities: number;
-    topKActions: number;
+    topK: TopKSettings;
     maxCharsInContext?: number | undefined;
     useChunking?: boolean | undefined;
     maxChunks?: number | undefined;
@@ -39,8 +38,11 @@ export type AnswerGeneratorSettings = {
 
 export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
     return {
-        topKEntities: 8,
-        topKActions: 0,
+        topK: {
+            topicsTopK: 8,
+            entitiesTopK: 8,
+            actionsTopK: 0,
+        },
         maxCharsInContext: 1024 * 8,
     };
 }
@@ -257,11 +259,11 @@ export function createAnswerGenerator(
         const context: AnswerContext = {
             entities: {
                 timeRanges: response.entityTimeRanges(),
-                values: response.mergeAllEntities(settings!.topKEntities),
+                values: response.getEntities(settings.topK.entitiesTopK),
             },
             topics: {
                 timeRanges: response.topicTimeRanges(),
-                values: response.mergeAllTopics(),
+                values: response.getTopics(),
             },
             messages:
                 response.messages && response.messages.length > 0
@@ -273,12 +275,12 @@ export function createAnswerGenerator(
                       })
                     : [],
         };
-        if (settings.topKActions > 0 && response.hasActions()) {
-            const actions = response.mergeAllActions(settings!.topKActions);
+        if (settings.topK.actionsTopK > 0 && response.hasActions()) {
+            const actions = response.getActions(settings.topK.actionsTopK);
             if (actions.length > 0) {
                 context.actions = {
                     timeRanges: response.actionTimeRanges(),
-                    values: response.mergeAllActions(settings!.topKActions),
+                    values: response.getActions(settings.topK.actionsTopK),
                 };
             }
         }
