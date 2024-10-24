@@ -15,7 +15,7 @@ import { ShellSettings } from "../../main/shellSettings";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { CameraView } from "./cameraView";
 import { createWebSocket, webapi } from "./webSocketAPI";
-//import * as Android from "../../lib/lib.android";
+import { Android } from "../../lib/lib.android";
 
 export function getClientAPI(): ClientAPI {
     if (globalThis.api !== undefined) {
@@ -205,8 +205,8 @@ function addEvents(
 
         // Android object gets injected on Android devices
         try {
-            //Android?.showToast("woohooo 2!");
-            eval("Android")?.showToast("woohoo!");
+            Android?.showToast("woohooo 2!");
+            //eval("Android")?.showToast("woohoo!");
         } catch (e) {
             console.log(e);
         }

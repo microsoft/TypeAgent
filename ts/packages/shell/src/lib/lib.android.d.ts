@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-declare var showToast: (message: string) => void;
+declare var Android = {  
+    showToast(message: string): void;  
+};  
 
-export as namespace Android;
+export { Android };
