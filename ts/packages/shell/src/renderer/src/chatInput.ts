@@ -95,7 +95,11 @@ export class ExpandableTextarea {
         }
     }
 
-    appendTextAtCursor(text: string) {
+    replaceTextAtCursor(
+        text: string,
+        cursorOffset: number = 0,
+        length: number = 0,
+    ) {
         const s = document.getSelection();
         if (s) {
             if (s.rangeCount > 1) {
@@ -106,12 +110,14 @@ export class ExpandableTextarea {
                 return;
             }
             if (currentRange.startContainer === this.textEntry.childNodes[0]) {
-                const prefix = this.textEntry.innerText.substring(
-                    0,
-                    currentRange.startOffset,
-                );
+                const currentText = this.textEntry.innerText;
+                let offset = currentRange.startOffset + cursorOffset;
+                if (offset < 0 || offset > currentText.length) {
+                    return;
+                }
+                const prefix = this.textEntry.innerText.substring(0, offset);
                 const suffix = this.textEntry.innerText.substring(
-                    currentRange.startOffset,
+                    offset + length,
                 );
                 this.textEntry.innerText = prefix + text + suffix;
 

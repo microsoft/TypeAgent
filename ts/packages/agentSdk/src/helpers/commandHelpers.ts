@@ -1,14 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionContext } from "../agentInterface.js";
+import { ActionContext, SessionContext } from "../agentInterface.js";
 import {
     AppAgentCommandInterface,
     CommandDescriptor,
     CommandDescriptors,
     CommandDescriptorTable,
 } from "../command.js";
-import { ParameterDefinitions, ParsedCommandParams } from "../parameters.js";
+import {
+    ParameterDefinitions,
+    ParsedCommandParams,
+    PartialParsedCommandParams,
+} from "../parameters.js";
 
 export {
     resolveFlag,
@@ -23,6 +27,7 @@ export type CommandHandlerNoParams = CommandDescriptor & {
         params: undefined,
         attachments?: string[],
     ): Promise<void>;
+    getCompletion?: undefined;
 };
 
 export type CommandHandler = CommandDescriptor & {
@@ -32,6 +37,11 @@ export type CommandHandler = CommandDescriptor & {
         params: ParsedCommandParams<ParameterDefinitions>,
         attachments?: string[],
     ): Promise<void>;
+    getCompletion?(
+        context: SessionContext<unknown>,
+        params: PartialParsedCommandParams<ParameterDefinitions>,
+        names: string[],
+    ): Promise<string[]>;
 };
 
 type CommandHandlerTypes = CommandHandlerNoParams | CommandHandler;
@@ -50,16 +60,62 @@ export interface CommandHandlerTable extends CommandDescriptorTable {
     defaultSubCommand?: CommandHandlerTypes | undefined;
 }
 
+function hasCompletion(handlers: CommandDefinitions): boolean {
+    if (isCommandDescriptorTable(handlers)) {
+        return (
+            (handlers.defaultSubCommand !== undefined &&
+                hasCompletion(handlers.defaultSubCommand)) ||
+            Object.values(handlers.commands).some(hasCompletion)
+        );
+    }
+    return handlers.getCompletion !== undefined;
+}
+
 export function isCommandDescriptorTable(
     entry: CommandDescriptors,
 ): entry is CommandDescriptorTable {
     return (entry as CommandDescriptorTable).commands !== undefined;
 }
 
+function getCommandHandler(
+    handlers: CommandDefinitions,
+    commands: string[],
+): CommandHandlerTypes {
+    let curr: CommandDefinitions = handlers;
+    const commandPrefix: string[] = [];
+
+    for (const command of commands) {
+        commandPrefix.push(command);
+        if (!isCommandDescriptorTable(curr)) {
+            throw new Error(
+                `Unknown subcommand '${commands.join(" ")}' in '@${commandPrefix.join(" ")}'`,
+            );
+        }
+        const next: CommandDefinitions | undefined = curr.commands[command];
+        if (next === undefined) {
+            throw new Error(
+                `Unknown command '${command}' in '@${commandPrefix.join(" ")}'`,
+            );
+        }
+        curr = next;
+    }
+
+    if (!isCommandDescriptorTable(curr)) {
+        return curr;
+    }
+
+    if (curr.defaultSubCommand === undefined) {
+        throw new Error(
+            `Command '@${commandPrefix.join(" ")}' requires a subcommand`,
+        );
+    }
+    return curr.defaultSubCommand;
+}
+
 export function getCommandInterface(
     handlers: CommandDefinitions,
 ): AppAgentCommandInterface {
-    return {
+    const commandInterface: AppAgentCommandInterface = {
         getCommands: async () => handlers,
         executeCommand: async (
             commands: string[],
@@ -67,53 +123,37 @@ export function getCommandInterface(
             context: ActionContext<unknown>,
             attachments?: string[],
         ) => {
-            let curr: CommandDefinitions = handlers;
-            const commandPrefix: string[] = [];
+            const handler = getCommandHandler(handlers, commands);
 
-            while (true) {
-                const currCommand = commands.shift();
-                if (currCommand === undefined) {
-                    break;
-                }
-                commandPrefix.push(currCommand);
-                if (!isCommandDescriptorTable(curr)) {
-                    break;
-                }
-                const next: CommandDefinitions | undefined =
-                    curr.commands[currCommand];
-                if (next === undefined) {
-                    throw new Error(
-                        `Unknown command '${currCommand}' in '@${commandPrefix.join(" ")}'`,
-                    );
-                }
-                curr = next;
-            }
-
-            if (isCommandDescriptorTable(curr)) {
-                if (curr.defaultSubCommand === undefined) {
-                    throw new Error(
-                        `Command '@${commandPrefix.join(" ")}' requires a subcommand`,
-                    );
-                }
-                curr = curr.defaultSubCommand;
-            }
-
-            if (isCommandHandlerNoParams(curr)) {
+            if (isCommandHandlerNoParams(handler)) {
                 if (params !== undefined) {
                     throw new Error(
-                        `Command '@${commandPrefix.join(" ")}' does not accept parameters`,
+                        `Command '@${commands.join(" ")}' does not accept parameters`,
                     );
                 }
-                await curr.run(context, undefined, attachments);
+                await handler.run(context, undefined, attachments);
                 return;
             } else {
                 if (params === undefined) {
                     throw new Error(
-                        `Command '@${commandPrefix.join(" ")}' expects parameters`,
+                        `Command '@${commands.join(" ")}' expects parameters`,
                     );
                 }
-                await curr.run(context, params, attachments);
+                await handler.run(context, params, attachments);
             }
         },
     };
+
+    if (hasCompletion(handlers)) {
+        commandInterface.getCommandCompletion = async (
+            commands: string[],
+            params: ParsedCommandParams<ParameterDefinitions>,
+            names: string[],
+            context: SessionContext<unknown>,
+        ) => {
+            const handler = getCommandHandler(handlers, commands);
+            return handler.getCompletion?.(context, params, names) ?? [];
+        };
+    }
+    return commandInterface;
 }

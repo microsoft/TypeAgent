@@ -1,11 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    ActionContext,
-    AppActionWithParameters,
-    SessionContext,
-} from "@typeagent/agent-sdk";
+import { ActionContext, AppAction, SessionContext } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import {
     disableDesktopActionContext,
@@ -13,6 +9,7 @@ import {
     runDesktopActions,
     setupDesktopActionContext,
 } from "./connector.js";
+import { DesktopActions } from "./actionsSchema.js";
 export function instantiate() {
     return {
         initializeAgentContext: initializeDesktopContext,
@@ -43,11 +40,11 @@ async function updateDesktopContext(
 }
 
 async function executeDesktopAction(
-    action: AppActionWithParameters,
+    action: AppAction,
     context: ActionContext<DesktopActionContext>,
 ) {
     const message = await runDesktopActions(
-        action,
+        action as DesktopActions,
         context.sessionContext.agentContext,
     );
     return createActionResult(message);

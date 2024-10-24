@@ -17,10 +17,15 @@ import {
 import { unicodeChar } from "../utils/interactive.js";
 import {
     CommandDescriptor,
+    CommandDescriptors,
     CommandDescriptorTable,
+    FlagDefinitions,
+    ParameterDefinitions,
+    ParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import { executeCommand } from "../action/actionHandlers.js";
 import {
+    getFlagMultiple,
     getFlagType,
     isCommandDescriptorTable,
     resolveFlag,
@@ -31,6 +36,7 @@ import { parseParams } from "./parameters.js";
 import { getHandlerTableUsage, getUsage } from "./commandHelp.js";
 
 const debugCommand = registerDebug("typeagent:dispatcher:command");
+const debugCommandError = registerDebug("typeagent:dispatcher:command:error");
 
 type ResolveCommandResult = {
     // The resolved app agent name
@@ -38,7 +44,7 @@ type ResolveCommandResult = {
     actualAppAgentName: string;
 
     // The resolved commands.
-    command: string[];
+    commands: string[];
 
     // The resolve arguments
     suffix: string;
@@ -58,7 +64,7 @@ export async function resolveCommand(
 
     let prev: string | undefined = undefined;
     let curr = input;
-    const nextTerm = () => {
+    const nextToken = () => {
         const result = curr.match(/^\s*\S+/);
         if (result === null || result.length !== 1) {
             return undefined;
@@ -68,7 +74,7 @@ export async function resolveCommand(
         curr = curr.substring(result[0].length);
         return result[0].trim();
     };
-    const revertTerm = () => {
+    const rollbackToken = () => {
         if (prev === undefined) {
             throw new Error("No previous term to revert to.");
         }
@@ -76,62 +82,70 @@ export async function resolveCommand(
         prev = undefined;
     };
 
-    const first = nextTerm();
+    const first = nextToken();
     if (first !== undefined) {
         if (context.agents.isCommandEnabled(first)) {
             parsedAppAgentName = first;
         } else {
-            revertTerm();
+            rollbackToken();
         }
     }
     const actualAppAgentName = parsedAppAgentName ?? "system";
     const appAgent = context.agents.getAppAgent(actualAppAgentName);
     const sessionContext = context.agents.getSessionContext(actualAppAgentName);
-    const commands = await appAgent.getCommands?.(sessionContext);
-    const commandPrefix: string[] = [];
-    if (commands === undefined || !isCommandDescriptorTable(commands)) {
-        return {
-            parsedAppAgentName,
-            actualAppAgentName,
-            command: commandPrefix,
-            suffix: curr.trim(),
-            table: undefined,
-            descriptor: commands,
-        };
-    }
+    const descriptors = await appAgent.getCommands?.(sessionContext);
+    const commands: string[] = [];
 
-    let table = commands;
+    let table: CommandDescriptorTable | undefined;
     let descriptor: CommandDescriptor | undefined;
-    while (true) {
-        const subcommand = nextTerm();
-        if (subcommand === undefined) {
-            descriptor = table.defaultSubCommand;
-            break;
+    if (descriptors === undefined || !isCommandDescriptorTable(descriptors)) {
+        descriptor = descriptors;
+    } else {
+        table = descriptors;
+        while (true) {
+            const subcommand = nextToken();
+            if (subcommand === undefined) {
+                descriptor = table.defaultSubCommand;
+                break;
+            }
+
+            const current: CommandDescriptors = table.commands[subcommand];
+            if (current === undefined) {
+                // Unknown command
+                descriptor = table.defaultSubCommand;
+                rollbackToken();
+                break;
+            }
+            commands.push(subcommand);
+            if (!isCommandDescriptorTable(current)) {
+                descriptor = current;
+                break;
+            }
+            table = current;
         }
 
-        const current = table.commands[subcommand];
-        if (current === undefined) {
-            // Unknown command
-            descriptor = table.defaultSubCommand;
-            revertTerm();
-            break;
-        }
-        commandPrefix.push(subcommand);
-        if (!isCommandDescriptorTable(current)) {
-            descriptor = current;
-            break;
-        }
-        table = current;
+        table = table;
+        descriptor = descriptor;
     }
 
-    return {
+    const result: ResolveCommandResult = {
         parsedAppAgentName,
         actualAppAgentName,
-        command: commandPrefix,
+        commands,
         suffix: curr.trim(),
         table,
         descriptor,
     };
+
+    if (debugCommand.enabled) {
+        debugCommand(`Resolved command:`, {
+            ...result,
+            table: result.table !== undefined,
+            descriptor: result.descriptor !== undefined,
+        });
+    }
+
+    return result;
 }
 
 async function parseCommand(
@@ -150,7 +164,7 @@ async function parseCommand(
         context.logger?.logEvent("command", {
             originalInput,
             appAgentName: result.parsedAppAgentName,
-            command: result.command,
+            command: result.commands,
             suffix: result.suffix,
         });
         try {
@@ -159,7 +173,7 @@ async function parseCommand(
                 : undefined;
             return {
                 appAgentName: result.actualAppAgentName,
-                command: result.command,
+                command: result.commands,
                 params,
             };
         } catch (e: any) {
@@ -185,7 +199,7 @@ async function parseCommand(
 }
 
 export function getParsedCommand(result: ResolveCommandResult) {
-    const command = result.command?.join(" ") ?? "";
+    const command = result.commands?.join(" ") ?? "";
     const parsedAgentName = result.parsedAppAgentName;
     return parsedAgentName
         ? command.length !== 0
@@ -219,7 +233,7 @@ export async function processCommandNoLock(
             DispatcherName,
             "block",
         );
-        debugCommand(e.stack);
+        debugCommandError(e.stack);
     }
 }
 
@@ -360,6 +374,21 @@ function getPartialCompletedCommand(input: string) {
     };
 }
 
+function getPendingFlag(
+    params: ParsedCommandParams<ParameterDefinitions>,
+    flags: FlagDefinitions | undefined,
+) {
+    if (params.tokens.length === 0 || flags === undefined) {
+        return undefined;
+    }
+    const lastToken = params.tokens[params.tokens.length - 1];
+    const resolvedFlag = resolveFlag(flags, lastToken);
+    return resolvedFlag !== undefined &&
+        getFlagType(resolvedFlag[1]) !== "boolean"
+        ? lastToken
+        : undefined;
+}
+
 export async function getCommandCompletion(
     input: string,
     context: CommandHandlerContext,
@@ -389,7 +418,7 @@ export async function getCommandCompletion(
             result.suffix.length === 0 &&
             table?.defaultSubCommand === result.descriptor
         ) {
-            // Match the default sub command.  Includes additiona subcommand names
+            // Match the default sub command.  Includes additional subcommand names
             completions.push(...Object.keys(table.commands));
         }
 
@@ -397,34 +426,51 @@ export async function getCommandCompletion(
             return undefined;
         }
         const flags = descriptor.parameters.flags;
-        if (flags === undefined) {
-            return undefined;
+        const params = parseParams(result.suffix, descriptor.parameters, true);
+        const agent = context.agents.getAppAgent(result.actualAppAgentName);
+        const sessionContext = context.agents.getSessionContext(
+            result.actualAppAgentName,
+        );
+
+        const pendingFlag = getPendingFlag(params, flags);
+
+        const pendingCompletions: string[] = [];
+        if (pendingFlag === undefined) {
+            pendingCompletions.push(...params.nextArgs);
+            if (flags !== undefined) {
+                const parsedFlags = params.flags;
+                for (const [key, value] of Object.entries(flags)) {
+                    const multiple = getFlagMultiple(value);
+                    if (!multiple) {
+                        if (getFlagType(value) === "json") {
+                            // JSON property flags
+                            pendingCompletions.push(`--${key}.`);
+                        }
+                        if (parsedFlags?.[key] !== undefined) {
+                            // filter out non-multiple flags that is already set.
+                            continue;
+                        }
+                    }
+                    completions.push(`--${key}`);
+                    if (value.char !== undefined) {
+                        completions.push(`-${value.char}`);
+                    }
+                }
+            }
+        } else {
+            // get the potential values for the pending flag
+            pendingCompletions.push(pendingFlag);
         }
 
-        const params = parseParams(result.suffix, descriptor.parameters, true);
-        let flagsNeedsValue = false;
-        if (params.tokens.length) {
-            const lastToken = params.tokens[params.tokens.length - 1];
-            const resolvedFlag = resolveFlag(flags, lastToken);
-            if (
-                resolvedFlag !== undefined &&
-                getFlagType(resolvedFlag[1]) !== "boolean"
-            ) {
-                flagsNeedsValue = true;
-            }
-        }
-        if (!flagsNeedsValue) {
-            const parsedFlags = params.flags;
-            for (const [key, value] of Object.entries(flags)) {
-                if (!value.multiple && parsedFlags?.[key] !== undefined) {
-                    // filter out non-multiple flags that is already set.
-                    continue;
-                }
-                completions.push(`--${key}`);
-                if (value.char !== undefined) {
-                    completions.push(`-${value.char}`);
-                }
-            }
+        if (agent.getCommandCompletion) {
+            completions.push(
+                ...(await agent.getCommandCompletion(
+                    result.commands,
+                    params,
+                    pendingCompletions,
+                    sessionContext,
+                )),
+            );
         }
     } else {
         if (result.suffix.length !== 0) {
@@ -434,7 +480,7 @@ export async function getCommandCompletion(
         completions.push(...Object.keys(table.commands));
         if (
             result.parsedAppAgentName === undefined &&
-            result.command.length === 0
+            result.commands.length === 0
         ) {
             // Include the agent names
             completions.push(

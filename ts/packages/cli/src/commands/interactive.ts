@@ -81,7 +81,12 @@ export default class Interactive extends Command {
                 }
             }
 
-            await processRequests(getPrompt, stdio, processCommand, context);
+            await processRequests<CommandHandlerContext>(
+                getPrompt,
+                stdio,
+                processCommand,
+                context,
+            );
         } finally {
             if (context) {
                 await closeCommandHandlerContext(context);
