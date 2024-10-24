@@ -40,6 +40,7 @@ import {
     SearchTermsActionV2,
     TermFilterV2,
 } from "./knowledgeTermSearchSchema2.js";
+import { createTopicSearchOptions } from "./topics.js";
 
 export type SearchProcessingOptions = {
     maxMatches: number;
@@ -584,8 +585,10 @@ export function createSearchProcessor(
         topLevelTopicSummary: boolean,
         options: SearchProcessingOptions,
         loadActions: boolean = false,
-    ) {
+    ): ConversationSearchOptions {
         const topicLevel = topLevelTopicSummary ? 2 : 1;
+        const topicOptions = createTopicSearchOptions(topLevelTopicSummary);
+        topicOptions.minScore = options.minScore;
         const searchOptions: ConversationSearchOptions = {
             entity: {
                 maxMatches: options.maxMatches,
@@ -593,13 +596,7 @@ export function createSearchProcessor(
                 matchNameToType: true,
                 loadEntities: true,
             },
-            topic: {
-                maxMatches: topLevelTopicSummary
-                    ? Number.MAX_SAFE_INTEGER
-                    : options.maxMatches,
-                minScore: options.minScore,
-                loadTopics: true,
-            },
+            topic: topicOptions,
             topicLevel,
             loadMessages: !topLevelTopicSummary,
         };

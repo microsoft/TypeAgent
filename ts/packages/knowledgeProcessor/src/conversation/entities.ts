@@ -11,9 +11,11 @@ import {
 } from "typeagent";
 import {
     KnowledgeStore,
+    TermSet,
     TextIndex,
     TextIndexSettings,
     createKnowledgeStore,
+    createTermSet,
     createTextIndex,
 } from "../knowledgeIndex.js";
 import path from "path";
@@ -45,11 +47,34 @@ import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
 
+export interface EntitySearchOptions extends SearchOptions {
+    loadEntities?: boolean | undefined;
+    nameSearchOptions?: SearchOptions | undefined;
+    matchNameToType: boolean;
+    combinationSetOp?: SetOp | undefined;
+    topK?: number;
+}
+
+export function createEntitySearchOptions(
+    loadEntities: boolean = true,
+): EntitySearchOptions {
+    return {
+        maxMatches: 2,
+        minScore: 0.8,
+        matchNameToType: true,
+        combinationSetOp: SetOp.IntersectUnion,
+        loadEntities,
+    };
+}
+
 export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
     extends KnowledgeStore<ExtractedEntity<TSourceId>, TEntityId> {
     readonly nameIndex: TextIndex<TTextId, TEntityId>;
     readonly typeIndex: TextIndex<TTextId, TEntityId>;
     readonly facetIndex: TextIndex<TTextId, TEntityId>;
+
+    readonly noiseTerms: TermSet;
+
     entities(): AsyncIterableIterator<ExtractedEntity<TSourceId>>;
     get(id: TEntityId): Promise<ExtractedEntity<TSourceId> | undefined>;
     getMultiple(ids: TEntityId[]): Promise<ExtractedEntity<TSourceId>[]>;
@@ -77,26 +102,6 @@ export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
         results: EntitySearchResult<TEntityId>[],
         unique?: Set<TSourceId>,
     ): Promise<Set<TSourceId> | undefined>;
-}
-
-export interface EntitySearchOptions extends SearchOptions {
-    loadEntities?: boolean | undefined;
-    nameSearchOptions?: SearchOptions | undefined;
-    matchNameToType: boolean;
-    combinationSetOp?: SetOp | undefined;
-    topK?: number;
-}
-
-export function createEntitySearchOptions(
-    loadEntities: boolean = true,
-): EntitySearchOptions {
-    return {
-        maxMatches: 2,
-        minScore: 0.8,
-        matchNameToType: true,
-        combinationSetOp: SetOp.IntersectUnion,
-        loadEntities,
-    };
 }
 
 export async function createEntityIndex<TSourceId = string>(
@@ -132,11 +137,13 @@ export async function createEntityIndex<TSourceId = string>(
             fSys,
         ),
     ]);
+    const noiseTerms = createTermSet();
     return {
         ...entityStore,
         nameIndex,
         typeIndex,
         facetIndex,
+        noiseTerms,
         entities: () => entityStore.entries(),
         get: (id) => entityStore.get(id),
         getMultiple,
@@ -315,7 +322,7 @@ export async function createEntityIndex<TSourceId = string>(
         options: EntitySearchOptions,
     ): Promise<EntitySearchResult<EntityId>> {
         const terms = combineTerms(filter);
-        return findEntities(terms, filter.timeRange, options);
+        return matchEntities(terms, filter.timeRange, options);
     }
 
     async function searchTermsV2(
@@ -323,12 +330,12 @@ export async function createEntityIndex<TSourceId = string>(
         options: EntitySearchOptions,
     ): Promise<EntitySearchResult<EntityId>> {
         if (filter.searchTerms && filter.searchTerms.length > 0) {
-            return findEntities(filter.searchTerms, filter.timeRange, options);
+            return matchEntities(filter.searchTerms, filter.timeRange, options);
         }
         return createSearchResults();
     }
 
-    async function findEntities(
+    async function matchEntities(
         terms: string[],
         timeRange: DateTimeRange | undefined,
         options: EntitySearchOptions,
@@ -342,8 +349,9 @@ export async function createEntityIndex<TSourceId = string>(
                 );
         }
 
+        terms = terms.filter((t) => !noiseTerms.has(t));
         if (terms && terms.length > 0) {
-            const hitCounter = createHitTable<EntityId>();
+            const hitCounter = createHitTable<EntityId>(undefined);
             await Promise.all([
                 nameIndex.getNearestHitsMultiple(
                     terms,
@@ -364,7 +372,7 @@ export async function createEntityIndex<TSourceId = string>(
                     options.minScore,
                 ),
             ]);
-            const entityHits = hitCounter.getTopK(options.topK ?? 3);
+            const entityHits = hitCounter.getTopK(options.topK ?? 5);
             results.entityIds = [
                 ...intersectMultiple(
                     entityHits,

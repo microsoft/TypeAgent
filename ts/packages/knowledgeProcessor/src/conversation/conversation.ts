@@ -51,7 +51,6 @@ import {
     unionSets,
     uniqueFrom,
 } from "../setOperations.js";
-import { getRangeOfTemporalSequence } from "../temporal.js";
 import { Action, ConcreteEntity } from "./knowledgeSchema.js";
 import { MessageIndex, createMessageIndex } from "./messages.js";
 import {
@@ -70,6 +69,7 @@ import {
 } from "./knowledgeTermSearchSchema2.js";
 import { getAllTermsInFilter } from "./searchProcessor.js";
 import { TypeChatLanguageModel } from "typechat";
+import { TextEmbeddingModel } from "aiclient";
 
 export interface RecentItems<T> {
     readonly entries: collections.CircularArray<T>;
@@ -352,14 +352,16 @@ export function createSearchResponse<
 
     function entityTimeRanges(): (dateTime.DateRange | undefined)[] {
         return response.entities.length > 0
-            ? response.entities.map((e) => e.getTemporalRange())
+            ? collections.mapAndFilter(response.entities, (e) =>
+                  e.getTemporalRange(),
+              )
             : [];
     }
 
     function topicTimeRanges(): (dateTime.DateRange | undefined)[] {
         return response.topics.length > 0
-            ? response.topics.map((t) =>
-                  getRangeOfTemporalSequence(t.temporalSequence),
+            ? collections.mapAndFilter(response.topics, (t) =>
+                  t.getTemporalRange(),
               )
             : [];
     }
@@ -386,8 +388,8 @@ export function createSearchResponse<
 
     function actionTimeRanges(): (dateTime.DateRange | undefined)[] {
         return response.actions.length > 0
-            ? response.actions.map((a) =>
-                  getRangeOfTemporalSequence(a.temporalSequence),
+            ? collections.mapAndFilter(response.actions, (a) =>
+                  a.getTemporalRange(),
               )
             : [];
     }
@@ -444,6 +446,19 @@ export type ConversationSettings = {
     indexSettings: TextIndexSettings;
     indexActions?: boolean;
 };
+
+export function createConversationSettings(
+    embeddingModel?: TextEmbeddingModel,
+): ConversationSettings {
+    return {
+        indexSettings: {
+            caseSensitive: false,
+            concurrency: 2,
+            embeddingModel,
+            semanticIndex: true,
+        },
+    };
+}
 
 export type ConversationSearchOptions = {
     entity: EntitySearchOptions;
@@ -900,13 +915,10 @@ export async function createConversation(
             const actionResult = options.action
                 ? await actionIndex.searchTermsV2(filter, options.action)
                 : undefined;
-            const hasActionMatches =
-                actionResult &&
-                actionResult.actionIds &&
-                actionResult.actionIds.length > 0;
             // Search entities
             filter = {
-                searchTerms: getAllTermsInFilter(filter, !hasActionMatches),
+                searchTerms: getAllTermsInFilter(filter, false),
+                timeRange: filter.timeRange,
             };
             const tasks = [
                 topicIndex.searchTermsV2(filter, options.topic),

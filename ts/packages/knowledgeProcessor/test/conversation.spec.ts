@@ -9,7 +9,7 @@ import os from "node:os";
 import { conversation } from "../src/index.js";
 import { shouldSkip, skipTest } from "./testCore.js";
 
-export type TestContext = {
+type TestContext = {
     cm: conversation.ConversationManager;
 };
 
