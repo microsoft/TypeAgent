@@ -484,7 +484,7 @@ export function getTopMergedEntities(
     let entities: CompositeEntity[] | undefined;
     if (mergedEntities.size > 0) {
         // Sort in hit count order
-        let entities = [...mergedEntities.values()]
+        entities = [...mergedEntities.values()]
             .sort((x, y) => y.count - x.count)
             .map((e) => e.value);
         entities = topK > 0 ? entities.slice(0, topK) : entities;
