@@ -179,6 +179,22 @@ importers:
         specifier: ^5.0.5
         version: 5.0.5
 
+  examples/spelunker:
+    dependencies:
+      aiclient:
+        specifier: workspace:*
+        version: link:../../packages/aiclient
+    devDependencies:
+      '@types/node':
+        specifier: ^18.18.7
+        version: 18.18.7
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+
   examples/whisperClient:
     dependencies:
       chalk:

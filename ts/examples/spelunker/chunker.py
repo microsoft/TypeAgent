@@ -232,13 +232,13 @@ def test():
         with open(filename, "r") as f:
             text = f.read()
     except OSError as e:
-        print({"error": e})
+        print({"error": str(e)})
         return 1
 
     try:
         tree = ast.parse(text, filename=filename)
     except SyntaxError as e:
-        print({"error": e})
+        print({"error": str(e)})
         return 1
 
     chunks = chunker(text, tree)
