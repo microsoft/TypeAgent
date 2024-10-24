@@ -45,8 +45,8 @@
             "text": "go back one song",
             "synonyms": [
               "return to the previous track",
-              "play the last song",
-              "rewind to the previous song"
+              "play the last song again",
+              "skip back one song"
             ],
             "category": "action",
             "propertyNames": [
@@ -71,13 +71,19 @@
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "pause the song"
+                  "pause the music"
                 ]
               },
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "play the song"
+                  "play the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music"
                 ]
               }
             ]
@@ -126,25 +132,13 @@
             ]
           },
           {
-            "text": "the song before this one",
+            "text": "the song before this one again",
             "synonyms": [
               "the previous song",
               "the last song",
               "the prior song"
             ],
             "category": "object",
-            "propertyNames": [
-              "fullActionName"
-            ]
-          },
-          {
-            "text": "again",
-            "synonyms": [
-              "once more",
-              "one more time",
-              "replay"
-            ],
-            "category": "frequency",
             "propertyNames": [
               "fullActionName"
             ]
@@ -156,40 +150,28 @@
             "propertyValue": "player.previous",
             "propertySubPhrases": [
               "hear",
-              "the song before this one",
-              "again"
+              "the song before this one again"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.next",
                 "propertySubPhrases": [
                   "hear",
-                  "the next song",
-                  "again"
+                  "the next song"
                 ]
               },
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
                   "pause",
-                  "the song",
-                  ""
+                  "the song"
                 ]
               },
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
                   "play",
-                  "the song",
-                  "again"
-                ]
-              },
-              {
-                "propertyValue": "player.replay",
-                "propertySubPhrases": [
-                  "replay",
-                  "the song",
-                  "again"
+                  "the song"
                 ]
               }
             ]
@@ -383,7 +365,7 @@
             "text": "play the last track over",
             "synonyms": [
               "replay the last track",
-              "play the previous track again",
+              "play the previous track",
               "repeat the last track"
             ],
             "category": "action",
@@ -437,7 +419,7 @@
             "substrings": [
               "rewind to the song before this one"
             ],
-            "implied": true
+            "implied": false
           }
         ],
         "subPhrases": [
@@ -473,7 +455,13 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.next",
+                "propertyValue": "player.rewind",
+                "propertySubPhrases": [
+                  "rewind the song"
+                ]
+              },
+              {
+                "propertyValue": "player.skip",
                 "propertySubPhrases": [
                   "skip to the next song"
                 ]
@@ -482,12 +470,6 @@
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
                   "pause the song"
-                ]
-              },
-              {
-                "propertyValue": "player.play",
-                "propertySubPhrases": [
-                  "play the song"
                 ]
               }
             ]
@@ -589,7 +571,7 @@
             "name": "fullActionName",
             "value": "player.previous",
             "substrings": [
-              "listen to the previous track"
+              "previous track"
             ],
             "implied": false
           }
@@ -600,7 +582,7 @@
             "synonyms": [
               "Can",
               "Would",
-              "Might"
+              "May"
             ],
             "category": "politeness",
             "isOptional": true
@@ -616,13 +598,25 @@
             "isOptional": true
           },
           {
-            "text": "listen to the previous track",
+            "text": "listen to",
             "synonyms": [
-              "play the previous song",
-              "play the last track",
-              "play the previous tune"
+              "play",
+              "hear",
+              "put on"
             ],
             "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the previous track",
+            "synonyms": [
+              "the last song",
+              "the prior track",
+              "the earlier song"
+            ],
+            "category": "object",
             "propertyNames": [
               "fullActionName"
             ]
@@ -632,9 +626,9 @@
             "synonyms": [
               "again",
               "one more time",
-              "repeat"
+              "another time"
             ],
-            "category": "confirmation",
+            "category": "repetition",
             "isOptional": true
           }
         ],
@@ -643,25 +637,36 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.previous",
             "propertySubPhrases": [
-              "listen to the previous track"
+              "listen to",
+              "the previous track"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.next",
                 "propertySubPhrases": [
-                  "listen to the next track"
+                  "listen to",
+                  "the next track"
                 ]
               },
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "pause the track"
+                  "pause",
+                  "the track"
                 ]
               },
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "play the track"
+                  "play",
+                  "the track"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop",
+                  "the track"
                 ]
               }
             ]
@@ -683,7 +688,7 @@
             "substrings": [
               "go back to the last song"
             ],
-            "implied": true
+            "implied": false
           }
         ],
         "subPhrases": [
@@ -712,7 +717,7 @@
             "synonyms": [
               "return to the previous song",
               "play the previous track",
-              "go to the previous song"
+              "replay the last song"
             ],
             "category": "action",
             "propertyNames": [
@@ -817,12 +822,6 @@
                 "propertySubPhrases": [
                   "play the track"
                 ]
-              },
-              {
-                "propertyValue": "player.stop",
-                "propertySubPhrases": [
-                  "stop the track"
-                ]
               }
             ]
           }
@@ -861,8 +860,8 @@
             "text": "skip back to the song before",
             "synonyms": [
               "go back to the previous song",
-              "return to the last song",
-              "play the song before this one"
+              "rewind to the last song",
+              "return to the earlier song"
             ],
             "category": "action",
             "propertyNames": [
@@ -1019,8 +1018,8 @@
             "text": ".",
             "synonyms": [
               "",
-              "",
-              ""
+              " ",
+              " "
             ],
             "category": "punctuation",
             "isOptional": true
@@ -1075,7 +1074,7 @@
             "substrings": [
               "Hit the back button on the player."
             ],
-            "implied": true
+            "implied": false
           }
         ],
         "subPhrases": [
@@ -1174,13 +1173,23 @@
         ],
         "subPhrases": [
           {
-            "text": "Hit the previous button",
+            "text": "Hit the",
             "synonyms": [
-              "Press the previous button",
-              "Click the previous button",
-              "Activate the previous button"
+              "Press the",
+              "Tap the",
+              "Click the"
             ],
             "category": "command",
+            "propertyNames": []
+          },
+          {
+            "text": "previous button",
+            "synonyms": [
+              "back button",
+              "last button",
+              "prior button"
+            ],
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -1201,25 +1210,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.previous",
             "propertySubPhrases": [
-              "Hit the previous button"
+              "previous button"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.next",
                 "propertySubPhrases": [
-                  "Hit the next button"
+                  "next button"
                 ]
               },
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "Hit the pause button"
+                  "pause button"
                 ]
               },
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "Hit the play button"
+                  "play button"
                 ]
               }
             ]
@@ -1357,19 +1366,19 @@
               {
                 "propertyValue": "player.next",
                 "propertySubPhrases": [
-                  "listen to the next track"
+                  "skip to the next track"
                 ]
               },
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "pause the track"
+                  "pause the music"
                 ]
               },
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "play the track"
+                  "play the music"
                 ]
               }
             ]
@@ -1441,7 +1450,7 @@
               {
                 "propertyValue": "player.stop",
                 "propertySubPhrases": [
-                  "stop the song"
+                  "stop the music"
                 ]
               }
             ]
@@ -1461,43 +1470,43 @@
             "name": "fullActionName",
             "value": "player.previous",
             "substrings": [
-              "listen to the previous track again"
+              "listen to the previous track"
             ],
-            "implied": false
+            "implied": true
           }
         ],
         "subPhrases": [
           {
-            "text": "I'd appreciate it if",
+            "text": "I'd appreciate it if we could",
             "synonyms": [
-              "I would be grateful if",
-              "It would be great if",
-              "I would like it if"
+              "I would be grateful if we could",
+              "It would be great if we could",
+              "I would like it if we could"
             ],
             "category": "politeness",
             "isOptional": true
           },
           {
-            "text": "we could",
+            "text": "listen to the previous track",
             "synonyms": [
-              "we can",
-              "we are able to",
-              "we're able to"
-            ],
-            "category": "confirmation",
-            "isOptional": true
-          },
-          {
-            "text": "listen to the previous track again",
-            "synonyms": [
-              "play the previous track again",
-              "replay the last track",
-              "repeat the previous song"
+              "play the previous song",
+              "go back to the last track",
+              "replay the previous track"
             ],
             "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
+          },
+          {
+            "text": "again",
+            "synonyms": [
+              "once more",
+              "one more time",
+              "another time"
+            ],
+            "category": "confirmation",
+            "isOptional": true
           }
         ],
         "propertyAlternatives": [
@@ -1505,7 +1514,7 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.previous",
             "propertySubPhrases": [
-              "listen to the previous track again"
+              "listen to the previous track"
             ],
             "alternatives": [
               {
@@ -1524,6 +1533,88 @@
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
                   "play the track"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "I'd like to go back to the last track, please.",
+      "action": {
+        "fullActionName": "player.previous",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.previous",
+            "substrings": [
+              "go back to the last track"
+            ],
+            "implied": true
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "I'd like to",
+            "synonyms": [
+              "I would like to",
+              "I want to",
+              "I wish to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "go back to the last track",
+            "synonyms": [
+              "return to the previous track",
+              "replay the last track",
+              "play the previous track"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "please",
+            "synonyms": [
+              "kindly",
+              "if you don't mind",
+              "if you please"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.previous",
+            "propertySubPhrases": [
+              "go back to the last track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "skip to the next track"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the music"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the music"
                 ]
               }
             ]
@@ -1578,7 +1669,7 @@
               "one more time",
               "another time"
             ],
-            "category": "repetition",
+            "category": "confirmation",
             "isOptional": true
           }
         ],
@@ -1588,6 +1679,78 @@
             "propertyValue": "player.previous",
             "propertySubPhrases": [
               "hear the previous song"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "hear the next song"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the song"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the song"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "I'd love to hear the last song again.",
+      "action": {
+        "fullActionName": "player.previous",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.previous",
+            "substrings": [
+              "hear the last song again"
+            ],
+            "implied": true
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "I'd love to",
+            "synonyms": [
+              "I would like to",
+              "I want to",
+              "I wish to"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "hear the last song again",
+            "synonyms": [
+              "play the previous song",
+              "replay the last song",
+              "repeat the previous track"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.previous",
+            "propertySubPhrases": [
+              "hear the last song again"
             ],
             "alternatives": [
               {
@@ -1717,8 +1880,8 @@
             "text": "do a quick backtrack",
             "synonyms": [
               "go back quickly",
-              "quickly return",
-              "immediately backtrack"
+              "quickly rewind",
+              "immediately return"
             ],
             "category": "action",
             "propertyNames": [
@@ -1730,7 +1893,7 @@
             "synonyms": [
               "to the previous track",
               "to the prior song",
-              "to the last track"
+              "to the earlier song"
             ],
             "category": "target",
             "propertyNames": [
@@ -1818,7 +1981,7 @@
             "synonyms": [
               "the previous song",
               "the last song",
-              "the song that was playing before"
+              "the song that was played earlier"
             ],
             "category": "object",
             "propertyNames": [
@@ -1836,10 +1999,10 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.replay",
+                "propertyValue": "player.rewind",
                 "propertySubPhrases": [
-                  "replay",
-                  "the song that just ended."
+                  "rewind to",
+                  "the previous track."
                 ]
               },
               {
@@ -1850,10 +2013,10 @@
                 ]
               },
               {
-                "propertyValue": "player.rewind",
+                "propertyValue": "player.replay",
                 "propertySubPhrases": [
-                  "rewind",
-                  "the song to the beginning."
+                  "replay",
+                  "the last song."
                 ]
               }
             ]
@@ -1904,9 +2067,9 @@
           {
             "text": "one song back",
             "synonyms": [
-              "a song back",
+              "one track back",
               "previous song",
-              "back one track"
+              "last track"
             ],
             "category": "direction",
             "propertyNames": [
@@ -2072,7 +2235,7 @@
               "We should",
               "How about we"
             ],
-            "category": "filler",
+            "category": "politeness",
             "isOptional": true
           },
           {
@@ -2152,7 +2315,7 @@
             "synonyms": [
               "play the previous song",
               "play the last song",
-              "replay the track"
+              "replay the previous track"
             ],
             "category": "action",
             "propertyNames": [
@@ -2232,15 +2395,15 @@
               "We should",
               "How about we"
             ],
-            "category": "filler",
+            "category": "politeness",
             "isOptional": true
           },
           {
             "text": "return to the last track",
             "synonyms": [
-              "go back to the previous track",
-              "replay the last song",
-              "play the previous track"
+              "go back to the previous song",
+              "play the previous track",
+              "replay the last song"
             ],
             "category": "action",
             "propertyNames": [
@@ -2302,7 +2465,7 @@
             "synonyms": [
               "Let us",
               "We should",
-              "We can"
+              "We could"
             ],
             "category": "politeness",
             "isOptional": true
@@ -2311,8 +2474,8 @@
             "text": "reverse to the previous track",
             "synonyms": [
               "go back to the previous track",
-              "play the previous track",
-              "move to the previous track"
+              "move to the previous track",
+              "return to the previous track"
             ],
             "category": "action",
             "propertyNames": [
@@ -2389,8 +2552,8 @@
             "text": "revisit the track before this one",
             "synonyms": [
               "go back to the previous track",
-              "play the last track again",
-              "return to the previous song"
+              "play the track before this",
+              "return to the last track"
             ],
             "category": "action",
             "propertyNames": [
@@ -2458,13 +2621,25 @@
             "isOptional": true
           },
           {
-            "text": "rewind to the song we just heard",
+            "text": "rewind to the song",
             "synonyms": [
-              "go back to the previous song",
-              "play the last song again",
-              "replay the song we just listened to"
+              "go back to the song",
+              "return to the song",
+              "play the previous song"
             ],
             "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "we just heard",
+            "synonyms": [
+              "we recently listened to",
+              "we just played",
+              "we heard a moment ago"
+            ],
+            "category": "context",
             "propertyNames": [
               "fullActionName"
             ]
@@ -2475,25 +2650,29 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.previous",
             "propertySubPhrases": [
-              "rewind to the song we just heard"
+              "rewind to the song",
+              "we just heard"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.replay",
                 "propertySubPhrases": [
-                  "replay the song we just heard"
+                  "replay the song",
+                  "we just heard"
                 ]
               },
               {
                 "propertyValue": "player.restart",
                 "propertySubPhrases": [
-                  "restart the song we just heard"
+                  "restart the song",
+                  "we just heard"
                 ]
               },
               {
-                "propertyValue": "player.back",
+                "propertyValue": "player.repeat",
                 "propertySubPhrases": [
-                  "go back to the song we just heard"
+                  "repeat the song",
+                  "we just heard"
                 ]
               }
             ]
@@ -2524,7 +2703,7 @@
             "synonyms": [
               "Would you",
               "Could you",
-              "Can you"
+              "Do you mind"
             ],
             "category": "politeness",
             "isOptional": true
@@ -2546,7 +2725,7 @@
               "the prior song",
               "the previous track"
             ],
-            "category": "action",
+            "category": "object",
             "propertyNames": [
               "fullActionName"
             ]
@@ -2597,7 +2776,7 @@
             "substrings": [
               "reversing to the previous song"
             ],
-            "implied": true
+            "implied": false
           }
         ],
         "subPhrases": [
@@ -2769,9 +2948,9 @@
             "name": "fullActionName",
             "value": "player.previous",
             "substrings": [
-              "Play the preceding track once more."
+              "Play the preceding track"
             ],
-            "implied": true
+            "implied": false
           }
         ],
         "subPhrases": [
@@ -2806,10 +2985,8 @@
               "one more time",
               "another time"
             ],
-            "category": "frequency",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "category": "repetition",
+            "isOptional": true
           }
         ],
         "propertyAlternatives": [
@@ -2818,32 +2995,28 @@
             "propertyValue": "player.previous",
             "propertySubPhrases": [
               "Play",
-              "the preceding track",
-              "once more"
+              "the preceding track"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.next",
                 "propertySubPhrases": [
                   "Play",
-                  "the next track",
-                  "once more"
+                  "the next track"
                 ]
               },
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
                   "Pause",
-                  "the current track",
-                  "now"
+                  "the track"
                 ]
               },
               {
                 "propertyValue": "player.stop",
                 "propertySubPhrases": [
                   "Stop",
-                  "the current track",
-                  "immediately"
+                  "the track"
                 ]
               }
             ]
@@ -2863,23 +3036,21 @@
             "name": "fullActionName",
             "value": "player.previous",
             "substrings": [
-              "Press the prev button on the music player."
+              "Press the prev button"
             ],
-            "implied": false
+            "implied": true
           }
         ],
         "subPhrases": [
           {
             "text": "Press",
             "synonyms": [
-              "Hit",
+              "Click",
               "Tap",
-              "Click"
+              "Hit"
             ],
             "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "propertyNames": []
           },
           {
             "text": "the prev button",
@@ -2900,10 +3071,8 @@
               "on the media player",
               "on the sound system"
             ],
-            "category": "location",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "category": "context",
+            "propertyNames": []
           }
         ],
         "propertyAlternatives": [
@@ -2911,41 +3080,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.previous",
             "propertySubPhrases": [
-              "Press",
-              "the prev button",
-              "on the music player"
+              "the prev button"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.next",
                 "propertySubPhrases": [
-                  "Press",
-                  "the next button",
-                  "on the music player"
-                ]
-              },
-              {
-                "propertyValue": "player.pause",
-                "propertySubPhrases": [
-                  "Press",
-                  "the pause button",
-                  "on the music player"
+                  "the next button"
                 ]
               },
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "Press",
-                  "the play button",
-                  "on the music player"
+                  "the play button"
                 ]
               },
               {
-                "propertyValue": "player.stop",
+                "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "Press",
-                  "the stop button",
-                  "on the music player"
+                  "the pause button"
                 ]
               }
             ]
@@ -2967,14 +3120,14 @@
             "substrings": [
               "Previous song"
             ],
-            "implied": true
+            "implied": false
           }
         ],
         "subPhrases": [
           {
             "text": "Previous song",
             "synonyms": [
-              "Play the previous song",
+              "Play the previous track",
               "Go back one song",
               "Play the last song"
             ],
@@ -3011,13 +3164,13 @@
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "Pause the music"
+                  "Pause the song"
                 ]
               },
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "Play the music"
+                  "Play the song"
                 ]
               }
             ]
@@ -3118,9 +3271,9 @@
           {
             "text": "Previous track",
             "synonyms": [
-              "Last song",
-              "Go back one track",
-              "Play previous"
+              "Play previous song",
+              "Go to previous track",
+              "Skip back one track"
             ],
             "category": "command",
             "propertyNames": [
@@ -3190,9 +3343,9 @@
           {
             "text": "Previous track",
             "synonyms": [
-              "Prior song",
-              "Last track",
-              "Previous song"
+              "Last song",
+              "Go back one track",
+              "Play the previous song"
             ],
             "category": "command",
             "propertyNames": [
@@ -3203,8 +3356,8 @@
             "text": "please",
             "synonyms": [
               "kindly",
-              "if you could",
-              "would you mind"
+              "if you would",
+              "if you don't mind"
             ],
             "category": "politeness",
             "isOptional": true
@@ -3255,7 +3408,7 @@
             "substrings": [
               "previous track"
             ],
-            "implied": false
+            "implied": true
           }
         ],
         "subPhrases": [
@@ -3267,9 +3420,7 @@
               "Begin"
             ],
             "category": "command",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "propertyNames": []
           },
           {
             "text": "the previous track",
@@ -3278,7 +3429,7 @@
               "the prior track",
               "the previous song"
             ],
-            "category": "object",
+            "category": "music",
             "propertyNames": [
               "fullActionName"
             ]
@@ -3291,7 +3442,7 @@
               "replay"
             ],
             "category": "repetition",
-            "isOptional": true
+            "propertyNames": []
           }
         ],
         "propertyAlternatives": [
@@ -3299,29 +3450,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.previous",
             "propertySubPhrases": [
-              "Queue up",
               "the previous track"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.next",
                 "propertySubPhrases": [
-                  "Queue up",
                   "the next track"
                 ]
               },
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "Play",
-                  "the current track"
+                  "play the track"
                 ]
               },
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "Pause",
-                  "the current track"
+                  "pause the track"
                 ]
               }
             ]
@@ -3343,7 +3490,7 @@
             "substrings": [
               "Rewind to the last track."
             ],
-            "implied": true
+            "implied": false
           }
         ],
         "subPhrases": [
@@ -3402,14 +3549,14 @@
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
                   "Pause",
-                  "the current track"
+                  "the track"
                 ]
               },
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
                   "Play",
-                  "the current track"
+                  "the track"
                 ]
               }
             ]
@@ -3534,9 +3681,9 @@
           {
             "text": "that just played.",
             "synonyms": [
-              "that was just playing",
-              "that recently played",
-              "that played before"
+              "that just finished",
+              "that just ended",
+              "that was just on"
             ],
             "category": "time reference",
             "propertyNames": [
@@ -3604,9 +3751,9 @@
           {
             "text": "Take us to the",
             "synonyms": [
-              "Go to the",
-              "Navigate to the",
-              "Move to the"
+              "Bring us to the",
+              "Move us to the",
+              "Navigate us to the"
             ],
             "category": "command",
             "propertyNames": []
@@ -3614,9 +3761,9 @@
           {
             "text": "previous song",
             "synonyms": [
-              "last track",
+              "last song",
               "prior song",
-              "previous track"
+              "preceding song"
             ],
             "category": "action",
             "propertyNames": [
@@ -3627,8 +3774,8 @@
             "text": "would you?",
             "synonyms": [
               "please?",
-              "if you could?",
-              "could you?"
+              "could you?",
+              "if you don't mind?"
             ],
             "category": "politeness",
             "isOptional": true
@@ -3696,9 +3843,9 @@
           {
             "text": "playing the last track again",
             "synonyms": [
-              "replay the last song",
+              "replay the last track",
               "play the previous track",
-              "repeat the last track"
+              "play the last song again"
             ],
             "category": "action",
             "propertyNames": [
@@ -3768,11 +3915,11 @@
           {
             "text": "spin that last one back",
             "synonyms": [
-              "rewind the last one",
-              "go back to the previous",
-              "play the previous track"
+              "replay the previous track",
+              "go back to the last song",
+              "play the previous one again"
             ],
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -3801,7 +3948,7 @@
               {
                 "propertyValue": "player.stop",
                 "propertySubPhrases": [
-                  "stop the music"
+                  "stop the track"
                 ]
               }
             ]
@@ -3861,7 +4008,7 @@
               {
                 "propertyValue": "player.next",
                 "propertySubPhrases": [
-                  "skip to the next track"
+                  "play the next track"
                 ]
               },
               {
@@ -3873,31 +4020,13 @@
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "play the music"
+                  "start the music"
                 ]
               }
             ]
           }
         ]
       }
-    }
-  ],
-  "failed": [
-    {
-      "request": "I'd like to go back to the last track, please.",
-      "action": {
-        "fullActionName": "player.previous",
-        "parameters": {}
-      },
-      "message": "Failed Explanation: JSON validation failed: Type '{}' is not assignable to type 'PropertyValuetype'.\n{\n  \"properties\": [\n    {\n      \"name\": \"fullActionName\",\n      \"value\": \"player.previous\",\n      \"substrings\": [\"go back to the last track\"],\n      \"implied\": true\n    },\n    {\n      \"name\": \"parameters\",\n      \"value\": {},\n      \"isImplicit\": true\n    }\n  ]\n}"
-    },
-    {
-      "request": "I'd love to hear the last song again.",
-      "action": {
-        "fullActionName": "player.previous",
-        "parameters": {}
-      },
-      "message": "Failed Explanation: JSON validation failed: Type '{}' is not assignable to type 'PropertyValuetype'.\n{\n  \"properties\": [\n    {\n      \"name\": \"fullActionName\",\n      \"value\": \"player.previous\",\n      \"substrings\": [\"hear the last song again\"],\n      \"implied\": true\n    },\n    {\n      \"name\": \"parameters\",\n      \"value\": {},\n      \"isImplicit\": true\n    }\n  ]\n}"
     }
   ]
 }

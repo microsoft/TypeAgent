@@ -76,8 +76,8 @@
             "text": "dentist appointment",
             "synonyms": [
               "dental visit",
-              "dentist checkup",
-              "dentist meeting"
+              "dentist meeting",
+              "dentist checkup"
             ],
             "category": "description",
             "propertyNames": [
@@ -88,8 +88,8 @@
             "text": "3-4pm",
             "synonyms": [
               "3 to 4 pm",
-              "3:00 to 4:00 pm",
-              "15:00 to 16:00"
+              "3:00-4:00 pm",
+              "15:00-16:00"
             ],
             "category": "timeRange",
             "propertyNames": [
@@ -343,11 +343,21 @@
             ]
           },
           {
-            "text": "starting at 4pm",
+            "text": "starting at",
             "synonyms": [
-              "at 4pm",
-              "beginning at 4pm",
-              "from 4pm"
+              "beginning at",
+              "commencing at",
+              "from"
+            ],
+            "category": "preposition",
+            "isOptional": true
+          },
+          {
+            "text": "4pm",
+            "synonyms": [
+              "4:00 pm",
+              "16:00",
+              "four in the afternoon"
             ],
             "category": "startTime",
             "propertyNames": [
@@ -357,8 +367,8 @@
           {
             "text": "next Thursday",
             "synonyms": [
-              "this coming Thursday",
-              "the next Thursday",
+              "coming Thursday",
+              "this Thursday",
               "Thursday next week"
             ],
             "category": "day",
@@ -453,25 +463,25 @@
             "propertyName": "parameters.event.timeRange.startTime",
             "propertyValue": "4:00 pm",
             "propertySubPhrases": [
-              "starting at 4pm"
+              "4pm"
             ],
             "alternatives": [
               {
                 "propertyValue": "3:00 pm",
                 "propertySubPhrases": [
-                  "starting at 3pm"
+                  "3pm"
                 ]
               },
               {
                 "propertyValue": "5:00 pm",
                 "propertySubPhrases": [
-                  "starting at 5pm"
+                  "5pm"
                 ]
               },
               {
                 "propertyValue": "6:00 pm",
                 "propertySubPhrases": [
-                  "starting at 6pm"
+                  "6pm"
                 ]
               }
             ]
@@ -516,8 +526,7 @@
             "timeRange": {
               "startTime": "4:00 pm"
             },
-            "description": "ping pong game",
-            "lookup": true
+            "description": "ping pong game"
           },
           "participants": [
             "Isobel"
@@ -529,10 +538,8 @@
           {
             "name": "fullActionName",
             "value": "calendar.addParticipants",
-            "substrings": [
-              "add Isobel to the Wednesday ping pong game at 4pm"
-            ],
-            "implied": false
+            "substrings": [],
+            "implied": true
           },
           {
             "name": "parameters.eventReference.day",
@@ -559,11 +566,6 @@
             "implied": false
           },
           {
-            "name": "parameters.eventReference.lookup",
-            "value": true,
-            "isImplicit": true
-          },
-          {
             "name": "parameters.participants.0",
             "value": "Isobel",
             "substrings": [
@@ -576,8 +578,8 @@
           {
             "text": "add",
             "synonyms": [
-              "insert",
               "include",
+              "insert",
               "put"
             ],
             "category": "action",
@@ -589,8 +591,8 @@
             "text": "Isobel",
             "synonyms": [
               "Isabel",
-              "Izzy",
-              "Isabella"
+              "Isabella",
+              "Izzy"
             ],
             "category": "participant",
             "propertyNames": [
@@ -602,7 +604,7 @@
             "synonyms": [
               "into the",
               "for the",
-              "in the"
+              "towards the"
             ],
             "category": "preposition",
             "isOptional": true
@@ -622,7 +624,7 @@
           {
             "text": "ping pong game",
             "synonyms": [
-              "table tennis game",
+              "table tennis match",
               "ping-pong match",
               "ping pong session"
             ],
@@ -632,21 +634,11 @@
             ]
           },
           {
-            "text": "at",
-            "synonyms": [
-              "by",
-              "around",
-              "near"
-            ],
-            "category": "preposition",
-            "isOptional": true
-          },
-          {
-            "text": "4pm",
+            "text": "at 4pm",
             "synonyms": [
               "4:00 pm",
               "16:00",
-              "4 o'clock"
+              "4 in the afternoon"
             ],
             "category": "time",
             "propertyNames": [
@@ -750,15 +742,15 @@
                 ]
               },
               {
-                "propertyValue": "soccer game",
-                "propertySubPhrases": [
-                  "soccer game"
-                ]
-              },
-              {
                 "propertyValue": "basketball game",
                 "propertySubPhrases": [
                   "basketball game"
+                ]
+              },
+              {
+                "propertyValue": "chess tournament",
+                "propertySubPhrases": [
+                  "chess tournament"
                 ]
               }
             ]
@@ -767,25 +759,25 @@
             "propertyName": "parameters.eventReference.timeRange.startTime",
             "propertyValue": "4:00 pm",
             "propertySubPhrases": [
-              "4pm"
+              "at 4pm"
             ],
             "alternatives": [
               {
                 "propertyValue": "3:00 pm",
                 "propertySubPhrases": [
-                  "3pm"
+                  "at 3pm"
                 ]
               },
               {
                 "propertyValue": "5:00 pm",
                 "propertySubPhrases": [
-                  "5pm"
+                  "at 5pm"
                 ]
               },
               {
                 "propertyValue": "6:00 pm",
                 "propertySubPhrases": [
-                  "6pm"
+                  "at 6pm"
                 ]
               }
             ]
@@ -854,7 +846,7 @@
             "synonyms": [
               "include",
               "insert",
-              "invite"
+              "append"
             ],
             "category": "action",
             "propertyNames": [
@@ -950,15 +942,15 @@
                 ]
               },
               {
-                "propertyValue": "alice",
+                "propertyValue": "susan",
                 "propertySubPhrases": [
-                  "alice"
+                  "susan"
                 ]
               },
               {
-                "propertyValue": "mike",
+                "propertyValue": "alex",
                 "propertySubPhrases": [
-                  "mike"
+                  "alex"
                 ]
               }
             ]
@@ -1343,7 +1335,7 @@
             "synonyms": [
               "meeting",
               "standup",
-              "gathering"
+              "session"
             ],
             "category": "event",
             "propertyNames": [
@@ -1399,21 +1391,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "John",
-                "propertySubPhrases": [
-                  "John"
-                ]
-              },
-              {
-                "propertyValue": "Emily",
-                "propertySubPhrases": [
-                  "Emily"
-                ]
-              },
-              {
                 "propertyValue": "Michael",
                 "propertySubPhrases": [
                   "Michael"
+                ]
+              },
+              {
+                "propertyValue": "Sarah",
+                "propertySubPhrases": [
+                  "Sarah"
+                ]
+              },
+              {
+                "propertyValue": "David",
+                "propertySubPhrases": [
+                  "David"
                 ]
               }
             ]
@@ -1549,7 +1541,7 @@
             "synonyms": [
               "card game",
               "game of bridge",
-              "bridge session"
+              "bridge match"
             ],
             "category": "description",
             "propertyNames": [
@@ -1569,39 +1561,19 @@
             ]
           },
           {
-            "text": "at",
+            "text": "at 10",
             "synonyms": [
-              "on",
-              "during",
-              "around"
-            ],
-            "category": "preposition",
-            "isOptional": true
-          },
-          {
-            "text": "10",
-            "synonyms": [
-              "10:00",
-              "10 am",
+              "10:00 am",
+              "10 in the morning",
               "10 o'clock"
             ],
-            "category": "startTime",
+            "category": "time",
             "propertyNames": [
               "parameters.event.timeRange.startTime"
             ]
           },
           {
-            "text": "for",
-            "synonyms": [
-              "lasting",
-              "during",
-              "over"
-            ],
-            "category": "preposition",
-            "isOptional": true
-          },
-          {
-            "text": "one hour",
+            "text": "for one hour",
             "synonyms": [
               "1 hour",
               "an hour",
@@ -1661,9 +1633,9 @@
                 ]
               },
               {
-                "propertyValue": "tennis match",
+                "propertyValue": "board game",
                 "propertySubPhrases": [
-                  "tennis match"
+                  "board game"
                 ]
               }
             ]
@@ -1699,25 +1671,25 @@
             "propertyName": "parameters.event.timeRange.startTime",
             "propertyValue": "10:00 am",
             "propertySubPhrases": [
-              "10"
+              "at 10"
             ],
             "alternatives": [
               {
-                "propertyValue": "9:00 am",
-                "propertySubPhrases": [
-                  "9"
-                ]
-              },
-              {
                 "propertyValue": "11:00 am",
                 "propertySubPhrases": [
-                  "11"
+                  "at 11"
                 ]
               },
               {
-                "propertyValue": "12:00 pm",
+                "propertyValue": "9:00 am",
                 "propertySubPhrases": [
-                  "12"
+                  "at 9"
+                ]
+              },
+              {
+                "propertyValue": "2:00 pm",
+                "propertySubPhrases": [
+                  "at 2"
                 ]
               }
             ]
@@ -1726,25 +1698,25 @@
             "propertyName": "parameters.event.timeRange.duration",
             "propertyValue": "1 hour",
             "propertySubPhrases": [
-              "one hour"
+              "for one hour"
             ],
             "alternatives": [
               {
                 "propertyValue": "2 hours",
                 "propertySubPhrases": [
-                  "two hours"
+                  "for two hours"
                 ]
               },
               {
                 "propertyValue": "30 minutes",
                 "propertySubPhrases": [
-                  "thirty minutes"
+                  "for thirty minutes"
                 ]
               },
               {
-                "propertyValue": "90 minutes",
+                "propertyValue": "3 hours",
                 "propertySubPhrases": [
-                  "ninety minutes"
+                  "for three hours"
                 ]
               }
             ]
@@ -1762,7 +1734,7 @@
             "participants": [
               "Gavin"
             ],
-            "description": "meeting"
+            "lookup": true
           }
         }
       },
@@ -1793,12 +1765,9 @@
             "implied": false
           },
           {
-            "name": "parameters.eventReference.description",
-            "value": "meeting",
-            "substrings": [
-              "meetings"
-            ],
-            "implied": true
+            "name": "parameters.eventReference.lookup",
+            "value": true,
+            "isImplicit": true
           }
         ],
         "subPhrases": [
@@ -1811,8 +1780,7 @@
             ],
             "category": "action",
             "propertyNames": [
-              "fullActionName",
-              "parameters.eventReference.description"
+              "fullActionName"
             ]
           },
           {
@@ -1831,7 +1799,7 @@
             "text": "this week",
             "synonyms": [
               "in the next seven days",
-              "during this week",
+              "over the next week",
               "within this week"
             ],
             "category": "time",
@@ -1849,48 +1817,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "calendar.scheduleEvent",
+                "propertyValue": "calendar.listEvents",
                 "propertySubPhrases": [
-                  "Schedule any meetings"
+                  "List any meetings"
                 ]
               },
               {
-                "propertyValue": "calendar.updateEvent",
+                "propertyValue": "calendar.getEvents",
                 "propertySubPhrases": [
-                  "Update any meetings"
+                  "Get any meetings"
                 ]
               },
               {
-                "propertyValue": "calendar.deleteEvent",
+                "propertyValue": "calendar.lookupEvents",
                 "propertySubPhrases": [
-                  "Delete any meetings"
-                ]
-              }
-            ]
-          },
-          {
-            "propertyName": "parameters.eventReference.description",
-            "propertyValue": "meeting",
-            "propertySubPhrases": [
-              "Search for any meetings"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "appointment",
-                "propertySubPhrases": [
-                  "Search for any appointments"
-                ]
-              },
-              {
-                "propertyValue": "event",
-                "propertySubPhrases": [
-                  "Search for any events"
-                ]
-              },
-              {
-                "propertyValue": "conference",
-                "propertySubPhrases": [
-                  "Search for any conferences"
+                  "Look up any meetings"
                 ]
               }
             ]

@@ -23,7 +23,7 @@
             "name": "parameters.trackName",
             "value": "Sensual Seduction",
             "substrings": [
-              "Sensual Seduction"
+              "'Sensual Seduction'"
             ],
             "implied": false
           }
@@ -43,28 +43,18 @@
             "text": "it's time to get down to some",
             "synonyms": [
               "let's play",
-              "time for",
-              "let's listen to"
+              "start playing",
+              "put on"
             ],
-            "category": "preposition",
-            "isOptional": true
+            "category": "command",
+            "isOptional": false
           },
           {
-            "text": "'",
+            "text": "'Sensual Seduction'",
             "synonyms": [
-              "\"",
-              "“",
-              "‘"
-            ],
-            "category": "punctuation",
-            "isOptional": true
-          },
-          {
-            "text": "Sensual Seduction",
-            "synonyms": [
-              "Sensual Seduction",
-              "this track",
-              "this song"
+              "'Sensual Seduction'",
+              "'Sensual Seduction'",
+              "'Sensual Seduction'"
             ],
             "category": "trackName",
             "propertyNames": [
@@ -72,23 +62,13 @@
             ]
           },
           {
-            "text": "'",
-            "synonyms": [
-              "\"",
-              "”",
-              "’"
-            ],
-            "category": "punctuation",
-            "isOptional": true
-          },
-          {
             "text": "ya feel me?",
             "synonyms": [
               "you know?",
               "you get it?",
-              "right?"
+              "understand?"
             ],
-            "category": "filler",
+            "category": "confirmation",
             "isOptional": true
           }
         ],
@@ -97,100 +77,31 @@
             "propertyName": "parameters.trackName",
             "propertyValue": "Sensual Seduction",
             "propertySubPhrases": [
-              "Sensual Seduction"
+              "'Sensual Seduction'"
             ],
             "alternatives": [
               {
-                "propertyValue": "Love in This Club",
+                "propertyValue": "Drop It Like It's Hot",
                 "propertySubPhrases": [
-                  "Love in This Club"
+                  "'Drop It Like It's Hot'"
                 ]
               },
               {
-                "propertyValue": "No Diggity",
+                "propertyValue": "Gin and Juice",
                 "propertySubPhrases": [
-                  "No Diggity"
+                  "'Gin and Juice'"
                 ]
               },
               {
-                "propertyValue": "Pony",
+                "propertyValue": "Beautiful",
                 "propertySubPhrases": [
-                  "Pony"
+                  "'Beautiful'"
                 ]
               }
             ]
           }
         ]
-      },
-      "corrections": [
-        {
-          "data": {
-            "properties": [
-              {
-                "name": "fullActionName",
-                "value": "player.playTrack",
-                "substrings": [],
-                "implied": true
-              },
-              {
-                "name": "parameters.trackName",
-                "value": "Sensual Seduction",
-                "substrings": [
-                  "Sensual Seduction"
-                ],
-                "implied": false
-              }
-            ],
-            "subPhrases": [
-              {
-                "text": "Aight",
-                "synonyms": [
-                  "Alright",
-                  "Okay",
-                  "Hey"
-                ],
-                "category": "acknowledgement",
-                "isOptional": true
-              },
-              {
-                "text": "it's time to get down to some",
-                "synonyms": [
-                  "let's play",
-                  "time for",
-                  "let's listen to"
-                ],
-                "category": "preposition",
-                "isOptional": true
-              },
-              {
-                "text": "Sensual Seduction",
-                "synonyms": [
-                  "Sensual Seduction",
-                  "this track",
-                  "this song"
-                ],
-                "category": "trackName",
-                "propertyNames": [
-                  "parameters.trackName"
-                ]
-              },
-              {
-                "text": "ya feel me?",
-                "synonyms": [
-                  "you know?",
-                  "you get it?",
-                  "right?"
-                ],
-                "category": "filler",
-                "isOptional": true
-              }
-            ]
-          },
-          "correction": [
-            "Missing sub-phrase: explanation missing for '''"
-          ]
-        }
-      ]
+      }
     },
     {
       "request": "Aight, it's time to pump up the volume with some fresh beats!",
@@ -244,23 +155,13 @@
             ]
           },
           {
-            "text": "with some",
+            "text": "with some fresh beats",
             "synonyms": [
-              "featuring",
-              "including",
-              "accompanied by"
+              "with new music",
+              "with fresh tracks",
+              "with some new beats"
             ],
-            "category": "preposition",
-            "isOptional": true
-          },
-          {
-            "text": "fresh beats",
-            "synonyms": [
-              "new music",
-              "cool tracks",
-              "latest songs"
-            ],
-            "category": "content",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -272,28 +173,28 @@
             "propertyValue": "player.playRandom",
             "propertySubPhrases": [
               "pump up the volume",
-              "fresh beats"
+              "with some fresh beats"
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playLoud",
+                "propertyValue": "player.playTopHits",
                 "propertySubPhrases": [
-                  "crank it up",
-                  "loud tunes"
+                  "turn up the hits",
+                  "with some chart-toppers"
                 ]
               },
               {
                 "propertyValue": "player.playChill",
                 "propertySubPhrases": [
-                  "take it easy",
-                  "chill vibes"
+                  "relax",
+                  "with some chill vibes"
                 ]
               },
               {
                 "propertyValue": "player.playClassics",
                 "propertySubPhrases": [
-                  "old school",
-                  "classic hits"
+                  "enjoy",
+                  "with some timeless classics"
                 ]
               }
             ]
@@ -314,14 +215,16 @@
           {
             "name": "fullActionName",
             "value": "player.playTrack",
-            "substrings": [],
+            "substrings": [
+              "drop"
+            ],
             "implied": true
           },
           {
             "name": "parameters.trackName",
             "value": "Gin and Juice",
             "substrings": [
-              "Gin and Juice"
+              "'Gin and Juice'"
             ],
             "implied": false
           }
@@ -340,31 +243,33 @@
           {
             "text": "DJ",
             "synonyms": [
+              "Deejay",
               "Disc Jockey",
-              "Music Mixer",
-              "Turntablist"
+              "Music Mixer"
             ],
-            "category": "acknowledgement",
+            "category": "address",
             "isOptional": true
           },
           {
-            "text": "drop that",
+            "text": "drop",
             "synonyms": [
-              "play that",
-              "spin that",
+              "play",
+              "spin",
               "put on"
             ],
-            "category": "command",
-            "isOptional": false
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
-            "text": "'Gin and Juice'",
+            "text": "that 'Gin and Juice'",
             "synonyms": [
-              "'Gin & Juice'",
-              "'Gin n Juice'",
-              "'Gin 'n' Juice'"
+              "the track 'Gin and Juice'",
+              "the song 'Gin and Juice'",
+              "'Gin and Juice'"
             ],
-            "category": "trackName",
+            "category": "track",
             "propertyNames": [
               "parameters.trackName"
             ]
@@ -383,8 +288,8 @@
             "text": "ya dig?",
             "synonyms": [
               "you understand?",
-              "got it?",
-              "capisce?"
+              "you get it?",
+              "got it?"
             ],
             "category": "confirmation",
             "isOptional": true
@@ -392,28 +297,55 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playTrack",
+            "propertySubPhrases": [
+              "drop"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.queueTrack",
+                "propertySubPhrases": [
+                  "queue"
+                ]
+              },
+              {
+                "propertyValue": "player.pauseTrack",
+                "propertySubPhrases": [
+                  "pause"
+                ]
+              },
+              {
+                "propertyValue": "player.stopTrack",
+                "propertySubPhrases": [
+                  "stop"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.trackName",
             "propertyValue": "Gin and Juice",
             "propertySubPhrases": [
-              "'Gin and Juice'"
+              "that 'Gin and Juice'"
             ],
             "alternatives": [
               {
                 "propertyValue": "Nuthin' but a 'G' Thang",
                 "propertySubPhrases": [
-                  "'Nuthin' but a 'G' Thang'"
-                ]
-              },
-              {
-                "propertyValue": "Drop It Like It's Hot",
-                "propertySubPhrases": [
-                  "'Drop It Like It's Hot'"
+                  "that 'Nuthin' but a 'G' Thang'"
                 ]
               },
               {
                 "propertyValue": "Still D.R.E.",
                 "propertySubPhrases": [
-                  "'Still D.R.E.'"
+                  "that 'Still D.R.E.'"
+                ]
+              },
+              {
+                "propertyValue": "The Next Episode",
+                "propertySubPhrases": [
+                  "that 'The Next Episode'"
                 ]
               }
             ]
@@ -475,8 +407,8 @@
             "text": "Snoop Dogg",
             "synonyms": [
               "Snoop",
-              "Dogg",
-              "Snoop Doggy Dogg"
+              "Snoop Doggy Dogg",
+              "Calvin Broadus"
             ],
             "category": "artist",
             "propertyNames": [
@@ -517,7 +449,7 @@
               {
                 "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "queue up"
+                  "queue that"
                 ]
               }
             ]
@@ -555,16 +487,26 @@
     {
       "request": "Ayo, let's bump some dope beats up in here!",
       "action": {
-        "fullActionName": "player.playRandom",
-        "parameters": {}
+        "fullActionName": "player.playGenre",
+        "parameters": {
+          "genre": "hip hop"
+        }
       },
       "explanation": {
         "properties": [
           {
             "name": "fullActionName",
-            "value": "player.playRandom",
+            "value": "player.playGenre",
             "substrings": [
               "let's bump some dope beats"
+            ],
+            "implied": true
+          },
+          {
+            "name": "parameters.genre",
+            "value": "hip hop",
+            "substrings": [
+              "dope beats"
             ],
             "implied": true
           }
@@ -581,15 +523,27 @@
             "isOptional": true
           },
           {
-            "text": "let's bump some dope beats",
+            "text": "let's bump",
             "synonyms": [
-              "play some cool music",
-              "start some awesome tunes",
-              "put on some great tracks"
+              "let's play",
+              "let's listen to",
+              "let's enjoy"
             ],
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
+            ]
+          },
+          {
+            "text": "some dope beats",
+            "synonyms": [
+              "some hip hop",
+              "some rap music",
+              "some cool tracks"
+            ],
+            "category": "genre",
+            "propertyNames": [
+              "parameters.genre"
             ]
           },
           {
@@ -606,27 +560,54 @@
         "propertyAlternatives": [
           {
             "propertyName": "fullActionName",
-            "propertyValue": "player.playRandom",
+            "propertyValue": "player.playGenre",
             "propertySubPhrases": [
-              "let's bump some dope beats"
+              "let's bump"
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playSpecific",
+                "propertyValue": "player.startMusic",
                 "propertySubPhrases": [
-                  "let's play a specific track"
+                  "let's start"
                 ]
               },
               {
-                "propertyValue": "player.pause",
+                "propertyValue": "player.queueGenre",
                 "propertySubPhrases": [
-                  "let's pause the music"
+                  "let's queue"
                 ]
               },
               {
-                "propertyValue": "player.stop",
+                "propertyValue": "player.playMusic",
                 "propertySubPhrases": [
-                  "let's stop the music"
+                  "let's play"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.genre",
+            "propertyValue": "hip hop",
+            "propertySubPhrases": [
+              "some dope beats"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "rock",
+                "propertySubPhrases": [
+                  "some rock tunes"
+                ]
+              },
+              {
+                "propertyValue": "jazz",
+                "propertySubPhrases": [
+                  "some smooth jazz"
+                ]
+              },
+              {
+                "propertyValue": "pop",
+                "propertySubPhrases": [
+                  "some pop hits"
                 ]
               }
             ]
@@ -651,7 +632,7 @@
               "bump",
               "some",
               "classic",
-              "ya dig?"
+              "Snoop Dogg"
             ],
             "implied": true
           },
@@ -676,23 +657,13 @@
             "isOptional": true
           },
           {
-            "text": "let's",
+            "text": "let's bump",
             "synonyms": [
-              "let us",
-              "we should",
-              "how about we"
+              "let's play",
+              "let's listen to",
+              "let's hear"
             ],
-            "category": "filler",
-            "isOptional": true
-          },
-          {
-            "text": "bump",
-            "synonyms": [
-              "play",
-              "listen to",
-              "put on"
-            ],
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -707,7 +678,8 @@
             "category": "description",
             "propertyNames": [
               "fullActionName"
-            ]
+            ],
+            "isOptional": true
           },
           {
             "text": "Snoop Dogg",
@@ -718,7 +690,8 @@
             ],
             "category": "artist",
             "propertyNames": [
-              "parameters.artist"
+              "parameters.artist",
+              "fullActionName"
             ]
           },
           {
@@ -728,11 +701,8 @@
               "right?",
               "got it?"
             ],
-            "category": "confirmation",
-            "isOptional": true,
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "category": "filler",
+            "isOptional": true
           }
         ],
         "propertyAlternatives": [
@@ -740,33 +710,33 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.playArtist",
             "propertySubPhrases": [
-              "bump",
+              "let's bump",
               "some of that classic",
-              "ya dig?"
+              "Snoop Dogg"
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playSong",
+                "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "play",
-                  "that track",
-                  "you know?"
+                  "let's bump",
+                  "some of that classic",
+                  "Doggystyle"
                 ]
               },
               {
-                "propertyValue": "player.playAlbum",
+                "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "spin",
-                  "that album",
-                  "you feel me?"
+                  "let's bump",
+                  "some of that classic",
+                  "Gin and Juice"
                 ]
               },
               {
                 "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "queue up",
-                  "that playlist",
-                  "you get it?"
+                  "let's bump",
+                  "some of that classic",
+                  "Snoop Dogg Essentials"
                 ]
               }
             ]
@@ -811,7 +781,7 @@
                   "bump",
                   "some",
                   "classic",
-                  "ya dig?"
+                  "Snoop Dogg"
                 ],
                 "implied": true
               },
@@ -836,23 +806,13 @@
                 "isOptional": true
               },
               {
-                "text": "let's",
+                "text": "let's bump",
                 "synonyms": [
-                  "let us",
-                  "we should",
-                  "how about we"
+                  "let's play",
+                  "let's listen to",
+                  "let's hear"
                 ],
-                "category": "filler",
-                "isOptional": true
-              },
-              {
-                "text": "bump",
-                "synonyms": [
-                  "play",
-                  "listen to",
-                  "put on"
-                ],
-                "category": "action",
+                "category": "command",
                 "propertyNames": [
                   "fullActionName"
                 ]
@@ -865,9 +825,7 @@
                   "some old school"
                 ],
                 "category": "description",
-                "propertyNames": [
-                  "fullActionName"
-                ]
+                "isOptional": true
               },
               {
                 "text": "Snoop Dogg",
@@ -888,13 +846,15 @@
                   "right?",
                   "got it?"
                 ],
-                "category": "confirmation",
+                "category": "filler",
                 "isOptional": true
               }
             ]
           },
           "correction": [
-            "Explicit property 'fullActionName' must be included as property names for all subphrases that contain the substring 'ya dig?'"
+            "Explicit property 'fullActionName' must be included as property names for all subphrases that contain the substring 'some'",
+            "Explicit property 'fullActionName' must be included as property names for all subphrases that contain the substring 'classic'",
+            "Explicit property 'fullActionName' must be included as property names for all subphrases that contain the substring 'Snoop Dogg'"
           ]
         }
       ]
@@ -911,8 +871,7 @@
             "name": "fullActionName",
             "value": "player.playRandom",
             "substrings": [
-              "turn up the heat",
-              "fire tracks"
+              "turn up the heat with some fire tracks"
             ],
             "implied": true
           }
@@ -939,23 +898,11 @@
             "isOptional": true
           },
           {
-            "text": "turn up the heat",
+            "text": "turn up the heat with some fire tracks",
             "synonyms": [
-              "increase the intensity",
-              "make it exciting",
-              "raise the energy"
-            ],
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
-          },
-          {
-            "text": "with some fire tracks",
-            "synonyms": [
-              "with some hot songs",
-              "with some great music",
-              "with some awesome tunes"
+              "play some hot songs",
+              "start some fire music",
+              "put on some lit tracks"
             ],
             "category": "action",
             "propertyNames": [
@@ -967,7 +914,7 @@
             "synonyms": [
               "here",
               "in this place",
-              "in this spot"
+              "around here"
             ],
             "category": "location",
             "isOptional": true
@@ -978,36 +925,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.playRandom",
             "propertySubPhrases": [
-              "turn up the heat",
-              "with some fire tracks"
+              "turn up the heat with some fire tracks"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.playTopHits",
                 "propertySubPhrases": [
-                  "turn up the heat",
-                  "with the top hits"
+                  "play the top hits"
                 ]
               },
               {
-                "propertyValue": "player.playFavorites",
+                "propertyValue": "player.playChill",
                 "propertySubPhrases": [
-                  "turn up the heat",
-                  "with my favorite tracks"
+                  "play some chill tunes"
                 ]
               },
               {
-                "propertyValue": "player.playNewReleases",
+                "propertyValue": "player.playClassics",
                 "propertySubPhrases": [
-                  "turn up the heat",
-                  "with the latest releases"
-                ]
-              },
-              {
-                "propertyValue": "player.playGenre",
-                "propertySubPhrases": [
-                  "turn up the heat",
-                  "with some genre-specific tracks"
+                  "play some classic tracks"
                 ]
               }
             ]
@@ -1028,7 +964,9 @@
           {
             "name": "fullActionName",
             "value": "player.playTrack",
-            "substrings": [],
+            "substrings": [
+              "let's get this party poppin' with some"
+            ],
             "implied": true
           },
           {
@@ -1058,27 +996,29 @@
               "pal",
               "friend"
             ],
-            "category": "filler",
+            "category": "acknowledgement",
             "isOptional": true
           },
           {
-            "text": "let's get this party poppin'",
+            "text": "let's get this party poppin' with some",
             "synonyms": [
-              "let's start the music",
-              "let's play some tunes",
-              "let's get the music going"
-            ],
-            "category": "confirmation",
-            "isOptional": true
-          },
-          {
-            "text": "with some 'Lay Low'",
-            "synonyms": [
-              "play 'Lay Low'",
-              "put on 'Lay Low'",
-              "spin 'Lay Low'"
+              "let's start the music with",
+              "let's play",
+              "let's begin the party with"
             ],
             "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "'Lay Low'",
+            "synonyms": [
+              "'Lay Low'",
+              "'Lay Low' by Snoop Dogg",
+              "'Lay Low' track"
+            ],
+            "category": "trackName",
             "propertyNames": [
               "parameters.trackName"
             ]
@@ -1086,28 +1026,55 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "parameters.trackName",
-            "propertyValue": "Lay Low",
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playTrack",
             "propertySubPhrases": [
-              "with some 'Lay Low'"
+              "let's get this party poppin' with some"
             ],
             "alternatives": [
               {
-                "propertyValue": "Gin and Juice",
+                "propertyValue": "player.queueTrack",
                 "propertySubPhrases": [
-                  "with some 'Gin and Juice'"
+                  "let's add some"
+                ]
+              },
+              {
+                "propertyValue": "player.pauseTrack",
+                "propertySubPhrases": [
+                  "let's take a break from"
+                ]
+              },
+              {
+                "propertyValue": "player.stopTrack",
+                "propertySubPhrases": [
+                  "let's stop"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.trackName",
+            "propertyValue": "Lay Low",
+            "propertySubPhrases": [
+              "'Lay Low'"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "Still D.R.E.",
+                "propertySubPhrases": [
+                  "'Still D.R.E.'"
                 ]
               },
               {
                 "propertyValue": "Nuthin' but a 'G' Thang",
                 "propertySubPhrases": [
-                  "with some 'Nuthin' but a 'G' Thang'"
+                  "'Nuthin' but a 'G' Thang'"
                 ]
               },
               {
-                "propertyValue": "Still D.R.E.",
+                "propertyValue": "The Next Episode",
                 "propertySubPhrases": [
-                  "with some 'Still D.R.E.'"
+                  "'The Next Episode'"
                 ]
               }
             ]
@@ -1157,7 +1124,7 @@
             "synonyms": [
               "Could I have",
               "May I get",
-              "Would I be able to get"
+              "Would it be possible to get"
             ],
             "category": "politeness",
             "isOptional": true
@@ -1189,7 +1156,7 @@
             "synonyms": [
               "with Pharrell",
               "featuring Pharrell Williams",
-              "featuring artist Pharrell"
+              "including Pharrell"
             ],
             "category": "artist",
             "propertyNames": [
@@ -1365,13 +1332,13 @@
               {
                 "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "put on"
+                  "play album"
                 ]
               },
               {
                 "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "queue up"
+                  "play playlist"
                 ]
               }
             ]
@@ -1586,21 +1553,15 @@
                 ]
               },
               {
-                "propertyValue": "lo-fi beats",
+                "propertyValue": "upbeat pop",
                 "propertySubPhrases": [
-                  "lo-fi beats music"
+                  "upbeat pop music"
                 ]
               },
               {
-                "propertyValue": "indie folk",
+                "propertyValue": "relaxing ambient",
                 "propertySubPhrases": [
-                  "indie folk music"
-                ]
-              },
-              {
-                "propertyValue": "electronic chill",
-                "propertySubPhrases": [
-                  "electronic chill music"
+                  "relaxing ambient music"
                 ]
               }
             ]
@@ -1622,138 +1583,7 @@
             "name": "fullActionName",
             "value": "player.playArtist",
             "substrings": [
-              "entertain me with"
-            ],
-            "implied": true
-          },
-          {
-            "name": "parameters.artist",
-            "value": "Bach",
-            "substrings": [
-              "Bach"
-            ],
-            "implied": false
-          }
-        ],
-        "subPhrases": [
-          {
-            "text": "Can you",
-            "synonyms": [
-              "Could you",
-              "Would you",
-              "Will you"
-            ],
-            "category": "politeness",
-            "isOptional": true
-          },
-          {
-            "text": "entertain me with",
-            "synonyms": [
-              "play for me",
-              "give me",
-              "provide me with"
-            ],
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
-          },
-          {
-            "text": "some Bach melodies",
-            "synonyms": [
-              "Bach music",
-              "Bach tunes",
-              "Bach pieces"
-            ],
-            "category": "content",
-            "propertyNames": [
-              "parameters.artist"
-            ]
-          },
-          {
-            "text": "please",
-            "synonyms": [
-              "kindly",
-              "if you would",
-              "if you please"
-            ],
-            "category": "politeness",
-            "isOptional": true
-          }
-        ],
-        "propertyAlternatives": [
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.playArtist",
-            "propertySubPhrases": [
-              "entertain me with"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.playSong",
-                "propertySubPhrases": [
-                  "play me"
-                ]
-              },
-              {
-                "propertyValue": "player.playAlbum",
-                "propertySubPhrases": [
-                  "put on"
-                ]
-              },
-              {
-                "propertyValue": "player.playPlaylist",
-                "propertySubPhrases": [
-                  "start a playlist with"
-                ]
-              }
-            ]
-          },
-          {
-            "propertyName": "parameters.artist",
-            "propertyValue": "Bach",
-            "propertySubPhrases": [
-              "some Bach melodies"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "Mozart",
-                "propertySubPhrases": [
-                  "some Mozart tunes"
-                ]
-              },
-              {
-                "propertyValue": "Beethoven",
-                "propertySubPhrases": [
-                  "some Beethoven pieces"
-                ]
-              },
-              {
-                "propertyValue": "Chopin",
-                "propertySubPhrases": [
-                  "some Chopin compositions"
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "request": "Can you entertain me with some Bach music?",
-      "action": {
-        "fullActionName": "player.playArtist",
-        "parameters": {
-          "artist": "Bach"
-        }
-      },
-      "explanation": {
-        "properties": [
-          {
-            "name": "fullActionName",
-            "value": "player.playArtist",
-            "substrings": [
-              "entertain me with some Bach music"
+              "entertain me with some"
             ],
             "implied": true
           },
@@ -1781,6 +1611,147 @@
             "text": "entertain me with some",
             "synonyms": [
               "play me some",
+              "give me some",
+              "provide me with some"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "Bach",
+            "synonyms": [
+              "Beethoven",
+              "Mozart",
+              "Chopin"
+            ],
+            "category": "artist",
+            "propertyNames": [
+              "parameters.artist"
+            ]
+          },
+          {
+            "text": "melodies",
+            "synonyms": [
+              "tunes",
+              "songs",
+              "pieces"
+            ],
+            "category": "music",
+            "isOptional": true
+          },
+          {
+            "text": "please",
+            "synonyms": [
+              "kindly",
+              "if you don't mind",
+              "if you please"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playArtist",
+            "propertySubPhrases": [
+              "entertain me with some"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.playSong",
+                "propertySubPhrases": [
+                  "play a song by"
+                ]
+              },
+              {
+                "propertyValue": "player.playAlbum",
+                "propertySubPhrases": [
+                  "play an album by"
+                ]
+              },
+              {
+                "propertyValue": "player.playPlaylist",
+                "propertySubPhrases": [
+                  "play a playlist by"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.artist",
+            "propertyValue": "Bach",
+            "propertySubPhrases": [
+              "Bach"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "Mozart",
+                "propertySubPhrases": [
+                  "Mozart"
+                ]
+              },
+              {
+                "propertyValue": "Beethoven",
+                "propertySubPhrases": [
+                  "Beethoven"
+                ]
+              },
+              {
+                "propertyValue": "Chopin",
+                "propertySubPhrases": [
+                  "Chopin"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Can you entertain me with some Bach music?",
+      "action": {
+        "fullActionName": "player.playArtist",
+        "parameters": {
+          "artist": "Bach"
+        }
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.playArtist",
+            "substrings": [
+              "entertain me with some"
+            ],
+            "implied": true
+          },
+          {
+            "name": "parameters.artist",
+            "value": "Bach",
+            "substrings": [
+              "Bach"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can you",
+            "synonyms": [
+              "Could you",
+              "Would you",
+              "Will you"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "entertain me with some",
+            "synonyms": [
+              "play some",
               "put on some",
               "give me some"
             ],
@@ -1808,7 +1779,7 @@
               "songs",
               "melodies"
             ],
-            "category": "object",
+            "category": "filler",
             "isOptional": true
           }
         ],
@@ -1883,7 +1854,9 @@
           {
             "name": "fullActionName",
             "value": "player.playGenre",
-            "substrings": [],
+            "substrings": [
+              "Can you play"
+            ],
             "implied": true
           },
           {
@@ -1921,19 +1894,19 @@
           {
             "text": "some fun",
             "synonyms": [
+              "a few fun",
               "some enjoyable",
-              "some entertaining",
-              "some lively"
+              "a couple of fun"
             ],
-            "category": "descriptor",
+            "category": "filler",
             "isOptional": true
           },
           {
             "text": "80s hits",
             "synonyms": [
-              "80s music",
-              "80s songs",
-              "80s tracks"
+              "eighties hits",
+              "80's hits",
+              "1980s hits"
             ],
             "category": "genre",
             "propertyNames": [
@@ -1943,11 +1916,11 @@
           {
             "text": "for us to enjoy",
             "synonyms": [
-              "for us to listen to",
               "for our enjoyment",
-              "for us to have fun with"
+              "so we can enjoy",
+              "for us"
             ],
-            "category": "purpose",
+            "category": "filler",
             "isOptional": true
           }
         ],
@@ -1993,9 +1966,9 @@
                 ]
               },
               {
-                "propertyValue": "rock music",
+                "propertyValue": "classic rock",
                 "propertySubPhrases": [
-                  "rock music"
+                  "classic rock"
                 ]
               },
               {
@@ -2023,7 +1996,7 @@
             "name": "fullActionName",
             "value": "player.playArtist",
             "substrings": [
-              "play some music"
+              "Can you play some music"
             ],
             "implied": true
           },
@@ -2052,7 +2025,7 @@
             "synonyms": [
               "play a song",
               "play tunes",
-              "play music"
+              "play tracks"
             ],
             "category": "action",
             "propertyNames": [
@@ -2152,7 +2125,7 @@
             "name": "parameters.artist",
             "value": "Bach",
             "substrings": [
-              "Bach's"
+              "Bach"
             ],
             "implied": false
           }
@@ -2165,25 +2138,27 @@
               "Would you play",
               "Please play"
             ],
-            "category": "politeness",
-            "isOptional": true
+            "category": "request",
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "some of",
             "synonyms": [
               "a few of",
-              "a selection of",
-              "a bit of"
+              "any of",
+              "a selection of"
             ],
             "category": "filler",
             "isOptional": true
           },
           {
-            "text": "Bach's",
+            "text": "Bach's works",
             "synonyms": [
-              "Bach",
-              "Johann Sebastian Bach's",
-              "J.S. Bach's"
+              "Bach's music",
+              "Bach's compositions",
+              "Bach's pieces"
             ],
             "category": "artist",
             "propertyNames": [
@@ -2191,11 +2166,11 @@
             ]
           },
           {
-            "text": "works for us",
+            "text": "for us",
             "synonyms": [
-              "music for us",
-              "pieces for us",
-              "compositions for us"
+              "for me",
+              "for everyone",
+              "for the group"
             ],
             "category": "filler",
             "isOptional": true
@@ -2203,28 +2178,55 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playArtist",
+            "propertySubPhrases": [
+              "Can you play"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.playSong",
+                "propertySubPhrases": [
+                  "Can you play a song by"
+                ]
+              },
+              {
+                "propertyValue": "player.playAlbum",
+                "propertySubPhrases": [
+                  "Can you play an album by"
+                ]
+              },
+              {
+                "propertyValue": "player.playPlaylist",
+                "propertySubPhrases": [
+                  "Can you play a playlist by"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.artist",
             "propertyValue": "Bach",
             "propertySubPhrases": [
-              "Bach's"
+              "Bach's works"
             ],
             "alternatives": [
               {
                 "propertyValue": "Mozart",
                 "propertySubPhrases": [
-                  "Mozart's"
+                  "Mozart's works"
                 ]
               },
               {
                 "propertyValue": "Beethoven",
                 "propertySubPhrases": [
-                  "Beethoven's"
+                  "Beethoven's works"
                 ]
               },
               {
                 "propertyValue": "Chopin",
                 "propertySubPhrases": [
-                  "Chopin's"
+                  "Chopin's works"
                 ]
               }
             ]
@@ -2246,7 +2248,7 @@
             "name": "fullActionName",
             "value": "player.playArtist",
             "substrings": [
-              "Can you play some pieces by Bach?"
+              "Can you play"
             ],
             "implied": true
           },
@@ -2271,16 +2273,26 @@
             "isOptional": true
           },
           {
-            "text": "play some pieces by",
+            "text": "play",
             "synonyms": [
-              "play music by",
-              "play songs by",
-              "play tracks by"
+              "perform",
+              "put on",
+              "start"
             ],
             "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
+          },
+          {
+            "text": "some pieces by",
+            "synonyms": [
+              "a few pieces by",
+              "some music by",
+              "a selection by"
+            ],
+            "category": "filler",
+            "isOptional": true
           },
           {
             "text": "Bach",
@@ -2300,25 +2312,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.playArtist",
             "propertySubPhrases": [
-              "play some pieces by"
+              "play"
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playAlbum",
+                "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "play an album by"
+                  "play a song"
                 ]
               },
               {
-                "propertyValue": "player.playSong",
+                "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "play a song by"
+                  "play an album"
                 ]
               },
               {
                 "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "play a playlist by"
+                  "play a playlist"
                 ]
               }
             ]
@@ -2395,8 +2407,8 @@
             "text": "play",
             "synonyms": [
               "start",
-              "put on",
-              "turn on"
+              "begin",
+              "put on"
             ],
             "category": "action",
             "propertyNames": [
@@ -2406,11 +2418,11 @@
           {
             "text": "some relaxing",
             "synonyms": [
-              "a bit of",
+              "a bit of relaxing",
               "some soothing",
               "a little relaxing"
             ],
-            "category": "filler",
+            "category": "description",
             "isOptional": true
           },
           {
@@ -2426,11 +2438,21 @@
             ]
           },
           {
-            "text": "music for us",
+            "text": "music",
             "synonyms": [
-              "music for me",
-              "music for everyone",
-              "music for the group"
+              "tunes",
+              "melodies",
+              "songs"
+            ],
+            "category": "filler",
+            "isOptional": true
+          },
+          {
+            "text": "for us",
+            "synonyms": [
+              "for me",
+              "for everyone",
+              "for the group"
             ],
             "category": "filler",
             "isOptional": true
@@ -2457,9 +2479,9 @@
                 ]
               },
               {
-                "propertyValue": "player.skip",
+                "propertyValue": "player.resume",
                 "propertySubPhrases": [
-                  "skip"
+                  "resume"
                 ]
               }
             ]
@@ -2548,7 +2570,7 @@
             "synonyms": [
               "put on",
               "start",
-              "begin"
+              "playback"
             ],
             "category": "action",
             "propertyNames": [
@@ -2607,13 +2629,13 @@
               {
                 "propertyValue": "player.addTrackToPlaylist",
                 "propertySubPhrases": [
-                  "add to playlist"
+                  "add"
                 ]
               },
               {
                 "propertyValue": "player.shufflePlay",
                 "propertySubPhrases": [
-                  "shuffle play"
+                  "shuffle"
                 ]
               }
             ]
@@ -2659,15 +2681,15 @@
                 ]
               },
               {
-                "propertyValue": "Drop It Like It's Hot",
-                "propertySubPhrases": [
-                  "'Drop It Like It's Hot'"
-                ]
-              },
-              {
                 "propertyValue": "Still D.R.E.",
                 "propertySubPhrases": [
                   "'Still D.R.E.'"
+                ]
+              },
+              {
+                "propertyValue": "Drop It Like It's Hot",
+                "propertySubPhrases": [
+                  "'Drop It Like It's Hot'"
                 ]
               }
             ]
@@ -2726,36 +2748,16 @@
             ]
           },
           {
-            "text": "some",
+            "text": "some Bach tunes",
             "synonyms": [
-              "a few",
-              "any",
-              "several"
-            ],
-            "category": "filler",
-            "isOptional": true
-          },
-          {
-            "text": "Bach",
-            "synonyms": [
-              "Beethoven",
-              "Mozart",
-              "Chopin"
+              "Bach music",
+              "Bach songs",
+              "Bach pieces"
             ],
             "category": "artist",
             "propertyNames": [
               "parameters.artist"
             ]
-          },
-          {
-            "text": "tunes",
-            "synonyms": [
-              "songs",
-              "tracks",
-              "music"
-            ],
-            "category": "filler",
-            "isOptional": true
           }
         ],
         "propertyAlternatives": [
@@ -2769,19 +2771,19 @@
               {
                 "propertyValue": "player.startArtist",
                 "propertySubPhrases": [
-                  "start"
-                ]
-              },
-              {
-                "propertyValue": "player.playMusicBy",
-                "propertySubPhrases": [
-                  "play music by"
+                  "start playing"
                 ]
               },
               {
                 "propertyValue": "player.queueArtist",
                 "propertySubPhrases": [
-                  "queue"
+                  "queue up"
+                ]
+              },
+              {
+                "propertyValue": "player.beginArtist",
+                "propertySubPhrases": [
+                  "begin playing"
                 ]
               }
             ]
@@ -2790,25 +2792,25 @@
             "propertyName": "parameters.artist",
             "propertyValue": "Bach",
             "propertySubPhrases": [
-              "Bach"
+              "some Bach tunes"
             ],
             "alternatives": [
               {
                 "propertyValue": "Mozart",
                 "propertySubPhrases": [
-                  "Mozart"
+                  "some Mozart tunes"
                 ]
               },
               {
                 "propertyValue": "Beethoven",
                 "propertySubPhrases": [
-                  "Beethoven"
+                  "some Beethoven tunes"
                 ]
               },
               {
                 "propertyValue": "Chopin",
                 "propertySubPhrases": [
-                  "Chopin"
+                  "some Chopin tunes"
                 ]
               }
             ]
@@ -2882,12 +2884,6 @@
                 "propertySubPhrases": [
                   "play some jazz"
                 ]
-              },
-              {
-                "propertyValue": "player.playArtist",
-                "propertySubPhrases": [
-                  "play some Beatles"
-                ]
               }
             ]
           }
@@ -2926,8 +2922,8 @@
             "text": "put on some tunes",
             "synonyms": [
               "play some music",
-              "start some songs",
-              "turn on some tracks"
+              "start the music",
+              "turn on some tunes"
             ],
             "category": "action",
             "propertyNames": [
@@ -2999,7 +2995,7 @@
             "name": "parameters.artists.0",
             "value": "Fleetwood Mac",
             "substrings": [
-              "by Fleetwood Mac"
+              "Fleetwood Mac"
             ],
             "implied": false
           }
@@ -3031,8 +3027,8 @@
             "text": "'Rumours'",
             "synonyms": [
               "'Rumors'",
-              "'RUMOURS'",
-              "'rumours'"
+              "'Rumours' album",
+              "'Rumours' record"
             ],
             "category": "albumName",
             "propertyNames": [
@@ -3043,8 +3039,8 @@
             "text": "by Fleetwood Mac",
             "synonyms": [
               "from Fleetwood Mac",
-              "performed by Fleetwood Mac",
-              "sung by Fleetwood Mac"
+              "Fleetwood Mac's",
+              "Fleetwood Mac album"
             ],
             "category": "artist",
             "propertyNames": [
@@ -3115,15 +3111,15 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "Pink Floyd",
-                "propertySubPhrases": [
-                  "by Pink Floyd"
-                ]
-              },
-              {
                 "propertyValue": "The Beatles",
                 "propertySubPhrases": [
                   "by The Beatles"
+                ]
+              },
+              {
+                "propertyValue": "Pink Floyd",
+                "propertySubPhrases": [
+                  "by Pink Floyd"
                 ]
               },
               {
@@ -3201,9 +3197,9 @@
           {
             "text": "'Thriller'",
             "synonyms": [
-              "the album 'Thriller'",
-              "'Thriller' album",
-              "Thriller"
+              "'Bad'",
+              "'Dangerous'",
+              "'Off the Wall'"
             ],
             "category": "albumName",
             "propertyNames": [
@@ -3213,9 +3209,9 @@
           {
             "text": "by Michael Jackson",
             "synonyms": [
-              "from Michael Jackson",
-              "of Michael Jackson",
-              "Michael Jackson's"
+              "by MJ",
+              "by the King of Pop",
+              "by Michael"
             ],
             "category": "artist",
             "propertyNames": [
@@ -3350,8 +3346,8 @@
             "text": "serenade me with some beautiful",
             "synonyms": [
               "play me some beautiful",
-              "provide me with some beautiful",
-              "give me some beautiful"
+              "give me some beautiful",
+              "provide me with some beautiful"
             ],
             "category": "action",
             "propertyNames": [
@@ -3392,19 +3388,19 @@
               {
                 "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "play a song by"
+                  "play a beautiful"
                 ]
               },
               {
                 "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "play an album by"
+                  "play an amazing"
                 ]
               },
               {
                 "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "play a playlist by"
+                  "play a wonderful"
                 ]
               }
             ]
@@ -3574,7 +3570,7 @@
             "name": "fullActionName",
             "value": "player.playArtist",
             "substrings": [
-              "treat us to"
+              "treat us to some of"
             ],
             "implied": true
           },
@@ -3593,16 +3589,16 @@
             "synonyms": [
               "Would you kindly",
               "Please",
-              "Would you be so kind as to"
+              "If you would be so kind"
             ],
             "category": "politeness",
             "isOptional": true
           },
           {
-            "text": "treat us to",
+            "text": "treat us to some of",
             "synonyms": [
-              "play for us",
-              "let us hear",
+              "play",
+              "put on",
               "give us"
             ],
             "category": "action",
@@ -3611,16 +3607,26 @@
             ]
           },
           {
-            "text": "some of Wagner's most enthralling works",
+            "text": "Wagner's",
             "synonyms": [
-              "Wagner's best pieces",
-              "Wagner's most captivating compositions",
-              "Wagner's finest works"
+              "Wagner",
+              "the works of Wagner",
+              "music by Wagner"
             ],
             "category": "artist",
             "propertyNames": [
               "parameters.artist"
             ]
+          },
+          {
+            "text": "most enthralling works",
+            "synonyms": [
+              "best pieces",
+              "most captivating compositions",
+              "top tracks"
+            ],
+            "category": "description",
+            "isOptional": true
           }
         ],
         "propertyAlternatives": [
@@ -3628,25 +3634,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.playArtist",
             "propertySubPhrases": [
-              "treat us to"
+              "treat us to some of"
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playSong",
+                "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "play a song for us"
+                  "play an album by"
                 ]
               },
               {
-                "propertyValue": "player.playAlbum",
+                "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "play an album for us"
+                  "play a song by"
                 ]
               },
               {
                 "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "play a playlist for us"
+                  "play a playlist by"
                 ]
               }
             ]
@@ -3655,25 +3661,25 @@
             "propertyName": "parameters.artist",
             "propertyValue": "Wagner",
             "propertySubPhrases": [
-              "some of Wagner's most enthralling works"
+              "Wagner's"
             ],
             "alternatives": [
               {
                 "propertyValue": "Beethoven",
                 "propertySubPhrases": [
-                  "some of Beethoven's most enthralling works"
+                  "Beethoven's"
                 ]
               },
               {
                 "propertyValue": "Mozart",
                 "propertySubPhrases": [
-                  "some of Mozart's most enthralling works"
+                  "Mozart's"
                 ]
               },
               {
                 "propertyValue": "Bach",
                 "propertySubPhrases": [
-                  "some of Bach's most enthralling works"
+                  "Bach's"
                 ]
               }
             ]
@@ -3763,21 +3769,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.pause",
+                "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "pause"
+                  "play a song"
                 ]
               },
               {
-                "propertyValue": "player.stop",
+                "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "stop"
+                  "play an album"
                 ]
               },
               {
-                "propertyValue": "player.skip",
+                "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "skip"
+                  "play a playlist"
                 ]
               }
             ]
@@ -3855,7 +3861,7 @@
             "synonyms": [
               "start",
               "begin",
-              "perform"
+              "put on"
             ],
             "category": "action",
             "propertyNames": [
@@ -3877,7 +3883,7 @@
             "synonyms": [
               "Johann Sebastian Bach",
               "J.S. Bach",
-              "Sebastian Bach"
+              "Bach's"
             ],
             "category": "artist",
             "propertyNames": [
@@ -3894,21 +3900,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playSong",
+                "propertyValue": "player.pauseArtist",
                 "propertySubPhrases": [
-                  "play a song"
+                  "pause"
                 ]
               },
               {
-                "propertyValue": "player.playAlbum",
+                "propertyValue": "player.stopArtist",
                 "propertySubPhrases": [
-                  "play an album"
+                  "stop"
                 ]
               },
               {
-                "propertyValue": "player.playPlaylist",
+                "propertyValue": "player.skipArtist",
                 "propertySubPhrases": [
-                  "play a playlist"
+                  "skip"
                 ]
               }
             ]
@@ -3957,7 +3963,7 @@
             "name": "fullActionName",
             "value": "player.playAlbum",
             "substrings": [
-              "play"
+              "Could you play"
             ],
             "implied": true
           },
@@ -3972,35 +3978,23 @@
         ],
         "subPhrases": [
           {
-            "text": "Could you",
+            "text": "Could you play",
             "synonyms": [
-              "Can you",
-              "Would you",
-              "Will you"
+              "Can you play",
+              "Would you play",
+              "Please play"
             ],
             "category": "politeness",
             "isOptional": true
           },
           {
-            "text": "play",
-            "synonyms": [
-              "start",
-              "begin",
-              "put on"
-            ],
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
-          },
-          {
             "text": "the 'Hamilton' Original Broadway Cast Recording",
             "synonyms": [
               "'Hamilton' Original Broadway Cast Recording",
-              "the album 'Hamilton' Original Broadway Cast Recording",
-              "'Hamilton' Broadway Cast Recording"
+              "Hamilton Original Broadway Cast Recording",
+              "the Hamilton Original Broadway Cast Recording"
             ],
-            "category": "content",
+            "category": "albumName",
             "propertyNames": [
               "parameters.albumName"
             ]
@@ -4008,39 +4002,18 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.playAlbum",
-            "propertySubPhrases": [
-              "play"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.pauseAlbum",
-                "propertySubPhrases": [
-                  "pause"
-                ]
-              },
-              {
-                "propertyValue": "player.stopAlbum",
-                "propertySubPhrases": [
-                  "stop"
-                ]
-              },
-              {
-                "propertyValue": "player.resumeAlbum",
-                "propertySubPhrases": [
-                  "resume"
-                ]
-              }
-            ]
-          },
-          {
             "propertyName": "parameters.albumName",
             "propertyValue": "Hamilton Original Broadway Cast Recording",
             "propertySubPhrases": [
               "the 'Hamilton' Original Broadway Cast Recording"
             ],
             "alternatives": [
+              {
+                "propertyValue": "Dear Evan Hansen Original Broadway Cast Recording",
+                "propertySubPhrases": [
+                  "the 'Dear Evan Hansen' Original Broadway Cast Recording"
+                ]
+              },
               {
                 "propertyValue": "The Phantom of the Opera Original London Cast Recording",
                 "propertySubPhrases": [
@@ -4051,12 +4024,6 @@
                 "propertyValue": "Les Misérables Original Broadway Cast Recording",
                 "propertySubPhrases": [
                   "the 'Les Misérables' Original Broadway Cast Recording"
-                ]
-              },
-              {
-                "propertyValue": "Wicked Original Broadway Cast Recording",
-                "propertySubPhrases": [
-                  "the 'Wicked' Original Broadway Cast Recording"
                 ]
               }
             ]
@@ -4227,8 +4194,8 @@
             "text": "Could you please",
             "synonyms": [
               "Can you please",
-              "Would you mind",
-              "Please"
+              "Would you please",
+              "Could you kindly"
             ],
             "category": "politeness",
             "isOptional": true
@@ -4249,7 +4216,7 @@
             "text": "some",
             "synonyms": [
               "a few",
-              "a couple of",
+              "any",
               "several"
             ],
             "category": "filler",
@@ -4368,7 +4335,7 @@
             "text": "Could you please",
             "synonyms": [
               "Can you please",
-              "Would you mind",
+              "Would you kindly",
               "Please"
             ],
             "category": "politeness",
@@ -4410,7 +4377,7 @@
               {
                 "propertyValue": "player.startArtist",
                 "propertySubPhrases": [
-                  "start playing"
+                  "start"
                 ]
               },
               {
@@ -4420,9 +4387,9 @@
                 ]
               },
               {
-                "propertyValue": "player.beginArtist",
+                "propertyValue": "player.playComposer",
                 "propertySubPhrases": [
-                  "begin playing"
+                  "play"
                 ]
               }
             ]
@@ -4489,7 +4456,7 @@
             "text": "Could you please",
             "synonyms": [
               "Can you please",
-              "Would you kindly",
+              "Would you mind",
               "Please"
             ],
             "category": "politeness",
@@ -4551,13 +4518,13 @@
               {
                 "propertyValue": "player.startGenre",
                 "propertySubPhrases": [
-                  "start playing"
+                  "start"
                 ]
               },
               {
-                "propertyValue": "player.queueGenre",
+                "propertyValue": "player.playMusic",
                 "propertySubPhrases": [
-                  "queue up"
+                  "play"
                 ]
               },
               {
@@ -4612,7 +4579,8 @@
             "name": "fullActionName",
             "value": "player.playGenre",
             "substrings": [
-              "put on"
+              "put on",
+              "music"
             ],
             "implied": true
           },
@@ -4649,21 +4617,31 @@
             ]
           },
           {
-            "text": "some soothing",
+            "text": "some",
             "synonyms": [
               "a bit of",
-              "some relaxing",
-              "a little"
+              "a little",
+              "any"
             ],
             "category": "filler",
             "isOptional": true
           },
           {
+            "text": "soothing",
+            "synonyms": [
+              "calming",
+              "relaxing",
+              "peaceful"
+            ],
+            "category": "descriptor",
+            "isOptional": true
+          },
+          {
             "text": "classical",
             "synonyms": [
-              "baroque",
               "symphonic",
-              "orchestral"
+              "orchestral",
+              "baroque"
             ],
             "category": "genre",
             "propertyNames": [
@@ -4677,8 +4655,10 @@
               "melodies",
               "songs"
             ],
-            "category": "filler",
-            "isOptional": true
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
           }
         ],
         "propertyAlternatives": [
@@ -4686,25 +4666,29 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.playGenre",
             "propertySubPhrases": [
-              "put on"
+              "put on",
+              "music"
             ],
             "alternatives": [
               {
-                "propertyValue": "player.startGenre",
+                "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "start"
+                  "play",
+                  "song"
                 ]
               },
               {
-                "propertyValue": "player.playCategory",
+                "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "play"
+                  "play",
+                  "album"
                 ]
               },
               {
-                "propertyValue": "player.beginGenre",
+                "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "begin"
+                  "play",
+                  "playlist"
                 ]
               }
             ]
@@ -4732,6 +4716,88 @@
                 "propertyValue": "pop",
                 "propertySubPhrases": [
                   "pop"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Could you turn on the music, please?",
+      "action": {
+        "fullActionName": "player.playRandom",
+        "parameters": {}
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.playRandom",
+            "substrings": [
+              "turn on the music"
+            ],
+            "implied": true
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Could you",
+            "synonyms": [
+              "Can you",
+              "Would you",
+              "Will you"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "turn on the music",
+            "synonyms": [
+              "play some music",
+              "start the music",
+              "put on some music"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "please",
+            "synonyms": [
+              "kindly",
+              "if you don't mind",
+              "if you could"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playRandom",
+            "propertySubPhrases": [
+              "turn on the music"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.playSpecific",
+                "propertySubPhrases": [
+                  "play a specific song"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music"
                 ]
               }
             ]
@@ -4821,7 +4887,7 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.startArtist",
+                "propertyValue": "player.startMusic",
                 "propertySubPhrases": [
                   "Start playing"
                 ]
@@ -4833,9 +4899,9 @@
                 ]
               },
               {
-                "propertyValue": "player.streamArtist",
+                "propertyValue": "player.playMusic",
                 "propertySubPhrases": [
-                  "Stream"
+                  "Play"
                 ]
               }
             ]
@@ -4856,7 +4922,7 @@
               {
                 "propertyValue": "Eminem",
                 "propertySubPhrases": [
-                  "Eminem"
+                  "Slim Shady"
                 ]
               },
               {
@@ -4911,9 +4977,9 @@
           {
             "text": "Bach",
             "synonyms": [
-              "Johann Sebastian Bach",
-              "J.S. Bach",
-              "Bach's"
+              "Beethoven",
+              "Mozart",
+              "Chopin"
             ],
             "category": "artist",
             "propertyNames": [
@@ -4925,9 +4991,9 @@
             "synonyms": [
               "songs we can hear",
               "tracks we could play",
-              "music we can listen to"
+              "music we can enjoy"
             ],
-            "category": "music",
+            "category": "request",
             "isOptional": true
           },
           {
@@ -5007,7 +5073,7 @@
               "Absolutely",
               "Definitely"
             ],
-            "category": "acknowledgement",
+            "category": "confirmation",
             "isOptional": true
           },
           {
@@ -5015,9 +5081,9 @@
             "synonyms": [
               "let's play",
               "let's listen to",
-              "let's put on"
+              "how about we play"
             ],
-            "category": "command",
+            "category": "politeness",
             "isOptional": true
           },
           {
@@ -5039,8 +5105,10 @@
               "playing now",
               "playing in this place"
             ],
-            "category": "command",
-            "isOptional": true
+            "category": "fullActionName",
+            "propertyNames": [
+              "fullActionName"
+            ]
           }
         ],
         "propertyAlternatives": [
@@ -5067,6 +5135,33 @@
                 "propertyValue": "All Eyez on Me",
                 "propertySubPhrases": [
                   "All Eyez on Me album"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playAlbum",
+            "propertySubPhrases": [
+              "playin' up in here"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.queueAlbum",
+                "propertySubPhrases": [
+                  "queue it up"
+                ]
+              },
+              {
+                "propertyValue": "player.shuffleAlbum",
+                "propertySubPhrases": [
+                  "shuffle it up"
+                ]
+              },
+              {
+                "propertyValue": "player.repeatAlbum",
+                "propertySubPhrases": [
+                  "repeat it up"
                 ]
               }
             ]
@@ -5116,7 +5211,7 @@
             "text": "let's get this party bumpin'",
             "synonyms": [
               "let's start the music",
-              "let's get the party started",
+              "let's get the music going",
               "let's play some tunes"
             ],
             "category": "action",
@@ -5150,8 +5245,8 @@
             "text": "!",
             "synonyms": [
               ".",
-              "!!",
-              "!!!"
+              "",
+              "?"
             ],
             "category": "punctuation",
             "isOptional": true
@@ -5199,9 +5294,9 @@
                 ]
               },
               {
-                "propertyValue": "Nuthin' But a 'G' Thang",
+                "propertyValue": "Nuthin' but a 'G' Thang",
                 "propertySubPhrases": [
-                  "'Nuthin' But a 'G' Thang'"
+                  "'Nuthin' but a 'G' Thang'"
                 ]
               },
               {
@@ -5266,8 +5361,8 @@
           {
             "text": "play some music",
             "synonyms": [
-              "play a song",
-              "start some music",
+              "play music",
+              "start playing music",
               "put on some music"
             ],
             "category": "action",
@@ -5280,7 +5375,7 @@
             "synonyms": [
               "from Bach",
               "of Bach",
-              "featuring Bach"
+              "composed by Bach"
             ],
             "category": "artist",
             "propertyNames": [
@@ -5369,14 +5464,16 @@
           {
             "name": "fullActionName",
             "value": "player.playGenre",
-            "substrings": [],
+            "substrings": [
+              "put on"
+            ],
             "implied": true
           },
           {
             "name": "parameters.genre",
             "value": "G-funk",
             "substrings": [
-              "smooth G-funk"
+              "G-funk"
             ],
             "implied": false
           }
@@ -5385,8 +5482,8 @@
           {
             "text": "Hey nephew",
             "synonyms": [
-              "Hi nephew",
               "Hello nephew",
+              "Hi nephew",
               "Hey there"
             ],
             "category": "greeting",
@@ -5406,28 +5503,30 @@
             "text": "put on",
             "synonyms": [
               "play",
-              "turn on",
-              "start"
+              "start",
+              "turn on"
             ],
             "category": "action",
-            "propertyNames": []
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
-            "text": "some of that",
+            "text": "some of that smooth",
             "synonyms": [
-              "a bit of",
-              "a little of",
-              "some"
+              "some smooth",
+              "a bit of smooth",
+              "some nice"
             ],
             "category": "filler",
             "isOptional": true
           },
           {
-            "text": "smooth G-funk",
+            "text": "G-funk",
             "synonyms": [
-              "G-funk",
-              "funky G-funk",
-              "classic G-funk"
+              "G-funk music",
+              "G-funk genre",
+              "G-funk style"
             ],
             "category": "genre",
             "propertyNames": [
@@ -5438,8 +5537,8 @@
             "text": "for me",
             "synonyms": [
               "please",
-              "if you don't mind",
-              "if you could"
+              "if you could",
+              "thanks"
             ],
             "category": "politeness",
             "isOptional": true
@@ -5447,34 +5546,55 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playGenre",
+            "propertySubPhrases": [
+              "put on"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.startGenre",
+                "propertySubPhrases": [
+                  "start"
+                ]
+              },
+              {
+                "propertyValue": "player.queueGenre",
+                "propertySubPhrases": [
+                  "queue up"
+                ]
+              },
+              {
+                "propertyValue": "player.playMusic",
+                "propertySubPhrases": [
+                  "play"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.genre",
             "propertyValue": "G-funk",
             "propertySubPhrases": [
-              "smooth G-funk"
+              "G-funk"
             ],
             "alternatives": [
               {
                 "propertyValue": "jazz",
                 "propertySubPhrases": [
-                  "smooth jazz"
+                  "jazz"
+                ]
+              },
+              {
+                "propertyValue": "hip-hop",
+                "propertySubPhrases": [
+                  "hip-hop"
                 ]
               },
               {
                 "propertyValue": "soul",
                 "propertySubPhrases": [
-                  "smooth soul"
-                ]
-              },
-              {
-                "propertyValue": "R&B",
-                "propertySubPhrases": [
-                  "smooth R&B"
-                ]
-              },
-              {
-                "propertyValue": "blues",
-                "propertySubPhrases": [
-                  "smooth blues"
+                  "soul"
                 ]
               }
             ]
@@ -5547,9 +5667,9 @@
           {
             "text": "and let's get this place groovin'!",
             "synonyms": [
-              "and let's get the party started",
-              "and let's dance",
-              "and let's have some fun"
+              "and let's get the party started!",
+              "and let's dance!",
+              "and let's have some fun!"
             ],
             "category": "filler",
             "isOptional": true
@@ -5597,9 +5717,9 @@
                 ]
               },
               {
-                "propertyValue": "Nuthin' but a 'G' Thang",
+                "propertyValue": "Nuthin' But a 'G' Thang",
                 "propertySubPhrases": [
-                  "'Nuthin' but a 'G' Thang'"
+                  "'Nuthin' But a 'G' Thang'"
                 ]
               },
               {
@@ -5633,7 +5753,8 @@
             "name": "parameters.genre",
             "value": "hip hop",
             "substrings": [
-              "vibe out to some dope rhymes and ill beats"
+              "dope rhymes",
+              "ill beats"
             ],
             "implied": true
           }
@@ -5656,17 +5777,41 @@
               "shall we",
               "let's"
             ],
-            "category": "confirmation",
+            "category": "politeness",
             "isOptional": true
           },
           {
-            "text": "vibe out to some dope rhymes and ill beats",
+            "text": "vibe out to",
             "synonyms": [
-              "listen to some hip hop",
-              "play some hip hop music",
-              "put on some hip hop tracks"
+              "listen to",
+              "play",
+              "jam to"
             ],
-            "category": "music genre request",
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "some dope rhymes",
+            "synonyms": [
+              "hip hop",
+              "rap",
+              "rhythmic poetry"
+            ],
+            "category": "genre",
+            "propertyNames": [
+              "parameters.genre"
+            ]
+          },
+          {
+            "text": "and ill beats",
+            "synonyms": [
+              "hip hop",
+              "rap",
+              "rhythmic poetry"
+            ],
+            "category": "genre",
             "propertyNames": [
               "parameters.genre"
             ]
@@ -5674,34 +5819,59 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playGenre",
+            "propertySubPhrases": [
+              "vibe out to"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.playMusic",
+                "propertySubPhrases": [
+                  "listen to"
+                ]
+              },
+              {
+                "propertyValue": "player.startPlaylist",
+                "propertySubPhrases": [
+                  "start a playlist of"
+                ]
+              },
+              {
+                "propertyValue": "player.streamSongs",
+                "propertySubPhrases": [
+                  "stream some"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.genre",
             "propertyValue": "hip hop",
             "propertySubPhrases": [
-              "vibe out to some dope rhymes and ill beats"
+              "some dope rhymes",
+              "and ill beats"
             ],
             "alternatives": [
               {
                 "propertyValue": "jazz",
                 "propertySubPhrases": [
-                  "chill with some smooth sax and mellow tunes"
+                  "smooth tunes",
+                  "and mellow vibes"
                 ]
               },
               {
                 "propertyValue": "rock",
                 "propertySubPhrases": [
-                  "rock out to some heavy riffs and powerful vocals"
+                  "some heavy riffs",
+                  "and powerful drums"
                 ]
               },
               {
                 "propertyValue": "electronic",
                 "propertySubPhrases": [
-                  "groove to some electronic beats and synth sounds"
-                ]
-              },
-              {
-                "propertyValue": "classical",
-                "propertySubPhrases": [
-                  "relax with some orchestral symphonies and timeless pieces"
+                  "some sick drops",
+                  "and electronic beats"
                 ]
               }
             ]
@@ -5771,7 +5941,7 @@
             "synonyms": [
               "listen to",
               "play",
-              "enjoy"
+              "put on"
             ],
             "category": "action",
             "propertyNames": [
@@ -5807,7 +5977,7 @@
             "synonyms": [
               "kindly",
               "if you don't mind",
-              "would you mind"
+              "would you"
             ],
             "category": "politeness",
             "isOptional": true
@@ -5824,19 +5994,19 @@
               {
                 "propertyValue": "player.queueTrack",
                 "propertySubPhrases": [
-                  "add to the queue"
+                  "queue up"
                 ]
               },
               {
-                "propertyValue": "player.pauseTrack",
+                "propertyValue": "player.addTrackToPlaylist",
                 "propertySubPhrases": [
-                  "pause the music"
+                  "add to my playlist"
                 ]
               },
               {
-                "propertyValue": "player.stopTrack",
+                "propertyValue": "player.shufflePlay",
                 "propertySubPhrases": [
-                  "stop the music"
+                  "shuffle play"
                 ]
               }
             ]
@@ -5955,7 +6125,7 @@
             "synonyms": [
               "some cool music",
               "some great tunes",
-              "some awesome songs"
+              "some awesome tracks"
             ],
             "category": "content",
             "propertyNames": [
@@ -5997,15 +6167,15 @@
                 "propertyValue": "player.shuffle",
                 "propertySubPhrases": [
                   "shuffle",
-                  "some tunes",
+                  "some tracks",
                   "right now"
                 ]
               },
               {
-                "propertyValue": "player.start",
+                "propertyValue": "player.startRadio",
                 "propertySubPhrases": [
                   "start",
-                  "some tracks",
+                  "a radio station",
                   "right now"
                 ]
               }
@@ -6055,7 +6225,7 @@
             "synonyms": [
               "let us have",
               "let's play",
-              "let's put on"
+              "how about some"
             ],
             "category": "filler",
             "isOptional": true
@@ -6076,8 +6246,8 @@
             "text": "vibes up in here",
             "synonyms": [
               "music here",
-              "songs playing",
-              "tracks going"
+              "tunes playing",
+              "songs in the room"
             ],
             "category": "filler",
             "isOptional": true
@@ -6104,9 +6274,9 @@
                 ]
               },
               {
-                "propertyValue": "Kendrick Lamar",
+                "propertyValue": "Ice Cube",
                 "propertySubPhrases": [
-                  "Kendrick Lamar"
+                  "Ice Cube"
                 ]
               }
             ]
@@ -6145,7 +6315,7 @@
             "synonyms": [
               "Hi",
               "Hello",
-              "Yo"
+              "Greetings"
             ],
             "category": "greeting",
             "isOptional": true
@@ -6171,23 +6341,13 @@
             "isOptional": true
           },
           {
-            "text": "with some",
+            "text": "with some classic",
             "synonyms": [
-              "featuring",
-              "including",
-              "with"
+              "with some timeless",
+              "with some vintage",
+              "with some old-school"
             ],
-            "category": "preposition",
-            "isOptional": true
-          },
-          {
-            "text": "classic",
-            "synonyms": [
-              "vintage",
-              "old-school",
-              "retro"
-            ],
-            "category": "genre",
+            "category": "property",
             "propertyNames": [
               "parameters.genre"
             ]
@@ -6197,7 +6357,7 @@
             "synonyms": [
               "tunes",
               "songs",
-              "tracks"
+              "music"
             ],
             "category": "filler",
             "isOptional": true
@@ -6215,9 +6375,9 @@
           {
             "text": "!",
             "synonyms": [
+              "",
               ".",
-              "?",
-              ""
+              "!!"
             ],
             "category": "punctuation",
             "isOptional": true
@@ -6228,31 +6388,31 @@
             "propertyName": "parameters.genre",
             "propertyValue": "classic",
             "propertySubPhrases": [
-              "classic"
+              "with some classic"
             ],
             "alternatives": [
               {
                 "propertyValue": "rock",
                 "propertySubPhrases": [
-                  "rock"
+                  "with some rock"
                 ]
               },
               {
                 "propertyValue": "jazz",
                 "propertySubPhrases": [
-                  "jazz"
+                  "with some jazz"
                 ]
               },
               {
                 "propertyValue": "pop",
                 "propertySubPhrases": [
-                  "pop"
+                  "with some pop"
                 ]
               },
               {
                 "propertyValue": "hip-hop",
                 "propertySubPhrases": [
-                  "hip-hop"
+                  "with some hip-hop"
                 ]
               }
             ]
@@ -6274,7 +6434,7 @@
             "name": "fullActionName",
             "value": "player.playArtist",
             "substrings": [
-              "spin some Snoop Dogg tracks"
+              "spin some"
             ],
             "implied": true
           },
@@ -6344,19 +6504,19 @@
               {
                 "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "play a"
+                  "play a song by"
                 ]
               },
               {
                 "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "spin the album"
+                  "play an album by"
                 ]
               },
               {
                 "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "play the playlist"
+                  "play a playlist by"
                 ]
               }
             ]
@@ -6475,7 +6635,7 @@
               {
                 "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "we listen to the song"
+                  "we listen to the track"
                 ]
               },
               {
@@ -6485,9 +6645,9 @@
                 ]
               },
               {
-                "propertyValue": "player.playArtist",
+                "propertyValue": "player.playRadio",
                 "propertySubPhrases": [
-                  "we enjoy some tracks by"
+                  "we tune into the station"
                 ]
               }
             ]
@@ -6563,9 +6723,9 @@
           {
             "text": "enjoy some tunes by",
             "synonyms": [
-              "listen to music by",
-              "play songs by",
-              "hear tracks by"
+              "listen to some music by",
+              "play some songs by",
+              "hear some tracks by"
             ],
             "category": "action",
             "propertyNames": [
@@ -6602,13 +6762,13 @@
               {
                 "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "play an album by"
+                  "listen to an album by"
                 ]
               },
               {
                 "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "start a playlist by"
+                  "enjoy a playlist by"
                 ]
               }
             ]
@@ -6668,7 +6828,7 @@
               "Shall we",
               "Let's"
             ],
-            "category": "suggestion",
+            "category": "filler",
             "isOptional": true
           },
           {
@@ -6678,7 +6838,7 @@
               "you and I",
               "everyone"
             ],
-            "category": "pronoun",
+            "category": "filler",
             "isOptional": true
           },
           {
@@ -6759,7 +6919,7 @@
               "I am in the mood for"
             ],
             "category": "request",
-            "isOptional": false
+            "isOptional": true
           },
           {
             "text": "Beethoven",
@@ -6856,7 +7016,7 @@
           {
             "text": "present us with some",
             "synonyms": [
-              "play some",
+              "play us some",
               "give us some",
               "provide us with some"
             ],
@@ -6899,19 +7059,19 @@
               {
                 "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "play a song by"
+                  "play the song"
                 ]
               },
               {
                 "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "play an album by"
+                  "play the album"
                 ]
               },
               {
                 "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "play a playlist by"
+                  "play the playlist"
                 ]
               }
             ]
@@ -6960,7 +7120,7 @@
             "name": "fullActionName",
             "value": "player.playArtist",
             "substrings": [
-              "regale us with some splendid Vivaldi."
+              "regale us with"
             ],
             "implied": true
           },
@@ -6985,23 +7145,33 @@
             "isOptional": true
           },
           {
-            "text": "regale us with some splendid",
+            "text": "regale us with",
             "synonyms": [
-              "play us some wonderful",
-              "provide us with some excellent",
-              "give us some amazing"
+              "play for us",
+              "entertain us with",
+              "provide us with"
             ],
-            "category": "fullActionName",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
           },
           {
+            "text": "some splendid",
+            "synonyms": [
+              "some wonderful",
+              "some amazing",
+              "some excellent"
+            ],
+            "category": "filler",
+            "isOptional": true
+          },
+          {
             "text": "Vivaldi",
             "synonyms": [
               "Antonio Vivaldi",
-              "the composer Vivaldi",
-              "Vivaldi's music"
+              "music by Vivaldi",
+              "Vivaldi's compositions"
             ],
             "category": "artist",
             "propertyNames": [
@@ -7014,25 +7184,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.playArtist",
             "propertySubPhrases": [
-              "regale us with some splendid"
+              "regale us with"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "play a wonderful"
+                  "play us"
                 ]
               },
               {
                 "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "play the entire album of"
+                  "entertain us with"
                 ]
               },
               {
                 "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "play a curated playlist of"
+                  "delight us with"
                 ]
               }
             ]
@@ -7045,9 +7215,9 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "Beethoven",
+                "propertyValue": "Bach",
                 "propertySubPhrases": [
-                  "Beethoven"
+                  "Bach"
                 ]
               },
               {
@@ -7057,9 +7227,9 @@
                 ]
               },
               {
-                "propertyValue": "Bach",
+                "propertyValue": "Beethoven",
                 "propertySubPhrases": [
-                  "Bach"
+                  "Beethoven"
                 ]
               }
             ]
@@ -7125,13 +7295,13 @@
               {
                 "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "listen to a playlist"
+                  "hear a playlist"
                 ]
               },
               {
                 "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "listen to an album"
+                  "hear an album"
                 ]
               }
             ]
@@ -7152,7 +7322,9 @@
           {
             "name": "fullActionName",
             "value": "player.playArtist",
-            "substrings": [],
+            "substrings": [
+              "perform"
+            ],
             "implied": true
           },
           {
@@ -7168,29 +7340,41 @@
           {
             "text": "I would be most obliged if you could",
             "synonyms": [
-              "I would appreciate it if you could",
-              "It would be great if you could",
-              "I would be thankful if you could"
+              "Please",
+              "Kindly",
+              "Would you mind"
             ],
             "category": "politeness",
             "isOptional": true
           },
           {
-            "text": "perform some charming",
+            "text": "perform",
             "synonyms": [
-              "play some delightful",
-              "play some beautiful",
-              "perform some lovely"
+              "play",
+              "execute",
+              "render"
             ],
             "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "some charming",
+            "synonyms": [
+              "a bit of",
+              "some delightful",
+              "a touch of"
+            ],
+            "category": "filler",
             "isOptional": true
           },
           {
             "text": "Chopin",
             "synonyms": [
               "Frédéric Chopin",
-              "Chopin's music",
-              "pieces by Chopin"
+              "the composer Chopin",
+              "Chopin's music"
             ],
             "category": "artist",
             "propertyNames": [
@@ -7199,6 +7383,33 @@
           }
         ],
         "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playArtist",
+            "propertySubPhrases": [
+              "perform"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.playSong",
+                "propertySubPhrases": [
+                  "play"
+                ]
+              },
+              {
+                "propertyValue": "player.playAlbum",
+                "propertySubPhrases": [
+                  "play album"
+                ]
+              },
+              {
+                "propertyValue": "player.playPlaylist",
+                "propertySubPhrases": [
+                  "play playlist"
+                ]
+              }
+            ]
+          },
           {
             "propertyName": "parameters.artist",
             "propertyValue": "Chopin",
@@ -7243,7 +7454,7 @@
             "name": "fullActionName",
             "value": "player.playArtist",
             "substrings": [
-              "play"
+              "play some Bach music"
             ],
             "implied": true
           },
@@ -7268,11 +7479,11 @@
             "isOptional": true
           },
           {
-            "text": "play",
+            "text": "play some",
             "synonyms": [
-              "start",
+              "play",
               "put on",
-              "begin"
+              "start playing"
             ],
             "category": "action",
             "propertyNames": [
@@ -7280,11 +7491,11 @@
             ]
           },
           {
-            "text": "some Bach music",
+            "text": "Bach",
             "synonyms": [
-              "Bach tunes",
-              "Bach songs",
-              "Bach pieces"
+              "Johann Sebastian Bach",
+              "J.S. Bach",
+              "Bach's"
             ],
             "category": "artist",
             "propertyNames": [
@@ -7292,13 +7503,13 @@
             ]
           },
           {
-            "text": "for me",
+            "text": "music for me",
             "synonyms": [
-              "for myself",
-              "for my benefit",
-              "on my behalf"
+              "some tunes for me",
+              "a few songs for me",
+              "some tracks for me"
             ],
-            "category": "politeness",
+            "category": "filler",
             "isOptional": true
           }
         ],
@@ -7307,25 +7518,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.playArtist",
             "propertySubPhrases": [
-              "play"
+              "play some"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "play a song"
+                  "play a song by"
                 ]
               },
               {
                 "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "play an album"
+                  "play an album by"
                 ]
               },
               {
                 "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "play a playlist"
+                  "play a playlist of"
                 ]
               }
             ]
@@ -7334,25 +7545,25 @@
             "propertyName": "parameters.artist",
             "propertyValue": "Bach",
             "propertySubPhrases": [
-              "some Bach music"
+              "Bach"
             ],
             "alternatives": [
               {
                 "propertyValue": "Mozart",
                 "propertySubPhrases": [
-                  "some Mozart music"
+                  "Mozart"
                 ]
               },
               {
                 "propertyValue": "Beethoven",
                 "propertySubPhrases": [
-                  "some Beethoven music"
+                  "Beethoven"
                 ]
               },
               {
                 "propertyValue": "Chopin",
                 "propertySubPhrases": [
-                  "some Chopin music"
+                  "Chopin"
                 ]
               }
             ]
@@ -7393,7 +7604,7 @@
             "synonyms": [
               "Could you please",
               "Would you mind",
-              "Please"
+              "Can you"
             ],
             "category": "politeness",
             "isOptional": true
@@ -7411,11 +7622,21 @@
             ]
           },
           {
-            "text": "some Bach",
+            "text": "some",
             "synonyms": [
-              "Bach",
-              "a bit of Bach",
-              "any Bach"
+              "a bit of",
+              "a little",
+              "any"
+            ],
+            "category": "filler",
+            "isOptional": true
+          },
+          {
+            "text": "Bach",
+            "synonyms": [
+              "Johann Sebastian Bach",
+              "J.S. Bach",
+              "Bach's music"
             ],
             "category": "artist",
             "propertyNames": [
@@ -7432,21 +7653,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playSong",
+                "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "play a song"
+                  "pause"
                 ]
               },
               {
-                "propertyValue": "player.playAlbum",
+                "propertyValue": "player.stop",
                 "propertySubPhrases": [
-                  "play an album"
+                  "stop"
                 ]
               },
               {
-                "propertyValue": "player.playPlaylist",
+                "propertyValue": "player.skip",
                 "propertySubPhrases": [
-                  "play a playlist"
+                  "skip"
                 ]
               }
             ]
@@ -7455,25 +7676,25 @@
             "propertyName": "parameters.artist",
             "propertyValue": "Bach",
             "propertySubPhrases": [
-              "some Bach"
+              "Bach"
             ],
             "alternatives": [
               {
                 "propertyValue": "Mozart",
                 "propertySubPhrases": [
-                  "some Mozart"
+                  "Mozart"
                 ]
               },
               {
                 "propertyValue": "Beethoven",
                 "propertySubPhrases": [
-                  "some Beethoven"
+                  "Beethoven"
                 ]
               },
               {
                 "propertyValue": "Chopin",
                 "propertySubPhrases": [
-                  "some Chopin"
+                  "Chopin"
                 ]
               }
             ]
@@ -7511,8 +7732,8 @@
             "text": "I'd like to hear some",
             "synonyms": [
               "I want to listen to",
-              "I would enjoy hearing",
-              "Please play"
+              "I would like to play",
+              "Can you play"
             ],
             "category": "politeness",
             "isOptional": true
@@ -7534,9 +7755,9 @@
             "synonyms": [
               "maybe Beethoven's Symphony No. 9.",
               "possibly Beethoven's Symphony No. 9.",
-              "such as Beethoven's Symphony No. 9."
+              "Beethoven's Symphony No. 9 might be nice."
             ],
-            "category": "example",
+            "category": "suggestion",
             "isOptional": true
           }
         ],
@@ -7936,38 +8157,28 @@
             "name": "parameters.artist",
             "value": "Bach",
             "substrings": [
-              "Bach"
+              "some Bach"
             ],
             "implied": false
           }
         ],
         "subPhrases": [
           {
-            "text": "I'd like to",
+            "text": "I'd like to listen to",
             "synonyms": [
-              "I would like to",
-              "I want to",
-              "I wish to"
+              "I want to hear",
+              "I would like to listen to",
+              "I want to listen to"
             ],
             "category": "politeness",
             "isOptional": true
           },
           {
-            "text": "listen to some",
+            "text": "some Bach",
             "synonyms": [
-              "hear some",
-              "play some",
-              "enjoy some"
-            ],
-            "category": "request",
-            "isOptional": true
-          },
-          {
-            "text": "Bach",
-            "synonyms": [
-              "Johann Sebastian Bach",
-              "J.S. Bach",
-              "Bach's music"
+              "Bach music",
+              "music by Bach",
+              "a piece by Bach"
             ],
             "category": "artist",
             "propertyNames": [
@@ -7981,7 +8192,7 @@
               "would you play it?",
               "can you start it?"
             ],
-            "category": "request",
+            "category": "confirmation",
             "isOptional": true
           }
         ],
@@ -7990,25 +8201,25 @@
             "propertyName": "parameters.artist",
             "propertyValue": "Bach",
             "propertySubPhrases": [
-              "Bach"
+              "some Bach"
             ],
             "alternatives": [
               {
                 "propertyValue": "Mozart",
                 "propertySubPhrases": [
-                  "Mozart"
+                  "some Mozart"
                 ]
               },
               {
                 "propertyValue": "Beethoven",
                 "propertySubPhrases": [
-                  "Beethoven"
+                  "some Beethoven"
                 ]
               },
               {
                 "propertyValue": "Chopin",
                 "propertySubPhrases": [
-                  "Chopin"
+                  "some Chopin"
                 ]
               }
             ]
@@ -8100,15 +8311,15 @@
                 ]
               },
               {
-                "propertyValue": "classical",
-                "propertySubPhrases": [
-                  "classical"
-                ]
-              },
-              {
                 "propertyValue": "rock",
                 "propertySubPhrases": [
                   "rock"
+                ]
+              },
+              {
+                "propertyValue": "classical",
+                "propertySubPhrases": [
+                  "classical"
                 ]
               }
             ]
@@ -8145,26 +8356,36 @@
         ],
         "subPhrases": [
           {
-            "text": "I'd love to hear",
+            "text": "I'd love to hear some",
             "synonyms": [
               "I would like to listen to",
               "I want to hear",
-              "I wish to listen to"
+              "I would enjoy hearing"
             ],
             "category": "request",
-            "isOptional": true
+            "propertyNames": []
           },
           {
-            "text": "some Bach tunes",
+            "text": "Bach",
             "synonyms": [
-              "Bach music",
-              "Bach songs",
-              "Bach pieces"
+              "Johann Sebastian Bach",
+              "J.S. Bach",
+              "Bach's music"
             ],
-            "category": "music",
+            "category": "artist",
             "propertyNames": [
               "parameters.artist"
             ]
+          },
+          {
+            "text": "tunes",
+            "synonyms": [
+              "songs",
+              "pieces",
+              "tracks"
+            ],
+            "category": "music",
+            "propertyNames": []
           },
           {
             "text": "can you play some?",
@@ -8174,7 +8395,9 @@
               "can you put on some?"
             ],
             "category": "request",
-            "isOptional": true
+            "propertyNames": [
+              "fullActionName"
+            ]
           }
         ],
         "propertyAlternatives": [
@@ -8182,25 +8405,52 @@
             "propertyName": "parameters.artist",
             "propertyValue": "Bach",
             "propertySubPhrases": [
-              "some Bach tunes"
+              "Bach"
             ],
             "alternatives": [
               {
                 "propertyValue": "Mozart",
                 "propertySubPhrases": [
-                  "some Mozart tunes"
+                  "Mozart"
                 ]
               },
               {
                 "propertyValue": "Beethoven",
                 "propertySubPhrases": [
-                  "some Beethoven tunes"
+                  "Beethoven"
                 ]
               },
               {
                 "propertyValue": "Chopin",
                 "propertySubPhrases": [
-                  "some Chopin tunes"
+                  "Chopin"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playArtist",
+            "propertySubPhrases": [
+              "can you play some?"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.playAlbum",
+                "propertySubPhrases": [
+                  "can you play an album?"
+                ]
+              },
+              {
+                "propertyValue": "player.playSong",
+                "propertySubPhrases": [
+                  "can you play a song?"
+                ]
+              },
+              {
+                "propertyValue": "player.playPlaylist",
+                "propertySubPhrases": [
+                  "can you play a playlist?"
                 ]
               }
             ]
@@ -8241,7 +8491,7 @@
             "synonyms": [
               "I would like to listen to",
               "I want to hear",
-              "I wish to listen to"
+              "I would enjoy hearing"
             ],
             "category": "request",
             "isOptional": true
@@ -8333,7 +8583,7 @@
             "synonyms": [
               "I would like to listen to",
               "I want to hear",
-              "I would enjoy hearing"
+              "I would enjoy listening to"
             ],
             "category": "request",
             "propertyNames": []
@@ -8343,7 +8593,7 @@
             "synonyms": [
               "Johann Sebastian Bach",
               "J.S. Bach",
-              "Bach's music"
+              "the composer Bach"
             ],
             "category": "artist",
             "propertyNames": [
@@ -8433,7 +8683,7 @@
             "name": "fullActionName",
             "value": "player.playRandom",
             "substrings": [
-              "I'd love to hear some music"
+              "hear some music"
             ],
             "implied": true
           }
@@ -8487,6 +8737,12 @@
                 "propertySubPhrases": [
                   "play some jazz"
                 ]
+              },
+              {
+                "propertyValue": "player.playArtist",
+                "propertySubPhrases": [
+                  "play some Beatles"
+                ]
               }
             ]
           }
@@ -8526,7 +8782,7 @@
             "synonyms": [
               "I feel like listening to",
               "I want to hear",
-              "I would like to play"
+              "I'm craving"
             ],
             "category": "request",
             "propertyNames": []
@@ -8534,9 +8790,9 @@
           {
             "text": "'Sensual Seduction'",
             "synonyms": [
-              "'Sensual Seduction'",
               "'Sensual Seduction' by Snoop Dogg",
-              "'Sensual Seduction' track"
+              "'Sensual Seduction' track",
+              "'Sensual Seduction' song"
             ],
             "category": "trackName",
             "propertyNames": [
@@ -8548,7 +8804,7 @@
             "synonyms": [
               "could you play that for me?",
               "would you play that for me?",
-              "please play that for me?"
+              "can you put that on for me?"
             ],
             "category": "request",
             "propertyNames": [
@@ -8606,7 +8862,7 @@
               {
                 "propertyValue": "player.nextTrack",
                 "propertySubPhrases": [
-                  "can you skip to the next track for me?"
+                  "can you skip to the next track?"
                 ]
               }
             ]
@@ -8669,9 +8925,9 @@
             "synonyms": [
               "could you play some?",
               "would you play some?",
-              "please play some"
+              "please play some?"
             ],
-            "category": "request",
+            "category": "politeness",
             "isOptional": true
           }
         ],
@@ -8811,16 +9067,14 @@
           {
             "name": "fullActionName",
             "value": "player.playTrack",
-            "substrings": [
-              "let's get it started!"
-            ],
+            "substrings": [],
             "implied": true
           },
           {
             "name": "parameters.trackName",
             "value": "Doggy Dogg World",
             "substrings": [
-              "'Doggy Dogg World'"
+              "Doggy Dogg World"
             ],
             "implied": false
           }
@@ -8829,9 +9083,9 @@
           {
             "text": "It ain't a party without some",
             "synonyms": [
-              "We need",
-              "It's not complete without",
-              "We can't have a party without"
+              "It's not a party without",
+              "No party is complete without",
+              "Can't have a party without"
             ],
             "category": "filler",
             "isOptional": true
@@ -8839,9 +9093,9 @@
           {
             "text": "'Doggy Dogg World'",
             "synonyms": [
-              "'Doggy Dogg World' by Snoop Dogg",
-              "'Doggy Dogg World' track",
-              "'Doggy Dogg World' song"
+              "'Doggy Dogg World'",
+              "'Doggy Dogg World'",
+              "'Doggy Dogg World'"
             ],
             "category": "trackName",
             "propertyNames": [
@@ -8851,11 +9105,11 @@
           {
             "text": "so let's get it started!",
             "synonyms": [
-              "so let's play it!",
               "so let's begin!",
-              "so let's start!"
+              "so let's start!",
+              "so let's kick it off!"
             ],
-            "category": "command",
+            "category": "filler",
             "isOptional": true
           }
         ],
@@ -8888,7 +9142,66 @@
             ]
           }
         ]
-      }
+      },
+      "corrections": [
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "player.playTrack",
+                "substrings": [],
+                "implied": true
+              },
+              {
+                "name": "parameters.trackName",
+                "value": "Doggy Dogg World",
+                "substrings": [
+                  "Doggy Dogg World"
+                ],
+                "implied": false
+              }
+            ],
+            "subPhrases": [
+              {
+                "text": "It ain't a party without some",
+                "synonyms": [
+                  "It's not a party without",
+                  "No party is complete without",
+                  "Can't have a party without"
+                ],
+                "category": "filler",
+                "isOptional": true
+              },
+              {
+                "text": "Doggy Dogg World",
+                "synonyms": [
+                  "Doggy Dogg World",
+                  "Doggy Dogg World",
+                  "Doggy Dogg World"
+                ],
+                "category": "trackName",
+                "propertyNames": [
+                  "parameters.trackName"
+                ]
+              },
+              {
+                "text": "so let's get it started!",
+                "synonyms": [
+                  "so let's begin!",
+                  "so let's start!",
+                  "so let's kick it off!"
+                ],
+                "category": "filler",
+                "isOptional": true
+              }
+            ]
+          },
+          "correction": [
+            "Missing sub-phrase: explanation missing for '''"
+          ]
+        }
+      ]
     },
     {
       "request": "Let's get this party started with some 'Drop It Like It's Hot', ya feel me?",
@@ -8931,9 +9244,9 @@
           {
             "text": "with some",
             "synonyms": [
-              "by playing",
               "featuring",
-              "including"
+              "including",
+              "playing"
             ],
             "category": "preposition",
             "isOptional": true
@@ -8976,15 +9289,15 @@
                 ]
               },
               {
-                "propertyValue": "Shape of You",
+                "propertyValue": "Happy",
                 "propertySubPhrases": [
-                  "'Shape of You'"
+                  "'Happy'"
                 ]
               },
               {
-                "propertyValue": "Blinding Lights",
+                "propertyValue": "Shape of You",
                 "propertySubPhrases": [
-                  "'Blinding Lights'"
+                  "'Shape of You'"
                 ]
               }
             ]
@@ -9033,7 +9346,7 @@
           {
             "text": "get this place smokin'",
             "synonyms": [
-              "liven things up",
+              "liven up this place",
               "make this place lively",
               "get the party started"
             ],
@@ -9054,8 +9367,8 @@
             "text": "'Vato'",
             "synonyms": [
               "'Vato'",
-              "'Vato'",
-              "'Vato'"
+              "'Vato' by Snoop Dogg",
+              "'Vato' track"
             ],
             "category": "track name",
             "propertyNames": [
@@ -9067,7 +9380,7 @@
             "synonyms": [
               "you know?",
               "right?",
-              "okay?"
+              "got it?"
             ],
             "category": "confirmation",
             "isOptional": true
@@ -9150,7 +9463,9 @@
               "enjoy"
             ],
             "category": "action",
-            "isOptional": true
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "Snoop Dogg",
@@ -9171,11 +9486,38 @@
               "music!",
               "tracks!"
             ],
-            "category": "music",
+            "category": "filler",
             "isOptional": true
           }
         ],
         "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playArtist",
+            "propertySubPhrases": [
+              "groove to some"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.playSong",
+                "propertySubPhrases": [
+                  "listen to a"
+                ]
+              },
+              {
+                "propertyValue": "player.playAlbum",
+                "propertySubPhrases": [
+                  "spin the album"
+                ]
+              },
+              {
+                "propertyValue": "player.playPlaylist",
+                "propertySubPhrases": [
+                  "queue up a playlist"
+                ]
+              }
+            ]
+          },
           {
             "propertyName": "parameters.artist",
             "propertyValue": "Snoop Dogg",
@@ -9257,8 +9599,8 @@
             "text": "Snoop Dogg's",
             "synonyms": [
               "by Snoop Dogg",
-              "from Snoop Dogg",
-              "Snoop Dogg"
+              "Snoop Dogg",
+              "from Snoop Dogg"
             ],
             "category": "artist",
             "propertyNames": [
@@ -9276,16 +9618,6 @@
             "propertyNames": [
               "parameters.trackName"
             ]
-          },
-          {
-            "text": "!",
-            "synonyms": [
-              ".",
-              "",
-              "!!"
-            ],
-            "category": "punctuation",
-            "isOptional": true
           }
         ],
         "propertyAlternatives": [
@@ -9330,9 +9662,9 @@
                 ]
               },
               {
-                "propertyValue": "Nuthin' but a 'G' Thang",
+                "propertyValue": "Nuthin' But a 'G' Thang",
                 "propertySubPhrases": [
-                  "'Nuthin' but a 'G' Thang'"
+                  "'Nuthin' But a 'G' Thang'"
                 ]
               },
               {
@@ -9389,7 +9721,7 @@
             "synonyms": [
               "play some",
               "hear some",
-              "enjoy some"
+              "put on some"
             ],
             "category": "action",
             "propertyNames": [
@@ -9413,7 +9745,7 @@
             "synonyms": [
               "okay?",
               "alright?",
-              "right?"
+              "if you please?"
             ],
             "category": "confirmation",
             "isOptional": true
@@ -9622,24 +9954,24 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playMusic",
+                "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "listen to",
-                  "music"
+                  "play",
+                  "some music"
                 ]
               },
               {
-                "propertyValue": "player.playSongs",
+                "propertyValue": "player.shuffle",
                 "propertySubPhrases": [
-                  "listen to",
-                  "songs"
+                  "shuffle",
+                  "the playlist"
                 ]
               },
               {
-                "propertyValue": "player.playTracks",
+                "propertyValue": "player.startRadio",
                 "propertySubPhrases": [
-                  "listen to",
-                  "tracks"
+                  "start",
+                  "the radio"
                 ]
               }
             ]
@@ -9690,7 +10022,7 @@
             "synonyms": [
               "revisit the classics",
               "go back to the old days",
-              "return to the old school"
+              "play some old school tracks"
             ],
             "category": "action",
             "isOptional": true
@@ -9700,7 +10032,7 @@
             "synonyms": [
               "featuring",
               "including",
-              "playing"
+              "by playing"
             ],
             "category": "preposition",
             "isOptional": true
@@ -9796,13 +10128,23 @@
             "isOptional": true
           },
           {
-            "text": "take it back to the old school with some",
+            "text": "take it back to the old school",
             "synonyms": [
-              "play some classic",
-              "put on some old school",
-              "let's hear some retro"
+              "reminisce about the old school",
+              "go back to the old school",
+              "return to the old school"
             ],
-            "category": "request",
+            "category": "action",
+            "isOptional": true
+          },
+          {
+            "text": "with some",
+            "synonyms": [
+              "featuring",
+              "including",
+              "along with"
+            ],
+            "category": "preposition",
             "isOptional": true
           },
           {
@@ -9839,9 +10181,9 @@
                 ]
               },
               {
-                "propertyValue": "Regulate",
+                "propertyValue": "Still D.R.E.",
                 "propertySubPhrases": [
-                  "'Regulate'"
+                  "'Still D.R.E.'"
                 ]
               }
             ]
@@ -9863,7 +10205,7 @@
             "name": "fullActionName",
             "value": "player.playArtist",
             "substrings": [
-              "Might I request the pleasure of listening to"
+              "Might I request the pleasure of listening to some exquisite Bach?"
             ],
             "implied": true
           },
@@ -9878,21 +10220,21 @@
         ],
         "subPhrases": [
           {
-            "text": "Might I request the pleasure of listening to",
+            "text": "Might I request",
             "synonyms": [
-              "Can I request to listen to",
-              "I would like to listen to",
-              "Please play"
+              "Can I request",
+              "May I request",
+              "Could I request"
             ],
             "category": "politeness",
             "isOptional": true
           },
           {
-            "text": "some exquisite",
+            "text": "the pleasure of listening to some exquisite",
             "synonyms": [
-              "some wonderful",
-              "some beautiful",
-              "some amazing"
+              "the joy of hearing some wonderful",
+              "the delight of enjoying some beautiful",
+              "the privilege of experiencing some amazing"
             ],
             "category": "filler",
             "isOptional": true
@@ -9900,9 +10242,9 @@
           {
             "text": "Bach",
             "synonyms": [
-              "Beethoven",
-              "Mozart",
-              "Chopin"
+              "Johann Sebastian Bach",
+              "J.S. Bach",
+              "Bach's music"
             ],
             "category": "artist",
             "propertyNames": [
@@ -10086,7 +10428,7 @@
             "name": "fullActionName",
             "value": "player.playArtist",
             "substrings": [
-              "Play some songs by The Beatles, please."
+              "Play some songs by"
             ],
             "implied": true
           },
@@ -10101,21 +10443,23 @@
         ],
         "subPhrases": [
           {
-            "text": "Play some songs",
+            "text": "Play some songs by",
             "synonyms": [
-              "Play a few tracks",
-              "Play some music",
-              "Play a couple of songs"
+              "Play music by",
+              "Play tracks by",
+              "Play tunes by"
             ],
-            "category": "command",
-            "propertyNames": []
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
-            "text": "by The Beatles",
+            "text": "The Beatles",
             "synonyms": [
-              "from The Beatles",
-              "by the band The Beatles",
-              "by the group The Beatles"
+              "The Fab Four",
+              "John, Paul, George, and Ringo",
+              "The Beatles band"
             ],
             "category": "artist",
             "propertyNames": [
@@ -10126,7 +10470,7 @@
             "text": "please",
             "synonyms": [
               "kindly",
-              "if you would",
+              "if you don't mind",
               "if you please"
             ],
             "category": "politeness",
@@ -10135,28 +10479,55 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playArtist",
+            "propertySubPhrases": [
+              "Play some songs by"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.playAlbum",
+                "propertySubPhrases": [
+                  "Play an album by"
+                ]
+              },
+              {
+                "propertyValue": "player.playPlaylist",
+                "propertySubPhrases": [
+                  "Play a playlist by"
+                ]
+              },
+              {
+                "propertyValue": "player.playTrack",
+                "propertySubPhrases": [
+                  "Play a track by"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.artist",
             "propertyValue": "The Beatles",
             "propertySubPhrases": [
-              "by The Beatles"
+              "The Beatles"
             ],
             "alternatives": [
               {
                 "propertyValue": "The Rolling Stones",
                 "propertySubPhrases": [
-                  "by The Rolling Stones"
+                  "The Rolling Stones"
                 ]
               },
               {
                 "propertyValue": "Queen",
                 "propertySubPhrases": [
-                  "by Queen"
+                  "Queen"
                 ]
               },
               {
                 "propertyValue": "Led Zeppelin",
                 "propertySubPhrases": [
-                  "by Led Zeppelin"
+                  "Led Zeppelin"
                 ]
               }
             ]
@@ -10186,7 +10557,7 @@
             "name": "parameters.genre",
             "value": "acoustic guitar",
             "substrings": [
-              "acoustic guitar"
+              "soothing acoustic guitar songs"
             ],
             "implied": false
           }
@@ -10215,36 +10586,16 @@
             "isOptional": true
           },
           {
-            "text": "soothing",
+            "text": "soothing acoustic guitar songs",
             "synonyms": [
-              "calming",
-              "relaxing",
-              "peaceful"
-            ],
-            "category": "descriptor",
-            "isOptional": true
-          },
-          {
-            "text": "acoustic guitar",
-            "synonyms": [
-              "acoustic",
-              "guitar",
-              "unplugged guitar"
+              "relaxing acoustic guitar tracks",
+              "calming acoustic guitar music",
+              "peaceful acoustic guitar tunes"
             ],
             "category": "genre",
             "propertyNames": [
               "parameters.genre"
             ]
-          },
-          {
-            "text": "songs",
-            "synonyms": [
-              "tracks",
-              "tunes",
-              "melodies"
-            ],
-            "category": "filler",
-            "isOptional": true
           }
         ],
         "propertyAlternatives": [
@@ -10279,25 +10630,25 @@
             "propertyName": "parameters.genre",
             "propertyValue": "acoustic guitar",
             "propertySubPhrases": [
-              "acoustic guitar"
+              "soothing acoustic guitar songs"
             ],
             "alternatives": [
               {
                 "propertyValue": "classical",
                 "propertySubPhrases": [
-                  "classical"
+                  "classical music"
                 ]
               },
               {
                 "propertyValue": "jazz",
                 "propertySubPhrases": [
-                  "jazz"
+                  "smooth jazz"
                 ]
               },
               {
-                "propertyValue": "rock",
+                "propertyValue": "pop",
                 "propertySubPhrases": [
-                  "rock"
+                  "pop hits"
                 ]
               }
             ]
@@ -10338,7 +10689,7 @@
             "synonyms": [
               "Start",
               "Begin",
-              "Commence"
+              "Launch"
             ],
             "category": "command",
             "propertyNames": [
@@ -10377,21 +10728,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.pause",
+                "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "Pause"
+                  "Play a song"
                 ]
               },
               {
-                "propertyValue": "player.stop",
+                "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "Stop"
+                  "Play an album"
                 ]
               },
               {
-                "propertyValue": "player.skip",
+                "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "Skip"
+                  "Play a playlist"
                 ]
               }
             ]
@@ -10468,9 +10819,9 @@
           {
             "text": "Play the song",
             "synonyms": [
-              "Start the track",
-              "Play the music",
-              "Play the tune"
+              "Play the track",
+              "Start the song",
+              "Play the music"
             ],
             "category": "command",
             "propertyNames": [
@@ -10481,8 +10832,8 @@
             "text": "'Bohemian Rhapsody'",
             "synonyms": [
               "'Bohemian Rhapsody'",
-              "'Bohemian Rhapsody' track",
-              "'Bohemian Rhapsody' song"
+              "the song 'Bohemian Rhapsody'",
+              "track 'Bohemian Rhapsody'"
             ],
             "category": "trackName",
             "propertyNames": [
@@ -10523,9 +10874,9 @@
                 ]
               },
               {
-                "propertyValue": "player.playAlbum",
+                "propertyValue": "player.playNextTrack",
                 "propertySubPhrases": [
-                  "Play the album"
+                  "Play the next song"
                 ]
               }
             ]
@@ -10629,7 +10980,7 @@
             "synonyms": [
               "Start",
               "Begin",
-              "Play"
+              "Commence"
             ],
             "category": "command",
             "propertyNames": [
@@ -10639,9 +10990,9 @@
           {
             "text": "the",
             "synonyms": [
-              "the",
               "these",
-              "those"
+              "those",
+              "some"
             ],
             "category": "filler",
             "isOptional": true
@@ -10649,9 +11000,9 @@
           {
             "text": "top 10",
             "synonyms": [
-              "top 10",
               "best 10",
-              "leading 10"
+              "leading 10",
+              "top ten"
             ],
             "category": "quantity",
             "propertyNames": [
@@ -10661,9 +11012,9 @@
           {
             "text": "hip-hop",
             "synonyms": [
-              "hip-hop",
               "rap",
-              "hip hop"
+              "hip hop",
+              "hiphop"
             ],
             "category": "genre",
             "propertyNames": [
@@ -10673,9 +11024,9 @@
           {
             "text": "tracks",
             "synonyms": [
-              "tracks",
               "songs",
-              "tunes"
+              "tunes",
+              "pieces"
             ],
             "category": "filler",
             "isOptional": true
@@ -10809,8 +11160,8 @@
             "text": "Please",
             "synonyms": [
               "Kindly",
-              "Would you please",
-              "Could you please"
+              "Would you",
+              "Could you"
             ],
             "category": "politeness",
             "isOptional": true
@@ -10869,13 +11220,13 @@
               {
                 "propertyValue": "player.addTrackToPlaylist",
                 "propertySubPhrases": [
-                  "add to playlist"
+                  "add"
                 ]
               },
               {
-                "propertyValue": "player.likeTrack",
+                "propertyValue": "player.shufflePlay",
                 "propertySubPhrases": [
-                  "like"
+                  "shuffle"
                 ]
               }
             ]
@@ -10969,7 +11320,7 @@
             "text": "Please",
             "synonyms": [
               "Kindly",
-              "Would you mind",
+              "Would you",
               "Could you"
             ],
             "category": "politeness",
@@ -10990,8 +11341,8 @@
           {
             "text": "a few",
             "synonyms": [
-              "several",
               "some",
+              "several",
               "a handful of"
             ],
             "category": "quantity",
@@ -11031,9 +11382,9 @@
                 ]
               },
               {
-                "propertyValue": "player.start",
+                "propertyValue": "player.queue",
                 "propertySubPhrases": [
-                  "start"
+                  "queue"
                 ]
               }
             ]
@@ -11143,11 +11494,11 @@
           {
             "text": "for me",
             "synonyms": [
-              "to me",
-              "for my benefit",
-              "for my enjoyment"
+              "for myself",
+              "for my enjoyment",
+              "for my listening"
             ],
-            "category": "recipient",
+            "category": "preposition",
             "isOptional": true
           },
           {
@@ -11155,7 +11506,7 @@
             "synonyms": [
               "assistant",
               "AI",
-              "system"
+              "helper"
             ],
             "category": "address",
             "isOptional": true
@@ -11274,7 +11625,7 @@
             "synonyms": [
               "Johann Sebastian Bach",
               "J.S. Bach",
-              "Bach the composer"
+              "Bach's compositions"
             ],
             "category": "artist",
             "propertyNames": [
@@ -11291,15 +11642,15 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playAlbum",
-                "propertySubPhrases": [
-                  "play an album by"
-                ]
-              },
-              {
                 "propertyValue": "player.playSong",
                 "propertySubPhrases": [
                   "play a song by"
+                ]
+              },
+              {
+                "propertyValue": "player.playAlbum",
+                "propertySubPhrases": [
+                  "play an album by"
                 ]
               },
               {
@@ -11395,7 +11746,7 @@
             "synonyms": [
               "from the 'Guardians of the Galaxy' album",
               "from the soundtrack of 'Guardians of the Galaxy'",
-              "from 'Guardians of the Galaxy'"
+              "from the 'Guardians of the Galaxy' music collection"
             ],
             "category": "album",
             "propertyNames": [
@@ -11439,21 +11790,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "The Greatest Showman",
+                "propertyValue": "Awesome Mix Vol. 1",
                 "propertySubPhrases": [
-                  "from 'The Greatest Showman' soundtrack"
+                  "from the 'Awesome Mix Vol. 1' soundtrack"
                 ]
               },
               {
-                "propertyValue": "Frozen",
+                "propertyValue": "Awesome Mix Vol. 2",
                 "propertySubPhrases": [
-                  "from the 'Frozen' soundtrack"
+                  "from the 'Awesome Mix Vol. 2' soundtrack"
                 ]
               },
               {
-                "propertyValue": "Bohemian Rhapsody",
+                "propertyValue": "Guardians of the Galaxy Vol. 2",
                 "propertySubPhrases": [
-                  "from the 'Bohemian Rhapsody' soundtrack"
+                  "from the 'Guardians of the Galaxy Vol. 2' soundtrack"
                 ]
               }
             ]
@@ -11502,21 +11853,11 @@
             ]
           },
           {
-            "text": "some",
+            "text": "some energetic",
             "synonyms": [
-              "a few",
-              "a bit of",
-              "a little"
-            ],
-            "category": "filler",
-            "isOptional": true
-          },
-          {
-            "text": "energetic",
-            "synonyms": [
-              "lively",
-              "upbeat",
-              "high-energy"
+              "a few lively",
+              "some vibrant",
+              "a bit of energetic"
             ],
             "category": "descriptor",
             "isOptional": true
@@ -11524,9 +11865,9 @@
           {
             "text": "rock",
             "synonyms": [
-              "rock and roll",
               "rock music",
-              "rock genre"
+              "rock songs",
+              "rock tracks"
             ],
             "category": "genre",
             "propertyNames": [
@@ -11538,9 +11879,9 @@
             "synonyms": [
               "songs",
               "tracks",
-              "music"
+              "melodies"
             ],
-            "category": "filler",
+            "category": "music",
             "isOptional": true
           }
         ],
@@ -11565,9 +11906,9 @@
                 ]
               },
               {
-                "propertyValue": "player.playMusic",
+                "propertyValue": "player.beginGenre",
                 "propertySubPhrases": [
-                  "Play"
+                  "Begin"
                 ]
               }
             ]
@@ -11922,10 +12263,12 @@
             "synonyms": [
               "Begin",
               "Initiate",
-              "Commence"
+              "Launch"
             ],
             "category": "command",
-            "isOptional": false
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "the",
@@ -11952,15 +12295,48 @@
           {
             "text": "playlist",
             "synonyms": [
+              "tracklist",
               "music list",
-              "track list",
               "song collection"
             ],
             "category": "object",
-            "isOptional": true
+            "propertyNames": [
+              "fullActionName"
+            ]
           }
         ],
         "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.getPlaylist",
+            "propertySubPhrases": [
+              "Start",
+              "playlist"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.playPlaylist",
+                "propertySubPhrases": [
+                  "Play",
+                  "playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.resumePlaylist",
+                "propertySubPhrases": [
+                  "Resume",
+                  "playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.queuePlaylist",
+                "propertySubPhrases": [
+                  "Queue",
+                  "playlist"
+                ]
+              }
+            ]
+          },
           {
             "propertyName": "parameters.name",
             "propertyValue": "classical symphony",
@@ -11969,21 +12345,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "baroque classics",
+                "propertyValue": "jazz classics",
                 "propertySubPhrases": [
-                  "baroque classics"
+                  "jazz classics"
                 ]
               },
               {
-                "propertyValue": "romantic era",
+                "propertyValue": "rock anthems",
                 "propertySubPhrases": [
-                  "romantic era"
+                  "rock anthems"
                 ]
               },
               {
-                "propertyValue": "modern symphonies",
+                "propertyValue": "pop hits",
                 "propertySubPhrases": [
-                  "modern symphonies"
+                  "pop hits"
                 ]
               }
             ]
@@ -12039,8 +12415,7 @@
               "a"
             ],
             "category": "article",
-            "isOptional": true,
-            "propertyNames": []
+            "isOptional": true
           },
           {
             "text": "smooth R&B",
@@ -12062,8 +12437,7 @@
               "track list"
             ],
             "category": "object",
-            "isOptional": true,
-            "propertyNames": []
+            "isOptional": true
           }
         ],
         "propertyAlternatives": [
@@ -12122,81 +12496,7 @@
             ]
           }
         ]
-      },
-      "corrections": [
-        {
-          "data": {
-            "properties": [
-              {
-                "name": "fullActionName",
-                "value": "player.getPlaylist",
-                "substrings": [
-                  "Start the smooth R&B playlist"
-                ],
-                "implied": true
-              },
-              {
-                "name": "parameters.name",
-                "value": "smooth R&B",
-                "substrings": [
-                  "smooth R&B"
-                ],
-                "implied": false
-              }
-            ],
-            "subPhrases": [
-              {
-                "text": "Start",
-                "synonyms": [
-                  "Begin",
-                  "Initiate",
-                  "Launch"
-                ],
-                "category": "command",
-                "propertyNames": []
-              },
-              {
-                "text": "the",
-                "synonyms": [
-                  "this",
-                  "that",
-                  "a"
-                ],
-                "category": "article",
-                "isOptional": true,
-                "propertyNames": []
-              },
-              {
-                "text": "smooth R&B",
-                "synonyms": [
-                  "smooth rhythm and blues",
-                  "smooth RnB",
-                  "smooth R and B"
-                ],
-                "category": "playlistName",
-                "propertyNames": [
-                  "name"
-                ]
-              },
-              {
-                "text": "playlist",
-                "synonyms": [
-                  "music list",
-                  "song collection",
-                  "track list"
-                ],
-                "category": "object",
-                "isOptional": true,
-                "propertyNames": []
-              }
-            ]
-          },
-          "correction": [
-            "Extraneous parameter: 'name' is not a parameter in the action",
-            "Property 'parameters.name' is expected to be explicit and should be included as a property name for a sub-phrase"
-          ]
-        }
-      ]
+      }
     },
     {
       "request": "Time to bump some Snoop Dogg, homie!",
@@ -12240,8 +12540,8 @@
             "text": "Snoop Dogg",
             "synonyms": [
               "Snoop Doggy Dogg",
-              "Snoop Lion",
-              "Calvin Broadus"
+              "Snoop",
+              "Snoop D-O-double-G"
             ],
             "category": "artist",
             "propertyNames": [
@@ -12274,15 +12574,15 @@
                 ]
               },
               {
-                "propertyValue": "Eminem",
-                "propertySubPhrases": [
-                  "Eminem"
-                ]
-              },
-              {
                 "propertyValue": "Ice Cube",
                 "propertySubPhrases": [
                   "Ice Cube"
+                ]
+              },
+              {
+                "propertyValue": "Tupac",
+                "propertySubPhrases": [
+                  "Tupac"
                 ]
               }
             ]
@@ -12345,7 +12645,7 @@
             "synonyms": [
               "pop music",
               "pop songs",
-              "pop genre"
+              "pop tracks"
             ],
             "category": "genre",
             "propertyNames": [
@@ -12463,8 +12763,8 @@
             "text": "play",
             "synonyms": [
               "start",
-              "begin",
-              "put on"
+              "put on",
+              "begin"
             ],
             "category": "action",
             "propertyNames": [
@@ -12472,36 +12772,16 @@
             ]
           },
           {
-            "text": "some energetic",
+            "text": "some energetic dance tracks",
             "synonyms": [
-              "a few lively",
-              "some upbeat",
-              "a couple of high-energy"
-            ],
-            "category": "description",
-            "isOptional": true
-          },
-          {
-            "text": "dance",
-            "synonyms": [
-              "electronic dance",
-              "EDM",
-              "club"
+              "some lively dance music",
+              "some upbeat dance songs",
+              "some high-energy dance tunes"
             ],
             "category": "genre",
             "propertyNames": [
               "parameters.genre"
             ]
-          },
-          {
-            "text": "tracks",
-            "synonyms": [
-              "songs",
-              "tunes",
-              "music"
-            ],
-            "category": "object",
-            "isOptional": true
           }
         ],
         "propertyAlternatives": [
@@ -12536,25 +12816,25 @@
             "propertyName": "parameters.genre",
             "propertyValue": "dance",
             "propertySubPhrases": [
-              "dance"
+              "some energetic dance tracks"
             ],
             "alternatives": [
               {
                 "propertyValue": "rock",
                 "propertySubPhrases": [
-                  "rock"
-                ]
-              },
-              {
-                "propertyValue": "jazz",
-                "propertySubPhrases": [
-                  "jazz"
+                  "some energetic rock tracks"
                 ]
               },
               {
                 "propertyValue": "pop",
                 "propertySubPhrases": [
-                  "pop"
+                  "some energetic pop tracks"
+                ]
+              },
+              {
+                "propertyValue": "hip-hop",
+                "propertySubPhrases": [
+                  "some energetic hip-hop tracks"
                 ]
               }
             ]
@@ -12613,11 +12893,21 @@
             ]
           },
           {
-            "text": "some Bach",
+            "text": "some",
             "synonyms": [
-              "Bach",
-              "a bit of Bach",
-              "any Bach"
+              "any",
+              "a bit of",
+              "a little"
+            ],
+            "category": "filler",
+            "isOptional": true
+          },
+          {
+            "text": "Bach",
+            "synonyms": [
+              "Johann Sebastian Bach",
+              "J.S. Bach",
+              "Bach's music"
             ],
             "category": "artist",
             "propertyNames": [
@@ -12657,25 +12947,25 @@
             "propertyName": "parameters.artist",
             "propertyValue": "Bach",
             "propertySubPhrases": [
-              "some Bach"
+              "Bach"
             ],
             "alternatives": [
               {
                 "propertyValue": "Mozart",
                 "propertySubPhrases": [
-                  "some Mozart"
+                  "Mozart"
                 ]
               },
               {
                 "propertyValue": "Beethoven",
                 "propertySubPhrases": [
-                  "some Beethoven"
+                  "Beethoven"
                 ]
               },
               {
                 "propertyValue": "Chopin",
                 "propertySubPhrases": [
-                  "some Chopin"
+                  "Chopin"
                 ]
               }
             ]
@@ -12725,8 +13015,8 @@
             "text": "play",
             "synonyms": [
               "start",
-              "put on",
-              "turn on"
+              "begin",
+              "put on"
             ],
             "category": "action",
             "propertyNames": [
@@ -12736,9 +13026,9 @@
           {
             "text": "some delightful",
             "synonyms": [
+              "a bit of",
               "some wonderful",
-              "some lovely",
-              "some beautiful"
+              "a little"
             ],
             "category": "filler",
             "isOptional": true
@@ -12969,7 +13259,7 @@
             "name": "fullActionName",
             "value": "player.playArtist",
             "substrings": [
-              "Would you mind playing"
+              "playing"
             ],
             "implied": true
           },
@@ -12988,7 +13278,7 @@
             "synonyms": [
               "Could you",
               "Can you",
-              "Would you please"
+              "Would it be possible to"
             ],
             "category": "politeness",
             "isOptional": true
@@ -12997,8 +13287,8 @@
             "text": "playing",
             "synonyms": [
               "play",
-              "put on",
-              "start"
+              "start playing",
+              "put on"
             ],
             "category": "action",
             "propertyNames": [
@@ -13009,7 +13299,7 @@
             "text": "some Bach music",
             "synonyms": [
               "Bach",
-              "music by Bach",
+              "some music by Bach",
               "Bach's music"
             ],
             "category": "artist",
@@ -13252,7 +13542,7 @@
             "synonyms": [
               "from Johann Sebastian Bach",
               "of Johann Sebastian Bach",
-              "featuring Johann Sebastian Bach"
+              "composed by Johann Sebastian Bach"
             ],
             "category": "artist",
             "propertyNames": [
@@ -13323,7 +13613,7 @@
       "action": {
         "fullActionName": "player.playGenre",
         "parameters": {
-          "genre": "smooth R&B"
+          "genre": "R&B"
         }
       },
       "explanation": {
@@ -13338,9 +13628,9 @@
           },
           {
             "name": "parameters.genre",
-            "value": "smooth R&B",
+            "value": "R&B",
             "substrings": [
-              "smooth R&B"
+              "R&B"
             ],
             "implied": false
           }
@@ -13369,21 +13659,21 @@
             ]
           },
           {
-            "text": "some",
+            "text": "some smooth",
             "synonyms": [
               "a few",
-              "any",
+              "some",
               "a couple of"
             ],
             "category": "filler",
             "isOptional": true
           },
           {
-            "text": "smooth R&B",
+            "text": "R&B",
             "synonyms": [
-              "smooth rhythm and blues",
-              "smooth RnB",
-              "smooth R and B"
+              "rhythm and blues",
+              "R and B",
+              "R n B"
             ],
             "category": "genre",
             "propertyNames": [
@@ -13394,8 +13684,8 @@
             "text": "songs",
             "synonyms": [
               "tracks",
-              "music",
-              "tunes"
+              "tunes",
+              "music"
             ],
             "category": "filler",
             "isOptional": true
@@ -13410,30 +13700,30 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playSong",
+                "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "playing a song"
+                  "pausing"
                 ]
               },
               {
-                "propertyValue": "player.playAlbum",
+                "propertyValue": "player.stop",
                 "propertySubPhrases": [
-                  "playing an album"
+                  "stopping"
                 ]
               },
               {
-                "propertyValue": "player.playPlaylist",
+                "propertyValue": "player.skip",
                 "propertySubPhrases": [
-                  "playing a playlist"
+                  "skipping"
                 ]
               }
             ]
           },
           {
             "propertyName": "parameters.genre",
-            "propertyValue": "smooth R&B",
+            "propertyValue": "R&B",
             "propertySubPhrases": [
-              "smooth R&B"
+              "R&B"
             ],
             "alternatives": [
               {
@@ -13449,9 +13739,9 @@
                 ]
               },
               {
-                "propertyValue": "classical",
+                "propertyValue": "rock",
                 "propertySubPhrases": [
-                  "classical"
+                  "rock"
                 ]
               }
             ]
@@ -13492,7 +13782,7 @@
             "synonyms": [
               "Could you",
               "Can you",
-              "Would it be possible to"
+              "Would it be possible"
             ],
             "category": "politeness",
             "isOptional": true
@@ -13501,8 +13791,8 @@
             "text": "putting on",
             "synonyms": [
               "playing",
-              "start",
-              "turn on"
+              "turning on",
+              "starting"
             ],
             "category": "action",
             "propertyNames": [
@@ -13510,9 +13800,19 @@
             ]
           },
           {
-            "text": "some upbeat pop tunes",
+            "text": "some upbeat",
             "synonyms": [
-              "some pop music",
+              "some lively",
+              "some energetic",
+              "some peppy"
+            ],
+            "category": "description",
+            "isOptional": true
+          },
+          {
+            "text": "pop",
+            "synonyms": [
+              "pop music",
               "pop songs",
               "pop tracks"
             ],
@@ -13520,6 +13820,16 @@
             "propertyNames": [
               "parameters.genre"
             ]
+          },
+          {
+            "text": "tunes",
+            "synonyms": [
+              "songs",
+              "tracks",
+              "melodies"
+            ],
+            "category": "filler",
+            "isOptional": true
           }
         ],
         "propertyAlternatives": [
@@ -13539,7 +13849,7 @@
               {
                 "propertyValue": "player.queueGenre",
                 "propertySubPhrases": [
-                  "queuing up"
+                  "queuing"
                 ]
               },
               {
@@ -13554,25 +13864,25 @@
             "propertyName": "parameters.genre",
             "propertyValue": "pop",
             "propertySubPhrases": [
-              "some upbeat pop tunes"
+              "pop"
             ],
             "alternatives": [
               {
                 "propertyValue": "rock",
                 "propertySubPhrases": [
-                  "some energetic rock songs"
+                  "rock"
                 ]
               },
               {
                 "propertyValue": "jazz",
                 "propertySubPhrases": [
-                  "some smooth jazz tracks"
+                  "jazz"
                 ]
               },
               {
                 "propertyValue": "classical",
                 "propertySubPhrases": [
-                  "some relaxing classical music"
+                  "classical"
                 ]
               }
             ]
@@ -13633,9 +13943,9 @@
           {
             "text": "some",
             "synonyms": [
-              "any",
               "a bit of",
-              "a little"
+              "a little",
+              "any"
             ],
             "category": "filler",
             "isOptional": true
@@ -13657,19 +13967,9 @@
             "synonyms": [
               "for us",
               "for them",
-              "for her"
+              "for everyone"
             ],
-            "category": "filler",
-            "isOptional": true
-          },
-          {
-            "text": "?",
-            "synonyms": [
-              "",
-              ".",
-              "!"
-            ],
-            "category": "punctuation",
+            "category": "politeness",
             "isOptional": true
           }
         ],
@@ -13745,7 +14045,7 @@
             "name": "fullActionName",
             "value": "player.playTrack",
             "substrings": [
-              "Yo, DJ, let's get this place jumpin' with some 'Young, Wild & Free'!"
+              "Yo, DJ, let's get this place jumpin' with some"
             ],
             "implied": true
           },
@@ -13773,38 +14073,30 @@
             "text": "DJ",
             "synonyms": [
               "Disc Jockey",
-              "Music Mixer",
-              "Turntablist"
+              "Music Master",
+              "DJ"
             ],
             "category": "acknowledgement",
             "isOptional": true
           },
           {
-            "text": "let's get this place jumpin'",
+            "text": "let's get this place jumpin' with some",
             "synonyms": [
-              "let's get the party started",
-              "let's energize this place",
-              "let's make this place lively"
+              "play",
+              "start playing",
+              "put on"
             ],
-            "category": "filler",
-            "isOptional": true
-          },
-          {
-            "text": "with some",
-            "synonyms": [
-              "playing",
-              "by playing",
-              "featuring"
-            ],
-            "category": "preposition",
-            "isOptional": true
+            "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "'Young, Wild & Free'",
             "synonyms": [
-              "'Young, Wild and Free'",
-              "'Young Wild & Free'",
-              "'Young Wild and Free'"
+              "'Young, Wild & Free'",
+              "'Young Wild and Free'",
+              "'Young, Wild, and Free'"
             ],
             "category": "trackName",
             "propertyNames": [
@@ -13813,6 +14105,33 @@
           }
         ],
         "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playTrack",
+            "propertySubPhrases": [
+              "let's get this place jumpin' with some"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.queueTrack",
+                "propertySubPhrases": [
+                  "add some tunes like"
+                ]
+              },
+              {
+                "propertyValue": "player.shufflePlay",
+                "propertySubPhrases": [
+                  "shuffle things up with"
+                ]
+              },
+              {
+                "propertyValue": "player.playAlbum",
+                "propertySubPhrases": [
+                  "spin the whole album of"
+                ]
+              }
+            ]
+          },
           {
             "propertyName": "parameters.trackName",
             "propertyValue": "Young, Wild & Free",
@@ -13888,7 +14207,7 @@
               "shall we",
               "why don't we"
             ],
-            "category": "confirmation",
+            "category": "suggestion",
             "isOptional": true
           },
           {
@@ -13945,21 +14264,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.startTrack",
+                "propertyValue": "player.startSong",
                 "propertySubPhrases": [
                   "jam to"
                 ]
               },
               {
-                "propertyValue": "player.queueTrack",
+                "propertyValue": "player.playMusic",
                 "propertySubPhrases": [
-                  "line up"
+                  "listen to"
                 ]
               },
               {
-                "propertyValue": "player.playSong",
+                "propertyValue": "player.queueTrack",
                 "propertySubPhrases": [
-                  "listen to"
+                  "queue up"
                 ]
               }
             ]
@@ -14045,8 +14364,8 @@
             "text": "let's get down to some of that",
             "synonyms": [
               "let's play",
-              "how about",
-              "let's listen to"
+              "let's listen to",
+              "how about we play"
             ],
             "category": "confirmation",
             "isOptional": true
@@ -14056,7 +14375,7 @@
             "synonyms": [
               "'Young, Wild and Free'",
               "'Young Wild & Free'",
-              "'Young, Wild & Free' by Snoop Dogg"
+              "'Young Wild and Free'"
             ],
             "category": "trackName",
             "propertyNames": [
@@ -14097,9 +14416,9 @@
                 ]
               },
               {
-                "propertyValue": "We Dem Boyz",
+                "propertyValue": "Roll Up",
                 "propertySubPhrases": [
-                  "'We Dem Boyz'"
+                  "'Roll Up'"
                 ]
               }
             ]
@@ -14210,26 +14529,26 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playPlaylist",
+                "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "let's vibe",
-                  "to a cool playlist",
+                  "let's play",
+                  "some music",
                   "on the speakers"
                 ]
               },
               {
-                "propertyValue": "player.playSong",
+                "propertyValue": "player.shuffle",
                 "propertySubPhrases": [
-                  "let's jam",
-                  "to a specific song",
+                  "shuffle",
+                  "the playlist",
                   "on the speakers"
                 ]
               },
               {
-                "propertyValue": "player.playAlbum",
+                "propertyValue": "player.playNext",
                 "propertySubPhrases": [
-                  "let's enjoy",
-                  "an entire album",
+                  "play next",
+                  "track",
                   "on the speakers"
                 ]
               }
@@ -14315,10 +14634,10 @@
                 ]
               },
               {
-                "propertyValue": "player.playFavorites",
+                "propertyValue": "player.playSong",
                 "propertySubPhrases": [
                   "let's get this party started",
-                  "with my favorite tracks!"
+                  "with a sick track!"
                 ]
               }
             ]
@@ -14491,7 +14810,7 @@
             "synonyms": [
               "some",
               "a bit of",
-              "a little"
+              "a little of"
             ],
             "category": "filler",
             "isOptional": true
@@ -14566,16 +14885,6 @@
           }
         ]
       }
-    }
-  ],
-  "failed": [
-    {
-      "request": "Could you turn on the music, please?",
-      "action": {
-        "fullActionName": "player.playRandom",
-        "parameters": {}
-      },
-      "message": "Failed Explanation: JSON validation failed: Type '{}' is not assignable to type 'PropertyValuetype'.\n{\n  \"properties\": [\n    {\n      \"name\": \"fullActionName\",\n      \"value\": \"player.playRandom\",\n      \"substrings\": [\"turn on the music\"],\n      \"implied\": true\n    },\n    {\n      \"name\": \"parameters\",\n      \"value\": {},\n      \"isImplicit\": true\n    }\n  ]\n}"
     }
   ]
 }

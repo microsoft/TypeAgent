@@ -65,8 +65,8 @@
           {
             "text": "would be perfect",
             "synonyms": [
-              "would be ideal",
               "would be great",
+              "would be ideal",
               "would be excellent"
             ],
             "category": "confirmation",
@@ -143,7 +143,7 @@
             "name": "fullActionName",
             "value": "player.changeVolume",
             "substrings": [
-              "Adjust the volume up by 30%."
+              "Adjust the volume up"
             ],
             "implied": true
           },
@@ -158,25 +158,13 @@
         ],
         "subPhrases": [
           {
-            "text": "Adjust",
+            "text": "Adjust the volume up",
             "synonyms": [
-              "Change",
-              "Modify",
-              "Alter"
+              "Increase the volume",
+              "Raise the volume",
+              "Turn up the volume"
             ],
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
-          },
-          {
-            "text": "the volume up",
-            "synonyms": [
-              "the sound level",
-              "the audio",
-              "the loudness"
-            ],
-            "category": "object",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -185,8 +173,8 @@
             "text": "by 30%",
             "synonyms": [
               "to 30%",
-              "at 30%",
-              "with 30%"
+              "up 30%",
+              "increase by 30%"
             ],
             "category": "parameter",
             "propertyNames": [
@@ -199,29 +187,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.changeVolume",
             "propertySubPhrases": [
-              "Adjust",
-              "the volume up"
+              "Adjust the volume up"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "Increase",
-                  "the volume"
+                  "Increase the volume"
                 ]
               },
               {
                 "propertyValue": "player.raiseVolume",
                 "propertySubPhrases": [
-                  "Raise",
-                  "the volume"
+                  "Raise the volume"
                 ]
               },
               {
                 "propertyValue": "player.turnUpVolume",
                 "propertySubPhrases": [
-                  "Turn up",
-                  "the volume"
+                  "Turn up the volume"
                 ]
               }
             ]
@@ -288,8 +272,8 @@
             "text": "Alter the sound level",
             "synonyms": [
               "Change the volume",
-              "Adjust the sound level",
-              "Modify the volume"
+              "Adjust the sound",
+              "Modify the audio level"
             ],
             "category": "command",
             "propertyNames": [
@@ -303,7 +287,7 @@
               "raise it by 10%",
               "boost it by 10%"
             ],
-            "category": "command",
+            "category": "parameter",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -345,21 +329,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": 20,
-                "propertySubPhrases": [
-                  "increase it by 20%"
-                ]
-              },
-              {
                 "propertyValue": 5,
                 "propertySubPhrases": [
-                  "raise it by 5%"
+                  "increase it by 5%"
                 ]
               },
               {
                 "propertyValue": 15,
                 "propertySubPhrases": [
-                  "boost it by 15%"
+                  "raise it by 15%"
+                ]
+              },
+              {
+                "propertyValue": 20,
+                "propertySubPhrases": [
+                  "boost it by 20%"
                 ]
               }
             ]
@@ -411,8 +395,8 @@
             "text": "by 30%",
             "synonyms": [
               "to 30%",
-              "up to 30%",
-              "by thirty percent"
+              "up by 30%",
+              "increase by 30%"
             ],
             "category": "parameter",
             "propertyNames": [
@@ -491,51 +475,47 @@
           {
             "name": "fullActionName",
             "value": "player.changeVolume",
-            "substrings": [
-              "Boost the volume"
-            ],
+            "substrings": [],
             "implied": true
           },
           {
             "name": "parameters.volumeChangePercentage",
             "value": 30,
             "substrings": [
-              "30%"
+              "Boost the volume by a cool 30%."
             ],
             "implied": false
           }
         ],
         "subPhrases": [
           {
-            "text": "Boost the volume",
+            "text": "Boost",
             "synonyms": [
-              "Increase the volume",
-              "Raise the volume",
-              "Turn up the volume"
+              "Increase",
+              "Raise",
+              "Amplify"
             ],
             "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "propertyNames": []
           },
           {
-            "text": "by a cool",
+            "text": "the volume",
             "synonyms": [
-              "by exactly",
-              "by precisely",
-              "by an exact"
+              "sound level",
+              "audio level",
+              "loudness"
             ],
-            "category": "filler",
-            "isOptional": true
+            "category": "object",
+            "propertyNames": []
           },
           {
-            "text": "30%",
+            "text": "by a cool 30%",
             "synonyms": [
-              "thirty percent",
-              "30 percent",
-              "30%"
+              "by 30%",
+              "by an impressive 30%",
+              "by a significant 30%"
             ],
-            "category": "value",
+            "category": "measurement",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -543,55 +523,34 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.changeVolume",
-            "propertySubPhrases": [
-              "Boost the volume"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.increaseVolume",
-                "propertySubPhrases": [
-                  "Increase the volume"
-                ]
-              },
-              {
-                "propertyValue": "player.raiseVolume",
-                "propertySubPhrases": [
-                  "Raise the volume"
-                ]
-              },
-              {
-                "propertyValue": "player.amplifyVolume",
-                "propertySubPhrases": [
-                  "Amplify the volume"
-                ]
-              }
-            ]
-          },
-          {
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": 30,
             "propertySubPhrases": [
-              "30%"
+              "by a cool 30%"
             ],
             "alternatives": [
               {
+                "propertyValue": 10,
+                "propertySubPhrases": [
+                  "by a cool 10%"
+                ]
+              },
+              {
                 "propertyValue": 20,
                 "propertySubPhrases": [
-                  "20%"
+                  "by a cool 20%"
+                ]
+              },
+              {
+                "propertyValue": 40,
+                "propertySubPhrases": [
+                  "by a cool 40%"
                 ]
               },
               {
                 "propertyValue": 50,
                 "propertySubPhrases": [
-                  "50%"
-                ]
-              },
-              {
-                "propertyValue": 10,
-                "propertySubPhrases": [
-                  "10%"
+                  "by a cool 50%"
                 ]
               }
             ]
@@ -612,16 +571,14 @@
           {
             "name": "fullActionName",
             "value": "player.changeVolume",
-            "substrings": [
-              "Can we get the sound level up"
-            ],
+            "substrings": [],
             "implied": true
           },
           {
             "name": "parameters.volumeChangePercentage",
             "value": 10,
             "substrings": [
-              "10%"
+              "up by a decent 10%"
             ],
             "implied": false
           }
@@ -638,35 +595,23 @@
             "isOptional": true
           },
           {
-            "text": "the sound level up",
+            "text": "the sound level",
             "synonyms": [
-              "the volume increased",
-              "the audio level raised",
-              "the sound volume up"
+              "the volume",
+              "the audio level",
+              "the sound"
             ],
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "category": "context",
+            "isOptional": false
           },
           {
-            "text": "by a decent",
+            "text": "up by a decent 10%",
             "synonyms": [
-              "by a good",
-              "by an adequate",
-              "by a sufficient"
+              "increased by a decent 10%",
+              "raised by a decent 10%",
+              "up by a good 10%"
             ],
-            "category": "filler",
-            "isOptional": true
-          },
-          {
-            "text": "10%",
-            "synonyms": [
-              "ten percent",
-              "10 percent",
-              "a 10% increase"
-            ],
-            "category": "quantity",
+            "category": "volume change",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -674,55 +619,28 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.changeVolume",
-            "propertySubPhrases": [
-              "the sound level up"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.increaseVolume",
-                "propertySubPhrases": [
-                  "increase the volume"
-                ]
-              },
-              {
-                "propertyValue": "player.raiseVolume",
-                "propertySubPhrases": [
-                  "raise the volume"
-                ]
-              },
-              {
-                "propertyValue": "player.adjustVolume",
-                "propertySubPhrases": [
-                  "adjust the volume"
-                ]
-              }
-            ]
-          },
-          {
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": 10,
             "propertySubPhrases": [
-              "10%"
+              "up by a decent 10%"
             ],
             "alternatives": [
               {
                 "propertyValue": 5,
                 "propertySubPhrases": [
-                  "5%"
+                  "up by a decent 5%"
                 ]
               },
               {
                 "propertyValue": 15,
                 "propertySubPhrases": [
-                  "15%"
+                  "up by a decent 15%"
                 ]
               },
               {
                 "propertyValue": 20,
                 "propertySubPhrases": [
-                  "20%"
+                  "up by a decent 20%"
                 ]
               }
             ]
@@ -746,7 +664,7 @@
             "substrings": [
               "Can we have the audio 20% down?"
             ],
-            "implied": false
+            "implied": true
           },
           {
             "name": "parameters.volumeChangePercentage",
@@ -777,16 +695,14 @@
               "the audio level"
             ],
             "category": "subject",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "propertyNames": []
           },
           {
             "text": "20%",
             "synonyms": [
               "twenty percent",
               "20 percent",
-              "a fifth"
+              "a 20%"
             ],
             "category": "quantity",
             "propertyNames": [
@@ -807,33 +723,6 @@
           }
         ],
         "propertyAlternatives": [
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.changeVolume",
-            "propertySubPhrases": [
-              "the audio"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.mute",
-                "propertySubPhrases": [
-                  "mute the audio"
-                ]
-              },
-              {
-                "propertyValue": "player.unmute",
-                "propertySubPhrases": [
-                  "unmute the audio"
-                ]
-              },
-              {
-                "propertyValue": "player.pause",
-                "propertySubPhrases": [
-                  "pause the audio"
-                ]
-              }
-            ]
-          },
           {
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -20,
@@ -857,10 +746,10 @@
                 ]
               },
               {
-                "propertyValue": 20,
+                "propertyValue": -50,
                 "propertySubPhrases": [
-                  "20%",
-                  "up"
+                  "50%",
+                  "down"
                 ]
               }
             ]
@@ -877,7 +766,7 @@
                 "substrings": [
                   "Can we have the audio 20% down?"
                 ],
-                "implied": false
+                "implied": true
               },
               {
                 "name": "parameters.volumeChangePercentage",
@@ -891,78 +780,6 @@
           },
           "correction": [
             "Value -20 for property 'parameters.volumeChangePercentage' doesn't match the number 20 in the substring '20% down'. Missing other substring to explain the value."
-          ]
-        },
-        {
-          "data": {
-            "properties": [
-              {
-                "name": "fullActionName",
-                "value": "player.changeVolume",
-                "substrings": [
-                  "Can we have the audio 20% down?"
-                ],
-                "implied": false
-              },
-              {
-                "name": "parameters.volumeChangePercentage",
-                "value": -20,
-                "substrings": [
-                  "20%",
-                  "down"
-                ],
-                "implied": false
-              }
-            ],
-            "subPhrases": [
-              {
-                "text": "Can we have",
-                "synonyms": [
-                  "Could we get",
-                  "May we have",
-                  "Is it possible to get"
-                ],
-                "category": "politeness",
-                "isOptional": true
-              },
-              {
-                "text": "the audio",
-                "synonyms": [
-                  "the sound",
-                  "the volume",
-                  "the audio level"
-                ],
-                "category": "subject",
-                "propertyNames": []
-              },
-              {
-                "text": "20%",
-                "synonyms": [
-                  "twenty percent",
-                  "20 percent",
-                  "a fifth"
-                ],
-                "category": "quantity",
-                "propertyNames": [
-                  "parameters.volumeChangePercentage"
-                ]
-              },
-              {
-                "text": "down",
-                "synonyms": [
-                  "lower",
-                  "decrease",
-                  "reduce"
-                ],
-                "category": "direction",
-                "propertyNames": [
-                  "parameters.volumeChangePercentage"
-                ]
-              }
-            ]
-          },
-          "correction": [
-            "Property 'fullActionName' is expected to be explicit and should be included as a property name for a sub-phrase"
           ]
         }
       ]
@@ -1017,23 +834,13 @@
             ]
           },
           {
-            "text": "by a tiny",
+            "text": "by a tiny 5%",
             "synonyms": [
-              "by a small",
-              "by a little",
-              "by a slight"
+              "by a small 5%",
+              "by a little 5%",
+              "by a slight 5%"
             ],
-            "category": "modifier",
-            "isOptional": true
-          },
-          {
-            "text": "5%",
-            "synonyms": [
-              "five percent",
-              "5 percent",
-              "5 pct"
-            ],
-            "category": "amount",
+            "category": "magnitude",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -1045,28 +852,35 @@
             "propertyValue": -5,
             "propertySubPhrases": [
               "trim down the volume",
-              "5%"
+              "by a tiny 5%"
             ],
             "alternatives": [
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
                   "trim down the volume",
-                  "10%"
+                  "by a tiny 10%"
                 ]
               },
               {
-                "propertyValue": -15,
+                "propertyValue": -3,
                 "propertySubPhrases": [
                   "trim down the volume",
-                  "15%"
+                  "by a tiny 3%"
                 ]
               },
               {
-                "propertyValue": -20,
+                "propertyValue": -1,
                 "propertySubPhrases": [
                   "trim down the volume",
-                  "20%"
+                  "by a tiny 1%"
+                ]
+              },
+              {
+                "propertyValue": -7,
+                "propertySubPhrases": [
+                  "trim down the volume",
+                  "by a tiny 7%"
                 ]
               }
             ]
@@ -1094,8 +908,7 @@
             "name": "parameters.volumeChangePercentage",
             "value": 10,
             "substrings": [
-              "jack up the sound level",
-              "10%"
+              "jack up the sound level by a strong 10%"
             ],
             "implied": false
           }
@@ -1112,25 +925,13 @@
             "isOptional": true
           },
           {
-            "text": "jack up the sound level",
+            "text": "jack up the sound level by a strong 10%",
             "synonyms": [
-              "increase the volume",
-              "raise the sound level",
-              "turn up the volume"
+              "increase the volume by 10%",
+              "raise the sound level by 10%",
+              "boost the volume by 10%"
             ],
-            "category": "action",
-            "propertyNames": [
-              "parameters.volumeChangePercentage"
-            ]
-          },
-          {
-            "text": "by a strong 10%",
-            "synonyms": [
-              "by a solid 10%",
-              "by a full 10%",
-              "by exactly 10%"
-            ],
-            "category": "magnitude",
+            "category": "volume change",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -1141,29 +942,25 @@
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": 10,
             "propertySubPhrases": [
-              "jack up the sound level",
-              "by a strong 10%"
+              "jack up the sound level by a strong 10%"
             ],
             "alternatives": [
               {
                 "propertyValue": 5,
                 "propertySubPhrases": [
-                  "increase the volume",
-                  "by 5%"
+                  "jack up the sound level by a strong 5%"
                 ]
               },
               {
                 "propertyValue": 15,
                 "propertySubPhrases": [
-                  "raise the sound level",
-                  "by 15%"
+                  "jack up the sound level by a strong 15%"
                 ]
               },
               {
                 "propertyValue": 20,
                 "propertySubPhrases": [
-                  "boost the audio",
-                  "by 20%"
+                  "jack up the sound level by a strong 20%"
                 ]
               }
             ]
@@ -1193,7 +990,7 @@
             "name": "parameters.volumeChangePercentage",
             "value": 5,
             "substrings": [
-              "by 5%"
+              "5%"
             ],
             "implied": false
           }
@@ -1224,11 +1021,11 @@
           {
             "text": "by 5%",
             "synonyms": [
-              "by five percent",
-              "by 5 percent",
-              "by 5 pct"
+              "to 5%",
+              "up to 5%",
+              "increase by 5%"
             ],
-            "category": "quantity",
+            "category": "measurement",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -1315,10 +1112,10 @@
             "name": "parameters.volumeChangePercentage",
             "value": -5,
             "substrings": [
-              "shave off",
-              "5%"
+              "shave off 5%",
+              "from"
             ],
-            "implied": true
+            "implied": false
           }
         ],
         "subPhrases": [
@@ -1341,8 +1138,7 @@
             ],
             "category": "action",
             "propertyNames": [
-              "fullActionName",
-              "parameters.volumeChangePercentage"
+              "fullActionName"
             ]
           },
           {
@@ -1358,13 +1154,26 @@
             ]
           },
           {
-            "text": "from the volume",
+            "text": "from",
             "synonyms": [
-              "of the volume",
-              "on the volume",
-              "in the volume"
+              "of",
+              "off",
+              "on"
             ],
-            "category": "context",
+            "category": "preposition",
+            "isOptional": true,
+            "propertyNames": [
+              "parameters.volumeChangePercentage"
+            ]
+          },
+          {
+            "text": "the volume",
+            "synonyms": [
+              "volume",
+              "sound level",
+              "audio level"
+            ],
+            "category": "object",
             "propertyNames": [
               "fullActionName"
             ]
@@ -1376,16 +1185,9 @@
             "propertyValue": "player.changeVolume",
             "propertySubPhrases": [
               "shave off",
-              "from the volume"
+              "the volume"
             ],
             "alternatives": [
-              {
-                "propertyValue": "player.increaseVolume",
-                "propertySubPhrases": [
-                  "increase",
-                  "the volume"
-                ]
-              },
               {
                 "propertyValue": "player.decreaseVolume",
                 "propertySubPhrases": [
@@ -1394,9 +1196,16 @@
                 ]
               },
               {
-                "propertyValue": "player.muteVolume",
+                "propertyValue": "player.lowerVolume",
                 "propertySubPhrases": [
-                  "mute",
+                  "lower",
+                  "the volume"
+                ]
+              },
+              {
+                "propertyValue": "player.reduceVolume",
+                "propertySubPhrases": [
+                  "reduce",
                   "the volume"
                 ]
               }
@@ -1406,29 +1215,29 @@
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -5,
             "propertySubPhrases": [
-              "shave off",
-              "5%"
+              "5%",
+              "from"
             ],
             "alternatives": [
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
-                  "reduce",
-                  "10%"
+                  "10%",
+                  "from"
                 ]
               },
               {
                 "propertyValue": -15,
                 "propertySubPhrases": [
-                  "lower",
-                  "15%"
+                  "15%",
+                  "from"
                 ]
               },
               {
                 "propertyValue": -20,
                 "propertySubPhrases": [
-                  "cut",
-                  "20%"
+                  "20%",
+                  "from"
                 ]
               }
             ]
@@ -1452,14 +1261,152 @@
                 "name": "parameters.volumeChangePercentage",
                 "value": -5,
                 "substrings": [
-                  "5%"
+                  "shave off 5%"
                 ],
-                "implied": true
+                "implied": false
               }
             ]
           },
           "correction": [
-            "Value -5 for property 'parameters.volumeChangePercentage' doesn't match the number 5 in the substring '5%'. Missing other substring to explain the value."
+            "Value -5 for property 'parameters.volumeChangePercentage' doesn't match the number 5 in the substring 'shave off 5%'. Missing other substring to explain the value."
+          ]
+        },
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "player.changeVolume",
+                "substrings": [
+                  "shave off",
+                  "volume"
+                ],
+                "implied": true
+              },
+              {
+                "name": "parameters.volumeChangePercentage",
+                "value": -5,
+                "substrings": [
+                  "shave off 5%",
+                  "-"
+                ],
+                "implied": false
+              }
+            ]
+          },
+          "correction": [
+            "Substring '-' for property 'parameters.volumeChangePercentage' not found in the request string. Substring must be exact copy of part of the original request and is not changed by correcting misspelling or grammar."
+          ]
+        },
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "player.changeVolume",
+                "substrings": [
+                  "shave off",
+                  "volume"
+                ],
+                "implied": true
+              },
+              {
+                "name": "parameters.volumeChangePercentage",
+                "value": -5,
+                "substrings": [
+                  "shave off 5%"
+                ],
+                "implied": false
+              }
+            ]
+          },
+          "correction": [
+            "Value -5 for property 'parameters.volumeChangePercentage' doesn't match the number 5 in the substring 'shave off 5%'. Missing other substring to explain the value."
+          ]
+        },
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "player.changeVolume",
+                "substrings": [
+                  "shave off",
+                  "volume"
+                ],
+                "implied": true
+              },
+              {
+                "name": "parameters.volumeChangePercentage",
+                "value": -5,
+                "substrings": [
+                  "shave off 5%",
+                  "from"
+                ],
+                "implied": false
+              }
+            ],
+            "subPhrases": [
+              {
+                "text": "Can you",
+                "synonyms": [
+                  "Could you",
+                  "Would you",
+                  "Will you"
+                ],
+                "category": "politeness",
+                "isOptional": true
+              },
+              {
+                "text": "shave off",
+                "synonyms": [
+                  "reduce",
+                  "decrease",
+                  "lower"
+                ],
+                "category": "action",
+                "propertyNames": [
+                  "fullActionName"
+                ]
+              },
+              {
+                "text": "5%",
+                "synonyms": [
+                  "five percent",
+                  "5 percent",
+                  "5 pct"
+                ],
+                "category": "quantity",
+                "propertyNames": [
+                  "parameters.volumeChangePercentage"
+                ]
+              },
+              {
+                "text": "from",
+                "synonyms": [
+                  "of",
+                  "off",
+                  "on"
+                ],
+                "category": "preposition",
+                "isOptional": true
+              },
+              {
+                "text": "the volume",
+                "synonyms": [
+                  "volume",
+                  "sound level",
+                  "audio level"
+                ],
+                "category": "object",
+                "propertyNames": [
+                  "fullActionName"
+                ]
+              }
+            ]
+          },
+          "correction": [
+            "Explicit property 'parameters.volumeChangePercentage' must be included as property names for all subphrases that contain the substring 'from'"
           ]
         }
       ]
@@ -1497,7 +1444,7 @@
             "synonyms": [
               "Adjust the volume",
               "Modify the sound level",
-              "Alter the audio level"
+              "Alter the volume"
             ],
             "category": "command",
             "propertyNames": [
@@ -1511,7 +1458,7 @@
               "raise it by 10%",
               "boost it by 10%"
             ],
-            "category": "command",
+            "category": "parameter",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -1588,16 +1535,14 @@
           {
             "name": "fullActionName",
             "value": "player.changeVolume",
-            "substrings": [
-              "amplify the volume"
-            ],
+            "substrings": [],
             "implied": true
           },
           {
             "name": "parameters.volumeChangePercentage",
             "value": 25,
             "substrings": [
-              "25%"
+              "amplify the volume by a sweet 25%"
             ],
             "implied": false
           }
@@ -1608,41 +1553,19 @@
             "synonyms": [
               "Can you please",
               "Would you kindly",
-              "Please"
+              "Please could you"
             ],
             "category": "politeness",
             "isOptional": true
           },
           {
-            "text": "amplify the volume",
+            "text": "amplify the volume by a sweet 25%",
             "synonyms": [
-              "increase the volume",
-              "raise the volume",
-              "turn up the volume"
+              "increase the volume by 25%",
+              "raise the volume by 25%",
+              "boost the volume by 25%"
             ],
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
-          },
-          {
-            "text": "by a sweet",
-            "synonyms": [
-              "by a nice",
-              "by a cool",
-              "by a neat"
-            ],
-            "category": "filler",
-            "isOptional": true
-          },
-          {
-            "text": "25%",
-            "synonyms": [
-              "twenty-five percent",
-              "25 percent",
-              "25% increase"
-            ],
-            "category": "value",
+            "category": "volume adjustment",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -1650,55 +1573,28 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.changeVolume",
-            "propertySubPhrases": [
-              "amplify the volume"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.increaseVolume",
-                "propertySubPhrases": [
-                  "increase the volume"
-                ]
-              },
-              {
-                "propertyValue": "player.raiseVolume",
-                "propertySubPhrases": [
-                  "raise the volume"
-                ]
-              },
-              {
-                "propertyValue": "player.boostVolume",
-                "propertySubPhrases": [
-                  "boost the volume"
-                ]
-              }
-            ]
-          },
-          {
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": 25,
             "propertySubPhrases": [
-              "25%"
+              "amplify the volume by a sweet 25%"
             ],
             "alternatives": [
               {
                 "propertyValue": 10,
                 "propertySubPhrases": [
-                  "10%"
+                  "amplify the volume by a sweet 10%"
                 ]
               },
               {
                 "propertyValue": 50,
                 "propertySubPhrases": [
-                  "50%"
+                  "amplify the volume by a sweet 50%"
                 ]
               },
               {
                 "propertyValue": 75,
                 "propertySubPhrases": [
-                  "75%"
+                  "amplify the volume by a sweet 75%"
                 ]
               }
             ]
@@ -1749,7 +1645,7 @@
             "synonyms": [
               "increase the volume",
               "raise the sound level",
-              "turn up the audio"
+              "boost the audio"
             ],
             "category": "action",
             "propertyNames": [
@@ -1796,13 +1692,13 @@
               {
                 "propertyValue": "player.raiseVolume",
                 "propertySubPhrases": [
-                  "raise the audio level"
+                  "raise the volume"
                 ]
               },
               {
                 "propertyValue": "player.boostVolume",
                 "propertySubPhrases": [
-                  "boost the sound level"
+                  "boost the volume"
                 ]
               }
             ]
@@ -1850,15 +1746,17 @@
           {
             "name": "fullActionName",
             "value": "player.changeVolume",
-            "substrings": [],
+            "substrings": [
+              "snip the volume"
+            ],
             "implied": true
           },
           {
             "name": "parameters.volumeChangePercentage",
             "value": -5,
             "substrings": [
-              "snip the volume",
-              "by just 5%"
+              "snip",
+              "5%"
             ],
             "implied": false
           }
@@ -1878,22 +1776,33 @@
             "text": "snip the volume",
             "synonyms": [
               "reduce the volume",
-              "decrease the volume",
-              "lower the volume"
+              "lower the volume",
+              "decrease the volume"
             ],
             "category": "action",
             "propertyNames": [
+              "fullActionName",
               "parameters.volumeChangePercentage"
             ]
           },
           {
-            "text": "by just 5%",
+            "text": "by just",
             "synonyms": [
-              "by 5%",
-              "by only 5%",
-              "by exactly 5%"
+              "by only",
+              "by exactly",
+              "by"
             ],
-            "category": "amount",
+            "category": "preposition",
+            "isOptional": true
+          },
+          {
+            "text": "5%",
+            "synonyms": [
+              "five percent",
+              "5 percent",
+              "5 pct"
+            ],
+            "category": "quantity",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -1901,32 +1810,59 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.changeVolume",
+            "propertySubPhrases": [
+              "snip the volume"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.increaseVolume",
+                "propertySubPhrases": [
+                  "increase the volume"
+                ]
+              },
+              {
+                "propertyValue": "player.decreaseVolume",
+                "propertySubPhrases": [
+                  "decrease the volume"
+                ]
+              },
+              {
+                "propertyValue": "player.muteVolume",
+                "propertySubPhrases": [
+                  "mute the volume"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -5,
             "propertySubPhrases": [
               "snip the volume",
-              "by just 5%"
+              "5%"
             ],
             "alternatives": [
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
                   "snip the volume",
-                  "by just 10%"
+                  "10%"
                 ]
               },
               {
                 "propertyValue": -15,
                 "propertySubPhrases": [
                   "snip the volume",
-                  "by just 15%"
+                  "15%"
                 ]
               },
               {
                 "propertyValue": -20,
                 "propertySubPhrases": [
                   "snip the volume",
-                  "by just 20%"
+                  "20%"
                 ]
               }
             ]
@@ -1940,21 +1876,95 @@
               {
                 "name": "fullActionName",
                 "value": "player.changeVolume",
-                "substrings": [],
+                "substrings": [
+                  "snip the volume"
+                ],
                 "implied": true
               },
               {
                 "name": "parameters.volumeChangePercentage",
                 "value": -5,
                 "substrings": [
-                  "snip the volume by just 5%"
+                  "5%"
                 ],
                 "implied": false
               }
             ]
           },
           "correction": [
-            "Value -5 for property 'parameters.volumeChangePercentage' doesn't match the number 5 in the substring 'snip the volume by just 5%'. Missing other substring to explain the value."
+            "Value -5 for property 'parameters.volumeChangePercentage' doesn't match the number 5 in the substring '5%'. Missing other substring to explain the value."
+          ]
+        },
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "player.changeVolume",
+                "substrings": [
+                  "snip the volume"
+                ],
+                "implied": true
+              },
+              {
+                "name": "parameters.volumeChangePercentage",
+                "value": -5,
+                "substrings": [
+                  "snip",
+                  "5%"
+                ],
+                "implied": false
+              }
+            ],
+            "subPhrases": [
+              {
+                "text": "Could you",
+                "synonyms": [
+                  "Can you",
+                  "Would you",
+                  "Will you"
+                ],
+                "category": "politeness",
+                "isOptional": true
+              },
+              {
+                "text": "snip the volume",
+                "synonyms": [
+                  "reduce the volume",
+                  "lower the volume",
+                  "decrease the volume"
+                ],
+                "category": "action",
+                "propertyNames": [
+                  "fullActionName"
+                ]
+              },
+              {
+                "text": "by just",
+                "synonyms": [
+                  "by only",
+                  "by exactly",
+                  "by"
+                ],
+                "category": "preposition",
+                "isOptional": true
+              },
+              {
+                "text": "5%",
+                "synonyms": [
+                  "five percent",
+                  "5 percent",
+                  "5 pct"
+                ],
+                "category": "quantity",
+                "propertyNames": [
+                  "parameters.volumeChangePercentage"
+                ]
+              }
+            ]
+          },
+          "correction": [
+            "Explicit property 'parameters.volumeChangePercentage' must be included as property names for all subphrases that contain the substring 'snip'"
           ]
         }
       ]
@@ -2079,17 +2089,17 @@
                 ]
               },
               {
-                "propertyValue": -3,
+                "propertyValue": -15,
                 "propertySubPhrases": [
                   "down",
-                  "by 3%"
+                  "by 15%"
                 ]
               },
               {
-                "propertyValue": -7,
+                "propertyValue": -20,
                 "propertySubPhrases": [
                   "down",
-                  "by 7%"
+                  "by 20%"
                 ]
               }
             ]
@@ -2146,7 +2156,7 @@
             "name": "parameters.volumeChangePercentage",
             "value": 10,
             "substrings": [
-              "by 10%"
+              "10%"
             ],
             "implied": false
           }
@@ -2177,11 +2187,11 @@
           {
             "text": "by 10%",
             "synonyms": [
-              "by ten percent",
-              "by 10 percent",
-              "by 10% more"
+              "to 10%",
+              "at 10%",
+              "with 10%"
             ],
-            "category": "amount",
+            "category": "measurement",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -2291,7 +2301,7 @@
             "text": "on the volume",
             "synonyms": [
               "the volume",
-              "volume",
+              "volume level",
               "sound level"
             ],
             "category": "object",
@@ -2302,9 +2312,9 @@
           {
             "text": "by 10%",
             "synonyms": [
-              "10 percent",
-              "ten percent",
-              "by ten percent"
+              "by ten percent",
+              "by 10 percent",
+              "by 10%"
             ],
             "category": "magnitude",
             "propertyNames": [
@@ -2421,7 +2431,7 @@
             "substrings": [
               "Decrease the volume by 10%."
             ],
-            "implied": true
+            "implied": false
           },
           {
             "name": "parameters.volumeChangePercentage",
@@ -2443,15 +2453,16 @@
             ],
             "category": "action",
             "propertyNames": [
+              "fullActionName",
               "parameters.volumeChangePercentage"
             ]
           },
           {
             "text": "the volume by",
             "synonyms": [
-              "the sound level by",
-              "the audio level by",
-              "the loudness by"
+              "the sound by",
+              "the audio by",
+              "the noise by"
             ],
             "category": "preposition",
             "isOptional": true
@@ -2471,6 +2482,33 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.changeVolume",
+            "propertySubPhrases": [
+              "Decrease"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.increaseVolume",
+                "propertySubPhrases": [
+                  "Increase"
+                ]
+              },
+              {
+                "propertyValue": "player.muteVolume",
+                "propertySubPhrases": [
+                  "Mute"
+                ]
+              },
+              {
+                "propertyValue": "player.setVolume",
+                "propertySubPhrases": [
+                  "Set"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -10,
             "propertySubPhrases": [
@@ -2478,6 +2516,13 @@
               "10%"
             ],
             "alternatives": [
+              {
+                "propertyValue": -20,
+                "propertySubPhrases": [
+                  "Decrease",
+                  "20%"
+                ]
+              },
               {
                 "propertyValue": -5,
                 "propertySubPhrases": [
@@ -2490,13 +2535,6 @@
                 "propertySubPhrases": [
                   "Decrease",
                   "15%"
-                ]
-              },
-              {
-                "propertyValue": -20,
-                "propertySubPhrases": [
-                  "Decrease",
-                  "20%"
                 ]
               }
             ]
@@ -2513,7 +2551,7 @@
                 "substrings": [
                   "Decrease the volume by 10%."
                 ],
-                "implied": true
+                "implied": false
               },
               {
                 "name": "parameters.volumeChangePercentage",
@@ -2527,6 +2565,68 @@
           },
           "correction": [
             "Value -10 for property 'parameters.volumeChangePercentage' doesn't match the number 10 in the substring 'Decrease the volume by 10%.'. Missing other substring to explain the value."
+          ]
+        },
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "player.changeVolume",
+                "substrings": [
+                  "Decrease the volume by 10%."
+                ],
+                "implied": false
+              },
+              {
+                "name": "parameters.volumeChangePercentage",
+                "value": -10,
+                "substrings": [
+                  "Decrease",
+                  "10%"
+                ],
+                "implied": false
+              }
+            ],
+            "subPhrases": [
+              {
+                "text": "Decrease",
+                "synonyms": [
+                  "Lower",
+                  "Reduce",
+                  "Drop"
+                ],
+                "category": "action",
+                "propertyNames": [
+                  "parameters.volumeChangePercentage"
+                ]
+              },
+              {
+                "text": "the volume by",
+                "synonyms": [
+                  "the sound by",
+                  "the audio by",
+                  "the noise by"
+                ],
+                "category": "preposition",
+                "isOptional": true
+              },
+              {
+                "text": "10%",
+                "synonyms": [
+                  "ten percent",
+                  "10 percent",
+                  "10%"
+                ],
+                "category": "value",
+                "propertyNames": [
+                  "parameters.volumeChangePercentage"
+                ]
+              }
+            ]
+          },
+          "correction": [
+            "Property 'fullActionName' is expected to be explicit and should be included as a property name for a sub-phrase"
           ]
         }
       ]
@@ -2553,35 +2653,24 @@
             "name": "parameters.volumeChangePercentage",
             "value": -10,
             "substrings": [
-              "Dial down",
-              "by 10%"
+              "by 10%",
+              "Dial down"
             ],
             "implied": false
           }
         ],
         "subPhrases": [
           {
-            "text": "Dial down",
+            "text": "Dial down the volume",
             "synonyms": [
-              "Lower",
-              "Decrease",
-              "Reduce"
+              "Lower the volume",
+              "Decrease the volume",
+              "Turn down the volume"
             ],
             "category": "command",
             "propertyNames": [
+              "fullActionName",
               "parameters.volumeChangePercentage"
-            ]
-          },
-          {
-            "text": "the volume",
-            "synonyms": [
-              "the sound",
-              "the audio",
-              "the noise"
-            ],
-            "category": "object",
-            "propertyNames": [
-              "fullActionName"
             ]
           },
           {
@@ -2589,7 +2678,7 @@
             "synonyms": [
               "by ten percent",
               "by 10 percent",
-              "by 10% points"
+              "by 10%"
             ],
             "category": "modifier",
             "propertyNames": [
@@ -2599,59 +2688,59 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.changeVolume",
+            "propertySubPhrases": [
+              "Dial down the volume"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.decreaseVolume",
+                "propertySubPhrases": [
+                  "Decrease the volume"
+                ]
+              },
+              {
+                "propertyValue": "player.lowerVolume",
+                "propertySubPhrases": [
+                  "Lower the volume"
+                ]
+              },
+              {
+                "propertyValue": "player.reduceVolume",
+                "propertySubPhrases": [
+                  "Reduce the volume"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -10,
             "propertySubPhrases": [
-              "Dial down",
+              "Dial down the volume",
               "by 10%"
             ],
             "alternatives": [
               {
                 "propertyValue": -5,
                 "propertySubPhrases": [
-                  "Dial down",
+                  "Dial down the volume",
                   "by 5%"
-                ]
-              },
-              {
-                "propertyValue": -20,
-                "propertySubPhrases": [
-                  "Dial down",
-                  "by 20%"
                 ]
               },
               {
                 "propertyValue": -15,
                 "propertySubPhrases": [
-                  "Dial down",
+                  "Dial down the volume",
                   "by 15%"
                 ]
-              }
-            ]
-          },
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.changeVolume",
-            "propertySubPhrases": [
-              "the volume"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.increaseVolume",
-                "propertySubPhrases": [
-                  "the volume up"
-                ]
               },
               {
-                "propertyValue": "player.muteVolume",
+                "propertyValue": -20,
                 "propertySubPhrases": [
-                  "the volume off"
-                ]
-              },
-              {
-                "propertyValue": "player.unmuteVolume",
-                "propertySubPhrases": [
-                  "the volume on"
+                  "Dial down the volume",
+                  "by 20%"
                 ]
               }
             ]
@@ -2682,6 +2771,58 @@
           },
           "correction": [
             "Value -10 for property 'parameters.volumeChangePercentage' doesn't match the number 10 in the substring 'by 10%'. Missing other substring to explain the value."
+          ]
+        },
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "player.changeVolume",
+                "substrings": [
+                  "Dial down the volume"
+                ],
+                "implied": true
+              },
+              {
+                "name": "parameters.volumeChangePercentage",
+                "value": -10,
+                "substrings": [
+                  "by 10%",
+                  "Dial down"
+                ],
+                "implied": false
+              }
+            ],
+            "subPhrases": [
+              {
+                "text": "Dial down the volume",
+                "synonyms": [
+                  "Lower the volume",
+                  "Decrease the volume",
+                  "Turn down the volume"
+                ],
+                "category": "command",
+                "propertyNames": [
+                  "fullActionName"
+                ]
+              },
+              {
+                "text": "by 10%",
+                "synonyms": [
+                  "by ten percent",
+                  "by 10 percent",
+                  "by 10%"
+                ],
+                "category": "modifier",
+                "propertyNames": [
+                  "parameters.volumeChangePercentage"
+                ]
+              }
+            ]
+          },
+          "correction": [
+            "Explicit property 'parameters.volumeChangePercentage' must be included as property names for all subphrases that contain the substring 'Dial down'"
           ]
         }
       ]
@@ -2731,9 +2872,9 @@
           {
             "text": "the volume",
             "synonyms": [
-              "volume level",
-              "sound level",
-              "audio level"
+              "the sound level",
+              "the audio",
+              "the loudness"
             ],
             "category": "object",
             "propertyNames": [
@@ -2763,23 +2904,23 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.increaseVolume",
+                "propertyValue": "player.lowerVolume",
                 "propertySubPhrases": [
-                  "Increase",
+                  "Lower",
                   "the volume"
                 ]
               },
               {
-                "propertyValue": "player.muteVolume",
+                "propertyValue": "player.decreaseVolume",
                 "propertySubPhrases": [
-                  "Mute",
+                  "Decrease",
                   "the volume"
                 ]
               },
               {
-                "propertyValue": "player.setVolume",
+                "propertyValue": "player.reduceVolume",
                 "propertySubPhrases": [
-                  "Set",
+                  "Reduce",
                   "the volume"
                 ]
               }
@@ -2794,13 +2935,6 @@
             ],
             "alternatives": [
               {
-                "propertyValue": -20,
-                "propertySubPhrases": [
-                  "Diminish",
-                  "by 20%"
-                ]
-              },
-              {
                 "propertyValue": -5,
                 "propertySubPhrases": [
                   "Diminish",
@@ -2812,6 +2946,13 @@
                 "propertySubPhrases": [
                   "Diminish",
                   "by 15%"
+                ]
+              },
+              {
+                "propertyValue": -20,
+                "propertySubPhrases": [
+                  "Diminish",
+                  "by 20%"
                 ]
               }
             ]
@@ -2871,7 +3012,7 @@
               "Diminish",
               "10%"
             ],
-            "implied": false
+            "implied": true
           }
         ],
         "subPhrases": [
@@ -2903,9 +3044,9 @@
           {
             "text": "by a small",
             "synonyms": [
+              "by a little",
               "by a slight",
-              "by a minor",
-              "by a little"
+              "by a minor"
             ],
             "category": "modifier",
             "isOptional": true
@@ -2915,7 +3056,7 @@
             "synonyms": [
               "ten percent",
               "10 percent",
-              "10%"
+              "10 per cent"
             ],
             "category": "quantity",
             "propertyNames": [
@@ -2964,17 +3105,17 @@
             ],
             "alternatives": [
               {
-                "propertyValue": -20,
-                "propertySubPhrases": [
-                  "Diminish",
-                  "20%"
-                ]
-              },
-              {
                 "propertyValue": -5,
                 "propertySubPhrases": [
                   "Diminish",
                   "5%"
+                ]
+              },
+              {
+                "propertyValue": -20,
+                "propertySubPhrases": [
+                  "Diminish",
+                  "20%"
                 ]
               },
               {
@@ -3006,7 +3147,7 @@
                 "substrings": [
                   "10%"
                 ],
-                "implied": false
+                "implied": true
               }
             ]
           },
@@ -3046,8 +3187,8 @@
           {
             "text": "Drop",
             "synonyms": [
-              "Lower",
               "Decrease",
+              "Lower",
               "Reduce"
             ],
             "category": "command",
@@ -3070,7 +3211,7 @@
             "synonyms": [
               "ten percent",
               "10 percent",
-              "10%"
+              "10 pct"
             ],
             "category": "percentage",
             "propertyNames": [
@@ -3171,7 +3312,7 @@
             "synonyms": [
               "Increase the sound level,",
               "Raise the volume,",
-              "Boost the audio,"
+              "Boost the audio level,"
             ],
             "category": "action",
             "propertyNames": [
@@ -3491,9 +3632,9 @@
           {
             "text": "by a smooth",
             "synonyms": [
-              "by exactly",
-              "by precisely",
-              "by an exact"
+              "by a nice",
+              "by a gentle",
+              "by a steady"
             ],
             "category": "filler",
             "isOptional": true
@@ -3522,13 +3663,13 @@
               {
                 "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "increasing the volume"
+                  "increase the volume"
                 ]
               },
               {
                 "propertyValue": "player.raiseVolume",
                 "propertySubPhrases": [
-                  "raising the volume"
+                  "raise the volume"
                 ]
               },
               {
@@ -3582,9 +3723,7 @@
           {
             "name": "fullActionName",
             "value": "player.changeVolume",
-            "substrings": [
-              "bring down the audio"
-            ],
+            "substrings": [],
             "implied": true
           },
           {
@@ -3605,7 +3744,7 @@
               "Carefully",
               "Gradually"
             ],
-            "category": "politeness",
+            "category": "adverb",
             "isOptional": true
           },
           {
@@ -3617,7 +3756,6 @@
             ],
             "category": "action",
             "propertyNames": [
-              "fullActionName",
               "parameters.volumeChangePercentage"
             ]
           },
@@ -3629,9 +3767,7 @@
               "the music"
             ],
             "category": "object",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "isOptional": true
           },
           {
             "text": "by 20%",
@@ -3640,44 +3776,13 @@
               "twenty percent",
               "by twenty percent"
             ],
-            "category": "magnitude",
+            "category": "measurement",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
           }
         ],
         "propertyAlternatives": [
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.changeVolume",
-            "propertySubPhrases": [
-              "bring down",
-              "the audio"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.lowerVolume",
-                "propertySubPhrases": [
-                  "lower",
-                  "the audio"
-                ]
-              },
-              {
-                "propertyValue": "player.decreaseVolume",
-                "propertySubPhrases": [
-                  "decrease",
-                  "the audio"
-                ]
-              },
-              {
-                "propertyValue": "player.reduceVolume",
-                "propertySubPhrases": [
-                  "reduce",
-                  "the audio"
-                ]
-              }
-            ]
-          },
           {
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -20,
@@ -3718,23 +3823,21 @@
               {
                 "name": "fullActionName",
                 "value": "player.changeVolume",
-                "substrings": [
-                  "bring down the audio"
-                ],
+                "substrings": [],
                 "implied": true
               },
               {
                 "name": "parameters.volumeChangePercentage",
                 "value": -20,
                 "substrings": [
-                  "20%"
+                  "bring down the audio by 20%"
                 ],
                 "implied": false
               }
             ]
           },
           "correction": [
-            "Value -20 for property 'parameters.volumeChangePercentage' doesn't match the number 20 in the substring '20%'. Missing other substring to explain the value."
+            "Value -20 for property 'parameters.volumeChangePercentage' doesn't match the number 20 in the substring 'bring down the audio by 20%'. Missing other substring to explain the value."
           ]
         }
       ]
@@ -3798,7 +3901,7 @@
               "by 5 percent",
               "by 5%"
             ],
-            "category": "modifier",
+            "category": "measurement",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -3942,7 +4045,7 @@
                   "by 5 percent",
                   "by 5%"
                 ],
-                "category": "modifier",
+                "category": "measurement",
                 "propertyNames": [
                   "parameters.volumeChangePercentage"
                 ]
@@ -4090,7 +4193,7 @@
             "synonyms": [
               "by ten percent",
               "by 10 percent",
-              "by 10% more"
+              "by a tenth"
             ],
             "category": "parameter",
             "propertyNames": [
@@ -4196,9 +4299,9 @@
           {
             "text": "a 20% decrease",
             "synonyms": [
-              "reduce by 20%",
-              "lower by 20%",
-              "cut by 20%"
+              "a 20 percent reduction",
+              "a 20% drop",
+              "a 20% cut"
             ],
             "category": "volume change",
             "propertyNames": [
@@ -4218,9 +4321,9 @@
           {
             "text": "would be ideal",
             "synonyms": [
-              "is preferred",
-              "is best",
-              "is optimal"
+              "would be perfect",
+              "would be great",
+              "would be best"
             ],
             "category": "preference",
             "isOptional": true
@@ -4311,9 +4414,9 @@
           {
             "text": "I'd appreciate it if you could",
             "synonyms": [
-              "Could you please",
-              "Would you mind",
-              "I would be grateful if you"
+              "I would be grateful if you could",
+              "It would be great if you could",
+              "I would appreciate it if you could"
             ],
             "category": "politeness",
             "isOptional": true
@@ -4384,7 +4487,7 @@
             "name": "parameters.volumeChangePercentage",
             "value": 25,
             "substrings": [
-              "25%"
+              "by 25%"
             ],
             "implied": false
           }
@@ -4393,9 +4496,9 @@
           {
             "text": "I'd be grateful if you could",
             "synonyms": [
-              "Please",
-              "Kindly",
-              "Would you mind"
+              "I would appreciate it if you could",
+              "It would be great if you could",
+              "Could you please"
             ],
             "category": "politeness",
             "isOptional": true
@@ -4416,8 +4519,8 @@
             "text": "by 25%",
             "synonyms": [
               "to 25%",
-              "up to 25%",
-              "at 25%"
+              "up by 25%",
+              "increase by 25%"
             ],
             "category": "parameter",
             "propertyNames": [
@@ -4577,9 +4680,9 @@
                 ]
               },
               {
-                "propertyValue": "player.amplifyVolume",
+                "propertyValue": "player.boostVolume",
                 "propertySubPhrases": [
-                  "amplify the volume"
+                  "boost the volume"
                 ]
               }
             ]
@@ -4666,9 +4769,9 @@
             "synonyms": [
               "twenty percent",
               "20 percent",
-              "by 20%"
+              "20% less"
             ],
-            "category": "percentage",
+            "category": "quantity",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -4680,7 +4783,7 @@
               "lower",
               "reduced"
             ],
-            "category": "volumeChange",
+            "category": "quality",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -4690,7 +4793,7 @@
             "synonyms": [
               "if you can",
               "if it's okay",
-              "if feasible"
+              "if it's possible"
             ],
             "category": "politeness",
             "isOptional": true
@@ -4778,7 +4881,7 @@
             "name": "parameters.volumeChangePercentage",
             "value": 20,
             "substrings": [
-              "by 20%"
+              "20%"
             ],
             "implied": false
           }
@@ -4809,9 +4912,9 @@
           {
             "text": "by 20%",
             "synonyms": [
-              "by twenty percent",
-              "by 20 percent",
-              "by 20% more"
+              "to 20%",
+              "up by 20%",
+              "increase by 20%"
             ],
             "category": "parameter",
             "propertyNames": [
@@ -4823,7 +4926,7 @@
             "synonyms": [
               "kindly",
               "if you don't mind",
-              "if you please"
+              "if possible"
             ],
             "category": "politeness",
             "isOptional": true
@@ -4840,19 +4943,19 @@
               {
                 "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "increase the volume"
+                  "increase the audio level"
                 ]
               },
               {
                 "propertyValue": "player.raiseVolume",
                 "propertySubPhrases": [
-                  "raise the volume"
+                  "raise the audio level"
                 ]
               },
               {
-                "propertyValue": "player.amplifySound",
+                "propertyValue": "player.amplifyVolume",
                 "propertySubPhrases": [
-                  "amplify the sound"
+                  "amplify the audio level"
                 ]
               }
             ]
@@ -4900,16 +5003,14 @@
           {
             "name": "fullActionName",
             "value": "player.changeVolume",
-            "substrings": [
-              "raise the volume"
-            ],
+            "substrings": [],
             "implied": true
           },
           {
             "name": "parameters.volumeChangePercentage",
             "value": 25,
             "substrings": [
-              "25%"
+              "raise the volume by a good 25%"
             ],
             "implied": false
           }
@@ -4926,35 +5027,13 @@
             "isOptional": true
           },
           {
-            "text": "raise the volume",
+            "text": "raise the volume by a good 25%",
             "synonyms": [
-              "increase the volume",
-              "turn up the volume",
-              "boost the volume"
+              "increase the volume by 25%",
+              "turn up the volume by 25%",
+              "boost the volume by 25%"
             ],
             "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
-          },
-          {
-            "text": "by a good",
-            "synonyms": [
-              "by about",
-              "by approximately",
-              "by around"
-            ],
-            "category": "filler",
-            "isOptional": true
-          },
-          {
-            "text": "25%",
-            "synonyms": [
-              "twenty-five percent",
-              "25 percent",
-              "25%"
-            ],
-            "category": "value",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -4962,55 +5041,28 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.changeVolume",
-            "propertySubPhrases": [
-              "raise the volume"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.increaseVolume",
-                "propertySubPhrases": [
-                  "increase the volume"
-                ]
-              },
-              {
-                "propertyValue": "player.turnUpVolume",
-                "propertySubPhrases": [
-                  "turn up the volume"
-                ]
-              },
-              {
-                "propertyValue": "player.boostVolume",
-                "propertySubPhrases": [
-                  "boost the volume"
-                ]
-              }
-            ]
-          },
-          {
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": 25,
             "propertySubPhrases": [
-              "25%"
+              "raise the volume by a good 25%"
             ],
             "alternatives": [
               {
                 "propertyValue": 10,
                 "propertySubPhrases": [
-                  "10%"
+                  "raise the volume by 10%"
                 ]
               },
               {
                 "propertyValue": 50,
                 "propertySubPhrases": [
-                  "50%"
+                  "raise the volume by 50%"
                 ]
               },
               {
                 "propertyValue": 75,
                 "propertySubPhrases": [
-                  "75%"
+                  "raise the volume by 75%"
                 ]
               }
             ]
@@ -5357,7 +5409,7 @@
             "synonyms": [
               "ten percent",
               "10 percent",
-              "10% increase"
+              "10%"
             ],
             "category": "quantity",
             "propertyNames": [
@@ -5575,7 +5627,7 @@
             "value": -20,
             "substrings": [
               "reduce",
-              "20%"
+              "the audio level by 20%"
             ],
             "implied": false
           }
@@ -5604,23 +5656,13 @@
             ]
           },
           {
-            "text": "the audio level by",
+            "text": "the audio level by 20%",
             "synonyms": [
-              "the sound level by",
-              "the volume by",
-              "the audio by"
+              "the volume by 20%",
+              "the sound level by 20%",
+              "the audio by 20%"
             ],
-            "category": "context",
-            "isOptional": true
-          },
-          {
-            "text": "20%",
-            "synonyms": [
-              "twenty percent",
-              "20 percent",
-              "20%"
-            ],
-            "category": "quantity",
+            "category": "specification",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -5632,28 +5674,28 @@
             "propertyValue": -20,
             "propertySubPhrases": [
               "reduce",
-              "20%"
+              "the audio level by 20%"
             ],
             "alternatives": [
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
                   "reduce",
-                  "10%"
+                  "the audio level by 10%"
                 ]
               },
               {
                 "propertyValue": -30,
                 "propertySubPhrases": [
                   "reduce",
-                  "30%"
+                  "the audio level by 30%"
                 ]
               },
               {
                 "propertyValue": -50,
                 "propertySubPhrases": [
                   "reduce",
-                  "50%"
+                  "the audio level by 50%"
                 ]
               }
             ]
@@ -5725,25 +5767,13 @@
             "isOptional": true
           },
           {
-            "text": "sweeten",
+            "text": "sweeten the volume",
             "synonyms": [
-              "increase",
-              "raise",
-              "boost"
+              "increase the volume",
+              "raise the volume",
+              "turn up the volume"
             ],
             "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
-          },
-          {
-            "text": "the volume",
-            "synonyms": [
-              "volume",
-              "sound level",
-              "audio"
-            ],
-            "category": "object",
             "propertyNames": [
               "fullActionName"
             ]
@@ -5752,7 +5782,7 @@
             "text": "by 25%",
             "synonyms": [
               "to 25%",
-              "up 25%",
+              "up to 25%",
               "increase by 25%"
             ],
             "category": "measurement",
@@ -5766,29 +5796,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.changeVolume",
             "propertySubPhrases": [
-              "sweeten",
-              "the volume"
+              "sweeten the volume"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "increase",
-                  "the volume"
+                  "increase the volume"
                 ]
               },
               {
-                "propertyValue": "player.decreaseVolume",
+                "propertyValue": "player.raiseVolume",
                 "propertySubPhrases": [
-                  "decrease",
-                  "the volume"
+                  "raise the volume"
                 ]
               },
               {
-                "propertyValue": "player.adjustVolume",
+                "propertyValue": "player.amplifyVolume",
                 "propertySubPhrases": [
-                  "adjust",
-                  "the volume"
+                  "amplify the volume"
                 ]
               }
             ]
@@ -5865,7 +5891,7 @@
             "text": "amplify the sound",
             "synonyms": [
               "increase the volume",
-              "raise the sound level",
+              "turn up the sound",
               "boost the audio"
             ],
             "category": "action",
@@ -5967,9 +5993,7 @@
           {
             "name": "fullActionName",
             "value": "player.changeVolume",
-            "substrings": [
-              "dial back the sound"
-            ],
+            "substrings": [],
             "implied": true
           },
           {
@@ -6013,18 +6037,16 @@
               "the noise"
             ],
             "category": "object",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "isOptional": true
           },
           {
             "text": "by a subtle",
             "synonyms": [
               "by a slight",
               "by a small",
-              "by a minor"
+              "by a modest"
             ],
-            "category": "modifier",
+            "category": "degree",
             "isOptional": true
           },
           {
@@ -6052,82 +6074,28 @@
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
-                  "reduce",
+                  "dial back",
                   "10%"
                 ]
               },
               {
                 "propertyValue": -20,
                 "propertySubPhrases": [
-                  "lower",
+                  "dial back",
                   "20%"
                 ]
               },
               {
                 "propertyValue": -5,
                 "propertySubPhrases": [
-                  "decrease",
+                  "dial back",
                   "5%"
-                ]
-              }
-            ]
-          },
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.changeVolume",
-            "propertySubPhrases": [
-              "the sound"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.adjustVolume",
-                "propertySubPhrases": [
-                  "the volume"
-                ]
-              },
-              {
-                "propertyValue": "player.setVolume",
-                "propertySubPhrases": [
-                  "the audio"
-                ]
-              },
-              {
-                "propertyValue": "player.modifyVolume",
-                "propertySubPhrases": [
-                  "the noise"
                 ]
               }
             ]
           }
         ]
-      },
-      "corrections": [
-        {
-          "data": {
-            "properties": [
-              {
-                "name": "fullActionName",
-                "value": "player.changeVolume",
-                "substrings": [
-                  "dial back the sound"
-                ],
-                "implied": true
-              },
-              {
-                "name": "parameters.volumeChangePercentage",
-                "value": -15,
-                "substrings": [
-                  "15%"
-                ],
-                "implied": false
-              }
-            ]
-          },
-          "correction": [
-            "Value -15 for property 'parameters.volumeChangePercentage' doesn't match the number 15 in the substring '15%'. Missing other substring to explain the value."
-          ]
-        }
-      ]
+      }
     },
     {
       "request": "Let's have the sound 15% lower, shall we?",
@@ -6181,7 +6149,7 @@
             "synonyms": [
               "fifteen percent",
               "15 percent",
-              "15 pct"
+              "15%"
             ],
             "category": "percentage",
             "propertyNames": [
@@ -6193,7 +6161,7 @@
             "synonyms": [
               "decrease",
               "reduce",
-              "turn down"
+              "drop"
             ],
             "category": "direction",
             "propertyNames": [
@@ -6336,7 +6304,7 @@
             "synonyms": [
               "thirty percent",
               "30 percent",
-              "30%"
+              "30 pct"
             ],
             "category": "quantity",
             "propertyNames": [
@@ -6447,7 +6415,6 @@
               "modify the audio"
             ],
             "category": "action",
-            "isOptional": false,
             "propertyNames": []
           },
           {
@@ -6469,7 +6436,7 @@
               "softer",
               "less loud"
             ],
-            "category": "description",
+            "category": "volume adjustment",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -6523,14 +6490,14 @@
                 "name": "parameters.volumeChangePercentage",
                 "value": -15,
                 "substrings": [
-                  "15% more chill"
+                  "15% more"
                 ],
                 "implied": false
               }
             ]
           },
           "correction": [
-            "Value -15 for property 'parameters.volumeChangePercentage' doesn't match the number 15 in the substring '15% more chill'. Missing other substring to explain the value."
+            "Value -15 for property 'parameters.volumeChangePercentage' doesn't match the number 15 in the substring '15% more'. Missing other substring to explain the value."
           ]
         }
       ]
@@ -6557,8 +6524,8 @@
             "name": "parameters.volumeChangePercentage",
             "value": -5,
             "substrings": [
-              "trim",
-              "by 5%"
+              "by 5%",
+              "trim"
             ],
             "implied": false
           }
@@ -6571,15 +6538,15 @@
               "We should",
               "How about we"
             ],
-            "category": "suggestion",
+            "category": "filler",
             "isOptional": true
           },
           {
-            "text": "trim",
+            "text": "trim the volume",
             "synonyms": [
-              "adjust",
-              "change",
-              "modify"
+              "adjust the volume",
+              "change the volume",
+              "modify the volume"
             ],
             "category": "action",
             "propertyNames": [
@@ -6588,25 +6555,13 @@
             ]
           },
           {
-            "text": "the volume",
-            "synonyms": [
-              "the sound level",
-              "the audio level",
-              "the loudness"
-            ],
-            "category": "object",
-            "propertyNames": [
-              "fullActionName"
-            ]
-          },
-          {
             "text": "by 5%",
             "synonyms": [
               "by five percent",
               "by 5 percent",
-              "by a small amount"
+              "by 5 pct"
             ],
-            "category": "magnitude",
+            "category": "parameter",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -6617,29 +6572,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.changeVolume",
             "propertySubPhrases": [
-              "trim",
-              "the volume"
+              "trim the volume"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "increase",
-                  "the volume"
+                  "increase the volume"
                 ]
               },
               {
                 "propertyValue": "player.decreaseVolume",
                 "propertySubPhrases": [
-                  "decrease",
-                  "the volume"
+                  "decrease the volume"
                 ]
               },
               {
                 "propertyValue": "player.adjustVolume",
                 "propertySubPhrases": [
-                  "adjust",
-                  "the volume"
+                  "adjust the volume"
                 ]
               }
             ]
@@ -6648,28 +6599,28 @@
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -5,
             "propertySubPhrases": [
-              "trim",
+              "trim the volume",
               "by 5%"
             ],
             "alternatives": [
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
-                  "trim",
+                  "trim the volume",
                   "by 10%"
                 ]
               },
               {
                 "propertyValue": -15,
                 "propertySubPhrases": [
-                  "trim",
+                  "trim the volume",
                   "by 15%"
                 ]
               },
               {
                 "propertyValue": -20,
                 "propertySubPhrases": [
-                  "trim",
+                  "trim the volume",
                   "by 20%"
                 ]
               }
@@ -6718,8 +6669,8 @@
                 "name": "parameters.volumeChangePercentage",
                 "value": -5,
                 "substrings": [
-                  "trim",
-                  "by 5%"
+                  "by 5%",
+                  "trim"
                 ],
                 "implied": false
               }
@@ -6732,7 +6683,7 @@
                   "We should",
                   "How about we"
                 ],
-                "category": "suggestion",
+                "category": "filler",
                 "isOptional": true
               },
               {
@@ -6752,9 +6703,9 @@
                 "synonyms": [
                   "by five percent",
                   "by 5 percent",
-                  "by a small amount"
+                  "by 5 pct"
                 ],
-                "category": "magnitude",
+                "category": "parameter",
                 "propertyNames": [
                   "parameters.volumeChangePercentage"
                 ]
@@ -6810,7 +6761,7 @@
               "raise the volume by 30%",
               "turn up the volume by 30%"
             ],
-            "category": "volume adjustment",
+            "category": "action",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -6866,14 +6817,16 @@
           {
             "name": "fullActionName",
             "value": "player.changeVolume",
-            "substrings": [],
+            "substrings": [
+              "Lower the sound"
+            ],
             "implied": true
           },
           {
             "name": "parameters.volumeChangePercentage",
             "value": -15,
             "substrings": [
-              "Lower the sound by",
+              "Lower",
               "15%"
             ],
             "implied": false
@@ -6881,25 +6834,38 @@
         ],
         "subPhrases": [
           {
-            "text": "Lower the sound by",
+            "text": "Lower",
             "synonyms": [
-              "Decrease the volume by",
-              "Reduce the sound by",
-              "Turn down the volume by"
+              "Decrease",
+              "Reduce",
+              "Turn down"
             ],
-            "category": "volume adjustment",
+            "category": "action",
             "propertyNames": [
+              "fullActionName",
               "parameters.volumeChangePercentage"
             ]
           },
           {
-            "text": "15%",
+            "text": "the sound",
             "synonyms": [
-              "fifteen percent",
-              "15 percent",
-              "15%"
+              "the volume",
+              "the audio",
+              "the noise"
             ],
-            "category": "percentage",
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "by 15%",
+            "synonyms": [
+              "by fifteen percent",
+              "by 15 percent",
+              "by 15%"
+            ],
+            "category": "magnitude",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -6907,32 +6873,63 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.changeVolume",
+            "propertySubPhrases": [
+              "Lower",
+              "the sound"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.decreaseVolume",
+                "propertySubPhrases": [
+                  "Decrease",
+                  "the volume"
+                ]
+              },
+              {
+                "propertyValue": "player.reduceVolume",
+                "propertySubPhrases": [
+                  "Reduce",
+                  "the sound"
+                ]
+              },
+              {
+                "propertyValue": "player.turnDownVolume",
+                "propertySubPhrases": [
+                  "Turn down",
+                  "the volume"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -15,
             "propertySubPhrases": [
-              "Lower the sound by",
-              "15%"
+              "Lower",
+              "by 15%"
             ],
             "alternatives": [
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
-                  "Lower the sound by",
-                  "10%"
+                  "Lower",
+                  "by 10%"
                 ]
               },
               {
                 "propertyValue": -20,
                 "propertySubPhrases": [
-                  "Lower the sound by",
-                  "20%"
+                  "Lower",
+                  "by 20%"
                 ]
               },
               {
                 "propertyValue": -25,
                 "propertySubPhrases": [
-                  "Lower the sound by",
-                  "25%"
+                  "Lower",
+                  "by 25%"
                 ]
               }
             ]
@@ -6946,21 +6943,23 @@
               {
                 "name": "fullActionName",
                 "value": "player.changeVolume",
-                "substrings": [],
+                "substrings": [
+                  "Lower the sound"
+                ],
                 "implied": true
               },
               {
                 "name": "parameters.volumeChangePercentage",
                 "value": -15,
                 "substrings": [
-                  "Lower the sound by 15%"
+                  "15%"
                 ],
                 "implied": false
               }
             ]
           },
           "correction": [
-            "Value -15 for property 'parameters.volumeChangePercentage' doesn't match the number 15 in the substring 'Lower the sound by 15%'. Missing other substring to explain the value."
+            "Value -15 for property 'parameters.volumeChangePercentage' doesn't match the number 15 in the substring '15%'. Missing other substring to explain the value."
           ]
         }
       ]
@@ -7010,7 +7009,7 @@
             "synonyms": [
               "to 30%",
               "up to 30%",
-              "at 30%"
+              "increase by 30%"
             ],
             "category": "parameter",
             "propertyNames": [
@@ -7090,7 +7089,7 @@
             "name": "fullActionName",
             "value": "player.changeVolume",
             "substrings": [
-              "Make the sound"
+              "Make the sound 15% less loud."
             ],
             "implied": true
           },
@@ -7106,13 +7105,25 @@
         ],
         "subPhrases": [
           {
-            "text": "Make the sound",
+            "text": "Make",
             "synonyms": [
-              "Adjust the volume",
-              "Change the sound level",
-              "Modify the audio"
+              "Set",
+              "Adjust",
+              "Change"
             ],
             "category": "command",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "the sound",
+            "synonyms": [
+              "the volume",
+              "the audio",
+              "the noise"
+            ],
+            "category": "object",
             "propertyNames": [
               "fullActionName"
             ]
@@ -7122,7 +7133,7 @@
             "synonyms": [
               "fifteen percent",
               "15 percent",
-              "15 pct"
+              "15%"
             ],
             "category": "percentage",
             "propertyNames": [
@@ -7134,9 +7145,9 @@
             "synonyms": [
               "quieter",
               "softer",
-              "lower volume"
+              "lower"
             ],
-            "category": "volume adjustment",
+            "category": "volume change",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -7147,25 +7158,29 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.changeVolume",
             "propertySubPhrases": [
-              "Make the sound"
+              "Make",
+              "the sound"
             ],
             "alternatives": [
               {
-                "propertyValue": "player.adjustVolume",
+                "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "Adjust the sound"
+                  "Increase",
+                  "the sound"
                 ]
               },
               {
-                "propertyValue": "player.setVolume",
+                "propertyValue": "player.decreaseVolume",
                 "propertySubPhrases": [
-                  "Set the sound"
+                  "Decrease",
+                  "the sound"
                 ]
               },
               {
-                "propertyValue": "player.modifyVolume",
+                "propertyValue": "player.mute",
                 "propertySubPhrases": [
-                  "Modify the sound"
+                  "Mute",
+                  "the sound"
                 ]
               }
             ]
@@ -7211,7 +7226,7 @@
                 "name": "fullActionName",
                 "value": "player.changeVolume",
                 "substrings": [
-                  "Make the sound"
+                  "Make the sound 15% less loud."
                 ],
                 "implied": true
               },
@@ -7268,17 +7283,17 @@
               "Change"
             ],
             "category": "command",
-            "isOptional": false
+            "propertyNames": []
           },
           {
             "text": "the volume",
             "synonyms": [
-              "volume",
+              "volume level",
               "sound level",
-              "audio level"
+              "audio volume"
             ],
             "category": "object",
-            "isOptional": false
+            "propertyNames": []
           },
           {
             "text": "softer",
@@ -7287,7 +7302,7 @@
               "lower",
               "decrease"
             ],
-            "category": "property",
+            "category": "modifier",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -7297,9 +7312,9 @@
             "synonyms": [
               "10 percent",
               "ten percent",
-              "10%"
+              "10% less"
             ],
-            "category": "property",
+            "category": "quantity",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -7355,14 +7370,14 @@
                 "name": "parameters.volumeChangePercentage",
                 "value": -10,
                 "substrings": [
-                  "softer by 10%"
+                  "10%"
                 ],
                 "implied": false
               }
             ]
           },
           "correction": [
-            "Value -10 for property 'parameters.volumeChangePercentage' doesn't match the number 10 in the substring 'softer by 10%'. Missing other substring to explain the value."
+            "Value -10 for property 'parameters.volumeChangePercentage' doesn't match the number 10 in the substring '10%'. Missing other substring to explain the value."
           ]
         }
       ]
@@ -7421,7 +7436,7 @@
             "synonyms": [
               "by a solid 10%",
               "by a full 10%",
-              "by 10%"
+              "by exactly 10%"
             ],
             "category": "quantity",
             "propertyNames": [
@@ -7441,21 +7456,21 @@
               {
                 "propertyValue": 5,
                 "propertySubPhrases": [
-                  "bumping up the volume",
+                  "increasing the volume",
                   "by a modest 5%"
                 ]
               },
               {
                 "propertyValue": 15,
                 "propertySubPhrases": [
-                  "bumping up the volume",
+                  "raising the volume",
                   "by a solid 15%"
                 ]
               },
               {
                 "propertyValue": 20,
                 "propertySubPhrases": [
-                  "bumping up the volume",
+                  "turning up the volume",
                   "by a hefty 20%"
                 ]
               }
@@ -7521,7 +7536,7 @@
               "up 10%",
               "10 percent"
             ],
-            "category": "quantity",
+            "category": "measurement",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -7538,7 +7553,7 @@
               {
                 "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "increasing the volume"
+                  "turning up the volume"
                 ]
               },
               {
@@ -7548,9 +7563,9 @@
                 ]
               },
               {
-                "propertyValue": "player.turnUpVolume",
+                "propertyValue": "player.boostVolume",
                 "propertySubPhrases": [
-                  "turning up the volume"
+                  "boosting the volume"
                 ]
               }
             ]
@@ -7620,7 +7635,7 @@
               "Adjust the sound level",
               "Alter the volume"
             ],
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -7630,9 +7645,9 @@
             "synonyms": [
               "raise it by 10%",
               "boost it by 10%",
-              "amplify it by 10%"
+              "turn it up by 10%"
             ],
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -7709,15 +7724,17 @@
           {
             "name": "fullActionName",
             "value": "player.changeVolume",
-            "substrings": [],
+            "substrings": [
+              "Muffle the sound"
+            ],
             "implied": true
           },
           {
             "name": "parameters.volumeChangePercentage",
             "value": -15,
             "substrings": [
-              "Muffle the sound by 15%.",
-              "Muffle"
+              "Muffle",
+              "15%"
             ],
             "implied": false
           }
@@ -7726,23 +7743,36 @@
           {
             "text": "Muffle",
             "synonyms": [
-              "Reduce",
               "Lower",
+              "Reduce",
               "Decrease"
             ],
             "category": "action",
             "propertyNames": [
+              "fullActionName",
               "parameters.volumeChangePercentage"
             ]
           },
           {
-            "text": "the sound by 15%",
+            "text": "the sound",
             "synonyms": [
-              "the volume by 15%",
-              "the audio by 15%",
-              "the noise by 15%"
+              "the audio",
+              "the volume",
+              "the noise"
             ],
-            "category": "specification",
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "by 15%",
+            "synonyms": [
+              "by fifteen percent",
+              "by 15 percent",
+              "by 15%"
+            ],
+            "category": "modifier",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -7750,32 +7780,63 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.changeVolume",
+            "propertySubPhrases": [
+              "Muffle",
+              "the sound"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.lowerVolume",
+                "propertySubPhrases": [
+                  "Lower",
+                  "the sound"
+                ]
+              },
+              {
+                "propertyValue": "player.reduceVolume",
+                "propertySubPhrases": [
+                  "Reduce",
+                  "the sound"
+                ]
+              },
+              {
+                "propertyValue": "player.decreaseVolume",
+                "propertySubPhrases": [
+                  "Decrease",
+                  "the sound"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -15,
             "propertySubPhrases": [
               "Muffle",
-              "the sound by 15%"
+              "by 15%"
             ],
             "alternatives": [
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
                   "Muffle",
-                  "the sound by 10%"
+                  "by 10%"
                 ]
               },
               {
                 "propertyValue": -20,
                 "propertySubPhrases": [
                   "Muffle",
-                  "the sound by 20%"
+                  "by 20%"
                 ]
               },
               {
-                "propertyValue": -5,
+                "propertyValue": -25,
                 "propertySubPhrases": [
                   "Muffle",
-                  "the sound by 5%"
+                  "by 25%"
                 ]
               }
             ]
@@ -7789,21 +7850,23 @@
               {
                 "name": "fullActionName",
                 "value": "player.changeVolume",
-                "substrings": [],
+                "substrings": [
+                  "Muffle the sound"
+                ],
                 "implied": true
               },
               {
                 "name": "parameters.volumeChangePercentage",
                 "value": -15,
                 "substrings": [
-                  "Muffle the sound by 15%."
+                  "15%"
                 ],
                 "implied": false
               }
             ]
           },
           "correction": [
-            "Value -15 for property 'parameters.volumeChangePercentage' doesn't match the number 15 in the substring 'Muffle the sound by 15%.'. Missing other substring to explain the value."
+            "Value -15 for property 'parameters.volumeChangePercentage' doesn't match the number 15 in the substring '15%'. Missing other substring to explain the value."
           ]
         }
       ]
@@ -7822,9 +7885,9 @@
             "name": "fullActionName",
             "value": "player.changeVolume",
             "substrings": [
-              "Nudge the volume up by"
+              "Nudge the volume up by 30%."
             ],
-            "implied": true
+            "implied": false
           },
           {
             "name": "parameters.volumeChangePercentage",
@@ -7849,25 +7912,25 @@
             ]
           },
           {
-            "text": "the volume up by",
+            "text": "the volume up",
             "synonyms": [
-              "the sound level by",
-              "the audio level by",
-              "the volume level by"
+              "the sound level",
+              "the audio",
+              "the loudness"
             ],
-            "category": "action detail",
+            "category": "object",
             "propertyNames": [
               "fullActionName"
             ]
           },
           {
-            "text": "30%",
+            "text": "by 30%",
             "synonyms": [
-              "thirty percent",
-              "30 percent",
-              "30% increase"
+              "by thirty percent",
+              "by 30 percent",
+              "by 30%"
             ],
-            "category": "value",
+            "category": "parameter",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -7879,28 +7942,28 @@
             "propertyValue": "player.changeVolume",
             "propertySubPhrases": [
               "Nudge",
-              "the volume up by"
+              "the volume up"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
                   "Increase",
-                  "the volume by"
+                  "the volume"
                 ]
               },
               {
                 "propertyValue": "player.raiseVolume",
                 "propertySubPhrases": [
                   "Raise",
-                  "the volume by"
+                  "the volume"
                 ]
               },
               {
                 "propertyValue": "player.adjustVolume",
                 "propertySubPhrases": [
                   "Adjust",
-                  "the volume by"
+                  "the volume"
                 ]
               }
             ]
@@ -7909,25 +7972,25 @@
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": 30,
             "propertySubPhrases": [
-              "30%"
+              "by 30%"
             ],
             "alternatives": [
               {
                 "propertyValue": 10,
                 "propertySubPhrases": [
-                  "10%"
+                  "by 10%"
                 ]
               },
               {
                 "propertyValue": 20,
                 "propertySubPhrases": [
-                  "20%"
+                  "by 20%"
                 ]
               },
               {
                 "propertyValue": 50,
                 "propertySubPhrases": [
-                  "50%"
+                  "by 50%"
                 ]
               }
             ]
@@ -8019,9 +8082,9 @@
                 ]
               },
               {
-                "propertyValue": "player.turnUpVolume",
+                "propertyValue": "player.amplifyVolume",
                 "propertySubPhrases": [
-                  "turn up the volume"
+                  "amplify the volume"
                 ]
               }
             ]
@@ -8076,8 +8139,7 @@
             "name": "parameters.volumeChangePercentage",
             "value": 25,
             "substrings": [
-              "enhance the volume",
-              "25%"
+              "enhance the volume by a generous 25%"
             ],
             "implied": false
           }
@@ -8094,35 +8156,13 @@
             "isOptional": true
           },
           {
-            "text": "enhance the volume",
+            "text": "enhance the volume by a generous 25%",
             "synonyms": [
-              "increase the volume",
-              "raise the volume",
-              "turn up the volume"
+              "increase the volume by a generous 25%",
+              "raise the volume by a generous 25%",
+              "boost the volume by a generous 25%"
             ],
-            "category": "action",
-            "propertyNames": [
-              "parameters.volumeChangePercentage"
-            ]
-          },
-          {
-            "text": "by a generous",
-            "synonyms": [
-              "by a substantial",
-              "by a considerable",
-              "by a significant"
-            ],
-            "category": "filler",
-            "isOptional": true
-          },
-          {
-            "text": "25%",
-            "synonyms": [
-              "twenty-five percent",
-              "25 percent",
-              "25 per cent"
-            ],
-            "category": "value",
+            "category": "volume adjustment",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -8133,29 +8173,25 @@
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": 25,
             "propertySubPhrases": [
-              "enhance the volume",
-              "25%"
+              "enhance the volume by a generous 25%"
             ],
             "alternatives": [
               {
                 "propertyValue": 10,
                 "propertySubPhrases": [
-                  "enhance the volume",
-                  "10%"
+                  "enhance the volume by a modest 10%"
                 ]
               },
               {
                 "propertyValue": 50,
                 "propertySubPhrases": [
-                  "enhance the volume",
-                  "50%"
+                  "enhance the volume by a substantial 50%"
                 ]
               },
               {
                 "propertyValue": 75,
                 "propertySubPhrases": [
-                  "enhance the volume",
-                  "75%"
+                  "enhance the volume by a significant 75%"
                 ]
               }
             ]
@@ -8430,6 +8466,40 @@
           "correction": [
             "Value -20 for property 'parameters.volumeChangePercentage' doesn't match the number 20 in the substring '20% softer'. Missing other substring to explain the value."
           ]
+        },
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "player.changeVolume",
+                "substrings": [
+                  "request the audio to be"
+                ],
+                "implied": true
+              },
+              {
+                "name": "parameters.volumeChangePercentage",
+                "value": -20,
+                "substrings": [
+                  "20% softer"
+                ],
+                "implied": false
+              },
+              {
+                "name": "parameters.volumeChangePercentage",
+                "value": -20,
+                "substrings": [
+                  "softer"
+                ],
+                "implied": false
+              }
+            ]
+          },
+          "correction": [
+            "Value -20 for property 'parameters.volumeChangePercentage' doesn't match the number 20 in the substring '20% softer'. Missing other substring to explain the value.",
+            "Multiple properties with property name 'parameters.volumeChangePercentage' found"
+          ]
         }
       ]
     },
@@ -8590,7 +8660,7 @@
               "Decrease",
               "Reduce"
             ],
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName",
               "parameters.volumeChangePercentage"
@@ -8615,7 +8685,7 @@
               "by 10 percent",
               "by 10%"
             ],
-            "category": "modifier",
+            "category": "magnitude",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -8631,23 +8701,23 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.increaseVolume",
+                "propertyValue": "player.decreaseVolume",
                 "propertySubPhrases": [
-                  "Increase",
+                  "Decrease",
                   "the volume"
                 ]
               },
               {
-                "propertyValue": "player.muteVolume",
+                "propertyValue": "player.lowerVolume",
                 "propertySubPhrases": [
-                  "Mute",
+                  "Lower",
                   "the volume"
                 ]
               },
               {
-                "propertyValue": "player.setVolume",
+                "propertyValue": "player.reduceVolume",
                 "propertySubPhrases": [
-                  "Set",
+                  "Reduce",
                   "the volume"
                 ]
               }
@@ -8662,13 +8732,6 @@
             ],
             "alternatives": [
               {
-                "propertyValue": -20,
-                "propertySubPhrases": [
-                  "Scale down",
-                  "by 20%"
-                ]
-              },
-              {
                 "propertyValue": -5,
                 "propertySubPhrases": [
                   "Scale down",
@@ -8680,6 +8743,13 @@
                 "propertySubPhrases": [
                   "Scale down",
                   "by 15%"
+                ]
+              },
+              {
+                "propertyValue": -20,
+                "propertySubPhrases": [
+                  "Scale down",
+                  "by 20%"
                 ]
               }
             ]
@@ -8728,7 +8798,7 @@
             "name": "fullActionName",
             "value": "player.changeVolume",
             "substrings": [
-              "Set the sound"
+              "Set the sound to be 15% quieter."
             ],
             "implied": true
           },
@@ -8744,33 +8814,41 @@
         ],
         "subPhrases": [
           {
-            "text": "Set the sound",
+            "text": "Set",
             "synonyms": [
-              "Adjust the volume",
-              "Change the sound level",
-              "Modify the audio"
+              "Adjust",
+              "Change",
+              "Modify"
             ],
             "category": "command",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "propertyNames": []
+          },
+          {
+            "text": "the sound",
+            "synonyms": [
+              "the volume",
+              "the audio",
+              "the noise"
+            ],
+            "category": "object",
+            "propertyNames": []
           },
           {
             "text": "to be",
             "synonyms": [
-              "to",
-              "as",
-              "into"
+              "to become",
+              "to get",
+              "to turn"
             ],
             "category": "preposition",
-            "isOptional": true
+            "propertyNames": []
           },
           {
             "text": "15%",
             "synonyms": [
               "fifteen percent",
               "15 percent",
-              "15%"
+              "15 pct"
             ],
             "category": "percentage",
             "propertyNames": [
@@ -8782,42 +8860,15 @@
             "synonyms": [
               "lower",
               "softer",
-              "decrease"
+              "less loud"
             ],
-            "category": "direction",
+            "category": "volumeChange",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
           }
         ],
         "propertyAlternatives": [
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.changeVolume",
-            "propertySubPhrases": [
-              "Set the sound"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.increaseVolume",
-                "propertySubPhrases": [
-                  "Increase the sound"
-                ]
-              },
-              {
-                "propertyValue": "player.decreaseVolume",
-                "propertySubPhrases": [
-                  "Decrease the sound"
-                ]
-              },
-              {
-                "propertyValue": "player.mute",
-                "propertySubPhrases": [
-                  "Mute the sound"
-                ]
-              }
-            ]
-          },
           {
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -15,
@@ -8841,9 +8892,9 @@
                 ]
               },
               {
-                "propertyValue": -30,
+                "propertyValue": -25,
                 "propertySubPhrases": [
-                  "30%",
+                  "25%",
                   "quieter"
                 ]
               }
@@ -8859,7 +8910,7 @@
                 "name": "fullActionName",
                 "value": "player.changeVolume",
                 "substrings": [
-                  "Set the sound"
+                  "Set the sound to be 15% quieter."
                 ],
                 "implied": true
               },
@@ -8875,70 +8926,6 @@
           },
           "correction": [
             "Value -15 for property 'parameters.volumeChangePercentage' doesn't match the number 15 in the substring '15% quieter'. Missing other substring to explain the value."
-          ]
-        },
-        {
-          "data": {
-            "properties": [
-              {
-                "name": "fullActionName",
-                "value": "player.changeVolume",
-                "substrings": [
-                  "Set the sound"
-                ],
-                "implied": true
-              },
-              {
-                "name": "parameters.volumeChangePercentage",
-                "value": -15,
-                "substrings": [
-                  "15%",
-                  "quieter"
-                ],
-                "implied": false
-              }
-            ],
-            "subPhrases": [
-              {
-                "text": "Set the sound",
-                "synonyms": [
-                  "Adjust the volume",
-                  "Change the sound level",
-                  "Modify the audio"
-                ],
-                "category": "command",
-                "propertyNames": [
-                  "fullActionName"
-                ]
-              },
-              {
-                "text": "15%",
-                "synonyms": [
-                  "fifteen percent",
-                  "15 percent",
-                  "15%"
-                ],
-                "category": "percentage",
-                "propertyNames": [
-                  "parameters.volumeChangePercentage"
-                ]
-              },
-              {
-                "text": "quieter",
-                "synonyms": [
-                  "lower",
-                  "softer",
-                  "decrease"
-                ],
-                "category": "direction",
-                "propertyNames": [
-                  "parameters.volumeChangePercentage"
-                ]
-              }
-            ]
-          },
-          "correction": [
-            "Missing sub-phrase: explanation missing for 'to be'"
           ]
         }
       ]
@@ -9180,16 +9167,16 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.mute",
+                "propertyValue": "player.lowerVolume",
                 "propertySubPhrases": [
-                  "Mute",
+                  "Lower",
                   "the sound"
                 ]
               },
               {
-                "propertyValue": "player.lowerVolume",
+                "propertyValue": "player.reduceVolume",
                 "propertySubPhrases": [
-                  "Lower",
+                  "Reduce",
                   "the sound"
                 ]
               },
@@ -9286,20 +9273,33 @@
             "value": -15,
             "substrings": [
               "15%",
-              "by a reasonable"
+              "Subdue"
             ],
             "implied": false
           }
         ],
         "subPhrases": [
           {
-            "text": "Subdue the sound",
+            "text": "Subdue",
             "synonyms": [
-              "Lower the volume",
-              "Reduce the sound",
-              "Decrease the volume"
+              "Lower",
+              "Reduce",
+              "Decrease"
             ],
             "category": "action",
+            "propertyNames": [
+              "fullActionName",
+              "parameters.volumeChangePercentage"
+            ]
+          },
+          {
+            "text": "the sound",
+            "synonyms": [
+              "the volume",
+              "the audio",
+              "the noise"
+            ],
+            "category": "object",
             "propertyNames": [
               "fullActionName"
             ]
@@ -9312,16 +9312,14 @@
               "by a fair"
             ],
             "category": "modifier",
-            "propertyNames": [
-              "parameters.volumeChangePercentage"
-            ]
+            "isOptional": true
           },
           {
             "text": "15%",
             "synonyms": [
               "fifteen percent",
               "15 percent",
-              "15%"
+              "15% reduction"
             ],
             "category": "quantity",
             "propertyNames": [
@@ -9334,25 +9332,29 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.changeVolume",
             "propertySubPhrases": [
-              "Subdue the sound"
+              "Subdue",
+              "the sound"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.lowerVolume",
                 "propertySubPhrases": [
-                  "Lower the sound"
+                  "Lower",
+                  "the sound"
                 ]
               },
               {
                 "propertyValue": "player.reduceVolume",
                 "propertySubPhrases": [
-                  "Reduce the sound"
+                  "Reduce",
+                  "the sound"
                 ]
               },
               {
                 "propertyValue": "player.decreaseVolume",
                 "propertySubPhrases": [
-                  "Decrease the sound"
+                  "Decrease",
+                  "the sound"
                 ]
               }
             ]
@@ -9361,28 +9363,28 @@
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -15,
             "propertySubPhrases": [
-              "by a reasonable",
+              "Subdue",
               "15%"
             ],
             "alternatives": [
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
-                  "by a slight",
+                  "Subdue",
                   "10%"
                 ]
               },
               {
                 "propertyValue": -20,
                 "propertySubPhrases": [
-                  "by a significant",
+                  "Subdue",
                   "20%"
                 ]
               },
               {
                 "propertyValue": -25,
                 "propertySubPhrases": [
-                  "by a large",
+                  "Subdue",
                   "25%"
                 ]
               }
@@ -9631,7 +9633,7 @@
               "by 15 percent",
               "by 15%"
             ],
-            "category": "measurement",
+            "category": "modifier",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -9649,22 +9651,22 @@
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
-                  "Tone down",
+                  "Lower",
                   "by 10%"
                 ]
               },
               {
                 "propertyValue": -20,
                 "propertySubPhrases": [
-                  "Tone down",
+                  "Decrease",
                   "by 20%"
                 ]
               },
               {
-                "propertyValue": -25,
+                "propertyValue": -5,
                 "propertySubPhrases": [
-                  "Tone down",
-                  "by 25%"
+                  "Reduce",
+                  "by 5%"
                 ]
               }
             ]
@@ -9746,7 +9748,7 @@
               "at 15%",
               "with 15%"
             ],
-            "category": "specification",
+            "category": "modifier",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -9823,17 +9825,19 @@
           {
             "name": "fullActionName",
             "value": "player.changeVolume",
-            "substrings": [],
+            "substrings": [
+              "slice the volume"
+            ],
             "implied": true
           },
           {
             "name": "parameters.volumeChangePercentage",
             "value": -5,
             "substrings": [
-              "slice the volume",
-              "5%"
+              "5%",
+              "slice"
             ],
-            "implied": false
+            "implied": true
           }
         ],
         "subPhrases": [
@@ -9841,8 +9845,8 @@
             "text": "Wanna",
             "synonyms": [
               "Want to",
-              "Would like to",
-              "Do you want to"
+              "Do you want to",
+              "Would you like to"
             ],
             "category": "politeness",
             "isOptional": true
@@ -9856,6 +9860,7 @@
             ],
             "category": "action",
             "propertyNames": [
+              "fullActionName",
               "parameters.volumeChangePercentage"
             ]
           },
@@ -9864,7 +9869,7 @@
             "synonyms": [
               "by exactly",
               "by precisely",
-              "by"
+              "by an exact"
             ],
             "category": "filler",
             "isOptional": true
@@ -9883,6 +9888,33 @@
           }
         ],
         "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.changeVolume",
+            "propertySubPhrases": [
+              "slice the volume"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.increaseVolume",
+                "propertySubPhrases": [
+                  "boost the volume"
+                ]
+              },
+              {
+                "propertyValue": "player.muteVolume",
+                "propertySubPhrases": [
+                  "mute the volume"
+                ]
+              },
+              {
+                "propertyValue": "player.setVolume",
+                "propertySubPhrases": [
+                  "set the volume"
+                ]
+              }
+            ]
+          },
           {
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -5,
@@ -9915,7 +9947,106 @@
             ]
           }
         ]
-      }
+      },
+      "corrections": [
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "player.changeVolume",
+                "substrings": [
+                  "slice the volume"
+                ],
+                "implied": true
+              },
+              {
+                "name": "parameters.volumeChangePercentage",
+                "value": -5,
+                "substrings": [
+                  "5%"
+                ],
+                "implied": true
+              }
+            ]
+          },
+          "correction": [
+            "Value -5 for property 'parameters.volumeChangePercentage' doesn't match the number 5 in the substring '5%'. Missing other substring to explain the value."
+          ]
+        },
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "player.changeVolume",
+                "substrings": [
+                  "slice the volume"
+                ],
+                "implied": true
+              },
+              {
+                "name": "parameters.volumeChangePercentage",
+                "value": -5,
+                "substrings": [
+                  "5%",
+                  "slice"
+                ],
+                "implied": true
+              }
+            ],
+            "subPhrases": [
+              {
+                "text": "Wanna",
+                "synonyms": [
+                  "Want to",
+                  "Do you want to",
+                  "Would you like to"
+                ],
+                "category": "politeness",
+                "isOptional": true
+              },
+              {
+                "text": "slice the volume",
+                "synonyms": [
+                  "reduce the volume",
+                  "decrease the volume",
+                  "lower the volume"
+                ],
+                "category": "action",
+                "propertyNames": [
+                  "fullActionName"
+                ]
+              },
+              {
+                "text": "by a neat",
+                "synonyms": [
+                  "by exactly",
+                  "by precisely",
+                  "by an exact"
+                ],
+                "category": "filler",
+                "isOptional": true
+              },
+              {
+                "text": "5%",
+                "synonyms": [
+                  "five percent",
+                  "5 percent",
+                  "5 pct"
+                ],
+                "category": "percentage",
+                "propertyNames": [
+                  "parameters.volumeChangePercentage"
+                ]
+              }
+            ]
+          },
+          "correction": [
+            "Explicit property 'parameters.volumeChangePercentage' must be included as property names for all subphrases that contain the substring 'slice'"
+          ]
+        }
+      ]
     },
     {
       "request": "Would it be possible to augment the volume by 10%?",
@@ -9972,7 +10103,7 @@
             "synonyms": [
               "by ten percent",
               "by 10 percent",
-              "by 10%"
+              "by a tenth"
             ],
             "category": "parameter",
             "propertyNames": [
@@ -10209,16 +10340,28 @@
             "isOptional": true
           },
           {
-            "text": "trim the volume",
+            "text": "trim",
             "synonyms": [
-              "lower the volume",
-              "reduce the volume",
-              "decrease the volume"
+              "lower",
+              "reduce",
+              "decrease"
             ],
             "category": "action",
             "propertyNames": [
               "fullActionName",
               "parameters.volumeChangePercentage"
+            ]
+          },
+          {
+            "text": "the volume",
+            "synonyms": [
+              "the sound",
+              "the audio",
+              "the noise"
+            ],
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
             ]
           },
           {
@@ -10228,7 +10371,7 @@
               "by 5 percent",
               "by 5%"
             ],
-            "category": "measurement",
+            "category": "amount",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -10239,25 +10382,29 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.changeVolume",
             "propertySubPhrases": [
-              "trim the volume"
+              "trim",
+              "the volume"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "increase the volume"
+                  "increase",
+                  "the volume"
                 ]
               },
               {
                 "propertyValue": "player.decreaseVolume",
                 "propertySubPhrases": [
-                  "decrease the volume"
+                  "decrease",
+                  "the volume"
                 ]
               },
               {
                 "propertyValue": "player.muteVolume",
                 "propertySubPhrases": [
-                  "mute the volume"
+                  "mute",
+                  "the volume"
                 ]
               }
             ]
@@ -10266,28 +10413,28 @@
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -5,
             "propertySubPhrases": [
-              "trim the volume",
+              "trim",
               "by 5%"
             ],
             "alternatives": [
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
-                  "trim the volume",
+                  "trim",
                   "by 10%"
                 ]
               },
               {
                 "propertyValue": -15,
                 "propertySubPhrases": [
-                  "trim the volume",
+                  "trim",
                   "by 15%"
                 ]
               },
               {
                 "propertyValue": -20,
                 "propertySubPhrases": [
-                  "trim the volume",
+                  "trim",
                   "by 20%"
                 ]
               }
@@ -10382,7 +10529,7 @@
                   "by 5 percent",
                   "by 5%"
                 ],
-                "category": "measurement",
+                "category": "amount",
                 "propertyNames": [
                   "parameters.volumeChangePercentage"
                 ]
@@ -10411,7 +10558,7 @@
             "substrings": [
               "drop the volume"
             ],
-            "implied": false
+            "implied": true
           },
           {
             "name": "parameters.volumeChangePercentage",
@@ -10452,7 +10599,7 @@
             "synonyms": [
               "by five percent",
               "by 5 percent",
-              "by 5%"
+              "by 5 pct"
             ],
             "category": "modifier",
             "propertyNames": [
@@ -10471,7 +10618,7 @@
               {
                 "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "increase the volume"
+                  "raise the volume"
                 ]
               },
               {
@@ -10531,7 +10678,7 @@
                 "substrings": [
                   "drop the volume"
                 ],
-                "implied": false
+                "implied": true
               },
               {
                 "name": "parameters.volumeChangePercentage",
@@ -10571,10 +10718,10 @@
             "name": "parameters.volumeChangePercentage",
             "value": -5,
             "substrings": [
-              "shave the volume by a cool 5%",
-              "shave"
+              "shave",
+              "5%"
             ],
-            "implied": false
+            "implied": true
           }
         ],
         "subPhrases": [
@@ -10595,15 +10742,15 @@
               "we should",
               "how about we"
             ],
-            "category": "filler",
+            "category": "politeness",
             "isOptional": true
           },
           {
-            "text": "shave the volume",
+            "text": "shave",
             "synonyms": [
-              "lower the volume",
-              "reduce the volume",
-              "decrease the volume"
+              "reduce",
+              "decrease",
+              "lower"
             ],
             "category": "action",
             "propertyNames": [
@@ -10612,13 +10759,35 @@
             ]
           },
           {
-            "text": "by a cool 5%",
+            "text": "the volume",
             "synonyms": [
-              "by 5%",
-              "by five percent",
-              "by a small 5%"
+              "volume",
+              "sound level",
+              "audio level"
             ],
-            "category": "modifier",
+            "category": "object",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "by a cool",
+            "synonyms": [
+              "by",
+              "by exactly",
+              "by precisely"
+            ],
+            "category": "preposition",
+            "isOptional": true
+          },
+          {
+            "text": "5%",
+            "synonyms": [
+              "five percent",
+              "5 percent",
+              "5 pct"
+            ],
+            "category": "quantity",
             "propertyNames": [
               "parameters.volumeChangePercentage"
             ]
@@ -10629,25 +10798,29 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.changeVolume",
             "propertySubPhrases": [
-              "shave the volume"
+              "shave",
+              "the volume"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.increaseVolume",
                 "propertySubPhrases": [
-                  "crank up the volume"
+                  "boost",
+                  "the volume"
                 ]
               },
               {
                 "propertyValue": "player.muteVolume",
                 "propertySubPhrases": [
-                  "mute the volume"
+                  "mute",
+                  "the volume"
                 ]
               },
               {
                 "propertyValue": "player.setVolume",
                 "propertySubPhrases": [
-                  "set the volume"
+                  "set",
+                  "the volume"
                 ]
               }
             ]
@@ -10656,29 +10829,29 @@
             "propertyName": "parameters.volumeChangePercentage",
             "propertyValue": -5,
             "propertySubPhrases": [
-              "shave the volume",
-              "by a cool 5%"
+              "shave",
+              "5%"
             ],
             "alternatives": [
               {
                 "propertyValue": -10,
                 "propertySubPhrases": [
-                  "shave the volume",
-                  "by a cool 10%"
+                  "shave",
+                  "10%"
                 ]
               },
               {
                 "propertyValue": -15,
                 "propertySubPhrases": [
-                  "shave the volume",
-                  "by a cool 15%"
+                  "shave",
+                  "15%"
                 ]
               },
               {
                 "propertyValue": -20,
                 "propertySubPhrases": [
-                  "shave the volume",
-                  "by a cool 20%"
+                  "shave",
+                  "20%"
                 ]
               }
             ]
@@ -10701,86 +10874,14 @@
                 "name": "parameters.volumeChangePercentage",
                 "value": -5,
                 "substrings": [
-                  "shave the volume by a cool 5%"
-                ],
-                "implied": false
-              }
-            ]
-          },
-          "correction": [
-            "Value -5 for property 'parameters.volumeChangePercentage' doesn't match the number 5 in the substring 'shave the volume by a cool 5%'. Missing other substring to explain the value."
-          ]
-        },
-        {
-          "data": {
-            "properties": [
-              {
-                "name": "fullActionName",
-                "value": "player.changeVolume",
-                "substrings": [
-                  "shave the volume"
+                  "5%"
                 ],
                 "implied": true
-              },
-              {
-                "name": "parameters.volumeChangePercentage",
-                "value": -5,
-                "substrings": [
-                  "shave the volume by a cool 5%",
-                  "shave"
-                ],
-                "implied": false
-              }
-            ],
-            "subPhrases": [
-              {
-                "text": "Yo",
-                "synonyms": [
-                  "Hey",
-                  "Hi",
-                  "Hello"
-                ],
-                "category": "greeting",
-                "isOptional": true
-              },
-              {
-                "text": "let's",
-                "synonyms": [
-                  "let us",
-                  "we should",
-                  "how about we"
-                ],
-                "category": "filler",
-                "isOptional": true
-              },
-              {
-                "text": "shave the volume",
-                "synonyms": [
-                  "lower the volume",
-                  "reduce the volume",
-                  "decrease the volume"
-                ],
-                "category": "action",
-                "propertyNames": [
-                  "fullActionName"
-                ]
-              },
-              {
-                "text": "by a cool 5%",
-                "synonyms": [
-                  "by 5%",
-                  "by five percent",
-                  "by a small 5%"
-                ],
-                "category": "modifier",
-                "propertyNames": [
-                  "parameters.volumeChangePercentage"
-                ]
               }
             ]
           },
           "correction": [
-            "Explicit property 'parameters.volumeChangePercentage' must be included as property names for all subphrases that contain the substring 'shave'"
+            "Value -5 for property 'parameters.volumeChangePercentage' doesn't match the number 5 in the substring '5%'. Missing other substring to explain the value."
           ]
         }
       ]

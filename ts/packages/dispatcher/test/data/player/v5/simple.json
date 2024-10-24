@@ -16,9 +16,7 @@
           {
             "name": "fullActionName",
             "value": "player.playArtist",
-            "substrings": [
-              "play"
-            ],
+            "substrings": [],
             "implied": true
           },
           {
@@ -66,7 +64,7 @@
             "synonyms": [
               "start",
               "put on",
-              "spin"
+              "playback"
             ],
             "category": "action",
             "propertyNames": [
@@ -125,15 +123,15 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playAlbum",
-                "propertySubPhrases": [
-                  "play an album by"
-                ]
-              },
-              {
                 "propertyValue": "player.playSong",
                 "propertySubPhrases": [
                   "play a song by"
+                ]
+              },
+              {
+                "propertyValue": "player.playAlbum",
+                "propertySubPhrases": [
+                  "play an album by"
                 ]
               },
               {
@@ -225,8 +223,8 @@
             "text": "lets hear some",
             "synonyms": [
               "let's play some",
-              "let's listen to some",
-              "how about some"
+              "let's listen to",
+              "how about"
             ],
             "category": "confirmation",
             "isOptional": true
@@ -399,8 +397,8 @@
             "text": "oh",
             "synonyms": [
               "um",
-              "uh",
-              "ah"
+              "ah",
+              "well"
             ],
             "category": "filler",
             "isOptional": true
@@ -418,8 +416,8 @@
           {
             "text": "a couple of songs",
             "synonyms": [
-              "a few songs",
               "two songs",
+              "a few songs",
               "a couple tracks"
             ],
             "category": "quantity",
@@ -567,7 +565,7 @@
             "text": "katie perry",
             "synonyms": [
               "katy perry",
-              "K. Perry",
+              "Katy Perry",
               "Katy P."
             ],
             "category": "artist",
@@ -587,19 +585,19 @@
               {
                 "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "can I listen to"
+                  "can I hear a song by"
                 ]
               },
               {
                 "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "can I play"
+                  "can I hear an album by"
                 ]
               },
               {
                 "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "can I queue up"
+                  "can I hear a playlist by"
                 ]
               }
             ]
@@ -669,7 +667,7 @@
               "start",
               "begin"
             ],
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -720,7 +718,7 @@
               {
                 "propertyValue": "player.playMusicBy",
                 "propertySubPhrases": [
-                  "play some"
+                  "play music by"
                 ]
               }
             ]
@@ -790,7 +788,7 @@
               "shall we",
               "why don't we"
             ],
-            "category": "suggestion",
+            "category": "politeness",
             "isOptional": true
           },
           {
@@ -892,9 +890,7 @@
           {
             "name": "fullActionName",
             "value": "player.playAlbum",
-            "substrings": [
-              "i want to listen to the album"
-            ],
+            "substrings": [],
             "implied": true
           },
           {
@@ -916,21 +912,29 @@
         ],
         "subPhrases": [
           {
-            "text": "i want to listen to the album",
+            "text": "i want to listen to",
             "synonyms": [
-              "I'd like to hear the album",
-              "play the album",
-              "can you play the album"
+              "I would like to hear",
+              "I want to play",
+              "I wish to listen to"
             ],
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "category": "request",
+            "propertyNames": []
+          },
+          {
+            "text": "the album",
+            "synonyms": [
+              "the record",
+              "the music album",
+              "the LP"
+            ],
+            "category": "object",
+            "propertyNames": []
           },
           {
             "text": "Pretzel Logic",
             "synonyms": [
-              "the album Pretzel Logic",
+              "Pretzel Logic",
               "Pretzel Logic album",
               "album Pretzel Logic"
             ],
@@ -940,11 +944,21 @@
             ]
           },
           {
-            "text": "by Steely Dan",
+            "text": "by",
             "synonyms": [
-              "from Steely Dan",
-              "Steely Dan's",
-              "by the band Steely Dan"
+              "from",
+              "of",
+              "by the band"
+            ],
+            "category": "preposition",
+            "propertyNames": []
+          },
+          {
+            "text": "Steely Dan",
+            "synonyms": [
+              "Steely Dan",
+              "the band Steely Dan",
+              "Steely Dan group"
             ],
             "category": "artist",
             "propertyNames": [
@@ -953,33 +967,6 @@
           }
         ],
         "propertyAlternatives": [
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.playAlbum",
-            "propertySubPhrases": [
-              "i want to listen to the album"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.queueAlbum",
-                "propertySubPhrases": [
-                  "i want to queue the album"
-                ]
-              },
-              {
-                "propertyValue": "player.addAlbumToPlaylist",
-                "propertySubPhrases": [
-                  "i want to add the album to my playlist"
-                ]
-              },
-              {
-                "propertyValue": "player.shuffleAlbum",
-                "propertySubPhrases": [
-                  "i want to shuffle the album"
-                ]
-              }
-            ]
-          },
           {
             "propertyName": "parameters.albumName",
             "propertyValue": "Pretzel Logic",
@@ -1000,9 +987,9 @@
                 ]
               },
               {
-                "propertyValue": "The Royal Scam",
+                "propertyValue": "Countdown to Ecstasy",
                 "propertySubPhrases": [
-                  "The Royal Scam"
+                  "Countdown to Ecstasy"
                 ]
               }
             ]
@@ -1011,25 +998,25 @@
             "propertyName": "parameters.artists.0",
             "propertyValue": "Steely Dan",
             "propertySubPhrases": [
-              "by Steely Dan"
+              "Steely Dan"
             ],
             "alternatives": [
               {
                 "propertyValue": "The Beatles",
                 "propertySubPhrases": [
-                  "by The Beatles"
+                  "The Beatles"
                 ]
               },
               {
                 "propertyValue": "Pink Floyd",
                 "propertySubPhrases": [
-                  "by Pink Floyd"
+                  "Pink Floyd"
                 ]
               },
               {
                 "propertyValue": "Led Zeppelin",
                 "propertySubPhrases": [
-                  "by Led Zeppelin"
+                  "Led Zeppelin"
                 ]
               }
             ]
@@ -1053,9 +1040,7 @@
           {
             "name": "fullActionName",
             "value": "player.playAlbum",
-            "substrings": [
-              "lets listen to"
-            ],
+            "substrings": [],
             "implied": true
           },
           {
@@ -1077,13 +1062,23 @@
         ],
         "subPhrases": [
           {
-            "text": "lets listen to",
+            "text": "lets",
             "synonyms": [
-              "let's play",
-              "play",
-              "start playing"
+              "let us",
+              "let's",
+              "allow us to"
             ],
-            "category": "command",
+            "category": "filler",
+            "isOptional": true
+          },
+          {
+            "text": "listen to",
+            "synonyms": [
+              "play",
+              "hear",
+              "put on"
+            ],
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -1095,17 +1090,27 @@
               "Pretzel Logic album",
               "Pretzel Logic by Steely Dan"
             ],
-            "category": "albumName",
+            "category": "album",
             "propertyNames": [
               "parameters.albumName"
             ]
           },
           {
-            "text": "by Steely Dan",
+            "text": "by",
             "synonyms": [
-              "from Steely Dan",
-              "Steely Dan's",
-              "by the band Steely Dan"
+              "from",
+              "performed by",
+              "created by"
+            ],
+            "category": "preposition",
+            "isOptional": true
+          },
+          {
+            "text": "Steely Dan",
+            "synonyms": [
+              "the band Steely Dan",
+              "Steely Dan group",
+              "Steely Dan music"
             ],
             "category": "artist",
             "propertyNames": [
@@ -1118,19 +1123,19 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.playAlbum",
             "propertySubPhrases": [
-              "lets listen to"
+              "listen to"
             ],
             "alternatives": [
               {
-                "propertyValue": "player.queueAlbum",
+                "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "queue up"
+                  "play"
                 ]
               },
               {
-                "propertyValue": "player.addAlbumToPlaylist",
+                "propertyValue": "player.queueAlbum",
                 "propertySubPhrases": [
-                  "add to playlist"
+                  "queue"
                 ]
               },
               {
@@ -1172,25 +1177,25 @@
             "propertyName": "parameters.artists.0",
             "propertyValue": "Steely Dan",
             "propertySubPhrases": [
-              "by Steely Dan"
+              "Steely Dan"
             ],
             "alternatives": [
               {
                 "propertyValue": "The Beatles",
                 "propertySubPhrases": [
-                  "by The Beatles"
+                  "The Beatles"
                 ]
               },
               {
                 "propertyValue": "Pink Floyd",
                 "propertySubPhrases": [
-                  "by Pink Floyd"
+                  "Pink Floyd"
                 ]
               },
               {
-                "propertyValue": "Fleetwood Mac",
+                "propertyValue": "Led Zeppelin",
                 "propertySubPhrases": [
-                  "by Fleetwood Mac"
+                  "Led Zeppelin"
                 ]
               }
             ]
@@ -1249,9 +1254,9 @@
           {
             "text": "play some pieces by",
             "synonyms": [
-              "play some music by",
-              "play works by",
-              "play compositions by"
+              "play music by",
+              "play songs by",
+              "play tracks by"
             ],
             "category": "action",
             "propertyNames": [
@@ -1282,19 +1287,19 @@
               {
                 "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "play the album by"
+                  "play an album by"
                 ]
               },
               {
                 "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "play the song by"
+                  "play a song by"
                 ]
               },
               {
                 "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "play the playlist by"
+                  "play a playlist by"
                 ]
               }
             ]
@@ -1378,8 +1383,8 @@
           {
             "text": "Ok",
             "synonyms": [
-              "Okay",
               "Alright",
+              "Okay",
               "Sure"
             ],
             "category": "acknowledgement",
@@ -1400,7 +1405,7 @@
             "synonyms": [
               "I want to listen to",
               "I'd like to hear",
-              "I want to play"
+              "I would like to listen to"
             ],
             "category": "request",
             "isOptional": false
@@ -1410,7 +1415,7 @@
             "synonyms": [
               "ah",
               "uh",
-              "er"
+              "hmm"
             ],
             "category": "filler",
             "isOptional": true
@@ -1420,7 +1425,7 @@
             "synonyms": [
               "uh",
               "er",
-              "ah"
+              "hmm"
             ],
             "category": "filler",
             "isOptional": true
@@ -1651,9 +1656,9 @@
                 ]
               },
               {
-                "propertyValue": "player.addArtist",
+                "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
-                  "add"
+                  "play an album by"
                 ]
               }
             ]
@@ -1668,7 +1673,7 @@
               {
                 "propertyValue": 1,
                 "propertySubPhrases": [
-                  "one"
+                  "a song by"
                 ]
               },
               {
@@ -1730,9 +1735,9 @@
             "name": "fullActionName",
             "value": "player.playArtist",
             "substrings": [
-              "please play a couple of fugues by Bach"
+              "please play"
             ],
-            "implied": false
+            "implied": true
           },
           {
             "name": "parameters.artist",
@@ -1748,7 +1753,7 @@
             "substrings": [
               "a couple of"
             ],
-            "implied": false
+            "implied": true
           }
         ],
         "subPhrases": [
@@ -1756,7 +1761,7 @@
             "text": "please",
             "synonyms": [
               "kindly",
-              "would you mind",
+              "would you",
               "could you"
             ],
             "category": "politeness",
@@ -1765,9 +1770,9 @@
           {
             "text": "play",
             "synonyms": [
-              "perform",
-              "put on",
-              "start"
+              "start",
+              "begin",
+              "perform"
             ],
             "category": "action",
             "propertyNames": [
@@ -1778,8 +1783,8 @@
             "text": "a couple of",
             "synonyms": [
               "two",
-              "a pair of",
-              "a few"
+              "a few",
+              "several"
             ],
             "category": "quantity",
             "propertyNames": [
@@ -1787,21 +1792,11 @@
             ]
           },
           {
-            "text": "fugues",
+            "text": "fugues by",
             "synonyms": [
-              "pieces",
-              "compositions",
-              "works"
-            ],
-            "category": "musicType",
-            "isOptional": true
-          },
-          {
-            "text": "by",
-            "synonyms": [
-              "from",
-              "composed by",
-              "written by"
+              "pieces by",
+              "works by",
+              "compositions by"
             ],
             "category": "preposition",
             "isOptional": true
@@ -1840,9 +1835,9 @@
                 ]
               },
               {
-                "propertyValue": "player.shuffleArtist",
+                "propertyValue": "player.skipArtist",
                 "propertySubPhrases": [
-                  "shuffle"
+                  "skip"
                 ]
               }
             ]
@@ -1957,9 +1952,9 @@
           {
             "text": "Paul Simon",
             "synonyms": [
-              "Simon & Garfunkel",
-              "Paul Frederic Simon",
-              "the artist Paul Simon"
+              "the artist Paul Simon",
+              "music by Paul Simon",
+              "songs by Paul Simon"
             ],
             "category": "artist",
             "propertyNames": [
@@ -2251,7 +2246,7 @@
             "synonyms": [
               "a bit of",
               "a little",
-              "some of"
+              "a few"
             ],
             "category": "filler",
             "isOptional": true
@@ -2290,9 +2285,9 @@
                 ]
               },
               {
-                "propertyValue": "player.playNextArtist",
+                "propertyValue": "player.enqueueArtist",
                 "propertySubPhrases": [
-                  "play next"
+                  "enqueue"
                 ]
               }
             ]
@@ -2360,7 +2355,7 @@
             "synonyms": [
               "play",
               "start",
-              "put on"
+              "begin"
             ],
             "category": "action",
             "propertyNames": [
@@ -2438,9 +2433,9 @@
                 ]
               },
               {
-                "propertyValue": "Ice Cube",
+                "propertyValue": "Kendrick Lamar",
                 "propertySubPhrases": [
-                  "Ice Cube"
+                  "Kendrick Lamar"
                 ]
               }
             ]
@@ -2492,10 +2487,10 @@
             "text": "Highway to Hell",
             "synonyms": [
               "Highway to Inferno",
-              "Road to Hell",
-              "Path to Hell"
+              "Highway to Hades",
+              "Highway to the Underworld"
             ],
-            "category": "trackName",
+            "category": "track name",
             "propertyNames": [
               "parameters.trackName"
             ]
@@ -2516,15 +2511,15 @@
                 ]
               },
               {
-                "propertyValue": "player.initiateTrack",
+                "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "initiate playing"
+                  "play"
                 ]
               },
               {
-                "propertyValue": "player.launchTrack",
+                "propertyValue": "player.startMusic",
                 "propertySubPhrases": [
-                  "launch playing"
+                  "start music"
                 ]
               }
             ]
@@ -2591,8 +2586,8 @@
             "text": "start some music",
             "synonyms": [
               "play some tunes",
-              "begin the music",
-              "start playing music"
+              "begin playing music",
+              "start the music"
             ],
             "category": "action",
             "propertyNames": [
@@ -2645,7 +2640,7 @@
               {
                 "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "start a playlist"
+                  "play a playlist"
                 ]
               }
             ]
@@ -2694,7 +2689,7 @@
             "name": "fullActionName",
             "value": "player.playArtist",
             "substrings": [
-              "queue up"
+              "queue up some Chemical Brothers"
             ],
             "implied": true
           },
@@ -2712,7 +2707,7 @@
             "text": "thanks",
             "synonyms": [
               "thank you",
-              "thanks a lot",
+              "cheers",
               "much appreciated"
             ],
             "category": "acknowledgement",
@@ -2729,26 +2724,16 @@
             "isOptional": true
           },
           {
-            "text": "queue up",
+            "text": "queue up some",
             "synonyms": [
               "play",
-              "add to queue",
+              "add",
               "start playing"
             ],
             "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
-          },
-          {
-            "text": "some",
-            "synonyms": [
-              "a bit of",
-              "a few",
-              "a little"
-            ],
-            "category": "filler",
-            "isOptional": true
           },
           {
             "text": "Chemical Brothers",
@@ -2768,25 +2753,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.playArtist",
             "propertySubPhrases": [
-              "queue up"
+              "queue up some"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.addToQueue",
                 "propertySubPhrases": [
-                  "add to queue"
+                  "add to the queue"
+                ]
+              },
+              {
+                "propertyValue": "player.startRadio",
+                "propertySubPhrases": [
+                  "start a radio station with"
                 ]
               },
               {
                 "propertyValue": "player.playNext",
                 "propertySubPhrases": [
                   "play next"
-                ]
-              },
-              {
-                "propertyValue": "player.shufflePlay",
-                "propertySubPhrases": [
-                  "shuffle play"
                 ]
               }
             ]
@@ -2873,7 +2858,7 @@
             "synonyms": [
               "start",
               "put on",
-              "play some"
+              "playback"
             ],
             "category": "action",
             "propertyNames": [
@@ -2884,8 +2869,8 @@
             "text": "a couple of",
             "synonyms": [
               "a few",
-              "several",
-              "two"
+              "two",
+              "a pair of"
             ],
             "category": "quantity",
             "propertyNames": [
@@ -2896,8 +2881,8 @@
             "text": "Duran Duran",
             "synonyms": [
               "the band Duran Duran",
-              "Duran Duran's",
-              "music by Duran Duran"
+              "Duran Duran's music",
+              "songs by Duran Duran"
             ],
             "category": "artist",
             "propertyNames": [
@@ -2909,9 +2894,9 @@
             "synonyms": [
               "tracks",
               "tunes",
-              "music"
+              "pieces"
             ],
-            "category": "object",
+            "category": "filler",
             "isOptional": true
           }
         ],
@@ -2924,21 +2909,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playSong",
+                "propertyValue": "player.queueArtist",
                 "propertySubPhrases": [
-                  "play a song"
+                  "queue"
                 ]
               },
               {
-                "propertyValue": "player.playAlbum",
+                "propertyValue": "player.shuffleArtist",
                 "propertySubPhrases": [
-                  "play an album"
+                  "shuffle"
                 ]
               },
               {
-                "propertyValue": "player.playPlaylist",
+                "propertyValue": "player.addArtist",
                 "propertySubPhrases": [
-                  "play a playlist"
+                  "add"
                 ]
               }
             ]
@@ -3017,7 +3002,7 @@
             "name": "fullActionName",
             "value": "player.playAlbum",
             "substrings": [
-              "play"
+              "would you please play"
             ],
             "implied": true
           },
@@ -3068,7 +3053,7 @@
               "Aja album",
               "Aja by Steely Dan"
             ],
-            "category": "albumName",
+            "category": "album",
             "propertyNames": [
               "parameters.albumName"
             ]
@@ -3097,19 +3082,19 @@
               {
                 "propertyValue": "player.playSong",
                 "propertySubPhrases": [
-                  "play the song"
+                  "play a song"
                 ]
               },
               {
                 "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "play the playlist"
+                  "play a playlist"
                 ]
               },
               {
                 "propertyValue": "player.playPodcast",
                 "propertySubPhrases": [
-                  "play the podcast"
+                  "play a podcast"
                 ]
               }
             ]
@@ -3134,9 +3119,9 @@
                 ]
               },
               {
-                "propertyValue": "Countdown to Ecstasy",
+                "propertyValue": "The Royal Scam",
                 "propertySubPhrases": [
-                  "Countdown to Ecstasy"
+                  "The Royal Scam"
                 ]
               }
             ]
@@ -3237,9 +3222,9 @@
             "synonyms": [
               "the album Graceland",
               "Graceland album",
-              "Graceland by Paul Simon"
+              "Graceland record"
             ],
-            "category": "album",
+            "category": "albumName",
             "propertyNames": [
               "parameters.albumName"
             ]
@@ -3266,21 +3251,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playSong",
+                "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "play the song"
+                  "pause"
                 ]
               },
               {
-                "propertyValue": "player.playPlaylist",
+                "propertyValue": "player.stop",
                 "propertySubPhrases": [
-                  "play the playlist"
+                  "stop"
                 ]
               },
               {
-                "propertyValue": "player.playPodcast",
+                "propertyValue": "player.resume",
                 "propertySubPhrases": [
-                  "play the podcast"
+                  "resume"
                 ]
               }
             ]
@@ -3384,8 +3369,8 @@
             "text": "play",
             "synonyms": [
               "start",
-              "begin",
-              "put on"
+              "put on",
+              "begin"
             ],
             "category": "action",
             "propertyNames": [
@@ -3489,9 +3474,7 @@
           {
             "name": "fullActionName",
             "value": "player.playAlbum",
-            "substrings": [
-              "play"
-            ],
+            "substrings": [],
             "implied": true
           },
           {
@@ -3529,7 +3512,7 @@
               "begin",
               "put on"
             ],
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -3559,8 +3542,8 @@
           {
             "text": "And Justice for All",
             "synonyms": [
-              "And Justice for All album",
               "the album And Justice for All",
+              "And Justice for All album",
               "And Justice for All by Metallica"
             ],
             "category": "album",
@@ -3685,7 +3668,7 @@
             "name": "parameters.trackNumber.0",
             "value": 3,
             "substrings": [
-              "third"
+              "the third one"
             ],
             "implied": false
           }
@@ -3864,7 +3847,7 @@
           {
             "text": "spin me some",
             "synonyms": [
-              "play some",
+              "play me some",
               "put on some",
               "give me some"
             ],

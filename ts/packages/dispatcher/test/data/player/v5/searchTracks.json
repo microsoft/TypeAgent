@@ -65,21 +65,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playTrack",
+                "propertyValue": "player.findTracks",
                 "propertySubPhrases": [
-                  "Play"
+                  "Find"
                 ]
               },
               {
-                "propertyValue": "player.pauseTrack",
+                "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Pause"
+                  "Find"
                 ]
               },
               {
-                "propertyValue": "player.stopTrack",
+                "propertyValue": "player.locateTracks",
                 "propertySubPhrases": [
-                  "Stop"
+                  "Find"
                 ]
               }
             ]
@@ -92,21 +92,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "live versions of popular songs",
+                "propertyValue": "acoustic covers of popular songs",
                 "propertySubPhrases": [
-                  "live versions of popular songs"
+                  "acoustic covers of popular songs"
                 ]
               },
               {
-                "propertyValue": "remixes of popular songs",
+                "propertyValue": "unplugged versions of popular songs",
                 "propertySubPhrases": [
-                  "remixes of popular songs"
+                  "unplugged versions of popular songs"
                 ]
               },
               {
-                "propertyValue": "instrumental versions of popular songs",
+                "propertyValue": "acoustic renditions of popular songs",
                 "propertySubPhrases": [
-                  "instrumental versions of popular songs"
+                  "acoustic renditions of popular songs"
                 ]
               }
             ]
@@ -147,7 +147,7 @@
             "synonyms": [
               "Search for",
               "Look for",
-              "Locate"
+              "Get"
             ],
             "category": "command",
             "propertyNames": []
@@ -169,7 +169,7 @@
             "synonyms": [
               "relaxing music",
               "music to relax",
-              "calming music"
+              "calm music"
             ],
             "category": "description",
             "propertyNames": []
@@ -220,7 +220,7 @@
             "name": "fullActionName",
             "value": "player.searchTracks",
             "substrings": [
-              "Find chillwave tracks for a laid-back evening"
+              "Find"
             ],
             "implied": true
           },
@@ -241,7 +241,7 @@
               "Look for",
               "Locate"
             ],
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -249,7 +249,7 @@
           {
             "text": "chillwave tracks for a laid-back evening",
             "synonyms": [
-              "chillwave songs for a relaxed evening",
+              "chillwave songs for a relaxed night",
               "chillwave music for a calm evening",
               "chillwave tunes for a peaceful evening"
             ],
@@ -274,13 +274,13 @@
                 ]
               },
               {
-                "propertyValue": "player.lookupMusic",
+                "propertyValue": "music.searchTracks",
                 "propertySubPhrases": [
                   "Find"
                 ]
               },
               {
-                "propertyValue": "player.browseTracks",
+                "propertyValue": "audio.searchTracks",
                 "propertySubPhrases": [
                   "Find"
                 ]
@@ -295,21 +295,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "lo-fi beats for a relaxed night",
+                "propertyValue": "chillwave music for a relaxed night",
                 "propertySubPhrases": [
-                  "lo-fi beats for a relaxed night"
+                  "chillwave music for a relaxed night"
                 ]
               },
               {
-                "propertyValue": "ambient music for a calm evening",
+                "propertyValue": "chillwave songs for a calm evening",
                 "propertySubPhrases": [
-                  "ambient music for a calm evening"
+                  "chillwave songs for a calm evening"
                 ]
               },
               {
-                "propertyValue": "downtempo songs for a peaceful night",
+                "propertyValue": "chillwave tunes for a peaceful night",
                 "propertySubPhrases": [
-                  "downtempo songs for a peaceful night"
+                  "chillwave tunes for a peaceful night"
                 ]
               }
             ]
@@ -385,13 +385,13 @@
                 ]
               },
               {
-                "propertyValue": "music.searchTracks",
+                "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
                   "Find"
                 ]
               },
               {
-                "propertyValue": "audio.searchTracks",
+                "propertyValue": "player.searchMusic",
                 "propertySubPhrases": [
                   "Find"
                 ]
@@ -448,7 +448,7 @@
             "name": "parameters.query",
             "value": "electronic dance music hits",
             "substrings": [
-              "Find electronic dance music hits"
+              "electronic dance music hits"
             ],
             "implied": false
           }
@@ -458,55 +458,26 @@
             "text": "Find",
             "synonyms": [
               "Search for",
-              "Look for",
+              "Look up",
               "Locate"
             ],
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "category": "command",
+            "isOptional": false
           },
           {
             "text": "electronic dance music hits",
             "synonyms": [
               "EDM hits",
-              "electronic music hits",
+              "electronic dance hits",
               "dance music hits"
             ],
-            "category": "query",
+            "category": "music genre",
             "propertyNames": [
               "parameters.query"
             ]
           }
         ],
         "propertyAlternatives": [
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.searchTracks",
-            "propertySubPhrases": [
-              "Find"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.findSongs",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              },
-              {
-                "propertyValue": "player.lookupTracks",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              },
-              {
-                "propertyValue": "player.searchMusic",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              }
-            ]
-          },
           {
             "propertyName": "parameters.query",
             "propertyValue": "electronic dance music hits",
@@ -515,21 +486,27 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "EDM hits",
+                "propertyValue": "electronic dance music",
                 "propertySubPhrases": [
-                  "EDM hits"
-                ]
-              },
-              {
-                "propertyValue": "electronic music hits",
-                "propertySubPhrases": [
-                  "electronic music hits"
+                  "electronic dance music"
                 ]
               },
               {
                 "propertyValue": "dance music hits",
                 "propertySubPhrases": [
                   "dance music hits"
+                ]
+              },
+              {
+                "propertyValue": "EDM hits",
+                "propertySubPhrases": [
+                  "EDM hits"
+                ]
+              },
+              {
+                "propertyValue": "electronic hits",
+                "propertySubPhrases": [
+                  "electronic hits"
                 ]
               }
             ]
@@ -579,17 +556,19 @@
             "synonyms": [
               "Search for",
               "Look up",
-              "Get"
+              "Locate"
             ],
             "category": "command",
-            "propertyNames": []
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "Hotel California",
             "synonyms": [
-              "Hotel California",
-              "the song Hotel California",
-              "track Hotel California"
+              "Hotel California song",
+              "Hotel California track",
+              "Hotel California music"
             ],
             "category": "trackName",
             "propertyNames": [
@@ -599,9 +578,9 @@
           {
             "text": "by The Eagles",
             "synonyms": [
-              "by The Eagles",
               "from The Eagles",
-              "performed by The Eagles"
+              "performed by The Eagles",
+              "sung by The Eagles"
             ],
             "category": "artist",
             "propertyNames": [
@@ -611,6 +590,33 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playTrack",
+            "propertySubPhrases": [
+              "Find"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.searchTrack",
+                "propertySubPhrases": [
+                  "Search"
+                ]
+              },
+              {
+                "propertyValue": "player.locateTrack",
+                "propertySubPhrases": [
+                  "Locate"
+                ]
+              },
+              {
+                "propertyValue": "player.findTrack",
+                "propertySubPhrases": [
+                  "Look for"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.trackName",
             "propertyValue": "Hotel California",
             "propertySubPhrases": [
@@ -618,15 +624,15 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "Bohemian Rhapsody",
-                "propertySubPhrases": [
-                  "Bohemian Rhapsody"
-                ]
-              },
-              {
                 "propertyValue": "Stairway to Heaven",
                 "propertySubPhrases": [
                   "Stairway to Heaven"
+                ]
+              },
+              {
+                "propertyValue": "Bohemian Rhapsody",
+                "propertySubPhrases": [
+                  "Bohemian Rhapsody"
                 ]
               },
               {
@@ -645,15 +651,15 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "Queen",
-                "propertySubPhrases": [
-                  "by Queen"
-                ]
-              },
-              {
                 "propertyValue": "Led Zeppelin",
                 "propertySubPhrases": [
                   "by Led Zeppelin"
+                ]
+              },
+              {
+                "propertyValue": "Queen",
+                "propertySubPhrases": [
+                  "by Queen"
                 ]
               },
               {
@@ -823,7 +829,7 @@
             "synonyms": [
               "chill study music",
               "relaxing beats for studying",
-              "study music lo-fi"
+              "study music playlist"
             ],
             "category": "query",
             "propertyNames": [
@@ -918,26 +924,14 @@
         ],
         "subPhrases": [
           {
-            "text": "Find",
+            "text": "Find me",
             "synonyms": [
-              "Search",
+              "Search for",
               "Look for",
-              "Locate"
+              "Get me"
             ],
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
-          },
-          {
-            "text": "me",
-            "synonyms": [
-              "for me",
-              "to me",
-              "on my behalf"
-            ],
-            "category": "politeness",
-            "isOptional": true
+            "category": "command",
+            "propertyNames": []
           },
           {
             "text": "some",
@@ -946,8 +940,8 @@
               "several",
               "a number of"
             ],
-            "category": "filler",
-            "isOptional": true
+            "category": "quantifier",
+            "propertyNames": []
           },
           {
             "text": "jazz tunes from the 60s",
@@ -956,40 +950,13 @@
               "jazz songs from the 1960s",
               "1960s jazz tracks"
             ],
-            "category": "query",
+            "category": "music query",
             "propertyNames": [
               "parameters.query"
             ]
           }
         ],
         "propertyAlternatives": [
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.searchTracks",
-            "propertySubPhrases": [
-              "Find"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.playTracks",
-                "propertySubPhrases": [
-                  "Play"
-                ]
-              },
-              {
-                "propertyValue": "player.queueTracks",
-                "propertySubPhrases": [
-                  "Queue"
-                ]
-              },
-              {
-                "propertyValue": "player.addTracks",
-                "propertySubPhrases": [
-                  "Add"
-                ]
-              }
-            ]
-          },
           {
             "propertyName": "parameters.query",
             "propertyValue": "jazz tunes from the 60s",
@@ -998,21 +965,27 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "rock songs from the 70s",
+                "propertyValue": "blues tunes from the 60s",
                 "propertySubPhrases": [
-                  "rock songs from the 70s"
+                  "blues tunes from the 60s"
                 ]
               },
               {
-                "propertyValue": "blues tracks from the 50s",
+                "propertyValue": "rock tunes from the 60s",
                 "propertySubPhrases": [
-                  "blues tracks from the 50s"
+                  "rock tunes from the 60s"
                 ]
               },
               {
-                "propertyValue": "pop hits from the 80s",
+                "propertyValue": "jazz tunes from the 70s",
                 "propertySubPhrases": [
-                  "pop hits from the 80s"
+                  "jazz tunes from the 70s"
+                ]
+              },
+              {
+                "propertyValue": "jazz tunes from the 50s",
+                "propertySubPhrases": [
+                  "jazz tunes from the 50s"
                 ]
               }
             ]
@@ -1053,7 +1026,7 @@
             "synonyms": [
               "Play music",
               "Search for music",
-              "Look for music"
+              "Get music"
             ],
             "category": "command",
             "propertyNames": [
@@ -1074,8 +1047,8 @@
             "text": "legendary guitarist",
             "synonyms": [
               "famous guitarist",
-              "renowned guitarist",
-              "iconic guitarist"
+              "iconic guitarist",
+              "renowned guitarist"
             ],
             "category": "descriptor",
             "isOptional": true
@@ -1182,8 +1155,8 @@
           {
             "text": "Find music",
             "synonyms": [
-              "Search for songs",
-              "Look for tracks",
+              "Search for music",
+              "Look for music",
               "Discover music"
             ],
             "category": "action",
@@ -1195,8 +1168,8 @@
             "text": "by",
             "synonyms": [
               "from",
-              "of",
-              "featuring"
+              "featuring",
+              "with"
             ],
             "category": "preposition",
             "isOptional": true
@@ -1277,7 +1250,7 @@
       "action": {
         "fullActionName": "player.searchTracks",
         "parameters": {
-          "query": "music for a beach party"
+          "query": "beach party"
         }
       },
       "explanation": {
@@ -1290,9 +1263,9 @@
           },
           {
             "name": "parameters.query",
-            "value": "music for a beach party",
+            "value": "beach party",
             "substrings": [
-              "music for a beach party"
+              "beach party"
             ],
             "implied": false
           }
@@ -1305,15 +1278,25 @@
               "Look for",
               "Locate"
             ],
-            "category": "command",
+            "category": "action",
             "propertyNames": []
           },
           {
-            "text": "music for a beach party",
+            "text": "music for a",
             "synonyms": [
-              "songs for a beach party",
-              "tunes for a beach party",
-              "tracks for a beach party"
+              "songs for a",
+              "tracks for a",
+              "tunes for a"
+            ],
+            "category": "context",
+            "propertyNames": []
+          },
+          {
+            "text": "beach party",
+            "synonyms": [
+              "beach gathering",
+              "seaside party",
+              "beach bash"
             ],
             "category": "query",
             "propertyNames": [
@@ -1324,27 +1307,27 @@
         "propertyAlternatives": [
           {
             "propertyName": "parameters.query",
-            "propertyValue": "music for a beach party",
+            "propertyValue": "beach party",
             "propertySubPhrases": [
-              "music for a beach party"
+              "beach party"
             ],
             "alternatives": [
               {
-                "propertyValue": "music for a pool party",
+                "propertyValue": "pool party",
                 "propertySubPhrases": [
-                  "music for a pool party"
+                  "pool party"
                 ]
               },
               {
-                "propertyValue": "music for a summer party",
+                "propertyValue": "summer party",
                 "propertySubPhrases": [
-                  "music for a summer party"
+                  "summer party"
                 ]
               },
               {
-                "propertyValue": "music for a BBQ party",
+                "propertyValue": "tropical party",
                 "propertySubPhrases": [
-                  "music for a BBQ party"
+                  "tropical party"
                 ]
               }
             ]
@@ -1385,7 +1368,7 @@
             "synonyms": [
               "Search for music",
               "Look for music",
-              "Get music"
+              "Locate music"
             ],
             "category": "command",
             "propertyNames": [
@@ -1406,8 +1389,8 @@
             "text": "Baroque period",
             "synonyms": [
               "Baroque era",
-              "Baroque age",
-              "Baroque time"
+              "Baroque time",
+              "Baroque age"
             ],
             "category": "time period",
             "propertyNames": [
@@ -1436,9 +1419,9 @@
                 ]
               },
               {
-                "propertyValue": "player.shuffleTracks",
+                "propertyValue": "player.browseTracks",
                 "propertySubPhrases": [
-                  "Shuffle music"
+                  "Browse music"
                 ]
               }
             ]
@@ -1478,7 +1461,7 @@
       "action": {
         "fullActionName": "player.searchTracks",
         "parameters": {
-          "query": "music to play at a wedding reception"
+          "query": "wedding reception music"
         }
       },
       "explanation": {
@@ -1486,16 +1469,14 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": [
-              "Find music to play at a wedding reception"
-            ],
+            "substrings": [],
             "implied": true
           },
           {
             "name": "parameters.query",
-            "value": "music to play at a wedding reception",
+            "value": "wedding reception music",
             "substrings": [
-              "music to play at a wedding reception"
+              "Find music to play at a wedding reception"
             ],
             "implied": false
           }
@@ -1509,16 +1490,14 @@
               "Locate"
             ],
             "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "propertyNames": []
           },
           {
             "text": "music to play at a wedding reception",
             "synonyms": [
               "songs for a wedding reception",
-              "tracks for a wedding party",
-              "tunes for a wedding celebration"
+              "tracks for a wedding reception",
+              "wedding reception tunes"
             ],
             "category": "query",
             "propertyNames": [
@@ -1528,55 +1507,34 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.searchTracks",
-            "propertySubPhrases": [
-              "Find"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.findSongs",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              },
-              {
-                "propertyValue": "player.lookupMusic",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              },
-              {
-                "propertyValue": "player.browseTracks",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              }
-            ]
-          },
-          {
             "propertyName": "parameters.query",
-            "propertyValue": "music to play at a wedding reception",
+            "propertyValue": "wedding reception music",
             "propertySubPhrases": [
               "music to play at a wedding reception"
             ],
             "alternatives": [
               {
-                "propertyValue": "songs for a wedding party",
+                "propertyValue": "wedding party music",
                 "propertySubPhrases": [
-                  "songs for a wedding party"
+                  "music to play at a wedding party"
                 ]
               },
               {
-                "propertyValue": "wedding reception playlist",
+                "propertyValue": "wedding dance music",
                 "propertySubPhrases": [
-                  "wedding reception playlist"
+                  "music to play for a wedding dance"
                 ]
               },
               {
-                "propertyValue": "wedding music",
+                "propertyValue": "wedding celebration music",
                 "propertySubPhrases": [
-                  "wedding music"
+                  "music to play for a wedding celebration"
+                ]
+              },
+              {
+                "propertyValue": "reception party music",
+                "propertySubPhrases": [
+                  "music to play at a reception party"
                 ]
               }
             ]
@@ -1597,9 +1555,7 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": [
-              "Find punk rock songs by The Ramones"
-            ],
+            "substrings": [],
             "implied": true
           },
           {
@@ -1620,10 +1576,8 @@
               "Look for",
               "Locate"
             ],
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "category": "command",
+            "isOptional": true
           },
           {
             "text": "punk rock",
@@ -1638,23 +1592,13 @@
             ]
           },
           {
-            "text": "songs",
+            "text": "songs by",
             "synonyms": [
-              "tracks",
-              "tunes",
-              "music"
+              "tracks by",
+              "music by",
+              "songs from"
             ],
-            "category": "music type",
-            "isOptional": true
-          },
-          {
-            "text": "by",
-            "synonyms": [
-              "from",
-              "performed by",
-              "created by"
-            ],
-            "category": "preposition",
+            "category": "music reference",
             "isOptional": true
           },
           {
@@ -1671,33 +1615,6 @@
           }
         ],
         "propertyAlternatives": [
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.searchTracks",
-            "propertySubPhrases": [
-              "Find"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.findSongs",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              },
-              {
-                "propertyValue": "player.lookupTracks",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              },
-              {
-                "propertyValue": "player.searchMusic",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              }
-            ]
-          },
           {
             "propertyName": "parameters.query",
             "propertyValue": "punk rock The Ramones",
@@ -1769,24 +1686,13 @@
             "propertyNames": []
           },
           {
-            "text": "songs",
+            "text": "songs for a",
             "synonyms": [
-              "tracks",
-              "music",
-              "tunes"
+              "music for a",
+              "tracks for a",
+              "tunes for a"
             ],
-            "category": "object",
-            "propertyNames": []
-          },
-          {
-            "text": "for a",
-            "synonyms": [
-              "for the",
-              "for an",
-              "for"
-            ],
-            "category": "preposition",
-            "isOptional": true,
+            "category": "context",
             "propertyNames": []
           },
           {
@@ -1804,12 +1710,11 @@
           {
             "text": "playlist",
             "synonyms": [
-              "mix",
               "collection",
-              "setlist"
+              "list",
+              "set"
             ],
-            "category": "object",
-            "isOptional": true,
+            "category": "context",
             "propertyNames": []
           }
         ],
@@ -2010,7 +1915,7 @@
             "synonyms": [
               "of the",
               "in the",
-              "on the"
+              "belonging to the"
             ],
             "category": "preposition",
             "isOptional": true
@@ -2018,9 +1923,9 @@
           {
             "text": "soundtrack of The Greatest Showman",
             "synonyms": [
+              "OST of The Greatest Showman",
               "music from The Greatest Showman",
-              "songs from The Greatest Showman",
-              "tracks from The Greatest Showman"
+              "songs from The Greatest Showman"
             ],
             "category": "query",
             "propertyNames": [
@@ -2175,21 +2080,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "tracks with saxophone",
+                "propertyValue": "songs with saxophone solos",
                 "propertySubPhrases": [
-                  "tracks with saxophone"
+                  "songs with saxophone solos"
                 ]
               },
               {
-                "propertyValue": "music featuring saxophone",
+                "propertyValue": "tracks featuring saxophone",
                 "propertySubPhrases": [
-                  "music featuring saxophone"
+                  "tracks featuring saxophone"
                 ]
               },
               {
-                "propertyValue": "songs with sax",
+                "propertyValue": "music with saxophone",
                 "propertySubPhrases": [
-                  "songs with sax"
+                  "music with saxophone"
                 ]
               }
             ]
@@ -2271,9 +2176,9 @@
                 ]
               },
               {
-                "propertyValue": "player.shuffleTracks",
+                "propertyValue": "player.addTracks",
                 "propertySubPhrases": [
-                  "Shuffle"
+                  "Add"
                 ]
               }
             ]
@@ -2286,21 +2191,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "songs to sing along to",
+                "propertyValue": "road trip anthems",
                 "propertySubPhrases": [
-                  "songs to sing along to"
+                  "road trip anthems"
                 ]
               },
               {
-                "propertyValue": "road trip songs",
+                "propertyValue": "sing-along hits",
                 "propertySubPhrases": [
-                  "road trip songs"
+                  "sing-along hits"
                 ]
               },
               {
-                "propertyValue": "karaoke songs",
+                "propertyValue": "car karaoke",
                 "propertySubPhrases": [
-                  "karaoke songs"
+                  "car karaoke"
                 ]
               }
             ]
@@ -2403,15 +2308,15 @@
                 ]
               },
               {
-                "propertyValue": "uplifting tracks",
+                "propertyValue": "uplifting music",
                 "propertySubPhrases": [
-                  "uplifting tracks"
+                  "uplifting music"
                 ]
               },
               {
-                "propertyValue": "feel-good music",
+                "propertyValue": "feel-good tracks",
                 "propertySubPhrases": [
-                  "feel-good music"
+                  "feel-good tracks"
                 ]
               }
             ]
@@ -2458,9 +2363,9 @@
           {
             "text": "songs to sing in the shower",
             "synonyms": [
-              "music to sing in the shower",
-              "tracks to sing in the shower",
-              "tunes to sing in the shower"
+              "music for showering",
+              "tunes for the shower",
+              "shower songs"
             ],
             "category": "query",
             "propertyNames": [
@@ -2522,7 +2427,7 @@
             "name": "parameters.filterType",
             "value": "name",
             "substrings": [
-              "title"
+              "in the title"
             ],
             "implied": true
           },
@@ -2530,7 +2435,7 @@
             "name": "parameters.filterValue",
             "value": "love",
             "substrings": [
-              "love"
+              "the word love"
             ],
             "implied": false
           }
@@ -2540,7 +2445,7 @@
             "text": "Find songs",
             "synonyms": [
               "Search for songs",
-              "Look for songs",
+              "Look for tracks",
               "Get songs"
             ],
             "category": "action",
@@ -2549,23 +2454,13 @@
             ]
           },
           {
-            "text": "with the word",
+            "text": "with the word love",
             "synonyms": [
-              "containing the word",
-              "that have the word",
-              "including the word"
+              "containing the word love",
+              "that have the word love",
+              "which include the word love"
             ],
-            "category": "preposition",
-            "isOptional": true
-          },
-          {
-            "text": "love",
-            "synonyms": [
-              "affection",
-              "adore",
-              "romance"
-            ],
-            "category": "filterValue",
+            "category": "filter",
             "propertyNames": [
               "parameters.filterValue"
             ]
@@ -2573,11 +2468,11 @@
           {
             "text": "in the title",
             "synonyms": [
-              "in the name",
-              "in the song title",
-              "in the track title"
+              "in their titles",
+              "within the title",
+              "in the song title"
             ],
-            "category": "filterType",
+            "category": "filter",
             "propertyNames": [
               "parameters.filterType"
             ]
@@ -2615,25 +2510,25 @@
             "propertyName": "parameters.filterValue",
             "propertyValue": "love",
             "propertySubPhrases": [
-              "love"
+              "with the word love"
             ],
             "alternatives": [
               {
-                "propertyValue": "heart",
+                "propertyValue": "happy",
                 "propertySubPhrases": [
-                  "heart"
+                  "with the word happy"
                 ]
               },
               {
-                "propertyValue": "happy",
+                "propertyValue": "sad",
                 "propertySubPhrases": [
-                  "happy"
+                  "with the word sad"
                 ]
               },
               {
                 "propertyValue": "dance",
                 "propertySubPhrases": [
-                  "dance"
+                  "with the word dance"
                 ]
               }
             ]
@@ -2736,15 +2631,15 @@
                 ]
               },
               {
-                "propertyValue": "player.queueTracks",
+                "propertyValue": "player.addTracksToQueue",
                 "propertySubPhrases": [
                   "Queue"
                 ]
               },
               {
-                "propertyValue": "player.addTracks",
+                "propertyValue": "player.shuffleTracks",
                 "propertySubPhrases": [
-                  "Add"
+                  "Shuffle"
                 ]
               }
             ]
@@ -2816,13 +2711,24 @@
             "propertyNames": []
           },
           {
-            "text": "the best of country rock",
+            "text": "the",
+            "synonyms": [
+              "a",
+              "an",
+              "some"
+            ],
+            "category": "article",
+            "isOptional": true,
+            "propertyNames": []
+          },
+          {
+            "text": "best of country rock",
             "synonyms": [
               "top country rock",
               "greatest country rock",
               "finest country rock"
             ],
-            "category": "query",
+            "category": "music genre",
             "propertyNames": [
               "parameters.query"
             ]
@@ -2833,25 +2739,25 @@
             "propertyName": "parameters.query",
             "propertyValue": "best of country rock",
             "propertySubPhrases": [
-              "the best of country rock"
+              "best of country rock"
             ],
             "alternatives": [
               {
                 "propertyValue": "top country rock hits",
                 "propertySubPhrases": [
-                  "the top country rock hits"
+                  "top country rock hits"
                 ]
               },
               {
                 "propertyValue": "greatest country rock songs",
                 "propertySubPhrases": [
-                  "the greatest country rock songs"
+                  "greatest country rock songs"
                 ]
               },
               {
-                "propertyValue": "essential country rock tracks",
+                "propertyValue": "country rock classics",
                 "propertySubPhrases": [
-                  "the essential country rock tracks"
+                  "country rock classics"
                 ]
               }
             ]
@@ -2872,9 +2778,7 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": [
-              "Find"
-            ],
+            "substrings": [],
             "implied": true
           },
           {
@@ -2891,13 +2795,11 @@
             "text": "Find",
             "synonyms": [
               "Search for",
-              "Look up",
+              "Look for",
               "Locate"
             ],
             "category": "command",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "propertyNames": []
           },
           {
             "text": "the best of electronic trance music",
@@ -2914,33 +2816,6 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.searchTracks",
-            "propertySubPhrases": [
-              "Find"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.findSongs",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              },
-              {
-                "propertyValue": "player.lookupTracks",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              },
-              {
-                "propertyValue": "player.searchMusic",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              }
-            ]
-          },
-          {
             "propertyName": "parameters.query",
             "propertyValue": "best of electronic trance music",
             "propertySubPhrases": [
@@ -2948,21 +2823,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "top electronic trance music",
+                "propertyValue": "top electronic trance tracks",
                 "propertySubPhrases": [
-                  "the best of electronic trance music"
+                  "the top electronic trance tracks"
                 ]
               },
               {
-                "propertyValue": "popular electronic trance music",
+                "propertyValue": "greatest electronic trance hits",
                 "propertySubPhrases": [
-                  "the best of electronic trance music"
+                  "the greatest electronic trance hits"
                 ]
               },
               {
-                "propertyValue": "greatest electronic trance music",
+                "propertyValue": "popular electronic trance songs",
                 "propertySubPhrases": [
-                  "the best of electronic trance music"
+                  "the popular electronic trance songs"
                 ]
               }
             ]
@@ -3093,15 +2968,15 @@
               "Look for",
               "Locate"
             ],
-            "category": "command",
+            "category": "action",
             "propertyNames": []
           },
           {
             "text": "the",
             "synonyms": [
               "a",
-              "an",
-              "some"
+              "some",
+              "any"
             ],
             "category": "article",
             "propertyNames": []
@@ -3113,7 +2988,7 @@
               "greatest synth-pop",
               "finest synth-pop"
             ],
-            "category": "music genre",
+            "category": "query",
             "propertyNames": [
               "parameters.query"
             ]
@@ -3193,9 +3068,9 @@
           {
             "text": "the greatest hits of the 80s",
             "synonyms": [
-              "the best songs of the 80s",
-              "top tracks from the 80s",
-              "hit songs from the 1980s"
+              "80s greatest hits",
+              "top hits of the 80s",
+              "best songs of the 80s"
             ],
             "category": "query",
             "propertyNames": [
@@ -3274,7 +3149,9 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": [],
+            "substrings": [
+              "Find the most iconic guitar solos"
+            ],
             "implied": true
           },
           {
@@ -3295,24 +3172,16 @@
               "Locate"
             ],
             "category": "command",
-            "isOptional": true
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
-            "text": "the",
+            "text": "the most iconic guitar solos",
             "synonyms": [
-              "a",
-              "an",
-              "those"
-            ],
-            "category": "article",
-            "isOptional": true
-          },
-          {
-            "text": "most iconic guitar solos",
-            "synonyms": [
-              "top guitar solos",
-              "famous guitar solos",
-              "legendary guitar solos"
+              "the greatest guitar solos",
+              "the best guitar solos",
+              "the top guitar solos"
             ],
             "category": "query",
             "propertyNames": [
@@ -3322,28 +3191,55 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "parameters.query",
-            "propertyValue": "most iconic guitar solos",
+            "propertyName": "fullActionName",
+            "propertyValue": "player.searchTracks",
             "propertySubPhrases": [
-              "most iconic guitar solos"
+              "Find"
             ],
             "alternatives": [
               {
-                "propertyValue": "greatest guitar solos",
+                "propertyValue": "player.searchAlbums",
                 "propertySubPhrases": [
-                  "greatest guitar solos"
+                  "Find albums"
+                ]
+              },
+              {
+                "propertyValue": "player.searchArtists",
+                "propertySubPhrases": [
+                  "Find artists"
+                ]
+              },
+              {
+                "propertyValue": "player.searchPlaylists",
+                "propertySubPhrases": [
+                  "Find playlists"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.query",
+            "propertyValue": "most iconic guitar solos",
+            "propertySubPhrases": [
+              "the most iconic guitar solos"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "greatest rock guitar solos",
+                "propertySubPhrases": [
+                  "the greatest rock guitar solos"
                 ]
               },
               {
                 "propertyValue": "legendary guitar solos",
                 "propertySubPhrases": [
-                  "legendary guitar solos"
+                  "the legendary guitar solos"
                 ]
               },
               {
-                "propertyValue": "top guitar solos",
+                "propertyValue": "top guitar solos of all time",
                 "propertySubPhrases": [
-                  "top guitar solos"
+                  "the top guitar solos of all time"
                 ]
               }
             ]
@@ -3364,7 +3260,9 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": [],
+            "substrings": [
+              "Find the most relaxing songs ever"
+            ],
             "implied": true
           },
           {
@@ -3384,8 +3282,10 @@
               "Look for",
               "Locate"
             ],
-            "category": "command",
-            "propertyNames": []
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "the most relaxing songs ever",
@@ -3401,6 +3301,33 @@
           }
         ],
         "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.searchTracks",
+            "propertySubPhrases": [
+              "Find"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.findTracks",
+                "propertySubPhrases": [
+                  "Locate"
+                ]
+              },
+              {
+                "propertyValue": "player.lookupTracks",
+                "propertySubPhrases": [
+                  "Search for"
+                ]
+              },
+              {
+                "propertyValue": "player.browseTracks",
+                "propertySubPhrases": [
+                  "Browse"
+                ]
+              }
+            ]
+          },
           {
             "propertyName": "parameters.query",
             "propertyValue": "most relaxing songs ever",
@@ -3474,9 +3401,9 @@
           {
             "text": "the top 10 viral songs on TikTok",
             "synonyms": [
-              "the most popular 10 songs on TikTok",
-              "the 10 trending songs on TikTok",
-              "the 10 most viral songs on TikTok"
+              "top 10 trending songs on TikTok",
+              "top 10 popular songs on TikTok",
+              "top 10 hit songs on TikTok"
             ],
             "category": "query",
             "propertyNames": [
@@ -3501,7 +3428,7 @@
               {
                 "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Look up"
+                  "Search"
                 ]
               },
               {
@@ -3555,7 +3482,9 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": [],
+            "substrings": [
+              "Find top hits from the 2000s"
+            ],
             "implied": true
           },
           {
@@ -3572,11 +3501,13 @@
             "text": "Find",
             "synonyms": [
               "Search for",
-              "Look up",
-              "Get"
+              "Look for",
+              "Locate"
             ],
-            "category": "command",
-            "isOptional": true
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "top hits from the 2000s",
@@ -3592,6 +3523,33 @@
           }
         ],
         "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.searchTracks",
+            "propertySubPhrases": [
+              "Find"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.playTracks",
+                "propertySubPhrases": [
+                  "Play"
+                ]
+              },
+              {
+                "propertyValue": "player.queueTracks",
+                "propertySubPhrases": [
+                  "Queue"
+                ]
+              },
+              {
+                "propertyValue": "player.browseTracks",
+                "propertySubPhrases": [
+                  "Browse"
+                ]
+              }
+            ]
+          },
           {
             "propertyName": "parameters.query",
             "propertyValue": "top hits from the 2000s",
@@ -3616,12 +3574,6 @@
                 "propertySubPhrases": [
                   "top rock hits from the 2000s"
                 ]
-              },
-              {
-                "propertyValue": "top pop hits from the 2000s",
-                "propertySubPhrases": [
-                  "top pop hits from the 2000s"
-                ]
               }
             ]
           }
@@ -3642,9 +3594,9 @@
             "name": "fullActionName",
             "value": "player.searchTracks",
             "substrings": [
-              "Find tracks"
+              "Find tracks featuring"
             ],
-            "implied": true
+            "implied": false
           },
           {
             "name": "parameters.query",
@@ -3657,11 +3609,11 @@
         ],
         "subPhrases": [
           {
-            "text": "Find tracks",
+            "text": "Find tracks featuring",
             "synonyms": [
-              "Search for songs",
-              "Look for tracks",
-              "Find music"
+              "Search for songs with",
+              "Look for tracks that include",
+              "Find music featuring"
             ],
             "category": "action",
             "propertyNames": [
@@ -3669,23 +3621,13 @@
             ]
           },
           {
-            "text": "featuring",
-            "synonyms": [
-              "with",
-              "including",
-              "featuring"
-            ],
-            "category": "preposition",
-            "isOptional": true
-          },
-          {
             "text": "Ariana Grande",
             "synonyms": [
-              "Ariana Grande",
-              "Ari",
-              "Grande"
+              "Ariana G.",
+              "A. Grande",
+              "Ariana"
             ],
-            "category": "artist",
+            "category": "query",
             "propertyNames": [
               "parameters.query"
             ]
@@ -3696,25 +3638,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.searchTracks",
             "propertySubPhrases": [
-              "Find tracks"
+              "Find tracks featuring"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.findSongs",
                 "propertySubPhrases": [
-                  "Find songs"
+                  "Search for songs by"
                 ]
               },
               {
-                "propertyValue": "player.lookupTracks",
+                "propertyValue": "music.lookupTracks",
                 "propertySubPhrases": [
-                  "Look up tracks"
+                  "Look up tracks with"
                 ]
               },
               {
-                "propertyValue": "player.searchMusic",
+                "propertyValue": "audio.findTracks",
                 "propertySubPhrases": [
-                  "Search music"
+                  "Locate tracks featuring"
                 ]
               }
             ]
@@ -3815,9 +3757,9 @@
           {
             "text": "by Fleetwood Mac",
             "synonyms": [
-              "from Fleetwood Mac",
-              "Fleetwood Mac's",
-              "Fleetwood Mac"
+              "by the band Fleetwood Mac",
+              "by Fleetwood Mac band",
+              "by Fleetwood Mac group"
             ],
             "category": "artist",
             "propertyNames": [
@@ -3842,7 +3784,7 @@
               {
                 "propertyValue": "player.addAlbumToPlaylist",
                 "propertySubPhrases": [
-                  "Add tracks from the album to playlist"
+                  "Add tracks from the album"
                 ]
               },
               {
@@ -3888,15 +3830,15 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "The Beatles",
-                "propertySubPhrases": [
-                  "by The Beatles"
-                ]
-              },
-              {
                 "propertyValue": "Pink Floyd",
                 "propertySubPhrases": [
                   "by Pink Floyd"
+                ]
+              },
+              {
+                "propertyValue": "The Beatles",
+                "propertySubPhrases": [
+                  "by The Beatles"
                 ]
               },
               {
@@ -4003,7 +3945,9 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": [],
+            "substrings": [
+              "Look for"
+            ],
             "implied": true
           },
           {
@@ -4024,14 +3968,16 @@
               "Locate"
             ],
             "category": "command",
-            "propertyNames": []
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "Africa by Toto",
             "synonyms": [
               "Africa by Toto",
               "Toto's Africa",
-              "the song Africa by Toto"
+              "Song Africa by Toto"
             ],
             "category": "query",
             "propertyNames": [
@@ -4041,6 +3987,33 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.searchTracks",
+            "propertySubPhrases": [
+              "Look for"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.findSongs",
+                "propertySubPhrases": [
+                  "Find"
+                ]
+              },
+              {
+                "propertyValue": "player.lookupTracks",
+                "propertySubPhrases": [
+                  "Lookup"
+                ]
+              },
+              {
+                "propertyValue": "player.searchMusic",
+                "propertySubPhrases": [
+                  "Search for"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.query",
             "propertyValue": "Africa by Toto",
             "propertySubPhrases": [
@@ -4048,21 +4021,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "Africa by Weezer",
+                "propertyValue": "Bohemian Rhapsody by Queen",
                 "propertySubPhrases": [
-                  "Africa by Weezer"
+                  "Bohemian Rhapsody by Queen"
                 ]
               },
               {
-                "propertyValue": "Rosanna by Toto",
+                "propertyValue": "Hotel California by Eagles",
                 "propertySubPhrases": [
-                  "Rosanna by Toto"
+                  "Hotel California by Eagles"
                 ]
               },
               {
-                "propertyValue": "Hold the Line by Toto",
+                "propertyValue": "Stairway to Heaven by Led Zeppelin",
                 "propertySubPhrases": [
-                  "Hold the Line by Toto"
+                  "Stairway to Heaven by Led Zeppelin"
                 ]
               }
             ]
@@ -4114,8 +4087,8 @@
             "text": "All I Want for Christmas Is You by Mariah Carey",
             "synonyms": [
               "All I Want for Christmas Is You by Mariah Carey",
-              "The song All I Want for Christmas Is You by Mariah Carey",
-              "All I Want for Christmas Is You by Mariah Carey track"
+              "Mariah Carey's All I Want for Christmas Is You",
+              "The song All I Want for Christmas Is You by Mariah Carey"
             ],
             "category": "query",
             "propertyNames": [
@@ -4140,13 +4113,13 @@
               {
                 "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Lookup"
+                  "Search for"
                 ]
               },
               {
-                "propertyValue": "player.searchMusic",
+                "propertyValue": "player.browseTracks",
                 "propertySubPhrases": [
-                  "Search for"
+                  "Browse"
                 ]
               }
             ]
@@ -4159,21 +4132,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "Jingle Bells by Frank Sinatra",
-                "propertySubPhrases": [
-                  "Jingle Bells by Frank Sinatra"
-                ]
-              },
-              {
                 "propertyValue": "Last Christmas by Wham!",
                 "propertySubPhrases": [
                   "Last Christmas by Wham!"
                 ]
               },
               {
-                "propertyValue": "Silent Night by Bing Crosby",
+                "propertyValue": "Jingle Bell Rock by Bobby Helms",
                 "propertySubPhrases": [
-                  "Silent Night by Bing Crosby"
+                  "Jingle Bell Rock by Bobby Helms"
+                ]
+              },
+              {
+                "propertyValue": "Feliz Navidad by José Feliciano",
+                "propertySubPhrases": [
+                  "Feliz Navidad by José Feliciano"
                 ]
               }
             ]
@@ -4215,14 +4188,14 @@
               "Locate"
             ],
             "category": "command",
-            "propertyNames": []
+            "isOptional": true
           },
           {
             "text": "Billie Jean by Michael Jackson",
             "synonyms": [
               "Billie Jean by MJ",
               "Billie Jean by the King of Pop",
-              "Billie Jean by Michael J."
+              "Billie Jean by M. Jackson"
             ],
             "category": "query",
             "propertyNames": [
@@ -4442,13 +4415,13 @@
               {
                 "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Lookup"
+                  "Search for"
                 ]
               },
               {
-                "propertyValue": "player.searchMusic",
+                "propertyValue": "player.browseTracks",
                 "propertySubPhrases": [
-                  "Search for"
+                  "Browse"
                 ]
               }
             ]
@@ -4473,9 +4446,9 @@
                 ]
               },
               {
-                "propertyValue": "Love Me Tender by Elvis Presley",
+                "propertyValue": "Hound Dog by Elvis Presley",
                 "propertySubPhrases": [
-                  "Love Me Tender by Elvis Presley"
+                  "Hound Dog by Elvis Presley"
                 ]
               }
             ]
@@ -4526,9 +4499,9 @@
           {
             "text": "country hits by Johnny Cash",
             "synonyms": [
-              "Johnny Cash country hits",
               "country songs by Johnny Cash",
-              "Johnny Cash's country hits"
+              "Johnny Cash country hits",
+              "Johnny Cash country songs"
             ],
             "category": "query",
             "propertyNames": [
@@ -4572,21 +4545,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "rock songs by Johnny Cash",
+                "propertyValue": "rock hits by Johnny Cash",
                 "propertySubPhrases": [
-                  "rock songs by Johnny Cash"
+                  "rock hits by Johnny Cash"
                 ]
               },
               {
-                "propertyValue": "folk music by Johnny Cash",
+                "propertyValue": "country songs by Johnny Cash",
                 "propertySubPhrases": [
-                  "folk music by Johnny Cash"
+                  "country songs by Johnny Cash"
                 ]
               },
               {
-                "propertyValue": "blues tracks by Johnny Cash",
+                "propertyValue": "top tracks by Johnny Cash",
                 "propertySubPhrases": [
-                  "blues tracks by Johnny Cash"
+                  "top tracks by Johnny Cash"
                 ]
               }
             ]
@@ -4662,15 +4635,15 @@
                 ]
               },
               {
-                "propertyValue": "player.browseMusic",
+                "propertyValue": "player.lookupMusic",
                 "propertySubPhrases": [
-                  "Browse"
+                  "Search for"
                 ]
               },
               {
-                "propertyValue": "player.discoverTracks",
+                "propertyValue": "player.browseTracks",
                 "propertySubPhrases": [
-                  "Discover"
+                  "Browse"
                 ]
               }
             ]
@@ -4683,21 +4656,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "relaxing music",
+                "propertyValue": "high-energy exercise playlists",
                 "propertySubPhrases": [
-                  "relaxing music"
+                  "high-energy exercise playlists"
                 ]
               },
               {
-                "propertyValue": "party anthems",
+                "propertyValue": "upbeat fitness playlists",
                 "propertySubPhrases": [
-                  "party anthems"
+                  "upbeat fitness playlists"
                 ]
               },
               {
-                "propertyValue": "focus study tracks",
+                "propertyValue": "motivational gym playlists",
                 "propertySubPhrases": [
-                  "focus study tracks"
+                  "motivational gym playlists"
                 ]
               }
             ]
@@ -4736,7 +4709,7 @@
             "synonyms": [
               "Search for",
               "Find",
-              "Locate"
+              "Seek"
             ],
             "category": "command",
             "isOptional": true
@@ -4819,7 +4792,7 @@
               "Seek"
             ],
             "category": "command",
-            "propertyNames": []
+            "isOptional": false
           },
           {
             "text": "French chansons",
@@ -4896,7 +4869,7 @@
             "synonyms": [
               "Search for",
               "Find",
-              "Locate"
+              "Seek"
             ],
             "category": "command",
             "propertyNames": []
@@ -4904,9 +4877,9 @@
           {
             "text": "Grammy award-winning songs",
             "synonyms": [
-              "Grammy-winning tracks",
+              "Grammy-winning songs",
               "Award-winning songs",
-              "Grammy songs"
+              "Songs that won Grammy"
             ],
             "category": "query",
             "propertyNames": [
@@ -5099,9 +5072,9 @@
           {
             "text": "heavy metal bands like Metallica",
             "synonyms": [
-              "metal bands such as Metallica",
-              "bands like Metallica",
-              "heavy metal groups like Metallica"
+              "metal groups such as Metallica",
+              "heavy rock bands like Metallica",
+              "metal bands similar to Metallica"
             ],
             "category": "query",
             "propertyNames": [
@@ -5235,13 +5208,13 @@
                 ]
               },
               {
-                "propertyValue": "player.lookupTracks",
+                "propertyValue": "player.lookupMusic",
                 "propertySubPhrases": [
                   "Search for"
                 ]
               },
               {
-                "propertyValue": "player.browseMusic",
+                "propertyValue": "player.browseTracks",
                 "propertySubPhrases": [
                   "Browse"
                 ]
@@ -5291,9 +5264,7 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": [
-              "Look for"
-            ],
+            "substrings": [],
             "implied": true
           },
           {
@@ -5311,19 +5282,17 @@
             "synonyms": [
               "Search for",
               "Find",
-              "Locate"
+              "Seek"
             ],
             "category": "command",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "propertyNames": []
           },
           {
             "text": "instrumental jazz music",
             "synonyms": [
-              "jazz instrumentals",
+              "instrumental jazz songs",
               "instrumental jazz tracks",
-              "jazz music without vocals"
+              "instrumental jazz tunes"
             ],
             "category": "query",
             "propertyNames": [
@@ -5333,33 +5302,6 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.searchTracks",
-            "propertySubPhrases": [
-              "Look for"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.findSongs",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              },
-              {
-                "propertyValue": "player.lookupTracks",
-                "propertySubPhrases": [
-                  "Search for"
-                ]
-              },
-              {
-                "propertyValue": "player.browseMusic",
-                "propertySubPhrases": [
-                  "Browse"
-                ]
-              }
-            ]
-          },
-          {
             "propertyName": "parameters.query",
             "propertyValue": "instrumental jazz music",
             "propertySubPhrases": [
@@ -5367,21 +5309,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "smooth jazz",
+                "propertyValue": "smooth jazz music",
                 "propertySubPhrases": [
-                  "smooth jazz"
+                  "smooth jazz music"
                 ]
               },
               {
-                "propertyValue": "classic jazz",
+                "propertyValue": "classic jazz music",
                 "propertySubPhrases": [
-                  "classic jazz"
+                  "classic jazz music"
                 ]
               },
               {
-                "propertyValue": "modern jazz",
+                "propertyValue": "modern jazz music",
                 "propertySubPhrases": [
-                  "modern jazz"
+                  "modern jazz music"
                 ]
               }
             ]
@@ -5564,15 +5506,15 @@
                 ]
               },
               {
-                "propertyValue": "Not Afraid by Eminem",
+                "propertyValue": "Without Me by Eminem",
                 "propertySubPhrases": [
-                  "Not Afraid by Eminem"
+                  "Without Me by Eminem"
                 ]
               },
               {
-                "propertyValue": "Rap God by Eminem",
+                "propertyValue": "The Real Slim Shady by Eminem",
                 "propertySubPhrases": [
-                  "Rap God by Eminem"
+                  "The Real Slim Shady by Eminem"
                 ]
               }
             ]
@@ -5705,7 +5647,7 @@
             "name": "fullActionName",
             "value": "player.searchTracks",
             "substrings": [
-              "Look for"
+              "Look for party anthems for a night out"
             ],
             "implied": true
           },
@@ -5724,9 +5666,9 @@
             "synonyms": [
               "Search for",
               "Find",
-              "Seek"
+              "Seek out"
             ],
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -5735,7 +5677,7 @@
             "text": "party anthems for a night out",
             "synonyms": [
               "songs for a night out",
-              "music for a party",
+              "music for a night out",
               "tracks for a night out"
             ],
             "category": "query",
@@ -5847,7 +5789,7 @@
             "synonyms": [
               "Bob Marley reggae songs",
               "Bob Marley reggae tracks",
-              "reggae songs by Bob Marley"
+              "Bob Marley reggae tunes"
             ],
             "category": "query",
             "propertyNames": [
@@ -5876,7 +5818,7 @@
                 ]
               },
               {
-                "propertyValue": "player.browseTracks",
+                "propertyValue": "player.browseMusic",
                 "propertySubPhrases": [
                   "Browse"
                 ]
@@ -6002,21 +5944,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "calming piano tunes",
+                "propertyValue": "calming piano music",
                 "propertySubPhrases": [
-                  "calming piano tunes"
+                  "calming piano music"
                 ]
               },
               {
-                "propertyValue": "soothing piano melodies",
+                "propertyValue": "soothing piano music",
                 "propertySubPhrases": [
-                  "soothing piano melodies"
+                  "soothing piano music"
                 ]
               },
               {
-                "propertyValue": "peaceful piano pieces",
+                "propertyValue": "peaceful piano music",
                 "propertySubPhrases": [
-                  "peaceful piano pieces"
+                  "peaceful piano music"
                 ]
               }
             ]
@@ -6094,7 +6036,7 @@
               {
                 "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Lookup"
+                  "Search for"
                 ]
               },
               {
@@ -6113,21 +6055,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "pop hits from the 80s",
+                "propertyValue": "grunge hits from the 90s",
                 "propertySubPhrases": [
-                  "pop hits from the 80s"
+                  "grunge hits from the 90s"
                 ]
               },
               {
-                "propertyValue": "jazz classics from the 70s",
+                "propertyValue": "alternative rock from the 90s",
                 "propertySubPhrases": [
-                  "jazz classics from the 70s"
+                  "alternative rock from the 90s"
                 ]
               },
               {
-                "propertyValue": "hip hop tracks from the 2000s",
+                "propertyValue": "classic rock from the 90s",
                 "propertySubPhrases": [
-                  "hip hop tracks from the 2000s"
+                  "classic rock from the 90s"
                 ]
               }
             ]
@@ -6176,7 +6118,7 @@
             "synonyms": [
               "Rolling in the Deep by Adele",
               "Adele's Rolling in the Deep",
-              "The song Rolling in the Deep by Adele"
+              "the song Rolling in the Deep by Adele"
             ],
             "category": "query",
             "propertyNames": [
@@ -6199,15 +6141,15 @@
                 ]
               },
               {
-                "propertyValue": "Hello by Adele",
-                "propertySubPhrases": [
-                  "Hello by Adele"
-                ]
-              },
-              {
                 "propertyValue": "Set Fire to the Rain by Adele",
                 "propertySubPhrases": [
                   "Set Fire to the Rain by Adele"
+                ]
+              },
+              {
+                "propertyValue": "Hello by Adele",
+                "propertySubPhrases": [
+                  "Hello by Adele"
                 ]
               }
             ]
@@ -6339,8 +6281,8 @@
             "text": "Smells Like Teen Spirit by Nirvana",
             "synonyms": [
               "Smells Like Teen Spirit by Nirvana",
-              "Smells Like Teen Spirit from Nirvana",
-              "Nirvana's Smells Like Teen Spirit"
+              "Smells Like Teen Spirit by the band Nirvana",
+              "Smells Like Teen Spirit by Nirvana band"
             ],
             "category": "query",
             "propertyNames": [
@@ -6419,7 +6361,9 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": [],
+            "substrings": [
+              "Look for"
+            ],
             "implied": true
           },
           {
@@ -6440,14 +6384,16 @@
               "Locate"
             ],
             "category": "command",
-            "propertyNames": []
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "Stairway to Heaven by Led Zeppelin",
             "synonyms": [
-              "Stairway to Heaven by Led Zeppelin",
+              "Stairway to Heaven performed by Led Zeppelin",
               "Stairway to Heaven from Led Zeppelin",
-              "Stairway to Heaven - Led Zeppelin"
+              "Stairway to Heaven sung by Led Zeppelin"
             ],
             "category": "query",
             "propertyNames": [
@@ -6456,6 +6402,33 @@
           }
         ],
         "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.searchTracks",
+            "propertySubPhrases": [
+              "Look for"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.findSongs",
+                "propertySubPhrases": [
+                  "Find"
+                ]
+              },
+              {
+                "propertyValue": "player.lookupTracks",
+                "propertySubPhrases": [
+                  "Search for"
+                ]
+              },
+              {
+                "propertyValue": "player.browseTracks",
+                "propertySubPhrases": [
+                  "Browse"
+                ]
+              }
+            ]
+          },
           {
             "propertyName": "parameters.query",
             "propertyValue": "Stairway to Heaven by Led Zeppelin",
@@ -6499,9 +6472,7 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": [
-              "Look for"
-            ],
+            "substrings": [],
             "implied": true
           },
           {
@@ -6522,9 +6493,7 @@
               "Locate"
             ],
             "category": "command",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "propertyNames": []
           },
           {
             "text": "Sweet Caroline by Neil Diamond",
@@ -6540,33 +6509,6 @@
           }
         ],
         "propertyAlternatives": [
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.searchTracks",
-            "propertySubPhrases": [
-              "Look for"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.findSongs",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              },
-              {
-                "propertyValue": "player.lookupTracks",
-                "propertySubPhrases": [
-                  "Search for"
-                ]
-              },
-              {
-                "propertyValue": "player.queryTracks",
-                "propertySubPhrases": [
-                  "Query"
-                ]
-              }
-            ]
-          },
           {
             "propertyName": "parameters.query",
             "propertyValue": "Sweet Caroline by Neil Diamond",
@@ -6659,21 +6601,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playTrack",
+                "propertyValue": "player.findSongs",
                 "propertySubPhrases": [
-                  "Play"
+                  "Find"
                 ]
               },
               {
-                "propertyValue": "player.addToQueue",
+                "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Add to queue"
+                  "Search for"
                 ]
               },
               {
-                "propertyValue": "player.likeTrack",
+                "propertyValue": "player.browseTracks",
                 "propertySubPhrases": [
-                  "Like"
+                  "Browse"
                 ]
               }
             ]
@@ -6752,8 +6694,8 @@
             "text": "Tennessee Whiskey by Chris Stapleton",
             "synonyms": [
               "Tennessee Whiskey performed by Chris Stapleton",
-              "Chris Stapleton's Tennessee Whiskey",
-              "Tennessee Whiskey sung by Chris Stapleton"
+              "Tennessee Whiskey sung by Chris Stapleton",
+              "Tennessee Whiskey from Chris Stapleton"
             ],
             "category": "query",
             "propertyNames": [
@@ -6770,21 +6712,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.findSongs",
+                "propertyValue": "player.playTrack",
                 "propertySubPhrases": [
-                  "Find"
+                  "Play"
                 ]
               },
               {
-                "propertyValue": "player.lookupTracks",
+                "propertyValue": "player.addToQueue",
                 "propertySubPhrases": [
-                  "Lookup"
+                  "Add to queue"
                 ]
               },
               {
-                "propertyValue": "player.searchMusic",
+                "propertyValue": "player.likeTrack",
                 "propertySubPhrases": [
-                  "Search for"
+                  "Like"
                 ]
               }
             ]
@@ -6860,7 +6802,7 @@
             "synonyms": [
               "newest hip-hop tracks",
               "recent hip-hop songs",
-              "latest rap releases"
+              "current hip-hop releases"
             ],
             "category": "music query",
             "propertyNames": [
@@ -6969,7 +6911,7 @@
               {
                 "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Search for"
+                  "Look up"
                 ]
               },
               {
@@ -7054,8 +6996,8 @@
             "text": "Bohemian Rhapsody",
             "synonyms": [
               "Bohemian Rhapsody",
-              "Bohemian Rhapsody by Queen",
-              "Bohemian Rhapsody track"
+              "Queen's Bohemian Rhapsody",
+              "The song Bohemian Rhapsody"
             ],
             "category": "query",
             "propertyNames": [
@@ -7080,13 +7022,13 @@
               {
                 "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Lookup the song"
+                  "Search for the song"
                 ]
               },
               {
-                "propertyValue": "player.searchMusic",
+                "propertyValue": "player.seekTracks",
                 "propertySubPhrases": [
-                  "Search for the song"
+                  "Seek the song"
                 ]
               }
             ]
@@ -7194,12 +7136,6 @@
                 "propertyValue": "high-energy exercise tracks",
                 "propertySubPhrases": [
                   "high-energy exercise tracks"
-                ]
-              },
-              {
-                "propertyValue": "motivational workout music",
-                "propertySubPhrases": [
-                  "motivational workout music"
                 ]
               }
             ]
@@ -7322,7 +7258,7 @@
               "Look for",
               "Seek"
             ],
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -7332,7 +7268,7 @@
             "synonyms": [
               "meditation ambient tracks",
               "tracks for meditation",
-              "meditation music"
+              "ambient music for meditation"
             ],
             "category": "query",
             "propertyNames": [
@@ -7434,14 +7370,16 @@
               "Seek"
             ],
             "category": "command",
-            "propertyNames": []
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "blues albums from B.B. King",
             "synonyms": [
               "B.B. King blues albums",
               "albums by B.B. King in blues",
-              "B.B. King blues records"
+              "B.B. King albums in blues genre"
             ],
             "category": "query",
             "propertyNames": [
@@ -7451,6 +7389,33 @@
         ],
         "propertyAlternatives": [
           {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.searchTracks",
+            "propertySubPhrases": [
+              "Search for"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.searchAlbums",
+                "propertySubPhrases": [
+                  "Find albums"
+                ]
+              },
+              {
+                "propertyValue": "player.searchArtists",
+                "propertySubPhrases": [
+                  "Look up artists"
+                ]
+              },
+              {
+                "propertyValue": "player.searchPlaylists",
+                "propertySubPhrases": [
+                  "Search for playlists"
+                ]
+              }
+            ]
+          },
+          {
             "propertyName": "parameters.query",
             "propertyValue": "blues albums from B.B. King",
             "propertySubPhrases": [
@@ -7458,21 +7423,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "jazz albums from B.B. King",
+                "propertyValue": "jazz albums from Miles Davis",
                 "propertySubPhrases": [
-                  "jazz albums from B.B. King"
+                  "jazz albums from Miles Davis"
                 ]
               },
               {
-                "propertyValue": "blues albums from Muddy Waters",
+                "propertyValue": "rock albums from The Beatles",
                 "propertySubPhrases": [
-                  "blues albums from Muddy Waters"
+                  "rock albums from The Beatles"
                 ]
               },
               {
-                "propertyValue": "rock albums from B.B. King",
+                "propertyValue": "pop albums from Michael Jackson",
                 "propertySubPhrases": [
-                  "rock albums from B.B. King"
+                  "pop albums from Michael Jackson"
                 ]
               }
             ]
@@ -7511,9 +7476,9 @@
           {
             "text": "Search for",
             "synonyms": [
-              "Find",
               "Look for",
-              "Seek"
+              "Find",
+              "Seek out"
             ],
             "category": "command",
             "propertyNames": [
@@ -7542,21 +7507,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playTracks",
+                "propertyValue": "player.findSongs",
                 "propertySubPhrases": [
-                  "Play"
+                  "Look for"
                 ]
               },
               {
-                "propertyValue": "player.addTracksToQueue",
+                "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Add to queue"
+                  "Find"
                 ]
               },
               {
-                "propertyValue": "player.shuffleTracks",
+                "propertyValue": "player.queryMusic",
                 "propertySubPhrases": [
-                  "Shuffle"
+                  "Query"
                 ]
               }
             ]
@@ -7569,21 +7534,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "classical music",
+                "propertyValue": "Broadway show tunes",
                 "propertySubPhrases": [
-                  "classical music"
+                  "Broadway show tunes"
                 ]
               },
               {
-                "propertyValue": "pop hits",
+                "propertyValue": "musical theater songs",
                 "propertySubPhrases": [
-                  "pop hits"
+                  "musical theater songs"
                 ]
               },
               {
-                "propertyValue": "jazz standards",
+                "propertyValue": "Broadway hits",
                 "propertySubPhrases": [
-                  "jazz standards"
+                  "Broadway hits"
                 ]
               }
             ]
@@ -7636,7 +7601,7 @@
             "synonyms": [
               "Beethoven's classical music",
               "Beethoven's compositions",
-              "Beethoven's symphonies"
+              "Beethoven's works"
             ],
             "category": "query",
             "propertyNames": [
@@ -7737,7 +7702,7 @@
               "Look for",
               "Seek"
             ],
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -7745,8 +7710,8 @@
           {
             "text": "cover songs by famous YouTubers",
             "synonyms": [
+              "covers by popular YouTubers",
               "YouTuber cover songs",
-              "songs covered by YouTubers",
               "famous YouTuber covers"
             ],
             "category": "query",
@@ -7844,11 +7809,11 @@
           {
             "text": "Search for",
             "synonyms": [
-              "Look for",
               "Find",
+              "Look for",
               "Seek"
             ],
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -7875,7 +7840,7 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.findTracks",
+                "propertyValue": "player.findSongs",
                 "propertySubPhrases": [
                   "Find"
                 ]
@@ -7968,8 +7933,8 @@
             "text": "Dont Stop Believin by Journey",
             "synonyms": [
               "Don't Stop Believin by Journey",
-              "Dont Stop Believin' by Journey",
-              "Don't Stop Believin' by Journey"
+              "Don't Stop Believin' by Journey",
+              "Dont Stop Believin' by Journey"
             ],
             "category": "query",
             "propertyNames": [
@@ -8066,8 +8031,8 @@
           {
             "text": "Search for",
             "synonyms": [
-              "Look for",
               "Find",
+              "Look for",
               "Seek"
             ],
             "category": "command",
@@ -8078,9 +8043,9 @@
           {
             "text": "Eye of the Tiger by Survivor",
             "synonyms": [
+              "Eye of the Tiger by Survivor",
               "Eye of the Tiger from Survivor",
-              "Eye of the Tiger - Survivor",
-              "Survivor's Eye of the Tiger"
+              "Eye of the Tiger - Survivor"
             ],
             "category": "query",
             "propertyNames": [
@@ -8177,8 +8142,8 @@
           {
             "text": "Search for",
             "synonyms": [
-              "Find",
               "Look for",
+              "Find",
               "Seek"
             ],
             "category": "action",
@@ -8210,13 +8175,13 @@
               {
                 "propertyValue": "player.findSongs",
                 "propertySubPhrases": [
-                  "Look for"
+                  "Find"
                 ]
               },
               {
                 "propertyValue": "player.lookupMusic",
                 "propertySubPhrases": [
-                  "Find"
+                  "Look up"
                 ]
               },
               {
@@ -8241,15 +8206,15 @@
                 ]
               },
               {
-                "propertyValue": "well-known opera arias",
-                "propertySubPhrases": [
-                  "well-known opera arias"
-                ]
-              },
-              {
                 "propertyValue": "classic opera arias",
                 "propertySubPhrases": [
                   "classic opera arias"
+                ]
+              },
+              {
+                "propertyValue": "well-known opera arias",
+                "propertySubPhrases": [
+                  "well-known opera arias"
                 ]
               }
             ]
@@ -8325,7 +8290,7 @@
                 ]
               },
               {
-                "propertyValue": "player.lookupMusic",
+                "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
                   "Look up"
                 ]
@@ -8346,21 +8311,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "traditional music globally",
+                "propertyValue": "traditional music from different countries",
                 "propertySubPhrases": [
-                  "traditional music globally"
+                  "traditional music from different countries"
                 ]
               },
               {
-                "propertyValue": "worldwide folk songs",
+                "propertyValue": "world folk songs",
                 "propertySubPhrases": [
-                  "worldwide folk songs"
+                  "world folk songs"
                 ]
               },
               {
-                "propertyValue": "international folk tunes",
+                "propertyValue": "global folk music",
                 "propertySubPhrases": [
-                  "international folk tunes"
+                  "global folk music"
                 ]
               }
             ]
@@ -8442,9 +8407,9 @@
                 ]
               },
               {
-                "propertyValue": "player.browseTracks",
+                "propertyValue": "player.querySongs",
                 "propertySubPhrases": [
-                  "Browse"
+                  "Query"
                 ]
               }
             ]
@@ -8510,11 +8475,11 @@
           {
             "text": "Search for",
             "synonyms": [
-              "Find",
               "Look for",
+              "Find",
               "Seek"
             ],
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -8523,8 +8488,8 @@
             "text": "Halo by Beyoncé",
             "synonyms": [
               "Halo by Beyonce",
-              "Halo by Bey",
-              "Halo by Queen B"
+              "Halo by Queen B",
+              "Halo by the artist Beyoncé"
             ],
             "category": "query",
             "propertyNames": [
@@ -8621,8 +8586,8 @@
           {
             "text": "Search for",
             "synonyms": [
-              "Look for",
               "Find",
+              "Look for",
               "Seek"
             ],
             "category": "command",
@@ -8802,9 +8767,9 @@
                 ]
               },
               {
-                "propertyValue": "Billie Jean by Michael Jackson",
+                "propertyValue": "Rolling in the Deep by Adele",
                 "propertySubPhrases": [
-                  "Billie Jean by Michael Jackson"
+                  "Rolling in the Deep by Adele"
                 ]
               }
             ]
@@ -8843,8 +8808,8 @@
           {
             "text": "Search for",
             "synonyms": [
-              "Find",
               "Look for",
+              "Find",
               "Seek"
             ],
             "category": "command",
@@ -8857,7 +8822,7 @@
             "synonyms": [
               "Imagine by J. Lennon",
               "Imagine by Lennon",
-              "Imagine by John L."
+              "Imagine by John"
             ],
             "category": "query",
             "propertyNames": [
@@ -8886,9 +8851,9 @@
                 ]
               },
               {
-                "propertyValue": "player.discoverTracks",
+                "propertyValue": "player.seekTracks",
                 "propertySubPhrases": [
-                  "Discover"
+                  "Seek"
                 ]
               }
             ]
@@ -8959,14 +8924,16 @@
               "Seek out"
             ],
             "category": "command",
-            "propertyNames": []
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "indie bands like Arctic Monkeys",
             "synonyms": [
               "alternative bands like Arctic Monkeys",
-              "indie groups similar to Arctic Monkeys",
-              "indie artists such as Arctic Monkeys"
+              "indie groups such as Arctic Monkeys",
+              "bands similar to Arctic Monkeys"
             ],
             "category": "query",
             "propertyNames": [
@@ -8975,6 +8942,33 @@
           }
         ],
         "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.searchTracks",
+            "propertySubPhrases": [
+              "Search for"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.searchAlbums",
+                "propertySubPhrases": [
+                  "Search for albums by"
+                ]
+              },
+              {
+                "propertyValue": "player.searchArtists",
+                "propertySubPhrases": [
+                  "Search for artists like"
+                ]
+              },
+              {
+                "propertyValue": "player.searchPlaylists",
+                "propertySubPhrases": [
+                  "Search for playlists featuring"
+                ]
+              }
+            ]
+          },
           {
             "propertyName": "parameters.query",
             "propertyValue": "indie bands like Arctic Monkeys",
@@ -8989,15 +8983,15 @@
                 ]
               },
               {
-                "propertyValue": "indie bands like The Killers",
-                "propertySubPhrases": [
-                  "indie bands like The Killers"
-                ]
-              },
-              {
                 "propertyValue": "indie bands like Tame Impala",
                 "propertySubPhrases": [
                   "indie bands like Tame Impala"
+                ]
+              },
+              {
+                "propertyValue": "indie bands like Vampire Weekend",
+                "propertySubPhrases": [
+                  "indie bands like Vampire Weekend"
                 ]
               }
             ]
@@ -9069,19 +9063,19 @@
               {
                 "propertyValue": "player.findSongs",
                 "propertySubPhrases": [
-                  "Find"
+                  "Find songs"
                 ]
               },
               {
                 "propertyValue": "player.lookupMusic",
                 "propertySubPhrases": [
-                  "Look up"
+                  "Look up music"
                 ]
               },
               {
                 "propertyValue": "player.browseTracks",
                 "propertySubPhrases": [
-                  "Browse"
+                  "Browse tracks"
                 ]
               }
             ]
@@ -9148,20 +9142,18 @@
             "text": "Search for",
             "synonyms": [
               "Find",
-              "Look for",
-              "Seek"
+              "Look up",
+              "Locate"
             ],
             "category": "command",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "propertyNames": []
           },
           {
             "text": "Let It Be by The Beatles",
             "synonyms": [
               "Let It Be by The Fab Four",
               "Let It Be by Beatles",
-              "Let It Be by The Band"
+              "Let It Be by the band The Beatles"
             ],
             "category": "query",
             "propertyNames": [
@@ -9170,33 +9162,6 @@
           }
         ],
         "propertyAlternatives": [
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.searchTracks",
-            "propertySubPhrases": [
-              "Search for"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.playTrack",
-                "propertySubPhrases": [
-                  "Play"
-                ]
-              },
-              {
-                "propertyValue": "player.addTrackToQueue",
-                "propertySubPhrases": [
-                  "Add to queue"
-                ]
-              },
-              {
-                "propertyValue": "player.likeTrack",
-                "propertySubPhrases": [
-                  "Like"
-                ]
-              }
-            ]
-          },
           {
             "propertyName": "parameters.query",
             "propertyValue": "Let It Be by The Beatles",
@@ -9493,8 +9458,8 @@
             "text": "Old Town Road by Lil Nas X",
             "synonyms": [
               "Old Town Road by Lil Nas X",
-              "Old Town Road by Nas X",
-              "Old Town Road by Lil Nas"
+              "Old Town Road by Lil Nas X",
+              "Old Town Road by Lil Nas X"
             ],
             "category": "query",
             "propertyNames": [
@@ -9523,9 +9488,9 @@
                 ]
               },
               {
-                "propertyValue": "player.discoverTracks",
+                "propertyValue": "player.querySongs",
                 "propertySubPhrases": [
-                  "Discover"
+                  "Query"
                 ]
               }
             ]
@@ -9735,19 +9700,19 @@
               {
                 "propertyValue": "player.findSongs",
                 "propertySubPhrases": [
-                  "Find songs"
+                  "Find"
                 ]
               },
               {
-                "propertyValue": "player.lookupMusic",
+                "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Look up music"
+                  "Look up"
                 ]
               },
               {
-                "propertyValue": "player.searchMusic",
+                "propertyValue": "player.browseTracks",
                 "propertySubPhrases": [
-                  "Search music"
+                  "Browse"
                 ]
               }
             ]
@@ -9826,8 +9791,8 @@
             "text": "Shape of You by Ed Sheeran",
             "synonyms": [
               "Shape of You by Ed Sheeran",
-              "Ed Sheeran's Shape of You",
-              "the song Shape of You by Ed Sheeran"
+              "Shape of You by Ed Sheeran",
+              "Shape of You by Ed Sheeran"
             ],
             "category": "query",
             "propertyNames": [
@@ -9844,21 +9809,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playTrack",
+                "propertyValue": "player.findSongs",
                 "propertySubPhrases": [
-                  "Play"
+                  "Find"
                 ]
               },
               {
-                "propertyValue": "player.addToQueue",
+                "propertyValue": "player.lookupTracks",
                 "propertySubPhrases": [
-                  "Add to queue"
+                  "Look up"
                 ]
               },
               {
-                "propertyValue": "player.likeTrack",
+                "propertyValue": "player.browseTracks",
                 "propertySubPhrases": [
-                  "Like"
+                  "Browse"
                 ]
               }
             ]
@@ -9877,15 +9842,15 @@
                 ]
               },
               {
-                "propertyValue": "Levitating by Dua Lipa",
+                "propertyValue": "Rolling in the Deep by Adele",
                 "propertySubPhrases": [
-                  "Levitating by Dua Lipa"
+                  "Rolling in the Deep by Adele"
                 ]
               },
               {
-                "propertyValue": "Bad Guy by Billie Eilish",
+                "propertyValue": "Uptown Funk by Mark Ronson ft. Bruno Mars",
                 "propertySubPhrases": [
-                  "Bad Guy by Billie Eilish"
+                  "Uptown Funk by Mark Ronson ft. Bruno Mars"
                 ]
               }
             ]
@@ -9924,9 +9889,9 @@
           {
             "text": "Search for songs",
             "synonyms": [
-              "Find songs",
-              "Look for tracks",
-              "Search music"
+              "Find tracks",
+              "Look for music",
+              "Seek songs"
             ],
             "category": "action",
             "propertyNames": [
@@ -9938,7 +9903,7 @@
             "synonyms": [
               "from",
               "of",
-              "by the"
+              "featuring"
             ],
             "category": "preposition",
             "isOptional": true
@@ -9965,21 +9930,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.findSongs",
+                "propertyValue": "player.searchAlbums",
                 "propertySubPhrases": [
-                  "Find songs"
+                  "Search for albums"
                 ]
               },
               {
-                "propertyValue": "player.lookupTracks",
+                "propertyValue": "player.searchArtists",
                 "propertySubPhrases": [
-                  "Look up songs"
+                  "Search for artists"
                 ]
               },
               {
-                "propertyValue": "player.discoverTracks",
+                "propertyValue": "player.searchPlaylists",
                 "propertySubPhrases": [
-                  "Discover songs"
+                  "Search for playlists"
                 ]
               }
             ]
@@ -10027,9 +9992,7 @@
           {
             "name": "fullActionName",
             "value": "player.searchTracks",
-            "substrings": [
-              "Search for soulful tunes by Aretha Franklin"
-            ],
+            "substrings": [],
             "implied": true
           },
           {
@@ -10050,16 +10013,14 @@
               "Seek"
             ],
             "category": "command",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "propertyNames": []
           },
           {
             "text": "soulful tunes by Aretha Franklin",
             "synonyms": [
-              "soul music by Aretha Franklin",
-              "songs by Aretha Franklin",
-              "Aretha Franklin's soulful tracks"
+              "soulful songs by Aretha Franklin",
+              "soulful music by Aretha Franklin",
+              "soulful tracks by Aretha Franklin"
             ],
             "category": "query",
             "propertyNames": [
@@ -10069,33 +10030,6 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.searchTracks",
-            "propertySubPhrases": [
-              "Search for"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.findSongs",
-                "propertySubPhrases": [
-                  "Find"
-                ]
-              },
-              {
-                "propertyValue": "player.lookupMusic",
-                "propertySubPhrases": [
-                  "Look up"
-                ]
-              },
-              {
-                "propertyValue": "player.browseTracks",
-                "propertySubPhrases": [
-                  "Browse"
-                ]
-              }
-            ]
-          },
-          {
             "propertyName": "parameters.query",
             "propertyValue": "soulful tunes by Aretha Franklin",
             "propertySubPhrases": [
@@ -10103,21 +10037,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "Aretha Franklin's greatest hits",
+                "propertyValue": "soulful songs by Aretha Franklin",
                 "propertySubPhrases": [
-                  "Aretha Franklin's greatest hits"
+                  "soulful songs by Aretha Franklin"
                 ]
               },
               {
-                "propertyValue": "classic soul by Aretha Franklin",
+                "propertyValue": "soulful music by Aretha Franklin",
                 "propertySubPhrases": [
-                  "classic soul by Aretha Franklin"
+                  "soulful music by Aretha Franklin"
                 ]
               },
               {
-                "propertyValue": "Aretha Franklin's top tracks",
+                "propertyValue": "soulful tracks by Aretha Franklin",
                 "propertySubPhrases": [
-                  "Aretha Franklin's top tracks"
+                  "soulful tracks by Aretha Franklin"
                 ]
               }
             ]
@@ -10168,9 +10102,9 @@
           {
             "text": "Spanish guitar music",
             "synonyms": [
-              "Flamenco music",
-              "Latin guitar tunes",
-              "Spanish instrumental"
+              "Flamenco guitar tunes",
+              "Latin guitar songs",
+              "Spanish instrumental music"
             ],
             "category": "query",
             "propertyNames": [
@@ -10280,7 +10214,7 @@
             "text": "Sweet Child o Mine by Guns N Roses",
             "synonyms": [
               "Sweet Child o' Mine by Guns N' Roses",
-              "Sweet Child of Mine by Guns and Roses",
+              "Sweet Child of Mine by Guns N Roses",
               "Sweet Child o Mine by GNR"
             ],
             "category": "query",
@@ -10382,7 +10316,7 @@
               "Look for the album",
               "Locate the album"
             ],
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -10423,7 +10357,7 @@
               {
                 "propertyValue": "player.searchArtists",
                 "propertySubPhrases": [
-                  "Look up the artist"
+                  "Search for the artist"
                 ]
               }
             ]
@@ -10472,7 +10406,7 @@
             "name": "fullActionName",
             "value": "player.searchTracks",
             "substrings": [
-              "Search"
+              "Search for"
             ],
             "implied": true
           },
@@ -10487,29 +10421,19 @@
         ],
         "subPhrases": [
           {
-            "text": "Search",
+            "text": "Search for",
             "synonyms": [
               "Find",
               "Look for",
               "Seek"
             ],
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
           },
           {
-            "text": "for the",
-            "synonyms": [
-              "for",
-              "to find",
-              "in search of"
-            ],
-            "category": "preposition",
-            "isOptional": true
-          },
-          {
-            "text": "best of British rock",
+            "text": "the best of British rock",
             "synonyms": [
               "top British rock",
               "greatest British rock",
@@ -10526,7 +10450,7 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.searchTracks",
             "propertySubPhrases": [
-              "Search"
+              "Search for"
             ],
             "alternatives": [
               {
@@ -10553,25 +10477,25 @@
             "propertyName": "parameters.query",
             "propertyValue": "best of British rock",
             "propertySubPhrases": [
-              "best of British rock"
+              "the best of British rock"
             ],
             "alternatives": [
               {
                 "propertyValue": "top British rock",
                 "propertySubPhrases": [
-                  "top British rock"
+                  "the top British rock"
                 ]
               },
               {
                 "propertyValue": "greatest British rock",
                 "propertySubPhrases": [
-                  "greatest British rock"
+                  "the greatest British rock"
                 ]
               },
               {
                 "propertyValue": "classic British rock",
                 "propertySubPhrases": [
-                  "classic British rock"
+                  "the classic British rock"
                 ]
               }
             ]
@@ -10593,7 +10517,7 @@
             "name": "fullActionName",
             "value": "player.searchTracks",
             "substrings": [
-              "Search for top charting pop songs"
+              "Search for"
             ],
             "implied": true
           },
@@ -10623,8 +10547,8 @@
             "text": "top charting pop songs",
             "synonyms": [
               "popular pop songs",
-              "hit pop songs",
-              "top pop tracks"
+              "top pop hits",
+              "chart-topping pop songs"
             ],
             "category": "query",
             "propertyNames": [
@@ -10815,7 +10739,7 @@
             "name": "fullActionName",
             "value": "player.searchTracks",
             "substrings": [
-              "Search for"
+              "Search for vintage vinyl records"
             ],
             "implied": true
           },
@@ -10832,9 +10756,9 @@
           {
             "text": "Search for",
             "synonyms": [
-              "Find",
               "Look for",
-              "Seek"
+              "Find",
+              "Seek out"
             ],
             "category": "action",
             "propertyNames": [
@@ -10943,8 +10867,8 @@
           {
             "text": "Search for",
             "synonyms": [
-              "Look for",
               "Find",
+              "Look for",
               "Seek"
             ],
             "category": "command",
@@ -11013,9 +10937,9 @@
                 ]
               },
               {
-                "propertyValue": "Billie Jean by Michael Jackson",
+                "propertyValue": "Rolling in the Deep by Adele",
                 "propertySubPhrases": [
-                  "Billie Jean by Michael Jackson"
+                  "Rolling in the Deep by Adele"
                 ]
               }
             ]
@@ -11068,7 +10992,7 @@
             "synonyms": [
               "Wonderwall from Oasis",
               "Oasis's Wonderwall",
-              "Wonderwall performed by Oasis"
+              "the song Wonderwall by Oasis"
             ],
             "category": "query",
             "propertyNames": [
@@ -11097,7 +11021,7 @@
                 ]
               },
               {
-                "propertyValue": "player.querySongs",
+                "propertyValue": "player.queryTracks",
                 "propertySubPhrases": [
                   "Query"
                 ]

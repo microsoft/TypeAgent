@@ -561,7 +561,10 @@ function toQueryString(query: SpotifyQuery) {
     query.artist?.forEach((artist) => queryParts.push(`artist:"${artist}"`));
     query.genre?.forEach((genre) => queryParts.push(`genre:"${genre}"`));
     query.query?.forEach((query) => queryParts.push(query));
-    return queryParts.join(" ");
+
+    const queryString = queryParts.join(" ");
+    debugSpotify(`Query: ${queryString}`);
+    return queryString;
 }
 
 async function playTracksWithQuery(
