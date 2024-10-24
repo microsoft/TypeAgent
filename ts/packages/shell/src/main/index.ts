@@ -53,6 +53,8 @@ let inlineBrowserView: BrowserView | null = null;
 let chatView: BrowserView | null = null;
 
 const inlineBrowserSize = 1000;
+const userAgent =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0";
 
 function setContentSize() {
     if (mainWindow && chatView) {
@@ -116,6 +118,8 @@ function createWindow(): void {
         height: ShellSettings.getinstance().height,
     });
 
+    mainWindow.webContents.setUserAgent(userAgent);
+
     chatView = new BrowserView({
         webPreferences: {
             preload: join(__dirname, "../preload/index.mjs"),
@@ -123,6 +127,8 @@ function createWindow(): void {
             zoomFactor: ShellSettings.getinstance().zoomLevel,
         },
     });
+
+    chatView.webContents.setUserAgent(userAgent);
 
     setContentSize();
 
@@ -246,6 +252,8 @@ function createWindow(): void {
                     sandbox: false,
                 },
             });
+
+            inlineBrowserView.webContents.setUserAgent(userAgent);
 
             mainWindow?.addBrowserView(inlineBrowserView);
 

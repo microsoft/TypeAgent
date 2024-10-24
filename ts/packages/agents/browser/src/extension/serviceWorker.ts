@@ -767,6 +767,7 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
             "www.homedepot.com",
             "www.target.com",
             "www.walmart.com",
+            "www.instacart.com",
         ];
 
         if (commerceHosts.includes(host)) {
