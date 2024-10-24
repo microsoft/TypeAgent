@@ -6,7 +6,6 @@ import {
     getClientContext,
     PlayerAction,
     handleCall,
-    PlayAction,
 } from "music";
 import chalk from "chalk";
 import {
@@ -46,7 +45,7 @@ async function initializePlayerContext() {
 }
 
 async function executePlayerAction(
-    action: AppAction,
+    action: PlayerAction,
     context: ActionContext<PlayerActionContext>,
 ) {
     if (context.sessionContext.agentContext.spotify) {
@@ -88,39 +87,73 @@ async function enableSpotify(context: SessionContext<PlayerActionContext>) {
     return clientContext.service.retrieveUser().username;
 }
 
+async function validateArtistWildcardMatch(
+    artists: string[] | undefined,
+    context: IClientContext,
+) {
+    if (artists === undefined) {
+        return true;
+    }
+    for (const artist of artists) {
+        if (!(await validateArtist(artist, context))) {
+            return false;
+        }
+    }
+    return true;
+}
 async function validatePlayerWildcardMatch(
-    action: AppAction,
+    action: PlayerAction,
     context: SessionContext<PlayerActionContext>,
 ) {
-    if (action.actionName === "play") {
-        const clientContext = context.agentContext.spotify;
-        if (clientContext === undefined) {
-            // Can't validate without context, assume true
-            return true;
-        }
-        const playAction = action as PlayAction;
-        if (playAction.parameters.query) {
-            for (const query of playAction.parameters.query) {
-                let result: boolean = false;
-                switch (query.constraint) {
-                    case "track":
-                    case undefined:
-                        result = await validateTrack(query.text, clientContext);
+    const clientContext = context.agentContext.spotify;
+    if (clientContext === undefined) {
+        // Can't validate without context, assume true
+        return true;
+    }
+    switch (action.actionName) {
+        case "playTrack":
+            return (
+                (await validateTrack(
+                    action.parameters.trackName,
+                    clientContext,
+                )) &&
+                (await validateArtistWildcardMatch(
+                    action.parameters.artists,
+                    clientContext,
+                ))
+            );
 
-                    case "album":
-                        result = await validateAlbum(query.text, clientContext);
-
-                    case "artist":
-                        result = await validateArtist(
-                            query.text,
-                            clientContext,
-                        );
-                }
-                if (result === false) {
-                    return false;
-                }
-            }
-        }
+        case "playAlbum":
+            return (
+                (await validateAlbum(
+                    action.parameters.albumName,
+                    clientContext,
+                )) &&
+                (await validateArtistWildcardMatch(
+                    action.parameters.artists,
+                    clientContext,
+                ))
+            );
+        case "playAlbumTrack":
+            return (
+                (await validateAlbum(
+                    action.parameters.albumName,
+                    clientContext,
+                )) &&
+                (await validateArtistWildcardMatch(
+                    action.parameters.artists,
+                    clientContext,
+                )) &&
+                (await validateTrack(
+                    action.parameters.trackName,
+                    clientContext,
+                ))
+            );
+        case "playArtist":
+            return await validateArtist(
+                action.parameters.artist,
+                clientContext,
+            );
     }
     return true;
 }
@@ -183,68 +216,59 @@ async function getPlayerActionCompletion(
     propertyName: string,
     context: SessionContext<PlayerActionContext>,
 ): Promise<string[]> {
-    if (action.actionName !== "play") {
-        return [];
-    }
     const userData = context.agentContext.spotify?.userData;
     if (userData === undefined) {
         return [];
     }
-    if (!propertyName.startsWith("parameters.query.")) {
-        return [];
-    }
-    const suffix = propertyName.substring("parameters.query.".length);
-    if (suffix === "") {
-        return [];
-    }
 
-    const split = suffix.split(".");
-    if (split.length > 2) {
-        // Not a valid property.
-        return [];
-    }
-    const index = parseInt(split[0]);
-    if (index.toString() !== split[0] || split[1] !== "text") {
-        // Not a valid index
-        return [];
-    }
-
-    const playAction = action as Partial<PlayAction>;
-    let track: boolean = true;
-    let album: boolean = true;
-    let artist: boolean = true;
-    switch (playAction.parameters?.query?.[index]?.constraint) {
-        case "track":
-            album = false;
-            artist = false;
+    let track = false;
+    let artist = false;
+    let album = false;
+    switch (action.actionName) {
+        case "playTrack":
+            if (propertyName === "parameters.trackName") {
+                track = true;
+            } else if (propertyName.startsWith("parameters.artists.")) {
+                artist = true;
+            }
             break;
-        case "album":
-            track = false;
-            artist = false;
+        case "playAlbum":
+            if (propertyName === "parameters.albumName") {
+                album = true;
+            } else if (propertyName.startsWith("parameters.artists.")) {
+                artist = true;
+            }
             break;
-        case "artist":
-            track = false;
-            album = false;
+        case "playAlbumTrack":
+            if (propertyName === "parameters.albumName") {
+                album = true;
+            } else if (propertyName.startsWith("parameters.artists.")) {
+                artist = true;
+            } else if (propertyName.startsWith("parameters.trackName")) {
+                track = true;
+            }
+            break;
+        case "playArtist":
+            if (propertyName === "parameters.artist") {
+                artist = true;
+            }
             break;
     }
 
     const result: string[] = [];
-
     if (track) {
         for (const track of userData.data.tracks.values()) {
             result.push(track.name);
         }
     }
-
-    if (artist) {
-        for (const artist of userData.data.artists.values()) {
-            result.push(artist.name);
-        }
-    }
-
     if (album) {
         for (const album of userData.data.albums.values()) {
             result.push(album.name);
+        }
+    }
+    if (artist) {
+        for (const artist of userData.data.artists.values()) {
+            result.push(artist.name);
         }
     }
     return result;

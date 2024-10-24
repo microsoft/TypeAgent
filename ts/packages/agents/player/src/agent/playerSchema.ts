@@ -2,7 +2,12 @@
 // Licensed under the MIT License.
 
 export type PlayerAction =
-    | PlayAction
+    | PlayRandomAction
+    | PlayTrackAction
+    | PlayAlbumAction
+    | PlayAlbumTrackAction
+    | PlayArtistAction
+    | PlayGenreAction
     | StatusAction
     | PauseAction
     | ResumeAction
@@ -24,32 +29,52 @@ export type PlayerAction =
     | GetQueueAction
     | UnknownAction;
 
-// this action is chosen over search if both could apply
-// with no parameters, play means resume playback
-export interface PlayAction {
-    actionName: "play";
+export interface PlayRandomAction {
+    actionName: "playRandom";
     parameters: {
-        // Text from the user request used to search for music to play.
-        // If the user request includes words that specify the 'constraint' for the search text, include the constraint with the search term.
-        // e.g.
-        //   "play the album The B-52s" translates to [{ constraint: "album", text: "The B-52s" }]
-        //   "play Rock Lobster by the B-52s" translates to [{ text: "Rock Lobster" }, { constraint: "artist", text: "B-52s" }]
-        // Leave 'constraint' undefined if the user request does not include words that specify the constraint for the search text
-        //   e.g. "play Rock Lobster" translates to [{ text: "Rock Lobster" }]
-        // Leave 'constraint' undefined if it isn't one of "track", "album" or "artist". i.e. do NOT put "genre" or "playlist" as a constraint
-        //   e.g. "play some music from the 80s genre" translates to [{ text: "80s" }]
-        query?: {
-            constraint?: "track" | "album" | "artist";
-            text: string;
-        }[];
-
-        // specified number of items to play, examples: three, a/an (=1), a few (=3), a couple of (=2), some (=5).
         quantity?: number;
+    };
+}
 
-        // play the track at this index in the current track list
-        trackNumber?: number;
-        // play this range of tracks example 1-3
-        trackRange?: number[];
+export interface PlayTrackAction {
+    actionName: "playTrack";
+    parameters: {
+        trackName: string;
+        artists?: string[];
+    };
+}
+
+export interface PlayAlbumAction {
+    actionName: "playAlbum";
+    parameters: {
+        albumName: string;
+        artists?: string[];
+        trackNumber?: number[];
+    };
+}
+
+export interface PlayAlbumTrackAction {
+    actionName: "playAlbumTrack";
+    parameters: {
+        albumName: string;
+        trackName: string;
+        artists?: string[];
+    };
+}
+
+export interface PlayArtistAction {
+    actionName: "playArtist";
+    parameters: {
+        artist: string;
+        quantity?: number;
+    };
+}
+
+export interface PlayGenreAction {
+    actionName: "playGenre";
+    parameters: {
+        genre: string;
+        quantity?: number;
     };
 }
 
