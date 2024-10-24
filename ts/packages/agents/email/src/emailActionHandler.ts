@@ -136,7 +136,7 @@ async function handleEmailAction(
                             "GPT_35_TURBO",
                             undefined,
                             undefined,
-                            ["emailActionHandler"]
+                            ["emailActionHandler"],
                         ),
                         undefined,
                     );

@@ -32,7 +32,9 @@ export function skipTest(name: string) {
 
 export function createTestModels(): TestModels {
     return {
-        chat: openai.createChatModel(undefined, undefined, undefined, ["knowledgeProcessorTest"]),
+        chat: openai.createChatModel(undefined, undefined, undefined, [
+            "knowledgeProcessorTest",
+        ]),
         embeddings: openai.createEmbeddingModel(),
     };
 }

@@ -35,7 +35,9 @@ import {
 import { createCommandTransformer } from "./commandTransformer.js";
 
 export async function runCodeChat(): Promise<void> {
-    const model = openai.createChatModel(undefined, undefined, undefined, ["codeChat"]);
+    const model = openai.createChatModel(undefined, undefined, undefined, [
+        "codeChat",
+    ]);
     const codeReviewer = createCodeReviewer(model);
     // For answer/code indexing examples
     const folderPath = "/data/code";

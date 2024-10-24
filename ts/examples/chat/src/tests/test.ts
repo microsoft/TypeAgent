@@ -128,7 +128,9 @@ export async function summarize() {
 }
 
 export async function testBingSummary() {
-    const model = openai.createChatModel(undefined, undefined, undefined, ["chatTests"]);
+    const model = openai.createChatModel(undefined, undefined, undefined, [
+        "chatTests",
+    ]);
     const results = await bing.searchWeb("Sherlock Holmes", 3);
     for (const result of results) {
         let chunkNumber = 0;

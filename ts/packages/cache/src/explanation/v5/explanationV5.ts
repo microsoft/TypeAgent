@@ -309,7 +309,7 @@ async function augmentExplanation(
             if (paramRange) {
                 const subPhrases = param.propertySubPhrases;
                 if (subPhrases.length === 1) {
-                    const model = openai.createChatModel(                        
+                    const model = openai.createChatModel(
                         undefined,
                         {
                             response_format: { type: "json_object" },

@@ -99,7 +99,7 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
         let apiSettings: openai.ApiSettings | undefined;
         if (!apiSettings) {
             if (fastModel) {
-                apiSettings = openai.localOpenAIApiSettingsFromEnv(                    
+                apiSettings = openai.localOpenAIApiSettingsFromEnv(
                     openai.ModelType.Chat,
                     undefined,
                     "GPT_35_TURBO",
@@ -117,7 +117,7 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
         if (apiSettings?.supportsResponseFormat) {
             completionSettings.response_format = { type: "json_object" };
         }
-        const chatModel = openai.createChatModel(            
+        const chatModel = openai.createChatModel(
             apiSettings,
             completionSettings,
             undefined,

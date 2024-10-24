@@ -413,9 +413,13 @@ export async function getLookupSettings(
     }
     fastModelName ??= "GPT_35_TURBO";
     let fastModel =
-        openai.createLocalChatModel(fastModelName, undefined, ["chatResponseHandler"]) ??
+        openai.createLocalChatModel(fastModelName, undefined, [
+            "chatResponseHandler",
+        ]) ??
         openai.createJsonChatModel(fastModelName, ["chatResponseHandler"]);
-    let generalModel = openai.createJsonChatModel(undefined, ["chatResponseHandler"]);
+    let generalModel = openai.createJsonChatModel(undefined, [
+        "chatResponseHandler",
+    ]);
     rewriteFocus ??=
         "make it more concise and readable, with better formatting (e.g. use line breaks, bullet points as needed)";
 

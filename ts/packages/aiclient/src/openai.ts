@@ -731,26 +731,29 @@ export function createJsonChatModel(
     endpoint?: string | ApiSettings,
     tags?: string[],
 ): ChatModel {
-    return createChatModel(endpoint, {
-        response_format: { type: "json_object" },
-    }, 
-    undefined, 
-    tags);
+    return createChatModel(
+        endpoint,
+        {
+            response_format: { type: "json_object" },
+        },
+        undefined,
+        tags,
+    );
 }
 
 /**
- * Model that supports OpenAI api, but running locally 
+ * Model that supports OpenAI api, but running locally
  * @param endpointName
  * @param completionSettings
  * @param tags - Tags for tracking this model's usage
  * @returns If no local Api settings found, return undefined
  */
-export function createLocalChatModel(    
+export function createLocalChatModel(
     endpointName?: string,
     completionSettings?: CompletionSettings,
     tags?: string[],
 ): ChatModel | undefined {
-    const settings = localOpenAIApiSettingsFromEnv(        
+    const settings = localOpenAIApiSettingsFromEnv(
         ModelType.Chat,
         undefined,
         endpointName,
@@ -763,12 +766,12 @@ export function createLocalChatModel(
 
 export type AzureChatModelName = "GPT_4" | "GPT_35_TURBO" | "GPT_4_O";
 /**
- * Create one of AI System's standard Chat Models 
+ * Create one of AI System's standard Chat Models
  * @param modelName
  * @param tags - Tags for tracking this model's usage
  * @returns
  */
-export function createStandardAzureChatModel(    
+export function createStandardAzureChatModel(
     modelName: AzureChatModelName,
     tags?: string[],
 ): ChatModel {
