@@ -243,9 +243,13 @@ export class SettingsView {
             updateInputs();
         };
 
-        speechSynthesis.onvoiceschanged = () => {
-            updateTTSSelections();
-        };
+        try {
+            speechSynthesis.onvoiceschanged = () => {
+                updateTTSSelections();
+            };
+        } catch (e) {
+            console.log(e);
+        }
 
         this.intellisenseCheckBox = this.addCheckbox("Intellisense", () => {
             this._shellSettings.partialCompletion =

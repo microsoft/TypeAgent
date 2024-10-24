@@ -235,6 +235,7 @@ export async function createWebSocket(
     autoReconnect: boolean = true,
 ) {
     return new Promise<WebSocket | undefined>((resolve) => {
+        console.log(`opening web socket to ${endpoint} `);
         const webSocket = new WebSocket(endpoint);
 
         webSocket.onopen = (event: object) => {
