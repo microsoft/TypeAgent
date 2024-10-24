@@ -39,7 +39,6 @@ import {
     argSourceFileOrFolder,
     getMessagesAndCount,
 } from "./common.js";
-import Path from "path";
 
 export type ChatContext = {
     storePath: string;
@@ -94,7 +93,7 @@ export async function createChatMemoryContext(
 ): Promise<ChatContext> {
     const storePath = "/data/testChat";
     const chatModel = openai.createChatModel(
-        [Path.parse(__filename).name],
+        ["chatMemory"],
         undefined,
         undefined,
         completionCallback,
@@ -147,14 +146,7 @@ export async function createChatMemoryContext(
 function createConversationSettings(
     embeddingModel?: TextEmbeddingModel,
 ): conversation.ConversationSettings {
-    return {
-        indexSettings: {
-            caseSensitive: false,
-            concurrency: 2,
-            embeddingModel,
-            semanticIndex: true,
-        },
-    };
+    return conversation.createConversationSettings(embeddingModel);
 }
 
 export function createConversation(
@@ -1156,7 +1148,7 @@ export async function runChatMemory(): Promise<void> {
             return;
         }
 
-        searcher.answers.settings.useChunking = namedArgs.chunk === true;
+        searcher.answers.settings.useChunking = true; //namedArgs.chunk === true;
 
         const timestampQ = new Date();
         let result:

@@ -27,6 +27,24 @@ export type AnswerSettings = {
     higherPrecision: boolean;
 };
 
+export type AnswerGeneratorSettings = {
+    topKEntities: number;
+    topKActions: number;
+    maxCharsInContext?: number | undefined;
+    useChunking?: boolean | undefined;
+    maxChunks?: number | undefined;
+    concurrency?: number;
+    hints?: string | undefined;
+};
+
+export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
+    return {
+        topKEntities: 8,
+        topKActions: 0,
+        maxCharsInContext: 1024 * 8,
+    };
+}
+
 export interface AnswerGenerator {
     settings: AnswerGeneratorSettings;
     generateAnswer(
@@ -44,24 +62,6 @@ export interface AnswerGenerator {
             AnswerResponse | undefined
         >,
     ): Promise<AnswerResponse | undefined>;
-}
-
-export type AnswerGeneratorSettings = {
-    topKEntities: number;
-    topKActions: number;
-    maxCharsInContext?: number | undefined;
-    useChunking?: boolean | undefined;
-    maxChunks?: number | undefined;
-    concurrency?: number;
-    hints?: string | undefined;
-};
-
-export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
-    return {
-        topKEntities: 8,
-        topKActions: 0,
-        maxCharsInContext: 4096,
-    };
 }
 
 export function createAnswerGenerator(
@@ -133,7 +133,7 @@ export function createAnswerGenerator(
         }
         const partialAnswers = await asyncArray.mapAsync(
             chunks,
-            settings.concurrency ?? 2,
+            settings.concurrency ?? 1,
             (chunk) =>
                 getAnswer(
                     question,
@@ -146,9 +146,11 @@ export function createAnswerGenerator(
         );
         let answer = "";
         let whyNoAnswer: string | undefined;
+        let answerCount = 0;
         for (const partialAnswer of partialAnswers) {
             if (partialAnswer) {
                 if (partialAnswer.type === "Answered") {
+                    answerCount++;
                     answer += partialAnswer.answer + "\n";
                 } else {
                     whyNoAnswer ??= partialAnswer.whyNoAnswer;
@@ -156,7 +158,9 @@ export function createAnswerGenerator(
             }
         }
         if (answer.length > 0) {
-            answer = (await rewriteAnswer(question, answer)) ?? answer;
+            if (answerCount > 1) {
+                answer = (await rewriteAnswer(question, answer)) ?? answer;
+            }
             return {
                 type: "Answered",
                 answer,
@@ -305,7 +309,7 @@ export function createAnswerGenerator(
     }
 
     function getMaxContextLength(): number {
-        return settings?.maxCharsInContext ?? 1000 * 30;
+        return settings?.maxCharsInContext ?? 1000 * 20;
     }
 }
 

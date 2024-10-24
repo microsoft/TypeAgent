@@ -45,11 +45,10 @@ import {
 import { asyncArray, removeDir, writeAllLines } from "typeagent";
 import ts from "typescript";
 import chalk from "chalk";
-import Path from "path";
 import { createCommandTransformer } from "./commandTransformer.js";
 
 export async function runCodeMemory(): Promise<void> {
-    const model = openai.createChatModel([Path.parse(__filename).name]);
+    const model = openai.createChatModel(["codeMemory"]);
     const memoryFolderPath = "/data/code/memory";
     const codeReviewer = createCodeReviewer(model);
     const codeGenerator = createCodeGenerator(model);

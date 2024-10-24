@@ -118,12 +118,14 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         hitTable: HitTable<TSourceId>,
         maxMatches?: number,
         minScore?: number,
+        scoreBoost?: number,
     ): Promise<void>;
     getNearestHitsMultiple(
         values: string[],
         hitTable: HitTable<TSourceId>,
         maxMatches?: number,
         minScore?: number,
+        scoreBoost?: number,
     ): Promise<void>;
     getNearestMultiple(
         values: string[],
@@ -385,6 +387,7 @@ export async function createTextIndex<TSourceId = any>(
         hitTable: HitTable<TSourceId>,
         maxMatches?: number,
         minScore?: number,
+        scoreBoost?: number,
     ): Promise<void> {
         maxMatches ??= 1;
         // Check exact match first
@@ -408,7 +411,10 @@ export async function createTextIndex<TSourceId = any>(
             if (textId) {
                 const postings = await postingFolder.get(textId.item);
                 if (postings) {
-                    postingsNearest = scorePostings(postings, textId.score);
+                    postingsNearest = scorePostings(
+                        postings,
+                        scoreBoost ? scoreBoost * textId.score : textId.score,
+                    );
                 }
             }
         }
@@ -425,9 +431,10 @@ export async function createTextIndex<TSourceId = any>(
         hitTable: HitTable<TSourceId>,
         maxMatches?: number,
         minScore?: number,
+        scoreBoost?: number,
     ): Promise<void> {
         return asyncArray.forEachAsync(values, settings.concurrency, (v) =>
-            getNearestHits(v, hitTable, maxMatches, minScore),
+            getNearestHits(v, hitTable, maxMatches, minScore, scoreBoost),
         );
     }
 
@@ -819,6 +826,27 @@ export async function createKnowledgeStore<T>(
 
     async function add(item: T, id?: TId): Promise<TId> {
         return id ? id : await entries.put(item, id);
+    }
+}
+
+export interface TermSet {
+    has(term: string): boolean;
+    put(term: string): void;
+}
+
+export function createTermSet(caseSensitive: boolean = false) {
+    const set = new Set();
+    return {
+        has(term: string): boolean {
+            return set.has(prepareTerm(term));
+        },
+        put(term: string): void {
+            set.add(prepareTerm(term));
+        },
+    };
+
+    function prepareTerm(term: string): string {
+        return caseSensitive ? term : term.toLowerCase();
     }
 }
 
