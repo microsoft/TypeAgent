@@ -172,7 +172,7 @@ function findEventsDisplayHtml(events: any[] | GraphEntity): string {
             eventsCopy.forEach((event) => {
                 const calendarItemLink = `https://outlook.office.com/calendar/item/${encodeURIComponent(event.id)}`;
                 htmlEvents +=
-                    `<p><a href="${calendarItemLink}" target="_blank">` +
+                    `<p><a href="${calendarItemLink}" target="_new">` +
                     `<h4>${event.subject}</a>` +
                     `</p>`;
             });
@@ -182,7 +182,7 @@ function findEventsDisplayHtml(events: any[] | GraphEntity): string {
             const event = events as GraphEntity;
             const calendarItemLink = `https://outlook.office.com/calendar/item/${encodeURIComponent(event.id)}`;
             const htmlEvent =
-                `<div>Outlook Calendar Events<a href="${calendarItemLink}" target="_blank">` +
+                `<div>Outlook Calendar Events<a href="${calendarItemLink}" target="_new">` +
                 `<h4>${event.subject}</h4></a><div style="font-size: 12px;">` +
                 "</div></div>";
             return htmlEvent;
@@ -796,7 +796,7 @@ async function populateMeetingDetails(
 ) {
     const calendarItemLink = `https://outlook.office.com/calendar/item/${encodeURIComponent(eventid)}`;
     const meetingDetailsHTML =
-        `<div>Outlook Meeting Schedule<a href="${calendarItemLink}" target="_blank">` +
+        `<div>Outlook Meeting Schedule<a href="${calendarItemLink}" target="_new">` +
         `<h4>${description}</h4></a><div style="font-size: 12px;">Start Time: <span>${startDateTime}</span>` +
         `<br>End Time: <span>${endDateTime}</span>` +
         "</div></div>";
@@ -810,7 +810,7 @@ async function populateMeetingDetailsMin(
 ) {
     const calendarItemLink = `https://outlook.office.com/calendar/item/${encodeURIComponent(eventid)}`;
     const meetingDetailsHTML =
-        `<div>Outlook Meeting Schedule<a href="${calendarItemLink}" target="_blank">` +
+        `<div>Outlook Meeting Schedule<a href="${calendarItemLink}" target="_new">` +
         `<h4>${header}<br>${description}</h4></a><div style="font-size: 12px;">` +
         "</div></div>";
     return meetingDetailsHTML;
