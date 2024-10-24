@@ -53,7 +53,7 @@ export interface CodeReviewer {
 export function createCodeReviewer(
     model?: ChatModel | undefined,
 ): CodeReviewer {
-    model ??= openai.createChatModel(["codeReviewer.ts"]);
+    model ??= openai.createChatModel(["codeReviewer"]);
     const codeReviewSchema = ["codeReviewSchema.ts"];
     const reviewTranslator = createReviewTranslator<CodeReview>(
         model,

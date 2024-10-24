@@ -38,7 +38,7 @@ export interface CodeGenerator {
 export function createCodeGenerator(
     model?: TypeChatLanguageModel | undefined,
 ): CodeGenerator {
-    model ??= openai.createChatModel(["codeGenerator.ts"]);
+    model ??= openai.createChatModel(["codeGenerator"]);
     const codeGenSchema = ["codeGenSchema.ts"];
     const codeGenTranslator = createTranslator<CodeGenResponse>(
         model,
