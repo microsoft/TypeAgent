@@ -140,10 +140,34 @@ export async function awaitPageLoad() {
 
 export async function getTabHTMLFragments(fullSize: boolean) {
     let htmlFragments: any[] = [];
-    const frames = [window.top, ...Array.from(window.frames)];
-
     let htmlPromises: Promise<any>[] = [];
-    frames.forEach((frame, index) => {
+
+    htmlPromises.push(
+        sendScriptAction(
+            {
+                type: "get_reduced_html",
+                fullSize: fullSize,
+                frameId: 0,
+            },
+            50000,
+            window.top,
+            "0",
+        ),
+    );
+
+    const iframeElements = document.getElementsByTagName("iframe");
+    for (let i = 0; i < iframeElements.length; i++) {
+        const frameElement = iframeElements[i];
+        if (
+            !frameElement.src ||
+            frameElement.src == "about:blank" ||
+            frameElement.hidden ||
+            (frameElement.clientHeight == 0 && frameElement.clientWidth == 0)
+        ) {
+            continue;
+        }
+
+        const index = i + 1;
         htmlPromises.push(
             sendScriptAction(
                 {
@@ -152,11 +176,11 @@ export async function getTabHTMLFragments(fullSize: boolean) {
                     frameId: index,
                 },
                 50000,
-                frame,
+                frameElement.contentWindow,
                 index.toString(),
             ),
         );
-    });
+    }
 
     const htmlResults = await Promise.all(htmlPromises);
     for (let i = 0; i < htmlResults.length; i++) {
