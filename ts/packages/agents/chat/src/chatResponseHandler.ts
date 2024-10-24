@@ -231,7 +231,7 @@ export function logEntities(label: string, entities?: Entity[]): void {
 }
 
 function urlToHtml(url: string): string {
-    return `<a href="${url}" target="_blank">${url}</a>`;
+    return `<a href="${url}" target="_new">${url}</a>`;
 }
 
 function capitalize(str: string): string {
