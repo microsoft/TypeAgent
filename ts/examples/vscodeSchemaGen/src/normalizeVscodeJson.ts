@@ -15,7 +15,7 @@ dotenv.config({ path: envPath });
 
 const misc_commandstxt_filePath = path.join(__dirname, 'data', 'input', 'misc_commands.txt');
 const misc_commandsjson_filePath = path.join(__dirname, 'data', 'output', 'misc_commands.json');
-const default_kb_filepath = path.join(__dirname, 'data', 'input', 'deafult_keybindings.json');
+const default_kb_filepath = path.join(__dirname, 'data', 'input', 'default_keybindings.json');
 const master_keybindings_filepath = path.join(__dirname, 'data', 'output', 'master_kb.json');
 const vscode_commands_filepath = path.join(__dirname, 'data', 'output' , 'commands.json');
 const master_commandsnkb_filepath = path.join(__dirname, 'data', 'output', 'master_commandsnkb.json');
