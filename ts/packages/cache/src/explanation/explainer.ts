@@ -1,20 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { PromptSection, TypeChatLanguageModel } from "typechat";
-import { createJsonTranslatorFromFile } from "common-utils";
 import { RequestAction, HistoryContext } from "./requestAction.js";
 import {
     GenericExplanationResult,
-    ExplanationValidator,
     ConstructionFactory,
     CreateConstructionInfo,
 } from "./genericExplainer.js";
-import {
-    GenericTypeChatAgent,
-    TypeChatAgent,
-    ValidationError,
-} from "./typeChatAgent.js";
+import { GenericTypeChatAgent, ValidationError } from "./typeChatAgent.js";
 
 export function getExactStringRequirementMessage(
     subphraseText: boolean = true,
@@ -28,27 +21,6 @@ export function getSubphraseExplanationInstruction() {
     return `Break the words of Request into non-overlapping phrases in exactly the order they appear and explain the role of each phrase in the translation. ${getExactStringRequirementMessage()}`;
 }
 
-/**
- * Return instructions needed to set up an explainer
- * @param requestAction
- * @returns
- */
-export function buildExplanationInstructions(
-    requestAction: RequestAction,
-): PromptSection[] {
-    const instr: PromptSection[] = [
-        {
-            role: "system",
-            content:
-                "The user is supplying a translation of the form Request => Action.\n" +
-                `${getSubphraseExplanationInstruction()}\n${getActionDescription(
-                    requestAction,
-                )}`,
-        },
-    ];
-    return instr;
-}
-
 function getContextPart(history?: HistoryContext) {
     if (history && history.entities.length > 0) {
         const contextNames = history.entities.map((c, i) => {
@@ -58,33 +30,20 @@ function getContextPart(history?: HistoryContext) {
     }
     return "";
 }
-export function getActionDescription(
-    requestAction: RequestAction,
-    parameterOnly: boolean = true,
-) {
-    const names = parameterOnly ? "parameters" : "properties";
-    const name = parameterOnly ? "parameter" : "property";
-    const actions = requestAction.actions;
-    const action = actions.action;
-    const paramNames = getLeafNames(
-        parameterOnly && action !== undefined
-            ? action.parameters
-            : actions.toJSON(),
-    );
-    let paramPart = "";
-    if (paramNames.length > 0) {
-        paramPart = `The ${name} name${
-            paramNames.length > 1 ? "s are " : " is "
-        }${paramNames.join(", ")}.`;
-    } else {
-        paramPart = `There are no ${names}.`;
-    }
-    const actionNamePart =
-        parameterOnly && action !== undefined
-            ? `The action name is ${action.actionName}. `
-            : "";
 
-    return `${actionNamePart}${paramPart}${getContextPart(requestAction.history)}`;
+export function getActionDescription(requestAction: RequestAction) {
+    const actions = requestAction.actions;
+    const leafPropertyNames = getLeafNames(actions.toJSON());
+    let propertyPart = "";
+    if (leafPropertyNames.length > 0) {
+        propertyPart = `The property name${
+            leafPropertyNames.length > 1 ? "s are " : " is "
+        }${leafPropertyNames.join(", ")}.`;
+    } else {
+        propertyPart = `There are no properties.`;
+    }
+
+    return `${propertyPart}. Ignore properties that are not listed. ${getContextPart(requestAction.history)}`;
 }
 
 function getLeafNames(params: any) {
@@ -162,33 +121,4 @@ export class Explainer<T extends object> {
         }
         return this.agent.correct(requestAction, explanation, correction);
     }
-}
-
-type ExplainerConfig = {
-    schemaFile: string;
-    schemaType: string;
-    createPromptPreamble?: (requestAction: RequestAction) => PromptSection[];
-    validate?: ExplanationValidator<any>;
-    createConstruction?: ConstructionFactory<any>;
-    model?: TypeChatLanguageModel; // use a custom model impl
-};
-
-export function createExplainer<T extends object>(config: ExplainerConfig) {
-    const createPromptPreamble =
-        config.createPromptPreamble ?? buildExplanationInstructions;
-    const agent = new TypeChatAgent(
-        "explanation",
-        () =>
-            createJsonTranslatorFromFile<T>(
-                config.schemaType,
-                config.schemaFile,
-                undefined,
-                undefined,
-                config.model,
-            ),
-        (input) => createPromptPreamble(input),
-        (input) => input.toString(),
-        config.validate,
-    );
-    return new Explainer<T>(agent, config.createConstruction);
 }

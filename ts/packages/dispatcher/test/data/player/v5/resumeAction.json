@@ -38,7 +38,7 @@
             "synonyms": [
               "audio",
               "music",
-              "noise"
+              "playback"
             ],
             "category": "object",
             "propertyNames": [
@@ -49,8 +49,8 @@
             "text": "once more",
             "synonyms": [
               "again",
-              "one more time",
-              "another time"
+              "resume",
+              "restart"
             ],
             "category": "frequency",
             "propertyNames": [
@@ -81,7 +81,7 @@
                 "propertySubPhrases": [
                   "Unpause",
                   "the audio",
-                  "now"
+                  "again"
                 ]
               },
               {
@@ -89,7 +89,7 @@
                 "propertySubPhrases": [
                   "Continue",
                   "the music",
-                  "from here"
+                  "once more"
                 ]
               }
             ]
@@ -122,7 +122,7 @@
               "Continue",
               "Restart"
             ],
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -131,8 +131,8 @@
             "text": "the beats",
             "synonyms": [
               "the music",
-              "the tunes",
-              "the songs"
+              "the track",
+              "the song"
             ],
             "category": "object",
             "propertyNames": [
@@ -207,32 +207,20 @@
             "text": "we",
             "synonyms": [
               "us",
-              "me and you",
-              "everyone"
+              "I",
+              "you"
             ],
-            "category": "politeness",
+            "category": "pronoun",
             "isOptional": true
           },
           {
-            "text": "continue with",
+            "text": "continue with the songs",
             "synonyms": [
-              "resume",
-              "carry on with",
-              "proceed with"
+              "resume the songs",
+              "play the songs again",
+              "start the songs again"
             ],
             "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
-          },
-          {
-            "text": "the songs",
-            "synonyms": [
-              "the music",
-              "the tracks",
-              "the playlist"
-            ],
-            "category": "object",
             "propertyNames": [
               "fullActionName"
             ]
@@ -253,29 +241,31 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.resume",
             "propertySubPhrases": [
-              "continue with",
-              "the songs"
+              "continue with the songs"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "start",
-                  "the songs"
+                  "start the songs"
                 ]
               },
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "pause",
-                  "the songs"
+                  "pause the songs"
                 ]
               },
               {
                 "propertyValue": "player.stop",
                 "propertySubPhrases": [
-                  "stop",
-                  "the songs"
+                  "stop the songs"
+                ]
+              },
+              {
+                "propertyValue": "player.next",
+                "propertySubPhrases": [
+                  "skip to the next song"
                 ]
               }
             ]
@@ -295,7 +285,7 @@
             "name": "fullActionName",
             "value": "player.resume",
             "substrings": [
-              "get the sound back"
+              "Can we get the sound back?"
             ],
             "implied": true
           }
@@ -314,9 +304,9 @@
           {
             "text": "we",
             "synonyms": [
-              "you",
+              "us",
               "I",
-              "they"
+              "you"
             ],
             "category": "politeness",
             "isOptional": true
@@ -324,9 +314,9 @@
           {
             "text": "get the sound back",
             "synonyms": [
-              "resume the audio",
+              "resume the sound",
               "turn the sound back on",
-              "unmute the sound"
+              "restore the sound"
             ],
             "category": "action",
             "propertyNames": [
@@ -575,12 +565,6 @@
                 "propertySubPhrases": [
                   "pause the music"
                 ]
-              },
-              {
-                "propertyValue": "player.skip",
-                "propertySubPhrases": [
-                  "skip the music"
-                ]
               }
             ]
           }
@@ -601,7 +585,7 @@
             "substrings": [
               "start the music back up"
             ],
-            "implied": true
+            "implied": false
           }
         ],
         "subPhrases": [
@@ -673,7 +657,7 @@
             "substrings": [
               "Continue playing"
             ],
-            "implied": false
+            "implied": true
           }
         ],
         "subPhrases": [
@@ -682,7 +666,7 @@
             "synonyms": [
               "Resume playing",
               "Keep playing",
-              "Carry on playing"
+              "Start playing again"
             ],
             "category": "action",
             "propertyNames": [
@@ -709,7 +693,7 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.play",
+                "propertyValue": "player.start",
                 "propertySubPhrases": [
                   "Start playing"
                 ]
@@ -717,7 +701,7 @@
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "Pause"
+                  "Pause playing"
                 ]
               },
               {
@@ -765,8 +749,8 @@
             "text": "please",
             "synonyms": [
               "kindly",
-              "if you would",
-              "if you don't mind"
+              "if you don't mind",
+              "would you mind"
             ],
             "category": "politeness",
             "isOptional": true
@@ -783,19 +767,19 @@
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
+                  "Play the melody"
+                ]
+              },
+              {
+                "propertyValue": "player.start",
+                "propertySubPhrases": [
                   "Start the melody"
                 ]
               },
               {
-                "propertyValue": "player.pause",
+                "propertyValue": "player.unpause",
                 "propertySubPhrases": [
-                  "Pause the melody"
-                ]
-              },
-              {
-                "propertyValue": "player.stop",
-                "propertySubPhrases": [
-                  "Stop the melody"
+                  "Unpause the melody"
                 ]
               }
             ]
@@ -817,7 +801,7 @@
             "substrings": [
               "continue the tunes"
             ],
-            "implied": true
+            "implied": false
           }
         ],
         "subPhrases": [
@@ -836,7 +820,7 @@
             "synonyms": [
               "resume the music",
               "play the songs again",
-              "start the tunes again"
+              "start the tunes"
             ],
             "category": "action",
             "propertyNames": [
@@ -861,13 +845,13 @@
               {
                 "propertyValue": "player.start",
                 "propertySubPhrases": [
-                  "start the songs"
+                  "start the tunes"
                 ]
               },
               {
                 "propertyValue": "player.unpause",
                 "propertySubPhrases": [
-                  "unpause the audio"
+                  "unpause the music"
                 ]
               }
             ]
@@ -889,7 +873,7 @@
             "substrings": [
               "get the music started again"
             ],
-            "implied": true
+            "implied": false
           }
         ],
         "subPhrases": [
@@ -997,27 +981,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.pause",
-                "propertySubPhrases": [
-                  "pause the track"
-                ]
-              },
-              {
-                "propertyValue": "player.stop",
-                "propertySubPhrases": [
-                  "stop the track"
-                ]
-              },
-              {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
                   "play the track"
                 ]
               },
               {
-                "propertyValue": "player.next",
+                "propertyValue": "player.start",
                 "propertySubPhrases": [
-                  "skip to the next track"
+                  "start the track"
+                ]
+              },
+              {
+                "propertyValue": "player.continue",
+                "propertySubPhrases": [
+                  "continue the track"
                 ]
               }
             ]
@@ -1141,8 +1119,8 @@
             "text": "Get",
             "synonyms": [
               "Start",
-              "Resume",
-              "Begin"
+              "Begin",
+              "Resume"
             ],
             "category": "command",
             "propertyNames": [
@@ -1193,19 +1171,19 @@
                 ]
               },
               {
+                "propertyValue": "player.restart",
+                "propertySubPhrases": [
+                  "Restart",
+                  "the tracks",
+                  "from the beginning"
+                ]
+              },
+              {
                 "propertyValue": "player.unpause",
                 "propertySubPhrases": [
                   "Unpause",
                   "the tracks",
                   "now"
-                ]
-              },
-              {
-                "propertyValue": "player.continue",
-                "propertySubPhrases": [
-                  "Continue",
-                  "the tracks",
-                  "from where they left off"
                 ]
               }
             ]
@@ -1238,14 +1216,14 @@
               "Continue",
               "Carry on"
             ],
-            "category": "confirmation",
+            "category": "filler",
             "isOptional": true
           },
           {
             "text": "and",
             "synonyms": [
               "plus",
-              "along with",
+              "also",
               "as well as"
             ],
             "category": "conjunction",
@@ -1254,8 +1232,8 @@
           {
             "text": "resume",
             "synonyms": [
-              "restart",
               "continue",
+              "restart",
               "pick up"
             ],
             "category": "action",
@@ -1266,9 +1244,9 @@
           {
             "text": "the playlist",
             "synonyms": [
-              "the song list",
-              "the music queue",
-              "the track collection"
+              "the music list",
+              "the song collection",
+              "the track list"
             ],
             "category": "object",
             "propertyNames": []
@@ -1303,7 +1281,60 @@
             ]
           }
         ]
-      }
+      },
+      "corrections": [
+        {
+          "data": {
+            "properties": [
+              {
+                "name": "fullActionName",
+                "value": "player.resume",
+                "substrings": [
+                  "resume"
+                ],
+                "implied": false
+              }
+            ],
+            "subPhrases": [
+              {
+                "text": "Go ahead",
+                "synonyms": [
+                  "Proceed",
+                  "Continue",
+                  "Carry on"
+                ],
+                "category": "filler",
+                "isOptional": true
+              },
+              {
+                "text": "resume",
+                "synonyms": [
+                  "continue",
+                  "restart",
+                  "pick up"
+                ],
+                "category": "action",
+                "propertyNames": [
+                  "fullActionName"
+                ]
+              },
+              {
+                "text": "the playlist",
+                "synonyms": [
+                  "the music list",
+                  "the song collection",
+                  "the track list"
+                ],
+                "category": "object",
+                "propertyNames": []
+              }
+            ]
+          },
+          "correction": [
+            "Missing sub-phrase: explanation missing for 'and'"
+          ]
+        }
+      ]
     },
     {
       "request": "Hey, could you hit play?",
@@ -1346,9 +1377,9 @@
           {
             "text": "hit play",
             "synonyms": [
+              "press play",
               "start playing",
-              "resume",
-              "play"
+              "resume"
             ],
             "category": "action",
             "propertyNames": [
@@ -1373,7 +1404,7 @@
               {
                 "propertyValue": "player.stop",
                 "propertySubPhrases": [
-                  "stop playing"
+                  "hit stop"
                 ]
               },
               {
@@ -1407,7 +1438,7 @@
             "substrings": [
               "Hit play again."
             ],
-            "implied": true
+            "implied": false
           }
         ],
         "subPhrases": [
@@ -1426,7 +1457,7 @@
             "synonyms": [
               "start",
               "resume",
-              "begin"
+              "continue"
             ],
             "category": "action",
             "propertyNames": [
@@ -1440,7 +1471,7 @@
               "another time",
               "replay"
             ],
-            "category": "frequency",
+            "category": "repetition",
             "propertyNames": [
               "fullActionName"
             ]
@@ -1516,7 +1547,7 @@
             "synonyms": [
               "the play icon",
               "the play control",
-              "the play symbol"
+              "the play key"
             ],
             "category": "object",
             "propertyNames": [
@@ -1527,7 +1558,7 @@
             "text": "again",
             "synonyms": [
               "once more",
-              "one more time",
+              "another time",
               "repeatedly"
             ],
             "category": "frequency",
@@ -1558,7 +1589,7 @@
                 "propertyValue": "player.start",
                 "propertySubPhrases": [
                   "Start",
-                  "the playback",
+                  "the play button",
                   "immediately"
                 ]
               },
@@ -1566,8 +1597,8 @@
                 "propertyValue": "player.continue",
                 "propertySubPhrases": [
                   "Continue",
-                  "the playback",
-                  "from where it left off"
+                  "the play button",
+                  "once more"
                 ]
               }
             ]
@@ -1598,7 +1629,7 @@
             "synonyms": [
               "I would be grateful if you could",
               "It would be great if you could",
-              "I would like you to"
+              "I would appreciate it if you"
             ],
             "category": "politeness",
             "isOptional": true
@@ -1608,7 +1639,7 @@
             "synonyms": [
               "resume the music",
               "start the music again",
-              "play the music once more"
+              "continue the music"
             ],
             "category": "action",
             "propertyNames": [
@@ -1631,9 +1662,9 @@
                 ]
               },
               {
-                "propertyValue": "player.restart",
+                "propertyValue": "player.start",
                 "propertySubPhrases": [
-                  "restart the music"
+                  "start the music"
                 ]
               },
               {
@@ -1733,7 +1764,7 @@
             "substrings": [
               "continue the music"
             ],
-            "implied": false
+            "implied": true
           }
         ],
         "subPhrases": [
@@ -1824,9 +1855,9 @@
           {
             "text": "the music",
             "synonyms": [
-              "the song",
-              "the audio",
-              "the track"
+              "the songs",
+              "the tunes",
+              "the audio"
             ],
             "category": "object",
             "propertyNames": [
@@ -1838,7 +1869,7 @@
             "synonyms": [
               "playing",
               "going",
-              "on"
+              "running"
             ],
             "category": "action",
             "propertyNames": [
@@ -1904,11 +1935,11 @@
         ],
         "subPhrases": [
           {
-            "text": "Keep the party going",
+            "text": "Keep",
             "synonyms": [
-              "Continue the celebration",
-              "Maintain the fun",
-              "Keep the event lively"
+              "Maintain",
+              "Continue",
+              "Sustain"
             ],
             "category": "command",
             "propertyNames": [
@@ -1916,11 +1947,23 @@
             ]
           },
           {
-            "text": "with the music",
+            "text": "the party going",
             "synonyms": [
-              "using the tunes",
-              "with the songs",
-              "with the playlist"
+              "the celebration active",
+              "the event lively",
+              "the gathering energetic"
+            ],
+            "category": "context",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "with the music.",
+            "synonyms": [
+              "with tunes",
+              "with songs",
+              "with melodies"
             ],
             "category": "context",
             "propertyNames": [
@@ -1933,29 +1976,33 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.playRandom",
             "propertySubPhrases": [
-              "Keep the party going",
-              "with the music"
+              "Keep",
+              "the party going",
+              "with the music."
             ],
             "alternatives": [
               {
                 "propertyValue": "player.playNext",
                 "propertySubPhrases": [
-                  "Play the next song",
-                  "to keep the party going"
+                  "Continue",
+                  "the party",
+                  "with the next song."
                 ]
               },
               {
-                "propertyValue": "player.shuffle",
+                "propertyValue": "player.playFavorite",
                 "propertySubPhrases": [
-                  "Shuffle the playlist",
-                  "for the party"
+                  "Keep",
+                  "the vibe",
+                  "with your favorite tracks."
                 ]
               },
               {
-                "propertyValue": "player.playFavorites",
+                "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "Play my favorite tracks",
-                  "for the party"
+                  "Maintain",
+                  "the energy",
+                  "with the playlist."
                 ]
               }
             ]
@@ -2069,7 +2116,7 @@
             "name": "fullActionName",
             "value": "player.resume",
             "substrings": [
-              "Kindly continue with the playlist."
+              "continue with the playlist"
             ],
             "implied": true
           }
@@ -2215,7 +2262,7 @@
                 "propertySubPhrases": [
                   "Continue",
                   "the music",
-                  "playing"
+                  "from where it left off"
                 ]
               }
             ]
@@ -2293,17 +2340,17 @@
                 ]
               },
               {
-                "propertyValue": "player.continue",
+                "propertyValue": "player.restart",
                 "propertySubPhrases": [
-                  "continue",
-                  "the tunes."
+                  "restart",
+                  "the track."
                 ]
               },
               {
-                "propertyValue": "player.replay",
+                "propertyValue": "player.continue",
                 "propertySubPhrases": [
-                  "replay",
-                  "the tracks."
+                  "continue",
+                  "the playlist."
                 ]
               }
             ]
@@ -2344,9 +2391,9 @@
             "synonyms": [
               "resume the music",
               "play the music again",
-              "turn the music back on"
+              "start the music"
             ],
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -2367,15 +2414,15 @@
                 ]
               },
               {
-                "propertyValue": "player.restart",
-                "propertySubPhrases": [
-                  "restart the music"
-                ]
-              },
-              {
                 "propertyValue": "player.unpause",
                 "propertySubPhrases": [
                   "unpause the music"
+                ]
+              },
+              {
+                "propertyValue": "player.continue",
+                "propertySubPhrases": [
+                  "continue the music"
                 ]
               }
             ]
@@ -2405,8 +2452,8 @@
             "text": "Let's",
             "synonyms": [
               "Let us",
-              "Allow us",
-              "We should"
+              "We should",
+              "How about we"
             ],
             "category": "politeness",
             "isOptional": true
@@ -2449,6 +2496,12 @@
                 "propertySubPhrases": [
                   "play my favorite song"
                 ]
+              },
+              {
+                "propertyValue": "player.playPlaylist",
+                "propertySubPhrases": [
+                  "play my playlist"
+                ]
               }
             ]
           }
@@ -2488,7 +2541,7 @@
             "synonyms": [
               "resume",
               "continue from where we stopped",
-              "start again from the last point"
+              "start again from where we paused"
             ],
             "category": "action",
             "propertyNames": [
@@ -2537,6 +2590,13 @@
                   "stop",
                   "the music"
                 ]
+              },
+              {
+                "propertyValue": "player.rewind",
+                "propertySubPhrases": [
+                  "rewind",
+                  "the music"
+                ]
               }
             ]
           }
@@ -2566,9 +2626,9 @@
             "synonyms": [
               "Let us",
               "We should",
-              "How about we"
+              "Let's go ahead and"
             ],
-            "category": "politeness",
+            "category": "filler",
             "isOptional": true
           },
           {
@@ -2601,7 +2661,7 @@
               {
                 "propertyValue": "player.start",
                 "propertySubPhrases": [
-                  "start the audio"
+                  "start the audio playback"
                 ]
               },
               {
@@ -2629,7 +2689,7 @@
             "substrings": [
               "Play on"
             ],
-            "implied": true
+            "implied": false
           }
         ],
         "subPhrases": [
@@ -2637,8 +2697,8 @@
             "text": "Play on",
             "synonyms": [
               "Resume",
-              "Continue",
-              "Start playing"
+              "Continue playing",
+              "Start again"
             ],
             "category": "command",
             "propertyNames": [
@@ -2665,21 +2725,21 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.pause",
+                "propertyValue": "player.start",
                 "propertySubPhrases": [
-                  "Pause"
+                  "Start playing"
                 ]
               },
               {
-                "propertyValue": "player.stop",
+                "propertyValue": "player.continue",
                 "propertySubPhrases": [
-                  "Stop"
+                  "Continue playing"
                 ]
               },
               {
-                "propertyValue": "player.next",
+                "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "Next"
+                  "Play"
                 ]
               }
             ]
@@ -2709,8 +2769,8 @@
             "text": "Play",
             "synonyms": [
               "Start",
-              "Resume",
-              "Begin"
+              "Begin",
+              "Resume"
             ],
             "category": "command",
             "propertyNames": [
@@ -2736,7 +2796,7 @@
               "one more time",
               "another time"
             ],
-            "category": "repetition",
+            "category": "frequency",
             "propertyNames": [
               "fullActionName"
             ]
@@ -2813,8 +2873,8 @@
             "text": "continue the music",
             "synonyms": [
               "resume the music",
-              "keep playing the music",
-              "start the music again"
+              "play the music again",
+              "start the music"
             ],
             "category": "action",
             "propertyNames": [
@@ -2915,9 +2975,9 @@
                 ]
               },
               {
-                "propertyValue": "player.shufflePlay",
+                "propertyValue": "player.shuffle",
                 "propertySubPhrases": [
-                  "shuffle play the music"
+                  "shuffle the music"
                 ]
               }
             ]
@@ -2975,21 +3035,21 @@
             ],
             "alternatives": [
               {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the music"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the music"
+                ]
+              },
+              {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
                   "play the music"
-                ]
-              },
-              {
-                "propertyValue": "player.start",
-                "propertySubPhrases": [
-                  "start the music"
-                ]
-              },
-              {
-                "propertyValue": "player.continue",
-                "propertySubPhrases": [
-                  "continue the music"
                 ]
               }
             ]
@@ -3016,11 +3076,11 @@
         ],
         "subPhrases": [
           {
-            "text": "Proceed",
+            "text": "Proceed with",
             "synonyms": [
-              "Continue",
-              "Resume",
-              "Go ahead"
+              "Continue with",
+              "Go ahead with",
+              "Resume"
             ],
             "category": "command",
             "propertyNames": [
@@ -3028,26 +3088,16 @@
             ]
           },
           {
-            "text": "with the audio playback",
+            "text": "the audio playback.",
             "synonyms": [
-              "with the music",
-              "with the sound",
-              "with the audio"
+              "the sound playback.",
+              "the music playback.",
+              "the audio stream."
             ],
             "category": "object",
             "propertyNames": [
               "fullActionName"
             ]
-          },
-          {
-            "text": ".",
-            "synonyms": [
-              "",
-              " ",
-              " "
-            ],
-            "category": "punctuation",
-            "isOptional": true
           }
         ],
         "propertyAlternatives": [
@@ -3055,29 +3105,29 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.resume",
             "propertySubPhrases": [
-              "Proceed",
-              "with the audio playback"
+              "Proceed with",
+              "the audio playback."
             ],
             "alternatives": [
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
                   "Start",
-                  "the audio playback"
+                  "the audio playback."
                 ]
               },
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
                   "Pause",
-                  "the audio playback"
+                  "the audio playback."
                 ]
               },
               {
                 "propertyValue": "player.stop",
                 "propertySubPhrases": [
                   "Stop",
-                  "the audio playback"
+                  "the audio playback."
                 ]
               }
             ]
@@ -3099,7 +3149,7 @@
             "substrings": [
               "Restart the jam"
             ],
-            "implied": true
+            "implied": false
           }
         ],
         "subPhrases": [
@@ -3107,8 +3157,8 @@
             "text": "Restart the jam",
             "synonyms": [
               "Resume the music",
-              "Play the song again",
-              "Start the track over"
+              "Continue the track",
+              "Play the song again"
             ],
             "category": "command",
             "propertyNames": [
@@ -3119,7 +3169,7 @@
             "text": "please",
             "synonyms": [
               "kindly",
-              "if you could",
+              "if you don't mind",
               "would you mind"
             ],
             "category": "politeness",
@@ -3135,9 +3185,9 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.start",
+                "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "Start the jam"
+                  "Play the jam"
                 ]
               },
               {
@@ -3147,9 +3197,9 @@
                 ]
               },
               {
-                "propertyValue": "player.restart",
+                "propertyValue": "player.startOver",
                 "propertySubPhrases": [
-                  "Restart the track"
+                  "Start over the jam"
                 ]
               }
             ]
@@ -3191,8 +3241,8 @@
             "text": "please",
             "synonyms": [
               "kindly",
-              "if you would",
-              "if you please"
+              "if you could",
+              "would you mind"
             ],
             "category": "politeness",
             "isOptional": true
@@ -3252,7 +3302,7 @@
             "synonyms": [
               "Play the song again",
               "Continue the song",
-              "Start the song from where it left off"
+              "Unpause the song"
             ],
             "category": "command",
             "propertyNames": [
@@ -3263,8 +3313,8 @@
             "text": "if you don't mind",
             "synonyms": [
               "if it's okay with you",
-              "if that's alright",
-              "if you could"
+              "if you could",
+              "if you would"
             ],
             "category": "politeness",
             "isOptional": true
@@ -3285,15 +3335,15 @@
                 ]
               },
               {
-                "propertyValue": "player.pause",
+                "propertyValue": "player.start",
                 "propertySubPhrases": [
-                  "Pause the song"
+                  "Start the song"
                 ]
               },
               {
-                "propertyValue": "player.stop",
+                "propertyValue": "player.continue",
                 "propertySubPhrases": [
-                  "Stop the song"
+                  "Continue the song"
                 ]
               }
             ]
@@ -3322,9 +3372,9 @@
           {
             "text": "Resume the sound",
             "synonyms": [
-              "Play the audio",
-              "Continue the music",
-              "Start the sound"
+              "Continue the audio",
+              "Play the sound",
+              "Unpause the audio"
             ],
             "category": "command",
             "propertyNames": [
@@ -3335,8 +3385,8 @@
             "text": "if you will",
             "synonyms": [
               "please",
-              "kindly",
-              "if possible"
+              "if you don't mind",
+              "if you could"
             ],
             "category": "politeness",
             "isOptional": true
@@ -3417,8 +3467,8 @@
             "text": "please",
             "synonyms": [
               "kindly",
-              "if you would",
-              "if you please"
+              "if you could",
+              "would you mind"
             ],
             "category": "politeness",
             "isOptional": true
@@ -3469,7 +3519,7 @@
             "substrings": [
               "Start the music up again."
             ],
-            "implied": true
+            "implied": false
           }
         ],
         "subPhrases": [
@@ -3477,8 +3527,8 @@
             "text": "Start",
             "synonyms": [
               "Begin",
-              "Initiate",
-              "Commence"
+              "Commence",
+              "Initiate"
             ],
             "category": "command",
             "propertyNames": [
@@ -3529,11 +3579,11 @@
                 ]
               },
               {
-                "propertyValue": "player.restart",
+                "propertyValue": "player.start",
                 "propertySubPhrases": [
-                  "Restart",
+                  "Begin",
                   "the music",
-                  "from the beginning"
+                  "again"
                 ]
               },
               {
@@ -3571,8 +3621,8 @@
             "text": "Unpause the tunes",
             "synonyms": [
               "Resume the music",
-              "Continue playing",
-              "Start the songs"
+              "Continue playing the songs",
+              "Start the tunes again"
             ],
             "category": "command",
             "propertyNames": [
@@ -3584,7 +3634,7 @@
             "synonyms": [
               "please",
               "if you can",
-              "if you don't mind"
+              "if possible"
             ],
             "category": "politeness",
             "isOptional": true
@@ -3644,7 +3694,7 @@
             "synonyms": [
               "Could you",
               "Can you",
-              "Would it be possible to"
+              "Would you please"
             ],
             "category": "politeness",
             "isOptional": true
@@ -3652,9 +3702,9 @@
           {
             "text": "resuming the song",
             "synonyms": [
-              "resume the song",
+              "continue the song",
               "play the song again",
-              "continue the song"
+              "restart the song"
             ],
             "category": "action",
             "propertyNames": [
@@ -3724,9 +3774,9 @@
           {
             "text": "resume the audio",
             "synonyms": [
-              "play the audio again",
               "continue the audio",
-              "restart the audio"
+              "restart the audio",
+              "play the audio again"
             ],
             "category": "action",
             "propertyNames": [
@@ -3758,12 +3808,6 @@
                 "propertyValue": "player.stop",
                 "propertySubPhrases": [
                   "stop the audio"
-                ]
-              },
-              {
-                "propertyValue": "player.rewind",
-                "propertySubPhrases": [
-                  "rewind the audio"
                 ]
               }
             ]
@@ -3804,7 +3848,7 @@
             "synonyms": [
               "continue the music",
               "resume the tracks",
-              "play the songs"
+              "keep playing the songs"
             ],
             "category": "command",
             "propertyNames": [
@@ -3829,13 +3873,13 @@
               {
                 "propertyValue": "player.continue",
                 "propertySubPhrases": [
-                  "continue the tracks"
+                  "continue the playlist"
                 ]
               },
               {
                 "propertyValue": "player.unpause",
                 "propertySubPhrases": [
-                  "unpause the tunes"
+                  "unpause the track"
                 ]
               }
             ]
@@ -3858,7 +3902,7 @@
               "press play",
               "again"
             ],
-            "implied": false
+            "implied": true
           }
         ],
         "subPhrases": [
@@ -3876,8 +3920,8 @@
             "text": "press play",
             "synonyms": [
               "start",
-              "begin",
-              "resume"
+              "resume",
+              "continue"
             ],
             "category": "command",
             "propertyNames": [
@@ -3889,7 +3933,7 @@
             "synonyms": [
               "on it",
               "on this",
-              "on the thing"
+              "on the player"
             ],
             "category": "preposition",
             "isOptional": true
@@ -3898,10 +3942,10 @@
             "text": "again",
             "synonyms": [
               "once more",
-              "another time",
-              "one more time"
+              "one more time",
+              "replay"
             ],
-            "category": "repetition",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -3917,24 +3961,24 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.start",
+                "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "start playing",
-                  "again"
+                  "press play",
+                  "on that"
                 ]
               },
               {
-                "propertyValue": "player.replay",
+                "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "replay",
-                  "again"
+                  "pause",
+                  "on that"
                 ]
               },
               {
-                "propertyValue": "player.continue",
+                "propertyValue": "player.stop",
                 "propertySubPhrases": [
-                  "continue",
-                  "again"
+                  "stop",
+                  "on that"
                 ]
               }
             ]
