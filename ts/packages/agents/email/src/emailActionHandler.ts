@@ -25,7 +25,6 @@ import {
     CommandHandlerTable,
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
-import Path from "path";
 
 export class MailClientLoginCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Log into the MS Graph to access email";
@@ -134,8 +133,10 @@ async function handleEmailAction(
                         query,
                         4096,
                         openai.createChatModel(
-                            [Path.parse(__filename).name],
                             "GPT_35_TURBO",
+                            undefined,
+                            undefined,
+                            ["emailActionHandler"],
                         ),
                         undefined,
                     );

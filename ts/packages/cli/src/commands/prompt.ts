@@ -31,13 +31,14 @@ export default class Prompt extends Command {
     async run(): Promise<void> {
         const { args, flags } = await this.parse(Prompt);
         const model = openai.createChatModel(
-            ["cli"],
             flags.model,
             flags.json
                 ? {
                       response_format: { type: "json_object" },
                   }
                 : undefined,
+            undefined,
+            ["cli"],
         );
         const isFile = fs.existsSync(args.request);
         if (isFile) {
