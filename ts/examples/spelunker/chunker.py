@@ -36,12 +36,12 @@ class Blob:
     """A sequence of text lines plus some metadata."""
 
     lines: list[str]
-    lineno: int  # 0-based!
+    start: int  # 0-based!
 
     def to_dict(self) -> dict[str, object]:
         return {
             "lines": self.lines,
-            "lineno": self.lineno,
+            "start": self.start,
         }
 
 
@@ -193,11 +193,11 @@ def create_chunks_recursively(
 
             # Split last parent.blobs[-1] into two, leaving a gap for the new Chunk
             parent_blob: Blob = parent.blobs.pop()
-            parent_start: int = parent_blob.lineno
-            parent_end: int = parent_blob.lineno + len(parent_blob.lines)
+            parent_start: int = parent_blob.start
+            parent_end: int = parent_blob.start + len(parent_blob.lines)
             first_blob, last_blob = chunk.blobs[0], chunk.blobs[-1]
-            first_start = first_blob.lineno
-            last_end = last_blob.lineno + len(last_blob.lines)
+            first_start = first_blob.start
+            last_end = last_blob.start + len(last_blob.lines)
             if parent_start <= last_end and last_end <= parent_end:
                 parent.blobs.append(Blob(lines[parent_start:first_start], parent_start))
                 parent.blobs.append(Blob(lines[last_end:parent_end], last_end))
@@ -232,13 +232,13 @@ def test():
         with open(filename, "r") as f:
             text = f.read()
     except OSError as e:
-        print({"error": str(e)})
+        print({"error": repr(e)})
         return 1
 
     try:
         tree = ast.parse(text, filename=filename)
     except SyntaxError as e:
-        print({"error": str(e)})
+        print({"error": repr(e)})
         return 1
 
     chunks = chunker(text, tree)
