@@ -14,16 +14,17 @@ async function main(): Promise<void> {
         filename = process.argv[2];
     }
     console.log(`[Chunkifying ${filename}]`);
-    const result = (await chunkifyPythonFile(filename)) as {
-        error?: string;
-        output?: string;
-    };
-    if (result.error) {
-        console.log(result.output);
-        console.error(result.error);
+    const result = (await chunkifyPythonFile(filename));
+    if (result instanceof Array) {
+        console.log(`[Got ${result.length} Chunks]`);
+        console.log(JSON.stringify(result, null, 2));
+    } else {
+        if (result.output) {
+            console.log("[output]", result.output);
+        }
+        console.error("[error]", result.error);
         return;
     }
-    console.log(JSON.stringify(result, null, 2));
 }
 
 await main();
