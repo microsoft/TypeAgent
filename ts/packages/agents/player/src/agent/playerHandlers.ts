@@ -18,10 +18,11 @@ import {
     DynamicDisplay,
 } from "@typeagent/agent-sdk";
 import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
-import { searchAlbum, searchArtists, searchTracks } from "../client.js";
+import { searchAlbum, searchTracks } from "../client.js";
 import { htmlStatus } from "../playback.js";
 import { getPlayerCommandInterface } from "./playerCommands.js";
 import { getGenreSeeds } from "../endpoints.js";
+import { searchArtists } from "../search.js";
 
 export function instantiate(): AppAgent {
     return {

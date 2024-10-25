@@ -221,13 +221,49 @@ export async function getArtist(service: SpotifyService, id: string) {
         },
     };
 
+    const artistsUrl = `https://api.spotify.com/v1/artist/${encodeURIComponent(id)}`;
+
+    try {
+        const spotifyResult = await axios.get(artistsUrl, config);
+
+        return spotifyResult.data as SpotifyApi.SingleArtistResponse;
+    } catch (e) {
+        translateAxiosError(e);
+    }
+    return undefined;
+}
+
+export async function getArtists(service: SpotifyService, ids: string[]) {
+    const config = {
+        headers: {
+            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
+        },
+    };
+
     const artistsUrl = getUrlWithParams("https://api.spotify.com/v1/artists", {
-        ids: id,
+        ids,
     });
     try {
         const spotifyResult = await axios.get(artistsUrl, config);
 
         return spotifyResult.data as SpotifyApi.MultipleArtistsResponse;
+    } catch (e) {
+        translateAxiosError(e);
+    }
+    return undefined;
+}
+
+export async function getArtistTopTracks(service: SpotifyService, id: string) {
+    const config = {
+        headers: {
+            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
+        },
+    };
+
+    const artistsUrl = `https://api.spotify.com/v1/artists/${encodeURIComponent(id)}/top-tracks`;
+    try {
+        const spotifyResult = await axios.get(artistsUrl, config);
+        return spotifyResult.data as SpotifyApi.ArtistsTopTracksResponse;
     } catch (e) {
         translateAxiosError(e);
     }
@@ -493,6 +529,27 @@ export async function getPlaylists(service: SpotifyService) {
         translateAxiosError(e);
     }
     return undefined;
+}
+
+export async function getAlbums(
+    service: SpotifyService,
+    ids: string[],
+): Promise<SpotifyApi.MultipleAlbumsResponse | undefined> {
+    const config = {
+        headers: {
+            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
+        },
+    };
+
+    const artistsUrl = getUrlWithParams("https://api.spotify.com/v1/albums", {
+        ids,
+    });
+    try {
+        const spotifyResult = await axios.get(artistsUrl, config);
+        return spotifyResult.data as SpotifyApi.MultipleAlbumsResponse;
+    } catch (e) {
+        translateAxiosError(e);
+    }
 }
 
 export async function getAlbumTracks(service: SpotifyService, albumId: string) {
