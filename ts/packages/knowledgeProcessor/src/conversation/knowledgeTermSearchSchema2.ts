@@ -30,7 +30,7 @@ export type ActionTerm = {
     verbs?: VerbsTerm | undefined; // action verbs
     // - subject and object for the verb
     subject?: string | undefined;
-    object?: string | undefined;
+    object?: string | undefined; // 'receives' the action (e.g. 'email' in: What did X say in his email about Y the sent to Z')
 };
 
 // Search indexes for following search terms: typically single word keywords.

@@ -39,7 +39,7 @@ import {
     createEntitySearchOptions,
 } from "./entities.js";
 import { ExtractedKnowledge } from "./knowledge.js";
-import { Filter, SearchAction } from "./knowledgeSearchWebSchema.js";
+import { Filter, SearchAction } from "./knowledgeSearchSchema.js";
 import { intersectSets, removeUndefined, unionSets } from "../setOperations.js";
 import { MessageIndex, createMessageIndex } from "./messages.js";
 import {

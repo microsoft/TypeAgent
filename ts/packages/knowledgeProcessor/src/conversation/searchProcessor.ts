@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SearchOptions, lookupAnswersOnWeb } from "typeagent";
+import { SearchOptions } from "typeagent";
 import {
     Conversation,
     ConversationSearchOptions,
@@ -9,13 +9,12 @@ import {
     SearchTermsActionResponse,
     SearchTermsActionResponseV2,
 } from "./conversation.js";
-import { SearchResponse, createSearchResponse } from "./searchResponse.js";
+import { SearchResponse } from "./searchResponse.js";
 import {
     Filter,
     GetAnswerAction,
-    WebLookupAction,
     ResponseStyle,
-} from "./knowledgeSearchWebSchema.js";
+} from "./knowledgeSearchSchema.js";
 import { SetOp } from "../setOperations.js";
 import {
     KnowledgeSearchMode,
@@ -133,9 +132,6 @@ export function createSearchProcessor(
                 break;
             case "getAnswer":
                 rr.response = await handleGetAnswers(query, rr.action, options);
-                break;
-            case "webLookup":
-                rr.response = await handleLookup(query, rr.action, options);
                 break;
         }
 
@@ -386,29 +382,6 @@ export function createSearchProcessor(
                 options.fallbackSearch,
             );
         }
-    }
-
-    async function handleLookup(
-        query: string,
-        lookup: WebLookupAction,
-        options: SearchProcessingOptions,
-    ): Promise<SearchResponse> {
-        const answer = await lookupAnswersOnWeb(
-            answerModel,
-            query,
-            options.maxMatches,
-            {
-                maxCharsPerChunk: 4096,
-                maxTextLengthToSearch: 4096 * 16,
-                rewriteForReadability: false,
-            },
-        );
-        const response = createSearchResponse(1);
-        response.answer = {
-            type: answer.answer.type === "NoAnswer" ? "NoAnswer" : "Answered",
-            answer: answer.answer.answer,
-        };
-        return response;
     }
 
     function isTopicSummaryRequest(action: GetAnswerAction): boolean {

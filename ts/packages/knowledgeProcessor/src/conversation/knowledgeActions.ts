@@ -8,7 +8,7 @@ import {
     createJsonTranslator,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import { SearchAction } from "./knowledgeSearchWebSchema.js";
+import { SearchAction } from "./knowledgeSearchSchema.js";
 import { dateTime, loadSchema } from "typeagent";
 import { DateTime, DateTimeRange } from "./dateTimeSchema.js";
 import { SearchTermsAction } from "./knowledgeTermSearchSchema.js";
@@ -32,7 +32,6 @@ export interface KnowledgeActionTranslator {
 export enum KnowledgeSearchMode {
     Default,
     WithActions,
-    WithActionsAndWeb,
 }
 
 export function createKnowledgeActionTranslator(
@@ -118,8 +117,6 @@ export function createKnowledgeActionTranslator(
                 return "knowledgeSearchNoActionsSchema.ts";
             case KnowledgeSearchMode.WithActions:
                 return "knowledgeSearchSchema.ts";
-            case KnowledgeSearchMode.WithActionsAndWeb:
-                return "knowledgeSearchWebSchema.ts";
         }
     }
 }

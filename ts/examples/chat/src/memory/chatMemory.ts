@@ -950,16 +950,6 @@ export async function runChatMemory(): Promise<void> {
             return;
         }
         if (result.response) {
-            if (result.action.actionName === "webLookup") {
-                if (result.response.answer) {
-                    printer.writeInColor(
-                        chalk.green,
-                        result.response.answer.answer!,
-                    );
-                }
-                return;
-            }
-
             const timestampA = new Date();
             const entityIndex = await context.conversation.getEntityIndex();
             const topicIndex = await context.conversation.getTopicsIndex(
