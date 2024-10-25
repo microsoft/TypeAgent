@@ -747,7 +747,7 @@ app.whenReady().then(async () => {
         "get-template-schema",
         async (_event, templateAgentName, templateName, data) => {
             return dispatcher.getTemplateSchema(
-                templateAgentName,  
+                templateAgentName,
                 templateName,
                 data,
             );
@@ -772,7 +772,7 @@ app.whenReady().then(async () => {
         // make sure links are opened in the external browser
         mainWindow?.webContents.setWindowOpenHandler((details) => {
             require("electron").shell.openExternal(details.url);
-            return { action: 'deny' }
+            return { action: "deny" };
         });
     });
 
