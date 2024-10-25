@@ -31,6 +31,8 @@ import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
 import { AppAgentEvent, DisplayAppendMode } from "@typeagent/agent-sdk";
 import { shellAgentProvider } from "./agent.js";
+import { BrowserAgentIpc } from "./browserIpc.js";
+import { WebSocketMessage } from "common-utils";
 
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
@@ -158,6 +160,7 @@ function createWindow(dispatcher: Dispatcher): void {
             ShellSettings.getinstance().devTools =
                 mainWindow.webContents.isDevToolsOpened();
 
+            mainWindow.hide();
             ShellSettings.getinstance().closeInlineBrowser();
             ShellSettings.getinstance().size = mainWindow.getSize();
         }
@@ -272,7 +275,7 @@ function createWindow(dispatcher: Dispatcher): void {
 
         inlineBrowserView?.webContents.loadURL(targetUrl.toString());
         inlineBrowserView?.webContents.on("did-finish-load", () => {
-            inlineBrowserView?.webContents.send("setupSiteAgent");
+            inlineBrowserView?.webContents.send("init-site-agent");
         });
     };
 
@@ -292,6 +295,19 @@ function createWindow(dispatcher: Dispatcher): void {
             setContentSize();
         }
     };
+
+    ipcMain.handle("init-browser-ipc", async () => {
+        await BrowserAgentIpc.getinstance().ensureWebsocketConnected();
+
+        BrowserAgentIpc.getinstance().onMessageReceived = (
+            message: WebSocketMessage,
+        ) => {
+            inlineBrowserView?.webContents.send(
+                "received-from-browser-ipc",
+                message,
+            );
+        };
+    });
 }
 
 /**
@@ -796,6 +812,13 @@ app.whenReady().then(async () => {
     globalShortcut.register("Alt+Right", () => {
         chatView?.webContents.send("send-demo-event", "Alt+Right");
     });
+
+    ipcMain.on(
+        "send-to-browser-ipc",
+        async (_event, data: WebSocketMessage) => {
+            await BrowserAgentIpc.getinstance().send(data);
+        },
+    );
 
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.
