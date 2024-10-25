@@ -26,6 +26,7 @@ import {
     ExtractedEntity,
     createKnowledgeExtractorSettings,
     createExtractedKnowledge,
+    isMemorizedEntity,
 } from "./knowledge.js";
 import {
     ConversationSearchProcessor,
@@ -60,6 +61,7 @@ export type ConversationMessage = {
 export type AddMessageTask = {
     type: "addMessage";
     message: ConversationMessage;
+    extractKnowledge?: boolean | boolean;
     callback?: ((error?: any | undefined) => void) | undefined;
 };
 
@@ -104,6 +106,7 @@ export interface ConversationManager<TMessageId = any, TTopicId = any> {
         message: string | TextBlock,
         knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
         timestamp?: Date | undefined,
+        extractKnowledge?: boolean | undefined,
     ): boolean;
     /**
      * Search the conversation and return an answer
@@ -257,7 +260,18 @@ export async function createConversationManager(
         message: string | TextBlock,
         knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
         timestamp?: Date | undefined,
+        extractKnowledge?: boolean | undefined,
     ): boolean {
+        extractKnowledge ??= true;
+        if (knowledge) {
+            if (Array.isArray(knowledge)) {
+                knowledge = removeMemorizedEntities(knowledge);
+            } else {
+                knowledge.entities = removeMemorizedEntities(
+                    knowledge.entities,
+                );
+            }
+        }
         return updateTaskQueue.push({
             type: "addMessage",
             message: {
@@ -265,6 +279,7 @@ export async function createConversationManager(
                 knowledge,
                 timestamp,
             },
+            extractKnowledge,
         });
     }
 
@@ -286,6 +301,7 @@ export async function createConversationManager(
                         addTask.message.text,
                         addTask.message.timestamp,
                         addTask.message.knowledge,
+                        addTask.extractKnowledge,
                     );
                     break;
             }
@@ -421,16 +437,18 @@ export async function addMessageToConversation(
     message: string | TextBlock,
     timestamp: Date | undefined,
     knownKnowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
+    extractKnowledge: boolean = true,
 ): Promise<void> {
     const messageBlock = await conversation.addMessage(message, timestamp);
 
     const messageIndex = await conversation.getMessageIndex();
     await messageIndex.put(messageBlock.value, messageBlock.blockId);
 
-    let extractedKnowledge = await extractKnowledge(
+    let extractedKnowledge = await extractKnowledgeFromMessage(
         knowledgeExtractor,
         messageBlock,
         knownKnowledge,
+        extractKnowledge,
     );
     if (extractedKnowledge) {
         await indexKnowledge(
@@ -448,6 +466,7 @@ export async function addMessageBatchToConversation(
     knowledgeExtractor: KnowledgeExtractor,
     topicMerger: TopicMerger | undefined,
     messages: ConversationMessage[],
+    extractKnowledge: boolean = true,
 ): Promise<void> {
     const messageBlocks = await asyncArray.mapAsync(messages, 1, (m) =>
         conversation.addMessage(m.text, m.timestamp),
@@ -469,10 +488,11 @@ export async function addMessageBatchToConversation(
         messageBlocks,
         concurrency,
         (message, index) => {
-            return extractKnowledge(
+            return extractKnowledgeFromMessage(
                 knowledgeExtractor,
                 message,
                 messages[index].knowledge,
+                extractKnowledge,
             );
         },
     );
@@ -492,20 +512,20 @@ export async function addMessageBatchToConversation(
     }
 }
 
-async function extractKnowledge(
+async function extractKnowledgeFromMessage(
     knowledgeExtractor: KnowledgeExtractor,
     message: SourceTextBlock,
-    knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
+    priorKnowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
+    extractKnowledge: boolean = true,
 ): Promise<ExtractedKnowledge | undefined> {
     let extractedKnowledge: ExtractedKnowledge | undefined;
     let knownKnowledge: ExtractedKnowledge | undefined;
-    if (knowledge) {
-        knownKnowledge = createExtractedKnowledge(message, knowledge);
+    if (priorKnowledge) {
+        knownKnowledge = createExtractedKnowledge(message, priorKnowledge);
     }
-    const knowledgeResult = await extractKnowledgeFromBlock(
-        knowledgeExtractor,
-        message,
-    );
+    const knowledgeResult = extractKnowledge
+        ? await extractKnowledgeFromBlock(knowledgeExtractor, message)
+        : undefined;
     if (knowledgeResult) {
         extractedKnowledge = knowledgeResult[1];
     }
@@ -520,6 +540,10 @@ async function extractKnowledge(
         extractedKnowledge = knownKnowledge;
     }
     return extractedKnowledge;
+}
+
+function removeMemorizedEntities(entities: ConcreteEntity[]): ConcreteEntity[] {
+    return entities.filter((e) => !isMemorizedEntity(e.type));
 }
 
 async function indexKnowledge(

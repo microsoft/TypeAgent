@@ -15,6 +15,7 @@ import {
     DisplayAppendMode,
     ParsedCommandParams,
     ParameterDefinitions,
+    Entity,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
@@ -233,14 +234,10 @@ async function executeAction(
             returnedResult.literalText &&
             systemContext.conversationManager
         ) {
-            // TODO: convert entity values to facets
-            // Ensure we don't immediately put back the entities pulled directly from storage
-            systemContext.conversationManager.queueAddMessage(
+            addToConversationMemory(
+                systemContext,
                 returnedResult.literalText,
-                returnedResult.entities.filter(
-                    (e) => !conversation.isStoredEntity(e.type),
-                ),
-                new Date(),
+                returnedResult.entities,
             );
         }
         result = returnedResult;
@@ -388,5 +385,26 @@ export async function executeCommand(
         actionContext.profiler?.stop();
         actionContext.profiler = undefined;
         closeActionContext();
+    }
+}
+
+function addToConversationMemory(
+    systemContext: CommandHandlerContext,
+    message: string,
+    entities: Entity[],
+) {
+    if (systemContext.conversationManager) {
+        // TODO: convert entity values to facets
+        // Ensure we don't immediately put back the entities pulled directly from storage
+        const newEntities = entities.filter(
+            (e) => !conversation.isMemorizedEntity(e.type),
+        );
+        const isLoopBackResponse = newEntities.length === 0;
+        systemContext.conversationManager.queueAddMessage(
+            message,
+            newEntities,
+            new Date(),
+            !isLoopBackResponse,
+        );
     }
 }

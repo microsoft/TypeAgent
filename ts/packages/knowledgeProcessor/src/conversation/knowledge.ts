@@ -246,10 +246,17 @@ export enum KnownEntityTypes {
     Person = "person",
     Email = "email",
     Email_Alias = "email_alias",
+    Memorized = "__memorized",
     Stored = "__stored",
     Message = "message",
 }
 
-export function isStoredEntity(entityType: string[]): boolean {
-    return entityType.findIndex((t) => t === KnownEntityTypes.Stored) >= 0;
+export function isMemorizedEntity(entityType: string[]): boolean {
+    return (
+        entityType.findIndex(
+            (t) =>
+                t === KnownEntityTypes.Memorized ||
+                t === KnownEntityTypes.Stored,
+        ) >= 0
+    );
 }

@@ -616,8 +616,10 @@ export function createChatModel(
             responseCallback(params, data);
         }
 
-        // track token usage
-        TokenCounter.getInstance().add(data.usage, tags);
+        try {
+            // track token usage
+            TokenCounter.getInstance().add(data.usage, tags);
+        } catch {}
 
         return success(data.choices[0].message?.content ?? "");
     }

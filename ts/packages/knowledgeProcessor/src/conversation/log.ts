@@ -4,28 +4,39 @@
 import { SearchResponse } from "./searchResponse.js";
 import { CompositeEntity } from "./entities.js";
 
-export function logSearchResponse(response: SearchResponse) {
+export function logSearchResponse(
+    response: SearchResponse,
+    verbose: boolean = false,
+) {
     console.log;
     logList([...response.allTopics()], "ul", "TOPICS");
-    logEntities(response.getEntities());
+    logEntities(response.getEntities(), verbose);
 }
 
-function logEntities(entities: CompositeEntity[] | undefined): void {
+function logEntities(
+    entities: CompositeEntity[] | undefined,
+    verbose: boolean,
+): void {
     if (entities && entities.length > 0) {
         logTitle(`ENTITIES [${entities.length}]`);
         for (const entity of entities) {
-            logEntity(entity);
+            logEntity(entity, verbose);
             console.log();
         }
         console.log();
     }
 }
 
-function logEntity(entity: CompositeEntity | undefined): void {
+function logEntity(
+    entity: CompositeEntity | undefined,
+    verbose: boolean,
+): void {
     if (entity) {
         console.log(entity.name.toUpperCase());
         logList(entity.type, "csv");
-        logList(entity.facets, "ul");
+        if (verbose) {
+            logList(entity.facets, "ul");
+        }
     }
 }
 
