@@ -31,6 +31,8 @@ import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
 import { AppAgentEvent, DisplayAppendMode } from "@typeagent/agent-sdk";
 import { shellAgentProvider } from "./agent.js";
+import { BrowserAgentIpc } from "./browserIpc.js";
+import { WebSocketMessage } from "common-utils";
 
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
@@ -244,9 +246,9 @@ function createWindow(dispatcher: Dispatcher): void {
         mainWindow?.setAlwaysOnTop(!mainWindow?.isAlwaysOnTop());
     };
 
-    ShellSettings.getinstance().onOpenInlineBrowser = (
+    ShellSettings.getinstance().onOpenInlineBrowser = async (
         targetUrl: URL,
-    ): void => {
+    ): Promise<void> => {
         const mainWindowSize = mainWindow?.getBounds();
 
         if (!inlineBrowserView && mainWindowSize) {
@@ -268,12 +270,22 @@ function createWindow(dispatcher: Dispatcher): void {
                 width: mainWindowSize.width + inlineBrowserSize,
             });
             setContentSize();
+            try {
+                await BrowserAgentIpc.getinstance().ensureWebsocketConnected();
+
+                BrowserAgentIpc.getinstance().onMessageReceived = (
+                    message: WebSocketMessage,
+                ) => {
+                    inlineBrowserView?.webContents.send(
+                        "received-from-browser-ipc",
+                        message,
+                    );
+                };
+            } catch {}
         }
 
-        inlineBrowserView?.webContents.loadURL(targetUrl.toString());
-        inlineBrowserView?.webContents.on("did-finish-load", () => {
-            inlineBrowserView?.webContents.send("setupSiteAgent");
-        });
+        await inlineBrowserView?.webContents.loadURL(targetUrl.toString());
+        inlineBrowserView?.webContents.send("setupSiteAgent");
     };
 
     ShellSettings.getinstance().onCloseInlineBrowser = (): void => {
@@ -292,6 +304,19 @@ function createWindow(dispatcher: Dispatcher): void {
             setContentSize();
         }
     };
+
+    ipcMain.handle("init-browser-ipc",async () =>{
+        await BrowserAgentIpc.getinstance().ensureWebsocketConnected();
+
+        BrowserAgentIpc.getinstance().onMessageReceived = (
+            message: WebSocketMessage,
+        ) => {
+            inlineBrowserView?.webContents.send(
+                "received-from-browser-ipc",
+                message,
+            );
+        };
+    })
 }
 
 /**
@@ -795,6 +820,10 @@ app.whenReady().then(async () => {
 
     globalShortcut.register("Alt+Right", () => {
         chatView?.webContents.send("send-demo-event", "Alt+Right");
+    });
+
+    ipcMain.on("send-to-browser-ipc", (_event, data: WebSocketMessage) => {
+        BrowserAgentIpc.getinstance().send(data);
     });
 
     // Default open or close DevTools by F12 in development

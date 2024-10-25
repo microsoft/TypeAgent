@@ -41,7 +41,7 @@ export class ShellSettings
     public onShowSettingsDialog: ((dialogName: string) => void) | null;
     public onRunDemo: ((interactive: boolean) => void) | null;
     public onToggleTopMost: EmptyFunction | null;
-    public onOpenInlineBrowser: ((targetUrl: URL) => void) | null;
+    public onOpenInlineBrowser: ((targetUrl: URL) => Promise<void>) | null;
     public onCloseInlineBrowser: EmptyFunction | null;
 
     public get width(): number {
@@ -187,9 +187,9 @@ export class ShellSettings
         return false;
     }
 
-    public openInlineBrowser(targetUrl: URL) {
+    public async openInlineBrowser(targetUrl: URL) {
         if (ShellSettings.getinstance().onOpenInlineBrowser != null) {
-            ShellSettings.getinstance().onOpenInlineBrowser!(targetUrl);
+            await ShellSettings.getinstance().onOpenInlineBrowser!(targetUrl);
         }
     }
 

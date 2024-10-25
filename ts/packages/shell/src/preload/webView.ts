@@ -4,106 +4,46 @@
 const { contextBridge } = require("electron/renderer");
 const { webFrame } = require("electron");
 
-import {
-    WebSocketMessage,
-    createWebSocket,
-    keepWebSocketAlive,
-} from "common-utils";
 import DOMPurify from "dompurify";
+import { ipcRenderer } from "electron";
 
-let webSocket: any = null;
-
-async function ensureWebsocketConnected() {
-    return new Promise<WebSocket | undefined>(async (resolve) => {
-        if (webSocket) {
-            if (webSocket.readyState === WebSocket.OPEN) {
-                resolve(webSocket);
-                return;
+ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
+    if (data.target == "browser") {
+        if (data.messageType == "browserActionRequest") {
+            const response = await runBrowserAction(data.body);
+            sendToBrowserAgent({
+                source: data.target,
+                target: data.source,
+                messageType: "browserActionResponse",
+                id: data.id,
+                body: response,
+            });
+        } else if (data.messageType == "siteTranslatorStatus") {
+            if (data.body.status == "initializing") {
+                console.log(`Initializing ${data.body.translator}`);
+            } else if (data.body.status == "initialized") {
+                console.log(`Finished initializing ${data.body.translator}`);
             }
-            try {
-                webSocket.close();
-                webSocket = undefined;
-            } catch {}
+        } else if (data.messageType.startsWith("browserActionRequest.")) {
+            const message = await runSiteAction(data.messageType, data.body);
+
+            sendToBrowserAgent({
+                source: data.target,
+                target: data.source,
+                messageType: "browserActionResponse",
+                id: data.id,
+                body: message,
+            });
         }
 
-        webSocket = await createWebSocket();
-        if (!webSocket) {
-            resolve(undefined);
-            return;
-        }
+        console.log(
+            `Browser websocket client received message: ${JSON.stringify(data)}`,
+        );
+    }
+});
 
-        webSocket.binaryType = "blob";
-        keepWebSocketAlive(webSocket, "browser");
-
-        webSocket.onmessage = async (event: any) => {
-            const text = event.data.toString();
-            const data = JSON.parse(text) as WebSocketMessage;
-            if (data.target == "browser") {
-                if (data.messageType == "browserActionRequest") {
-                    const response = await runBrowserAction(data.body);
-                    webSocket.send(
-                        JSON.stringify({
-                            source: data.target,
-                            target: data.source,
-                            messageType: "browserActionResponse",
-                            id: data.id,
-                            body: response,
-                        }),
-                    );
-                } else if (data.messageType == "siteTranslatorStatus") {
-                    if (data.body.status == "initializing") {
-                        console.log(`Initializing ${data.body.translator}`);
-                    } else if (data.body.status == "initialized") {
-                        console.log(
-                            `Finished initializing ${data.body.translator}`,
-                        );
-                    }
-                } else if (
-                    data.messageType.startsWith("browserActionRequest.")
-                ) {
-                    const message = await runSiteAction(
-                        data.messageType,
-                        data.body,
-                    );
-
-                    webSocket.send(
-                        JSON.stringify({
-                            source: data.target,
-                            target: data.source,
-                            messageType: "browserActionResponse",
-                            id: data.id,
-                            body: message,
-                        }),
-                    );
-                }
-
-                console.log(
-                    `Browser websocket client received message: ${text}`,
-                );
-            }
-        };
-
-        webSocket.onclose = (event: object) => {
-            console.log(event);
-            console.log("websocket connection closed");
-            webSocket = undefined;
-            reconnectWebSocket();
-        };
-
-        resolve(webSocket);
-    });
-}
-
-export function reconnectWebSocket() {
-    const connectionCheckIntervalId = setInterval(async () => {
-        if (webSocket && webSocket.readyState === WebSocket.OPEN) {
-            console.log("Clearing reconnect retry interval");
-            clearInterval(connectionCheckIntervalId);
-        } else {
-            console.log("Retrying connection");
-            await ensureWebsocketConnected();
-        }
-    }, 5 * 1000);
+function sendToBrowserAgent(message: any) {
+    ipcRenderer.send("send-to-browser-ipc", message);
 }
 
 export async function getLatLongForLocation(locationName: string) {
@@ -365,7 +305,7 @@ async function runBrowserAction(action: any) {
         }
 
         case "clickOnElement":
-        case "enterTextInElement":
+        case "enterTextInElement": 
         case "enterTextOnPage": {
             sendScriptActionToAllFrames({
                 type: "run_ui_event",
@@ -473,42 +413,30 @@ async function runSiteAction(messageType: string, action: any) {
     return confirmationMessage;
 }
 
+await ipcRenderer.invoke("init-browser-ipc");
+
 contextBridge.exposeInMainWorld("browserConnect", {
     enableSiteAgent: (translatorName) => {
-        if (
-            webSocket &&
-            webSocket.readyState === WebSocket.OPEN &&
-            translatorName
-        ) {
-            webSocket.send(
-                JSON.stringify({
-                    source: "browser",
-                    target: "dispatcher",
-                    messageType: "enableSiteTranslator",
-                    body: translatorName,
-                }),
-            );
+        if (translatorName) {
+            sendToBrowserAgent({
+                source: "browser",
+                target: "dispatcher",
+                messageType: "enableSiteTranslator",
+                body: translatorName,
+            });
         }
     },
     disableSiteAgent: (translatorName) => {
-        if (
-            webSocket &&
-            webSocket.readyState === WebSocket.OPEN &&
-            translatorName
-        ) {
-            webSocket.send(
-                JSON.stringify({
-                    source: "browser",
-                    target: "dispatcher",
-                    messageType: "disableSiteTranslator",
-                    body: translatorName,
-                }),
-            );
+        if (translatorName) {
+            sendToBrowserAgent({
+                source: "browser",
+                target: "dispatcher",
+                messageType: "disableSiteTranslator",
+                body: translatorName,
+            });
         }
     },
 });
-
-await ensureWebsocketConnected();
 
 window.onbeforeunload = () => {
     window.postMessage("disableSiteAgent");
