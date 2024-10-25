@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-//import { ShellSettings } from "../../main/shellSettings";
+/// <reference path="../../lib/lib.android.d.ts" /> 
+
 import { ClientAPI, NotifyCommands } from "../../preload/electronTypes";
 import { ChatView } from "./chatView";
 import { TabView } from "./tabView";
@@ -15,7 +16,6 @@ import { ShellSettings } from "../../main/shellSettings";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { CameraView } from "./cameraView";
 import { createWebSocket, webapi } from "./webSocketAPI";
-import { Android } from "../../lib/lib.android";
 
 export function getClientAPI(): ClientAPI {
     if (globalThis.api !== undefined) {
