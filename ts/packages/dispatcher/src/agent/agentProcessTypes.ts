@@ -33,7 +33,7 @@ export type AgentContextCallFunctions = {
         content: DisplayContent;
         mode: DisplayAppendMode;
     }) => void;
-    takeAction: (param: { actionContextId: number; action: ClientAction }) => void;
+    takeAction: (param: { actionContextId: number; action: ClientAction, data?: unknown }) => void;
 };
 
 export type AgentContextInvokeFunctions = {

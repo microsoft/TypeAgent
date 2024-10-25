@@ -26,7 +26,7 @@ export type DisplayMessageKind =
 
 export type DisplayAppendMode = "inline" | "block" | "temporary";
 
-export type ClientAction = "show-camera" | "open-app" | "show-notification" | "start-intent";
+export type ClientAction = "show-camera" | "open-app" | "show-notification" | "start-intent" | "set-alarm";
 
 export interface ActionIO {
     readonly type: DisplayType;
@@ -36,5 +36,5 @@ export interface ActionIO {
     appendDisplay(content: DisplayContent, mode?: DisplayAppendMode): void;
 
     // Tell the host process take a specific action
-    takeAction(action: ClientAction): void;
+    takeAction(action: ClientAction, data?: unknown): void;
 }

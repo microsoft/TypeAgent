@@ -264,7 +264,7 @@ export async function createWebSocket(
                     fnMap.get("clear")(undefined, msgObj.data);
                     break;
                 case "take-action":
-                    fnMap.get("take-action")(undefined, msgObj.data);
+                    fnMap.get("take-action")(undefined, msgObj.data.action, msgObj.data.data);
                     break;
                 case "notify":
                     notify(msgObj);

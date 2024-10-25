@@ -367,10 +367,11 @@ function getActionContextShim(
                 mode,
             });
         },
-        takeAction(action: ClientAction) {
+        takeAction(action: ClientAction, data?: unknown) {
             rpc.send("takeAction", {
                 actionContextId,
                 action,
+                data
             });
         },
     };

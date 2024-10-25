@@ -320,6 +320,22 @@ importers:
         specifier: ^5.4.2
         version: 5.4.3
 
+  packages/agents/androidMobile:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+    devDependencies:
+      prettier:
+        specifier: ^3.2.5
+        version: 3.2.5
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+
   packages/agents/browser:
     dependencies:
       '@mozilla/readability':
@@ -1175,6 +1191,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
+      android-mobile-agent:
+        specifier: workspace:*
+        version: link:../agents/androidMobile
       browser-typeagent:
         specifier: workspace:*
         version: link:../agents/browser

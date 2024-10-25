@@ -75,6 +75,11 @@
       "type": "module",
       "name": "image-agent",
       "execMode": "dispatcher"
+    },
+    "androidMobile": {
+      "type": "module",
+      "name": "android-mobile-agent",
+      "execMode": "dispatcher"
     }
   },
   "explainers": {

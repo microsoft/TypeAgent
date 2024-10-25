@@ -201,21 +201,26 @@ function addEvents(
             //}
         },
     );
-    api.onTakeAction((_, action: string) => {
+    api.onTakeAction((_, action: string, data?: unknown) => {
 
-        // Android object gets injected on Android devices
+        // Android object gets injected on Android devices, otherwise unavailable
         try {
-            Android?.showToast("woohooo 2!");
-            //eval("Android")?.showToast("woohoo!");
+            //Android?.showToast("woohooo 2!");
+            console.log(`Take Action '${action}' Data: ${data}`);
+            switch (action) {
+                case "show-camera": {
+                    cameraView.show();
+                    return;
+                }
+                case "set-alarm": {
+                    let d: any = data;
+                    Android?.setAlarm(d.time);
+                    return;
+                }
+            }
+
         } catch (e) {
             console.log(e);
-        }
-
-        switch (action) {
-            case "show-camera": {
-                cameraView.show();
-                return;
-            }
         }
     });
 }

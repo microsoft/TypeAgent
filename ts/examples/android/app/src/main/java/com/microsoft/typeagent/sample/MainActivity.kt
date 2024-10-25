@@ -56,6 +56,7 @@ class MainActivity : ComponentActivity() {
 fun Browser() {
     val url = "http://10.0.2.2:3000"
     var wvv: WebView? = null
+    var jsi: JavaScriptInterface? = null
 
     Column() {
         Button(modifier = Modifier.width(75.dp).height(30.dp).zIndex(10000F), onClick = { wvv?.reload()}) { Text(text = "Refresh") }
@@ -73,13 +74,15 @@ fun Browser() {
                 )
 
                 // javascript callback
-                addJavascriptInterface(JavaScriptInterface(it), "Android")
+                jsi = JavaScriptInterface(it);
+                addJavascriptInterface(jsi!!, "Android")
 
                 // url/client
                 webViewClient = WebViewClient()
                 loadUrl(url)
             }
         }, update = {
+            jsi!!.context = it.context
             it.loadUrl(url)
         }, modifier = Modifier.fillMaxSize())
     }

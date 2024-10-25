@@ -83,7 +83,7 @@ export interface ClientIO {
     ): void;
 
     // Host specific (TODO: Formalize the API)
-    takeAction(action: string): void;
+    takeAction(action: string, data: unknown): void;
 }
 
 // Dispatcher request specific IO
@@ -143,7 +143,7 @@ export interface RequestIO {
         requestId: RequestId,
         filter: NotifyCommands,
     ): void;
-    takeAction(action: string): void;
+    takeAction(action: string, data: unknown): void;
 }
 
 let lastAppendMode: DisplayAppendMode | undefined;
@@ -237,7 +237,7 @@ export function getConsoleRequestIO(
                 // ignored.
             }
         },
-        takeAction: (action: string) => {
+        takeAction: (action: string, data: unknown) => {
             return stdio?.write("This command is not supported in the CLI.\n");
         },
     };
@@ -319,8 +319,8 @@ export function getRequestIO(
         ) {
             clientIO.notify(event, requestId, data, source);
         },
-        takeAction(action: string) {
-            clientIO.takeAction(action);
+        takeAction(action: string, data: unknown) {
+            clientIO.takeAction(action, data);
         },
     };
 }

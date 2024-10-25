@@ -580,8 +580,8 @@ const clientIO: ClientIO = {
     exit: () => {
         app.quit();
     },
-    takeAction: (action: string) => {
-        chatView?.webContents.send("take-action", action);
+    takeAction: (action: string, data: unknown) => {
+        chatView?.webContents.send("take-action", action, data);
     },
 };
 

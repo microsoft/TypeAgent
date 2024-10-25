@@ -187,7 +187,7 @@ export interface ClientAPI {
         ) => void,
     ): void;
     onTakeAction(
-        callback: (e: Electron.IpcRendererEvent, action: string) => void,
+        callback: (e: Electron.IpcRendererEvent, action: string, data: unknown) => void,
     );
 }
 
