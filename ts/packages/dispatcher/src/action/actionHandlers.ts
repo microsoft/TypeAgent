@@ -394,17 +394,16 @@ function addToConversationMemory(
     entities: Entity[],
 ) {
     if (systemContext.conversationManager) {
-        // TODO: convert entity values to facets
-        // Ensure we don't immediately put back the entities pulled directly from storage
         const newEntities = entities.filter(
             (e) => !conversation.isMemorizedEntity(e.type),
         );
-        const isLoopBackResponse = newEntities.length === 0;
-        systemContext.conversationManager.queueAddMessage(
-            message,
-            newEntities,
-            new Date(),
-            !isLoopBackResponse,
-        );
+        if (newEntities.length > 0) {
+            systemContext.conversationManager.queueAddMessage(
+                message,
+                newEntities,
+                new Date(),
+                false,
+            );
+        }
     }
 }

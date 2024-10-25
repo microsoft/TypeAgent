@@ -23,10 +23,11 @@ import {
     KnowledgeExtractor,
     createKnowledgeExtractor,
     ExtractedKnowledge,
-    ExtractedEntity,
     createKnowledgeExtractorSettings,
     createExtractedKnowledge,
     isMemorizedEntity,
+    isKnowledgeEmpty,
+    mergeKnowledge,
 } from "./knowledge.js";
 import {
     ConversationSearchProcessor,
@@ -35,12 +36,10 @@ import {
 } from "./searchProcessor.js";
 import { createEmbeddingCache } from "../modelCache.js";
 import { KnowledgeSearchMode } from "./knowledgeActions.js";
-import { unionArrays } from "../setOperations.js";
 import { ConcreteEntity, KnowledgeResponse } from "./knowledgeSchema.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TopicMerger } from "./topics.js";
 import { logError } from "../diagnostics.js";
-import { mergeEntityFacet } from "./entities.js";
 import assert from "assert";
 
 export type ConversationMessage = {
@@ -516,30 +515,43 @@ async function extractKnowledgeFromMessage(
     knowledgeExtractor: KnowledgeExtractor,
     message: SourceTextBlock,
     priorKnowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
-    extractKnowledge: boolean = true,
+    shouldExtractKnowledge: boolean = true,
 ): Promise<ExtractedKnowledge | undefined> {
-    let extractedKnowledge: ExtractedKnowledge | undefined;
+    let newKnowledge: ExtractedKnowledge | undefined;
     let knownKnowledge: ExtractedKnowledge | undefined;
-    if (priorKnowledge) {
-        knownKnowledge = createExtractedKnowledge(message, priorKnowledge);
+
+    if (hasPriorKnowledge(priorKnowledge)) {
+        knownKnowledge = createExtractedKnowledge(message, priorKnowledge!);
     }
-    const knowledgeResult = extractKnowledge
+    const knowledgeResult = shouldExtractKnowledge
         ? await extractKnowledgeFromBlock(knowledgeExtractor, message)
         : undefined;
+
     if (knowledgeResult) {
-        extractedKnowledge = knowledgeResult[1];
+        newKnowledge = knowledgeResult[1];
     }
-    if (extractedKnowledge) {
+    if (newKnowledge) {
         if (knownKnowledge) {
-            extractedKnowledge = mergeKnowledge(
-                extractedKnowledge,
-                knownKnowledge,
-            );
+            newKnowledge = mergeKnowledge(newKnowledge, knownKnowledge);
         }
     } else {
-        extractedKnowledge = knownKnowledge;
+        newKnowledge = knownKnowledge
+            ? mergeKnowledge(knownKnowledge) // Eliminates any duplicate information
+            : undefined;
     }
-    return extractedKnowledge;
+    return newKnowledge;
+
+    function hasPriorKnowledge(
+        knowledge: ConcreteEntity[] | KnowledgeResponse | undefined,
+    ) {
+        if (knowledge) {
+            if (Array.isArray(knowledge)) {
+                return knowledge.length > 0;
+            }
+            return !isKnowledgeEmpty(knowledge);
+        }
+        return false;
+    }
 }
 
 function removeMemorizedEntities(entities: ConcreteEntity[]): ConcreteEntity[] {
@@ -570,51 +582,5 @@ async function indexKnowledge(
             timestamp,
             true,
         );
-    }
-}
-
-function mergeKnowledge(
-    x: ExtractedKnowledge,
-    y: ExtractedKnowledge,
-): ExtractedKnowledge {
-    const merged = new Map<string, ExtractedEntity>();
-    if (x.entities && x.entities.length > 0) {
-        mergeEntities(x.entities, merged);
-    }
-    if (y.entities && y.entities.length > 0) {
-        mergeEntities(y.entities, merged);
-    }
-
-    let topics = collections.concatArrays(x.topics, y.topics);
-    let actions = collections.concatArrays(x.actions, y.actions);
-    return {
-        entities: [...merged.values()],
-        topics,
-        actions,
-    };
-}
-
-function mergeEntities(
-    entities: ExtractedEntity[],
-    merged: Map<string, ExtractedEntity>,
-): void {
-    for (const ee of entities) {
-        const entity = ee.value;
-        entity.name = entity.name.toLowerCase();
-        collections.lowerAndSort(entity.type);
-        const existing = merged.get(entity.name);
-        if (existing) {
-            existing.value.type = unionArrays(
-                existing.value.type,
-                entity.type,
-            )!;
-            if (entity.facets && entity.facets.length > 0) {
-                for (const f of entity.facets) {
-                    mergeEntityFacet(existing.value, f);
-                }
-            }
-        } else {
-            merged.set(entity.name, ee);
-        }
     }
 }

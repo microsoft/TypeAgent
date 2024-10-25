@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { asyncArray, loadSchema } from "typeagent";
+import { asyncArray, collections, loadSchema } from "typeagent";
 import {
     Action,
     ConcreteEntity,
@@ -16,6 +16,7 @@ import {
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { SourceTextBlock, TextBlock, TextBlockType } from "../text.js";
 import { mergeEntityFacet } from "./entities.js";
+import { unionArrays } from "../setOperations.js";
 
 export interface KnowledgeExtractor {
     readonly settings: KnowledgeExtractorSettings;
@@ -246,17 +247,72 @@ export enum KnownEntityTypes {
     Person = "person",
     Email = "email",
     Email_Alias = "email_alias",
-    Memorized = "__memorized",
-    Stored = "__stored",
+    Memorized = "__memory",
     Message = "message",
 }
 
 export function isMemorizedEntity(entityType: string[]): boolean {
+    return entityType.findIndex((t) => t === KnownEntityTypes.Memorized) >= 0;
+}
+
+export function isKnowledgeEmpty(knowledge: KnowledgeResponse): boolean {
     return (
-        entityType.findIndex(
-            (t) =>
-                t === KnownEntityTypes.Memorized ||
-                t === KnownEntityTypes.Stored,
-        ) >= 0
+        knowledge.topics.length === 0 &&
+        knowledge.entities.length === 0 &&
+        knowledge.actions.length === 0
     );
+}
+
+export function mergeKnowledge(
+    x: ExtractedKnowledge,
+    y?: ExtractedKnowledge | undefined,
+): ExtractedKnowledge {
+    const merged = new Map<string, ExtractedEntity>();
+    if (x.entities && x.entities.length > 0) {
+        mergeEntities(x.entities, merged);
+    }
+    if (y && y.entities && y.entities.length > 0) {
+        mergeEntities(y.entities, merged);
+    }
+
+    let topics = y ? collections.concatArrays(x.topics, y.topics) : x.topics;
+    let actions = y
+        ? collections.concatArrays(x.actions, y.actions)
+        : x.actions;
+    return {
+        entities: [...merged.values()],
+        topics,
+        actions,
+    };
+}
+
+function mergeEntities(
+    entities: ExtractedEntity[],
+    nameToEntityMap: Map<string, ExtractedEntity>,
+): void {
+    for (const ee of entities) {
+        const entity = prepareEntityForMerge(ee.value);
+        const existing = nameToEntityMap.get(entity.name);
+        if (existing) {
+            // We already have an entity with this name. Merge the entity's types
+            existing.value.type = unionArrays(
+                existing.value.type,
+                entity.type,
+            )!;
+            if (entity.facets && entity.facets.length > 0) {
+                for (const f of entity.facets) {
+                    mergeEntityFacet(existing.value, f);
+                }
+            }
+        } else {
+            // Have not seen this entity before
+            nameToEntityMap.set(entity.name, ee);
+        }
+    }
+}
+
+function prepareEntityForMerge(entity: ConcreteEntity) {
+    entity.name = entity.name.toLowerCase();
+    collections.lowerAndSort(entity.type);
+    return entity;
 }

@@ -237,7 +237,7 @@ function matchedEntities(response: conversation.SearchResponse): Entity[] {
 function compositeEntityToEntity(entity: conversation.CompositeEntity): Entity {
     return {
         name: entity.name,
-        type: [...entity.type, "__stored"],
+        type: [...entity.type, conversation.KnownEntityTypes.Memorized],
     };
 }
 
