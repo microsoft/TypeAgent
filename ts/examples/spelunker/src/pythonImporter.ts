@@ -26,12 +26,13 @@ TypeScript, of course).
 */
 
 import * as fs from "fs";
-import { ObjectFolder } from "typeagent";
 import { Chunk, chunkifyPythonFile } from "./pythonChunker.js";
+import { ObjectFolder, SemanticIndex } from "typeagent";
 
 export async function importPythonFile(
     file: string,
-    folder: ObjectFolder<Chunk>,
+    objectFolder: ObjectFolder<Chunk>,
+    codeIndex: SemanticIndex<string>,
 ): Promise<void> {
     let filename = fs.realpathSync(file);
     const result = await chunkifyPythonFile(filename);
@@ -41,13 +42,13 @@ export async function importPythonFile(
         return;
     }
 
-    // Create the object folder.
     console.log(`[Importing ${result.length} chunks from ${filename}]`);
 
     // Store the chunks in the database.
     for (const chunk of result) {
         chunk.filename = filename;
-        await folder.put(chunk, chunk.id);
-        // TODO: Also store embedding and a "date created" for the chunk.
+        await objectFolder.put(chunk, chunk.id);
+        await codeIndex.put(chunk.blobs.join(""), chunk.id);
+        // TODO: Also log the "date/time created" for the chunk.
     }
 }

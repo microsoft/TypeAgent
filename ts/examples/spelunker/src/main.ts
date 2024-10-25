@@ -3,9 +3,13 @@
 
 // Main program to test pythonChunker.ts and pythonImporter.ts.
 
-import { createObjectFolder } from "typeagent";
+import dotenv from "dotenv";
+import { createEmbeddingFolder, createObjectFolder, createSemanticIndex } from "typeagent";
 import { importPythonFile } from "./pythonImporter.js";
 import { Chunk } from "./pythonChunker.js";
+
+const envPath = new URL("../../../.env", import.meta.url);
+dotenv.config({ path: envPath });
 
 async function main(): Promise<void> {
     const defaultFile = "sample.py.txt";
@@ -15,11 +19,17 @@ async function main(): Promise<void> {
     } else {
         files = [defaultFile];
     }
+
     const objectFolder = await createObjectFolder<Chunk>(
         "/data/spelunker/chunks",
     );
+    const embeddingFolder = await createEmbeddingFolder(
+        "/data/spelunker/embeddings",
+    );
+    const codeIndex = createSemanticIndex(embeddingFolder);
+
     for (const file of files) {
-        await importPythonFile(file, objectFolder);
+        await importPythonFile(file, objectFolder, codeIndex);
     }
 }
 

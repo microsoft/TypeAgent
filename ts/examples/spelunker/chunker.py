@@ -1,6 +1,8 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+# TODO: Make it a service
+
 """A chunker for Python code using the ast module.
 
 - Basic idea: Chunks can nest!

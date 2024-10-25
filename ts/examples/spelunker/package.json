@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "aiclient": "workspace:*",
+    "dotenv": "^16.3.1",
     "typeagent": "workspace:*",
     "typescript": "^5.4.2"
   },

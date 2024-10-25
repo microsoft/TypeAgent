@@ -184,6 +184,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.3.1
       typeagent:
         specifier: workspace:*
         version: link:../../packages/typeagent
