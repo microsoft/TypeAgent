@@ -262,6 +262,25 @@ function compareKnownTracks(
     return compareKnownAlbums(userData, a.album, b.album);
 }
 
+export async function resolveArtists(
+    artistNames: string[],
+    context: IClientContext,
+): Promise<SpotifyApi.ArtistObjectFull[] | undefined> {
+    const foundArtists = await Promise.all(
+        artistNames.map((a) => searchArtistSorted(a, context)),
+    );
+
+    const resolvedArtists: SpotifyApi.ArtistObjectFull[] = [];
+    for (let i = 0; i < artistNames.length; i++) {
+        const foundArtist = foundArtists[i];
+        if (foundArtist === undefined) {
+            return undefined;
+        }
+        resolvedArtists.push(foundArtist[0]);
+    }
+    return resolvedArtists;
+}
+
 async function findArtists(
     artistNames: string[],
     context: IClientContext,

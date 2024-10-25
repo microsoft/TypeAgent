@@ -22,7 +22,12 @@ import { searchAlbum, searchTracks } from "../client.js";
 import { htmlStatus } from "../playback.js";
 import { getPlayerCommandInterface } from "./playerCommands.js";
 import { getGenreSeeds } from "../endpoints.js";
-import { searchArtists } from "../search.js";
+import {
+    resolveArtists,
+    searchArtists,
+    SpotifyQuery,
+    toQueryString,
+} from "../search.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -89,21 +94,6 @@ async function enableSpotify(context: SessionContext<PlayerActionContext>) {
     return clientContext.service.retrieveUser().username;
 }
 
-async function validateArtistWildcardMatch(
-    artists: string[] | undefined,
-    context: IClientContext,
-) {
-    if (artists === undefined) {
-        return true;
-    }
-    for (const artist of artists) {
-        if (!(await validateArtist(artist, context))) {
-            return false;
-        }
-    }
-    return true;
-}
-
 async function validateGenre(genre: string, context: IClientContext) {
     const genreSeeds = await getGenreSeeds(context.service);
     if (genreSeeds) {
@@ -123,42 +113,25 @@ async function validatePlayerWildcardMatch(
     }
     switch (action.actionName) {
         case "playTrack":
-            return (
-                (await validateTrack(
-                    action.parameters.trackName,
-                    clientContext,
-                )) &&
-                (await validateArtistWildcardMatch(
-                    action.parameters.artists,
-                    clientContext,
-                ))
+            return validateTrack(
+                action.parameters.trackName,
+                action.parameters.artists,
+                undefined,
+                clientContext,
             );
 
         case "playAlbum":
-            return (
-                (await validateAlbum(
-                    action.parameters.albumName,
-                    clientContext,
-                )) &&
-                (await validateArtistWildcardMatch(
-                    action.parameters.artists,
-                    clientContext,
-                ))
+            return await validateAlbum(
+                action.parameters.albumName,
+                action.parameters.artists,
+                clientContext,
             );
         case "playAlbumTrack":
-            return (
-                (await validateAlbum(
-                    action.parameters.albumName,
-                    clientContext,
-                )) &&
-                (await validateArtistWildcardMatch(
-                    action.parameters.artists,
-                    clientContext,
-                )) &&
-                (await validateTrack(
-                    action.parameters.trackName,
-                    clientContext,
-                ))
+            return await validateTrack(
+                action.parameters.trackName,
+                action.parameters.artists,
+                action.parameters.albumName,
+                clientContext,
             );
         case "playArtist":
             return validateArtist(action.parameters.artist, clientContext);
@@ -168,21 +141,66 @@ async function validatePlayerWildcardMatch(
     return true;
 }
 
-async function validateTrack(trackName: string, context: IClientContext) {
-    const tracks = await searchTracks(`track:"${trackName}"`, context);
+async function validateTrack(
+    trackName: string,
+    artists: string[] | undefined,
+    album: string | undefined,
+    context: IClientContext,
+) {
+    const resolvedArtists = artists
+        ? await resolveArtists(artists, context)
+        : [];
+
+    if (resolvedArtists === undefined) {
+        return false;
+    }
+    const query: SpotifyQuery = {
+        track: [trackName],
+        artist: resolvedArtists.map((artist) => artist.name),
+    };
+    const queryString = toQueryString(query);
+    const tracks = await searchTracks(queryString, context);
     if (tracks && tracks.tracks && tracks.tracks.length > 0) {
         // For validation for wildcard match, only allow substring match.
         const lowerCaseTrackName = trackName.toLowerCase();
-        return tracks.tracks.some((track) =>
-            track.name.toLowerCase().includes(lowerCaseTrackName),
+        const lowerCaseAlbumName = album?.toLowerCase();
+        return tracks.tracks.some(
+            (track) =>
+                track.name.toLowerCase().includes(lowerCaseTrackName) &&
+                (lowerCaseAlbumName === undefined ||
+                    track.album.name
+                        .toLowerCase()
+                        .includes(lowerCaseAlbumName)),
         );
     }
     return false;
 }
 
-async function validateAlbum(albumName: string, context: IClientContext) {
+async function validateAlbum(
+    albumName: string,
+    artists: string[] | undefined,
+    context: IClientContext,
+) {
+    const resolvedArtists = artists
+        ? await resolveArtists(artists, context)
+        : [];
+
+    if (resolvedArtists === undefined) {
+        return false;
+    }
     // search album already return exact matches.
-    return searchAlbum(albumName, context) !== undefined;
+    const album = await searchAlbum(albumName, context);
+    if (album === undefined) {
+        return false;
+    }
+
+    if (artists === undefined) {
+        return true;
+    }
+
+    return resolvedArtists.every((resolvedArtist) =>
+        album.artists.some((artists) => artists.id === resolvedArtist.id),
+    );
 }
 
 async function validateArtist(artistName: string, context: IClientContext) {

@@ -14,6 +14,7 @@ import {
     PlayArtistAction,
     PlayerAction,
     PlayGenreAction,
+    PlayRandomAction,
     PlayTrackAction,
     SearchTracksAction,
     SelectDeviceAction,
@@ -525,12 +526,20 @@ async function playTracksWithQuery(
     return createNotFoundActionResult("tracks", queryString);
 }
 
-async function playRandomAction(clientContext: IClientContext) {
+async function playRandomAction(
+    clientContext: IClientContext,
+    action: PlayRandomAction,
+) {
     const savedTracks = await getFavoriteTracks(clientContext.service);
     if (savedTracks && savedTracks.length > 0) {
         const tracks = savedTracks.map((track) => track.track);
         const collection = new TrackCollection(tracks, tracks.length);
-        return playTracks(collection, 0, tracks.length, clientContext);
+        return playTracks(
+            collection,
+            0,
+            action.parameters.quantity ?? tracks.length,
+            clientContext,
+        );
     }
     const message = "No favorite tracks found";
     return createActionResultFromTextDisplay(chalk.red(message), message);
@@ -613,7 +622,7 @@ async function playAlbumTrackAction(
         );
         if (track !== undefined) {
             return playTracks(
-                new AlbumTrackCollection(album, [track]),
+                new TrackCollection([toTrackObjectFull(track, album)], 1),
                 0,
                 1,
                 clientContext,
@@ -784,7 +793,7 @@ export async function handleCall(
 ): Promise<ActionResult> {
     switch (action.actionName) {
         case "playRandom":
-            return playRandomAction(clientContext);
+            return playRandomAction(clientContext, action);
         case "playTrack":
             return playTrackAction(clientContext, action);
         case "playAlbum":
