@@ -14,10 +14,11 @@ const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
 
 const misc_commandstxt_filePath = path.join(__dirname, 'data', 'input', 'misc_commands.txt');
-const misc_commandsjson_filePath = path.join(__dirname, 'data', 'output', 'misc_commands.json');
+const vscode_commands_filepath = path.join(__dirname, 'data', 'input' , 'commands.json');
 const default_kb_filepath = path.join(__dirname, 'data', 'input', 'default_keybindings.json');
+
+const misc_commandsjson_filePath = path.join(__dirname, 'data', 'output', 'misc_commands.json');
 const master_keybindings_filepath = path.join(__dirname, 'data', 'output', 'master_kb.json');
-const vscode_commands_filepath = path.join(__dirname, 'data', 'output' , 'commands.json');
 const master_commandsnkb_filepath = path.join(__dirname, 'data', 'output', 'master_commandsnkb.json');
 
 async function createDirectoryIfNotExists(dirPath: string) {
@@ -34,7 +35,7 @@ export async function normalizeCommandsandKBJson() {
     await createDirectoryIfNotExists(path.join(__dirname, 'data', 'output'));
 
     await convertTxtToJSON(misc_commandstxt_filePath);
-    await mergeJsonFiles(misc_commandsjson_filePath, default_kb_filepath, master_keybindings_filepath);
+    await mergeKBJsonFiles(misc_commandsjson_filePath, default_kb_filepath, master_keybindings_filepath);
     await mergeKBNCommandJsonFiles(vscode_commands_filepath, master_keybindings_filepath, master_commandsnkb_filepath);
 
     async function convertTxtToJSON(filePath: string)  {
@@ -55,15 +56,41 @@ export async function normalizeCommandsandKBJson() {
         const jsonOutput = JSON.stringify(jsonArray, null, 2);
         await fs.writeFile(misc_commandsjson_filePath, jsonOutput);
     }
+
+    async function mergeAndFilterKeyBindings(keybindingsFilePath : string) {
+
+        const masterKBJData = await fs.readFile(keybindingsFilePath, 'utf-8');
+        const masterKBArray = JSON.parse(masterKBJData);
+
+        const filteredMap = new Map<string, any>();
     
-    async function mergeJsonFiles(commandsFilePath: string, keybindingsFilePath: string, masterFilePath: string) {
-        const commandsData = await fs.readFile(commandsFilePath, 'utf-8');
-        const keybindingsData = await fs.readFile(keybindingsFilePath, 'utf-8');
+        masterKBArray.forEach((kb: any) => {
+            const command = kb.command;
     
-        const commandsArray = JSON.parse(commandsData);
-        const keybindingsArray = JSON.parse(keybindingsData);
+            if (!filteredMap.has(command)) {
+                filteredMap.set(command, kb);
+            } else {
+                const existingBinding = filteredMap.get(command);
+                if (!existingBinding.when && kb.when) {
+                    // Keep the one without the "when" condition
+                    return;
+                }
+                if (!kb.when) {
+                    filteredMap.set(command, kb);
+                }
+            }
+        });
+        return Array.from(filteredMap.values());
+    }
     
-        const masterArray = [...commandsArray, ...keybindingsArray];
+    async function mergeKBJsonFiles(miscKBFilePath: string, keybindingsFilePath: string, masterFilePath: string) {
+        const miscKBData = await fs.readFile(miscKBFilePath, 'utf-8');
+        const defKBData = await fs.readFile(keybindingsFilePath, 'utf-8');
+    
+        const miscKBArray = JSON.parse(miscKBData);
+        const defKBArray = JSON.parse(defKBData);
+    
+        const masterArray = [...miscKBArray, ...defKBArray];
         const masterJsonOutput = JSON.stringify(masterArray, null, 2);
     
         await fs.writeFile(masterFilePath, masterJsonOutput);
@@ -71,54 +98,50 @@ export async function normalizeCommandsandKBJson() {
     }
     
     async function mergeKBNCommandJsonFiles(firstFilePath: string, secondFilePath: string, mergedFilePath: string) {
+        // contains the commands
         const firstFileData = await fs.readFile(firstFilePath, 'utf-8');
-        const secondFileData = await fs.readFile(secondFilePath, 'utf-8');
-    
         const firstArray = JSON.parse(firstFileData);
-        const secondArray = JSON.parse(secondFileData);
+        // contains the keybindings
+        //const secondFileData = await fs.readFile(secondFilePath, 'utf-8');
+
+        //const secondArray = JSON.parse(secondFileData);
+        const secondArray = await mergeAndFilterKeyBindings(secondFilePath);
     
         const secondMap = new Map(secondArray.map((item: any) => [item.command, item]));
-    
         const mergedArray: any[] = [];
-        const unmatchedItems: any[] = [];
-    
+        let countOfNodesNotInKbFile: number = 0;
+
         firstArray.forEach((item: any) => {
             const matchingItem: any = secondMap.get(item.id);
-            const mergedObject: any = {
-                id: item.id
-            };
-    
-            if (item.metadata) {
-                mergedObject.metadata = item.metadata;
-            }
+            const mergedObject: any = { ...item };
     
             if (matchingItem) {
-                if (matchingItem.key) {
-                    mergedObject.key = matchingItem.key;
-                }
-    
                 if (matchingItem.when) {
                     mergedObject.when = matchingItem.when;
                 }
-            } else {
-                unmatchedItems.push(item);
+                secondMap.delete(item.id);
+            }
+            else{
+                countOfNodesNotInKbFile++;
+                console.log(`Node in the commands file but not in the master keybindings file: ${item.id}`);
             }
             mergedArray.push(mergedObject);
         });
+
+        console.log(`Number of nodes in the commands file(${firstFilePath}) but not in the master keybindings file(${secondFilePath}): ${countOfNodesNotInKbFile}`);
+        console.log(`Number of nodes in the master keybindings file(${secondFilePath}) but not in the commands file (${firstFilePath}): ${secondMap.size}`);
+        secondMap.forEach((item: any) => {
+            const mergedItem: any = { id: item.command };
+            if (item.when) {
+                mergedItem.when = item.when;
+            }
+            mergedArray.push(mergedItem);
+        });
     
-        const mergedJsonOutput = JSON.stringify(mergedArray, null, 2);
+        const filteredArray = mergedArray.filter((item: any) => !item.id.startsWith('_'));
+        console.log(`Number of nodes in the merged JSON output: ${filteredArray.length}`);
+        const mergedJsonOutput = JSON.stringify(filteredArray, null, 2);
         await fs.writeFile(mergedFilePath, mergedJsonOutput);
-    
-        if (unmatchedItems.length > 0) {
-            console.log('Items from the first file with no corresponding entry in the second file:');
-            unmatchedItems.forEach((item: any) => {
-                console.log(JSON.stringify(item, null, 2));
-            });
-        } else {
-            console.log('All items from the first file have corresponding entries in the second file.');
-        }
-    
-        console.log(`Number of nodes in merged JSON output: ${mergedArray.length}`);
         console.log(`Merged JSON file has been created at: ${mergedFilePath}`);
     }
 }
