@@ -85,6 +85,5 @@ export class BrowserAgentIpc {
     public async send(message: WebSocketMessage) {
         await this.ensureWebsocketConnected();
         this.webSocket.send(JSON.stringify(message));
-    
     }
 }

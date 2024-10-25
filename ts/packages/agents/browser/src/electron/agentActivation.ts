@@ -67,4 +67,3 @@ window.addEventListener("message", (event) => {
         window.browserConnect.disableSiteAgent(siteAgent);
     }
 });
-

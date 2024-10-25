@@ -44,7 +44,7 @@ ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
 
 ipcRenderer.on("init-site-agent", () => {
     window.postMessage("setupSiteAgent");
-})
+});
 
 function sendToBrowserAgent(message: any) {
     ipcRenderer.send("send-to-browser-ipc", message);
@@ -309,7 +309,7 @@ async function runBrowserAction(action: any) {
         }
 
         case "clickOnElement":
-        case "enterTextInElement": 
+        case "enterTextInElement":
         case "enterTextOnPage": {
             sendScriptActionToAllFrames({
                 type: "run_ui_event",
@@ -445,4 +445,3 @@ contextBridge.exposeInMainWorld("browserConnect", {
 window.onbeforeunload = () => {
     window.postMessage("disableSiteAgent");
 };
-

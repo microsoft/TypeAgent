@@ -159,7 +159,7 @@ function createWindow(dispatcher: Dispatcher): void {
                 mainWindow.webContents.zoomLevel;
             ShellSettings.getinstance().devTools =
                 mainWindow.webContents.isDevToolsOpened();
-            
+
             mainWindow.hide();
             ShellSettings.getinstance().closeInlineBrowser();
             ShellSettings.getinstance().size = mainWindow.getSize();
@@ -276,7 +276,7 @@ function createWindow(dispatcher: Dispatcher): void {
         inlineBrowserView?.webContents.loadURL(targetUrl.toString());
         inlineBrowserView?.webContents.on("did-finish-load", () => {
             inlineBrowserView?.webContents.send("init-site-agent");
-        });      
+        });
     };
 
     ShellSettings.getinstance().onCloseInlineBrowser = (): void => {
@@ -296,7 +296,7 @@ function createWindow(dispatcher: Dispatcher): void {
         }
     };
 
-    ipcMain.handle("init-browser-ipc",async () =>{
+    ipcMain.handle("init-browser-ipc", async () => {
         await BrowserAgentIpc.getinstance().ensureWebsocketConnected();
 
         BrowserAgentIpc.getinstance().onMessageReceived = (
@@ -307,7 +307,7 @@ function createWindow(dispatcher: Dispatcher): void {
                 message,
             );
         };
-    })
+    });
 }
 
 /**
@@ -813,9 +813,12 @@ app.whenReady().then(async () => {
         chatView?.webContents.send("send-demo-event", "Alt+Right");
     });
 
-    ipcMain.on("send-to-browser-ipc", async (_event, data: WebSocketMessage) => {
-        await BrowserAgentIpc.getinstance().send(data);
-    });
+    ipcMain.on(
+        "send-to-browser-ipc",
+        async (_event, data: WebSocketMessage) => {
+            await BrowserAgentIpc.getinstance().send(data);
+        },
+    );
 
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.
