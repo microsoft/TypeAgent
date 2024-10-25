@@ -130,6 +130,13 @@ function createWindow(dispatcher: Dispatcher): void {
 
     chatView.webContents.setUserAgent(userAgent);
 
+    // ensure links are openend in a new browser window
+    chatView.webContents.setWindowOpenHandler((details) => {
+        // TODO: add logic for keeping things in the browser window
+        shell.openExternal(details.url);
+        return { action: "deny" };
+    });
+
     setContentSize();
 
     mainWindow.setBrowserView(chatView);
@@ -142,11 +149,6 @@ function createWindow(dispatcher: Dispatcher): void {
         if (ShellSettings.getinstance().devTools) {
             chatView?.webContents.openDevTools();
         }
-    });
-
-    mainWindow.webContents.setWindowOpenHandler((details) => {
-        shell.openExternal(details.url);
-        return { action: "deny" };
     });
 
     mainWindow.on("close", () => {
@@ -766,6 +768,12 @@ app.whenReady().then(async () => {
 
         // Send settings asap
         ShellSettings.getinstance().onSettingsChanged!();
+
+        // make sure links are opened in the external browser
+        mainWindow?.webContents.setWindowOpenHandler((details) => {
+            require("electron").shell.openExternal(details.url);
+            return { action: "deny" };
+        });
     });
 
     await initializeSpeech(dispatcher);
