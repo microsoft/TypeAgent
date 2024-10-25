@@ -687,7 +687,7 @@ app.whenReady().then(async () => {
             );
 
             mainWindow?.setTitle(
-                `${newSettingSummary} Zoom: ${ShellSettings.getinstance().zoomLevel * 100}%`,
+                `${newSettingSummary} Zoom: ${Math.round(chatView?.webContents.zoomFactor! * 100)}%`,
             );
         }
 
@@ -760,7 +760,7 @@ app.whenReady().then(async () => {
         );
 
         mainWindow?.setTitle(
-            `${settingSummary} Zoom: ${ShellSettings.getinstance().zoomLevel * 100}%`,
+            `${settingSummary} Zoom: ${Math.round(chatView?.webContents.zoomFactor! * 100)}%`,
         );
         mainWindow?.show();
 
@@ -835,6 +835,8 @@ function zoomIn(chatView: BrowserView) {
         "zoomLevel",
         chatView.webContents.zoomLevel,
     );
+
+    updateZoomInTitle(chatView);
 }
 
 function zoomOut(chatView: BrowserView) {
@@ -844,6 +846,25 @@ function zoomOut(chatView: BrowserView) {
         "zoomLevel",
         chatView.webContents.zoomLevel,
     );
+
+    updateZoomInTitle(chatView);
+}
+
+function resetZoom(chatView: BrowserView) {
+    chatView.webContents.zoomLevel = 0;
+    ShellSettings.getinstance().set("zoomLevel", 0);
+    updateZoomInTitle(chatView);
+}
+
+function updateZoomInTitle(chatView: BrowserView) {
+    const prevTitle = mainWindow?.getTitle();
+    if (prevTitle) {
+        let summary = prevTitle.substring(0, prevTitle.indexOf("Zoom: "));
+
+        mainWindow?.setTitle(
+            `${summary}Zoom: ${Math.round(chatView.webContents.zoomFactor * 100)}%`,
+        );
+    }
 }
 
 const isMac = process.platform === "darwin";
@@ -859,8 +880,7 @@ function setupZoomHandlers(chatView: BrowserView) {
             } else if (input.key === "-" || input.key === "NumpadMinus") {
                 zoomOut(chatView);
             } else if (input.key === "0") {
-                chatView.webContents.zoomLevel = 0;
-                ShellSettings.getinstance().set("zoomLevel", 0);
+                resetZoom(chatView);
             }
         }
     });

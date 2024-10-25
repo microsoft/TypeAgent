@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 const { contextBridge } = require("electron/renderer");
+const { webFrame } = require("electron");
 
 import {
     WebSocketMessage,
@@ -332,9 +333,8 @@ async function runBrowserAction(action: any) {
                     action: action,
                 });
             } else {
-                sendScriptAction({
-                    type: "zoom_in_page",
-                });
+                const currZoom = webFrame.getZoomFactor();
+                webFrame.setZoomFactor(currZoom + 0.2);
             }
 
             break;
@@ -346,16 +346,13 @@ async function runBrowserAction(action: any) {
                     action: action,
                 });
             } else {
-                sendScriptAction({
-                    type: "zoom_out_page",
-                });
+                const currZoom = webFrame.getZoomFactor();
+                webFrame.setZoomFactor(currZoom - 0.2);
             }
             break;
         }
         case "zoomReset": {
-            sendScriptAction({
-                type: "zoom_reset",
-            });
+            webFrame.setZoomFactor(1.0);
             break;
         }
 

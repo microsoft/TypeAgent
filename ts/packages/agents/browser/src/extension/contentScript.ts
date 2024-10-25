@@ -570,17 +570,6 @@ async function handleScriptAction(
             break;
         }
 
-        case "zoom_in_page": {
-            sendResponse({});
-            break;
-        }
-        case "zoom_out_page": {
-            window.history.forward();
-
-            sendResponse({});
-            break;
-        }
-
         case "read_page_content": {
             const article = getReadablePageContent();
             sendResponse(article);
