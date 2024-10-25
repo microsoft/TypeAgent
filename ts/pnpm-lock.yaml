@@ -184,6 +184,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
+      typeagent:
+        specifier: workspace:*
+        version: link:../../packages/typeagent
       typescript:
         specifier: ^5.4.2
         version: 5.4.3

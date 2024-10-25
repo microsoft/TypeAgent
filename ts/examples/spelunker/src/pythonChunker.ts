@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// This requires that python3 is on the PATH
+// and the chunker.py script is in the current directory.
+
 import { exec } from "child_process";
 import { promisify } from "util";
 
@@ -10,17 +13,19 @@ export type IdType = string;
 
 export interface Blob {
     lines: string[];
-    start: number;  // int; 0-based!
+    start: number; // int; 0-based!
 }
 
 export interface Chunk {
     // Names here must match names in chunker.py.
+    // TODO: Make them consistent -- Py or TS naming style?
     id: IdType;
     treeName: string;
     blobs: Blob[];
     parent_id: IdType;
-    parent_slot: number;  // int; parent.children[parent_slot] === id
+    parent_slot: number; // int; parent.children[parent_slot] === id
     children: IdType[];
+    filename?: string;
 }
 
 export interface ErrorItem {
@@ -28,7 +33,9 @@ export interface ErrorItem {
     output?: string;
 }
 
-export async function chunkifyPythonFile(filename: string): Promise<Chunk[] | ErrorItem> {
+export async function chunkifyPythonFile(
+    filename: string,
+): Promise<Chunk[] | ErrorItem> {
     let output,
         errors,
         success = false;
