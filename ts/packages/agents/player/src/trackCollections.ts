@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { SpotifyService } from "./service.js";
+import { toTrackObjectFull } from "./spotifyUtils.js";
 
 // for now, no paging of track lists; later add offset and count
 export interface ITrackCollection {
@@ -58,10 +59,8 @@ export class AlbumTrackCollection extends TrackCollection {
         super([], 0);
         this.contextUri = album.uri;
         this.trackCount = tracks.length;
-        this.tracks = tracks.map((albumItem) => {
-            const fullTrack = albumItem as SpotifyApi.TrackObjectFull;
-            fullTrack.album = album;
-            return fullTrack;
-        });
+        this.tracks = tracks.map((albumItem) =>
+            toTrackObjectFull(albumItem, album),
+        );
     }
 }
