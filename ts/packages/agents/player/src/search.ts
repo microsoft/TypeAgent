@@ -419,7 +419,7 @@ function dumpArtists(
     debug(`Found ${items.length} possible artists:`);
     for (const item of items) {
         debug(
-            `${item.popularity.toString().padStart(3)} ${item.name}${known?.has(item.id) ? " (known)" : ""}`,
+            `${item.popularity.toString().padStart(3)} ${item.name}${known?.has(item.id) ? chalk.cyan(" (known)") : ""}`,
         );
     }
 }
