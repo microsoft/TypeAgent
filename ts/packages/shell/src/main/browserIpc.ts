@@ -82,9 +82,9 @@ export class BrowserAgentIpc {
         }, 5 * 1000);
     }
 
-    public send(message: WebSocketMessage) {
-        if (this.webSocket && this.webSocket.readyState === WebSocket.OPEN) {
-            this.webSocket.send(JSON.stringify(message));
-        }
+    public async send(message: WebSocketMessage) {
+        await this.ensureWebsocketConnected();
+        this.webSocket.send(JSON.stringify(message));
+    
     }
 }

@@ -42,6 +42,10 @@ ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
     }
 });
 
+ipcRenderer.on("init-site-agent", () => {
+    window.postMessage("setupSiteAgent");
+})
+
 function sendToBrowserAgent(message: any) {
     ipcRenderer.send("send-to-browser-ipc", message);
 }
@@ -442,4 +446,3 @@ window.onbeforeunload = () => {
     window.postMessage("disableSiteAgent");
 };
 
-window.postMessage("setupSiteAgent");

@@ -55,7 +55,7 @@ function setupSiteAgent() {
     }
 }
 
-window.addEventListener("message", async (event) => {
+window.addEventListener("message", (event) => {
     if (event.data === "setupSiteAgent") {
         setupSiteAgent();
     }
@@ -68,6 +68,3 @@ window.addEventListener("message", async (event) => {
     }
 });
 
-document.addEventListener("DOMContentLoaded", () => {
-    setupSiteAgent();
-});
