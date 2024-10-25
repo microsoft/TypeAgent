@@ -35,7 +35,6 @@ import {
     SearchProcessingOptions,
 } from "./searchProcessor.js";
 import { createEmbeddingCache } from "../modelCache.js";
-import { KnowledgeSearchMode } from "./knowledgeActions.js";
 import { ConcreteEntity, KnowledgeResponse } from "./knowledgeSchema.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TopicMerger } from "./topics.js";
@@ -198,7 +197,6 @@ export async function createConversationManager(
         conversation,
         knowledgeModel,
         answerModel,
-        KnowledgeSearchMode.WithActions,
     );
     const updateTaskQueue = collections.createTaskQueue(async (task) => {
         await handleUpdateTask(task);

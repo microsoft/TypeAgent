@@ -25,7 +25,6 @@ export interface KnowledgeExtractor {
 
 export type KnowledgeExtractorSettings = {
     maxContextLength: number;
-    includeActions: boolean;
     mergeActionKnowledge?: boolean;
 };
 
@@ -56,14 +55,7 @@ export function createKnowledgeExtractor(
     function createTranslator(
         model: TypeChatLanguageModel,
     ): TypeChatJsonTranslator<KnowledgeResponse> {
-        const schema = loadSchema(
-            [
-                settings.includeActions
-                    ? "knowledgeSchema.ts"
-                    : "knowledgeNoActionsSchema.ts",
-            ],
-            import.meta.url,
-        );
+        const schema = loadSchema(["knowledgeSchema.ts"], import.meta.url);
         const typeName = "KnowledgeResponse";
         const validator = createTypeScriptJsonValidator<KnowledgeResponse>(
             schema,
@@ -124,7 +116,6 @@ export function createKnowledgeExtractorSettings(
 ): KnowledgeExtractorSettings {
     return {
         maxContextLength: maxCharsPerChunk,
-        includeActions: true,
         mergeActionKnowledge: true,
     };
 }

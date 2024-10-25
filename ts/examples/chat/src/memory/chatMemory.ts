@@ -131,7 +131,7 @@ export async function createChatMemoryContext(
         conversation,
         entityTopK: 16,
         actionTopK: 16,
-        searcher: createSearchProcessor(conversation, chatModel, true, 16, 16),
+        searcher: createSearchProcessor(conversation, chatModel, 16, 16),
         emailMemory: await knowLib.email.createEmailMemory(
             chatModel,
             ReservedConversationNames.outlook,
@@ -162,18 +162,10 @@ export function createConversation(
 export function createSearchProcessor(
     c: conversation.Conversation,
     model: ChatModel,
-    includeActions: boolean,
     entityTopK: number,
     actionTopK: number,
 ) {
-    const searcher = conversation.createSearchProcessor(
-        c,
-        model,
-        model,
-        includeActions
-            ? conversation.KnowledgeSearchMode.WithActions
-            : conversation.KnowledgeSearchMode.Default,
-    );
+    const searcher = conversation.createSearchProcessor(c, model, model);
     searcher.answers.settings.topK.entitiesTopK = entityTopK;
     searcher.answers.settings.topK.actionsTopK = actionTopK;
     return searcher;
@@ -197,7 +189,6 @@ export async function loadConversation(
     context: ChatContext,
     name: string,
     rootPath?: string,
-    includeActions = true,
 ): Promise<boolean> {
     const reservedCm = getReservedConversation(context, name);
     let exists: boolean = false;
@@ -222,9 +213,6 @@ export async function loadConversation(
             context.conversation,
             context.chatModel,
             context.chatModel,
-            includeActions
-                ? conversation.KnowledgeSearchMode.WithActions
-                : conversation.KnowledgeSearchMode.Default,
         );
     } else {
         context.conversation = reservedCm.conversation;
@@ -543,14 +531,7 @@ export async function runChatMemory(): Promise<void> {
                 storePath = path.dirname(storePath);
             }
             if (name) {
-                if (
-                    await loadConversation(
-                        context,
-                        name,
-                        storePath,
-                        namedArgs.actions,
-                    )
-                ) {
+                if (await loadConversation(context, name, storePath)) {
                     printer.writeLine(`Loaded ${name}`);
                 } else {
                     printer.writeLine(
@@ -568,7 +549,6 @@ export async function runChatMemory(): Promise<void> {
             description:
                 "Extract knowledge from the messages in the current conversation",
             options: {
-                actions: argBool("Extract actions", true),
                 maxTurns: argNum("Number of turns to run"),
                 concurrency: argConcurrency(2),
                 pause: argPause(),
@@ -582,7 +562,6 @@ export async function runChatMemory(): Promise<void> {
             context.chatModel,
             {
                 maxContextLength: context.maxCharsPerChunk,
-                includeActions: namedArgs.actions,
                 mergeActionKnowledge: false,
             },
         );
@@ -902,7 +881,6 @@ export async function runChatMemory(): Promise<void> {
                 maxMatches: argNum("Maximum fuzzy matches", 2),
                 minScore: argNum("Minimum similarity score", 0.8),
                 fallback: argBool("Fallback to message search", true),
-                action: argBool("Include actions"),
                 eval: argBool("Evaluate search query", true),
                 debug: argBool("Show debug info", false),
                 save: argBool("Save the search", false),
@@ -933,12 +911,6 @@ export async function runChatMemory(): Promise<void> {
         if (namedArgs.fallback) {
             searchOptions.fallbackSearch = { maxMatches: 10 };
         }
-        if (namedArgs.action === undefined) {
-            namedArgs.action =
-                context.searcher.searchMode !==
-                conversation.KnowledgeSearchMode.Default;
-        }
-        searchOptions.includeActions = namedArgs.action;
         if (!namedArgs.eval) {
             await searchNoEval(query, searchOptions);
             return;
@@ -1128,12 +1100,6 @@ export async function runChatMemory(): Promise<void> {
         if (namedArgs.fallback) {
             searchOptions.fallbackSearch = { maxMatches: 10 };
         }
-        if (namedArgs.action === undefined) {
-            namedArgs.action =
-                searcher.searchMode !==
-                conversation.KnowledgeSearchMode.Default;
-        }
-        searchOptions.includeActions = namedArgs.action;
         if (!namedArgs.eval) {
             await searchNoEval(query, searchOptions);
             return;

@@ -17,7 +17,6 @@ import {
 } from "./knowledgeSearchSchema.js";
 import { SetOp } from "../setOperations.js";
 import {
-    KnowledgeSearchMode,
     KnowledgeActionTranslator,
     createKnowledgeActionTranslator,
 } from "./knowledgeActions.js";
@@ -45,13 +44,11 @@ export type SearchProcessingOptions = {
     minScore: number;
     maxMessages: number;
     fallbackSearch?: SearchOptions | undefined;
-    includeActions?: boolean;
     skipAnswerGeneration?: boolean;
     progress?: ((action: any) => void) | undefined;
 };
 
 export interface ConversationSearchProcessor {
-    searchMode: KnowledgeSearchMode;
     actions: KnowledgeActionTranslator;
     answers: AnswerGenerator;
     search(
@@ -86,20 +83,11 @@ export function createSearchProcessor(
     conversation: Conversation,
     actionModel: ChatModel,
     answerModel: ChatModel,
-    searchMode: KnowledgeSearchMode = KnowledgeSearchMode.Default,
 ): ConversationSearchProcessor {
-    const searchTranslator = createKnowledgeActionTranslator(
-        actionModel,
-        searchMode,
-    );
-    const searchTranslator_NoActions = createKnowledgeActionTranslator(
-        actionModel,
-        KnowledgeSearchMode.Default,
-    );
+    const searchTranslator = createKnowledgeActionTranslator(actionModel);
     const answers = createAnswerGenerator(answerModel);
 
     return {
-        searchMode,
         actions: searchTranslator,
         answers,
         search,
@@ -114,9 +102,10 @@ export function createSearchProcessor(
         options: SearchProcessingOptions,
     ): Promise<SearchActionResponse | undefined> {
         const context = await buildContext();
-        const actionResult = options.includeActions
-            ? await searchTranslator.translateSearch(query, context)
-            : await searchTranslator_NoActions.translateSearch(query, context);
+        const actionResult = await searchTranslator.translateSearch(
+            query,
+            context,
+        );
         if (!actionResult.success) {
             return undefined;
         }
@@ -261,17 +250,15 @@ export function createSearchProcessor(
             topicLevel,
             loadMessages: responseType === "Answer" || hasActionFilter(action),
         };
-        if (options.includeActions) {
-            searchOptions.action = {
-                maxMatches: options.maxMatches,
+        searchOptions.action = {
+            maxMatches: options.maxMatches,
+            minScore: options.minScore,
+            verbSearchOptions: {
+                maxMatches: 1,
                 minScore: options.minScore,
-                verbSearchOptions: {
-                    maxMatches: 1,
-                    minScore: options.minScore,
-                },
-                loadActions: false,
-            };
-        }
+            },
+            loadActions: false,
+        };
 
         adjustRequest(query, action, searchOptions);
 
@@ -574,17 +561,15 @@ export function createSearchProcessor(
             topicLevel,
             loadMessages: !topLevelTopicSummary,
         };
-        if (options.includeActions) {
-            searchOptions.action = {
-                maxMatches: options.maxMatches,
+        searchOptions.action = {
+            maxMatches: options.maxMatches,
+            minScore: options.minScore,
+            verbSearchOptions: {
+                maxMatches: 1,
                 minScore: options.minScore,
-                verbSearchOptions: {
-                    maxMatches: 1,
-                    minScore: options.minScore,
-                },
-                loadActions,
-            };
-        }
+            },
+            loadActions,
+        };
         return searchOptions;
     }
 }
