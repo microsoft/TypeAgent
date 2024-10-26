@@ -18,6 +18,7 @@ export type CompletionSettings = {
  */
 export interface ChatModel extends TypeChatLanguageModel {
     completionSettings: CompletionSettings;
+    completionCallback?: ((request: any, response: any) => void) | undefined;
     complete(
         prompt: string | PromptSection[] | ChatMessage[],
     ): Promise<Result<string>>;

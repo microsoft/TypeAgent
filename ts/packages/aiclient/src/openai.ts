@@ -540,14 +540,14 @@ export type CompletionUsageStats = {
  *     You supply API settings
  * @param endpoint The name of the API endpoint OR explicit API settings with which to create a client
  * @param completionSettings Completion settings for the model
- * @param responseCallback A callback to be called when the response is returned from the api
+ * @param completionCallback A callback to be called when the response is returned from the api
  * @param tags Tags for tracking usage of this model instance
  * @returns ChatModel
  */
 export function createChatModel(
     endpoint?: string | ApiSettings,
     completionSettings?: CompletionSettings,
-    responseCallback?: (request: any, response: any) => void,
+    completionCallback?: (request: any, response: any) => void,
     tags?: string[],
 ): ChatModelWithStreaming {
     const settings =
@@ -570,6 +570,7 @@ export function createChatModel(
           };
     const model: ChatModelWithStreaming = {
         completionSettings: completionSettings,
+        completionCallback,
         complete,
         completeStream,
     };
@@ -614,8 +615,8 @@ export function createChatModel(
             return error("No choices returned");
         }
 
-        if (responseCallback) {
-            responseCallback(params, data);
+        if (model.completionCallback) {
+            model.completionCallback(params, data);
         }
 
         try {
@@ -723,6 +724,16 @@ function verifyFilterResults(filterResult: FilterResult) {
 }
 
 /**
+ * Create one of AI System's standard Chat Models
+ * @param modelName
+ * @param tag - Tag for tracking this model's usage
+ * @returns
+ */
+export function createChatModelDefault(tag: string): ChatModelWithStreaming {
+    return createChatModel(undefined, undefined, undefined, [tag]);
+}
+
+/**
  * Return a Chat model that returns JSON
  * Uses the type: json_object flag
  * @param endpoint
@@ -732,7 +743,7 @@ function verifyFilterResults(filterResult: FilterResult) {
 export function createJsonChatModel(
     endpoint?: string | ApiSettings,
     tags?: string[],
-): ChatModel {
+): ChatModelWithStreaming {
     return createChatModel(
         endpoint,
         {
@@ -766,20 +777,12 @@ export function createLocalChatModel(
         : undefined;
 }
 
-export type AzureChatModelName = "GPT_4" | "GPT_35_TURBO" | "GPT_4_O";
-/**
- * Create one of AI System's standard Chat Models
- * @param modelName
- * @param tags - Tags for tracking this model's usage
- * @returns
- */
-export function createStandardAzureChatModel(
-    modelName: AzureChatModelName,
-    tags?: string[],
-): ChatModel {
-    const endpointName = modelName === "GPT_4" ? undefined : modelName; // GPT_4 is the default model
-    return createJsonChatModel(endpointName, tags);
-}
+export type AzureChatModelName =
+    | "DEFAULT"
+    | "GPT_4"
+    | "GPT_35_TURBO"
+    | "GPT_4_O"
+    | "GPT_4_O_MINI";
 
 /**
  * Create a client for the OpenAI embeddings service

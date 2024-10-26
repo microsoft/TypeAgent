@@ -173,10 +173,7 @@ export async function createConversationManager(
 ): Promise<ConversationManager<string, string>> {
     const conversationSettings = createConversationSettings();
     const chatModel =
-        model ??
-        openai.createChatModel(undefined, undefined, undefined, [
-            "conversationManager",
-        ]);
+        model ?? openai.createChatModelDefault("conversationManager");
     const knowledgeModel = chatModel;
     const answerModel = chatModel;
 
