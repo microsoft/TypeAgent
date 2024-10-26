@@ -158,8 +158,11 @@ export interface ConversationManager<TMessageId = any, TTopicId = any> {
 
 /**
  * Creates a conversation manager with standard defaults.
+ * @param conversationName name of conversation
  * @param conversationPath path to a root folder for this conversation.
+ * @param createNew Use existing conversation or create a new one
  * @param existingConversation If using an existing conversation
+ * @param model Pass in chat model to use
  */
 export async function createConversationManager(
     conversationName: string,

@@ -214,6 +214,7 @@ export async function loadConversation(
                 conversationPath,
                 false,
                 context.conversation,
+                context.chatModel,
             );
     } else {
         context.conversation = reservedCm.conversation;
