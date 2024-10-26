@@ -46,14 +46,14 @@ async function main(): Promise<void> {
             console.log("Bye!");
             return;
         }
-        const hits = await codeIndex.nearestNeighbors(input, 1, 0.6);
+        const hits = await codeIndex.nearestNeighbors(input, 2, 0.7);
         console.log(`Got ${hits.length} hits:`);
         for (const hit of hits) {
-            console.log(hit);
+            // console.log(hit);
             const item = await objectFolder.get(hit.item);
             if (item) {
-                console.log(item);
-                console.log(item.blobs);
+                // console.log(item);
+                console.log(hit, "-->", item.blobs);
             }
         }
     }
