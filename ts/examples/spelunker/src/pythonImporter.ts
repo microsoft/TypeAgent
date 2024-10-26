@@ -49,7 +49,13 @@ export async function importPythonFile(
     for (const chunk of result) {
         chunk.filename = filename;
         await objectFolder.put(chunk, chunk.id);
-        await codeIndex.put(chunk.blobs.join(""), chunk.id);
+        const text = makeChunkText(chunk);
+        await codeIndex.put(text, chunk.id);
         // TODO: Also log the "date/time created" for the chunk.
     }
+}
+
+function makeChunkText(chunk: Chunk): string {
+    const prefix = `${chunk.filename}\n${chunk.treeName}\n\n`;
+    return prefix + chunk.blobs.map((blob) => blob.lines.join("\n")).join("\n");
 }

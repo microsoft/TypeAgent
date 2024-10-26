@@ -4,8 +4,12 @@
 // Main program to test pythonChunker.ts and pythonImporter.ts.
 
 import dotenv from "dotenv";
-import * as readlineSync from 'readline-sync';
-import { createEmbeddingFolder, createObjectFolder, createSemanticIndex } from "typeagent";
+import * as readlineSync from "readline-sync";
+import {
+    createEmbeddingFolder,
+    createObjectFolder,
+    createSemanticIndex,
+} from "typeagent";
 import { importPythonFile } from "./pythonImporter.js";
 import { Chunk } from "./pythonChunker.js";
 
@@ -34,16 +38,16 @@ async function main(): Promise<void> {
     }
 
     while (true) {
-        const input = readlineSync.question('~> ', {
-            history: true,     // Enable history
-            keepWhitespace: true,  // Keep leading/trailing whitespace in history
+        const input = readlineSync.question("~> ", {
+            history: true, // Enable history
+            keepWhitespace: true, // Keep leading/trailing whitespace in history
         });
         if (!input) {
             console.log("Bye!");
             return;
         }
-        const hits = await codeIndex.nearestNeighbors(input, 2);
-        console.log("Hits:");
+        const hits = await codeIndex.nearestNeighbors(input, 1, 0.6);
+        console.log(`Got ${hits.length} hits:`);
         for (const hit of hits) {
             console.log(hit);
             const item = await objectFolder.get(hit.item);
