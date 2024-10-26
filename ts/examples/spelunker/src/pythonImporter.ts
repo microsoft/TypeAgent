@@ -45,6 +45,7 @@ export async function importPythonFile(
     console.log(`[Importing ${result.length} chunks from ${filename}]`);
 
     // Store the chunks in the database.
+    // TODO: Paralellize? Or batch (e.g. putMultiple)?
     for (const chunk of result) {
         chunk.filename = filename;
         await objectFolder.put(chunk, chunk.id);
