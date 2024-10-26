@@ -187,6 +187,9 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
+      readline-sync:
+        specifier: ^1.4.10
+        version: 1.4.10
       typeagent:
         specifier: workspace:*
         version: link:../../packages/typeagent
@@ -197,6 +200,9 @@ importers:
       '@types/node':
         specifier: ^18.18.7
         version: 18.18.7
+      '@types/readline-sync':
+        specifier: ^1.4.8
+        version: 1.4.8
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
@@ -2986,6 +2992,9 @@ packages:
   '@types/range-parser@1.2.7':
     resolution: {integrity: sha512-hKormJbkJqzQGhziax5PItDUTMAM9uE2XXQmM37dyd4hVM+5aVl7oVxMVUiVQn2oCQFN/LKCZdvSM0pFRqbSmQ==}
 
+  '@types/readline-sync@1.4.8':
+    resolution: {integrity: sha512-BL7xOf0yKLA6baAX6MMOnYkoflUyj/c7y3pqMRfU0va7XlwHAOTOIo4x55P/qLfMsuaYdJJKubToLqRVmRtRZA==}
+
   '@types/responselike@1.0.3':
     resolution: {integrity: sha512-H/+L+UkTV33uf49PH5pCAUBVPNj2nDBXTN+qS1dOwyyg24l3CcicicCA7ca+HMvJBZcFgl5r8e+RR6elsb4Lyw==}
 
@@ -3412,6 +3421,7 @@ packages:
 
   boolean@3.2.0:
     resolution: {integrity: sha512-d0II/GO9uf9lfUHH2BQsjxzRJZBdsjgsBiW4BvhWk/3qoKwQFjIDVN19PfX8F2D/r9PCMTtLWjYVCFrpeYUzsw==}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
 
   brace-expansion@1.1.11:
     resolution: {integrity: sha512-iCuPHDFgrHX7H2vEI/5xpz07zSHB00TpugqhmYtVmMO6518mCuRMoOYFldEBl0g187ufozdaHgWKcYFb61qGiA==}
@@ -9139,6 +9149,8 @@ snapshots:
   '@types/qs@6.9.10': {}
 
   '@types/range-parser@1.2.7': {}
+
+  '@types/readline-sync@1.4.8': {}
 
   '@types/responselike@1.0.3':
     dependencies:

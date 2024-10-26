@@ -24,11 +24,13 @@
   "dependencies": {
     "aiclient": "workspace:*",
     "dotenv": "^16.3.1",
+    "readline-sync": "^1.4.10",
     "typeagent": "workspace:*",
     "typescript": "^5.4.2"
   },
   "devDependencies": {
     "@types/node": "^18.18.7",
+    "@types/readline-sync": "^1.4.8",
     "copyfiles": "^2.4.1",
     "rimraf": "^5.0.5"
   },
