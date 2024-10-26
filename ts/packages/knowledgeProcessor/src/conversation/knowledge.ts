@@ -237,7 +237,8 @@ export function knowledgeValueToString(value: Value): string {
 export enum KnownEntityTypes {
     Person = "person",
     Email = "email",
-    Email_Alias = "email_alias",
+    Email_Address = "email_address",
+    Email_Alias = "alias",
     Memorized = "__memory",
     Message = "message",
 }

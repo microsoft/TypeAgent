@@ -37,6 +37,7 @@ export type ActionTerm = {
 export type TermFilterV2 = {
     action?: ActionTerm;
     // do not include terms already in action
+    // Phrases like 'email address' or 'first name' are a single term
     searchTerms?: SearchTerm[];
     // Use only if request explicitly asks for time range
     timeRange?: DateTimeRange | undefined; // in this time range

@@ -58,7 +58,7 @@ export function emailAddressToEntities(
         if (emailAddress.address) {
             entity.facets = [];
             entity.facets.push({
-                name: "email_alias",
+                name: "email_address",
                 value: emailAddress.address,
             });
         }
@@ -66,7 +66,10 @@ export function emailAddressToEntities(
     if (emailAddress.address) {
         entities.push({
             name: emailAddress.address,
-            type: [KnownEntityTypes.Email, KnownEntityTypes.Email_Alias],
+            type: [
+                KnownEntityTypes.Email_Address,
+                KnownEntityTypes.Email_Alias,
+            ],
         });
     }
 
