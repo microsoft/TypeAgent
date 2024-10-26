@@ -138,14 +138,29 @@ export function createAnswerGenerator(
             AnswerResponse | undefined
         >,
     ): Promise<AnswerResponse | undefined> {
-        let chunks = [
-            ...splitAnswerContext(context, answerSettings.maxCharsPerChunk),
-        ];
-        const maxChunks = settings.chunking.maxChunks;
-        const fastStop = settings.chunking.fastStop ?? false;
-        if (maxChunks && maxChunks > 0) {
-            chunks = chunks.slice(0, maxChunks);
+        let chunks = splitContext(context, answerSettings.maxCharsPerChunk);
+        if (chunks.length === 0) {
+            return undefined;
         }
+        if (!chunks[0].messages) {
+            const structuredChunk = chunks[0];
+            // Structured only. Lets do it first, since it may have the full answer we needed
+            const structuredAnswer = await getAnswer(
+                question,
+                answerSettings.answerStyle,
+                answerSettings.higherPrecision,
+                structuredChunk,
+                false,
+            );
+            if (structuredAnswer && structuredAnswer.type === "Answered") {
+                return structuredAnswer;
+            }
+            chunks = chunks.slice(1);
+        }
+        if (chunks.length === 0) {
+            return undefined;
+        }
+        // Generate partial answers from each chunk
         const partialAnswers = await asyncArray.mapAsync(
             chunks,
             settings.concurrency ?? 2,
@@ -161,38 +176,14 @@ export function createAnswerGenerator(
                 if (progress) {
                     progress(context, index, response);
                 }
-                if (fastStop) {
+                if (settings.chunking.fastStop) {
+                    // Return false if mapAsync should stop
                     return response && response.type !== "Answered";
                 }
             },
         );
-        let answer = "";
-        let whyNoAnswer: string | undefined;
-        let answerCount = 0;
-        for (const partialAnswer of partialAnswers) {
-            if (partialAnswer) {
-                if (partialAnswer.type === "Answered") {
-                    answerCount++;
-                    answer += partialAnswer.answer + "\n";
-                } else {
-                    whyNoAnswer ??= partialAnswer.whyNoAnswer;
-                }
-            }
-        }
-        if (answer.length > 0) {
-            if (answerCount > 1) {
-                answer = (await rewriteAnswer(question, answer)) ?? answer;
-            }
-            return {
-                type: "Answered",
-                answer,
-            };
-        }
-        whyNoAnswer ??= "";
-        return {
-            type: "NoAnswer",
-            whyNoAnswer,
-        };
+
+        return await combinePartialAnswers(question, partialAnswers);
     }
 
     async function getAnswer(
@@ -220,6 +211,39 @@ export function createAnswerGenerator(
         );
         const result = await translator.translate(prompt, [contextSection]);
         return result.success ? result.data : undefined;
+    }
+
+    async function combinePartialAnswers(
+        question: string,
+        partialAnswers: (AnswerResponse | undefined)[],
+    ): Promise<AnswerResponse> {
+        let answer = "";
+        let whyNoAnswer: string | undefined;
+        let answerCount = 0;
+        for (const partialAnswer of partialAnswers) {
+            if (partialAnswer) {
+                if (partialAnswer.type === "Answered") {
+                    answerCount++;
+                    answer += partialAnswer.answer + "\n";
+                } else {
+                    whyNoAnswer ??= partialAnswer.whyNoAnswer;
+                }
+            }
+        }
+        if (answer.length > 0) {
+            if (answerCount > 1) {
+                answer = (await rewriteAnswer(question, answer)) ?? answer;
+            }
+            return {
+                type: "Answered",
+                answer,
+            };
+        }
+        whyNoAnswer ??= "";
+        return {
+            type: "NoAnswer",
+            whyNoAnswer,
+        };
     }
 
     async function rewriteAnswer(
@@ -307,6 +331,15 @@ export function createAnswerGenerator(
         return context;
     }
 
+    function splitContext(context: AnswerContext, maxCharsPerChunk: number) {
+        let chunks = [...splitAnswerContext(context, maxCharsPerChunk)];
+        const maxChunks = settings.chunking.maxChunks;
+        if (maxChunks && maxChunks > 0) {
+            chunks = chunks.slice(0, maxChunks);
+        }
+        return chunks;
+    }
+
     function trimContext(content: string, maxLength: number): string {
         if (content.length > maxLength) {
             content = content.slice(0, maxLength);
@@ -357,21 +390,12 @@ export function* splitAnswerContext(
     maxCharsPerChunk: number,
     splitMessages: boolean = false,
 ): IterableIterator<AnswerContext> {
-    let curChunk: AnswerContext = {};
+    let curChunk = splitStructuredChunks(context);
     let curChunkLength = 0;
-    // TODO: split entities, topics, actions
-    if (context.entities) {
-        curChunk.entities = context.entities;
-    }
-    if (context.topics) {
-        curChunk.topics = context.topics;
-    }
-    if (context.actions) {
-        curChunk.actions = context.actions;
-    }
     yield curChunk;
-    newChunk();
+
     if (context.messages) {
+        newChunk();
         if (splitMessages) {
             for (const message of context.messages) {
                 for (const messageChunk of splitLargeTextIntoChunks(
@@ -438,4 +462,20 @@ export function answerContextToString(context: AnswerContext): string {
         propertyCount++;
         return text;
     }
+}
+
+function splitStructuredChunks(context: AnswerContext): AnswerContext {
+    // TODO: split entities, topics, actions
+
+    const chunk: AnswerContext = {};
+    if (context.entities) {
+        chunk.entities = context.entities;
+    }
+    if (context.topics) {
+        chunk.topics = context.topics;
+    }
+    if (context.actions) {
+        chunk.actions = context.actions;
+    }
+    return chunk;
 }

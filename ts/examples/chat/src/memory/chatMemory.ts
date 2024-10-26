@@ -110,6 +110,16 @@ export async function createChatMemoryContext(
         conversationPath,
         conversationSettings,
     );
+    const conversationManager =
+        await knowLib.conversation.createConversationManager(
+            conversationName,
+            conversationPath,
+            false,
+            conversation,
+            chatModel,
+        );
+    const entityTopK = 16;
+    const actionTopK = 16;
     const context: ChatContext = {
         storePath,
         chatModel,
@@ -119,19 +129,16 @@ export async function createChatMemoryContext(
         searchConcurrency: 2,
         minScore: 0.9,
         conversationName,
-        conversationManager:
-            await knowLib.conversation.createConversationManager(
-                conversationName,
-                conversationPath,
-                false,
-                conversation,
-                chatModel,
-            ),
+        conversationManager,
         conversationSettings,
         conversation,
-        entityTopK: 16,
-        actionTopK: 16,
-        searcher: createSearchProcessor(conversation, chatModel, 16, 16),
+        entityTopK,
+        actionTopK,
+        searcher: configureSearchProcessor(
+            conversationManager,
+            entityTopK,
+            actionTopK,
+        ),
         emailMemory: await knowLib.email.createEmailMemory(
             chatModel,
             ReservedConversationNames.outlook,
@@ -159,16 +166,15 @@ export function createConversation(
     });
 }
 
-export function createSearchProcessor(
-    c: conversation.Conversation,
-    model: ChatModel,
+export function configureSearchProcessor(
+    cm: conversation.ConversationManager,
     entityTopK: number,
     actionTopK: number,
 ) {
-    const searcher = conversation.createSearchProcessor(c, model, model);
-    searcher.answers.settings.topK.entitiesTopK = entityTopK;
-    searcher.answers.settings.topK.actionsTopK = actionTopK;
-    return searcher;
+    const answers = cm.searchProcessor.answers;
+    answers.settings.topK.entitiesTopK = entityTopK;
+    answers.settings.topK.actionsTopK = actionTopK;
+    return cm.searchProcessor;
 }
 
 export async function createSearchMemory(
@@ -209,11 +215,6 @@ export async function loadConversation(
                 false,
                 context.conversation,
             );
-        context.searcher = conversation.createSearchProcessor(
-            context.conversation,
-            context.chatModel,
-            context.chatModel,
-        );
     } else {
         context.conversation = reservedCm.conversation;
         context.conversationName = name;
@@ -221,6 +222,11 @@ export async function loadConversation(
         context.searcher = reservedCm.searchProcessor;
         exists = true;
     }
+    context.searcher = configureSearchProcessor(
+        context.conversationManager,
+        context.entityTopK,
+        context.actionTopK,
+    );
     if (name !== "search") {
         context.searchMemory = await createSearchMemory(context);
     }
