@@ -671,14 +671,21 @@ export async function createConversation(
             const actionResult = options.action
                 ? await actionIndex.searchTermsV2(filter, options.action)
                 : undefined;
-            // Search entities
-            filter = {
-                searchTerms: getAllTermsInFilter(filter, false),
-                timeRange: filter.timeRange,
-            };
             const tasks = [
-                topicIndex.searchTermsV2(filter, options.topic),
-                entityIndex.searchTermsV2(filter, options.entity),
+                topicIndex.searchTermsV2(
+                    {
+                        searchTerms: getAllTermsInFilter(filter),
+                        timeRange: filter.timeRange,
+                    },
+                    options.topic,
+                ),
+                entityIndex.searchTermsV2(
+                    {
+                        searchTerms: getAllTermsInFilter(filter, false),
+                        timeRange: filter.timeRange,
+                    },
+                    options.entity,
+                ),
             ];
             const [topicResult, entityResult] = await Promise.all(tasks);
             results.topics.push(topicResult);
@@ -760,6 +767,9 @@ export async function createConversation(
             );
         }
         entityMessageIds = intersectSets(entityMessageIds, actionMessageIds);
+        if (!entityMessageIds || entityMessageIds.size === 0) {
+            entityMessageIds = unionSets(entityMessageIds, actionMessageIds);
+        }
         let messageIds = intersectSets(topicMessageIds, entityMessageIds);
         if (!messageIds || messageIds.size === 0) {
             //messageIds = topicMessageIds;

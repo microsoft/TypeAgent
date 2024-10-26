@@ -372,7 +372,7 @@ export async function createEntityIndex<TSourceId = string>(
                     options.minScore,
                 ),
             ]);
-            const entityHits = hitCounter.getTopK(options.topK ?? 5);
+            const entityHits = hitCounter.getTopK(options.topK ?? 3);
             results.entityIds = [
                 ...intersectMultiple(
                     entityHits,

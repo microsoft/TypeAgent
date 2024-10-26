@@ -135,7 +135,7 @@ export function createAnswerGenerator(
         }
         const partialAnswers = await asyncArray.mapAsync(
             chunks,
-            settings.concurrency ?? 1,
+            settings.concurrency ?? 2,
             (chunk) =>
                 getAnswer(
                     question,
@@ -144,7 +144,12 @@ export function createAnswerGenerator(
                     chunk,
                     false,
                 ),
-            progress,
+            (context, index, response) => {
+                if (progress) {
+                    progress(context, index, response);
+                }
+                return response && response.type !== "Answered";
+            },
         );
         let answer = "";
         let whyNoAnswer: string | undefined;
