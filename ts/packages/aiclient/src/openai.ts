@@ -327,17 +327,17 @@ function azureImageApiSettingsFromEnv(
 
 /**
  * Loads settings that support local services supporting the Open AI API spec
- * @param tags Tags for tracking usage of this model instance
  * @param modelType Type of setting
  * @param env Environment variables
  * @param endpointName
+ * @param tags Tags for tracking usage of this model instance
  * @returns API settings, or undefined if endpoint was not defined
  */
 export function localOpenAIApiSettingsFromEnv(
-    tags: string[],
     modelType: ModelType,
     env?: Record<string, string | undefined>,
     endpointName?: string,
+    tags?: string[],
 ): ApiSettings | undefined {
     env ??= process.env;
     endpointName ??= "Local";
@@ -538,15 +538,17 @@ export type CompletionUsageStats = {
  *     You supply API settings
  *  createChatModel(apiSettings)
  *     You supply API settings
- * @param tags Tags for tracking usage of this model instance
  * @param endpoint The name of the API endpoint OR explicit API settings with which to create a client
+ * @param completionSettings Completion settings for the model
+ * @param responseCallback A callback to be called when the response is returned from the api
+ * @param tags Tags for tracking usage of this model instance
  * @returns ChatModel
  */
 export function createChatModel(
-    tags: string[],
     endpoint?: string | ApiSettings,
     completionSettings?: CompletionSettings,
     responseCallback?: (request: any, response: any) => void,
+    tags?: string[],
 ): ChatModelWithStreaming {
     const settings =
         typeof endpoint === "object"
@@ -723,55 +725,60 @@ function verifyFilterResults(filterResult: FilterResult) {
 /**
  * Return a Chat model that returns JSON
  * Uses the type: json_object flag
- * @param tags - Tags for tracking this model's usage
  * @param endpoint
+ * @param tags - Tags for tracking this model's usage
  * @returns ChatModel
  */
 export function createJsonChatModel(
-    tags: string[],
     endpoint?: string | ApiSettings,
+    tags?: string[],
 ): ChatModel {
-    return createChatModel(tags, endpoint, {
-        response_format: { type: "json_object" },
-    });
+    return createChatModel(
+        endpoint,
+        {
+            response_format: { type: "json_object" },
+        },
+        undefined,
+        tags,
+    );
 }
 
 /**
  * Model that supports OpenAI api, but running locally
- * @param tags - Tags for tracking this model's usage
  * @param endpointName
  * @param completionSettings
+ * @param tags - Tags for tracking this model's usage
  * @returns If no local Api settings found, return undefined
  */
 export function createLocalChatModel(
-    tags: string[],
     endpointName?: string,
     completionSettings?: CompletionSettings,
+    tags?: string[],
 ): ChatModel | undefined {
     const settings = localOpenAIApiSettingsFromEnv(
-        tags,
         ModelType.Chat,
         undefined,
         endpointName,
+        tags,
     );
     return settings
-        ? createChatModel(tags, settings, completionSettings)
+        ? createChatModel(settings, completionSettings, undefined, tags)
         : undefined;
 }
 
 export type AzureChatModelName = "GPT_4" | "GPT_35_TURBO" | "GPT_4_O";
 /**
  * Create one of AI System's standard Chat Models
- * @param tags - Tags for tracking this model's usage
  * @param modelName
+ * @param tags - Tags for tracking this model's usage
  * @returns
  */
 export function createStandardAzureChatModel(
-    tags: string[],
     modelName: AzureChatModelName,
+    tags?: string[],
 ): ChatModel {
     const endpointName = modelName === "GPT_4" ? undefined : modelName; // GPT_4 is the default model
-    return createJsonChatModel(tags, endpointName);
+    return createJsonChatModel(endpointName, tags);
 }
 
 /**
