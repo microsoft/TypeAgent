@@ -37,13 +37,13 @@ from typing import Iterator
 class Blob:
     """A sequence of text lines plus some metadata."""
 
-    lines: list[str]
     start: int  # 0-based!
+    lines: list[str]
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "lines": self.lines,
             "start": self.start,
+            "lines": self.lines,
         }
 
 
@@ -170,7 +170,7 @@ def extract_blob(lines: list[str], node: ast.AST) -> Blob:
         decorators: list[ast.AST] = node.decorator_list  # type: ignore
         if decorators:
             start = decorators[0].lineno - 1  # type: ignore
-    return Blob(lines[start:end], start)  # type: ignore
+    return Blob(start, lines[start:end])  # type: ignore
 
 
 def create_chunks_recursively(
@@ -201,8 +201,8 @@ def create_chunks_recursively(
             first_start = first_blob.start
             last_end = last_blob.start + len(last_blob.lines)
             if parent_start <= last_end and last_end <= parent_end:
-                parent.blobs.append(Blob(lines[parent_start:first_start], parent_start))
-                parent.blobs.append(Blob(lines[last_end:parent_end], last_end))
+                parent.blobs.append(Blob(parent_start, lines[parent_start:first_start]))
+                parent.blobs.append(Blob(last_end, lines[last_end:parent_end]))
                 assert len(parent.blobs) == parent_slot + 1
 
     return chunks
@@ -217,7 +217,7 @@ def chunker(text: str, tree: ast.AST) -> list[Chunk]:
     # Handcraft the root node
     root_id = generate_id()
     root_name = tree.__class__.__name__
-    root = Chunk(root_id, root_name, [Blob(lines, 0)], "", 0, [])
+    root = Chunk(root_id, root_name, [Blob(0, lines)], "", 0, [])
 
     chunks = create_chunks_recursively(lines, tree, root)
     chunks.insert(0, root)

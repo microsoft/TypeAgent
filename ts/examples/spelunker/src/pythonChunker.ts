@@ -12,8 +12,8 @@ const execPromise = promisify(exec);
 export type IdType = string;
 
 export interface Blob {
-    lines: string[];
     start: number; // int; 0-based!
+    lines: string[];
 }
 
 export interface Chunk {
