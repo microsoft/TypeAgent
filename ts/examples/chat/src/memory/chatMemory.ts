@@ -1105,7 +1105,7 @@ export async function runChatMemory(): Promise<void> {
             return;
         }
 
-        searcher.answers.settings.useChunking = true; //namedArgs.chunk === true;
+        searcher.answers.settings.chunking.enable = true; //namedArgs.chunk === true;
 
         const timestampQ = new Date();
         let result:

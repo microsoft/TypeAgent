@@ -27,11 +27,17 @@ export type AnswerSettings = {
     higherPrecision: boolean;
 };
 
+export type AnswerChunkingSettings = {
+    enable: boolean;
+    splitMessages?: boolean | undefined;
+    maxChunks?: number | undefined;
+    fastStop?: boolean | undefined;
+};
+
 export type AnswerGeneratorSettings = {
     topK: TopKSettings;
+    chunking: AnswerChunkingSettings;
     maxCharsInContext?: number | undefined;
-    useChunking?: boolean | undefined;
-    maxChunks?: number | undefined;
     concurrency?: number;
     hints?: string | undefined;
 };
@@ -42,6 +48,11 @@ export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
             topicsTopK: 8,
             entitiesTopK: 8,
             actionsTopK: 0,
+        },
+        chunking: {
+            enable: false,
+            splitMessages: false,
+            fastStop: true,
         },
         maxCharsInContext: 1024 * 8,
     };
@@ -106,7 +117,7 @@ export function createAnswerGenerator(
     ): Promise<AnswerResponse | undefined> {
         const context: AnswerContext = createContext(response);
 
-        if (isContextTooBig(context, response) && settings.useChunking) {
+        if (isContextTooBig(context, response) && settings.chunking?.enable) {
             // Run answer generation in chunks
             return await getAnswerInChunks(question, context, {
                 maxCharsPerChunk: settings.maxCharsInContext!,
@@ -130,8 +141,10 @@ export function createAnswerGenerator(
         let chunks = [
             ...splitAnswerContext(context, answerSettings.maxCharsPerChunk),
         ];
-        if (settings.maxChunks && settings.maxChunks) {
-            chunks = chunks.slice(0, settings.maxChunks);
+        const maxChunks = settings.chunking.maxChunks;
+        const fastStop = settings.chunking.fastStop ?? false;
+        if (maxChunks && maxChunks > 0) {
+            chunks = chunks.slice(0, maxChunks);
         }
         const partialAnswers = await asyncArray.mapAsync(
             chunks,
@@ -148,7 +161,9 @@ export function createAnswerGenerator(
                 if (progress) {
                     progress(context, index, response);
                 }
-                return response && response.type !== "Answered";
+                if (fastStop) {
+                    return response && response.type !== "Answered";
+                }
             },
         );
         let answer = "";

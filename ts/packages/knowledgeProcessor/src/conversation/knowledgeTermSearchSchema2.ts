@@ -20,7 +20,7 @@ import { DateTimeRange } from "./dateTimeSchema.js";
 export type SearchTerm = string;
 
 export type VerbsTerm = {
-    verbs: string[];
+    words: string[]; // individual words in single or compound verb
     verbTense: "past" | "present" | "future";
 };
 // Action Terms:
