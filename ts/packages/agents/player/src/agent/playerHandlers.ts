@@ -160,18 +160,20 @@ async function validateTrack(
     };
     const queryString = toQueryString(query);
     const tracks = await searchTracks(queryString, context);
-    if (tracks && tracks.tracks && tracks.tracks.length > 0) {
+    if (tracks) {
         // For validation for wildcard match, only allow substring match.
         const lowerCaseTrackName = trackName.toLowerCase();
         const lowerCaseAlbumName = album?.toLowerCase();
-        return tracks.tracks.some(
-            (track) =>
-                track.name.toLowerCase().includes(lowerCaseTrackName) &&
-                (lowerCaseAlbumName === undefined ||
-                    track.album.name
-                        .toLowerCase()
-                        .includes(lowerCaseAlbumName)),
-        );
+        return tracks
+            .getTracks()
+            .some(
+                (track) =>
+                    track.name.toLowerCase().includes(lowerCaseTrackName) &&
+                    (lowerCaseAlbumName === undefined ||
+                        track.album.name
+                            .toLowerCase()
+                            .includes(lowerCaseAlbumName)),
+            );
     }
     return false;
 }

@@ -50,9 +50,8 @@ import {
     next,
     previous,
     shuffle,
-    getAlbumTracks,
     getQueue,
-    getGenreSeeds,
+    getAlbum,
 } from "./endpoints.js";
 import {
     htmlStatus,
@@ -85,8 +84,7 @@ import {
     findAlbums,
     findArtistTopTracks,
     findTracks,
-    SpotifyQuery,
-    toQueryString,
+    findTracksWithGenre,
 } from "./search.js";
 import { toTrackObjectFull } from "./spotifyUtils.js";
 
@@ -130,16 +128,13 @@ export interface IClientContext {
 
 async function printTrackNames(
     trackCollection: ITrackCollection,
-    startIndex: number,
-    endIndex: number,
     context: IClientContext,
 ) {
-    const fetchedTracks = await trackCollection.getTracks(context.service);
-    const selectedTracks = fetchedTracks.slice(startIndex, endIndex);
-    let count = startIndex + 1;
+    const selectedTracks = trackCollection.getTracks();
+    let count = 0;
     for (const track of selectedTracks) {
         let prefix = "";
-        if (context && fetchedTracks.length > 1) {
+        if (context && selectedTracks.length > 1) {
             prefix = `T${count}: `;
         }
         console.log(chalk.cyanBright(`${prefix}${track.name}`));
@@ -208,13 +203,9 @@ export async function loadHistoryFile(
 
 async function htmlTrackNames(
     trackCollection: ITrackCollection,
-    startIndex: number,
-    endIndex: number,
-    context: IClientContext,
     headText = "Tracks",
 ) {
-    const fetchedTracks = await trackCollection.getTracks(context.service);
-    const selectedTracks = fetchedTracks.slice(startIndex, endIndex);
+    const selectedTracks = trackCollection.getTracks();
     const displayContent: DisplayContent = {
         type: "html",
         content: "",
@@ -335,12 +326,7 @@ async function updateTrackListAndPrint(
     collection: ITrackCollection,
     clientContext: IClientContext,
 ) {
-    await printTrackNames(
-        collection,
-        0,
-        collection.getTrackCount(),
-        clientContext,
-    );
+    await printTrackNames(collection, clientContext);
     clientContext.currentTrackList = collection;
     clientContext.lastTrackStartIndex = 0;
     clientContext.lastTrackEndIndex = collection.getTrackCount();
@@ -389,7 +375,7 @@ export async function searchTracks(
     };
     const data = await search(query, context.service);
     if (data && data.tracks && data.tracks.items.length > 0) {
-        return new TrackCollection(data.tracks.items, data.tracks.items.length);
+        return new TrackCollection(data.tracks.items);
     }
 }
 
@@ -411,38 +397,21 @@ export async function searchAlbum(albumName: string, context: IClientContext) {
     return undefined;
 }
 
-async function playTracks(
+async function playTrackCollection(
     trackCollection: ITrackCollection,
-    startIndex: number,
-    endIndex: number,
     clientContext: IClientContext,
 ) {
     if (clientContext.deviceId) {
-        const fetchedTracks = await trackCollection.getTracks(
-            clientContext.service,
-        );
-        const tracks = fetchedTracks.slice(startIndex, endIndex);
+        const tracks = trackCollection.getTracks();
         const uris = tracks.map((track) => track.uri);
         console.log(chalk.cyanBright("Playing..."));
-        await printTrackNames(
-            trackCollection,
-            startIndex,
-            endIndex,
-            clientContext,
-        );
-        const actionResult = await htmlTrackNames(
-            trackCollection,
-            startIndex,
-            endIndex,
-            clientContext,
-            "Playing",
-        );
+        await printTrackNames(trackCollection, clientContext);
+        const actionResult = await htmlTrackNames(trackCollection, "Playing");
         await play(
             clientContext.service,
             clientContext.deviceId,
             uris,
             trackCollection.getContext(),
-            startIndex,
         );
         return actionResult;
     } else {
@@ -451,95 +420,20 @@ async function playTracks(
     }
 }
 
-async function playTracksWithQuery(
-    query: SpotifyQuery,
-    quantity: number,
-    clientContext: IClientContext,
-): Promise<ActionResult> {
-    // play track
-    // search for tracks and collect the albums
-    const queryString = toQueryString(query);
-    const param: SpotifyApi.SearchForItemParameterObject = {
-        q: queryString,
-        type: "track",
-        limit: 50,
-        offset: 0,
-    };
-    const result = await search(param, clientContext.service);
-    const trackResult = result?.tracks;
-    if (trackResult === undefined) {
-        return createNotFoundActionResult("tracks", queryString);
-    }
-
-    // TODO: if there is not exact match for artist, might want to consider popularity of
-    // the artist too.
-    let tracks: SpotifyApi.TrackObjectFull[];
-    const hasQuery = query.query !== undefined && query.query.length > 0;
-    const hasTrack = query.track !== undefined && query.track.length > 0;
-    if (!hasQuery && !hasTrack) {
-        // No search term for track name, just play what we found sorted by popularity
-        tracks = trackResult.items.sort((a, b) => b.popularity - a.popularity);
-    } else {
-        // With search terms for track name, search for matching songs in the albums (to gather multi-movement songs)
-        const albums = new Map(
-            trackResult.items.map((track) => [
-                track.album.id,
-                track.album.name,
-            ]),
-        );
-
-        tracks = [];
-        for (const [id, album] of albums) {
-            const param: SpotifyApi.SearchForItemParameterObject = {
-                q: toQueryString({ ...query, album: [album] }),
-                type: "track",
-                limit: 50,
-                offset: 0,
-            };
-            const result = await search(param, clientContext.service);
-            if (result?.tracks !== undefined) {
-                tracks.push(
-                    ...result.tracks.items
-                        .filter((track) => track.album.id === id)
-                        .sort((a, b) => {
-                            if (a.disc_number !== b.disc_number) {
-                                return a.disc_number - b.disc_number;
-                            }
-                            return a.track_number - b.track_number;
-                        }),
-                );
-                if (quantity >= 0 && tracks.length > quantity) {
-                    break;
-                }
-            }
-        }
-    }
-
-    if (tracks.length !== 0) {
-        return playTracks(
-            new TrackCollection(tracks, tracks.length),
-            0,
-            quantity > 0 ? quantity : tracks.length,
-            clientContext,
-        );
-    }
-    return createNotFoundActionResult("tracks", queryString);
-}
-
 async function playRandomAction(
     clientContext: IClientContext,
     action: PlayRandomAction,
 ) {
+    const quantity = action.parameters.quantity ?? 0;
     const savedTracks = await getFavoriteTracks(clientContext.service);
     if (savedTracks && savedTracks.length > 0) {
+        if (quantity > 0) {
+            savedTracks.splice(quantity);
+        }
+
         const tracks = savedTracks.map((track) => track.track);
-        const collection = new TrackCollection(tracks, tracks.length);
-        return playTracks(
-            collection,
-            0,
-            action.parameters.quantity ?? tracks.length,
-            clientContext,
-        );
+        const collection = new TrackCollection(tracks);
+        return playTrackCollection(collection, clientContext);
     }
     const message = "No favorite tracks found";
     return createActionResultFromTextDisplay(chalk.red(message), message);
@@ -550,12 +444,20 @@ async function playTrackAction(
     action: PlayTrackAction,
 ): Promise<ActionResult> {
     const tracks = await findTracks(
+        clientContext,
         action.parameters.trackName,
         action.parameters.artists,
-        clientContext,
+        3,
     );
-    const collection = new TrackCollection(tracks, tracks.length);
-    return playTracks(collection, 0, 1, clientContext);
+
+    if (
+        tracks[0].name.toLowerCase() ===
+        action.parameters.trackName.toLowerCase()
+    ) {
+        tracks.splice(1);
+    }
+    const collection = new TrackCollection(tracks);
+    return playTrackCollection(collection, clientContext);
 }
 
 async function playAlbumAction(
@@ -570,10 +472,8 @@ async function playAlbumAction(
 
     const album = albums[0];
     if (action.parameters.trackNumber === undefined) {
-        return playTracks(
-            new AlbumTrackCollection(album, album.tracks.items),
-            0,
-            album.tracks.items.length,
+        return playTrackCollection(
+            new AlbumTrackCollection(album),
             clientContext,
         );
     }
@@ -590,13 +490,10 @@ async function playAlbumAction(
         tracks.push(track);
     }
 
-    return playTracks(
+    return playTrackCollection(
         new TrackCollection(
             tracks.map((track) => toTrackObjectFull(track, album)),
-            tracks.length,
         ),
-        0,
-        tracks.length,
         clientContext,
     );
 }
@@ -621,10 +518,8 @@ async function playAlbumTrackAction(
                     .includes(action.parameters.trackName.toLowerCase()),
         );
         if (track !== undefined) {
-            return playTracks(
-                new TrackCollection([toTrackObjectFull(track, album)], 1),
-                0,
-                1,
+            return playTrackCollection(
+                new TrackCollection([toTrackObjectFull(track, album)]),
                 clientContext,
             );
         }
@@ -644,39 +539,26 @@ async function playArtistAction(
         action.parameters.artist,
         clientContext,
     );
-    const collection = new TrackCollection(tracks, tracks.length);
-    return playTracks(
-        collection,
-        0,
-        action.parameters.quantity ?? tracks.length,
-        clientContext,
-    );
+    const quantity = action.parameters.quantity ?? 0;
+    if (quantity > 0) {
+        tracks.splice(quantity);
+    }
+    const collection = new TrackCollection(tracks);
+    return playTrackCollection(collection, clientContext);
 }
 
 async function playGenreAction(
     clientContext: IClientContext,
     playAction: PlayGenreAction,
 ): Promise<ActionResult> {
-    // TODO: cache this.
-
-    const genreSeed = await getGenreSeeds(clientContext.service);
-
-    const genre = genreSeed?.genres.find(
-        (g) => g === playAction.parameters.genre,
-    );
-
-    const query: SpotifyQuery = genre
-        ? {
-              genre: [genre],
-          }
-        : {
-              query: [playAction.parameters.genre],
-          };
-    return await playTracksWithQuery(
-        query,
-        playAction.parameters.quantity ?? 0,
+    const tracks = await findTracksWithGenre(
         clientContext,
+        playAction.parameters.genre,
+        playAction.parameters.quantity,
     );
+
+    const collection = new TrackCollection(tracks);
+    return playTrackCollection(collection, clientContext);
 }
 
 function ensureClientId(state: SpotifyApi.CurrentPlaybackResponse) {
@@ -820,28 +702,14 @@ export async function handleCall(
                         `--------------------------------------------`,
                     ),
                 );
-                const collection = new TrackCollection(
-                    filtered,
-                    filtered.length,
-                );
-                await printTrackNames(
-                    collection,
-                    0,
-                    filtered.length,
-                    clientContext,
-                );
+                const collection = new TrackCollection(filtered);
+                await printTrackNames(collection, clientContext);
                 console.log(
                     chalk.cyanBright(
                         `--------------------------------------------`,
                     ),
                 );
-                return htmlTrackNames(
-                    collection,
-                    0,
-                    filtered.length,
-                    clientContext,
-                    "Queue",
-                );
+                return htmlTrackNames(collection, "Queue");
             }
             return createNotFoundActionResult("tracks in the queue");
         }
@@ -919,13 +787,7 @@ export async function handleCall(
             if (searchResult) {
                 console.log(chalk.magentaBright("Search Results:"));
                 updateTrackListAndPrint(searchResult, clientContext);
-                return htmlTrackNames(
-                    searchResult,
-                    0,
-                    searchResult.getTrackCount(),
-                    clientContext,
-                    "Search Results",
-                );
+                return htmlTrackNames(searchResult, "Search Results");
             }
             return createNotFoundActionResult("tracks", queryString);
         }
@@ -964,9 +826,6 @@ export async function handleCall(
                     await updateTrackListAndPrint(collection, clientContext);
                     return htmlTrackNames(
                         collection,
-                        0,
-                        collection.getTrackCount(),
-                        clientContext,
                         `Playlist: ${playlist.name}`,
                     );
                 }
@@ -993,7 +852,7 @@ export async function handleCall(
                 }
             }
             if (album !== undefined) {
-                const getTracksResponse = await getAlbumTracks(
+                const fullAlbumRsponse = await getAlbum(
                     clientContext.service,
                     album.id,
                 );
@@ -1012,23 +871,18 @@ export async function handleCall(
                         status.progress_ms ? status.progress_ms : 0,
                     );
                 }
-                if (getTracksResponse) {
+                if (fullAlbumRsponse) {
                     const collection = new AlbumTrackCollection(
-                        album,
-                        getTracksResponse.items,
+                        fullAlbumRsponse,
                     );
+
                     actionIO.setDisplay(
                         chalk.magentaBright(
                             `${getAlbumAction.parameters.name}:`,
                         ),
                     );
                     await updateTrackListAndPrint(collection, clientContext);
-                    return htmlTrackNames(
-                        collection,
-                        0,
-                        collection.getTrackCount(),
-                        clientContext,
-                    );
+                    return htmlTrackNames(collection);
                 }
                 return createNotFoundActionResult(`tracks from album ${name}`);
             }
@@ -1044,15 +898,10 @@ export async function handleCall(
             const tops = await getFavoriteTracks(clientContext.service, count);
             if (tops) {
                 const tracks = tops.map((pto) => pto.track!);
-                const collection = new TrackCollection(tracks, tracks.length);
+                const collection = new TrackCollection(tracks);
                 console.log(chalk.magentaBright("Favorites:"));
                 await updateTrackListAndPrint(collection, clientContext);
-                return htmlTrackNames(
-                    collection,
-                    0,
-                    tracks.length,
-                    clientContext,
-                );
+                return htmlTrackNames(collection);
             }
             return createErrorActionResult("No favorites found");
         }
@@ -1071,33 +920,19 @@ export async function handleCall(
                 const filter = filterType + ":" + filterText;
                 const parseResult = Filter.parseFilter(filter);
                 if (parseResult.ast) {
-                    const trackList = await trackCollection.getTracks(
-                        clientContext.service,
+                    const trackList = trackCollection.getTracks();
+
+                    const tracks = await applyFilterExpr(
+                        clientContext,
+                        getTypeChatLanguageModel(),
+                        parseResult.ast,
+                        trackList,
+                        negate,
                     );
-                    if (trackList) {
-                        const tracks = await applyFilterExpr(
-                            clientContext,
-                            getTypeChatLanguageModel(),
-                            parseResult.ast,
-                            trackList,
-                            negate,
-                        );
-                        const collection = new TrackCollection(
-                            tracks,
-                            tracks.length,
-                        );
-                        console.log(chalk.magentaBright("Filtered Tracks:"));
-                        await updateTrackListAndPrint(
-                            collection,
-                            clientContext,
-                        );
-                        return await htmlTrackNames(
-                            collection,
-                            0,
-                            tracks.length,
-                            clientContext,
-                        );
-                    }
+                    const collection = new TrackCollection(tracks);
+                    console.log(chalk.magentaBright("Filtered Tracks:"));
+                    await updateTrackListAndPrint(collection, clientContext);
+                    return await htmlTrackNames(collection);
                 } else {
                     console.log(parseResult.diagnostics);
                 }
@@ -1109,7 +944,7 @@ export async function handleCall(
             const name = createPlaylistAction.parameters.name;
             const input = clientContext.currentTrackList;
             if (input !== undefined) {
-                const trackList = await input.getTracks(clientContext.service);
+                const trackList = input.getTracks();
                 const uris = trackList.map((track) => (track ? track.uri : ""));
                 await createPlaylist(
                     clientContext.service,
@@ -1119,13 +954,10 @@ export async function handleCall(
                     name,
                 );
                 console.log(`playlist ${name} created with tracks:`);
-                printTrackNames(input, 0, input.getTrackCount(), clientContext);
+                printTrackNames(input, clientContext);
                 return createActionResultFromHtmlDisplay(
                     `<div>playlist ${name} created with tracks...</div>${await htmlTrackNames(
                         input,
-                        0,
-                        input.getTrackCount(),
-                        clientContext,
                     )}`,
                 );
             }
