@@ -531,6 +531,25 @@ export async function getPlaylists(service: SpotifyService) {
     return undefined;
 }
 
+export async function getAlbum(
+    service: SpotifyService,
+    id: string,
+): Promise<SpotifyApi.SingleAlbumResponse | undefined> {
+    const config = {
+        headers: {
+            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
+        },
+    };
+
+    const artistsUrl = `https://api.spotify.com/v1/album/${encodeURIComponent(id)}`;
+    try {
+        const spotifyResult = await axios.get(artistsUrl, config);
+        return spotifyResult.data as SpotifyApi.SingleAlbumResponse;
+    } catch (e) {
+        translateAxiosError(e);
+    }
+}
+
 export async function getAlbums(
     service: SpotifyService,
     ids: string[],
