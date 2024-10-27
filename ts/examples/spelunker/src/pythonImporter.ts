@@ -26,8 +26,11 @@ TypeScript, of course).
 */
 
 import * as fs from "fs";
-import { Chunk, chunkifyPythonFile } from "./pythonChunker.js";
+import * as path from "path";
+
 import { ObjectFolder, SemanticIndex } from "typeagent";
+
+import { Chunk, chunkifyPythonFile } from "./pythonChunker.js";
 
 export async function importPythonFile(
     file: string,
@@ -57,6 +60,8 @@ export async function importPythonFile(
 }
 
 function makeChunkText(chunk: Chunk): string {
-    const prefix = `${chunk.filename}\n${chunk.treeName}\n\n`;
-    return prefix + chunk.blobs.map((blob) => blob.lines.join("")).join("\n");
+    const prefix = `${path.basename(chunk.filename ?? "")}\n${chunk.treeName}\n\n`;
+    const fullText =
+        prefix + chunk.blobs.map((blob) => blob.lines.join("")).join("\n");
+    return fullText.replace(/\W+/g, " ").trim();
 }
