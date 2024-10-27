@@ -33,9 +33,9 @@ async function main(): Promise<void> {
     );
     const codeIndex = createSemanticIndex(embeddingFolder);
 
-    for (const file of files) {
-        await importPythonFile(file, objectFolder, codeIndex);
-    }
+    // Import all files concurrently.
+    const promises = files.map((file) => importPythonFile(file, objectFolder, codeIndex));
+    await Promise.all(promises);
 
     while (true) {
         const input = readlineSync.question("~> ", {

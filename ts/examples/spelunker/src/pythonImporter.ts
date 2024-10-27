@@ -44,16 +44,10 @@ export async function importPythonFile(
 
     console.log(`[Importing ${result.length} chunks from ${filename}]`);
 
-    // Store the chunks in the database.
-    // TODO: Paralellize? Or batch (e.g. putMultiple)?
-    for (const chunk of result) {
-        chunk.filename = filename;
-        await objectFolder.put(chunk, chunk.id);
-        const text = makeChunkText(chunk);
-        // console.log("[debug]", chunk.id, chunk.treeName, text);
-        await codeIndex.put(text, chunk.id);
-        // TODO: Also log the "date/time created" for the chunk.
-    }
+    // Store the chunks in the database (concurrently).
+    const promises1 = result.map((chunk) => objectFolder.put(chunk, chunk.id));
+    const promises2 = result.map((chunk) => codeIndex.put(makeChunkText(chunk), chunk.id));
+    await Promise.all([...promises1, ...promises2]);
 }
 
 function makeChunkText(chunk: Chunk): string {
