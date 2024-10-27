@@ -55,7 +55,7 @@ async function main(): Promise<void> {
             return;
         }
         const searchKey = input.replace(/\W+/g, " ").trim();
-        const hits = await codeIndex.nearestNeighbors(searchKey, 2, 0.7);
+        const hits = await codeIndex.nearestNeighbors(searchKey, 1, 0.7);
         console.log(`Got ${hits.length} hits:`);
         for (const hit of hits) {
             // console.log(hit);

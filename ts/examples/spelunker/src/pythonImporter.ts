@@ -28,7 +28,7 @@ TypeScript, of course).
 import * as fs from "fs";
 import * as path from "path";
 
-import { ObjectFolder, SemanticIndex } from "typeagent";
+import { asyncArray, ObjectFolder, SemanticIndex } from "typeagent";
 
 import { Chunk, chunkifyPythonFile } from "./pythonChunker.js";
 
@@ -52,11 +52,12 @@ export async function importPythonFile(
     }
 
     // Store the chunks in the database (concurrently).
-    const promises1 = chunks.map((chunk) => objectFolder.put(chunk, chunk.id));
-    const promises2 = chunks.map((chunk) =>
-        codeIndex.put(makeChunkText(chunk), chunk.id),
-    );
-    await Promise.all([...promises1, ...promises2]);
+    const promises: Promise<any>[] = chunks.map((chunk) => objectFolder.put(chunk, chunk.id));
+    promises.push(
+        asyncArray.forEachAsync(chunks, 10, async (chunk) => {
+            await codeIndex.put(makeChunkText(chunk), chunk.id);
+        }));
+    await Promise.all(promises);
 }
 
 function makeChunkText(chunk: Chunk): string {
