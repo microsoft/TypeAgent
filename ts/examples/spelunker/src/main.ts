@@ -25,16 +25,24 @@ async function main(): Promise<void> {
         files = [defaultFile];
     }
 
+    let homeDir = "";
+    if (process.platform === "darwin") {
+        homeDir = process.env.HOME || "";
+    }
+    const dataRoot = `${homeDir}/data`;
+    const spelunkerRoot = `${dataRoot}/spelunker`;
     const objectFolder = await createObjectFolder<Chunk>(
-        "/data/spelunker/chunks",
+        `${spelunkerRoot}/chunks`,
     );
     const embeddingFolder = await createEmbeddingFolder(
-        "/data/spelunker/embeddings",
+        `${spelunkerRoot}/embeddings`,
     );
     const codeIndex = createSemanticIndex(embeddingFolder);
 
     // Import all files concurrently.
-    const promises = files.map((file) => importPythonFile(file, objectFolder, codeIndex));
+    const promises = files.map((file) =>
+        importPythonFile(file, objectFolder, codeIndex),
+    );
     await Promise.all(promises);
 
     while (true) {
@@ -46,7 +54,7 @@ async function main(): Promise<void> {
             console.log("Bye!");
             return;
         }
-        const hits = await codeIndex.nearestNeighbors(input, 2, 0.7);
+        const hits = await codeIndex.nearestNeighbors(input, 2, 0.6);
         console.log(`Got ${hits.length} hits:`);
         for (const hit of hits) {
             // console.log(hit);

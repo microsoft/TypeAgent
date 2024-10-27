@@ -41,12 +41,18 @@ export async function importPythonFile(
         console.error(result.error);
         return;
     }
+    const chunks: Chunk[] = result;
+    console.log(`[Importing ${chunks.length} chunks from ${filename}]`);
 
-    console.log(`[Importing ${result.length} chunks from ${filename}]`);
+    for (const chunk of chunks) {
+        chunk.filename = filename;
+    }
 
     // Store the chunks in the database (concurrently).
-    const promises1 = result.map((chunk) => objectFolder.put(chunk, chunk.id));
-    const promises2 = result.map((chunk) => codeIndex.put(makeChunkText(chunk), chunk.id));
+    const promises1 = chunks.map((chunk) => objectFolder.put(chunk, chunk.id));
+    const promises2 = chunks.map((chunk) =>
+        codeIndex.put(makeChunkText(chunk), chunk.id),
+    );
     await Promise.all([...promises1, ...promises2]);
 }
 
