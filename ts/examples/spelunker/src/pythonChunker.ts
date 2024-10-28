@@ -27,8 +27,7 @@ export interface Chunk {
     id: IdType;
     treeName: string;
     blobs: Blob[];
-    parent_id: IdType;
-    parent_slot: number; // int; parent.children[parent_slot] === id
+    parentId: IdType;
     children: IdType[];
     filename?: string;
 }

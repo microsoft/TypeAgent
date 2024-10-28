@@ -5,6 +5,8 @@
 
 """A chunker for Python code using the ast module.
 
+**TODO: Revise this comment to match the code.**
+
 - Basic idea: Chunks can nest!
 - Each chunk consists of some text from the file,
   with 0 or more *placeholders* where other chunks are to be inserted.
@@ -59,30 +61,20 @@ class Chunk:
     blobs: list[Blob]  # Blobs around the placeholders
 
     # For inner chunks:
-    parent_id: IdType
-    parent_slot: int  # Index of preceding blob in parent chunk
+    parentId: IdType
 
     # For outer chunks:
     children: list[IdType]  # len() is one less than len(blobs)
 
-    # Used by custo_json() below.
+    # Used by custom_json() below.
     def to_dict(self) -> dict[str, object]:
         return {
             "id": self.id,
             "treeName": self.treeName,
             "blobs": self.blobs,
-            "parent_id": self.parent_id,
-            "parent_slot": self.parent_slot,
+            "parentId": self.parentId,
             "children": self.children,
         }
-
-    # Just for fun.
-    def to_json(self) -> str:
-        return json.dumps(self.to_dict(), default=custom_json, indent=2)
-
-    # For pydantic:
-    # class Config:
-    #     arbitrary_types_allowed = True  # Needed for ast.AST
 
 
 # Support for JSON serialization of Chunks
@@ -173,12 +165,16 @@ def extract_blob(lines: list[str], node: ast.AST) -> Blob:
     return Blob(start, lines[start:end])  # type: ignore
 
 
+def only_whitespace(blob: Blob) -> bool:
+    """Check if a blob contains only whitespace."""
+    return all(line.isspace() for line in blob.lines)
+
+
 def create_chunks_recursively(
     lines: list[str], tree: ast.AST, parent: Chunk
 ) -> list[Chunk]:
     """Recursively create chunks for the AST."""
     chunks: list[Chunk] = []
-    parent_slot: int = 0
 
     for node in ast_iter_child_statement_nodes(tree):
         if isinstance(node, ast.FunctionDef) or isinstance(node, ast.ClassDef):
@@ -186,12 +182,10 @@ def create_chunks_recursively(
             node_id = generate_id()
             node_blob = extract_blob(lines, node)
             node_blobs = [node_blob]
-            chunk = Chunk(node_id, node_name, node_blobs, parent.id, parent_slot, [])
+            chunk = Chunk(node_id, node_name, node_blobs, parent.id, [])
             chunks.append(chunk)
             chunks.extend(create_chunks_recursively(lines, node, chunk))
             parent.children.append(node_id)
-            parent_slot += 1
-            assert len(parent.children) == parent_slot
 
             # Split last parent.blobs[-1] into two, leaving a gap for the new Chunk
             parent_blob: Blob = parent.blobs.pop()
@@ -203,7 +197,6 @@ def create_chunks_recursively(
             if parent_start <= last_end and last_end <= parent_end:
                 parent.blobs.append(Blob(parent_start, lines[parent_start:first_start]))
                 parent.blobs.append(Blob(last_end, lines[last_end:parent_end]))
-                assert len(parent.blobs) == parent_slot + 1
 
     return chunks
 
@@ -217,14 +210,14 @@ def chunker(text: str, tree: ast.AST) -> list[Chunk]:
     # Handcraft the root node
     root_id = generate_id()
     root_name = tree.__class__.__name__
-    root = Chunk(root_id, root_name, [Blob(0, lines)], "", 0, [])
+    root = Chunk(root_id, root_name, [Blob(0, lines)], "", [])
 
     chunks = create_chunks_recursively(lines, tree, root)
     chunks.insert(0, root)
     return chunks
 
 
-def test():
+def main():
     if len(sys.argv) != 2:
         print("Usage: python chunker.py <filename>")
         return 2
@@ -244,12 +237,28 @@ def test():
         return 1
 
     chunks = chunker(text, tree)
-    # for chunk in chunks:
-    #     print(chunk)
+
+    # Remove leading and trailing blank lines from blobs,
+    # only keep non-empty chunks.
+    # Need to do this laster because blob lists are mutated above.
+    for chunk in chunks:
+        blobs = chunk.blobs
+        new_blobs: list[Blob] = []
+        for blob in blobs:
+            lines = blob.lines
+            while lines and lines[-1].isspace():
+                lines.pop()
+            while lines and lines[0].isspace():
+                blob.start += 1
+                lines.pop(0)
+            if lines:
+                new_blobs.append(blob)
+        chunk.blobs = new_blobs
+
     print(json.dumps(chunks, indent=4, default=custom_json))
     return 0
 
 
 if __name__ == "__main__":
-    exit_code = test()
+    exit_code = main()
     sys.exit(exit_code)
