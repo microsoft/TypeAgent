@@ -5,26 +5,23 @@
 
 """A chunker for Python code using the ast module.
 
-**TODO: Revise this comment to match the code.**
-
 - Basic idea: Chunks can nest!
 - Each chunk consists of some text from the file,
   with 0 or more *placeholders* where other chunks are to be inserted.
 - Each chunk has an ID and some metadata.
-- For an inner chunk, the metadata contains (at least)
-  the ID of the outer chunk and the insertion point.
-- For an outer chunk, the metadata includes
-  a list of inner chunk IDs and their insertion points.
+- For an inner (child) chunk, the metadata contains (at least)
+  the ID of the parent chunk.
+- For a parent chunk, the metadata includes
+  a list of inner chunk IDs.
+- Reconstruction of the full text is done using line numbers.
 - Sometimes the hierarchy has more than two levels.
-- Not every inner chunk is a function or class,
+- Not every inner chunk needs to be a function or class,
   though that is where we start.
 - Both at the top level and within functions and classes,
-  we can have additional chunks, e.g. blocks of imports, docstrings,
+  we could have additional chunks, e.g. blocks of imports, docstrings,
   blocks of variable definitions, comments, etc.
 - The chunker has some freedom of how to break code into chunks,
   in order to keep the chunks manageable in number and size.
-- Chunks are not necessarily formed of a whole number of lines.
-- CR LF is replaced by LF (that's how Python's IO works, usually).
 """
 
 import ast
@@ -78,7 +75,6 @@ class Chunk:
 
 
 # Support for JSON serialization of Chunks
-
 
 def custom_json(obj: object) -> dict[str, object]:
     if hasattr(obj, "to_dict"):
@@ -163,11 +159,6 @@ def extract_blob(lines: list[str], node: ast.AST) -> Blob:
         if decorators:
             start = decorators[0].lineno - 1  # type: ignore
     return Blob(start, lines[start:end])  # type: ignore
-
-
-def only_whitespace(blob: Blob) -> bool:
-    """Check if a blob contains only whitespace."""
-    return all(line.isspace() for line in blob.lines)
 
 
 def create_chunks_recursively(
