@@ -55,12 +55,12 @@ export async function importPythonFile(
     const promises: Promise<any>[] = chunks.map((chunk) =>
         objectFolder.put(chunk, chunk.id),
     );
-    promises.push(
-        asyncArray.forEachAsync(chunks, 10, async (chunk) => {
-            await codeIndex.put(makeChunkText(chunk), chunk.id);
-        }),
-    );
     await Promise.all(promises);
+
+    // Compute and store embeddings (not concurrently -- I get 429 errors).
+    await asyncArray.forEachAsync(chunks, 1, async (chunk) => {
+        await codeIndex.put(makeChunkText(chunk), chunk.id);
+    });
 }
 
 function makeChunkText(chunk: Chunk): string {
