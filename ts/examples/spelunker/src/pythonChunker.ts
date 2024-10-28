@@ -44,8 +44,8 @@ export async function chunkifyPythonFile(
     let output,
         errors,
         success = false;
-    const chunkerPath = path.join(__dirname, "chunker.py");
-    try {
+        try {
+        const chunkerPath = path.join(__dirname, "chunker.py");
         let { stdout, stderr } = await execPromise(
             `python3 ${chunkerPath} ${filename}`,
         );
