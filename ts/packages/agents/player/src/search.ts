@@ -89,8 +89,6 @@ async function searchAlbums(
 async function searchArtistSorted(artistName: string, context: IClientContext) {
     const data = await searchArtists(artistName, context);
     if (data && data.artists && data.artists.items.length > 0) {
-        const lowerArtistNames = [artistName.toLowerCase()];
-
         // Prefer the known one, then exact match, and then popularity.
         const artists = data.artists.items.sort((a, b) => {
             if (context.userData !== undefined) {
@@ -103,7 +101,7 @@ async function searchArtistSorted(artistName: string, context: IClientContext) {
                     return compKnown;
                 }
             }
-            const compName = compareArtistsNames(lowerArtistNames, [a], [b]);
+            const compName = compareNames(artistName, a, b);
             if (compName !== 0) {
                 return compName;
             }
@@ -135,22 +133,11 @@ async function searchAlbumSorted(
     context: IClientContext,
 ) {
     const artistNames = artists?.map((a) => a.name);
-    let albums = await searchAlbums(albumName, artistNames, context);
+    const albumsResult = await searchAlbums(albumName, artistNames, context);
+    const albums = filterByArtists(albumsResult, artists);
     if (albums === undefined) {
         return undefined;
     }
-    if (artists !== undefined) {
-        albums = albums.filter((album) =>
-            album.artists.some((albumArtist) =>
-                artists.some((artist) => artist.id === albumArtist.id),
-            ),
-        );
-
-        if (albums.length === 0) {
-            return undefined;
-        }
-    }
-
     const fullAblums = await getAlbumsByIds(
         context.service,
         albums.map((a) => a.id),
@@ -164,9 +151,6 @@ async function searchAlbumSorted(
         return fullAblums;
     }
 
-    const lowerCaseAlbumName = albumName.toLowerCase();
-    const lowerCaseArtistNames = artistNames?.map((a) => a.toLowerCase());
-
     return fullAblums.sort((a, b) => {
         if (context.userData !== undefined) {
             const compKnown = compareKnownAlbums(context.userData.data, a, b);
@@ -174,29 +158,9 @@ async function searchAlbumSorted(
                 return compKnown;
             }
         }
-        const compName = compareNameWithArtists(
-            lowerCaseAlbumName,
-            a,
-            b,
-            lowerCaseArtistNames,
-        );
+        const compName = compareNames(albumName, a, b);
         return compName !== 0 ? compName : b.popularity - a.popularity;
     });
-}
-
-function compareArtistsNames(
-    lowerNames: string[],
-    a: SpotifyApi.ArtistObjectSimplified[],
-    b: SpotifyApi.ArtistObjectSimplified[],
-) {
-    // TODO: Might want to use fuzzy matching here.
-    const exactA = a.filter((a) =>
-        lowerNames.some((name) => name === a.name.toLowerCase()),
-    );
-    const exactB = b.filter((b) =>
-        lowerNames.some((name) => name === b.name.toLowerCase()),
-    );
-    return exactB.length - exactA.length;
 }
 
 type SimplifiedObject =
@@ -204,27 +168,19 @@ type SimplifiedObject =
     | SpotifyApi.AlbumObjectSimplified
     | SpotifyApi.ArtistObjectSimplified;
 
-function compareNames(
-    lowerName: string,
-    a: SimplifiedObject,
-    b: SimplifiedObject,
-) {
-    // TODO: Might want to use fuzzy matching here.
-    const exactA = lowerName === a.name.toLowerCase() ? 1 : 0;
-    const exactB = lowerName === b.name.toLowerCase() ? 1 : 0;
-    return exactB - exactA;
-}
+const nameLocaleCompareOptions = {
+    usage: "search",
+    sensitivity: "base",
+} as const;
 
-function compareNameWithArtists(
-    lowerName: string | undefined,
-    a: SpotifyApi.TrackObjectSimplified | SpotifyApi.AlbumObjectSimplified,
-    b: SpotifyApi.TrackObjectSimplified | SpotifyApi.AlbumObjectSimplified,
-    lowerArtistNames: string[] | undefined,
-) {
-    const exact = lowerName ? compareNames(lowerName, a, b) : 0;
-    return exact !== 0 || lowerArtistNames === undefined
-        ? exact
-        : compareArtistsNames(lowerArtistNames, a.artists, b.artists);
+export function equivalentNames(a: string, b: string) {
+    return a.localeCompare(b, "en", nameLocaleCompareOptions) == 0;
+}
+function compareNames(name: string, a: SimplifiedObject, b: SimplifiedObject) {
+    // TODO: Might want to use fuzzy matching here.
+    const equivalentA = equivalentNames(a.name, name) ? 1 : 0;
+    const equivalentB = equivalentNames(b.name, name) ? 1 : 0;
+    return equivalentB - equivalentA;
 }
 
 function compareKnownArtists(
@@ -424,7 +380,7 @@ async function sortAndExpandMovment(
     quantity: number,
 ) {
     const userData = context.userData?.data;
-    const lowerTrackName = query.track?.[0].toLowerCase();
+    const trackName = query.track?.[0];
     let result = tracks.sort((a, b) => {
         if (userData) {
             const compKnown = compareKnownTracks(userData, a, b);
@@ -433,8 +389,8 @@ async function sortAndExpandMovment(
             }
         }
 
-        if (lowerTrackName) {
-            const compName = compareNames(lowerTrackName, a, b);
+        if (trackName) {
+            const compName = compareNames(trackName, a, b);
             if (compName !== 0) {
                 return compName;
             }
@@ -446,7 +402,7 @@ async function sortAndExpandMovment(
         result = result.slice(0, quantity);
     }
 
-    if (result[0].name.toLowerCase() !== lowerTrackName) {
+    if (trackName && equivalentNames(result[0].name, trackName)) {
         // Expand movements
         result = await expandMovmentTracks(query, result, context);
     }
@@ -488,6 +444,25 @@ export async function findTracksWithGenre(
     return sortAndExpandMovment(context, query, tracks, quantity);
 }
 
+function filterByArtists<
+    T extends
+        | SpotifyApi.TrackObjectSimplified
+        | SpotifyApi.AlbumObjectSimplified,
+>(
+    items: T[] | undefined,
+    artists: SpotifyApi.ArtistObjectFull[] | undefined,
+): T[] | undefined {
+    if (items === undefined || artists == undefined) {
+        return items;
+    }
+    const result = items.filter((track) =>
+        track.artists.some((trackArtist) =>
+            artists.some((artist) => artist.id === trackArtist.id),
+        ),
+    );
+    return result.length === 0 ? undefined : result;
+}
+
 export async function findTracks(
     context: IClientContext,
     trackName: string,
@@ -514,17 +489,8 @@ export async function findTracks(
     const result = await search(param, context.service);
     const trackResult = result?.tracks?.items;
 
-    const tracks = matchedArtists
-        ? trackResult?.filter((track) =>
-              track.artists.some((trackArtist) =>
-                  matchedArtists.some(
-                      (matchedArtist) => matchedArtist.id === trackArtist.id,
-                  ),
-              ),
-          )
-        : trackResult;
-
-    if (tracks === undefined || tracks.length === 0) {
+    const tracks = filterByArtists(trackResult, matchedArtists);
+    if (tracks === undefined) {
         throw new Error(
             `Unable find track '${trackName}'${matchedArtistNames !== undefined && matchedArtistNames.length > 0 ? ` by ${matchedArtistNames.join(", ")}` : ""}`,
         );

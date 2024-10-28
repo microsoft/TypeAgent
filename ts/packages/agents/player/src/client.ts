@@ -81,6 +81,7 @@ import {
     createActionResultFromTextDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
 import {
+    equivalentNames,
     findAlbums,
     findArtistTopTracks,
     findTracks,
@@ -450,10 +451,7 @@ async function playTrackAction(
         3,
     );
 
-    if (
-        tracks[0].name.toLowerCase() ===
-        action.parameters.trackName.toLowerCase()
-    ) {
+    if (equivalentNames(action.parameters.trackName, tracks[0].name)) {
         tracks.splice(1);
     }
     const collection = new TrackCollection(tracks);
