@@ -1,10 +1,8 @@
-import Server from "webpack-dev-server";
-import path from "path";
-import fs from "fs";
-import { fileURLToPath } from 'url';
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import Server from "webpack-dev-server";
+import fs from "fs";
 
 export function setupMiddlewares(
     middlewares: Server.Middleware[],
@@ -20,7 +18,10 @@ export function setupMiddlewares(
 
     // Get the lists file path from command-line arguments
     // const listsFilePath = process.argv[0] || path.join(__dirname, "lists.json");
-    const listsFilePath = path.join(__dirname, "lists.json");
+    // const listsFilePath = path.join(__dirname, "lists.json");
+
+    const listsFilePath =
+        "C:\\Users\\hillarym\\.typeagent\\profiles\\dev_0\\sessions\\20240930_1\\list\\lists.json";
     let listsData: { name: string; items: string[] }[] = [];
 
     const readListsFromFile = () => {
@@ -28,7 +29,15 @@ export function setupMiddlewares(
             if (err) {
                 console.error("Error reading lists file:", err);
             } else {
-                listsData = JSON.parse(data);
+                try {
+                    const updatedListsData = JSON.parse(data);
+                    const changes = compareListsData(
+                        listsData,
+                        updatedListsData,
+                    );
+                    listsData = updatedListsData;
+                    sendEvent("updateLists", changes);
+                } catch {}
             }
         });
     };
@@ -40,7 +49,6 @@ export function setupMiddlewares(
         if (filename) {
             console.log(`File ${filename} changed: ${eventType}`);
             readListsFromFile();
-            sendEvent("updateLists", listsData);
         }
     });
 
@@ -81,7 +89,78 @@ export function setupMiddlewares(
         });
     }
 
-    // Example of adding a list
+    function compareListsData(
+        current: { name: string; items: string[] }[],
+        updated: { name: string; items: string[] }[],
+    ) {
+        const currentNames = current.map((list) => list.name);
+        const updatedNames = updated.map((list) => list.name);
+
+        const listsAdded = updatedNames.filter(
+            (name) => !currentNames.includes(name),
+        );
+        const listsRemoved = currentNames.filter(
+            (name) => !updatedNames.includes(name),
+        );
+
+        const listsEdited = updated
+            .filter((updatedList) => {
+                const currentList = current.find(
+                    (list) => list.name === updatedList.name,
+                );
+                if (!currentList) return false;
+
+                const itemsAdded = updatedList.items.filter(
+                    (item) => !currentList.items.includes(item),
+                );
+                const itemsRemoved = currentList.items.filter(
+                    (item) => !updatedList.items.includes(item),
+                );
+                const itemsEdited = updatedList.items.filter(
+                    (item) =>
+                        currentList.items.includes(item) &&
+                        item !==
+                            currentList.items[currentList.items.indexOf(item)],
+                );
+
+                return (
+                    itemsAdded.length > 0 ||
+                    itemsRemoved.length > 0 ||
+                    itemsEdited.length > 0
+                );
+            })
+            .map((updatedList) => {
+                const currentList = current.find(
+                    (list) => list.name === updatedList.name,
+                );
+                if (currentList) {
+                    const itemsAdded = updatedList.items.filter(
+                        (item) => !currentList.items.includes(item),
+                    );
+                    const itemsRemoved = currentList.items.filter(
+                        (item) => !updatedList.items.includes(item),
+                    );
+                    const itemsEdited = updatedList.items.filter(
+                        (item) =>
+                            currentList.items.includes(item) &&
+                            item !==
+                                currentList.items[
+                                    currentList.items.indexOf(item)
+                                ],
+                    );
+
+                    return {
+                        name: updatedList.name,
+                        itemsAdded,
+                        itemsRemoved,
+                        itemsEdited,
+                    };
+                }
+            });
+
+        return { listsAdded, listsRemoved, listsEdited };
+    }
+
     app.post("/add-list", (req, res) => {
         const newList = { name: "newList", items: [] };
         listsData.push(newList);
@@ -89,7 +168,6 @@ export function setupMiddlewares(
         res.sendStatus(200);
     });
 
-    // Example of adding an item to a list
     app.post("/add-item", (req, res) => {
         const listName = "weeklyGroceries";
         const newItem = "Oranges";
@@ -103,7 +181,6 @@ export function setupMiddlewares(
         }
     });
 
-    // Example of removing an item from a list
     app.post("/remove-item", (req, res) => {
         const listName = "weeklyGroceries";
         const itemToRemove = "Bread";
@@ -117,7 +194,6 @@ export function setupMiddlewares(
         }
     });
 
-    // Example of marking an item as ordered
     app.post("/mark-ordered", (req, res) => {
         const listName = "weeklyGroceries";
         const itemToMark = "Milk";
@@ -125,11 +201,5 @@ export function setupMiddlewares(
         res.sendStatus(200);
     });
 
-    // Start the server
-    /*
-app.listen(port, () => {
-  console.log(`Server is running at http://localhost:${port}`);
-});
-*/
     return middlewares;
 }

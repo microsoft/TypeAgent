@@ -20,7 +20,7 @@ export default {
         port: 9000,
     },
     entry: {
-        "index": path.join(srcDir, "site", "index.ts"),
+        index: path.join(srcDir, "site", "index.ts"),
     },
     output: {
         path: path.join(dirName, "dist"),
@@ -43,7 +43,10 @@ export default {
             patterns: [
                 { from: path.join(srcDir, "site", "index.html"), to: "." },
                 { from: path.join(srcDir, "site", "styles.css"), to: "." },
-                { from: path.join(srcDir, "site", "lists.json"), to: "./route/" },
+                {
+                    from: path.join(srcDir, "site", "lists.json"),
+                    to: "./route/",
+                },
             ],
         }),
     ],
