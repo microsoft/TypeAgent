@@ -1,6 +1,10 @@
 import Server from "webpack-dev-server";
 import path from "path";
 import fs from "fs";
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export function setupMiddlewares(
     middlewares: Server.Middleware[],
@@ -15,7 +19,8 @@ export function setupMiddlewares(
     // app.use(express.static(path.join(__dirname, 'public')));
 
     // Get the lists file path from command-line arguments
-    const listsFilePath = process.argv[0] || path.join(__dirname, "lists.json");
+    // const listsFilePath = process.argv[0] || path.join(__dirname, "lists.json");
+    const listsFilePath = path.join(__dirname, "lists.json");
     let listsData: { name: string; items: string[] }[] = [];
 
     const readListsFromFile = () => {
