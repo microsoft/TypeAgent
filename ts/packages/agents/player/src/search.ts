@@ -419,7 +419,9 @@ export async function findTracksWithGenre(
     // TODO: cache this.
     const genreSeed = await getGenreSeeds(context.service);
 
-    const matchedGenre = genreSeed?.genres.find((g) => g === genre);
+    const matchedGenre = genreSeed?.genres.find((g) =>
+        equivalentNames(g, genre),
+    );
 
     const query: SpotifyQuery = matchedGenre
         ? {
