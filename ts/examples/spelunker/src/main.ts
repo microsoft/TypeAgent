@@ -14,6 +14,7 @@ import { importPythonFile } from "./pythonImporter.js";
 import { Chunk } from "./pythonChunker.js";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,8 +25,20 @@ dotenv.config({ path: envPath });
 async function main(): Promise<void> {
     const defaultFile = path.join(__dirname, "sample.py.txt");
     let files: string[];
+    // TODO: Use a proper command-line parser.
     if (process.argv.length > 2) {
         files = process.argv.slice(2);
+        if (files.length === 1 && files[0] === "-") {
+            files = [];
+        } else if (files.length === 2 && files[0] === "--files") {
+            // Read list of files from a file.
+            const fileList = files[1];
+            files = fs
+                .readFileSync(fileList, "utf-8")
+                .split("\n")
+                .map((line) => line.trim())
+                .filter((line) => line.length > 0 && line[0] !== "#");
+        }
     } else {
         files = [defaultFile];
     }
