@@ -1,0 +1,100 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+ <html lang="en">
+ <head>
+     <meta charset="UTF-8">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+     <title>Grocery List</title>
+ </head>
+ <body>
+     <h1>Grocery List</h1>
+     <ul id="grocery-list">
+     </ul>
+ 
+     <script>
+         // Object in memory with grocery items and their order status
+        let groceryItems = {
+            items: [
+                { name: "Apples", ordered: false },
+                { name: "Bananas", ordered: false },
+                { name: "Carrots", ordered: false },
+                { name: "Bread", ordered: false },
+                { name: "Milk", ordered: false },
+                { name: "Eggs", ordered: false },
+                { name: "Chicken", ordered: false },
+                { name: "Rice", ordered: false },
+                { name: "Tomatoes", ordered: false },
+                { name: "Cheese", ordered: false }
+            ]
+        };
+
+        // Function to update the grocery list
+        function updateGroceryList() {
+            const list = document.getElementById('grocery-list');
+            list.innerHTML = ''; // Clear the current list
+            groceryItems.items.forEach(item => {
+                const listItem = document.createElement('li');
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = item.ordered;
+                checkbox.addEventListener('change', () => {
+                    item.ordered = checkbox.checked;
+                });
+                listItem.appendChild(checkbox);
+                listItem.appendChild(document.createTextNode(item.name));
+                list.appendChild(listItem);
+            });
+        }
+
+        // Function to handle window messages
+        function handleMessage(event) {
+            const message = event.data;
+            if (message.type === 'addItem') {
+                groceryItems.items.push({ name: message.item, ordered: false });
+            } else if (message.type === 'removeItem') {
+                groceryItems.items = groceryItems.items.filter(item => item.name !== message.item);
+            } else if (message.type === 'markOrdered') {
+                const item = groceryItems.items.find(item => item.name === message.item);
+                if (item) {
+                    item.ordered = true;
+                }
+            } else if (message.type === 'clearOrderStatus') {
+                const item = groceryItems.items.find(item => item.name === message.item);
+                if (item) {
+                    item.ordered = false;
+                }
+            }
+            updateGroceryList();
+        }
+
+        // Add event listener for window messages
+        window.addEventListener('message', handleMessage);
+
+        // Initial list population
+        updateGroceryList();
+
+        // Example of using postMessage to add an item
+        setTimeout(() => {
+            window.postMessage({ type: 'addItem', item: 'Oranges' }, '*');
+        }, 5000); // Adds "Oranges" to the list after 5 seconds
+
+        // Example of using postMessage to remove an item
+        setTimeout(() => {
+            window.postMessage({ type: 'removeItem', item: 'Bread' }, '*');
+        }, 10000); // Removes "Bread" from the list after 10 seconds
+
+        // Example of using postMessage to mark an item as ordered
+        setTimeout(() => {
+            window.postMessage({ type: 'markOrdered', item: 'Milk' }, '*');
+        }, 15000); // Marks "Milk" as ordered after 15 seconds
+
+        // Example of using postMessage to clear order status of an item
+        setTimeout(() => {
+            window.postMessage({ type: 'clearOrderStatus', item: 'Milk' }, '*');
+        }, 20000); // Clears order status of "Milk" after 20 seconds
+     </script>
+ </body>
+ </html>
+ 
