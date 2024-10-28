@@ -72,14 +72,22 @@ async function main(): Promise<void> {
             return;
         }
         const searchKey = input.replace(/\W+/g, " ").trim();
-        const hits = await codeIndex.nearestNeighbors(searchKey, 1, 0.7);
-        console.log(`Got ${hits.length} hits:`);
+        const hits = await codeIndex.nearestNeighbors(searchKey, 2, 0.6);
+        console.log(`Got ${hits.length} hit${hits.length == 0 ? "s." : hits.length === 1 ? ":" : "s:"}`);
         for (const hit of hits) {
-            // console.log(hit);
-            const item = await objectFolder.get(hit.item);
-            if (item) {
-                // console.log(item);
-                console.log(hit, "-->", item.blobs);
+            const chunk: Chunk | undefined = await objectFolder.get(hit.item);
+            if (!chunk) {
+                console.log(hit, "--> [No data]");
+            } else {
+                console.log(`score: ${hit.score}, id: ${chunk.id}, file: ${chunk.filename}, node type: ${chunk.treeName}`);
+                for (const blob of chunk.blobs) {
+                    let lineno = 1 + blob.start;
+                    for (const index in blob.lines) {
+                        console.log(`${lineno}: ${blob.lines[index].trimEnd()}`);
+                        lineno += 1;
+                    }
+                    console.log("");
+                }
             }
         }
     }
