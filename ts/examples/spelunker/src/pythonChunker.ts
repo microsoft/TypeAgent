@@ -5,7 +5,12 @@
 // and the chunker.py script is in the current directory.
 
 import { exec } from "child_process";
+import path from "path";
 import { promisify } from "util";
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const execPromise = promisify(exec);
 
@@ -39,9 +44,10 @@ export async function chunkifyPythonFile(
     let output,
         errors,
         success = false;
+    const chunkerPath = path.join(__dirname, "chunker.py");
     try {
         let { stdout, stderr } = await execPromise(
-            `python3 chunker.py ${filename}`,
+            `python3 ${chunkerPath} ${filename}`,
         );
         output = stdout;
         errors = stderr;

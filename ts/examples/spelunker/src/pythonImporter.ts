@@ -52,11 +52,14 @@ export async function importPythonFile(
     }
 
     // Store the chunks in the database (concurrently).
-    const promises: Promise<any>[] = chunks.map((chunk) => objectFolder.put(chunk, chunk.id));
+    const promises: Promise<any>[] = chunks.map((chunk) =>
+        objectFolder.put(chunk, chunk.id),
+    );
     promises.push(
         asyncArray.forEachAsync(chunks, 10, async (chunk) => {
             await codeIndex.put(makeChunkText(chunk), chunk.id);
-        }));
+        }),
+    );
     await Promise.all(promises);
 }
 

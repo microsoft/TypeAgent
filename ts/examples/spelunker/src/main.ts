@@ -12,12 +12,17 @@ import {
 } from "typeagent";
 import { importPythonFile } from "./pythonImporter.js";
 import { Chunk } from "./pythonChunker.js";
+import path from "path";
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
 
 async function main(): Promise<void> {
-    const defaultFile = "sample.py.txt";
+    const defaultFile = path.join(__dirname, "sample.py.txt");
     let files: string[];
     if (process.argv.length > 2) {
         files = process.argv.slice(2);
