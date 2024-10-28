@@ -238,8 +238,8 @@
                 "${workspaceFolder}/**/*.js"
             ]
         },
-		{
-			"name": "Launch VSCODE schemagen",
+        {
+			"name": "VSCODE Schema Gen -dataprep",
 			"type": "node",
 			"request": "launch",
             "skipFiles": [
@@ -247,6 +247,22 @@
             ],
             "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
             "program": "./dist/main.js",
+            "args": [ "-dataprep" ],
+            "console": "externalTerminal",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ]
+		},
+		{
+			"name": "VSCODE Schema Gen -schemagen",
+			"type": "node",
+			"request": "launch",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
+            "program": "./dist/main.js",
+            "args": [ "-schemagen" ],
             "console": "externalTerminal",
             "outFiles": [
                 "${workspaceFolder}/**/*.js"

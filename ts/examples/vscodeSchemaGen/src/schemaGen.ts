@@ -55,6 +55,7 @@ Generate a compact TypeScript type for the following VSCode action. The type sho
     - Do not include the \`metadata\` as a field in the parameters in the type definition.
 3. The result should be a valid, concise TypeScript type definition with meaningful but minimal comments.
 4. All comments should be prefixed with \`//\`.
+5. **Do not include any code block markers or markdown syntax around the TypeScript output.**
 
 JSON Node:
 ${JSON.stringify(jsonNode, null, 2)}
