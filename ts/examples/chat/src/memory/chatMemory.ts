@@ -92,11 +92,8 @@ export async function createChatMemoryContext(
     completionCallback?: (req: any, resp: any) => void,
 ): Promise<ChatContext> {
     const storePath = "/data/testChat";
-    const chatModel = openai.createChatModel(
-        undefined,
-        undefined,
-        completionCallback,
-    );
+    const chatModel = openai.createChatModelDefault("chatMemory");
+    chatModel.completionCallback = completionCallback;
     const embeddingModel = knowLib.createEmbeddingCache(
         openai.createEmbeddingModel(),
         64,
@@ -109,6 +106,16 @@ export async function createChatMemoryContext(
         conversationPath,
         conversationSettings,
     );
+    const conversationManager =
+        await knowLib.conversation.createConversationManager(
+            conversationName,
+            conversationPath,
+            false,
+            conversation,
+            chatModel,
+        );
+    const entityTopK = 16;
+    const actionTopK = 16;
     const context: ChatContext = {
         storePath,
         chatModel,
@@ -118,19 +125,16 @@ export async function createChatMemoryContext(
         searchConcurrency: 2,
         minScore: 0.9,
         conversationName,
-        conversationManager:
-            await knowLib.conversation.createConversationManager(
-                conversationName,
-                conversationPath,
-                false,
-                conversation,
-                chatModel,
-            ),
+        conversationManager,
         conversationSettings,
         conversation,
-        entityTopK: 16,
-        actionTopK: 16,
-        searcher: createSearchProcessor(conversation, chatModel, true, 16, 16),
+        entityTopK,
+        actionTopK,
+        searcher: configureSearchProcessor(
+            conversationManager,
+            entityTopK,
+            actionTopK,
+        ),
         emailMemory: await knowLib.email.createEmailMemory(
             chatModel,
             ReservedConversationNames.outlook,
@@ -145,14 +149,7 @@ export async function createChatMemoryContext(
 function createConversationSettings(
     embeddingModel?: TextEmbeddingModel,
 ): conversation.ConversationSettings {
-    return {
-        indexSettings: {
-            caseSensitive: false,
-            concurrency: 2,
-            embeddingModel,
-            semanticIndex: true,
-        },
-    };
+    return conversation.createConversationSettings(embeddingModel);
 }
 
 export function createConversation(
@@ -165,24 +162,15 @@ export function createConversation(
     });
 }
 
-export function createSearchProcessor(
-    c: conversation.Conversation,
-    model: ChatModel,
-    includeActions: boolean,
+export function configureSearchProcessor(
+    cm: conversation.ConversationManager,
     entityTopK: number,
     actionTopK: number,
 ) {
-    const searcher = conversation.createSearchProcessor(
-        c,
-        model,
-        model,
-        includeActions
-            ? conversation.KnowledgeSearchMode.WithActions
-            : conversation.KnowledgeSearchMode.Default,
-    );
-    searcher.answers.settings.topKEntities = entityTopK;
-    searcher.answers.settings.topKActions = actionTopK;
-    return searcher;
+    const answers = cm.searchProcessor.answers;
+    answers.settings.topK.entitiesTopK = entityTopK;
+    answers.settings.topK.actionsTopK = actionTopK;
+    return cm.searchProcessor;
 }
 
 export async function createSearchMemory(
@@ -194,7 +182,8 @@ export async function createSearchMemory(
         context.storePath,
         true,
     );
-    memory.searchProcessor.answers.settings.topKEntities = context.entityTopK;
+    memory.searchProcessor.answers.settings.topK.entitiesTopK =
+        context.entityTopK;
     return memory;
 }
 
@@ -202,7 +191,6 @@ export async function loadConversation(
     context: ChatContext,
     name: string,
     rootPath?: string,
-    includeActions = true,
 ): Promise<boolean> {
     const reservedCm = getReservedConversation(context, name);
     let exists: boolean = false;
@@ -222,15 +210,8 @@ export async function loadConversation(
                 conversationPath,
                 false,
                 context.conversation,
+                context.chatModel,
             );
-        context.searcher = conversation.createSearchProcessor(
-            context.conversation,
-            context.chatModel,
-            context.chatModel,
-            includeActions
-                ? conversation.KnowledgeSearchMode.WithActions
-                : conversation.KnowledgeSearchMode.Default,
-        );
     } else {
         context.conversation = reservedCm.conversation;
         context.conversationName = name;
@@ -238,6 +219,11 @@ export async function loadConversation(
         context.searcher = reservedCm.searchProcessor;
         exists = true;
     }
+    context.searcher = configureSearchProcessor(
+        context.conversationManager,
+        context.entityTopK,
+        context.actionTopK,
+    );
     if (name !== "search") {
         context.searchMemory = await createSearchMemory(context);
     }
@@ -548,14 +534,7 @@ export async function runChatMemory(): Promise<void> {
                 storePath = path.dirname(storePath);
             }
             if (name) {
-                if (
-                    await loadConversation(
-                        context,
-                        name,
-                        storePath,
-                        namedArgs.actions,
-                    )
-                ) {
+                if (await loadConversation(context, name, storePath)) {
                     printer.writeLine(`Loaded ${name}`);
                 } else {
                     printer.writeLine(
@@ -573,7 +552,6 @@ export async function runChatMemory(): Promise<void> {
             description:
                 "Extract knowledge from the messages in the current conversation",
             options: {
-                actions: argBool("Extract actions", true),
                 maxTurns: argNum("Number of turns to run"),
                 concurrency: argConcurrency(2),
                 pause: argPause(),
@@ -587,7 +565,6 @@ export async function runChatMemory(): Promise<void> {
             context.chatModel,
             {
                 maxContextLength: context.maxCharsPerChunk,
-                includeActions: namedArgs.actions,
                 mergeActionKnowledge: false,
             },
         );
@@ -907,7 +884,6 @@ export async function runChatMemory(): Promise<void> {
                 maxMatches: argNum("Maximum fuzzy matches", 2),
                 minScore: argNum("Minimum similarity score", 0.8),
                 fallback: argBool("Fallback to message search", true),
-                action: argBool("Include actions"),
                 eval: argBool("Evaluate search query", true),
                 debug: argBool("Show debug info", false),
                 save: argBool("Save the search", false),
@@ -938,12 +914,6 @@ export async function runChatMemory(): Promise<void> {
         if (namedArgs.fallback) {
             searchOptions.fallbackSearch = { maxMatches: 10 };
         }
-        if (namedArgs.action === undefined) {
-            namedArgs.action =
-                context.searcher.searchMode !==
-                conversation.KnowledgeSearchMode.Default;
-        }
-        searchOptions.includeActions = namedArgs.action;
         if (!namedArgs.eval) {
             await searchNoEval(query, searchOptions);
             return;
@@ -955,16 +925,6 @@ export async function runChatMemory(): Promise<void> {
             return;
         }
         if (result.response) {
-            if (result.action.actionName === "webLookup") {
-                if (result.response.answer) {
-                    printer.writeInColor(
-                        chalk.green,
-                        result.response.answer.answer!,
-                    );
-                }
-                return;
-            }
-
             const timestampA = new Date();
             const entityIndex = await context.conversation.getEntityIndex();
             const topicIndex = await context.conversation.getTopicsIndex(
@@ -1143,18 +1103,12 @@ export async function runChatMemory(): Promise<void> {
         if (namedArgs.fallback) {
             searchOptions.fallbackSearch = { maxMatches: 10 };
         }
-        if (namedArgs.action === undefined) {
-            namedArgs.action =
-                searcher.searchMode !==
-                conversation.KnowledgeSearchMode.Default;
-        }
-        searchOptions.includeActions = namedArgs.action;
         if (!namedArgs.eval) {
             await searchNoEval(query, searchOptions);
             return;
         }
 
-        searcher.answers.settings.useChunking = namedArgs.chunk === true;
+        searcher.answers.settings.chunking.enable = true; //namedArgs.chunk === true;
 
         const timestampQ = new Date();
         let result:
@@ -1209,10 +1163,7 @@ export async function runChatMemory(): Promise<void> {
             }
             printer.writeLine();
             if (debug) {
-                printer.writeSearchResponse(
-                    result.response,
-                    context.searcher.answers.settings,
-                );
+                printer.writeSearchResponse(result.response);
             }
         }
     }
@@ -1332,16 +1283,14 @@ export async function runChatMemory(): Promise<void> {
         response: conversation.SearchResponse | undefined,
     ): void {
         if (response !== undefined) {
-            const allTopics = response.mergeAllTopics();
+            const allTopics = response.getTopics();
             if (allTopics && allTopics.length > 0) {
                 printer.writeLine(`Topic Hit Count: ${allTopics.length}`);
             } else {
                 const topicIds = new Set(response.allTopicIds());
                 printer.writeLine(`Topic Hit Count: ${topicIds.size}`);
             }
-            const allEntities = response.mergeAllEntities(
-                context.searcher.answers.settings.topKEntities,
-            );
+            const allEntities = response.getEntities();
             if (allEntities && allEntities.length > 0) {
                 printer.writeLine(`Entity Hit Count: ${allEntities.length}`);
             } else {
@@ -1350,9 +1299,7 @@ export async function runChatMemory(): Promise<void> {
                     `Entity to Message Hit Count: ${entityIds.size}`,
                 );
             }
-            const allActions = response.mergeAllEntities(
-                context.searcher.answers.settings.topKActions,
-            );
+            const allActions = response.getActions();
             //const allActions = [...response.allActionIds()];
             if (allActions && allActions.length > 0) {
                 printer.writeLine(`Action Hit Count: ${allActions.length}`);

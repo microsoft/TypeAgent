@@ -162,6 +162,8 @@ class RandomOnlineCommandHandler implements CommandHandlerNoParams {
         const chatModel = openai.createChatModel(
             apiSettings,
             completionSettings,
+            undefined,
+            ["randomCommandHandler"],
         );
 
         return chatModel;

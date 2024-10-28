@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { setObjectProperty } from "common-utils";
 import {
     HistoryContext,
     JSONAction,
@@ -134,52 +135,13 @@ export function matchedValues(
     };
 }
 
-function setActionProperty(object: any, name: string, value: any) {
-    const properties = name.split(".");
-    let lastName: string | number = "actionProps";
-    let curr = object;
-    for (let i = 0; i < properties.length; i++) {
-        const name = properties[i];
-        // Protect against prototype pollution
-        if (
-            name === "__proto__" ||
-            name === "constructor" ||
-            name === "prototype"
-        ) {
-            throw new Error(`Invalid property name: ${name}`);
-        }
-        const maybeIndex = parseInt(name);
-        if (maybeIndex.toString() === name) {
-            // Array index
-            if (curr[lastName] === undefined) {
-                curr[lastName] = [];
-            }
-            curr = curr[lastName];
-            if (!Array.isArray(curr)) {
-                throw new Error(`Internal error: ${lastName} is not an array`);
-            }
-            lastName = maybeIndex;
-        } else {
-            if (curr[lastName] === undefined) {
-                curr[lastName] = {};
-            }
-            curr = curr[lastName];
-            if (typeof curr !== "object") {
-                throw new Error(`Internal error: ${lastName} is not an object`);
-            }
-            lastName = name;
-        }
-    }
-    curr[lastName] = value;
-}
-
 export function createActionProps(
     values: [string, ParamValueType][],
     initial?: JSONAction | JSONAction[],
 ) {
     const result: any = { actionProps: structuredClone(initial) };
     for (const [name, value] of values) {
-        setActionProperty(result, name, value);
+        setObjectProperty(result, "actionProps", name, value);
     }
     const actionProps = result.actionProps;
     if (actionProps.parameters === undefined) {

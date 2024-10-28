@@ -274,7 +274,7 @@ export async function applyFilterExpr(
                             track.album.artists[0].id,
                         );
                         if (wrapper) {
-                            let hit = wrapper.artists[0].genres.includes(genre);
+                            let hit = wrapper.genres.includes(genre);
                             if (negate) {
                                 hit = !hit;
                             }

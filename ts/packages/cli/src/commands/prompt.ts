@@ -37,6 +37,8 @@ export default class Prompt extends Command {
                       response_format: { type: "json_object" },
                   }
                 : undefined,
+            undefined,
+            ["cli"],
         );
         const isFile = fs.existsSync(args.request);
         if (isFile) {

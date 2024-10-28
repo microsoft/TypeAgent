@@ -8,7 +8,6 @@ import {
     AppAction,
     ActionContext,
     ParsedCommandParams,
-    ParameterDefinitions,
     SessionContext,
     PartialParsedCommandParams,
 } from "@typeagent/agent-sdk";
@@ -47,13 +46,21 @@ import { RequestCommandHandler } from "../handlers/requestCommandHandler.js";
 import { DisplayCommandHandler } from "../handlers/displayCommandHandler.js";
 import { getHandlerTableUsage, getUsage } from "../dispatcher/commandHelp.js";
 import {
+    getActionCompletion,
     getSystemTemplateCompletion,
     getSystemTemplateSchema,
 } from "../translation/actionTemplate.js";
-import { Actions, FullAction } from "agent-cache";
-import { getTranslatorActionInfos } from "../translation/actionInfo.js";
+import { getTokenCommandHandlers } from "../handlers/tokenCommandHandler.js";
+import { Actions } from "agent-cache";
+import {
+    getActionInfo,
+    getParameterNames,
+    getParameterType,
+    getTranslatorActionInfos,
+    validateAction,
+} from "../translation/actionInfo.js";
 import { executeActions } from "../action/actionHandlers.js";
-import { DeepPartialUndefined } from "common-utils";
+import { getObjectProperty } from "common-utils";
 
 function executeSystemAction(
     action: AppAction,
@@ -181,7 +188,7 @@ class ActionCommandHandler implements CommandHandler {
             },
         },
         flags: {
-            parameter: {
+            parameters: {
                 description: "Action parameter",
                 optional: true,
                 type: "json",
@@ -203,42 +210,107 @@ class ActionCommandHandler implements CommandHandler {
             );
         }
 
-        // TODO: needs to validate the type
-        const action: FullAction = {
+        const action = {
             translatorName,
             actionName,
-            parameters: (params.flags.parameter as any) ?? {},
+            parameters: (params.flags.parameters as any) ?? {},
         };
 
+        validateAction(actionInfo, action, true);
         return executeActions(Actions.fromFullActions([action]), context);
     }
     public async getCompletion(
         context: SessionContext<CommandHandlerContext>,
         params: PartialParsedCommandParams<typeof this.parameters>,
-        name: string,
-    ): Promise<string[] | undefined> {
+        names: string[],
+    ): Promise<string[]> {
         const systemContext = context.agentContext;
-        if (name === "translatorName") {
-            const translators = systemContext.agents.getTranslatorNames();
-            return translators;
-        }
-
-        if (name === "actionName") {
-            const translatorName = params.args?.translatorName;
-            if (translatorName === undefined) {
-                return undefined;
+        const completions: string[] = [];
+        for (const name of names) {
+            if (name === "translatorName") {
+                const translators = systemContext.agents.getTranslatorNames();
+                completions.push(...translators);
+                continue;
             }
-            const config =
-                systemContext.agents.getTranslatorConfig(translatorName);
 
-            const actionInfos = getTranslatorActionInfos(
-                config,
-                translatorName,
-            );
+            if (name === "actionName") {
+                const translatorName = params.args?.translatorName;
+                if (translatorName === undefined) {
+                    continue;
+                }
+                const config =
+                    systemContext.agents.tryGetTranslatorConfig(translatorName);
 
-            return Array.from(actionInfos.keys());
+                if (config === undefined) {
+                    continue;
+                }
+                const actionInfos = getTranslatorActionInfos(
+                    config,
+                    translatorName,
+                );
+
+                completions.push(...actionInfos.keys());
+                continue;
+            }
+
+            if (name === "--parameters.") {
+                // complete the flag name for json properties
+                const action = {
+                    translatorName: params.args?.translatorName,
+                    actionName: params.args?.actionName,
+                    parameters: params.flags?.parameters,
+                };
+                const actionInfo = getActionInfo(action, systemContext);
+                if (actionInfo === undefined) {
+                    continue;
+                }
+                const data = { action };
+                const getCurrentValue = (name: string) =>
+                    getObjectProperty(data, "action", name);
+                const parameterNames = getParameterNames(
+                    actionInfo,
+                    getCurrentValue,
+                );
+                completions.push(
+                    ...parameterNames
+                        .filter((p) => getCurrentValue(p) === undefined)
+                        .map((p) => `--${p}`),
+                );
+                continue;
+            }
+
+            if (name.startsWith("--parameters.")) {
+                // complete the flag values for json properties
+
+                const action = {
+                    translatorName: params.args?.translatorName,
+                    actionName: params.args?.actionName,
+                    parameters: params.flags?.parameters,
+                };
+
+                const actionInfo = getActionInfo(action, systemContext);
+                if (actionInfo === undefined) {
+                    continue;
+                }
+                const propertyName = name.substring(2);
+                const fieldType = getParameterType(actionInfo, propertyName);
+                if (fieldType?.type === "string-union") {
+                    completions.push(...fieldType.typeEnum);
+                    continue;
+                }
+
+                completions.push(
+                    ...(await getActionCompletion(
+                        systemContext,
+                        action as Partial<AppAction>,
+                        propertyName,
+                    )),
+                );
+
+                continue;
+            }
         }
-        return undefined;
+        return completions;
     }
 }
 
@@ -272,6 +344,7 @@ const systemHandlers: CommandHandlerTable = {
         },
         random: getRandomCommandHandlers(),
         notify: getNotifyCommandHandlers(),
+        token: getTokenCommandHandlers(),
     },
 };
 

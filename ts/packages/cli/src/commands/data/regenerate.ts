@@ -89,6 +89,11 @@ export default class ExplanationDataRegenerateCommmand extends Command {
             description: "Resume incremental regeneration",
             default: false,
         }),
+        request: Flags.string({
+            description:
+                "Regenerate data with request matching pattern. Use * as wildcard",
+            multiple: true,
+        }),
         actionName: Flags.string({
             description:
                 "Regenerate data with action name matching pattern. Use * as wildcard",
@@ -294,6 +299,10 @@ export default class ExplanationDataRegenerateCommmand extends Command {
         const actionNameRegex = flags.actionName?.map(
             (e) => new RegExp(e.replaceAll("*", ".*")),
         );
+
+        const requestRegex = flags.request?.map(
+            (e) => new RegExp(e.replaceAll("*", ".*")),
+        );
         const dataInput: GenerateDataInput[] = [];
         for (const { file, data } of pending) {
             const inputs: (string | RequestAction)[] = [];
@@ -301,6 +310,13 @@ export default class ExplanationDataRegenerateCommmand extends Command {
                 const filter = (e: TestDataEntry | FailedTestDataEntry) => {
                     if (flags.resume) {
                         if ((e as any).message !== "Not processed") {
+                            return undefined;
+                        }
+                    }
+
+                    if (requestRegex) {
+                        const request = e.request;
+                        if (!requestRegex.some((f) => f.test(request))) {
                             return undefined;
                         }
                     }

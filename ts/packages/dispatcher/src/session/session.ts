@@ -20,6 +20,7 @@ import {
     AppAgentStateOptions,
 } from "../handlers/common/appAgentManager.js";
 import { cloneConfig, mergeConfig } from "./options.js";
+import { TokenCounter } from "aiclient";
 
 const debugSession = registerDebug("typeagent:session");
 
@@ -167,6 +168,7 @@ type SessionCacheData = {
 type SessionData = {
     config: SessionConfig;
     cacheData: SessionCacheData;
+    tokens?: TokenCounter;
 };
 
 // Fill in missing fields when loading sessions from disk
@@ -227,6 +229,7 @@ export class Session {
         debugSession(
             `Config: ${JSON.stringify(sessionData.config, undefined, 2)}`,
         );
+
         return new Session(sessionData, dir);
     }
 
@@ -250,6 +253,11 @@ export class Session {
     ) {
         this.config = sessionData.config;
         this.cacheData = sessionData.cacheData;
+
+        // rehydrate token stats
+        if (sessionData.tokens) {
+            TokenCounter.load(sessionData.tokens);
+        }
     }
 
     public get explainerName() {
@@ -354,13 +362,14 @@ export class Session {
         return undefined;
     }
 
-    private save() {
+    public save() {
         if (this.dir) {
             const sessionDataFilePath = getSessionDataFilePath(this.dir);
             const data = {
                 version: sessionVersion,
                 config: this.config,
                 cacheData: this.cacheData,
+                tokens: TokenCounter.getInstance(),
             };
             debugSession(`Saving session: ${this.dir}`);
             debugSession(

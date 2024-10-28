@@ -40,8 +40,8 @@ export type CommandHandler = CommandDescriptor & {
     getCompletion?(
         context: SessionContext<unknown>,
         params: PartialParsedCommandParams<ParameterDefinitions>,
-        name: string,
-    ): Promise<string[] | undefined>;
+        names: string[],
+    ): Promise<string[]>;
 };
 
 type CommandHandlerTypes = CommandHandlerNoParams | CommandHandler;
@@ -84,41 +84,34 @@ function getCommandHandler(
     let curr: CommandDefinitions = handlers;
     const commandPrefix: string[] = [];
 
-    while (true) {
-        const currCommand = commands.shift();
-        if (currCommand === undefined) {
-            break;
-        }
-        commandPrefix.push(currCommand);
+    for (const command of commands) {
+        commandPrefix.push(command);
         if (!isCommandDescriptorTable(curr)) {
-            break;
+            throw new Error(
+                `Unknown subcommand '${commands.join(" ")}' in '@${commandPrefix.join(" ")}'`,
+            );
         }
-        const next: CommandDefinitions | undefined = curr.commands[currCommand];
+        const next: CommandDefinitions | undefined = curr.commands[command];
         if (next === undefined) {
             throw new Error(
-                `Unknown command '${currCommand}' in '@${commandPrefix.join(" ")}'`,
+                `Unknown command '${command}' in '@${commandPrefix.join(" ")}'`,
             );
         }
         curr = next;
     }
 
-    if (commands.length !== 0) {
+    if (!isCommandDescriptorTable(curr)) {
+        return curr;
+    }
+
+    if (curr.defaultSubCommand === undefined) {
         throw new Error(
-            `Unknown subcommand '${commands.join(" ")}' in '@${commandPrefix.join(" ")}'`,
+            `Command '@${commandPrefix.join(" ")}' requires a subcommand`,
         );
     }
-
-    if (isCommandDescriptorTable(curr)) {
-        if (curr.defaultSubCommand === undefined) {
-            throw new Error(
-                `Command '@${commandPrefix.join(" ")}' requires a subcommand`,
-            );
-        }
-        curr = curr.defaultSubCommand;
-    }
-
-    return curr;
+    return curr.defaultSubCommand;
 }
+
 export function getCommandInterface(
     handlers: CommandDefinitions,
 ): AppAgentCommandInterface {
@@ -155,11 +148,11 @@ export function getCommandInterface(
         commandInterface.getCommandCompletion = async (
             commands: string[],
             params: ParsedCommandParams<ParameterDefinitions>,
-            name: string,
+            names: string[],
             context: SessionContext<unknown>,
         ) => {
             const handler = getCommandHandler(handlers, commands);
-            return handler.getCompletion?.(context, params, name);
+            return handler.getCompletion?.(context, params, names) ?? [];
         };
     }
     return commandInterface;

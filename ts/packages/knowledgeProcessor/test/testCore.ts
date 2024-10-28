@@ -3,17 +3,16 @@
 
 import { ChatModel, openai, TextEmbeddingModel } from "aiclient";
 import { TextBlock, TextBlockType } from "../src/text.js";
-import { readAllText } from "typeagent";
+import { readAllText, readJsonFile } from "typeagent";
 import { splitIntoBlocks } from "../src/textChunker.js";
+import { SearchTermsActionV2 } from "../src/conversation/knowledgeTermSearchSchema2.js";
+import path from "path";
+import os from "node:os";
 
 export type TestModels = {
     chat: ChatModel;
     embeddings: TextEmbeddingModel;
 };
-
-export interface TestContext {
-    models: TestModels;
-}
 
 export function shouldSkip() {
     return !hasTestKeys();
@@ -33,15 +32,13 @@ export function skipTest(name: string) {
 
 export function createTestModels(): TestModels {
     return {
-        chat: openai.createChatModel(),
+        chat: openai.createChatModelDefault("knowledgeProcessorTest"),
         embeddings: openai.createEmbeddingModel(),
     };
 }
 
-export function createContext(): TestContext {
-    return {
-        models: createTestModels(),
-    };
+export function getRootDataPath() {
+    return path.join(os.tmpdir(), "/data/tests");
 }
 
 export async function loadData(
@@ -51,4 +48,26 @@ export async function loadData(
     const playText = await readAllText(filePath);
     // Split full play text into paragraphs
     return splitIntoBlocks(playText, blockType);
+}
+
+export type SearchAction = {
+    query: string;
+    action: SearchTermsActionV2;
+};
+
+export async function loadSearchActionV2(
+    rootPath: string,
+    name: string,
+): Promise<SearchAction> {
+    const query = await readAllText(path.join(rootPath, name + ".txt"));
+    const action: SearchTermsActionV2 | undefined = await readJsonFile(
+        path.join(rootPath, name + ".json"),
+    );
+    if (!action) {
+        throw Error(`${name}.json not found`);
+    }
+    return {
+        query,
+        action,
+    };
 }

@@ -38,7 +38,6 @@ function createInstructions([
             role: "system",
             content: `${form}\n${getSubphraseExplanationInstruction()}\n${getActionDescription(
                 requestAction,
-                false,
             )}`,
         },
         {

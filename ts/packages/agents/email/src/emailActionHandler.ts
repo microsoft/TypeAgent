@@ -132,7 +132,12 @@ async function handleEmailAction(
                     let result = await generateNotes(
                         query,
                         4096,
-                        openai.createChatModel("GPT_35_TURBO"),
+                        openai.createChatModel(
+                            "GPT_35_TURBO",
+                            undefined,
+                            undefined,
+                            ["emailActionHandler"],
+                        ),
                         undefined,
                     );
 

@@ -51,7 +51,7 @@ export function createPropertyExplainer(
                 (enableContext
                     ? `For each property, explain which substring of the request or entities in the conversation history is used to compute the value. ${substringRequirement}\n`
                     : `For each property, explain which substring of the request is used to compute the value. ${substringRequirement}\n`) +
-                getActionDescription(requestAction, false)
+                getActionDescription(requestAction)
             );
         },
         (requestAction) => requestAction.toPromptString(true),

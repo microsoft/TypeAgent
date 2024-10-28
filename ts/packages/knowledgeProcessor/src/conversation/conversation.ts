@@ -24,7 +24,6 @@ import {
     TopicIndex,
     TopicMerger,
     TopicSearchOptions,
-    TopicSearchResult,
     createTopicIndex,
     createTopicMerger,
     createTopicSearchOptions,
@@ -34,34 +33,20 @@ import {
     removeSemanticIndexFolder,
 } from "../knowledgeIndex.js";
 import {
-    CompositeEntity,
     EntityIndex,
     EntitySearchOptions,
-    EntitySearchResult,
     createEntityIndex,
     createEntitySearchOptions,
-    mergeEntities,
 } from "./entities.js";
 import { ExtractedKnowledge } from "./knowledge.js";
-import { Filter, SearchAction } from "./knowledgeSearchWebSchema.js";
-import { AnswerResponse } from "./answerSchema.js";
-import {
-    intersectSets,
-    removeUndefined,
-    unionSets,
-    uniqueFrom,
-} from "../setOperations.js";
-import { getRangeOfTemporalSequence } from "../temporal.js";
-import { Action, ConcreteEntity } from "./knowledgeSchema.js";
+import { Filter, SearchAction } from "./knowledgeSearchSchema.js";
+import { intersectSets, removeUndefined, unionSets } from "../setOperations.js";
 import { MessageIndex, createMessageIndex } from "./messages.js";
 import {
-    ActionGroup,
     ActionIndex,
     ActionSearchOptions,
-    ActionSearchResult,
     createActionIndex,
     createActionSearchOptions,
-    mergeActions,
 } from "./actions.js";
 import { SearchTermsAction, TermFilter } from "./knowledgeTermSearchSchema.js";
 import {
@@ -70,6 +55,8 @@ import {
 } from "./knowledgeTermSearchSchema2.js";
 import { getAllTermsInFilter } from "./searchProcessor.js";
 import { TypeChatLanguageModel } from "typechat";
+import { TextEmbeddingModel } from "aiclient";
+import { createSearchResponse, SearchResponse } from "./searchResponse.js";
 
 export interface RecentItems<T> {
     readonly entries: collections.CircularArray<T>;
@@ -211,239 +198,23 @@ export type ExtractedKnowledgeIds<
     actionIds?: TActionId[] | undefined;
 };
 
-export interface SearchResponse<
-    TMessageId = any,
-    TTopicId = any,
-    TEntityId = any,
-    TActionId = any,
-> {
-    entities: EntitySearchResult<TEntityId>[];
-    topics: TopicSearchResult<TTopicId>[];
-    actions: ActionSearchResult<TActionId>[];
-    topicLevel: number;
-    messageIds?: TMessageId[] | undefined;
-    messages?: dateTime.Timestamped<TextBlock<TMessageId>>[] | undefined;
-    answer?: AnswerResponse | undefined;
-    responseStyle?: string;
-
-    allTopics(): IterableIterator<string>;
-    allTopicIds(): IterableIterator<TTopicId>;
-
-    mergeAllTopics(): string[];
-    topicTimeRanges(): (dateTime.DateRange | undefined)[];
-
-    allEntities(): IterableIterator<ConcreteEntity>;
-    allEntityIds(): IterableIterator<TEntityId>;
-    allEntityNames(): string[];
-    entityTimeRanges(): (dateTime.DateRange | undefined)[];
-    mergeAllEntities(topK: number): CompositeEntity[];
-
-    allActions(): IterableIterator<Action>;
-    allActionIds(): IterableIterator<TActionId>;
-    actionTimeRanges(): (dateTime.DateRange | undefined)[];
-    mergeAllActions(topK: number): ActionGroup[];
-
-    getTotalMessageLength(): number;
-
-    hasTopics(): boolean;
-    hasEntities(): boolean;
-    hasActions(): boolean;
-    hasMessages(): boolean;
-    hasHits(): boolean;
-}
-
-export function createSearchResponse<
-    TMessageId = any,
-    TTopicId = any,
-    TEntityId = any,
-    TActionId = any,
->(topicLevel?: number): SearchResponse<TMessageId, TTopicId, TEntityId> {
-    const response: SearchResponse<TMessageId, TTopicId, TEntityId, TActionId> =
-        {
-            entities: [],
-            topics: [],
-            actions: [],
-            topicLevel: topicLevel ?? 1,
-            allTopics,
-            allTopicIds,
-            mergeAllTopics,
-            topicTimeRanges,
-            allEntities,
-            allEntityIds,
-            allEntityNames,
-            mergeAllEntities,
-            entityTimeRanges,
-            allActions,
-            allActionIds,
-            actionTimeRanges,
-            mergeAllActions,
-            getTotalMessageLength,
-            hasTopics,
-            hasEntities,
-            hasActions,
-            hasHits,
-            hasMessages,
-        };
-    return response;
-
-    function* allTopics(): IterableIterator<string> {
-        for (const result of response.topics) {
-            if (result.topics && result.topics.length > 0) {
-                for (const topic of result.topics) {
-                    yield topic;
-                }
-            }
-        }
-    }
-
-    function* allTopicIds(): IterableIterator<TTopicId> {
-        for (const result of response.topics) {
-            if (result.topicIds && result.topicIds.length > 0) {
-                for (const id of result.topicIds) {
-                    yield id;
-                }
-            }
-        }
-    }
-
-    function mergeAllTopics(): string[] {
-        return uniqueFrom<string, string>(allTopics())!;
-    }
-
-    function* allEntityIds(): IterableIterator<TEntityId> {
-        for (const result of response.entities) {
-            if (result.entityIds && result.entityIds.length > 0) {
-                for (const id of result.entityIds) {
-                    yield id;
-                }
-            }
-        }
-    }
-
-    function* allEntities(): IterableIterator<ConcreteEntity> {
-        for (const result of response.entities) {
-            if (result.entities && result.entities.length > 0) {
-                for (const entity of result.entities) {
-                    yield entity;
-                }
-            }
-        }
-    }
-
-    function mergeAllEntities(topK: number = 3): CompositeEntity[] {
-        const mergedEntities = mergeEntities(allEntities());
-        if (mergedEntities.size === 0) {
-            return [];
-        }
-        // Sort in hit count order
-        const entities = [...mergedEntities.values()]
-            .sort((x, y) => y.count - x.count)
-            .map((e) => e.value);
-        return topK > 0 ? entities.slice(0, topK) : entities;
-    }
-
-    function allEntityNames(): string[] {
-        return uniqueFrom<ConcreteEntity, string>(
-            allEntities(),
-            (e) => e.name,
-            true,
-        )!;
-    }
-
-    function entityTimeRanges(): (dateTime.DateRange | undefined)[] {
-        return response.entities.length > 0
-            ? response.entities.map((e) => e.getTemporalRange())
-            : [];
-    }
-
-    function topicTimeRanges(): (dateTime.DateRange | undefined)[] {
-        return response.topics.length > 0
-            ? response.topics.map((t) =>
-                  getRangeOfTemporalSequence(t.temporalSequence),
-              )
-            : [];
-    }
-
-    function* allActions(): IterableIterator<Action> {
-        for (const result of response.actions) {
-            if (result.actions && result.actions.length > 0) {
-                for (const action of result.actions) {
-                    yield action;
-                }
-            }
-        }
-    }
-
-    function* allActionIds(): IterableIterator<TActionId> {
-        for (const result of response.actions) {
-            if (result.actionIds) {
-                for (const id of result.actionIds) {
-                    yield id;
-                }
-            }
-        }
-    }
-
-    function actionTimeRanges(): (dateTime.DateRange | undefined)[] {
-        return response.actions.length > 0
-            ? response.actions.map((a) =>
-                  getRangeOfTemporalSequence(a.temporalSequence),
-              )
-            : [];
-    }
-
-    function mergeAllActions(topK: number = 3): ActionGroup[] {
-        // Returned ranked by most relevant
-        const actionGroups = mergeActions(allActions(), false);
-        return topK > 0 ? actionGroups.slice(0, topK) : actionGroups;
-    }
-
-    function getTotalMessageLength(): number {
-        let length = 0;
-        if (response.messages) {
-            for (const message of response.messages) {
-                length += message.value.value.length;
-            }
-        }
-        return length;
-    }
-
-    function hasTopics(): boolean {
-        for (const _ of allTopics()) {
-            return true;
-        }
-        return false;
-    }
-
-    function hasEntities(): boolean {
-        for (const _ of allEntities()) {
-            return true;
-        }
-        return false;
-    }
-
-    function hasActions(): boolean {
-        for (const _ of allActions()) {
-            return true;
-        }
-        return false;
-    }
-
-    function hasMessages(): boolean {
-        return (
-            response.messageIds !== undefined && response.messageIds.length > 0
-        );
-    }
-
-    function hasHits(): boolean {
-        return hasMessages() || hasEntities() || hasTopics();
-    }
-}
-
 export type ConversationSettings = {
     indexSettings: TextIndexSettings;
     indexActions?: boolean;
 };
+
+export function createConversationSettings(
+    embeddingModel?: TextEmbeddingModel,
+): ConversationSettings {
+    return {
+        indexSettings: {
+            caseSensitive: false,
+            concurrency: 2,
+            embeddingModel,
+            semanticIndex: true,
+        },
+    };
+}
 
 export type ConversationSearchOptions = {
     entity: EntitySearchOptions;
@@ -803,7 +574,7 @@ export async function createConversation(
         const entityIndex = await getEntityIndex();
         const topicIndex = await getTopicsIndex(options.topicLevel);
         const actionIndex = await getActionIndex();
-        const results = createSearchResponse<MessageId, TopicId, EntityId>();
+        const results = createSearchResults();
         for (const filter of filters) {
             switch (filter.filterType) {
                 case "Topic":
@@ -851,7 +622,7 @@ export async function createConversation(
             getTopicsIndex(options.topicLevel),
             getActionIndex(),
         ]);
-        const results = createSearchResponse<MessageId, TopicId, EntityId>();
+        const results = createSearchResults();
         for (const filter of filters) {
             // Only search actions if (a) actions are enabled (b) we have an action filter
             const topicResult = await topicIndex.searchTerms(
@@ -895,22 +666,26 @@ export async function createConversation(
             getTopicsIndex(options.topicLevel),
             getActionIndex(),
         ]);
-        const results = createSearchResponse<MessageId, TopicId, EntityId>();
+        const results = createSearchResults();
         for (let filter of filters) {
             const actionResult = options.action
                 ? await actionIndex.searchTermsV2(filter, options.action)
                 : undefined;
-            const hasActionMatches =
-                actionResult &&
-                actionResult.actionIds &&
-                actionResult.actionIds.length > 0;
-            // Search entities
-            filter = {
-                searchTerms: getAllTermsInFilter(filter, !hasActionMatches),
-            };
             const tasks = [
-                topicIndex.searchTermsV2(filter, options.topic),
-                entityIndex.searchTermsV2(filter, options.entity),
+                topicIndex.searchTermsV2(
+                    {
+                        searchTerms: getAllTermsInFilter(filter),
+                        timeRange: filter.timeRange,
+                    },
+                    options.topic,
+                ),
+                entityIndex.searchTermsV2(
+                    {
+                        searchTerms: getAllTermsInFilter(filter, false),
+                        timeRange: filter.timeRange,
+                    },
+                    options.entity,
+                ),
             ];
             const [topicResult, entityResult] = await Promise.all(tasks);
             results.topics.push(topicResult);
@@ -992,6 +767,9 @@ export async function createConversation(
             );
         }
         entityMessageIds = intersectSets(entityMessageIds, actionMessageIds);
+        if (!entityMessageIds || entityMessageIds.size === 0) {
+            entityMessageIds = unionSets(entityMessageIds, actionMessageIds);
+        }
         let messageIds = intersectSets(topicMessageIds, entityMessageIds);
         if (!messageIds || messageIds.size === 0) {
             //messageIds = topicMessageIds;
@@ -1037,6 +815,10 @@ export async function createConversation(
             }
         }
         return undefined;
+    }
+
+    function createSearchResults() {
+        return createSearchResponse<MessageId, TopicId, EntityId>();
     }
 }
 
