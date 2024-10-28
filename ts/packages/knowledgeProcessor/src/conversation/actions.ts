@@ -425,7 +425,7 @@ export async function createActionIndex<TSourceId = any>(
         };
         if (actionTerm.verbs) {
             actionFilter.verbFilter = {
-                verbs: actionTerm.verbs.verbs,
+                verbs: actionTerm.verbs.words,
                 verbTense: actionTerm.verbs.verbTense,
             };
         }

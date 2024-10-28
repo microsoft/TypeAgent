@@ -29,4 +29,13 @@ public static class StringEx
 
         return args.ToArray();
     }
+
+    public static string GetArg(this string[] args, int index)
+    {
+        if (index >= args.Length)
+        {
+            throw new ArgumentException($"Missing argument at position {index}");
+        }
+        return args[index];
+    }
 }

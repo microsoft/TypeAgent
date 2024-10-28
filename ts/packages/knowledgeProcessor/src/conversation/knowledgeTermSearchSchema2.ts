@@ -20,7 +20,7 @@ import { DateTimeRange } from "./dateTimeSchema.js";
 export type SearchTerm = string;
 
 export type VerbsTerm = {
-    verbs: string[];
+    words: string[]; // individual words in single or compound verb
     verbTense: "past" | "present" | "future";
 };
 // Action Terms:
@@ -30,13 +30,14 @@ export type ActionTerm = {
     verbs?: VerbsTerm | undefined; // action verbs
     // - subject and object for the verb
     subject?: string | undefined;
-    object?: string | undefined;
+    object?: string | undefined; // 'receives' the action (e.g. 'email' in: What did X say in his email about Y the sent to Z')
 };
 
 // Search indexes for following search terms: typically single word keywords.
 export type TermFilterV2 = {
     action?: ActionTerm;
     // do not include terms already in action
+    // Phrases like 'email address' or 'first name' are a single term
     searchTerms?: SearchTerm[];
     // Use only if request explicitly asks for time range
     timeRange?: DateTimeRange | undefined; // in this time range

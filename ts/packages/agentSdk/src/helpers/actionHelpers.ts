@@ -20,11 +20,13 @@ export function createActionResultNoDisplay(
 
 export function createActionResult(
     literalText: string,
-    speak?: boolean,
+    speak?: boolean | undefined,
+    entities?: Entity[] | undefined,
 ): ActionResultSuccess {
+    entities ??= [];
     return {
         literalText,
-        entities: [],
+        entities,
         displayContent: speak
             ? {
                   type: "text",
