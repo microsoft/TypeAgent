@@ -99,8 +99,8 @@ function addEvents(
     api.onClear((_) => {
         chatView.clear();
     });
-    api.onMarkRequestExplained((_, id, timestamp, fromCache) => {
-        chatView.markRequestExplained(id, timestamp, fromCache);
+    api.onNotifyExplained((_, id, data) => {
+        chatView.notifyExplained(id, data);
     });
     api.onRandomCommandSelected((_, id, message) => {
         chatView.randomCommandSelected(id, message);

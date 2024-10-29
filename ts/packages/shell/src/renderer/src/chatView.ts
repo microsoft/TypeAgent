@@ -10,7 +10,11 @@ import {
     DynamicDisplay,
 } from "@typeagent/agent-sdk";
 import { TTS } from "./tts/tts";
-import { IAgentMessage, TemplateEditConfig } from "agent-dispatcher";
+import {
+    IAgentMessage,
+    NotifyExplainedData,
+    TemplateEditConfig,
+} from "agent-dispatcher";
 
 import { PartialCompletion } from "./partial";
 import { InputChoice } from "./choicePanel";
@@ -404,10 +408,8 @@ export class ChatView {
         return retVal;
     }
 
-    markRequestExplained(id: string, timestamp: string, fromCache?: boolean) {
-        this.idToMessageGroup
-            .get(id)
-            ?.markRequestExplained(timestamp, fromCache);
+    notifyExplained(id: string, data: NotifyExplainedData) {
+        this.idToMessageGroup.get(id)?.notifyExplained(data);
     }
 
     randomCommandSelected(id: string, message: string) {

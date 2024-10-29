@@ -13,6 +13,7 @@ import {
     TemplateEditConfig,
     IAgentMessage,
     CommandCompletionResult,
+    NotifyExplainedData,
 } from "agent-dispatcher";
 import { RequestMetrics } from "agent-dispatcher";
 
@@ -93,12 +94,11 @@ export interface ClientAPI {
             group_id: string,
         ) => void,
     ): void;
-    onMarkRequestExplained(
+    onNotifyExplained(
         callback: (
             e: Electron.IpcRendererEvent,
-            id: string,
-            timestamp: string,
-            fromCache?: boolean,
+            requestId: string,
+            data: NotifyExplainedData,
         ) => void,
     ): void;
     onRandomCommandSelected(

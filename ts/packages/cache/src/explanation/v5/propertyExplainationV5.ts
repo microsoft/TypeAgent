@@ -71,6 +71,9 @@ export function isEntityParameter(
     return parameter.hasOwnProperty("entityIndex");
 }
 
+// REVIEW: disable entity constructions.
+const enableEntityConstructions = false;
+
 function validatePropertyExplanation(
     requestAction: RequestAction,
     actionExplanation: PropertyExplanation,
@@ -103,6 +106,11 @@ function validatePropertyExplanation(
 
         if (!isImplicitParameter(prop)) {
             if (isEntityParameter(prop) && prop.entityIndex !== undefined) {
+                if (enableEntityConstructions === false) {
+                    throw new Error(
+                        "Request has references to entities in the context",
+                    );
+                }
                 const entities = requestAction.history?.entities;
                 if (
                     entities === undefined ||
