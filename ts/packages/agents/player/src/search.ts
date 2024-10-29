@@ -260,7 +260,7 @@ async function findArtists(
     return artists;
 }
 
-async function findAlbumsWithTrackArtists(
+async function searchAlbumsWithTrackArtists(
     albumName: string,
     artists: SpotifyApi.ArtistObjectFull[],
     context: IClientContext,
@@ -268,18 +268,18 @@ async function findAlbumsWithTrackArtists(
     // Try again without artist, as the artist on the album might not match the one in the tracks.
     let albums = await searchAlbumSorted(albumName, undefined, context);
     if (albums === undefined) {
-        throw new Error(
-            `Unable to find album '${albumName}' with artists ${artists.map((artist) => artist.name).join(", ")}`,
-        );
+        return undefined;
     }
 
-    return albums.filter((album) =>
+    const filtered = albums.filter((album) =>
         album.tracks.items.some((track) =>
             track.artists.some((trackArtist) =>
                 artists.some((artist) => artist.id === trackArtist.id),
             ),
         ),
     );
+
+    return filtered.length === 0 ? undefined : filtered;
 }
 
 export async function findArtistTopTracks(
@@ -312,11 +312,16 @@ export async function findAlbums(
         albums = await searchAlbumSorted(albumName, matchedArtists, context);
 
         if (albums === undefined) {
-            albums = await findAlbumsWithTrackArtists(
+            albums = await searchAlbumsWithTrackArtists(
                 albumName,
                 matchedArtists,
                 context,
             );
+            if (albums === undefined) {
+                throw new Error(
+                    `Unable to find album '${albumName}' with artists ${matchedArtists.map((artist) => artist.name).join(", ")}`,
+                );
+            }
         }
     } else {
         albums = await searchAlbumSorted(albumName, undefined, context);
