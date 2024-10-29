@@ -21,6 +21,7 @@
         {"name": "commonUtils", "rootPath": "packages/commonUtils"},
         {"name": "dispatcher", "rootPath": "packages/dispatcher"},
         {"name": "knowledgeProcessor", "rootPath": "packages/knowledgeProcessor"},
+        {"name": "memoryProviders", "rootPath": "examples/memoryProviders"},
         {"name": "typeagent", "rootPath": "packages/typeagent"}
     ],
     "jest.runMode": "on-demand"

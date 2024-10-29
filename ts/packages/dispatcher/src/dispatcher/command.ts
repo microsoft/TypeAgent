@@ -385,7 +385,7 @@ function getPendingFlag(
     const resolvedFlag = resolveFlag(flags, lastToken);
     return resolvedFlag !== undefined &&
         getFlagType(resolvedFlag[1]) !== "boolean"
-        ? resolvedFlag[0]
+        ? lastToken
         : undefined;
 }
 
@@ -459,7 +459,7 @@ export async function getCommandCompletion(
             }
         } else {
             // get the potential values for the pending flag
-            pendingCompletions.push(`--${pendingFlag}`);
+            pendingCompletions.push(pendingFlag);
         }
 
         if (agent.getCommandCompletion) {

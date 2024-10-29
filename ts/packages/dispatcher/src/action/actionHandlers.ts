@@ -15,6 +15,7 @@ import {
     DisplayAppendMode,
     ParsedCommandParams,
     ParameterDefinitions,
+    Entity,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
@@ -29,6 +30,7 @@ import { getStorage } from "./storageImpl.js";
 import { getUserProfileDir } from "../utils/userData.js";
 import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
 import { ProfileNames } from "../utils/profileNames.js";
+import { conversation } from "knowledge-processor";
 
 const debugAgent = registerDebug("typeagent:agent");
 const debugActions = registerDebug("typeagent:actions");
@@ -232,11 +234,10 @@ async function executeAction(
             returnedResult.literalText &&
             systemContext.conversationManager
         ) {
-            // TODO: convert entity values to facets
-            systemContext.conversationManager.addMessage(
+            addToConversationMemory(
+                systemContext,
                 returnedResult.literalText,
                 returnedResult.entities,
-                new Date(),
             );
         }
         result = returnedResult;
@@ -384,5 +385,25 @@ export async function executeCommand(
         actionContext.profiler?.stop();
         actionContext.profiler = undefined;
         closeActionContext();
+    }
+}
+
+function addToConversationMemory(
+    systemContext: CommandHandlerContext,
+    message: string,
+    entities: Entity[],
+) {
+    if (systemContext.conversationManager) {
+        const newEntities = entities.filter(
+            (e) => !conversation.isMemorizedEntity(e.type),
+        );
+        if (newEntities.length > 0) {
+            systemContext.conversationManager.queueAddMessage(
+                message,
+                newEntities,
+                new Date(),
+                false,
+            );
+        }
     }
 }

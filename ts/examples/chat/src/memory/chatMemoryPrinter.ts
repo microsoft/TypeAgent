@@ -226,21 +226,10 @@ export class ChatMemoryPrinter extends ChatPrinter {
         }
     }
 
-    public writeSearchResponse(
-        response: conversation.SearchResponse,
-        settings?: conversation.AnswerGeneratorSettings,
-    ) {
-        this.writeTopics([...response.allTopics()]);
-        this.writeCompositeEntities(
-            response.mergeAllEntities(
-                settings?.topKEntities ?? Number.MAX_SAFE_INTEGER,
-            ),
-        );
-        this.writeActionGroups(
-            response.mergeAllActions(
-                settings?.topKActions ?? Number.MAX_SAFE_INTEGER,
-            ),
-        );
+    public writeSearchResponse(response: conversation.SearchResponse) {
+        this.writeTopics(response.getTopics());
+        this.writeCompositeEntities(response.getEntities());
+        this.writeActionGroups(response.getActions());
         if (response.messages) {
             this.writeTemporalBlocks(chalk.cyan, response.messages);
         }

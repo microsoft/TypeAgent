@@ -105,8 +105,8 @@ const api: ClientAPI = {
     onSettingSummaryChanged(callback) {
         ipcRenderer.on("setting-summary-changed", callback);
     },
-    onMarkRequestExplained(callback) {
-        ipcRenderer.on("mark-explained", callback);
+    onNotifyExplained(callback) {
+        ipcRenderer.on("notifyExplained", callback);
     },
     onRandomCommandSelected(callback) {
         ipcRenderer.on("update-random-command", callback);

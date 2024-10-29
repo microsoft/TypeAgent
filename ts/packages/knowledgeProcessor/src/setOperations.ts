@@ -396,6 +396,7 @@ export interface HitTable<T> {
 
 export function createHitTable<T>(
     keyAccessor?: (value: T) => any,
+    fixedScore?: number | undefined,
 ): HitTable<T> {
     const map = new Map<any, ScoredItem<T>>();
     return {
@@ -431,7 +432,7 @@ export function createHitTable<T>(
     }
 
     function add(value: T, score?: number | undefined): number {
-        score ??= 1.0;
+        score = fixedScore ? fixedScore : score ?? 1.0;
         const key = getKey(value);
         let scoredItem = map.get(key);
         if (scoredItem) {
@@ -497,6 +498,10 @@ export function createHitTable<T>(
     // TODO: Optimize.
     function getTopK(k: number): T[] {
         const topItems = byHighestScore();
+        if (k === map.size) {
+            return topItems.map((i) => i.item);
+        }
+
         const topK: T[] = [];
         if (k < 1 || topItems.length === 0) {
             return topK;

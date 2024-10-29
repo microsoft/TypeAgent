@@ -255,8 +255,13 @@ export class PartialCompletion {
             debugError(`Partial completion prefix not found`);
             return;
         }
-        this.input.appendTextAtCursor(
-            item.selectedText.substring(prefix.length),
+        const replaceText = /\s/.test(item.selectedText)
+            ? `"${item.selectedText.replaceAll('"', '\\"')}"`
+            : item.selectedText;
+        this.input.replaceTextAtCursor(
+            replaceText,
+            -prefix.length,
+            prefix.length,
         );
     }
 

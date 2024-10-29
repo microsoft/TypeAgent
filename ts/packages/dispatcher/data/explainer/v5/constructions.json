@@ -6,8 +6,8 @@
       "matches": [
         "can you",
         "could you",
-        "would you mind to",
-        "can you please"
+        "would you",
+        "will you"
       ],
       "basename": "politeness",
       "canBeMerged": false,
@@ -18,9 +18,9 @@
         "pause",
         "stop",
         "halt",
-        "suspend"
+        "freeze"
       ],
-      "basename": "P:action",
+      "basename": "M:action",
       "namespace": "player.pause::fullActionName",
       "canBeMerged": false,
       "index": 1
@@ -29,8 +29,8 @@
       "matches": [
         "please",
         "kindly",
-        "if you could",
-        "if you would"
+        "if you don't mind",
+        "if you could"
       ],
       "basename": "politeness",
       "canBeMerged": false,
@@ -38,95 +38,127 @@
     },
     {
       "matches": [
-        "can you",
-        "could you",
-        "would you mind",
-        "can you please"
+        "pause the music",
+        "stop the music",
+        "halt the music",
+        "put the music on hold"
       ],
-      "basename": "politeness",
+      "basename": "M:action",
+      "namespace": "player.pause::fullActionName",
       "canBeMerged": false,
       "index": 3
     },
     {
       "matches": [
-        "pause"
+        "play",
+        "start",
+        "put on",
+        "begin"
       ],
-      "basename": "P:action",
-      "namespace": "player.pause::fullActionName",
+      "basename": "M:action",
+      "namespace": "player.playTrack::fullActionName",
       "canBeMerged": false,
       "index": 4
     },
     {
       "matches": [
-        "the music"
+        "nocturne",
+        "nocturnes",
+        "nocturnal",
+        "nocturn",
+        "prelude",
+        "etude",
+        "ballade"
       ],
-      "basename": "P:object",
-      "namespace": "player.pause::fullActionName",
+      "basename": "M:trackName",
+      "namespace": "player::parameters.trackName",
       "canBeMerged": false,
       "index": 5
     },
     {
       "matches": [
-        "can you",
-        "could you",
-        "would you be able to",
-        "can you please"
+        "by",
+        "from",
+        "composed by",
+        "performed by"
       ],
-      "basename": "politeness",
+      "basename": "preposition",
       "canBeMerged": false,
       "index": 6
     },
     {
       "matches": [
-        "play",
-        "put on",
-        "start playing",
-        "begin"
+        "chopin",
+        "frédéric chopin",
+        "f. chopin",
+        "chopins",
+        "beethoven",
+        "mozart",
+        "bach"
       ],
-      "basename": "P:action",
-      "namespace": "player.play::fullActionName",
+      "basename": "M:artist",
+      "namespace": "player::parameters.artists.0",
       "canBeMerged": false,
       "index": 7
     },
     {
       "matches": [
-        "some",
-        "a bit of",
-        "a few",
-        "several"
+        "can you play",
+        "could you play",
+        "would you play",
+        "will you play"
       ],
-      "basename": "quantity",
+      "basename": "politeness",
       "canBeMerged": false,
       "index": 8
     },
     {
       "matches": [
-        "bach",
-        "johann sebastian bach",
-        "the composer bach",
-        "bach's music",
-        "classical",
-        "the well-tempered clavier",
-        "toccata and fugue",
-        "beethoven",
-        "mozart",
-        "chopin"
+        "some",
+        "any",
+        "a bit of",
+        "a little"
       ],
-      "basename": "P:artist",
-      "namespace": "player::parameters.query.0.constraint,player::parameters.query.0.text",
+      "basename": "filler",
       "canBeMerged": false,
       "index": 9
     },
     {
       "matches": [
-        "for me",
-        "to me",
-        "for my enjoyment",
-        "for my listening pleasure"
+        "bach",
+        "johann sebastian bach",
+        "j.s. bach",
+        "bach's music",
+        "beethoven",
+        "mozart",
+        "chopin"
       ],
-      "basename": "preposition",
+      "basename": "M:artist",
+      "namespace": "player::parameters.artist",
       "canBeMerged": false,
       "index": 10
+    },
+    {
+      "matches": [
+        "for me",
+        "to me",
+        "for myself",
+        "for my sake"
+      ],
+      "basename": "filler",
+      "canBeMerged": false,
+      "index": 11
+    },
+    {
+      "matches": [
+        "please",
+        "kindly",
+        "if you don't mind",
+        "if you please"
+      ],
+      "basename": "politeness",
+      "canBeMerged": false,
+      "index": 12
     }
   ],
   "constructionNamespaces": [
@@ -137,15 +169,10 @@
           "parts": [
             {
               "matchSet": "politeness_0",
-              "capture": false,
-              "optional": true,
-              "wildcard": false
+              "optional": true
             },
             {
-              "matchSet": "P:action_1",
-              "capture": true,
-              "optional": false,
-              "wildcard": false,
+              "matchSet": "M:action_1",
               "transformInfos": [
                 {
                   "namespace": "player.pause",
@@ -155,38 +182,18 @@
             },
             {
               "matchSet": "politeness_2",
-              "capture": false,
-              "optional": true,
-              "wildcard": false
+              "optional": true
             }
-          ],
-          "implicitParameters": []
+          ]
         },
         {
           "parts": [
             {
-              "matchSet": "politeness_3",
-              "capture": false,
-              "optional": true,
-              "wildcard": false
+              "matchSet": "politeness_0",
+              "optional": true
             },
             {
-              "matchSet": "P:action_4",
-              "capture": true,
-              "optional": false,
-              "wildcard": false,
-              "transformInfos": [
-                {
-                  "namespace": "player.pause",
-                  "transformName": "fullActionName"
-                }
-              ]
-            },
-            {
-              "matchSet": "P:object_5",
-              "capture": true,
-              "optional": false,
-              "wildcard": false,
+              "matchSet": "M:action_3",
               "transformInfos": [
                 {
                   "namespace": "player.pause",
@@ -196,72 +203,83 @@
             },
             {
               "matchSet": "politeness_2",
-              "capture": false,
-              "optional": true,
-              "wildcard": false
+              "optional": true
             }
-          ],
-          "implicitParameters": []
+          ]
         },
         {
           "parts": [
             {
-              "matchSet": "politeness_6",
-              "capture": false,
-              "optional": true,
-              "wildcard": false
+              "matchSet": "politeness_0",
+              "optional": true
             },
             {
-              "matchSet": "P:action_7",
-              "capture": true,
-              "optional": false,
-              "wildcard": false,
+              "matchSet": "M:action_4",
               "transformInfos": [
                 {
-                  "namespace": "player.play",
+                  "namespace": "player.playTrack",
                   "transformName": "fullActionName"
                 }
               ]
             },
             {
-              "matchSet": "quantity_8",
-              "capture": false,
-              "optional": false,
-              "wildcard": false
-            },
-            {
-              "matchSet": "P:artist_9",
-              "capture": true,
-              "optional": false,
-              "wildcard": false,
+              "matchSet": "M:trackName_5",
+              "wildcard": true,
               "transformInfos": [
                 {
                   "namespace": "player",
-                  "transformName": "parameters.query.0.constraint"
-                },
-                {
-                  "namespace": "player",
-                  "transformName": "parameters.query.0.text"
+                  "transformName": "parameters.trackName"
                 }
               ]
             },
             {
-              "matchSet": "preposition_10",
-              "capture": false,
-              "optional": true,
-              "wildcard": false
+              "matchSet": "preposition_6",
+              "optional": true
             },
             {
-              "matchSet": "politeness_2",
-              "capture": false,
-              "optional": true,
-              "wildcard": false
+              "matchSet": "M:artist_7",
+              "wildcard": true,
+              "transformInfos": [
+                {
+                  "namespace": "player",
+                  "transformName": "parameters.artists.0"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "parts": [
+            {
+              "matchSet": "politeness_8",
+              "optional": true
+            },
+            {
+              "matchSet": "filler_9",
+              "optional": true
+            },
+            {
+              "matchSet": "M:artist_10",
+              "transformInfos": [
+                {
+                  "namespace": "player",
+                  "transformName": "parameters.artist"
+                }
+              ]
+            },
+            {
+              "matchSet": "filler_11",
+              "optional": true
+            },
+            {
+              "matchSet": "politeness_12",
+              "optional": true
             }
           ],
           "implicitParameters": [
             {
-              "paramName": "parameters.quantity",
-              "paramValue": 5
+              "paramName": "fullActionName",
+              "paramValue": "player.playArtist"
             }
           ]
         }
@@ -279,35 +297,56 @@
               "pause",
               {
                 "value": "player.pause",
-                "original": true
+                "count": 1
               }
             ],
             [
               "stop",
               {
                 "value": "player.pause",
-                "original": false
+                "count": 0
               }
             ],
             [
               "halt",
               {
                 "value": "player.pause",
-                "original": false
+                "count": 0
               }
             ],
             [
-              "suspend",
+              "freeze",
               {
                 "value": "player.pause",
-                "original": false
+                "count": 0
               }
             ],
             [
-              "pause|the music",
+              "pause the music",
               {
                 "value": "player.pause",
-                "original": true
+                "count": 1
+              }
+            ],
+            [
+              "stop the music",
+              {
+                "value": "player.pause",
+                "count": 0
+              }
+            ],
+            [
+              "halt the music",
+              {
+                "value": "player.pause",
+                "count": 0
+              }
+            ],
+            [
+              "put the music on hold",
+              {
+                "value": "player.pause",
+                "count": 0
               }
             ]
           ]
@@ -315,7 +354,7 @@
       ]
     },
     {
-      "name": "player.play",
+      "name": "player.playTrack",
       "transforms": [
         {
           "name": "fullActionName",
@@ -323,29 +362,29 @@
             [
               "play",
               {
-                "value": "player.play",
-                "original": true
+                "value": "player.playTrack",
+                "count": 1
+              }
+            ],
+            [
+              "start",
+              {
+                "value": "player.playTrack",
+                "count": 0
               }
             ],
             [
               "put on",
               {
-                "value": "player.play",
-                "original": false
-              }
-            ],
-            [
-              "start playing",
-              {
-                "value": "player.play",
-                "original": false
+                "value": "player.playTrack",
+                "count": 0
               }
             ],
             [
               "begin",
               {
-                "value": "player.play",
-                "original": false
+                "value": "player.playTrack",
+                "count": 0
               }
             ]
           ]
@@ -356,109 +395,163 @@
       "name": "player",
       "transforms": [
         {
-          "name": "parameters.query.0.constraint",
+          "name": "parameters.trackName",
           "transform": [
             [
-              "bach",
+              "nocturne",
               {
-                "value": "artist",
-                "original": true
+                "value": "Nocturne",
+                "count": 1
               }
             ],
             [
-              "classical",
+              "prelude",
               {
-                "value": "genre",
-                "original": false
+                "value": "Prelude",
+                "count": 0
               }
             ],
             [
-              "the well-tempered clavier",
+              "etude",
               {
-                "value": "album",
-                "original": false
+                "value": "Etude",
+                "count": 0
               }
             ],
             [
-              "toccata and fugue",
+              "ballade",
               {
-                "value": "track",
-                "original": false
+                "value": "Ballade",
+                "count": 0
               }
             ],
             [
-              "johann sebastian bach",
+              "nocturnes",
               {
-                "value": "artist",
-                "original": false
+                "value": "Nocturne",
+                "count": 0
               }
             ],
             [
-              "the composer bach",
+              "nocturnal",
               {
-                "value": "artist",
-                "original": false
+                "value": "Nocturne",
+                "count": 0
               }
             ],
             [
-              "bach's music",
+              "nocturn",
               {
-                "value": "artist",
-                "original": false
+                "value": "Nocturne",
+                "count": 0
               }
             ]
           ]
         },
         {
-          "name": "parameters.query.0.text",
+          "name": "parameters.artists.0",
           "transform": [
             [
-              "bach",
+              "chopin",
               {
-                "value": "Bach",
-                "original": true
+                "value": "Chopin",
+                "count": 1
               }
             ],
             [
               "beethoven",
               {
                 "value": "Beethoven",
-                "original": false
+                "count": 0
               }
             ],
             [
               "mozart",
               {
                 "value": "Mozart",
-                "original": false
+                "count": 0
+              }
+            ],
+            [
+              "bach",
+              {
+                "value": "Bach",
+                "count": 0
+              }
+            ],
+            [
+              "frédéric chopin",
+              {
+                "value": "Chopin",
+                "count": 0
+              }
+            ],
+            [
+              "f. chopin",
+              {
+                "value": "Chopin",
+                "count": 0
+              }
+            ],
+            [
+              "chopins",
+              {
+                "value": "Chopin",
+                "count": 0
+              }
+            ]
+          ]
+        },
+        {
+          "name": "parameters.artist",
+          "transform": [
+            [
+              "bach",
+              {
+                "value": "Bach",
+                "count": 1
+              }
+            ],
+            [
+              "beethoven",
+              {
+                "value": "Beethoven",
+                "count": 0
+              }
+            ],
+            [
+              "mozart",
+              {
+                "value": "Mozart",
+                "count": 0
               }
             ],
             [
               "chopin",
               {
                 "value": "Chopin",
-                "original": false
+                "count": 0
               }
             ],
             [
               "johann sebastian bach",
               {
                 "value": "Bach",
-                "original": false
+                "count": 0
               }
             ],
             [
-              "the composer bach",
+              "j.s. bach",
               {
                 "value": "Bach",
-                "original": false
+                "count": 0
               }
             ],
             [
               "bach's music",
               {
                 "value": "Bach",
-                "original": false
+                "count": 0
               }
             ]
           ]

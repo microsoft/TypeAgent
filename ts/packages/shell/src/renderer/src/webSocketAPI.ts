@@ -118,8 +118,8 @@ export const webapi: ClientAPI = {
     onSettingSummaryChanged(callback) {
         fnMap.set("setting-summary-changed", callback);
     },
-    onMarkRequestExplained(callback) {
-        fnMap.set("mark-explained", callback);
+    onNotifyExplained(callback) {
+        fnMap.set("notifyExplained", callback);
     },
     onRandomCommandSelected(callback) {
         fnMap.set("update-random-command", callback);
@@ -377,9 +377,7 @@ export async function createWebSocket(
             switch (msg.data.event) {
                 case "explained":
                     if (msg.data.requestId === undefined) {
-                        console.warn(
-                            "markRequestExplained: requestId is undefined",
-                        );
+                        console.warn("notifyExplained: requestId is undefined");
                         return;
                     } else {
                         fnMap.get("mark-explained")(

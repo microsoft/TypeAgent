@@ -11,7 +11,7 @@ import { PromptSection } from "typechat";
 import { ChatModel } from "aiclient";
 import { AnswerResponse } from "./answerSchema.js";
 import { flatten } from "../setOperations.js";
-import { SearchResponse } from "./conversation.js";
+import { SearchResponse, TopKSettings } from "./searchResponse.js";
 import registerDebug from "debug";
 import { CompositeEntity } from "./entities.js";
 import { splitLargeTextIntoChunks } from "../textChunker.js";
@@ -26,6 +26,37 @@ export type AnswerSettings = {
     answerStyle: AnswerStyle | undefined;
     higherPrecision: boolean;
 };
+
+export type AnswerChunkingSettings = {
+    enable: boolean;
+    splitMessages?: boolean | undefined;
+    maxChunks?: number | undefined;
+    fastStop?: boolean | undefined;
+};
+
+export type AnswerGeneratorSettings = {
+    topK: TopKSettings;
+    chunking: AnswerChunkingSettings;
+    maxCharsInContext?: number | undefined;
+    concurrency?: number;
+    hints?: string | undefined;
+};
+
+export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
+    return {
+        topK: {
+            topicsTopK: 8,
+            entitiesTopK: 8,
+            actionsTopK: 0,
+        },
+        chunking: {
+            enable: false,
+            splitMessages: false,
+            fastStop: true,
+        },
+        maxCharsInContext: 1024 * 8,
+    };
+}
 
 export interface AnswerGenerator {
     settings: AnswerGeneratorSettings;
@@ -44,24 +75,6 @@ export interface AnswerGenerator {
             AnswerResponse | undefined
         >,
     ): Promise<AnswerResponse | undefined>;
-}
-
-export type AnswerGeneratorSettings = {
-    topKEntities: number;
-    topKActions: number;
-    maxCharsInContext?: number | undefined;
-    useChunking?: boolean | undefined;
-    maxChunks?: number | undefined;
-    concurrency?: number;
-    hints?: string | undefined;
-};
-
-export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
-    return {
-        topKEntities: 8,
-        topKActions: 0,
-        maxCharsInContext: 4096,
-    };
 }
 
 export function createAnswerGenerator(
@@ -104,7 +117,7 @@ export function createAnswerGenerator(
     ): Promise<AnswerResponse | undefined> {
         const context: AnswerContext = createContext(response);
 
-        if (isContextTooBig(context, response) && settings.useChunking) {
+        if (isContextTooBig(context, response) && settings.chunking?.enable) {
             // Run answer generation in chunks
             return await getAnswerInChunks(question, context, {
                 maxCharsPerChunk: settings.maxCharsInContext!,
@@ -125,12 +138,29 @@ export function createAnswerGenerator(
             AnswerResponse | undefined
         >,
     ): Promise<AnswerResponse | undefined> {
-        let chunks = [
-            ...splitAnswerContext(context, answerSettings.maxCharsPerChunk),
-        ];
-        if (settings.maxChunks && settings.maxChunks) {
-            chunks = chunks.slice(0, settings.maxChunks);
+        let chunks = splitContext(context, answerSettings.maxCharsPerChunk);
+        if (chunks.length === 0) {
+            return undefined;
         }
+        if (!chunks[0].messages) {
+            const structuredChunk = chunks[0];
+            // Structured only. Lets do it first, since it may have the full answer we needed
+            const structuredAnswer = await getAnswer(
+                question,
+                answerSettings.answerStyle,
+                answerSettings.higherPrecision,
+                structuredChunk,
+                false,
+            );
+            if (structuredAnswer && structuredAnswer.type === "Answered") {
+                return structuredAnswer;
+            }
+            chunks = chunks.slice(1);
+        }
+        if (chunks.length === 0) {
+            return undefined;
+        }
+        // Generate partial answers from each chunk
         const partialAnswers = await asyncArray.mapAsync(
             chunks,
             settings.concurrency ?? 2,
@@ -142,31 +172,18 @@ export function createAnswerGenerator(
                     chunk,
                     false,
                 ),
-            progress,
-        );
-        let answer = "";
-        let whyNoAnswer: string | undefined;
-        for (const partialAnswer of partialAnswers) {
-            if (partialAnswer) {
-                if (partialAnswer.type === "Answered") {
-                    answer += partialAnswer.answer + "\n";
-                } else {
-                    whyNoAnswer ??= partialAnswer.whyNoAnswer;
+            (context, index, response) => {
+                if (progress) {
+                    progress(context, index, response);
                 }
-            }
-        }
-        if (answer.length > 0) {
-            answer = (await rewriteAnswer(question, answer)) ?? answer;
-            return {
-                type: "Answered",
-                answer,
-            };
-        }
-        whyNoAnswer ??= "";
-        return {
-            type: "NoAnswer",
-            whyNoAnswer,
-        };
+                if (settings.chunking.fastStop) {
+                    // Return false if mapAsync should stop
+                    return response && response.type !== "Answered";
+                }
+            },
+        );
+
+        return await combinePartialAnswers(question, partialAnswers);
     }
 
     async function getAnswer(
@@ -194,6 +211,39 @@ export function createAnswerGenerator(
         );
         const result = await translator.translate(prompt, [contextSection]);
         return result.success ? result.data : undefined;
+    }
+
+    async function combinePartialAnswers(
+        question: string,
+        partialAnswers: (AnswerResponse | undefined)[],
+    ): Promise<AnswerResponse> {
+        let answer = "";
+        let whyNoAnswer: string | undefined;
+        let answerCount = 0;
+        for (const partialAnswer of partialAnswers) {
+            if (partialAnswer) {
+                if (partialAnswer.type === "Answered") {
+                    answerCount++;
+                    answer += partialAnswer.answer + "\n";
+                } else {
+                    whyNoAnswer ??= partialAnswer.whyNoAnswer;
+                }
+            }
+        }
+        if (answer.length > 0) {
+            if (answerCount > 1) {
+                answer = (await rewriteAnswer(question, answer)) ?? answer;
+            }
+            return {
+                type: "Answered",
+                answer,
+            };
+        }
+        whyNoAnswer ??= "";
+        return {
+            type: "NoAnswer",
+            whyNoAnswer,
+        };
     }
 
     async function rewriteAnswer(
@@ -253,11 +303,11 @@ export function createAnswerGenerator(
         const context: AnswerContext = {
             entities: {
                 timeRanges: response.entityTimeRanges(),
-                values: response.mergeAllEntities(settings!.topKEntities),
+                values: response.getEntities(settings.topK.entitiesTopK),
             },
             topics: {
                 timeRanges: response.topicTimeRanges(),
-                values: response.mergeAllTopics(),
+                values: response.getTopics(),
             },
             messages:
                 response.messages && response.messages.length > 0
@@ -269,16 +319,25 @@ export function createAnswerGenerator(
                       })
                     : [],
         };
-        if (settings.topKActions > 0 && response.hasActions()) {
-            const actions = response.mergeAllActions(settings!.topKActions);
+        if (settings.topK.actionsTopK > 0 && response.hasActions()) {
+            const actions = response.getActions(settings.topK.actionsTopK);
             if (actions.length > 0) {
                 context.actions = {
                     timeRanges: response.actionTimeRanges(),
-                    values: response.mergeAllActions(settings!.topKActions),
+                    values: response.getActions(settings.topK.actionsTopK),
                 };
             }
         }
         return context;
+    }
+
+    function splitContext(context: AnswerContext, maxCharsPerChunk: number) {
+        let chunks = [...splitAnswerContext(context, maxCharsPerChunk)];
+        const maxChunks = settings.chunking.maxChunks;
+        if (maxChunks && maxChunks > 0) {
+            chunks = chunks.slice(0, maxChunks);
+        }
+        return chunks;
     }
 
     function trimContext(content: string, maxLength: number): string {
@@ -305,7 +364,7 @@ export function createAnswerGenerator(
     }
 
     function getMaxContextLength(): number {
-        return settings?.maxCharsInContext ?? 1000 * 30;
+        return settings?.maxCharsInContext ?? 1000 * 20;
     }
 }
 
@@ -331,21 +390,12 @@ export function* splitAnswerContext(
     maxCharsPerChunk: number,
     splitMessages: boolean = false,
 ): IterableIterator<AnswerContext> {
-    let curChunk: AnswerContext = {};
+    let curChunk = splitStructuredChunks(context);
     let curChunkLength = 0;
-    // TODO: split entities, topics, actions
-    if (context.entities) {
-        curChunk.entities = context.entities;
-    }
-    if (context.topics) {
-        curChunk.topics = context.topics;
-    }
-    if (context.actions) {
-        curChunk.actions = context.actions;
-    }
     yield curChunk;
-    newChunk();
+
     if (context.messages) {
+        newChunk();
         if (splitMessages) {
             for (const message of context.messages) {
                 for (const messageChunk of splitLargeTextIntoChunks(
@@ -412,4 +462,20 @@ export function answerContextToString(context: AnswerContext): string {
         propertyCount++;
         return text;
     }
+}
+
+function splitStructuredChunks(context: AnswerContext): AnswerContext {
+    // TODO: split entities, topics, actions
+
+    const chunk: AnswerContext = {};
+    if (context.entities) {
+        chunk.entities = context.entities;
+    }
+    if (context.topics) {
+        chunk.topics = context.topics;
+    }
+    if (context.actions) {
+        chunk.actions = context.actions;
+    }
+    return chunk;
 }

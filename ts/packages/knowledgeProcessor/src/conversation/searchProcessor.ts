@@ -1,25 +1,22 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SearchOptions, lookupAnswersOnWeb } from "typeagent";
+import { SearchOptions } from "typeagent";
 import {
     Conversation,
     ConversationSearchOptions,
     SearchActionResponse,
-    SearchResponse,
     SearchTermsActionResponse,
     SearchTermsActionResponseV2,
-    createSearchResponse,
 } from "./conversation.js";
+import { SearchResponse } from "./searchResponse.js";
 import {
     Filter,
     GetAnswerAction,
-    WebLookupAction,
     ResponseStyle,
-} from "./knowledgeSearchWebSchema.js";
+} from "./knowledgeSearchSchema.js";
 import { SetOp } from "../setOperations.js";
 import {
-    KnowledgeSearchMode,
     KnowledgeActionTranslator,
     createKnowledgeActionTranslator,
 } from "./knowledgeActions.js";
@@ -40,19 +37,18 @@ import {
     SearchTermsActionV2,
     TermFilterV2,
 } from "./knowledgeTermSearchSchema2.js";
+import { createTopicSearchOptions } from "./topics.js";
 
 export type SearchProcessingOptions = {
     maxMatches: number;
     minScore: number;
     maxMessages: number;
     fallbackSearch?: SearchOptions | undefined;
-    includeActions?: boolean;
     skipAnswerGeneration?: boolean;
     progress?: ((action: any) => void) | undefined;
 };
 
 export interface ConversationSearchProcessor {
-    searchMode: KnowledgeSearchMode;
     actions: KnowledgeActionTranslator;
     answers: AnswerGenerator;
     search(
@@ -87,20 +83,11 @@ export function createSearchProcessor(
     conversation: Conversation,
     actionModel: ChatModel,
     answerModel: ChatModel,
-    searchMode: KnowledgeSearchMode = KnowledgeSearchMode.Default,
 ): ConversationSearchProcessor {
-    const searchTranslator = createKnowledgeActionTranslator(
-        actionModel,
-        searchMode,
-    );
-    const searchTranslator_NoActions = createKnowledgeActionTranslator(
-        actionModel,
-        KnowledgeSearchMode.Default,
-    );
+    const searchTranslator = createKnowledgeActionTranslator(actionModel);
     const answers = createAnswerGenerator(answerModel);
 
     return {
-        searchMode,
         actions: searchTranslator,
         answers,
         search,
@@ -115,9 +102,10 @@ export function createSearchProcessor(
         options: SearchProcessingOptions,
     ): Promise<SearchActionResponse | undefined> {
         const context = await buildContext();
-        const actionResult = options.includeActions
-            ? await searchTranslator.translateSearch(query, context)
-            : await searchTranslator_NoActions.translateSearch(query, context);
+        const actionResult = await searchTranslator.translateSearch(
+            query,
+            context,
+        );
         if (!actionResult.success) {
             return undefined;
         }
@@ -133,9 +121,6 @@ export function createSearchProcessor(
                 break;
             case "getAnswer":
                 rr.response = await handleGetAnswers(query, rr.action, options);
-                break;
-            case "webLookup":
-                rr.response = await handleLookup(query, rr.action, options);
                 break;
         }
 
@@ -265,17 +250,15 @@ export function createSearchProcessor(
             topicLevel,
             loadMessages: responseType === "Answer" || hasActionFilter(action),
         };
-        if (options.includeActions) {
-            searchOptions.action = {
-                maxMatches: options.maxMatches,
+        searchOptions.action = {
+            maxMatches: options.maxMatches,
+            minScore: options.minScore,
+            verbSearchOptions: {
+                maxMatches: 1,
                 minScore: options.minScore,
-                verbSearchOptions: {
-                    maxMatches: 1,
-                    minScore: options.minScore,
-                },
-                loadActions: false,
-            };
-        }
+            },
+            loadActions: false,
+        };
 
         adjustRequest(query, action, searchOptions);
 
@@ -316,6 +299,7 @@ export function createSearchProcessor(
             searchOptions,
         );
         await adjustMessages(query, response, searchOptions, options);
+        response.topKSettings = answers.settings.topK;
         if (!options.skipAnswerGeneration) {
             await generateAnswerForSearchTerms(
                 query,
@@ -343,6 +327,7 @@ export function createSearchProcessor(
             searchOptions,
         );
         await adjustMessages(query, response, searchOptions, options);
+        response.topKSettings = answers.settings.topK;
         if (!options.skipAnswerGeneration) {
             await generateAnswerForSearchTerms(query, response, options);
         }
@@ -384,29 +369,6 @@ export function createSearchProcessor(
                 options.fallbackSearch,
             );
         }
-    }
-
-    async function handleLookup(
-        query: string,
-        lookup: WebLookupAction,
-        options: SearchProcessingOptions,
-    ): Promise<SearchResponse> {
-        const answer = await lookupAnswersOnWeb(
-            answerModel,
-            query,
-            options.maxMatches,
-            {
-                maxCharsPerChunk: 4096,
-                maxTextLengthToSearch: 4096 * 16,
-                rewriteForReadability: false,
-            },
-        );
-        const response = createSearchResponse(1);
-        response.answer = {
-            type: answer.answer.type === "NoAnswer" ? "NoAnswer" : "Answered",
-            answer: answer.answer.answer,
-        };
-        return response;
     }
 
     function isTopicSummaryRequest(action: GetAnswerAction): boolean {
@@ -584,8 +546,10 @@ export function createSearchProcessor(
         topLevelTopicSummary: boolean,
         options: SearchProcessingOptions,
         loadActions: boolean = false,
-    ) {
+    ): ConversationSearchOptions {
         const topicLevel = topLevelTopicSummary ? 2 : 1;
+        const topicOptions = createTopicSearchOptions(topLevelTopicSummary);
+        topicOptions.minScore = options.minScore;
         const searchOptions: ConversationSearchOptions = {
             entity: {
                 maxMatches: options.maxMatches,
@@ -593,27 +557,19 @@ export function createSearchProcessor(
                 matchNameToType: true,
                 loadEntities: true,
             },
-            topic: {
-                maxMatches: topLevelTopicSummary
-                    ? Number.MAX_SAFE_INTEGER
-                    : options.maxMatches,
-                minScore: options.minScore,
-                loadTopics: true,
-            },
+            topic: topicOptions,
             topicLevel,
             loadMessages: !topLevelTopicSummary,
         };
-        if (options.includeActions) {
-            searchOptions.action = {
-                maxMatches: options.maxMatches,
+        searchOptions.action = {
+            maxMatches: options.maxMatches,
+            minScore: options.minScore,
+            verbSearchOptions: {
+                maxMatches: 1,
                 minScore: options.minScore,
-                verbSearchOptions: {
-                    maxMatches: 1,
-                    minScore: options.minScore,
-                },
-                loadActions,
-            };
-        }
+            },
+            loadActions,
+        };
         return searchOptions;
     }
 }
@@ -626,7 +582,7 @@ export function getAllTermsInFilter(
     if (action) {
         let terms: string[] = [];
         if (includeVerbs && action.verbs) {
-            terms.push(...action.verbs.verbs);
+            terms.push(...action.verbs.words);
         }
         if (action.subject) {
             terms.push(action.subject);

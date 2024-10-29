@@ -65,6 +65,15 @@ public class EmailExporter
         }
     }
 
+    public void ExportFrom(string senderName)
+    {
+        List<Email> emails = _outlook.LoadFrom(senderName);
+        foreach(var email in emails)
+        {
+            Console.WriteLine(email.ToString());
+        }
+    }
+
     string DestFilePath(string sourceFilePath, string destFolderPath)
     {
         return Path.Join(destFolderPath, Path.GetFileNameWithoutExtension(sourceFilePath) + ".json");
@@ -108,23 +117,29 @@ public class EmailExporter
         {
             return;
         }
-        bool print = args[0] == "--print";
         try
         {
             using Outlook outlook = new Outlook();
             var exporter = new EmailExporter(outlook);
-            if (print)
+            switch(args[0])
             {
-                if (args.Length < 1)
-                {
-                    return;
-                }
-                exporter.PrintEmail(args[1]);
-                Console.ReadLine();
-                return;
-            }
+                default:
+                    exporter.Export(args.ElementAtOrDefault(0), args.ElementAtOrDefault(1));
+                    break;
 
-            exporter.Export(args.ElementAtOrDefault(0), args.ElementAtOrDefault(1));
+                case "--sender":
+                    exporter.ExportFrom(args.GetArg(1));
+                    break;
+
+                case "--print":
+                    exporter.PrintEmail(args.GetArg(1));
+                    Console.ReadLine();
+                    return;
+            }
+        }
+        catch(System.Exception ex)
+        {
+            LogError(ex);
         }
         finally
         {
@@ -168,6 +183,5 @@ public class EmailExporter
         Console.ForegroundColor = color;
         Console.WriteLine(message);
         Console.ForegroundColor = prevColor;
-
     }
 }

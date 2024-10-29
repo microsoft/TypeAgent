@@ -51,9 +51,38 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { DispatcherName } from "./common/interactiveIO.js";
 import { getActionTemplateEditConfig } from "../translation/actionTemplate.js";
+import { getActionInfo, validateAction } from "../translation/actionInfo.js";
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
+
+function validateReplaceActions(
+    actions: unknown,
+    systemContext: CommandHandlerContext,
+): actions is FullAction[] {
+    if (actions === null) {
+        throw new Error("Request cancelled");
+    }
+    if (actions === undefined) {
+        return false;
+    }
+    if (!Array.isArray(actions)) {
+        throw new Error("Invalid replacement");
+    }
+    for (const action of actions) {
+        if (typeof action !== "object") {
+            throw new Error("Invalid replacement");
+        }
+        const actionInfo = getActionInfo(action, systemContext);
+        if (actionInfo === undefined) {
+            throw new Error("Invalid replacement");
+        }
+
+        validateAction(actionInfo, action);
+    }
+
+    return true;
+}
 
 async function confirmTranslation(
     elapsedMs: number,
@@ -95,17 +124,12 @@ async function confirmTranslation(
         editPreface,
     );
 
-    // TODO: Need to validate
-    const newActions = (await systemContext.requestIO.proposeAction(
+    const newActions = await systemContext.requestIO.proposeAction(
         templateSequence,
         DispatcherName,
-    )) as FullAction[] | undefined | null;
+    );
 
-    if (newActions === null) {
-        throw new Error("Request cancelled");
-    }
-
-    return newActions
+    return validateReplaceActions(newActions, systemContext)
         ? {
               requestAction: new RequestAction(
                   requestAction.request,
@@ -562,11 +586,6 @@ export async function translateRequest(
     return requestAction;
 }
 
-// remove whitespace from a string, except for whitespace within quotes
-function removeUnquotedWhitespace(str: string) {
-    return str.replace(/\s(?=(?:(?:[^"]*"){2})*[^"]*$)/g, "");
-}
-
 function canExecute(
     requestAction: RequestAction,
     context: ActionContext<CommandHandlerContext>,
@@ -668,8 +687,14 @@ async function requestExplain(
     );
 
     if (context.explanationAsynchronousMode) {
-        // TODO: result/error handler in Asynchronous mode
-        processRequestActionP.then(notifyExplained).catch();
+        processRequestActionP.then(notifyExplained).catch((e) =>
+            context.requestIO.notify("explained", requestId, {
+                error: e.message,
+                fromCache,
+                fromUser,
+                time: new Date().toLocaleTimeString(),
+            }),
+        );
     } else {
         console.log(
             chalk.grey(`Generating explanation for '${requestAction}'`),

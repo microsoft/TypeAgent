@@ -3,7 +3,6 @@
 
 import { ChatModel, openai } from "aiclient";
 import { CommandHandler, InteractiveIo, displayHelp } from "interactive-app";
-import Path from "path";
 
 export interface SchemaStudio {
     readonly model: ChatModel;
@@ -11,11 +10,7 @@ export interface SchemaStudio {
 }
 
 export async function createStudio(): Promise<SchemaStudio> {
-    const model = openai.createChatModel(
-        [Path.parse(__filename).name],
-        undefined,
-        { temperature: 0.3 },
-    );
+    const model = openai.createChatModelDefault("schemaStudio");
     const studio = {
         model,
         commands: {

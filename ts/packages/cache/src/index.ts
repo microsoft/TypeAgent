@@ -51,10 +51,3 @@ export {
     printProcessRequestActionResult,
     printImportConstructionResult,
 } from "./utils/print.js";
-
-// REVIEW: For experimentation with specialized explainers.  Need to examine whether we want to support this long term.
-export {
-    buildExplanationInstructions,
-    createExplainer,
-    Explainer,
-} from "./explanation/explainer.js";

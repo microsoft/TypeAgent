@@ -5,7 +5,9 @@ import { ISymbol, SchemaParser, NodeType } from "schema-parser";
 import { TranslatorConfig } from "./agentTranslators.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { FullAction } from "agent-cache";
-import { getObjectProperty } from "common-utils";
+import { AppAction } from "@typeagent/agent-sdk";
+import { CommandHandlerContext } from "../internal.js";
+import { DeepPartialUndefined } from "common-utils";
 
 export type ActionParamPrimitive = {
     type: "string" | "number" | "boolean";
@@ -41,12 +43,14 @@ export type ActionParamField =
     | ActionParamArray;
 
 export type ActionInfo = {
+    translatorName: string;
     actionName: string;
     comments: string;
     parameters?: ActionParamObject | undefined;
 };
 
-function getActionInfo(
+function parseActionInfo(
+    translatorName: string,
     actionTypeName: string,
     parser: SchemaParser,
 ): ActionInfo | undefined {
@@ -74,6 +78,7 @@ function getActionInfo(
     }
     if (actionName !== undefined && comments !== undefined) {
         return {
+            translatorName,
             actionName,
             comments,
             parameters,
@@ -97,7 +102,7 @@ export function getTranslatorActionInfos(
 
     const actionInfo = new Map<string, ActionInfo>();
     for (const actionTypeName of parser.actionTypeNames()) {
-        const info = getActionInfo(actionTypeName, parser);
+        const info = parseActionInfo(translatorName, actionTypeName, parser);
         if (info) {
             actionInfo.set(info.actionName, info);
         }
@@ -402,4 +407,21 @@ export function getParameterType(actionInfo: ActionInfo, name: string) {
         }
     }
     return curr;
+}
+
+export function getActionInfo(
+    action: DeepPartialUndefined<AppAction>,
+    systemContext: CommandHandlerContext,
+) {
+    const { translatorName, actionName } = action;
+    if (translatorName === undefined || actionName === undefined) {
+        return undefined;
+    }
+    const config = systemContext.agents.tryGetTranslatorConfig(translatorName);
+    if (config === undefined) {
+        return undefined;
+    }
+
+    const actionInfos = getTranslatorActionInfos(config, translatorName);
+    return actionInfos.get(actionName);
 }

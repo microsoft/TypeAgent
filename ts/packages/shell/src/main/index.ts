@@ -23,6 +23,7 @@ import {
     createDispatcher,
     RequestId,
     Dispatcher,
+    NotifyExplainedData,
 } from "agent-dispatcher";
 
 import { IAgentMessage, TemplateEditConfig } from "agent-dispatcher";
@@ -31,6 +32,8 @@ import { unlinkSync } from "fs";
 import { existsSync } from "node:fs";
 import { AppAgentEvent, DisplayAppendMode } from "@typeagent/agent-sdk";
 import { shellAgentProvider } from "./agent.js";
+import { BrowserAgentIpc } from "./browserIpc.js";
+import { WebSocketMessage } from "common-utils";
 
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
@@ -53,6 +56,8 @@ let inlineBrowserView: BrowserView | null = null;
 let chatView: BrowserView | null = null;
 
 const inlineBrowserSize = 1000;
+const userAgent =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0";
 
 function setContentSize() {
     if (mainWindow && chatView) {
@@ -116,12 +121,23 @@ function createWindow(dispatcher: Dispatcher): void {
         height: ShellSettings.getinstance().height,
     });
 
+    mainWindow.webContents.setUserAgent(userAgent);
+
     chatView = new BrowserView({
         webPreferences: {
             preload: join(__dirname, "../preload/index.mjs"),
             sandbox: false,
             zoomFactor: ShellSettings.getinstance().zoomLevel,
         },
+    });
+
+    chatView.webContents.setUserAgent(userAgent);
+
+    // ensure links are openend in a new browser window
+    chatView.webContents.setWindowOpenHandler((details) => {
+        // TODO: add logic for keeping things in the browser window
+        shell.openExternal(details.url);
+        return { action: "deny" };
     });
 
     setContentSize();
@@ -138,11 +154,6 @@ function createWindow(dispatcher: Dispatcher): void {
         }
     });
 
-    mainWindow.webContents.setWindowOpenHandler((details) => {
-        shell.openExternal(details.url);
-        return { action: "deny" };
-    });
-
     mainWindow.on("close", () => {
         if (mainWindow) {
             ShellSettings.getinstance().zoomLevel =
@@ -150,6 +161,7 @@ function createWindow(dispatcher: Dispatcher): void {
             ShellSettings.getinstance().devTools =
                 mainWindow.webContents.isDevToolsOpened();
 
+            mainWindow.hide();
             ShellSettings.getinstance().closeInlineBrowser();
             ShellSettings.getinstance().size = mainWindow.getSize();
         }
@@ -249,6 +261,8 @@ function createWindow(dispatcher: Dispatcher): void {
                 },
             });
 
+            inlineBrowserView.webContents.setUserAgent(userAgent);
+
             mainWindow?.addBrowserView(inlineBrowserView);
 
             setupDevToolsHandlers(inlineBrowserView);
@@ -262,7 +276,7 @@ function createWindow(dispatcher: Dispatcher): void {
 
         inlineBrowserView?.webContents.loadURL(targetUrl.toString());
         inlineBrowserView?.webContents.on("did-finish-load", () => {
-            inlineBrowserView?.webContents.send("setupSiteAgent");
+            inlineBrowserView?.webContents.send("init-site-agent");
         });
     };
 
@@ -282,6 +296,19 @@ function createWindow(dispatcher: Dispatcher): void {
             setContentSize();
         }
     };
+
+    ipcMain.handle("init-browser-ipc", async () => {
+        await BrowserAgentIpc.getinstance().ensureWebsocketConnected();
+
+        BrowserAgentIpc.getinstance().onMessageReceived = (
+            message: WebSocketMessage,
+        ) => {
+            inlineBrowserView?.webContents.send(
+                "received-from-browser-ipc",
+                message,
+            );
+        };
+    });
 }
 
 /**
@@ -407,24 +434,13 @@ function updateDisplay(message: IAgentMessage, mode?: DisplayAppendMode) {
     chatView?.webContents.send("updateDisplay", message, mode);
 }
 
-function markRequestExplained(
-    requestId: RequestId,
-    timestamp: string,
-    fromCache?: boolean,
-    fromUser?: boolean,
-) {
+function notifyExplained(requestId: RequestId, data: NotifyExplainedData) {
     // Ignore message without requestId
     if (requestId === undefined) {
-        console.warn("markRequestExplained: requestId is undefined");
+        console.warn("notifyExplained: requestId is undefined");
         return;
     }
-    chatView?.webContents.send(
-        "mark-explained",
-        requestId,
-        timestamp,
-        fromCache,
-        fromUser,
-    );
+    chatView?.webContents.send("notifyExplained", requestId, data);
 }
 
 function updateRandomCommandSelected(requestId: RequestId, message: string) {
@@ -544,12 +560,7 @@ const clientIO: ClientIO = {
     notify(event: string, requestId: RequestId, data: any, source: string) {
         switch (event) {
             case "explained":
-                markRequestExplained(
-                    requestId,
-                    data.time,
-                    data.fromCache,
-                    data.fromUser,
-                );
+                notifyExplained(requestId, data);
                 break;
             case "randomCommandSelected":
                 updateRandomCommandSelected(requestId, data.message);
@@ -679,7 +690,7 @@ app.whenReady().then(async () => {
             );
 
             mainWindow?.setTitle(
-                `${newSettingSummary} Zoom: ${ShellSettings.getinstance().zoomLevel * 100}%`,
+                `${newSettingSummary} Zoom: ${Math.round(chatView?.webContents.zoomFactor! * 100)}%`,
             );
         }
 
@@ -752,12 +763,18 @@ app.whenReady().then(async () => {
         );
 
         mainWindow?.setTitle(
-            `${settingSummary} Zoom: ${ShellSettings.getinstance().zoomLevel * 100}%`,
+            `${settingSummary} Zoom: ${Math.round(chatView?.webContents.zoomFactor! * 100)}%`,
         );
         mainWindow?.show();
 
         // Send settings asap
         ShellSettings.getinstance().onSettingsChanged!();
+
+        // make sure links are opened in the external browser
+        mainWindow?.webContents.setWindowOpenHandler((details) => {
+            require("electron").shell.openExternal(details.url);
+            return { action: "deny" };
+        });
     });
 
     await initializeSpeech(dispatcher);
@@ -780,6 +797,13 @@ app.whenReady().then(async () => {
     globalShortcut.register("Alt+Right", () => {
         chatView?.webContents.send("send-demo-event", "Alt+Right");
     });
+
+    ipcMain.on(
+        "send-to-browser-ipc",
+        async (_event, data: WebSocketMessage) => {
+            await BrowserAgentIpc.getinstance().send(data);
+        },
+    );
 
     // Default open or close DevTools by F12 in development
     // and ignore CommandOrControl + R in production.
@@ -827,6 +851,8 @@ function zoomIn(chatView: BrowserView) {
         "zoomLevel",
         chatView.webContents.zoomLevel,
     );
+
+    updateZoomInTitle(chatView);
 }
 
 function zoomOut(chatView: BrowserView) {
@@ -836,6 +862,25 @@ function zoomOut(chatView: BrowserView) {
         "zoomLevel",
         chatView.webContents.zoomLevel,
     );
+
+    updateZoomInTitle(chatView);
+}
+
+function resetZoom(chatView: BrowserView) {
+    chatView.webContents.zoomLevel = 0;
+    ShellSettings.getinstance().set("zoomLevel", 0);
+    updateZoomInTitle(chatView);
+}
+
+function updateZoomInTitle(chatView: BrowserView) {
+    const prevTitle = mainWindow?.getTitle();
+    if (prevTitle) {
+        let summary = prevTitle.substring(0, prevTitle.indexOf("Zoom: "));
+
+        mainWindow?.setTitle(
+            `${summary}Zoom: ${Math.round(chatView.webContents.zoomFactor * 100)}%`,
+        );
+    }
 }
 
 const isMac = process.platform === "darwin";
@@ -851,8 +896,7 @@ function setupZoomHandlers(chatView: BrowserView) {
             } else if (input.key === "-" || input.key === "NumpadMinus") {
                 zoomOut(chatView);
             } else if (input.key === "0") {
-                chatView.webContents.zoomLevel = 0;
-                ShellSettings.getinstance().set("zoomLevel", 0);
+                resetZoom(chatView);
             }
         }
     });

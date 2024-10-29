@@ -51,7 +51,7 @@ export function createPropertyExplainer(
                 (enableContext
                     ? `For each property, explain which substring of the request or entities in the conversation history is used to compute the value. ${substringRequirement}\n`
                     : `For each property, explain which substring of the request is used to compute the value. ${substringRequirement}\n`) +
-                getActionDescription(requestAction, false)
+                getActionDescription(requestAction)
             );
         },
         (requestAction) => requestAction.toPromptString(true),
@@ -70,6 +70,9 @@ export function isEntityParameter(
 ): parameter is EntityProperty {
     return parameter.hasOwnProperty("entityIndex");
 }
+
+// REVIEW: disable entity constructions.
+const enableEntityConstructions = false;
 
 function validatePropertyExplanation(
     requestAction: RequestAction,
@@ -103,6 +106,11 @@ function validatePropertyExplanation(
 
         if (!isImplicitParameter(prop)) {
             if (isEntityParameter(prop) && prop.entityIndex !== undefined) {
+                if (enableEntityConstructions === false) {
+                    throw new Error(
+                        "Request has references to entities in the context",
+                    );
+                }
                 const entities = requestAction.history?.entities;
                 if (
                     entities === undefined ||
