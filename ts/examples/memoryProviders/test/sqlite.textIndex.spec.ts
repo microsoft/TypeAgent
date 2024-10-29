@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import { createDb } from "../src/sqlite/common.js";
 import { createStringTable } from "../src/sqlite/textIndex.js";
 import { ensureTestDir, testFilePath } from "./testCore.js";
