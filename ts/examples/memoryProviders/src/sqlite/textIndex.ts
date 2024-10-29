@@ -16,20 +16,26 @@ export function createStringTable(
     tableName: string,
     ensureExists: boolean = true,
 ): StringTable {
+    const schemaSql = `  
+    CREATE TABLE IF NOT EXISTS ${tableName} (  
+      stringId INTEGER PRIMARY KEY AUTOINCREMENT,
+      value TEXT NOT NULL,
+      UNIQUE(value)  
+    );`;
+
     if (ensureExists) {
-        ensureTable();
+        db.exec(schemaSql);
     }
 
-    const idSql = db.prepare(`SELECT stringId from ${tableName}`);
-    const valuesSql = db.prepare(`SELECT value from ${tableName}`);
-    const getIdSql = db.prepare(
+    const sql_ids = db.prepare(`SELECT stringId from ${tableName}`);
+    const sql_values = db.prepare(`SELECT value from ${tableName}`);
+    const sql_getId = db.prepare(
         `SELECT stringId from ${tableName} where value = ?`,
     );
-    const addSql = db.prepare(
+    const sql_add = db.prepare(
         `INSERT OR IGNORE INTO ${tableName} (value) VALUES (?)`,
     );
-    const removeSql = db.prepare(`DELETE FROM ${tableName} WHERE value = ?`);
-
+    const sql_remove = db.prepare(`DELETE FROM ${tableName} WHERE value = ?`);
     return {
         ids,
         values,
@@ -38,30 +44,20 @@ export function createStringTable(
         remove,
     };
 
-    function ensureTable() {
-        const schemaSql = `  
-    CREATE TABLE IF NOT EXISTS ${tableName} (  
-      stringId INTEGER PRIMARY KEY AUTOINCREMENT,
-      value TEXT NOT NULL,
-      UNIQUE(value)  
-    );`;
-        db.exec(schemaSql);
-    }
-
     function* ids(): IterableIterator<number> {
-        for (const id of idSql.iterate()) {
+        for (const id of sql_ids.iterate()) {
             yield id as number;
         }
     }
 
     function* values(): IterableIterator<string> {
-        for (const value of valuesSql.iterate()) {
+        for (const value of sql_values.iterate()) {
             yield value as string;
         }
     }
 
     function getId(value: string): number | undefined {
-        const row: StringTableRow = getIdSql.get(value) as StringTableRow;
+        const row: StringTableRow = sql_getId.get(value) as StringTableRow;
         return row ? row.stringId : undefined;
     }
 
@@ -69,11 +65,16 @@ export function createStringTable(
         if (!value) {
             throw Error("value is empty");
         }
-        return addSql.run(value).lastInsertRowid as number;
+        const result = sql_add.run(value);
+        if (result.changes > 0) {
+            return result.lastInsertRowid as number;
+        }
+        const row = sql_getId.get(value) as StringTableRow;
+        return row.stringId;
     }
 
     function remove(value: string) {
-        removeSql.run(value);
+        sql_remove.run(value);
     }
 
     type StringTableRow = {
@@ -81,5 +82,3 @@ export function createStringTable(
         value: string;
     };
 }
-
-//export async function createKeyValueIndex(db: sqlite.Database) {}

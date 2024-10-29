@@ -3,3 +3,4 @@
 
 export * from "./common.js";
 export * from "./textIndex.js";
+export * from "./keyValueIndex.js";
