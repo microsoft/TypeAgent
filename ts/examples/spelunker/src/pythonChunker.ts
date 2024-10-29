@@ -43,12 +43,11 @@ export async function chunkifyPythonFile(
     let output,
         errors,
         success = false;
-        try {
+    try {
         const chunkerPath = path.join(__dirname, "chunker.py");
         let { stdout, stderr } = await execPromise(
             `python3 ${chunkerPath} ${filename}`,
             { maxBuffer: 16 * 1024 * 1024 }, // Extra large buffer
-
         );
         output = stdout;
         errors = stderr;

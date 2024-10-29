@@ -28,16 +28,17 @@ TypeScript, of course).
 import * as fs from "fs";
 import * as path from "path";
 
-import { asyncArray, ObjectFolder, SemanticIndex } from "typeagent";
+import { asyncArray, ObjectFolder } from "typeagent";
+import { CodeBlock, SemanticCodeIndex } from "code-processor";
 
 import { Chunk, chunkifyPythonFile } from "./pythonChunker.js";
-import { ChatModelWithStreaming } from "aiclient";
+import { ChatModel } from "aiclient";
 
 export async function importPythonFile(
     file: string,
     objectFolder: ObjectFolder<Chunk>,
-    codeIndex: SemanticIndex<string>,
-    chatModel: ChatModelWithStreaming,
+    codeIndex: SemanticCodeIndex,
+    chatModel: ChatModel,
 ): Promise<void> {
     let filename = fs.realpathSync(file);
     const result = await chunkifyPythonFile(filename);
@@ -53,26 +54,37 @@ export async function importPythonFile(
         chunk.filename = filename;
     }
 
-    // Store the chunks in the database (concurrently).
-    const promises: Promise<any>[] = chunks.map((chunk) =>
-        objectFolder.put(chunk, chunk.id),
-    );
-    await Promise.all(promises);
-
-    // Compute and store embeddings (not concurrently -- I get 429 errors).
-    await asyncArray.forEachAsync(chunks, 1, async (chunk) => {
-        console.log(`[Embedding ${chunk.id}]`);
+    // Compute and store embedding.
+    await asyncArray.forEachAsync(chunks, 4, async (chunk) => {
+        const putCall = objectFolder.put(chunk, chunk.id);
+        const lineCount = chunk.blobs.reduce(
+            (acc, blob) => acc + blob.lines.length,
+            0,
+        );
+        const t0 = Date.now();
         const rawText = makeChunkText(chunk);
-        const prompt = "Understand the included code and document it where necessary, especially complicated loops.\n" +
-            "The docs must be: accurate, active voice, crisp, succinct\n";
-        const chatOutput = await chatModel.complete(prompt + rawText);
-        if (!chatOutput.success) {
-            console.log(`[Error embedding ${chunk.id}: ${chatOutput.message}]`);
-        } else {
-            const embeddingText = chatOutput.data + "\n" + rawText;
-            console.log("====================\n" + embeddingText);
-            await codeIndex.put(embeddingText, chunk.id);
+        const codeBlock: CodeBlock = { code: rawText, language: "python" };
+        let embeddingText = "";
+        for (let i = 0; i < 3; i++) {
+            try {
+                embeddingText = await codeIndex.put(
+                    codeBlock,
+                    chunk.id,
+                    chunk.filename,
+                );
+                console.log(`[Embedding ${chunk.id} (${lineCount} lines)]`);
+                console.log(embeddingText);
+                break;
+            } catch (error) {
+                console.error(`Try ${i + 1}: ${error}`);
+            }
         }
+        await putCall;
+        const t1 = Date.now();
+        console.log(
+            `[${embeddingText ? "Embedded" : "FAILED TO EMBED"} ` +
+                `${chunk.id} (${lineCount} lines) in ${t1 - t0} ms]`,
+        );
     });
 }
 
