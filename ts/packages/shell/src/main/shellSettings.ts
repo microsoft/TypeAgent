@@ -187,7 +187,7 @@ export class ShellSettings
         return false;
     }
 
-    public openInlineBrowser(targetUrl: URL) {
+    public async openInlineBrowser(targetUrl: URL) {
         if (ShellSettings.getinstance().onOpenInlineBrowser != null) {
             ShellSettings.getinstance().onOpenInlineBrowser!(targetUrl);
         }

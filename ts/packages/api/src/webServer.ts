@@ -25,29 +25,33 @@ export class TypeAgentAPIWebServer {
                     : req.url;
 
             // make sure requested file falls under web root
-            requestedFile = realpathSync(
-                path.resolve(path.join(root, requestedFile)),
-            );
-            if (!requestedFile.startsWith(root)) {
-                res.statusCode = 403;
-                res.end();
-                return;
-            }
+            try {
+                requestedFile = realpathSync(
+                    path.resolve(path.join(root, requestedFile)),
+                );
+                if (!requestedFile.startsWith(root)) {
+                    res.statusCode = 403;
+                    res.end();
+                    return;
+                }
 
-            // serve requested file
-            if (existsSync(requestedFile)) {
-                res.writeHead(200, {
-                    "Content-Type": getMimeType(path.extname(requestedFile)),
-                    "Access-Control-Allow-Origin": "*",
-                });
-                res.end(readFileSync(requestedFile).toString());
+                // serve requested file
+                if (existsSync(requestedFile)) {
+                    res.writeHead(200, {
+                        "Content-Type": getMimeType(
+                            path.extname(requestedFile),
+                        ),
+                        "Access-Control-Allow-Origin": "*",
+                    });
+                    res.end(readFileSync(requestedFile).toString());
 
-                console.log(`Served '${requestedFile}' as '${req.url}'`);
-            } else {
+                    console.log(`Served '${requestedFile}' as '${req.url}'`);
+                }
+            } catch (error) {
                 res.writeHead(404, { "Content-Type": "text/plain" });
                 res.end("File Not Found!\n");
 
-                console.log(`Unable to serve '${req.url}', 404.`);
+                console.log(`Unable to serve '${req.url}', 404. ${error}`);
             }
         });
     }

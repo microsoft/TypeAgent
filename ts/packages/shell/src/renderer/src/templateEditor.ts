@@ -9,6 +9,7 @@ import {
     TemplateSchema,
 } from "@typeagent/agent-sdk";
 import { TemplateData, TemplateEditConfig } from "agent-dispatcher";
+import { getObjectProperty, setObjectProperty } from "common-utils";
 import { getClientAPI } from "./main";
 import { SearchMenu, SearchMenuItem } from "./search";
 
@@ -60,78 +61,11 @@ class FieldContainer {
     }
 
     public getProperty(name: string) {
-        if (name === "") {
-            return this.current;
-        }
-        const properties = name.split(".");
-        let lastName: string | number = "current";
-        let curr: any = this;
-        for (let i = 0; i < properties.length; i++) {
-            const name = properties[i];
-            // Protect against prototype pollution
-            if (
-                name === "__proto__" ||
-                name === "constructor" ||
-                name === "prototype"
-            ) {
-                throw new Error(`Invalid property name: ${name}`);
-            }
-            const maybeIndex = parseInt(name);
-            if (maybeIndex.toString() === name) {
-                // Array index
-                const next = curr[lastName];
-                if (next === undefined || !Array.isArray(next)) {
-                    return undefined;
-                }
-                curr = next;
-                lastName = maybeIndex;
-            } else {
-                const next = curr[lastName];
-                if (next === undefined || typeof next !== "object") {
-                    return undefined;
-                }
-                curr = next;
-                lastName = name;
-            }
-        }
-        return curr[lastName];
+        return getObjectProperty(this, "current", name);
     }
 
     public setProperty(name: string, value: any) {
-        const properties = name.split(".");
-        let lastName: string | number = "current";
-        let curr = this;
-        for (let i = 0; i < properties.length; i++) {
-            const name = properties[i];
-            // Protect against prototype pollution
-            if (
-                name === "__proto__" ||
-                name === "constructor" ||
-                name === "prototype"
-            ) {
-                throw new Error(`Invalid property name: ${name}`);
-            }
-            const maybeIndex = parseInt(name);
-            if (maybeIndex.toString() === name) {
-                // Array index
-                let next = curr[lastName];
-                if (next === undefined || !Array.isArray(next)) {
-                    next = [];
-                    curr[lastName] = next;
-                }
-                curr = next;
-                lastName = maybeIndex;
-            } else {
-                let next = curr[lastName];
-                if (next === undefined || typeof next !== "object") {
-                    next = {};
-                    curr[lastName] = next;
-                }
-                curr = next;
-                lastName = name;
-            }
-        }
-        curr[lastName] = value;
+        setObjectProperty(this, "current", name, value, true);
     }
 
     public async refreshSchema(index: number) {
@@ -299,14 +233,15 @@ abstract class FieldBase extends FieldRow {
     }
     public updateValueDisplay(updateParent: boolean = false) {
         const value = this.getValue();
+        const valid = this.isValidValue(value);
         if (value !== undefined) {
             this.setMissing(false);
-            this.setValid(this.isValidValue(value));
+            this.setValid(valid);
             this.valueCell.innerText =
                 typeof value === "object" ? "" : value.toString();
         } else {
             this.setMissing(true);
-            this.setValid(this.optional);
+            this.setValid(valid || this.optional);
             this.valueCell.innerText = "";
         }
 
@@ -755,7 +690,6 @@ const enum ButtonIndex {
 }
 
 class FieldObject extends FieldGroup {
-    private readonly hasRequiredFields: boolean;
     constructor(
         data: FieldContainer,
         fullPropertyName: string,
@@ -766,20 +700,14 @@ class FieldObject extends FieldGroup {
         parent?: FieldGroup,
     ) {
         super(data, fullPropertyName, paramName, optional, level, parent);
-        const fields = Object.values(fieldTypes);
-        this.hasRequiredFields =
-            fields.length === 0 ||
-            Object.values(fields).some((f) => !f.optional);
         this.updateValueDisplay();
         this.createChildFields();
     }
 
-    protected isValidValue(value: any) {
-        // Missing required fields will count as errors already
-        return (
-            this.hasRequiredFields ||
-            (typeof value === "object" && !Array.isArray(value))
-        );
+    protected isValidValue(_value: any) {
+        // Object are always valid whether the actual value is correct,
+        // The fields will be invalid if the value isn't
+        return true;
     }
 
     private createChildFields() {

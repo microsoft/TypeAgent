@@ -122,7 +122,9 @@ export class CrosswordPageTranslator<T extends object> {
       undefined,
       fastModelName,
     );
-    this.model = ai.createChatModel(apiSettings);
+    this.model = ai.createChatModel(apiSettings, undefined, undefined, [
+      "crossword",
+    ]);
 
     const validator = createTypeScriptJsonValidator<T>(this.schema, schemaName);
     this.translator = createJsonTranslator(this.model, validator);

@@ -118,7 +118,7 @@ export async function summarize() {
     const result = await generateNotes(
         text,
         2048,
-        openai.createChatModel(),
+        openai.createChatModelDefault("chatTests"),
         (chunk, text) => {
             console.log(chalk.greenBright(`${text.length} of ${chunk.length}`));
             console.log("Output\n\n" + text + "\n");
@@ -128,7 +128,7 @@ export async function summarize() {
 }
 
 export async function testBingSummary() {
-    const model = openai.createChatModel();
+    const model = openai.createChatModelDefault("chatTests");
     const results = await bing.searchWeb("Sherlock Holmes", 3);
     for (const result of results) {
         let chunkNumber = 0;

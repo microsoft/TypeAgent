@@ -11,6 +11,7 @@ import {
     getFlagType,
     resolveFlag,
 } from "@typeagent/agent-sdk/helpers/command";
+import { setObjectProperty } from "common-utils";
 
 function parseIntParameter(
     valueStr: string,
@@ -26,6 +27,24 @@ function parseIntParameter(
     return value;
 }
 
+function parseJsonParameter(
+    valueStr: string,
+    kind: "flag" | "argument",
+    name: string,
+) {
+    try {
+        const v = JSON.parse(valueStr);
+        if (v === null || typeof v !== "object") {
+            throw new Error("Not an object");
+        }
+        return v;
+    } catch (e: any) {
+        throw new Error(
+            `Invalid JSON value for ${kind} '${name}': ${e.message}`,
+        );
+    }
+}
+
 function stripQuoteFromToken(term: string) {
     if (term.length !== 0 && (term[0] === "'" || term[0] === '"')) {
         const lastChar = term[term.length - 1];
@@ -35,6 +54,67 @@ function stripQuoteFromToken(term: string) {
         return term.substring(1, term.length - 1);
     }
     return term;
+}
+
+function invalidValueToken(valueToken: string) {
+    // for strings, value that starts with '--' needs to be quoted.
+    if (valueToken.startsWith("--")) {
+        return true;
+    }
+
+    if (
+        valueToken.length === 2 &&
+        valueToken[0] === "-" &&
+        valueToken.charCodeAt(1) < 48 /* "0" */ &&
+        valueToken.charCodeAt(1) > 57 /* "9" */
+    ) {
+        return true;
+    }
+    return false;
+}
+function parseValueToken(
+    flagToken: string,
+    flag: string,
+    parsedFlags: any,
+    valueType: "string" | "number" | "json",
+    valueToken?: string,
+) {
+    if (valueToken === undefined || invalidValueToken(valueToken)) {
+        throw new Error(`Missing value for flag '${flagToken}'`);
+    }
+
+    // stripped any quotes
+    const stripped = stripQuoteFromToken(valueToken);
+
+    if (valueType === "number") {
+        return parseIntParameter(stripped, "flag", flagToken);
+    }
+
+    if (valueType === "string") {
+        // It is a string, just return the value stripped of quote.
+        return stripped;
+    }
+
+    // valueType === "json"
+
+    const prefix = `--${flag}.`;
+    if (!flagToken.startsWith(prefix)) {
+        // Full json object
+        return parseJsonParameter(stripped, "flag", flagToken);
+    }
+
+    // Json object property
+    const existing = parsedFlags[flag];
+    if (Array.isArray(existing)) {
+        throw new Error(
+            `Invalid flag '${flag}': multiple json value cannot use property syntax`,
+        );
+    }
+    parsedFlags[flag] = undefined; // avoid duplicate flag error, this will be assigned back later
+    const propertyName = flagToken.substring(prefix.length);
+    const data = { obj: existing ?? {} };
+    setObjectProperty(data, "obj", propertyName, stripped, true);
+    return data.obj;
 }
 
 export function parseParams<T extends ParameterDefinitions>(
@@ -102,20 +182,22 @@ export function parseParams<T extends ParameterDefinitions>(
                     value = true;
                 } else {
                     const rollback = curr;
-                    const valueStr = nextToken();
-                    if (valueStr === undefined || valueStr.startsWith("-")) {
+                    const valueToken = nextToken();
+                    try {
+                        value = parseValueToken(
+                            next,
+                            name,
+                            parsedFlags,
+                            valueType,
+                            valueToken,
+                        );
+                    } catch (e) {
                         // rollback to continue with partial
-                        if (valueStr !== undefined) {
+                        if (valueToken !== undefined) {
                             curr = rollback;
                             parsedTokens.pop();
                         }
-                        throw new Error(`Missing value for flag '${next}'`);
-                    }
-                    const stripped = stripQuoteFromToken(valueStr);
-                    if (valueType === "number") {
-                        value = parseIntParameter(stripped, "flag", next);
-                    } else {
-                        value = stripped;
+                        throw e;
                     }
                 }
                 const multiple = getFlagMultiple(flag);
@@ -150,7 +232,9 @@ export function parseParams<T extends ParameterDefinitions>(
                 const argValue =
                     argDef.type === "number"
                         ? parseIntParameter(arg, "argument", name)
-                        : arg;
+                        : argDef.type === "json"
+                          ? parseJsonParameter(arg, "argument", name)
+                          : arg;
                 if (argDef.multiple !== true) {
                     argDefIndex++;
                     parsedArgs[name] = argValue;
@@ -184,28 +268,36 @@ export function parseParams<T extends ParameterDefinitions>(
                 }
             }
         }
-        if (argDefs !== undefined) {
-            // Detect missing arguments
-            if (argDefIndex !== argDefs.length) {
-                for (let i = argDefIndex; i < argDefs.length; i++) {
-                    const [name, argDef] = argDefs[i];
-                    if (argDef.optional === true) {
-                        continue;
-                    }
-                    if (
-                        argDef.multiple === true &&
-                        parsedArgs[name] !== undefined
-                    ) {
-                        continue;
-                    }
-                    throw new Error(`Missing argument '${name}'`);
+    }
+    let nextArgs: string[] = [];
+    if (argDefs !== undefined) {
+        // Detect missing arguments
+        if (argDefIndex !== argDefs.length) {
+            for (let i = argDefIndex; i < argDefs.length; i++) {
+                const [name, argDef] = argDefs[i];
+                nextArgs.push(name);
+
+                if (argDef.optional === true) {
+                    continue;
                 }
+                if (
+                    argDef.multiple === true &&
+                    parsedArgs[name] !== undefined
+                ) {
+                    continue;
+                }
+                if (partial) {
+                    break;
+                }
+                throw new Error(`Missing argument '${name}'`);
             }
         }
     }
+
     return {
         args: argDefs !== undefined ? parsedArgs : undefined,
         flags: flagDefs !== undefined ? parsedFlags : undefined,
         tokens: parsedTokens,
+        nextArgs,
     };
 }

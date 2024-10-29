@@ -16,9 +16,6 @@ import {
     PersonalizedGreetingAction,
 } from "./greetingActionSchema.js";
 import { randomInt } from "node:crypto";
-//import { getLookupInstructions, getLookupSettings, LookupSettings, searchWeb } from "chat-agent/agent/handlers";
-//import { StopWatch } from "common-utils";
-//import { generateAnswerFromWebPages } from "typeagent";
 import {
     CommandHandlerNoParams,
     CommandHandlerTable,
@@ -106,6 +103,7 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
                     openai.ModelType.Chat,
                     undefined,
                     "GPT_35_TURBO",
+                    ["greeting"],
                 );
             } else {
                 // Create default model
@@ -122,6 +120,8 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
         const chatModel = openai.createChatModel(
             apiSettings,
             completionSettings,
+            undefined,
+            ["greeting"],
         );
 
         return chatModel;

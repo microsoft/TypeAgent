@@ -65,10 +65,12 @@ export async function processRequests<T>(
                 request.toLowerCase() === "quit" ||
                 request.toLowerCase() === "exit"
             ) {
+                (context as any)?.session.save(); // save session state
                 break;
             } else {
                 try {
                     await processRequest(request, context);
+                    (context as any)?.session.save(); // save session state
                 } catch (error) {
                     console.log("### ERROR:");
                     console.log(error);

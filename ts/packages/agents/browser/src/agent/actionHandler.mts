@@ -1,11 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { WebSocketMessage, createWebSocket } from "common-utils";
+import { WebSocketMessage, createWebSocket } from "common-utils/ws";
 import { WebSocket } from "ws";
 import {
   ActionContext,
-  AppActionWithParameters,
+  AppAction,
   AppAgent,
   SessionContext,
 } from "@typeagent/agent-sdk";
@@ -134,7 +134,7 @@ async function updateBrowserContext(
 }
 
 async function executeBrowserAction(
-  action: AppActionWithParameters,
+  action: AppAction,
   context: ActionContext<BrowserActionContext>,
 ) {
   const webSocketEndpoint = context.sessionContext.agentContext.webSocket;

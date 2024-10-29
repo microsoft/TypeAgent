@@ -8,6 +8,8 @@ import {
     answerContextToString,
     splitAnswerContext,
 } from "../src/conversation/answerGenerator.js";
+import { mergeActions } from "../src/conversation/actions.js";
+import { Action } from "../src/conversation/knowledgeSchema.js";
 
 describe("AnswerGenerator", () => {
     test("splitContext", async () => {
@@ -38,9 +40,11 @@ describe("AnswerGenerator", () => {
 
     test("answerContextToString", () => {
         const author = createAuthor();
+        const action = createAction();
         const context: AnswerContext = {
             entities: { timeRanges: [], values: [author] },
             topics: { timeRanges: [], values: createTopics() },
+            actions: { timeRanges: [], values: mergeActions([action]) },
         };
         const j1 = answerContextToString(context);
         JSON.parse(j1);
@@ -68,6 +72,16 @@ describe("AnswerGenerator", () => {
                 'book="Sense and Sensibility"',
                 'book="Emma"',
             ],
+        };
+    }
+
+    function createAction(): Action {
+        return {
+            subjectEntityName: "Jane Austen",
+            verbs: ["write"],
+            verbTense: "past",
+            objectEntityName: "book",
+            indirectObjectEntityName: "none",
         };
     }
 });

@@ -6,7 +6,6 @@ import {
     getClientContext,
     PlayerAction,
     handleCall,
-    PlayAction,
 } from "music";
 import chalk from "chalk";
 import {
@@ -17,12 +16,18 @@ import {
     DisplayType,
     AppAgentEvent,
     DynamicDisplay,
-    AppActionWithParameters,
 } from "@typeagent/agent-sdk";
 import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
-import { searchAlbum, searchArtists, searchTracks } from "../client.js";
+import { searchAlbum, searchTracks } from "../client.js";
 import { htmlStatus } from "../playback.js";
 import { getPlayerCommandInterface } from "./playerCommands.js";
+import { getGenreSeeds } from "../endpoints.js";
+import {
+    resolveArtists,
+    searchArtists,
+    SpotifyQuery,
+    toQueryString,
+} from "../search.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -32,7 +37,7 @@ export function instantiate(): AppAgent {
         validateWildcardMatch: validatePlayerWildcardMatch,
         getDynamicDisplay: getPlayerDynamicDisplay,
         ...getPlayerCommandInterface(),
-        getActionCompletion: getPlayerActionComplete,
+        getActionCompletion: getPlayerActionCompletion,
     };
 }
 
@@ -47,7 +52,7 @@ async function initializePlayerContext() {
 }
 
 async function executePlayerAction(
-    action: AppAction,
+    action: PlayerAction,
     context: ActionContext<PlayerActionContext>,
 ) {
     if (context.sessionContext.agentContext.spotify) {
@@ -89,58 +94,115 @@ async function enableSpotify(context: SessionContext<PlayerActionContext>) {
     return clientContext.service.retrieveUser().username;
 }
 
-async function validatePlayerWildcardMatch(
-    action: AppAction,
-    context: SessionContext<PlayerActionContext>,
-) {
-    if (action.actionName === "play") {
-        const clientContext = context.agentContext.spotify;
-        if (clientContext === undefined) {
-            // Can't validate without context, assume true
-            return true;
-        }
-        const playAction = action as PlayAction;
-        if (playAction.parameters.query) {
-            for (const query of playAction.parameters.query) {
-                let result: boolean = false;
-                switch (query.constraint) {
-                    case "track":
-                    case undefined:
-                        result = await validateTrack(query.text, clientContext);
-
-                    case "album":
-                        result = await validateAlbum(query.text, clientContext);
-
-                    case "artist":
-                        result = await validateArtist(
-                            query.text,
-                            clientContext,
-                        );
-                }
-                if (result === false) {
-                    return false;
-                }
-            }
-        }
-    }
-    return true;
-}
-
-async function validateTrack(trackName: string, context: IClientContext) {
-    const tracks = await searchTracks(`track:"${trackName}"`, context);
-    if (tracks && tracks.tracks && tracks.tracks.length > 0) {
-        // For validation for wildcard match, only allow substring match.
-        const lowerCaseTrackName = trackName.toLowerCase();
-        return tracks.tracks.some((track) =>
-            track.name.toLowerCase().includes(lowerCaseTrackName),
-        );
+async function validateGenre(genre: string, context: IClientContext) {
+    const genreSeeds = await getGenreSeeds(context.service);
+    if (genreSeeds) {
+        return genreSeeds.genres.includes(genre);
     }
     return false;
 }
 
-async function validateAlbum(albumName: string, context: IClientContext) {
+async function validatePlayerWildcardMatch(
+    action: PlayerAction,
+    context: SessionContext<PlayerActionContext>,
+) {
+    const clientContext = context.agentContext.spotify;
+    if (clientContext === undefined) {
+        // Can't validate without context, assume true
+        return true;
+    }
+    switch (action.actionName) {
+        case "playTrack":
+            return validateTrack(
+                action.parameters.trackName,
+                action.parameters.artists,
+                undefined,
+                clientContext,
+            );
+
+        case "playAlbum":
+            return await validateAlbum(
+                action.parameters.albumName,
+                action.parameters.artists,
+                clientContext,
+            );
+        case "playAlbumTrack":
+            return await validateTrack(
+                action.parameters.trackName,
+                action.parameters.artists,
+                action.parameters.albumName,
+                clientContext,
+            );
+        case "playArtist":
+            return validateArtist(action.parameters.artist, clientContext);
+        case "playGenre":
+            return await validateGenre(action.parameters.genre, clientContext);
+    }
+    return true;
+}
+
+async function validateTrack(
+    trackName: string,
+    artists: string[] | undefined,
+    album: string | undefined,
+    context: IClientContext,
+) {
+    const resolvedArtists = artists
+        ? await resolveArtists(artists, context)
+        : [];
+
+    if (resolvedArtists === undefined) {
+        return false;
+    }
+    const query: SpotifyQuery = {
+        track: [trackName],
+        artist: resolvedArtists.map((artist) => artist.name),
+    };
+    const queryString = toQueryString(query);
+    const tracks = await searchTracks(queryString, context);
+    if (tracks) {
+        // For validation for wildcard match, only allow substring match.
+        const lowerCaseTrackName = trackName.toLowerCase();
+        const lowerCaseAlbumName = album?.toLowerCase();
+        return tracks
+            .getTracks()
+            .some(
+                (track) =>
+                    track.name.toLowerCase().includes(lowerCaseTrackName) &&
+                    (lowerCaseAlbumName === undefined ||
+                        track.album.name
+                            .toLowerCase()
+                            .includes(lowerCaseAlbumName)),
+            );
+    }
+    return false;
+}
+
+async function validateAlbum(
+    albumName: string,
+    artists: string[] | undefined,
+    context: IClientContext,
+) {
+    const resolvedArtists = artists
+        ? await resolveArtists(artists, context)
+        : [];
+
+    if (resolvedArtists === undefined) {
+        return false;
+    }
     // search album already return exact matches.
-    return searchAlbum(albumName, context) !== undefined;
+    const album = await searchAlbum(albumName, context);
+    if (album === undefined) {
+        return false;
+    }
+
+    if (artists === undefined) {
+        return true;
+    }
+
+    return resolvedArtists.every((resolvedArtist) =>
+        album.artists.some((artists) => artists.id === resolvedArtist.id),
+    );
 }
 
 async function validateArtist(artistName: string, context: IClientContext) {
@@ -179,73 +241,80 @@ async function getPlayerDynamicDisplay(
     throw new Error(`Invalid displayId ${displayId}`);
 }
 
-async function getPlayerActionComplete(
-    action: AppActionWithParameters,
+async function getPlayerActionCompletion(
+    action: AppAction,
     propertyName: string,
     context: SessionContext<PlayerActionContext>,
 ): Promise<string[]> {
-    if (action.actionName !== "play") {
+    const clientContext = context.agentContext.spotify;
+    if (clientContext === undefined) {
         return [];
     }
-    const userData = context.agentContext.spotify?.userData;
+    const userData = clientContext.userData;
     if (userData === undefined) {
         return [];
     }
-    if (!propertyName.startsWith("parameters.query.")) {
-        return [];
-    }
-    const suffix = propertyName.substring("parameters.query.".length);
-    if (suffix === "") {
-        return [];
-    }
 
-    const split = suffix.split(".");
-    if (split.length > 2) {
-        // Not a valid property.
-        return [];
-    }
-    const index = parseInt(split[0]);
-    if (index.toString() !== split[0] || split[1] !== "text") {
-        // Not a valid index
-        return [];
-    }
-
-    const playAction = action as Partial<PlayAction>;
-    let track: boolean = true;
-    let album: boolean = true;
-    let artist: boolean = true;
-    switch (playAction.parameters?.query?.[index]?.constraint) {
-        case "track":
-            album = false;
-            artist = false;
+    let track = false;
+    let artist = false;
+    let album = false;
+    let genre = false;
+    switch (action.actionName) {
+        case "playTrack":
+            if (propertyName === "parameters.trackName") {
+                track = true;
+            } else if (propertyName.startsWith("parameters.artists.")) {
+                artist = true;
+            }
             break;
-        case "album":
-            track = false;
-            artist = false;
+        case "playAlbum":
+            if (propertyName === "parameters.albumName") {
+                album = true;
+            } else if (propertyName.startsWith("parameters.artists.")) {
+                artist = true;
+            }
             break;
-        case "artist":
-            track = false;
-            album = false;
+        case "playAlbumTrack":
+            if (propertyName === "parameters.albumName") {
+                album = true;
+            } else if (propertyName.startsWith("parameters.artists.")) {
+                artist = true;
+            } else if (propertyName.startsWith("parameters.trackName")) {
+                track = true;
+            }
+            break;
+        case "playArtist":
+            if (propertyName === "parameters.artist") {
+                artist = true;
+            }
+            break;
+        case "playGenre":
+            if (propertyName === "parameters.genre") {
+                genre = true;
+            }
             break;
     }
 
     const result: string[] = [];
-
     if (track) {
         for (const track of userData.data.tracks.values()) {
             result.push(track.name);
         }
     }
-
+    if (album) {
+        for (const album of userData.data.albums.values()) {
+            result.push(album.name);
+        }
+    }
     if (artist) {
         for (const artist of userData.data.artists.values()) {
             result.push(artist.name);
         }
     }
-
-    if (album) {
-        for (const album of userData.data.albums.values()) {
-            result.push(album.name);
+    if (genre) {
+        const genreSeeds = await getGenreSeeds(clientContext.service);
+        if (genreSeeds) {
+            result.push(...genreSeeds.genres);
         }
     }
     return result;

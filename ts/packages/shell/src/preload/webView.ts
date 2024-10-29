@@ -2,107 +2,52 @@
 // Licensed under the MIT License.
 
 const { contextBridge } = require("electron/renderer");
+const { webFrame } = require("electron");
 
-import {
-    WebSocketMessage,
-    createWebSocket,
-    keepWebSocketAlive,
-} from "common-utils";
 import DOMPurify from "dompurify";
+import { ipcRenderer } from "electron";
 
-let webSocket: any = null;
-
-async function ensureWebsocketConnected() {
-    return new Promise<WebSocket | undefined>(async (resolve) => {
-        if (webSocket) {
-            if (webSocket.readyState === WebSocket.OPEN) {
-                resolve(webSocket);
-                return;
+ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
+    if (data.target == "browser") {
+        if (data.messageType == "browserActionRequest") {
+            const response = await runBrowserAction(data.body);
+            sendToBrowserAgent({
+                source: data.target,
+                target: data.source,
+                messageType: "browserActionResponse",
+                id: data.id,
+                body: response,
+            });
+        } else if (data.messageType == "siteTranslatorStatus") {
+            if (data.body.status == "initializing") {
+                console.log(`Initializing ${data.body.translator}`);
+            } else if (data.body.status == "initialized") {
+                console.log(`Finished initializing ${data.body.translator}`);
             }
-            try {
-                webSocket.close();
-                webSocket = undefined;
-            } catch {}
+        } else if (data.messageType.startsWith("browserActionRequest.")) {
+            const message = await runSiteAction(data.messageType, data.body);
+
+            sendToBrowserAgent({
+                source: data.target,
+                target: data.source,
+                messageType: "browserActionResponse",
+                id: data.id,
+                body: message,
+            });
         }
 
-        webSocket = await createWebSocket();
-        if (!webSocket) {
-            resolve(undefined);
-            return;
-        }
+        console.log(
+            `Browser websocket client received message: ${JSON.stringify(data)}`,
+        );
+    }
+});
 
-        webSocket.binaryType = "blob";
-        keepWebSocketAlive(webSocket, "browser");
+ipcRenderer.on("init-site-agent", () => {
+    window.postMessage("setupSiteAgent");
+});
 
-        webSocket.onmessage = async (event: any) => {
-            const text = event.data.toString();
-            const data = JSON.parse(text) as WebSocketMessage;
-            if (data.target == "browser") {
-                if (data.messageType == "browserActionRequest") {
-                    const response = await runBrowserAction(data.body);
-                    webSocket.send(
-                        JSON.stringify({
-                            source: data.target,
-                            target: data.source,
-                            messageType: "browserActionResponse",
-                            id: data.id,
-                            body: response,
-                        }),
-                    );
-                } else if (data.messageType == "siteTranslatorStatus") {
-                    if (data.body.status == "initializing") {
-                        console.log(`Initializing ${data.body.translator}`);
-                    } else if (data.body.status == "initialized") {
-                        console.log(
-                            `Finished initializing ${data.body.translator}`,
-                        );
-                    }
-                } else if (
-                    data.messageType.startsWith("browserActionRequest.")
-                ) {
-                    const message = await runSiteAction(
-                        data.messageType,
-                        data.body,
-                    );
-
-                    webSocket.send(
-                        JSON.stringify({
-                            source: data.target,
-                            target: data.source,
-                            messageType: "browserActionResponse",
-                            id: data.id,
-                            body: message,
-                        }),
-                    );
-                }
-
-                console.log(
-                    `Browser websocket client received message: ${text}`,
-                );
-            }
-        };
-
-        webSocket.onclose = (event: object) => {
-            console.log(event);
-            console.log("websocket connection closed");
-            webSocket = undefined;
-            reconnectWebSocket();
-        };
-
-        resolve(webSocket);
-    });
-}
-
-export function reconnectWebSocket() {
-    const connectionCheckIntervalId = setInterval(async () => {
-        if (webSocket && webSocket.readyState === WebSocket.OPEN) {
-            console.log("Clearing reconnect retry interval");
-            clearInterval(connectionCheckIntervalId);
-        } else {
-            console.log("Retrying connection");
-            await ensureWebsocketConnected();
-        }
-    }, 5 * 1000);
+function sendToBrowserAgent(message: any) {
+    ipcRenderer.send("send-to-browser-ipc", message);
 }
 
 export async function getLatLongForLocation(locationName: string) {
@@ -140,10 +85,34 @@ export async function awaitPageLoad() {
 
 export async function getTabHTMLFragments(fullSize: boolean) {
     let htmlFragments: any[] = [];
-    const frames = [window.top, ...Array.from(window.frames)];
-
     let htmlPromises: Promise<any>[] = [];
-    frames.forEach((frame, index) => {
+
+    htmlPromises.push(
+        sendScriptAction(
+            {
+                type: "get_reduced_html",
+                fullSize: fullSize,
+                frameId: 0,
+            },
+            50000,
+            window.top,
+            "0",
+        ),
+    );
+
+    const iframeElements = document.getElementsByTagName("iframe");
+    for (let i = 0; i < iframeElements.length; i++) {
+        const frameElement = iframeElements[i];
+        if (
+            !frameElement.src ||
+            frameElement.src == "about:blank" ||
+            frameElement.hidden ||
+            (frameElement.clientHeight == 0 && frameElement.clientWidth == 0)
+        ) {
+            continue;
+        }
+
+        const index = i + 1;
         htmlPromises.push(
             sendScriptAction(
                 {
@@ -152,11 +121,11 @@ export async function getTabHTMLFragments(fullSize: boolean) {
                     frameId: index,
                 },
                 50000,
-                frame,
+                frameElement.contentWindow,
                 index.toString(),
             ),
         );
-    });
+    }
 
     const htmlResults = await Promise.all(htmlPromises);
     for (let i = 0; i < htmlResults.length; i++) {
@@ -308,9 +277,8 @@ async function runBrowserAction(action: any) {
                     action: action,
                 });
             } else {
-                sendScriptAction({
-                    type: "zoom_in_page",
-                });
+                const currZoom = webFrame.getZoomFactor();
+                webFrame.setZoomFactor(currZoom + 0.2);
             }
 
             break;
@@ -322,16 +290,13 @@ async function runBrowserAction(action: any) {
                     action: action,
                 });
             } else {
-                sendScriptAction({
-                    type: "zoom_out_page",
-                });
+                const currZoom = webFrame.getZoomFactor();
+                webFrame.setZoomFactor(currZoom - 0.2);
             }
             break;
         }
         case "zoomReset": {
-            sendScriptAction({
-                type: "zoom_reset",
-            });
+            webFrame.setZoomFactor(1.0);
             break;
         }
 
@@ -452,45 +417,31 @@ async function runSiteAction(messageType: string, action: any) {
     return confirmationMessage;
 }
 
+await ipcRenderer.invoke("init-browser-ipc");
+
 contextBridge.exposeInMainWorld("browserConnect", {
     enableSiteAgent: (translatorName) => {
-        if (
-            webSocket &&
-            webSocket.readyState === WebSocket.OPEN &&
-            translatorName
-        ) {
-            webSocket.send(
-                JSON.stringify({
-                    source: "browser",
-                    target: "dispatcher",
-                    messageType: "enableSiteTranslator",
-                    body: translatorName,
-                }),
-            );
+        if (translatorName) {
+            sendToBrowserAgent({
+                source: "browser",
+                target: "dispatcher",
+                messageType: "enableSiteTranslator",
+                body: translatorName,
+            });
         }
     },
     disableSiteAgent: (translatorName) => {
-        if (
-            webSocket &&
-            webSocket.readyState === WebSocket.OPEN &&
-            translatorName
-        ) {
-            webSocket.send(
-                JSON.stringify({
-                    source: "browser",
-                    target: "dispatcher",
-                    messageType: "disableSiteTranslator",
-                    body: translatorName,
-                }),
-            );
+        if (translatorName) {
+            sendToBrowserAgent({
+                source: "browser",
+                target: "dispatcher",
+                messageType: "disableSiteTranslator",
+                body: translatorName,
+            });
         }
     },
 });
 
-await ensureWebsocketConnected();
-
 window.onbeforeunload = () => {
     window.postMessage("disableSiteAgent");
 };
-
-window.postMessage("setupSiteAgent");

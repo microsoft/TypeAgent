@@ -25,8 +25,16 @@ export enum TextBlockType {
     Word,
 }
 
+/**
+ * A block of text
+ * TextBlock includes an optional set of sourceIds: Ids for the artifact(doc, message, web page)
+ * from where this text block was taken
+ */
 export interface TextBlock<TId = any> {
     type: TextBlockType;
+    /**
+     * The text for this text block
+     */
     value: string;
     sourceIds?: TId[] | undefined;
 }

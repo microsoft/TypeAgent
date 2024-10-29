@@ -14,7 +14,8 @@
     {
       "matches": ["https://*/*"],
       "js": ["agentActivation.js"],
-      "world": "MAIN"
+      "world": "MAIN",
+      "runAt": "document_start"
     },
     {
       "matches": ["https://*/*"],

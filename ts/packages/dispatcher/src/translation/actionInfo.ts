@@ -4,6 +4,10 @@
 import { ISymbol, SchemaParser, NodeType } from "schema-parser";
 import { TranslatorConfig } from "./agentTranslators.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
+import { FullAction } from "agent-cache";
+import { AppAction } from "@typeagent/agent-sdk";
+import { CommandHandlerContext } from "../internal.js";
+import { DeepPartialUndefined } from "common-utils";
 
 export type ActionParamPrimitive = {
     type: "string" | "number" | "boolean";
@@ -39,12 +43,14 @@ export type ActionParamField =
     | ActionParamArray;
 
 export type ActionInfo = {
+    translatorName: string;
     actionName: string;
     comments: string;
     parameters?: ActionParamObject | undefined;
 };
 
-function getActionInfo(
+function parseActionInfo(
+    translatorName: string,
     actionTypeName: string,
     parser: SchemaParser,
 ): ActionInfo | undefined {
@@ -72,6 +78,7 @@ function getActionInfo(
     }
     if (actionName !== undefined && comments !== undefined) {
         return {
+            translatorName,
             actionName,
             comments,
             parameters,
@@ -95,7 +102,7 @@ export function getTranslatorActionInfos(
 
     const actionInfo = new Map<string, ActionInfo>();
     for (const actionTypeName of parser.actionTypeNames()) {
-        const info = getActionInfo(actionTypeName, parser);
+        const info = parseActionInfo(translatorName, actionTypeName, parser);
         if (info) {
             actionInfo.set(info.actionName, info);
         }
@@ -180,4 +187,241 @@ function getActionParamObjectType(parser: SchemaParser): ActionParamObject {
         type: "object",
         fields,
     };
+}
+
+function validateField(
+    name: string,
+    expected: ActionParamField,
+    actual: unknown,
+    coerce: boolean,
+) {
+    if (actual === null) {
+        throw new Error(`Field ${name} is null`);
+    }
+    switch (expected.type) {
+        case "object":
+            if (typeof actual !== "object" || Array.isArray(actual)) {
+                throw new Error(`Field ${name} is not an object: ${actual}`);
+            }
+            validateObject(
+                name,
+                expected,
+                actual as Record<string, unknown>,
+                coerce,
+            );
+            break;
+        case "array":
+            if (!Array.isArray(actual)) {
+                throw new Error(`Field ${name} is not an array: ${actual}`);
+            }
+            validateArray(name, expected, actual, coerce);
+            break;
+        case "string-union":
+            if (typeof actual !== "string") {
+                throw new Error(`Field ${name} is not a string: ${actual}`);
+            }
+            if (!expected.typeEnum.includes(actual)) {
+                throw new Error(`Field ${name} is not in the enum: ${actual}`);
+            }
+            break;
+        default:
+            if (typeof actual !== expected.type) {
+                if (coerce && typeof actual === "string") {
+                    switch (expected.type) {
+                        case "number":
+                            const num = parseInt(actual);
+                            if (num.toString() === actual) {
+                                return actual;
+                            }
+                            break;
+                        case "boolean":
+                            if (actual === "true") {
+                                return true;
+                            }
+                            if (actual === "false") {
+                                return false;
+                            }
+                            break;
+                    }
+                }
+                throw new Error(
+                    `Property ${name} is not a ${expected.type}: ${actual}`,
+                );
+            }
+    }
+}
+
+function validateArray(
+    name: string,
+    expected: ActionParamArray,
+    actual: unknown[],
+    coerce: boolean = false,
+) {
+    for (let i = 0; i < actual.length; i++) {
+        const element = actual[i];
+        const v = validateField(
+            `${name}.${i}`,
+            expected.elementType,
+            element,
+            coerce,
+        );
+        if (coerce && v !== undefined) {
+            actual[i] = v;
+        }
+    }
+}
+
+function validateObject(
+    name: string,
+    expected: ActionParamObject,
+    actual: Record<string, unknown>,
+    coerce: boolean,
+) {
+    for (const field of Object.entries(expected.fields)) {
+        const [fieldName, fieldInfo] = field;
+        const actualField = actual[fieldName];
+        const fullName = `${name}.${fieldName}`;
+        if (actualField === undefined) {
+            if (!fieldInfo.optional) {
+                throw new Error(`Missing required field ${fullName}`);
+            }
+            continue;
+        }
+        const v = validateField(
+            `${name}.${fieldName}`,
+            fieldInfo.field,
+            actualField,
+            coerce,
+        );
+        if (coerce && v !== undefined) {
+            actual[fieldName] = v;
+        }
+    }
+}
+
+export function validateAction(
+    actionInfo: ActionInfo,
+    action: Record<string, unknown>,
+    coerce: boolean = false,
+): action is FullAction {
+    if (actionInfo.actionName !== action.actionName) {
+        throw new Error(
+            `Action name '${actionInfo.actionName}' expected, got '${action.actionName}' instead`,
+        );
+    }
+
+    const parameters = action.parameters;
+    if (parameters === undefined) {
+        throw new Error("Missing parameter property");
+    }
+
+    if (
+        parameters === null ||
+        typeof parameters !== "object" ||
+        Array.isArray(parameters)
+    ) {
+        throw new Error("Parameter object not an object");
+    }
+
+    if (actionInfo.parameters === undefined) {
+        const keys = Object.keys(parameters);
+        if (keys.length > 0) {
+            throw new Error(
+                `Action has extraneous parameters : ${keys.join(", ")}`,
+            );
+        }
+        return true;
+    }
+
+    validateObject(
+        "parameters",
+        actionInfo.parameters,
+        parameters as Record<string, unknown>,
+        coerce,
+    );
+    return true;
+}
+
+export function getParameterNames(
+    actionInfo: ActionInfo,
+    getCurrentValue: (name: string) => any,
+) {
+    if (actionInfo.parameters === undefined) {
+        return [];
+    }
+    const pending: Array<[string, ActionParamField]> = [
+        ["parameters", actionInfo.parameters],
+    ];
+    const result: string[] = [];
+    while (true) {
+        const next = pending.pop();
+        if (next === undefined) {
+            return result;
+        }
+
+        const [name, field] = next;
+        switch (field.type) {
+            case "object":
+                for (const [key, value] of Object.entries(field.fields)) {
+                    pending.push([`${name}.${key}`, value.field]);
+                }
+                break;
+            case "array":
+                const v = getCurrentValue(name);
+                const newIndex = Array.isArray(v) ? v.length : 0;
+                for (let i = 0; i <= newIndex; i++) {
+                    pending.push([`${name}.${i}`, field.elementType]);
+                }
+                break;
+            default:
+                result.push(name);
+        }
+    }
+}
+
+export function getParameterType(actionInfo: ActionInfo, name: string) {
+    const propertyNames = name.split(".");
+    if (propertyNames.shift() !== "parameters") {
+        return undefined;
+    }
+    let curr: ActionParamField | undefined = actionInfo.parameters;
+    if (curr === undefined) {
+        return undefined;
+    }
+
+    for (const propertyName of propertyNames) {
+        const maybeIndex = parseInt(propertyName);
+        if (maybeIndex.toString() == propertyName) {
+            if (curr.type !== "array") {
+                return undefined;
+            }
+            curr = curr.elementType;
+        } else {
+            if (curr.type !== "object") {
+                return undefined;
+            }
+            curr = curr.fields[propertyName]?.field;
+            if (curr === undefined) {
+                return undefined;
+            }
+        }
+    }
+    return curr;
+}
+
+export function getActionInfo(
+    action: DeepPartialUndefined<AppAction>,
+    systemContext: CommandHandlerContext,
+) {
+    const { translatorName, actionName } = action;
+    if (translatorName === undefined || actionName === undefined) {
+        return undefined;
+    }
+    const config = systemContext.agents.tryGetTranslatorConfig(translatorName);
+    if (config === undefined) {
+        return undefined;
+    }
+
+    const actionInfos = getTranslatorActionInfos(config, translatorName);
+    return actionInfos.get(actionName);
 }

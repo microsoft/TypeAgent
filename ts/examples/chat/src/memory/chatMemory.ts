@@ -8,7 +8,6 @@ import {
     CommandHandler,
     CommandMetadata,
     InteractiveIo,
-    NamedArgs,
     addStandardHandlers,
     arg,
     argBool,
@@ -50,6 +49,7 @@ export type ChatContext = {
     searchConcurrency: number;
     minScore: number;
     entityTopK: number;
+    actionTopK: number;
     conversationName: string;
     conversationSettings: knowLib.conversation.ConversationSettings;
     conversation: knowLib.conversation.Conversation;
@@ -92,11 +92,8 @@ export async function createChatMemoryContext(
     completionCallback?: (req: any, resp: any) => void,
 ): Promise<ChatContext> {
     const storePath = "/data/testChat";
-    const chatModel = openai.createChatModel(
-        undefined,
-        undefined,
-        completionCallback,
-    );
+    const chatModel = openai.createChatModelDefault("chatMemory");
+    chatModel.completionCallback = completionCallback;
     const embeddingModel = knowLib.createEmbeddingCache(
         openai.createEmbeddingModel(),
         64,
@@ -109,26 +106,35 @@ export async function createChatMemoryContext(
         conversationPath,
         conversationSettings,
     );
+    const conversationManager =
+        await knowLib.conversation.createConversationManager(
+            conversationName,
+            conversationPath,
+            false,
+            conversation,
+            chatModel,
+        );
+    const entityTopK = 16;
+    const actionTopK = 16;
     const context: ChatContext = {
         storePath,
         chatModel,
         embeddingModel,
-        maxCharsPerChunk: 2048,
+        maxCharsPerChunk: 4096,
         topicWindowSize: 8,
         searchConcurrency: 2,
         minScore: 0.9,
         conversationName,
-        conversationManager:
-            await knowLib.conversation.createConversationManager(
-                conversationName,
-                conversationPath,
-                false,
-                conversation,
-            ),
+        conversationManager,
         conversationSettings,
         conversation,
-        entityTopK: 16,
-        searcher: createSearchProcessor(conversation, chatModel, true, 16),
+        entityTopK,
+        actionTopK,
+        searcher: configureSearchProcessor(
+            conversationManager,
+            entityTopK,
+            actionTopK,
+        ),
         emailMemory: await knowLib.email.createEmailMemory(
             chatModel,
             ReservedConversationNames.outlook,
@@ -143,14 +149,7 @@ export async function createChatMemoryContext(
 function createConversationSettings(
     embeddingModel?: TextEmbeddingModel,
 ): conversation.ConversationSettings {
-    return {
-        indexSettings: {
-            caseSensitive: false,
-            concurrency: 2,
-            embeddingModel,
-            semanticIndex: true,
-        },
-    };
+    return conversation.createConversationSettings(embeddingModel);
 }
 
 export function createConversation(
@@ -163,22 +162,15 @@ export function createConversation(
     });
 }
 
-export function createSearchProcessor(
-    c: conversation.Conversation,
-    model: ChatModel,
-    includeActions: boolean,
+export function configureSearchProcessor(
+    cm: conversation.ConversationManager,
     entityTopK: number,
+    actionTopK: number,
 ) {
-    const searcher = conversation.createSearchProcessor(
-        c,
-        model,
-        model,
-        includeActions
-            ? conversation.KnowledgeSearchMode.WithActions
-            : conversation.KnowledgeSearchMode.Default,
-    );
-    searcher.answers.settings.topKEntities = entityTopK;
-    return searcher;
+    const answers = cm.searchProcessor.answers;
+    answers.settings.topK.entitiesTopK = entityTopK;
+    answers.settings.topK.actionsTopK = actionTopK;
+    return cm.searchProcessor;
 }
 
 export async function createSearchMemory(
@@ -190,7 +182,8 @@ export async function createSearchMemory(
         context.storePath,
         true,
     );
-    memory.searchProcessor.answers.settings.topKEntities = context.entityTopK;
+    memory.searchProcessor.answers.settings.topK.entitiesTopK =
+        context.entityTopK;
     return memory;
 }
 
@@ -198,7 +191,6 @@ export async function loadConversation(
     context: ChatContext,
     name: string,
     rootPath?: string,
-    includeActions = true,
 ): Promise<boolean> {
     const reservedCm = getReservedConversation(context, name);
     let exists: boolean = false;
@@ -218,20 +210,19 @@ export async function loadConversation(
                 conversationPath,
                 false,
                 context.conversation,
+                context.chatModel,
             );
     } else {
         context.conversation = reservedCm.conversation;
         context.conversationName = name;
         context.conversationManager = reservedCm;
+        context.searcher = reservedCm.searchProcessor;
         exists = true;
     }
-    context.searcher = conversation.createSearchProcessor(
-        context.conversation,
-        context.chatModel,
-        context.chatModel,
-        includeActions
-            ? conversation.KnowledgeSearchMode.WithActions
-            : conversation.KnowledgeSearchMode.Default,
+    context.searcher = configureSearchProcessor(
+        context.conversationManager,
+        context.entityTopK,
+        context.actionTopK,
     );
     if (name !== "search") {
         context.searchMemory = await createSearchMemory(context);
@@ -264,7 +255,6 @@ export async function runChatMemory(): Promise<void> {
         tokenLog,
     };
     addStandardHandlers(handlers);
-
     await runConsole({
         onStart,
         inputHandler,
@@ -300,6 +290,7 @@ export async function runChatMemory(): Promise<void> {
     function printStats(req: any, response: any): void {
         if (showTokenStats) {
             printer.writeCompletionStats(response.usage);
+            printer.writeLine();
         }
     }
     //--------------------
@@ -309,10 +300,7 @@ export async function runChatMemory(): Promise<void> {
     //--------------------
 
     handlers.history.metadata = "Display search history.";
-    async function history(
-        args: string[] | NamedArgs,
-        io: InteractiveIo,
-    ): Promise<void> {
+    async function history(args: string[], io: InteractiveIo): Promise<void> {
         if (context.searchMemory) {
             await writeHistory(context.searchMemory.conversation);
         } else {
@@ -322,7 +310,7 @@ export async function runChatMemory(): Promise<void> {
 
     handlers.importTranscript.metadata = importChatDef();
     async function importTranscript(
-        args: string[] | NamedArgs,
+        args: string[],
         io: InteractiveIo,
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, importChatDef());
@@ -381,7 +369,7 @@ export async function runChatMemory(): Promise<void> {
     }
     handlers.importPlay.metadata = importChatDef();
     async function importPlay(
-        args: string[] | NamedArgs,
+        args: string[],
         io: InteractiveIo,
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, importChatDef());
@@ -423,7 +411,7 @@ export async function runChatMemory(): Promise<void> {
     }
     handlers.importMessage.metadata = importMessageDef();
     async function importMessage(
-        args: string[] | NamedArgs,
+        args: string[],
         io: InteractiveIo,
     ): Promise<void> {
         // Temporary: safeguard here to prevent demo issues
@@ -458,12 +446,12 @@ export async function runChatMemory(): Promise<void> {
             options: {
                 concurrency: argConcurrency(1),
                 clean: argClean(),
-                chunkSize: argChunkSize(4096),
+                chunkSize: argChunkSize(context.maxCharsPerChunk),
             },
         };
     }
     handlers.importEmail.metadata = importEmailDef();
-    async function importEmail(args: string[] | NamedArgs, io: InteractiveIo) {
+    async function importEmail(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, importEmailDef());
         let sourcePath: string = namedArgs.sourcePath;
         let isDir = isDirectoryPath(sourcePath);
@@ -518,7 +506,7 @@ export async function runChatMemory(): Promise<void> {
     }
 
     handlers.replay.metadata = "Replay the chat";
-    async function replay(args: string[] | NamedArgs, io: InteractiveIo) {
+    async function replay(args: string[], io: InteractiveIo) {
         await writeHistory(context.conversation);
     }
 
@@ -536,7 +524,7 @@ export async function runChatMemory(): Promise<void> {
         };
     }
     handlers.load.metadata = loadDef();
-    async function load(args: string[] | NamedArgs, io: InteractiveIo) {
+    async function load(args: string[], io: InteractiveIo) {
         if (args.length > 0) {
             const namedArgs = parseNamedArguments(args, loadDef());
             let name = namedArgs.name;
@@ -546,14 +534,7 @@ export async function runChatMemory(): Promise<void> {
                 storePath = path.dirname(storePath);
             }
             if (name) {
-                if (
-                    await loadConversation(
-                        context,
-                        name,
-                        storePath,
-                        namedArgs.actions,
-                    )
-                ) {
+                if (await loadConversation(context, name, storePath)) {
                     printer.writeLine(`Loaded ${name}`);
                 } else {
                     printer.writeLine(
@@ -571,7 +552,6 @@ export async function runChatMemory(): Promise<void> {
             description:
                 "Extract knowledge from the messages in the current conversation",
             options: {
-                actions: argBool("Extract actions", true),
                 maxTurns: argNum("Number of turns to run"),
                 concurrency: argConcurrency(2),
                 pause: argPause(),
@@ -579,13 +559,12 @@ export async function runChatMemory(): Promise<void> {
         };
     }
     handlers.knowledge.metadata = knowledgeDef();
-    async function knowledge(args: string[] | NamedArgs, io: InteractiveIo) {
+    async function knowledge(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, knowledgeDef());
         const extractor = conversation.createKnowledgeExtractor(
             context.chatModel,
             {
                 maxContextLength: context.maxCharsPerChunk,
-                includeActions: namedArgs.actions,
                 mergeActionKnowledge: false,
             },
         );
@@ -633,7 +612,7 @@ export async function runChatMemory(): Promise<void> {
     }
     handlers.buildIndex.metadata = buildIndexDef();
     async function buildIndex(
-        args: string[] | NamedArgs,
+        args: string[],
         io: InteractiveIo,
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, buildIndexDef());
@@ -724,7 +703,7 @@ export async function runChatMemory(): Promise<void> {
         };
     }
     handlers.topics.metadata = topicsDef();
-    async function topics(args: string[] | NamedArgs, io: InteractiveIo) {
+    async function topics(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, topicsDef());
         const index = await context.conversation.getTopicsIndex(
             namedArgs.level,
@@ -776,7 +755,7 @@ export async function runChatMemory(): Promise<void> {
         };
     }
     handlers.entities.metadata = entitiesDef();
-    async function entities(args: string[] | NamedArgs, io: InteractiveIo) {
+    async function entities(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, entitiesDef());
         let query = namedArgs.name ?? namedArgs.type ?? namedArgs.facet;
         if (query) {
@@ -835,13 +814,14 @@ export async function runChatMemory(): Promise<void> {
         };
     }
     handlers.actions.metadata = actionsDef();
-    async function actions(args: string[] | NamedArgs, io: InteractiveIo) {
+    async function actions(args: string[], io: InteractiveIo) {
         const index = await context.conversation.getActionIndex();
         if (args.length === 0) {
-            // Just dump all actions
-            for await (const action of index.entries()) {
-                writeExtractedAction(action);
-            }
+            const actions = (await asyncArray.toArray(index.entries())).map(
+                (a) => a.value,
+            );
+            const merged = conversation.mergeActions(actions);
+            printer.writeActionGroups(merged);
             return;
         }
 
@@ -904,18 +884,17 @@ export async function runChatMemory(): Promise<void> {
                 maxMatches: argNum("Maximum fuzzy matches", 2),
                 minScore: argNum("Minimum similarity score", 0.8),
                 fallback: argBool("Fallback to message search", true),
-                action: argBool("Include actions"),
                 eval: argBool("Evaluate search query", true),
                 debug: argBool("Show debug info", false),
                 save: argBool("Save the search", false),
                 v2: argBool("Run V2 match", false),
-                chunkSize: argChunkSize(),
+                chunk: argBool("Use chunking", true),
             },
         };
     }
     handlers.searchQuery.metadata = searchDef();
     async function searchQuery(
-        args: string[] | NamedArgs,
+        args: string[],
         io: InteractiveIo,
     ): Promise<void> {
         const timestampQ = new Date();
@@ -935,12 +914,6 @@ export async function runChatMemory(): Promise<void> {
         if (namedArgs.fallback) {
             searchOptions.fallbackSearch = { maxMatches: 10 };
         }
-        if (namedArgs.action === undefined) {
-            namedArgs.action =
-                context.searcher.searchMode !==
-                conversation.KnowledgeSearchMode.Default;
-        }
-        searchOptions.includeActions = namedArgs.action;
         if (!namedArgs.eval) {
             await searchNoEval(query, searchOptions);
             return;
@@ -952,16 +925,6 @@ export async function runChatMemory(): Promise<void> {
             return;
         }
         if (result.response) {
-            if (result.action.actionName === "webLookup") {
-                if (result.response.answer) {
-                    printer.writeInColor(
-                        chalk.green,
-                        result.response.answer.answer!,
-                    );
-                }
-                return;
-            }
-
             const timestampA = new Date();
             const entityIndex = await context.conversation.getEntityIndex();
             const topicIndex = await context.conversation.getTopicsIndex(
@@ -987,10 +950,7 @@ export async function runChatMemory(): Promise<void> {
     }
 
     handlers.search.metadata = searchDef();
-    async function search(
-        args: string[] | NamedArgs,
-        io: InteractiveIo,
-    ): Promise<void> {
+    async function search(args: string[], io: InteractiveIo): Promise<void> {
         await searchConversation(context.searcher, true, args);
     }
 
@@ -1003,7 +963,7 @@ export async function runChatMemory(): Promise<void> {
         };
     }
     handlers.searchV2Debug.metadata = searchV2DebugDef();
-    async function searchV2Debug(args: string[] | NamedArgs): Promise<void> {
+    async function searchV2Debug(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, searchV2DebugDef());
         const result = await context.searcher.actions.translateSearchTermsV2(
             namedArgs.query,
@@ -1045,7 +1005,7 @@ export async function runChatMemory(): Promise<void> {
         };
     }
     handlers.makeTestSet.metadata = makeTestSetDef();
-    async function makeTestSet(args: string[] | NamedArgs): Promise<void> {
+    async function makeTestSet(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, makeTestSetDef());
         await conversation.testData.searchBatchFile(
             context.conversationManager,
@@ -1069,7 +1029,7 @@ export async function runChatMemory(): Promise<void> {
         };
     }
     handlers.runTestSet.metadata = runTestSetDef();
-    async function runTestSet(args: string[] | NamedArgs): Promise<void> {
+    async function runTestSet(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, runTestSetDef());
         const comparisons = await conversation.testData.compareQueryBatchFile(
             context.conversationManager,
@@ -1125,7 +1085,7 @@ export async function runChatMemory(): Promise<void> {
     async function searchConversation(
         searcher: conversation.ConversationSearchProcessor,
         recordAnswer: boolean,
-        args: string[] | NamedArgs,
+        args: string[],
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, searchDef());
         const maxMatches = namedArgs.maxMatches;
@@ -1143,24 +1103,12 @@ export async function runChatMemory(): Promise<void> {
         if (namedArgs.fallback) {
             searchOptions.fallbackSearch = { maxMatches: 10 };
         }
-        if (namedArgs.action === undefined) {
-            namedArgs.action =
-                searcher.searchMode !==
-                conversation.KnowledgeSearchMode.Default;
-        }
-        searchOptions.includeActions = namedArgs.action;
         if (!namedArgs.eval) {
             await searchNoEval(query, searchOptions);
             return;
         }
 
-        if (namedArgs.chunkSize) {
-            searcher.answers.settings.maxCharsInContext = namedArgs.chunkSize;
-            searcher.answers.settings.useChunking = namedArgs.chunkSize > 0;
-        } else {
-            searcher.answers.settings.maxCharsInContext = undefined;
-            searcher.answers.settings.useChunking = false;
-        }
+        searcher.answers.settings.chunking.enable = true; //namedArgs.chunk === true;
 
         const timestampQ = new Date();
         let result:
@@ -1215,10 +1163,7 @@ export async function runChatMemory(): Promise<void> {
             }
             printer.writeLine();
             if (debug) {
-                printer.writeSearchResponse(
-                    result.response,
-                    context.searcher.answers.settings,
-                );
+                printer.writeSearchResponse(result.response);
             }
         }
     }
@@ -1338,16 +1283,14 @@ export async function runChatMemory(): Promise<void> {
         response: conversation.SearchResponse | undefined,
     ): void {
         if (response !== undefined) {
-            const allTopics = response.mergeAllTopics();
+            const allTopics = response.getTopics();
             if (allTopics && allTopics.length > 0) {
                 printer.writeLine(`Topic Hit Count: ${allTopics.length}`);
             } else {
                 const topicIds = new Set(response.allTopicIds());
                 printer.writeLine(`Topic Hit Count: ${topicIds.size}`);
             }
-            const allEntities = response.getCompositeEntities(
-                context.searcher.answers.settings.topKEntities,
-            );
+            const allEntities = response.getEntities();
             if (allEntities && allEntities.length > 0) {
                 printer.writeLine(`Entity Hit Count: ${allEntities.length}`);
             } else {
@@ -1356,10 +1299,15 @@ export async function runChatMemory(): Promise<void> {
                     `Entity to Message Hit Count: ${entityIds.size}`,
                 );
             }
-            const allActions = knowLib.sets.uniqueFrom(response.allActionIds());
+            const allActions = response.getActions();
             //const allActions = [...response.allActionIds()];
             if (allActions && allActions.length > 0) {
                 printer.writeLine(`Action Hit Count: ${allActions.length}`);
+            } else {
+                const actionIds = new Set(response.allActionIds());
+                printer.writeLine(
+                    `Action to Message Hit Count: ${actionIds.size}`,
+                );
             }
             if (response.messages) {
                 printer.writeLine(
@@ -1514,12 +1462,6 @@ export async function runChatMemory(): Promise<void> {
                 printer.writeTemporalBlocks(chalk.greenBright, textBlocks);
             }
         }
-    }
-
-    function writeExtractedAction(
-        action: knowLib.conversation.ExtractedAction,
-    ) {
-        printer.writeLine(conversation.actionToString(action.value));
     }
 
     async function writeExtractedEntity(

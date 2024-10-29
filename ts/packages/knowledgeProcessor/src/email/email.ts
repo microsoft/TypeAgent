@@ -21,8 +21,9 @@ import {
     ConversationSettings,
     createConversation,
 } from "../conversation/conversation.js";
-import { TypeChatLanguageModel } from "typechat";
 import { isValidChunkSize, splitLargeTextIntoChunks } from "../textChunker.js";
+import { ChatModel } from "aiclient";
+import { KnownEntityTypes } from "../conversation/knowledge.js";
 
 export function emailAddressToString(address: EmailAddress): string {
     if (address.displayName) {
@@ -51,13 +52,13 @@ export function emailAddressToEntities(
     if (emailAddress.displayName) {
         const entity: ConcreteEntity = {
             name: emailAddress.displayName,
-            type: ["person", "email"],
+            type: [KnownEntityTypes.Person],
         };
         entities.push(entity);
         if (emailAddress.address) {
             entity.facets = [];
             entity.facets.push({
-                name: "email_alias",
+                name: "email_address",
                 value: emailAddress.address,
             });
         }
@@ -65,17 +66,17 @@ export function emailAddressToEntities(
     if (emailAddress.address) {
         entities.push({
             name: emailAddress.address,
-            type: ["email_alias"],
+            type: [
+                KnownEntityTypes.Email_Address,
+                KnownEntityTypes.Email_Alias,
+            ],
         });
     }
 
     return entities;
 }
 
-export function emailToString(
-    email: Email,
-    includeBody: boolean = true,
-): string {
+export function emailHeadersToString(email: Email): string {
     let text = "";
     if (email.from) {
         text += makeHeader("From", emailAddressToString(email.from));
@@ -89,9 +90,6 @@ export function emailToString(
     if (email.bcc) {
         text += makeHeader("Bcc", emailAddressListToString(email.bcc));
     }
-    if (email.subject) {
-        text += makeHeader("Subject", email.subject);
-    }
     if (email.sentOn) {
         text += makeHeader("Sent", email.sentOn.toString());
     }
@@ -101,8 +99,19 @@ export function emailToString(
     if (email.importance) {
         text += makeHeader("Importance", email.importance);
     }
+    if (email.subject) {
+        text += makeHeader("Subject", email.subject);
+    }
+    return text;
+}
+
+export function emailToString(
+    email: Email,
+    includeBody: boolean = true,
+): string {
+    let text = emailHeadersToString(email);
     if (includeBody && email.body) {
-        text += "\n";
+        text += "\n\n";
         text += email.body;
     }
     return text;
@@ -268,13 +277,14 @@ export async function loadEmailFolder(
  * @returns
  */
 export async function createEmailMemory(
-    model: TypeChatLanguageModel,
+    model: ChatModel,
     name: string,
     rootPath: string,
     settings: ConversationSettings,
 ) {
     const storePath = path.join(rootPath, name);
     const emailConversation = await createConversation(settings, storePath);
+
     const actions = await emailConversation.getActionIndex();
     actions.verbTermMap.put("say", EmailVerbs.send);
     actions.verbTermMap.put("discuss", EmailVerbs.send);
@@ -286,9 +296,16 @@ export async function createEmailMemory(
         rootPath,
         false,
         emailConversation,
+        model,
     );
     cm.topicMerger.settings.mergeWindowSize = 1;
     cm.topicMerger.settings.trackRecent = false;
+
+    const entityIndex = await cm.conversation.getEntityIndex();
+    entityIndex.noiseTerms.put("email");
+    entityIndex.noiseTerms.put("message");
+
+    cm.searchProcessor.answers.settings.hints = `messages are *emails*. Use email headers (to, subject. etc) to determine if message is highly relevant to the question`;
     return cm;
 }
 
@@ -345,7 +362,7 @@ export function emailToMessages(
     }
 
     const messages: ConversationMessage[] = [];
-    const text = emailToString(email);
+    const text = email.body;
     for (const chunk of splitLargeTextIntoChunks(text, maxCharsPerChunk!)) {
         const emailChunk: Email = { ...email };
         emailChunk.body = chunk;

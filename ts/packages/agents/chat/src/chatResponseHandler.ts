@@ -5,6 +5,7 @@ import fs from "node:fs";
 import { getMimeType, StopWatch } from "common-utils";
 import {
     ChatResponseAction,
+    Entity,
     GenerateResponseAction,
     LookupAndGenerateResponseAction,
 } from "./chatResponseActionSchema.js";
@@ -14,7 +15,6 @@ import {
     extractEntities,
     generateAnswerFromWebPages,
     promptLib,
-    Entity,
 } from "typeagent";
 import { ChatModel, bing, openai } from "aiclient";
 import { PromptSection } from "typechat";
@@ -31,7 +31,10 @@ import {
     createActionResultNoDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
 import { fileURLToPath } from "node:url";
-import { conversation as Conversation } from "knowledge-processor";
+import {
+    conversation,
+    conversation as Conversation,
+} from "knowledge-processor";
 import { getImageElement } from "../../../commonUtils/dist/image.js";
 
 export function instantiate(): AppAgent {
@@ -181,9 +184,10 @@ async function handleChatResponse(
                             matches.response &&
                             matches.response.answer
                         ) {
-                            console.log("Matches:");
-                            console.log(matches);
-
+                            console.log("CONVERSATION MEMORY MATCHES:");
+                            conversation.log.logSearchResponse(
+                                matches.response,
+                            );
                             if (
                                 lookupAction.parameters
                                     .retrieveRelatedFilesFromStorage &&
@@ -191,11 +195,11 @@ async function handleChatResponse(
                                     undefined
                             ) {
                                 return createActionResultFromHtmlDisplay(
-                                    `<div>${matches.response.answer.answer !== undefined ? matches.response.answer.answer : ""} ${await rehydrateImages(context, lookupAction.parameters.relatedFiles)}</div>`,
+                                    `<div>${matches.response.getAnswer()} ${await rehydrateImages(context, lookupAction.parameters.relatedFiles)}</div>`,
                                 );
                             } else {
                                 console.log(
-                                    "Anwser: " +
+                                    "Answer: " +
                                         matches.response.answer.answer
                                             ?.replace("\n", "")
                                             .substring(0, 100) +
@@ -203,6 +207,8 @@ async function handleChatResponse(
                                 );
                                 return createActionResult(
                                     matches.response.answer.answer!,
+                                    undefined,
+                                    matchedEntities(matches.response),
                                 );
                             }
                         } else {
@@ -219,6 +225,20 @@ async function handleChatResponse(
         }
     }
     return createActionResult("No information found");
+}
+
+function matchedEntities(response: conversation.SearchResponse): Entity[] {
+    const entities = response.getEntities();
+    return entities.length > 0
+        ? entities.map((e) => compositeEntityToEntity(e))
+        : [];
+}
+
+function compositeEntityToEntity(entity: conversation.CompositeEntity): Entity {
+    return {
+        name: entity.name,
+        type: [...entity.type, conversation.KnownEntityTypes.Memorized],
+    };
 }
 
 export function logEntities(label: string, entities?: Entity[]): void {
@@ -413,9 +433,13 @@ export async function getLookupSettings(
     }
     fastModelName ??= "GPT_35_TURBO";
     let fastModel =
-        openai.createLocalChatModel(fastModelName) ??
-        openai.createJsonChatModel(fastModelName);
-    let generalModel = openai.createJsonChatModel();
+        openai.createLocalChatModel(fastModelName, undefined, [
+            "chatResponseHandler",
+        ]) ??
+        openai.createJsonChatModel(fastModelName, ["chatResponseHandler"]);
+    let generalModel = openai.createJsonChatModel(undefined, [
+        "chatResponseHandler",
+    ]);
     rewriteFocus ??=
         "make it more concise and readable, with better formatting (e.g. use line breaks, bullet points as needed)";
 

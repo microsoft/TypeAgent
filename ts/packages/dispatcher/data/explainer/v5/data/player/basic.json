@@ -25,8 +25,8 @@
             "text": "Can you",
             "synonyms": [
               "Could you",
-              "Would you mind to",
-              "Can you please"
+              "Would you",
+              "Will you"
             ],
             "category": "politeness",
             "isOptional": true
@@ -36,7 +36,7 @@
             "synonyms": [
               "stop",
               "halt",
-              "suspend"
+              "freeze"
             ],
             "category": "action",
             "propertyNames": [
@@ -47,8 +47,8 @@
             "text": "please",
             "synonyms": [
               "kindly",
-              "if you could",
-              "if you would"
+              "if you don't mind",
+              "if you could"
             ],
             "category": "politeness",
             "isOptional": true
@@ -75,9 +75,15 @@
                 ]
               },
               {
-                "propertyValue": "player.skip",
+                "propertyValue": "player.rewind",
                 "propertySubPhrases": [
-                  "skip"
+                  "rewind"
+                ]
+              },
+              {
+                "propertyValue": "player.fastForward",
+                "propertySubPhrases": [
+                  "fast forward"
                 ]
               }
             ]
@@ -107,32 +113,20 @@
             "text": "Can you",
             "synonyms": [
               "Could you",
-              "Would you mind",
-              "Can you please"
+              "Would you",
+              "Will you"
             ],
             "category": "politeness",
             "isOptional": true
           },
           {
-            "text": "pause",
+            "text": "pause the music",
             "synonyms": [
-              "stop",
-              "halt",
-              "suspend"
+              "stop the music",
+              "halt the music",
+              "put the music on hold"
             ],
             "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
-          },
-          {
-            "text": "the music",
-            "synonyms": [
-              "the song",
-              "the track",
-              "the audio"
-            ],
-            "category": "object",
             "propertyNames": [
               "fullActionName"
             ]
@@ -141,8 +135,8 @@
             "text": "please",
             "synonyms": [
               "kindly",
-              "if you could",
-              "if you would"
+              "if you don't mind",
+              "if you could"
             ],
             "category": "politeness",
             "isOptional": true
@@ -153,43 +147,206 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.pause",
             "propertySubPhrases": [
-              "pause",
-              "the music"
+              "pause the music"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "play",
-                  "the music"
+                  "play the music"
                 ]
               },
               {
                 "propertyValue": "player.stop",
                 "propertySubPhrases": [
-                  "stop",
-                  "the music"
+                  "stop the music"
                 ]
               },
               {
                 "propertyValue": "player.skip",
                 "propertySubPhrases": [
-                  "skip",
-                  "the music"
+                  "skip the music"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "request": "Can you play Nocturne by Chopin",
+      "action": {
+        "fullActionName": "player.playTrack",
+        "parameters": {
+          "trackName": "Nocturne",
+          "artists": [
+            "Chopin"
+          ]
+        }
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.playTrack",
+            "substrings": [
+              "Can you play"
+            ],
+            "implied": true
+          },
+          {
+            "name": "parameters.trackName",
+            "value": "Nocturne",
+            "substrings": [
+              "Nocturne"
+            ],
+            "implied": false
+          },
+          {
+            "name": "parameters.artists.0",
+            "value": "Chopin",
+            "substrings": [
+              "Chopin"
+            ],
+            "implied": false
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can you",
+            "synonyms": [
+              "Could you",
+              "Would you",
+              "Will you"
+            ],
+            "category": "politeness",
+            "isOptional": true
+          },
+          {
+            "text": "play",
+            "synonyms": [
+              "start",
+              "put on",
+              "begin"
+            ],
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          },
+          {
+            "text": "Nocturne",
+            "synonyms": [
+              "Nocturnes",
+              "Nocturnal",
+              "Nocturn"
+            ],
+            "category": "trackName",
+            "propertyNames": [
+              "parameters.trackName"
+            ]
+          },
+          {
+            "text": "by",
+            "synonyms": [
+              "from",
+              "composed by",
+              "performed by"
+            ],
+            "category": "preposition",
+            "isOptional": true
+          },
+          {
+            "text": "Chopin",
+            "synonyms": [
+              "Frédéric Chopin",
+              "F. Chopin",
+              "Chopins"
+            ],
+            "category": "artist",
+            "propertyNames": [
+              "parameters.artists.0"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.playTrack",
+            "propertySubPhrases": [
+              "play"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.pauseTrack",
+                "propertySubPhrases": [
+                  "pause"
                 ]
               },
               {
-                "propertyValue": "player.shuffle",
+                "propertyValue": "player.stopTrack",
                 "propertySubPhrases": [
-                  "shuffle",
-                  "the music"
+                  "stop"
                 ]
               },
               {
-                "propertyValue": "player.repeat",
+                "propertyValue": "player.resumeTrack",
                 "propertySubPhrases": [
-                  "repeat",
-                  "the music"
+                  "resume"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.trackName",
+            "propertyValue": "Nocturne",
+            "propertySubPhrases": [
+              "Nocturne"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "Prelude",
+                "propertySubPhrases": [
+                  "Prelude"
+                ]
+              },
+              {
+                "propertyValue": "Etude",
+                "propertySubPhrases": [
+                  "Etude"
+                ]
+              },
+              {
+                "propertyValue": "Ballade",
+                "propertySubPhrases": [
+                  "Ballade"
+                ]
+              }
+            ]
+          },
+          {
+            "propertyName": "parameters.artists.0",
+            "propertyValue": "Chopin",
+            "propertySubPhrases": [
+              "Chopin"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "Beethoven",
+                "propertySubPhrases": [
+                  "Beethoven"
+                ]
+              },
+              {
+                "propertyValue": "Mozart",
+                "propertySubPhrases": [
+                  "Mozart"
+                ]
+              },
+              {
+                "propertyValue": "Bach",
+                "propertySubPhrases": [
+                  "Bach"
                 ]
               }
             ]
@@ -200,111 +357,79 @@
     {
       "request": "Can you play some Bach for me please?",
       "action": {
-        "fullActionName": "player.play",
+        "fullActionName": "player.playArtist",
         "parameters": {
-          "query": [
-            {
-              "constraint": "artist",
-              "text": "Bach"
-            }
-          ],
-          "quantity": 5
+          "artist": "Bach"
         }
       },
       "explanation": {
         "properties": [
           {
             "name": "fullActionName",
-            "value": "player.play",
+            "value": "player.playArtist",
             "substrings": [
-              "play"
-            ],
-            "implied": false
-          },
-          {
-            "name": "parameters.query.0.constraint",
-            "value": "artist",
-            "substrings": [
-              "Bach"
+              "Can you play"
             ],
             "implied": true
           },
           {
-            "name": "parameters.query.0.text",
+            "name": "parameters.artist",
             "value": "Bach",
             "substrings": [
               "Bach"
             ],
             "implied": false
-          },
-          {
-            "name": "parameters.quantity",
-            "value": 5,
-            "isImplicit": true
           }
         ],
         "subPhrases": [
           {
-            "text": "Can you",
+            "text": "Can you play",
             "synonyms": [
-              "Could you",
-              "Would you be able to",
-              "Can you please"
+              "Could you play",
+              "Would you play",
+              "Will you play"
             ],
             "category": "politeness",
             "isOptional": true
           },
           {
-            "text": "play",
-            "synonyms": [
-              "put on",
-              "start playing",
-              "begin"
-            ],
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
-          },
-          {
             "text": "some",
             "synonyms": [
+              "any",
               "a bit of",
-              "a few",
-              "several"
+              "a little"
             ],
-            "category": "quantity",
-            "propertyNames": []
+            "category": "filler",
+            "isOptional": true
           },
           {
             "text": "Bach",
             "synonyms": [
               "Johann Sebastian Bach",
-              "the composer Bach",
+              "J.S. Bach",
               "Bach's music"
             ],
             "category": "artist",
             "propertyNames": [
-              "parameters.query.0.constraint",
-              "parameters.query.0.text"
+              "parameters.artist"
             ]
           },
           {
             "text": "for me",
             "synonyms": [
               "to me",
-              "for my enjoyment",
-              "for my listening pleasure"
+              "for myself",
+              "for my sake"
             ],
-            "category": "preposition",
+            "category": "filler",
             "isOptional": true
           },
           {
             "text": "please",
             "synonyms": [
-              "if you would",
               "kindly",
-              "if you could"
+              "if you don't mind",
+              "if you please"
             ],
             "category": "politeness",
             "isOptional": true
@@ -312,61 +437,7 @@
         ],
         "propertyAlternatives": [
           {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.play",
-            "propertySubPhrases": [
-              "play"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.pause",
-                "propertySubPhrases": [
-                  "pause"
-                ]
-              },
-              {
-                "propertyValue": "player.stop",
-                "propertySubPhrases": [
-                  "stop"
-                ]
-              },
-              {
-                "propertyValue": "player.shuffle",
-                "propertySubPhrases": [
-                  "shuffle"
-                ]
-              }
-            ]
-          },
-          {
-            "propertyName": "parameters.query.0.constraint",
-            "propertyValue": "artist",
-            "propertySubPhrases": [
-              "Bach"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "genre",
-                "propertySubPhrases": [
-                  "classical"
-                ]
-              },
-              {
-                "propertyValue": "album",
-                "propertySubPhrases": [
-                  "The Well-Tempered Clavier"
-                ]
-              },
-              {
-                "propertyValue": "track",
-                "propertySubPhrases": [
-                  "Toccata and Fugue"
-                ]
-              }
-            ]
-          },
-          {
-            "propertyName": "parameters.query.0.text",
+            "propertyName": "parameters.artist",
             "propertyValue": "Bach",
             "propertySubPhrases": [
               "Bach"
@@ -393,116 +464,7 @@
             ]
           }
         ]
-      },
-      "corrections": [
-        {
-          "data": {
-            "properties": [
-              {
-                "name": "fullActionName",
-                "value": "player.play",
-                "substrings": [
-                  "play"
-                ],
-                "implied": false
-              },
-              {
-                "name": "parameters.query.0.constraint",
-                "value": "artist",
-                "substrings": [
-                  "Bach"
-                ],
-                "implied": true
-              },
-              {
-                "name": "parameters.query.0.text",
-                "value": "Bach",
-                "substrings": [
-                  "Bach"
-                ],
-                "implied": false
-              },
-              {
-                "name": "parameters.quantity",
-                "value": 5,
-                "isImplicit": true
-              }
-            ],
-            "subPhrases": [
-              {
-                "text": "Can you",
-                "synonyms": [
-                  "Could you",
-                  "Would you be able to",
-                  "Can you please"
-                ],
-                "category": "politeness",
-                "isOptional": true
-              },
-              {
-                "text": "play",
-                "synonyms": [
-                  "put on",
-                  "start playing",
-                  "begin"
-                ],
-                "category": "action",
-                "propertyNames": [
-                  "fullActionName"
-                ]
-              },
-              {
-                "text": "some",
-                "synonyms": [
-                  "a bit of",
-                  "a few",
-                  "several"
-                ],
-                "category": "quantity",
-                "propertyNames": [
-                  "parameters.quantity"
-                ]
-              },
-              {
-                "text": "Bach",
-                "synonyms": [
-                  "Johann Sebastian Bach",
-                  "the composer Bach",
-                  "Bach's music"
-                ],
-                "category": "artist",
-                "propertyNames": [
-                  "parameters.query.0.constraint",
-                  "parameters.query.0.text"
-                ]
-              },
-              {
-                "text": "for me",
-                "synonyms": [
-                  "to me",
-                  "for my enjoyment",
-                  "for my listening pleasure"
-                ],
-                "category": "preposition",
-                "isOptional": true
-              },
-              {
-                "text": "please",
-                "synonyms": [
-                  "if you would",
-                  "kindly",
-                  "if you could"
-                ],
-                "category": "politeness",
-                "isOptional": true
-              }
-            ]
-          },
-          "correction": [
-            "Property 'parameters.quantity' is expected to be implicit and should not be a parameter name in a sub-phrase"
-          ]
-        }
-      ]
+      }
     }
   ]
 }
