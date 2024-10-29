@@ -48,9 +48,7 @@ import chalk from "chalk";
 import { createCommandTransformer } from "./commandTransformer.js";
 
 export async function runCodeMemory(): Promise<void> {
-    const model = openai.createChatModel(undefined, undefined, undefined, [
-        "codeMemory",
-    ]);
+    const model = openai.createChatModelDefault("codeMemory");
     const memoryFolderPath = "/data/code/memory";
     const codeReviewer = createCodeReviewer(model);
     const codeGenerator = createCodeGenerator(model);

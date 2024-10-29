@@ -23,6 +23,7 @@ import {
 } from "../conversation/conversation.js";
 import { isValidChunkSize, splitLargeTextIntoChunks } from "../textChunker.js";
 import { ChatModel } from "aiclient";
+import { KnownEntityTypes } from "../conversation/knowledge.js";
 
 export function emailAddressToString(address: EmailAddress): string {
     if (address.displayName) {
@@ -51,13 +52,13 @@ export function emailAddressToEntities(
     if (emailAddress.displayName) {
         const entity: ConcreteEntity = {
             name: emailAddress.displayName,
-            type: ["person"],
+            type: [KnownEntityTypes.Person],
         };
         entities.push(entity);
         if (emailAddress.address) {
             entity.facets = [];
             entity.facets.push({
-                name: "email_alias",
+                name: "email_address",
                 value: emailAddress.address,
             });
         }
@@ -65,7 +66,10 @@ export function emailAddressToEntities(
     if (emailAddress.address) {
         entities.push({
             name: emailAddress.address,
-            type: ["email", "email_alias"],
+            type: [
+                KnownEntityTypes.Email_Address,
+                KnownEntityTypes.Email_Alias,
+            ],
         });
     }
 
