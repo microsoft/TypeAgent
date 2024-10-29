@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as sqlite from "better-sqlite3";
+import * as knowLib from "knowledge-processor";
 import { createDb } from "../src/sqlite/common.js";
 import { ensureTestDir, testFilePath } from "./testCore.js";
 import { createKeyValueIndex } from "../src/sqlite/keyValueIndex.js";
@@ -28,20 +29,11 @@ describe("sqlite.keyValueIndex", () => {
                 "TEXT",
             );
             const idsForKey = makeStringIds(4, 4);
-            for (let k = 0; k < 4; ++k) {
+            const maxK = 4;
+            for (let k = 0; k < maxK; ++k) {
                 await index.put(idsForKey[k], k.toString());
             }
-            for (let k = 0; k < 4; ++k) {
-                const ids = await index.get(k.toString());
-                expect(ids).toBeDefined();
-                if (ids) {
-                    let expectedIds = idsForKey[k];
-                    expect(ids.length).toEqual(idsForKey[k].length);
-                    for (let v = 0; v < ids.length; ++v) {
-                        expect(ids[v]).toEqual(expectedIds[v]);
-                    }
-                }
-            }
+            verifyTable(index, maxK, idsForKey);
         },
         testTimeout,
     );
@@ -56,23 +48,51 @@ describe("sqlite.keyValueIndex", () => {
             );
             7;
             const idsForKey = makeNumberIds(4, 4);
-            for (let k = 0; k < 4; ++k) {
+            const maxK = 4;
+            for (let k = 0; k < maxK; ++k) {
                 await index.put(idsForKey[k], k.toString());
             }
-            for (let k = 0; k < 4; ++k) {
-                const ids = await index.get(k.toString());
-                expect(ids).toBeDefined();
-                if (ids) {
-                    let expectedIds = idsForKey[k];
-                    expect(ids.length).toEqual(idsForKey[k].length);
-                    for (let v = 0; v < ids.length; ++v) {
-                        expect(ids[v]).toEqual(expectedIds[v]);
-                    }
-                }
-            }
+            verifyTable(index, maxK, idsForKey);
         },
         testTimeout,
     );
+    test(
+        "number_number",
+        async () => {
+            const index = createKeyValueIndex<number, number>(
+                db!,
+                "number_number",
+                "INTEGER",
+                "INTEGER",
+            );
+            7;
+            const idsForKey = makeNumberIds(4, 4);
+            const maxK = 4;
+            for (let k = 0; k < maxK; ++k) {
+                await index.put(idsForKey[k], k);
+            }
+            verifyTable(index, maxK, idsForKey);
+        },
+        testTimeout,
+    );
+
+    async function verifyTable(
+        index: knowLib.KeyValueIndex,
+        maxK: number,
+        idsForKey: any[],
+    ) {
+        for (let k = 0; k < maxK; ++k) {
+            const ids = await index.get(k.toString());
+            expect(ids).toBeDefined();
+            if (ids) {
+                let expectedIds = idsForKey[k];
+                expect(ids.length).toEqual(idsForKey[k].length);
+                for (let v = 0; v < ids.length; ++v) {
+                    expect(ids[v]).toEqual(expectedIds[v]);
+                }
+            }
+        }
+    }
 
     function makeStringIds(keyCount: number, valueCount: number) {
         let kv: string[][] = [];

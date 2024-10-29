@@ -69,7 +69,7 @@ export function createKeyValueIndex<
     }
 
     function put(values: TValueId[], id?: TKeyId): Promise<TKeyId> {
-        if (!id) {
+        if (id === undefined) {
             // TODO: support
             throw new Error("Not supported");
         }
