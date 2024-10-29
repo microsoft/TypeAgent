@@ -1,6 +1,8 @@
-# local-whisper-client
+# List visualization
 
-Client for testing local whisper service instances
+This webpage helps visualize the contents of the List agent.
+
+To see the page in action, run `pnpm run start` in this directory.
 
 ## Trademarks
 

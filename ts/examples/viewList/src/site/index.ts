@@ -32,7 +32,7 @@ async function loadLists() {
         const currentListTitle =
             document.getElementById("list-title")?.textContent;
         if (!currentListTitle) {
-            loadListContents(lists); // Load the first list by default if no list is currently selected
+            loadListContents(lists[0]);
             highlightSelectedList(listNames.children[0] as HTMLLIElement);
         }
     }

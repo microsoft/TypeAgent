@@ -9,19 +9,18 @@ export function setupMiddlewares(
     devServer: Server,
 ) {
     const app = devServer.app!;
-    // const port = 3000;
-
     let clients: any[] = [];
 
-    // Serve static files from the "public" directory
-    // app.use(express.static(path.join(__dirname, 'public')));
-
     // Get the lists file path from command-line arguments
-    // const listsFilePath = process.argv[0] || path.join(__dirname, "lists.json");
-    // const listsFilePath = path.join(__dirname, "lists.json");
+    const listsFilePath = process.env.LISTS_FILE || process.env.NODE_ENV;
 
-    const listsFilePath =
-        "C:\\Users\\hillarym\\.typeagent\\profiles\\dev_0\\sessions\\20240930_1\\list\\lists.json";
+    if (!listsFilePath) {
+        console.error(
+            "Please provide the path to the lists file using the --node-env command-line argument.",
+        );
+        process.exit(1);
+    }
+
     let listsData: { name: string; items: string[] }[] = [];
 
     const readListsFromFile = () => {
@@ -29,15 +28,10 @@ export function setupMiddlewares(
             if (err) {
                 console.error("Error reading lists file:", err);
             } else {
-                try {
-                    const updatedListsData = JSON.parse(data);
-                    const changes = compareListsData(
-                        listsData,
-                        updatedListsData,
-                    );
-                    listsData = updatedListsData;
-                    sendEvent("updateLists", changes);
-                } catch {}
+                const updatedListsData = JSON.parse(data);
+                const changes = compareListsData(listsData, updatedListsData);
+                listsData = updatedListsData;
+                sendEvent("updateLists", changes);
             }
         });
     };
@@ -82,7 +76,7 @@ export function setupMiddlewares(
         });
     });
 
-    // Function to send events to all clients
+    // Send events to all clients
     function sendEvent(event: string, data: any) {
         clients.forEach((client) => {
             client.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
