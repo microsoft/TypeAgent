@@ -1,0 +1,16 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": ".",
+    "outDir": "../dist/test",
+    "types": ["node", "jest"],
+  },
+  "include": ["./**/*", "../src/conversation/testData.ts"],
+  "ts-node": {
+    "esm": true
+  },
+  "references": [
+    { "path": "../src" }
+  ]
+}

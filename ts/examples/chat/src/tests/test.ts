@@ -18,7 +18,6 @@ import {
 } from "typeagent";
 import * as path from "path";
 import { getData } from "typechat";
-//import { testStringTables } from "./testSql.js";
 //import { runKnowledgeTests } from "./knowledgeTests.js";
 
 export function func1(x: number, y: number, op: string): number {
@@ -182,7 +181,6 @@ export async function runTestCases(): Promise<void> {
 }
 
 export async function runTests(): Promise<void> {
-    //await testStringTables();
     //await runTestCases();
     // await runKnowledgeTests();
 }
