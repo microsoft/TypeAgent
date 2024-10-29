@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 // This requires that python3 is on the PATH
-// and the chunker.py script is in the current directory.
+// and the chunker.py script is in the dist directory.
 
 import { exec } from "child_process";
 import path from "path";

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Main program to test pythonChunker.ts and pythonImporter.ts.
+// Main program to index python files and query the index.
 
 import dotenv from "dotenv";
 import * as readlineSync from "readline-sync";
@@ -15,6 +15,7 @@ import { Chunk } from "./pythonChunker.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import { openai } from "aiclient";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,10 +57,11 @@ async function main(): Promise<void> {
         `${spelunkerRoot}/embeddings`,
     );
     const codeIndex = createSemanticIndex(embeddingFolder);
+    const chatModel = openai.createChatModelDefault("chat");
 
     // Import all files. (TODO: concurrently but avoid timestamp conflicts)
     for (const file of files) {
-        await importPythonFile(file, objectFolder, codeIndex);
+        await importPythonFile(file, objectFolder, codeIndex, chatModel);
     }
 
     while (true) {

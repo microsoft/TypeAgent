@@ -31,11 +31,13 @@ import * as path from "path";
 import { asyncArray, ObjectFolder, SemanticIndex } from "typeagent";
 
 import { Chunk, chunkifyPythonFile } from "./pythonChunker.js";
+import { ChatModelWithStreaming } from "aiclient";
 
 export async function importPythonFile(
     file: string,
     objectFolder: ObjectFolder<Chunk>,
     codeIndex: SemanticIndex<string>,
+    chatModel: ChatModelWithStreaming,
 ): Promise<void> {
     let filename = fs.realpathSync(file);
     const result = await chunkifyPythonFile(filename);
@@ -59,13 +61,23 @@ export async function importPythonFile(
 
     // Compute and store embeddings (not concurrently -- I get 429 errors).
     await asyncArray.forEachAsync(chunks, 1, async (chunk) => {
-        await codeIndex.put(makeChunkText(chunk), chunk.id);
+        console.log(`[Embedding ${chunk.id}]`);
+        const rawText = makeChunkText(chunk);
+        const prompt = "Understand the included code and document it where necessary, especially complicated loops.\n" +
+            "The docs must be: accurate, active voice, crisp, succinct\n";
+        const chatOutput = await chatModel.complete(prompt + rawText);
+        if (!chatOutput.success) {
+            console.log(`[Error embedding ${chunk.id}: ${chatOutput.message}]`);
+        } else {
+            const embeddingText = chatOutput.data + "\n" + rawText;
+            console.log("====================\n" + embeddingText);
+            await codeIndex.put(embeddingText, chunk.id);
+        }
     });
 }
 
 function makeChunkText(chunk: Chunk): string {
-    const prefix = `${path.basename(chunk.filename ?? "")}\n${chunk.treeName}\n\n`;
-    const fullText =
-        prefix + chunk.blobs.map((blob) => blob.lines.join("")).join("\n");
-    return fullText.replace(/\W+/g, " ").trim();
+    let text = `${path.basename(chunk.filename ?? "")}\n${chunk.treeName}\n\n`;
+    text += chunk.blobs.map((blob) => blob.lines.join("")).join("\n");
+    return text;
 }
