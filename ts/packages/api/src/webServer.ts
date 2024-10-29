@@ -8,6 +8,7 @@ import path from "node:path";
 
 export type TypeAgentAPIServerConfig = {
     wwwroot: string;
+    port: number;
     broadcast: boolean;
 };
 

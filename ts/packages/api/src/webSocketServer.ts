@@ -151,5 +151,7 @@ export class TypeAgentAPIWebSocketServer {
         });
     }
 
-    noop() {}
+    stop() {
+        this.server.close();
+    }
 }
