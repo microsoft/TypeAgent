@@ -687,8 +687,14 @@ async function requestExplain(
     );
 
     if (context.explanationAsynchronousMode) {
-        // TODO: result/error handler in Asynchronous mode
-        processRequestActionP.then(notifyExplained).catch();
+        processRequestActionP.then(notifyExplained).catch((e) =>
+            context.requestIO.notify("explained", requestId, {
+                error: e.message,
+                fromCache,
+                fromUser,
+                time: new Date().toLocaleTimeString(),
+            }),
+        );
     } else {
         console.log(
             chalk.grey(`Generating explanation for '${requestAction}'`),
