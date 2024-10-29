@@ -262,7 +262,7 @@
             ],
             "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
             "program": "./dist/main.js",
-            "args": [ "-schemagen" ],
+            "args": [ "-schemagen-actionprefix=editor.action" ],
             "console": "externalTerminal",
             "outFiles": [
                 "${workspaceFolder}/**/*.js"

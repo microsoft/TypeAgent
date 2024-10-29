@@ -101,10 +101,6 @@ export async function normalizeCommandsandKBJson() {
         // contains the commands
         const firstFileData = await fs.readFile(firstFilePath, 'utf-8');
         const firstArray = JSON.parse(firstFileData);
-        // contains the keybindings
-        //const secondFileData = await fs.readFile(secondFilePath, 'utf-8');
-
-        //const secondArray = JSON.parse(secondFileData);
         const secondArray = await mergeAndFilterKeyBindings(secondFilePath);
     
         const secondMap = new Map(secondArray.map((item: any) => [item.command, item]));

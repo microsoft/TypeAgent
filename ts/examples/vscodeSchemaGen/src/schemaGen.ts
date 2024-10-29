@@ -4,6 +4,7 @@
 import { ChatModelWithStreaming, openai } from "aiclient";
 import dotenv from "dotenv";
 import * as fs from 'fs';
+import { createVscodeActionsIndex } from "./embedActions.js";
 
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
@@ -16,7 +17,7 @@ async function getModelCompletionResponse(
     const chatResponse = await chatModel.complete(prompt);
     if (chatResponse.success) {
         const responseText = chatResponse.data;
-        console.log(responseText);
+        //console.log(responseText);
         return responseText;
     } else {
         console.log(chatResponse.message);
@@ -66,24 +67,49 @@ TypeScript Type:
     return await getModelCompletionResponse(model, prompt, jsonNode);
 }
 
-export async function processVscodeCommandsJsonFile(jsonFilePath: string, outputFilePath: string) {
+function parseTypeComponents(schema: string): { typeName: string, actionName: string, comments: string[] } {
+    return {
+        typeName: (schema.match(/type\s+(\w+)\s*=/) || [])[1] || '',
+        actionName: (schema.match(/actionName:\s*['"](.+?)['"]/) || [])[1] || '',
+        comments: (schema.match(/\/\/.*/g) || []).map(comment => comment.trim()),
+    };
+}
+
+export async function processVscodeCommandsJsonFile(jsonFilePath: string, outputFilePath: string, actionPrefix: string | undefined) {
     const jsonData = JSON.parse(fs.readFileSync(jsonFilePath, 'utf8'));
 
+    const vscodeActionIndex = createVscodeActionsIndex();
+
     const schemaDefinitions: string[] = [];
+    let processedNodeCount = 0;
+    let schemaCount = 0;
 
     for (const node of jsonData) {
         try {
-        const schema:string|undefined = await genActionSchemaForNode(node);
-        if(schema)
-        {
-            console.log(schema);
-            schemaDefinitions.push(schema);
-        }
+            if (actionPrefix && !node.id.startsWith(actionPrefix)) {
+                continue;
+            }
+
+            const schema: string | undefined = await genActionSchemaForNode(node);
+            processedNodeCount++;
+
+            if (schema) {
+                schemaDefinitions.push(schema);
+                schemaCount++;
+
+                let actionData:any = parseTypeComponents(schema);
+                vscodeActionIndex.addOrUpdate(actionData.actionName, actionData);
+            }
+
+            if (processedNodeCount % 50 === 0) {
+                console.log(`Processed ${processedNodeCount} nodes so far. Schemas generated: ${schemaCount}`);
+            }
         } catch (error) {
-        console.error(`Error generating schema for node ${node.id}:`, error);
+            console.error(`Error generating schema for node ${node.id}:`, error);
         }
     }
 
     fs.writeFileSync(outputFilePath, schemaDefinitions.join('\n\n'));
     console.log(`Schema definitions written to ${outputFilePath}`);
+    console.log(`Total nodes processed: ${processedNodeCount}, Total schemas generated: ${schemaCount}`);
 }
