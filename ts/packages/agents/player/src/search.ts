@@ -333,8 +333,8 @@ export async function findAlbums(
 async function expandMovmentTracks(
     originalQuery: SpotifyQuery,
     tracks: SpotifyApi.TrackObjectFull[],
+    quantity: number = 50,
     context: IClientContext,
-    limit: number = 50,
 ) {
     // With search terms for track name, search for matching songs in the albums (to gather multi-movement songs)
     const albums = new Map(
@@ -361,7 +361,7 @@ async function expandMovmentTracks(
                         return a.track_number - b.track_number;
                     }),
             );
-            if (expandedTracks.length > limit) {
+            if (expandedTracks.length > quantity) {
                 break;
             }
         }
@@ -400,7 +400,7 @@ async function sortAndExpandMovment(
 
     if (trackName && !equivalentNames(result[0].name, trackName)) {
         // Expand movements if it is not an exact match
-        result = await expandMovmentTracks(query, result, context);
+        result = await expandMovmentTracks(query, result, quantity, context);
     }
 
     dumpTracks(result, userData);
