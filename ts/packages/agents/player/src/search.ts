@@ -14,7 +14,7 @@ import chalk from "chalk";
 import { SpotifyService } from "./service.js";
 
 const debug = registerDebug("typeagent:spotify:search");
-const debugVerbose = registerDebug("typeagent:verbose:spotify:search");
+const debugVerbose = registerDebug("typeagent:spotify-verbose:search");
 const debugError = registerDebug("typeagent:spotify:search:error");
 
 export type SpotifyQuery = {
@@ -100,10 +100,6 @@ async function searchArtistSorted(artistName: string, context: IClientContext) {
                 if (compKnown !== 0) {
                     return compKnown;
                 }
-            }
-            const compName = compareNames(artistName, a, b);
-            if (compName !== 0) {
-                return compName;
             }
             return b.popularity - a.popularity;
         });
@@ -264,7 +260,7 @@ async function findArtists(
     return artists;
 }
 
-async function findAlbumsWithTrackArtists(
+async function searchAlbumsWithTrackArtists(
     albumName: string,
     artists: SpotifyApi.ArtistObjectFull[],
     context: IClientContext,
@@ -272,18 +268,18 @@ async function findAlbumsWithTrackArtists(
     // Try again without artist, as the artist on the album might not match the one in the tracks.
     let albums = await searchAlbumSorted(albumName, undefined, context);
     if (albums === undefined) {
-        throw new Error(
-            `Unable to find album '${albumName}' with artists ${artists.map((artist) => artist.name).join(", ")}`,
-        );
+        return undefined;
     }
 
-    return albums.filter((album) =>
+    const filtered = albums.filter((album) =>
         album.tracks.items.some((track) =>
             track.artists.some((trackArtist) =>
                 artists.some((artist) => artist.id === trackArtist.id),
             ),
         ),
     );
+
+    return filtered.length === 0 ? undefined : filtered;
 }
 
 export async function findArtistTopTracks(
@@ -316,11 +312,16 @@ export async function findAlbums(
         albums = await searchAlbumSorted(albumName, matchedArtists, context);
 
         if (albums === undefined) {
-            albums = await findAlbumsWithTrackArtists(
+            albums = await searchAlbumsWithTrackArtists(
                 albumName,
                 matchedArtists,
                 context,
             );
+            if (albums === undefined) {
+                throw new Error(
+                    `Unable to find album '${albumName}' with artists ${matchedArtists.map((artist) => artist.name).join(", ")}`,
+                );
+            }
         }
     } else {
         albums = await searchAlbumSorted(albumName, undefined, context);
@@ -337,8 +338,8 @@ export async function findAlbums(
 async function expandMovmentTracks(
     originalQuery: SpotifyQuery,
     tracks: SpotifyApi.TrackObjectFull[],
+    quantity: number = 50,
     context: IClientContext,
-    limit: number = 50,
 ) {
     // With search terms for track name, search for matching songs in the albums (to gather multi-movement songs)
     const albums = new Map(
@@ -365,7 +366,7 @@ async function expandMovmentTracks(
                         return a.track_number - b.track_number;
                     }),
             );
-            if (expandedTracks.length > limit) {
+            if (expandedTracks.length > quantity) {
                 break;
             }
         }
@@ -402,9 +403,9 @@ async function sortAndExpandMovment(
         result = result.slice(0, quantity);
     }
 
-    if (trackName && equivalentNames(result[0].name, trackName)) {
-        // Expand movements
-        result = await expandMovmentTracks(query, result, context);
+    if (trackName && !equivalentNames(result[0].name, trackName)) {
+        // Expand movements if it is not an exact match
+        result = await expandMovmentTracks(query, result, quantity, context);
     }
 
     dumpTracks(result, userData);
