@@ -1,15 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+
 import * as sqlite from "better-sqlite3";
 import * as knowLib from "knowledge-processor";
-
-export type ColumnType = string | number;
-
-export type SqlColumnType<T> = T extends string
-    ? "TEXT"
-    : T extends number
-      ? "INTEGER"
-      : never;
+import { ColumnType, SqlColumnType } from "./common.js";
 
 export function createKeyValueIndex<
     TKeyId extends ColumnType = string,

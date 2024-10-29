@@ -30,7 +30,7 @@ export function createStringTable(
     const sql_ids = db.prepare(`SELECT stringId from ${tableName}`);
     const sql_values = db.prepare(`SELECT value from ${tableName}`);
     const sql_getId = db.prepare(
-        `SELECT stringId from ${tableName} where value = ?`,
+        `SELECT stringId from ${tableName} WHERE value = ?`,
     );
     const sql_add = db.prepare(
         `INSERT OR IGNORE INTO ${tableName} (value) VALUES (?)`,
