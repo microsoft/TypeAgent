@@ -33,7 +33,7 @@ export function createKeyValueIndex<
     }
 
     const sql_get = db.prepare(
-        `SELECT valueId from ${tableName} WHERE keyId = ?`,
+        `SELECT valueId from ${tableName} WHERE keyId = ? ORDER BY valueId ASC`,
     );
     const sql_add = db.prepare(
         `INSERT OR IGNORE INTO ${tableName} (keyId, valueId) VALUES (?, ?)`,
