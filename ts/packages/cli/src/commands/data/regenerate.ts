@@ -29,6 +29,23 @@ import {
     getChatModelMaxConcurrency,
     getChatModelNames,
 } from "common-utils";
+import { Entity } from "@typeagent/agent-sdk";
+
+function toEntities(actions: Actions): Entity[] {
+    const entities: Entity[] = [];
+    for (const action of actions) {
+        for (const [key, value] of Object.entries(action.parameters)) {
+            if (typeof value === "string") {
+                entities.push({
+                    name: value,
+                    type: [key],
+                });
+            }
+        }
+    }
+    return entities;
+}
+
 export default class ExplanationDataRegenerateCommmand extends Command {
     static strict = false;
     static args = {
@@ -380,6 +397,12 @@ export default class ExplanationDataRegenerateCommmand extends Command {
                         ? new RequestAction(
                               e.request,
                               Actions.fromJSON(e.action),
+                              {
+                                  promptSections: [],
+                                  entities: toEntities(
+                                      Actions.fromJSON(e.action),
+                                  ),
+                              },
                           )
                         : undefined;
                     if (flags.validate) {

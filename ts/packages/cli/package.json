@@ -45,6 +45,7 @@
   "dependencies": {
     "@oclif/core": "^3",
     "@oclif/plugin-help": "^5",
+    "@typeagent/agent-sdk": "workspace:*",
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "aiclient": "workspace:*",
