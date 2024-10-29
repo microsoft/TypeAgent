@@ -730,7 +730,7 @@ function verifyFilterResults(filterResult: FilterResult) {
  * @returns
  */
 export function createChatModelDefault(tag: string): ChatModelWithStreaming {
-    return createChatModel(undefined, undefined, undefined, [tag]);
+    return createJsonChatModel(undefined, [tag]);
 }
 
 /**
