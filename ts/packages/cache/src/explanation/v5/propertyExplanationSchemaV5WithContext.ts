@@ -10,6 +10,7 @@ export interface ImplicitProperty {
     isImplicit: true;
 }
 
+// Use this if the property value comes directly from the request.
 export interface Property {
     name: string;
     value: PropertyValueType;
@@ -18,6 +19,7 @@ export interface Property {
     implied: boolean; // implied by the context of the substrings in the request
 }
 
+// Use this if the property value is only in the conversation history and not from the request.
 export interface EntityProperty {
     name: string;
     value: PropertyValueType;
