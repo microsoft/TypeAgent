@@ -14,7 +14,7 @@ import chalk from "chalk";
 import { SpotifyService } from "./service.js";
 
 const debug = registerDebug("typeagent:spotify:search");
-const debugVerbose = registerDebug("typeagent:verbose:spotify:search");
+const debugVerbose = registerDebug("typeagent:spotify-verbose:search");
 const debugError = registerDebug("typeagent:spotify:search:error");
 
 export type SpotifyQuery = {
@@ -100,10 +100,6 @@ async function searchArtistSorted(artistName: string, context: IClientContext) {
                 if (compKnown !== 0) {
                     return compKnown;
                 }
-            }
-            const compName = compareNames(artistName, a, b);
-            if (compName !== 0) {
-                return compName;
             }
             return b.popularity - a.popularity;
         });
@@ -402,8 +398,8 @@ async function sortAndExpandMovment(
         result = result.slice(0, quantity);
     }
 
-    if (trackName && equivalentNames(result[0].name, trackName)) {
-        // Expand movements
+    if (trackName && !equivalentNames(result[0].name, trackName)) {
+        // Expand movements if it is not an exact match
         result = await expandMovmentTracks(query, result, context);
     }
 
