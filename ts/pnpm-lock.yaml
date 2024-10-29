@@ -184,6 +184,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
+      code-processor:
+        specifier: workspace:*
+        version: link:../../packages/codeProcessor
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
