@@ -15,9 +15,11 @@ import {
     generateNotesForWebPage,
     createSemanticList,
     collections,
+    readAllText,
 } from "typeagent";
 import * as path from "path";
 import { getData } from "typechat";
+import { StopWatch } from "interactive-app";
 //import { runKnowledgeTests } from "./knowledgeTests.js";
 
 export function func1(x: number, y: number, op: string): number {
@@ -74,9 +76,23 @@ export async function testEmbedding2() {
 }
 
 export async function testEmbeddingModel() {
+    const stopWatch = new StopWatch();
     const model = openai.createEmbeddingModel();
-    const result = await model.generateEmbedding("lunch meeting");
+
+    stopWatch.start();
+    let result = await model.generateEmbedding("lunch meeting");
+    stopWatch.stop();
     console.log(result.success);
+    console.log(stopWatch.elapsedMs);
+
+    for (let i = 0; i < 3; ++i) {
+        const medText = await readAllText("/data/test/medText.txt");
+        stopWatch.start();
+        result = await model.generateEmbedding(medText);
+        stopWatch.stop();
+        console.log(result.success);
+        console.log(stopWatch.elapsedMs);
+    }
 
     const strings = [
         "lunch meeting",
@@ -92,11 +108,13 @@ export async function testEmbeddingModel() {
         }
     }
 
+    stopWatch.start();
     const list = createSemanticList<string>(model, undefined, (value) => value);
     for (const str of strings) {
         await list.push(str);
     }
-
+    stopWatch.stop();
+    console.log(stopWatch.elapsedMs);
     const match = await list.nearestNeighbor("pizza");
     console.log(match);
 }
@@ -110,7 +128,7 @@ export function generateMessageLines(count: number): string[] {
 }
 
 export async function summarize() {
-    const text = await fs.promises.readFile("C:/data/longText.txt", {
+    const text = await fs.promises.readFile("C:/data/test/longText.txt", {
         encoding: "utf-8",
     });
     console.log(chalk.greenBright(`Total:${text.length}\n`));
@@ -181,6 +199,8 @@ export async function runTestCases(): Promise<void> {
 }
 
 export async function runTests(): Promise<void> {
+    await testEmbeddingModel();
+
     //await runTestCases();
     // await runKnowledgeTests();
 }

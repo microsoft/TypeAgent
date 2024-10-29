@@ -14,8 +14,11 @@ export interface StringTable {
 export function createStringTable(
     db: sqlite.Database,
     tableName: string,
+    ensureExists: boolean = true,
 ): StringTable {
-    ensureTable();
+    if (ensureExists) {
+        ensureTable();
+    }
 
     const idSql = db.prepare(`SELECT stringId from ${tableName}`);
     const valuesSql = db.prepare(`SELECT value from ${tableName}`);
@@ -72,8 +75,11 @@ export function createStringTable(
     function remove(value: string) {
         removeSql.run(value);
     }
+
     type StringTableRow = {
         stringId: number;
         value: string;
     };
 }
+
+//export async function createKeyValueIndex(db: sqlite.Database) {}
