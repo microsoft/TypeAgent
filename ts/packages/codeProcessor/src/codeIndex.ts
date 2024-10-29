@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 import {
+    ObjectFolderSettings,
+    ObjectSerializer,
     ScoredItem,
     createEmbeddingFolder,
     createObjectFolder,
@@ -27,13 +29,19 @@ export async function createSemanticCodeIndex(
     folderPath: string,
     codeReviewer: CodeReviewer,
     embeddingModel?: TextEmbeddingModel,
+    objectSerializer?: ObjectSerializer,
 ): Promise<SemanticCodeIndex> {
     const embeddingFolder = await createEmbeddingFolder(
         path.join(folderPath, "embeddings"),
     );
     const codeIndex = createSemanticIndex(embeddingFolder, embeddingModel);
+    const codeStoreSettings: ObjectFolderSettings = {};
+    if (objectSerializer) {
+        codeStoreSettings.serializer = objectSerializer;
+    }
     const codeStore = await createObjectFolder<StoredCodeBlock>(
         path.join(folderPath, "code"),
+        codeStoreSettings,
     );
     return {
         find,
