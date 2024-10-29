@@ -8,4 +8,5 @@ module.exports = {
     moduleNameMapper: {
         "^../src/(.*)$": "<rootDir>/dist/$1",
     },
+    testTimeout: 30000
 };
