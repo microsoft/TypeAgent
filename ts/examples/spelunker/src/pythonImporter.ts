@@ -28,7 +28,7 @@ TypeScript, of course).
 import * as fs from "fs";
 import * as path from "path";
 
-import { asyncArray, ObjectFolder } from "typeagent";
+import { ObjectFolder } from "typeagent";
 import { CodeBlock, SemanticCodeIndex } from "code-processor";
 
 import { Chunk, chunkifyPythonFile } from "./pythonChunker.js";
@@ -50,18 +50,16 @@ export async function importPythonFile(
     const chunks: Chunk[] = result;
     console.log(`[Importing ${chunks.length} chunks from ${filename}]`);
 
+    // Compute and store embedding. (TODO: concurrency.)
     for (const chunk of chunks) {
+        const t0 = Date.now();
         chunk.filename = filename;
-    }
-
-    // Compute and store embedding.
-    await asyncArray.forEachAsync(chunks, 4, async (chunk) => {
-        const putCall = objectFolder.put(chunk, chunk.id);
         const lineCount = chunk.blobs.reduce(
             (acc, blob) => acc + blob.lines.length,
             0,
         );
-        const t0 = Date.now();
+        console.log(`[Embedding ${chunk.id} (${lineCount} lines)]`);
+        const putCall = objectFolder.put(chunk, chunk.id);
         const rawText = makeChunkText(chunk);
         const codeBlock: CodeBlock = { code: rawText, language: "python" };
         let embeddingText = "";
@@ -72,7 +70,6 @@ export async function importPythonFile(
                     chunk.id,
                     chunk.filename,
                 );
-                console.log(`[Embedding ${chunk.id} (${lineCount} lines)]`);
                 console.log(embeddingText);
                 break;
             } catch (error) {
@@ -85,7 +82,7 @@ export async function importPythonFile(
             `[${embeddingText ? "Embedded" : "FAILED TO EMBED"} ` +
                 `${chunk.id} (${lineCount} lines) in ${t1 - t0} ms]`,
         );
-    });
+    }
 }
 
 function makeChunkText(chunk: Chunk): string {
