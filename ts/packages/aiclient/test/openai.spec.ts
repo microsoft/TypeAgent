@@ -9,7 +9,13 @@ dotenv.config({
 
 import { getData } from "typechat";
 import { TextEmbeddingModel } from "../src/index.js";
-import { createEmbeddingModel, hasEmbeddingModel, testIf } from "./testCore.js";
+import {
+    createEmbeddingModel,
+    hasApiSettings,
+    hasEmbeddingModel,
+    testIf,
+} from "./testCore.js";
+import { createChatModelDefault, EnvVars } from "../src/openai.js";
 
 const testTimeout = 30000;
 const smallEndpoint = "3_SMALL";
@@ -41,7 +47,17 @@ describe("openai.textEmbeddings", () => {
         },
         testTimeout,
     );
-
+    testIf(
+        () => hasApiSettings(EnvVars.AZURE_OPENAI_API_KEY),
+        "createDefault",
+        () => {
+            const model = createChatModelDefault("test");
+            expect(model.completionSettings.response_format).toBeDefined();
+            expect(model.completionSettings.response_format?.type).toBe(
+                "json_object",
+            );
+        },
+    );
     async function testEmbeddings(
         model: TextEmbeddingModel,
         text: string,
