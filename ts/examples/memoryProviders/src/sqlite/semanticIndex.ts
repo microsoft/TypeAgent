@@ -2,7 +2,14 @@
 // Licensed under the MIT License.
 
 import * as sqlite from "better-sqlite3";
-import { Embedding, ScoredItem, SimilarityType, VectorStore } from "typeagent";
+import {
+    Embedding,
+    ScoredItem,
+    SimilarityType,
+    VectorStore,
+    createTopNList,
+    similarity,
+} from "typeagent";
 import { ColumnType, SqlColumnType } from "./common.js";
 
 export function createVectorStore<TKeyId extends ColumnType = string>(
@@ -30,6 +37,8 @@ export function createVectorStore<TKeyId extends ColumnType = string>(
         `INSERT OR IGNORE INTO ${tableName} (keyId, embedding) VALUES (?, ?)`,
     );
     const sql_remove = db.prepare(`DELETE FROM ${tableName} WHERE keyId = ?`);
+    const sql_all = db.prepare(`SELECT * from ${tableName}`);
+
     return {
         exists,
         put,
@@ -56,9 +65,7 @@ export function createVectorStore<TKeyId extends ColumnType = string>(
 
     function get(id: TKeyId): Promise<Embedding | undefined> {
         const row = sql_getEmbedding.get(id) as VectorRow;
-        const embedding = row
-            ? new Float32Array(row.embedding.buffer)
-            : undefined;
+        const embedding = row ? deserialize(row.embedding) : undefined;
         return Promise.resolve(embedding);
     }
 
@@ -69,19 +76,57 @@ export function createVectorStore<TKeyId extends ColumnType = string>(
 
     function nearestNeighbor(
         value: Embedding,
-        similarity: SimilarityType,
+        type: SimilarityType,
         minScore?: number,
     ): Promise<ScoredItem<TKeyId> | undefined> {
-        return Promise.resolve(undefined);
+        let bestScore = Number.MIN_VALUE;
+        let bestKey: TKeyId | undefined;
+        for (const row of allRows()) {
+            const score = similarity(deserialize(row.embedding), value, type);
+            if (score > bestScore) {
+                bestScore = score;
+                bestKey = row.keyId;
+            }
+        }
+        return Promise.resolve(
+            bestKey
+                ? {
+                      score: bestScore,
+                      item: bestKey,
+                  }
+                : undefined,
+        );
     }
 
     function nearestNeighbors(
         value: Embedding,
         maxMatches: number,
-        similarity: SimilarityType,
+        type: SimilarityType,
         minScore?: number,
     ): Promise<ScoredItem<TKeyId>[]> {
-        return Promise.resolve([]);
+        minScore ??= 0;
+        const matches = createTopNList<TKeyId>(maxMatches);
+        for (const row of allRows()) {
+            const score: number = similarity(
+                deserialize(row.embedding),
+                value,
+                type,
+            );
+            if (score >= minScore) {
+                matches.push(row.keyId, score);
+            }
+        }
+        return Promise.resolve(matches.byRank());
+    }
+
+    function* allRows(): IterableIterator<VectorRow> {
+        for (const row of sql_all.iterate()) {
+            yield row as VectorRow;
+        }
+    }
+
+    function deserialize(embedding: Buffer): Float32Array {
+        return new Float32Array(embedding.buffer);
     }
 
     type VectorRow = {

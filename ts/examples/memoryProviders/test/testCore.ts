@@ -21,6 +21,15 @@ export function testFilePath(fileName: string): string {
     return path.join(getRootDataPath(), fileName);
 }
 
+export function generateTestEmbedding(
+    value: number,
+    length: number,
+): NormalizedEmbedding {
+    const embedding = new Array<number>(length);
+    embedding.fill(value);
+    return createNormalized(embedding);
+}
+
 export function generateRandomTestEmbedding(
     length: number,
 ): NormalizedEmbedding {
