@@ -13,6 +13,7 @@ import { CodeBlock, StoredCodeBlock } from "./code.js";
 import { CodeReviewer } from "./codeReviewer.js";
 import { TextEmbeddingModel } from "aiclient";
 import path from "path";
+import { CodeDocumentation } from "./codeDocSchema.js";
 
 export interface SemanticCodeIndex {
     find(question: string, maxMatches: number): Promise<ScoredItem<string>[]>;
@@ -21,7 +22,7 @@ export interface SemanticCodeIndex {
         code: CodeBlock,
         name: string,
         sourcePath?: string | undefined,
-    ): Promise<string>;
+    ): Promise<CodeDocumentation>;
     remove(name: string): Promise<void>;
 }
 
@@ -61,18 +62,17 @@ export async function createSemanticCodeIndex(
         code: CodeBlock,
         name: string,
         sourcePath?: string | undefined,
-    ): Promise<string> {
+    ): Promise<CodeDocumentation> {
         const docs = await codeReviewer.document(code);
         let text = name;
         if (docs.comments) {
             for (const docLine of docs.comments) {
-                text += "\n";
-                text += docLine.comment;
+                text += `\n${docLine.lineNumber}: ${docLine.comment}`;
             }
         }
         await codeIndex.put(text, name);
         await codeStore.put({ code, sourcePath }, name);
-        return text;
+        return docs;
     }
 
     function remove(name: string): Promise<void> {
