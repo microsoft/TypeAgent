@@ -54,6 +54,20 @@ describe("openai.textEmbeddings", () => {
         testTimeout,
     );
     testIf(
+        hasEmbeddingModel,
+        "generateBatch.maxBatchSize",
+        async () => {
+            if (standardModel!.generateEmbeddingBatch) {
+                const inputs = new Array(standardModel!.maxBatchSize! + 1);
+                inputs.fill("Foo");
+                const result =
+                    await standardModel!.generateEmbeddingBatch(inputs);
+                expect(result.success).toBe(false);
+            }
+        },
+        testTimeout,
+    );
+    testIf(
         () => hasEmbeddingModel(smallEndpoint),
         "generateSmall",
         async () => {
