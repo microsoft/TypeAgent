@@ -16,6 +16,7 @@ import { ShellSettings } from "../../main/shellSettings";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { CameraView } from "./cameraView";
 import { createWebSocket, webapi } from "./webSocketAPI";
+import { SPAAuthRedirect } from "./auth/authRedirect";
 
 export function getClientAPI(): ClientAPI {
     if (globalThis.api !== undefined) {
@@ -356,6 +357,12 @@ document.addEventListener("DOMContentLoaded", function () {
     addEvents(chatView, agents, settingsView, tabs, cameraView);
 
     chatView.chatInputFocus();
+
+    // setup SPA
+    const loginButton: HTMLButtonElement = document.getElementById("SignIn") as HTMLButtonElement;
+    const auth: SPAAuthRedirect = new SPAAuthRedirect(loginButton);
+    auth.initalize();
+
 
     if ((window as any).electron) {
         (window as any).electron.ipcRenderer.send("dom ready");

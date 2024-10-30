@@ -170,7 +170,14 @@ export const webapi: ClientAPI = {
         // TODO: implement client side token acquisition
         // Depends on implementing client side EntraID Auth first
         return new Promise<SpeechToken | undefined>((resolve) => {
-            resolve(undefined); // currently not supported
+
+            let speechToken: | { token: string; expire: number; region: string; endpoint: string }
+                            | undefined;
+
+
+            // TODO: implement
+
+            resolve(speechToken); // currently not supported
         });
     },
     getLocalWhisperStatus: () => {
