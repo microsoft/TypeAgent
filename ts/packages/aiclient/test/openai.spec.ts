@@ -25,12 +25,47 @@ describe("openai.textEmbeddings", () => {
         "Bach ate pizza while composing fugues",
         "Shakespeare did handstands while writing Macbeth",
     ];
+    let standardModel: TextEmbeddingModel | undefined;
+    beforeAll(() => {
+        if (hasEmbeddingModel()) {
+            standardModel = createEmbeddingModel();
+        }
+    });
     testIf(
         hasEmbeddingModel,
         "generate",
         async () => {
-            const model = createEmbeddingModel();
-            await testEmbeddings(model, texts[0]);
+            await testEmbeddings(standardModel!, texts[0]);
+        },
+        testTimeout,
+    );
+    testIf(
+        hasEmbeddingModel,
+        "generateBatch",
+        async () => {
+            if (standardModel!.generateEmbeddingBatch) {
+                const embeddings = getData(
+                    await standardModel!.generateEmbeddingBatch(texts),
+                );
+                expect(embeddings.length).toEqual(texts.length);
+                for (const e of embeddings) {
+                    validateEmbedding(e);
+                }
+            }
+        },
+        testTimeout,
+    );
+    testIf(
+        hasEmbeddingModel,
+        "generateBatch.maxBatchSize",
+        async () => {
+            if (standardModel!.generateEmbeddingBatch) {
+                const inputs = new Array(standardModel!.maxBatchSize + 1);
+                inputs.fill("Foo");
+                const result =
+                    await standardModel!.generateEmbeddingBatch(inputs);
+                expect(result.success).toBe(false);
+            }
         },
         testTimeout,
     );

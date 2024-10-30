@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { assert } from "console";
-import { asyncArray } from "..";
+import { asyncArray, collections } from "..";
 import { ScoredItem } from "../memory";
 import {
     createNormalized,
@@ -60,20 +60,57 @@ export async function generateEmbedding<T = string>(
 
 /**
  * Generate embeddings in parallel
+ * Uses batching if model supports it
  * @param model
- * @param values
+ * @param values strings for which to generate embeddings
+ * @param maxCharsPerChunk Models can limit the total # of chars per batch
  * @param concurrency default is 2
  * @returns
  */
-export async function generateEmbeddings<T = string>(
-    model: EmbeddingModel<T>,
-    values: T[],
+export async function generateTextEmbeddings(
+    model: TextEmbeddingModel,
+    values: string[],
     concurrency?: number,
+    maxCharsPerChunk: number = Number.MAX_SAFE_INTEGER,
 ): Promise<NormalizedEmbedding[]> {
+    // Verify that none of the individual strings are too long
+    if (values.some((s) => s.length > maxCharsPerChunk)) {
+        throw new Error(
+            `Values contains string with length > ${maxCharsPerChunk}`,
+        );
+    }
     concurrency ??= 2;
-    return asyncArray.mapAsync(values, concurrency, (v) =>
-        generateEmbedding(model, v),
-    );
+    if (model.maxBatchSize > 1 && model.generateEmbeddingBatch) {
+        const chunks = [
+            ...collections.getStringChunks(
+                values,
+                model.maxBatchSize,
+                maxCharsPerChunk,
+            ),
+        ];
+        const embeddingChunks = await asyncArray.mapAsync(
+            chunks,
+            concurrency,
+            (c) => generateEmbeddingBatch(model, c),
+        );
+        return embeddingChunks.flat();
+    } else {
+        // Run generateEmbeddings in parallel
+        return asyncArray.mapAsync(values, concurrency, (v) =>
+            generateEmbedding(model, v),
+        );
+    }
+}
+
+async function generateEmbeddingBatch(
+    model: TextEmbeddingModel,
+    values: string[],
+): Promise<NormalizedEmbedding[]> {
+    if (model.generateEmbeddingBatch === undefined) {
+        throw new Error("Model does not support batch operations");
+    }
+    const embeddings = getData(await model.generateEmbeddingBatch(values));
+    return embeddings.map((e) => createNormalized(e));
 }
 
 function isEmbedding<T>(
