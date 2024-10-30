@@ -35,7 +35,8 @@ export interface ChatModelWithStreaming extends ChatModel {
  */
 export interface EmbeddingModel<K> {
     generateEmbedding(input: K): Promise<Result<number[]>>;
-    // Future: support batch operations
+    // (Optional) Not all models/apis support batching
+    generateEmbeddingBatch?(inputs: K[]): Promise<Result<number[][]>>;
 }
 
 /**
