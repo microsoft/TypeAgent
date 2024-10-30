@@ -15,10 +15,7 @@ import {
 import {
     CommandHandlerContext,
     getTranslator,
-    getActiveTranslatorList,
-    isTranslatorActive,
     updateCorrectionContext,
-    isActionActive,
 } from "./common/commandHandlerContext.js";
 
 import { CachedImageWithDetails, getColorElapsedString } from "common-utils";
@@ -177,7 +174,7 @@ async function matchRequest(
     if (constructionStore.isEnabled()) {
         const startTime = performance.now();
         const config = systemContext.session.getConfig();
-        const useTranslators = getActiveTranslatorList(systemContext);
+        const useTranslators = systemContext.agents.getActiveTranslators();
         const matches = constructionStore.match(request, {
             wildcard: config.matchWildcard,
             useTranslators,
@@ -342,9 +339,12 @@ async function findAssistantForRequest(
     );
     const systemContext = context.sessionContext.agentContext;
     const selectTranslator = loadAssistantSelectionJsonTranslator(
-        getActiveTranslatorList(systemContext).filter(
-            (enabledTranslatorName) => translatorName !== enabledTranslatorName,
-        ),
+        systemContext.agents
+            .getActiveTranslators()
+            .filter(
+                (enabledTranslatorName) =>
+                    translatorName !== enabledTranslatorName,
+            ),
         systemContext.agents,
     );
 
@@ -414,7 +414,7 @@ async function finalizeAction(
         }
 
         const { request, nextTranslatorName, searched } = nextTranslation;
-        if (!isTranslatorActive(nextTranslatorName, systemContext)) {
+        if (!systemContext.agents.isTranslatorActive(nextTranslatorName)) {
             // this is a bug. May be the translator cache didn't get updated when state change?
             throw new Error(
                 `Internal error: switch to disabled translator ${nextTranslatorName}`,
@@ -515,12 +515,12 @@ export async function translateRequest(
     }
     // Start with the last translator used
     let translatorName = systemContext.lastActionTranslatorName;
-    if (!isTranslatorActive(translatorName, systemContext)) {
+    if (!systemContext.agents.isTranslatorActive(translatorName)) {
         debugTranslate(
             `Translating request using default translator: ${translatorName} not active`,
         );
         // REVIEW: Just pick the first one.
-        translatorName = getActiveTranslatorList(systemContext)[0];
+        translatorName = systemContext.agents.getActiveTranslators()[0];
         if (translatorName === undefined) {
             throw new Error("No active translator available");
         }
@@ -592,7 +592,7 @@ function canExecute(
     context: ActionContext<CommandHandlerContext>,
 ): boolean {
     const actions = requestAction.actions;
-
+    const systemContext = context.sessionContext.agentContext;
     const unknown: Action[] = [];
     const disabled = new Set<string>();
     for (const action of actions) {
@@ -601,10 +601,7 @@ function canExecute(
         }
         if (
             action.translatorName &&
-            !isActionActive(
-                action.translatorName,
-                context.sessionContext.agentContext,
-            )
+            !systemContext.agents.isActionActive(action.translatorName)
         ) {
             disabled.add(action.translatorName);
         }
