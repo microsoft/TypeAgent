@@ -1,8 +1,9 @@
-## memory-providers
+## Spelunker test app
 
-**Easy Stage Sample code** and early ideas on how to implement a backing store for knowledge-processor using sqlite.
-
-This code early is rapidly evolving.
+This sample app is used to explore ideas around "code spelunking", i.e.,
+exploring a repo full of unknown source code (in multiple languages) and
+gradually understand how it works. The AI is meant as a helper for the human to
+help them think.
 
 ## Trademarks
 
