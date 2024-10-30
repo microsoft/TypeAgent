@@ -45,7 +45,7 @@ export type FailedTestDataEntry<T extends object = object> = {
     message: string;
     request: string;
     action?: JSONAction | JSONAction[] | undefined;
-    history?: HistoryContext | undefined,
+    history?: HistoryContext | undefined;
     explanation?: undefined;
     corrections?: CorrectionRecord<T>[] | undefined;
 
