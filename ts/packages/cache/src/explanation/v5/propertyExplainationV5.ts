@@ -20,6 +20,7 @@ import {
     ensureProperties,
 } from "../validateExplanation.js";
 import { form } from "./explanationV5.js";
+import { getLanguageTools } from "../../utils/language.js";
 
 export type PropertyExplainer = TypeChatAgent<
     RequestAction,
@@ -73,6 +74,7 @@ export function isEntityParameter(
 
 // REVIEW: disable entity constructions.
 const enableEntityConstructions = false;
+const langTool = getLanguageTools("en");
 
 function validatePropertyExplanation(
     requestAction: RequestAction,
@@ -136,6 +138,16 @@ function validatePropertyExplanation(
                     }
                 }
             }
+
+            if (
+                typeof prop.value === "string" &&
+                langTool?.possibleReferentialPhrase(prop.value.toLowerCase())
+            ) {
+                throw new Error(
+                    "Request contains a possible referential phrase used for property values.",
+                );
+            }
+
             const lowerCaseRequest = requestAction.request.toLowerCase();
             for (const substring of prop.substrings) {
                 if (!lowerCaseRequest.includes(substring.toLowerCase())) {
