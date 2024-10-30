@@ -558,8 +558,8 @@ export class MessageContainer {
             message = `${cachePart}. Explained at ${timestamp}`;
             color = fromCache ? "#00c000" : "#c0c000";
         } else {
-            message = `${cachePart}. Not explained: ${data.error}`;
-            color = "#f08080";
+            message = `${cachePart}. Nothing to put in cache: ${data.error}`;
+            color = "lightblue";
         }
         this.messageDiv.setAttribute("data-expl", message);
         this.messageDiv.classList.add("chat-message-explained");
