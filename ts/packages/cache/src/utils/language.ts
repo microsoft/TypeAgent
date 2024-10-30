@@ -36,13 +36,20 @@ const referencePrefixes = [
     "those ",
 ];
 
+// REVIEW: Heuristics to allow time references from now.
+const relativeToNow =
+    /^this (week|month|year|quarter|season|day|hour|minute|second|morning|afternoon)$/;
+
 const languageToolsEn: LanguageTools = {
     possibleReferentialPhrase(phrase: string) {
         // TODO: initiali implemention. Can be overbroad and incomplete.
         const lowerCase = phrase.toLowerCase();
         return (
-            referenceWords.includes(lowerCase) ||
-            referencePrefixes.some((prefix) => lowerCase.startsWith(prefix))
+            (referenceWords.includes(lowerCase) ||
+                referencePrefixes.some((prefix) =>
+                    lowerCase.startsWith(prefix),
+                )) &&
+            !relativeToNow.test(phrase)
         );
     },
 };

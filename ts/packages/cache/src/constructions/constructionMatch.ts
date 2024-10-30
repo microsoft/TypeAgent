@@ -102,7 +102,8 @@ function captureMatch(
         state.capture.push(m.text);
 
         if (langTool?.possibleReferentialPhrase(m.text)) {
-            // The captured text can't be a referential phrase. Return false here
+            // The captured text can't be a referential phrase.
+            // Return false after adding the text to capture so that backtrack will
             // try longer wildcard before this part or shorter match for this part.
             return false;
         }
@@ -112,9 +113,9 @@ function captureMatch(
 
 function captureWildcardMatch(state: MatchState, wildcardText: string) {
     if (langTool?.possibleReferentialPhrase(wildcardText)) {
-        // The wildcard can't be a referential phrase. Return false here
-        // So that we will stop backtrack and try another state from the wildcard queue
-        // (that are not at this position).
+        // The wildcard can't be a referential phrase. Return false before adding
+        // the wildcard text to capture to stop backtrack and try another state
+        // from the wildcard queue (that is not at this position).
         return false;
     }
 
