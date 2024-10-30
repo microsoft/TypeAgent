@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { HistoryContext } from "../explanation/requestAction.js";
+import { getLanguageTools } from "../utils/language.js";
 import {
     isSpaceOrPunctuation,
     isSpaceOrPunctuationRange,
@@ -91,6 +92,38 @@ function findPendingWildcard(request: string, matchedCurrent: number) {
     return current - matchedCurrent;
 }
 
+const langTool = getLanguageTools("en");
+function captureMatch(
+    state: MatchState,
+    part: ConstructionPart,
+    m: MatchedPart,
+) {
+    if (part.capture) {
+        state.capture.push(m.text);
+
+        if (langTool?.possibleReferentialPhrase(m.text)) {
+            // The captured text can't be a referential phrase. Return false here
+            // try longer wildcard before this part or shorter match for this part.
+            return false;
+        }
+    }
+    return true;
+}
+
+function captureWildcardMatch(state: MatchState, wildcardText: string) {
+    if (langTool?.possibleReferentialPhrase(wildcardText)) {
+        // The wildcard can't be a referential phrase. Return false here
+        // So that we will stop backtrack and try another state from the wildcard queue
+        // (that are not at this position).
+        return false;
+    }
+
+    state.pendingWildcard = -1;
+    state.capture.push(wildcardText);
+    state.matchedEnd.push(-1); // Use -1 to indicate a wildcard match
+    return true;
+}
+
 function finishMatchParts(
     state: MatchState,
     request: string,
@@ -114,9 +147,10 @@ function finishMatchParts(
 
         // Matched
         if (state.pendingWildcard !== -1) {
-            state.pendingWildcard = -1;
-            state.capture.push(m.wildcard!);
-            state.matchedEnd.push(-1); // Use -1 to indicate a wildcard match
+            const wildcardText = m.wildcard!;
+            if (!captureWildcardMatch(state, wildcardText)) {
+                return false;
+            }
             state.matchedStart.push(m.start);
         } else {
             state.matchedStart.push(state.matchedCurrent);
@@ -124,8 +158,8 @@ function finishMatchParts(
         const matchedEnd = m.start + m.text.length;
         state.matchedEnd.push(matchedEnd);
         state.matchedCurrent = matchedEnd;
-        if (part.capture) {
-            state.capture.push(m.text);
+        if (!captureMatch(state, part, m)) {
+            return false;
         }
     }
 
@@ -146,9 +180,9 @@ function finishMatchParts(
     const wildcardMatch = wildcardRegex.exec(wildcardRange);
     if (wildcardMatch !== null) {
         // Update the state in case we need to backtrack because value translation failed.
-        state.pendingWildcard = -1;
-        state.capture.push(wildcardMatch[1]);
-        state.matchedEnd.push(-1); // Use -1 to indicate a wildcard match
+        if (!captureWildcardMatch(state, wildcardMatch[1])) {
+            return false;
+        }
         state.matchedCurrent = request.length;
         return true;
     }
@@ -270,8 +304,9 @@ function backtrack(
                 backtrackMatch.start + backtrackMatch.text.length;
             state.matchedEnd.push(matchedEnd);
             state.matchedCurrent = matchedEnd;
-            if (backtrackPart.capture) {
-                state.capture.push(backtrackMatch.text);
+            if (!captureMatch(state, backtrackPart, backtrackMatch)) {
+                // continue to backtrack.
+                continue;
             }
             return true;
         }

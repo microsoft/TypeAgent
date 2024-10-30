@@ -25,6 +25,7 @@ import {
     isEntityParameter,
     isImplicitParameter,
 } from "./propertyExplainationV5.js";
+import { getLanguageTools } from "../../utils/language.js";
 
 // Subphrase explanation
 type SubPhraseExplainerInput = [RequestAction, PropertyExplanation];
@@ -83,6 +84,7 @@ export function hasPropertyNames(
     return isPropertySubPhrase(phrase) && phrase.propertyNames.length > 0;
 }
 
+const langTool = getLanguageTools("en");
 function validateSubPhraseExplanationV5(
     [requestAction, propertyExplanation]: SubPhraseExplainerInput,
     explanation: SubPhraseExplanation,
@@ -98,6 +100,11 @@ function validateSubPhraseExplanationV5(
         // check if the parameter name is valid
         // Ideally LLM wouldn't emit a sub-phrase with parameter names array empty, but it does, so be relax about it
         if (hasPropertyNames(phrase)) {
+            if (langTool?.possibleReferentialPhrase(phrase.text)) {
+                throw new Error(
+                    "Request contains a possible referential phrase used for property values.",
+                );
+            }
             phrase.propertyNames.forEach((propertyName) => {
                 // Call checkActionPropertyValue() to ensure the value exist for the parameter name in the sub-phrase
                 try {
