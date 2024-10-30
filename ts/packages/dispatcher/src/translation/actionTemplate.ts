@@ -4,7 +4,6 @@
 import { Action, Actions } from "agent-cache";
 import { getActionInfo, getTranslatorActionInfos } from "./actionInfo.js";
 import { CommandHandlerContext } from "../internal.js";
-import { getActiveTranslatorList } from "../handlers/common/commandHandlerContext.js";
 import {
     TemplateFieldStringUnion,
     TemplateSchema,
@@ -94,7 +93,7 @@ export function getActionTemplateEditConfig(
 ): TemplateEditConfig {
     const templateData: TemplateData[] = [];
 
-    const translators = getActiveTranslatorList(context);
+    const translators = context.agents.getActiveTranslators();
     for (const action of actions) {
         templateData.push({
             schema: toTemplate(context, translators, action),
@@ -134,7 +133,7 @@ export async function getSystemTemplateSchema(
         data.actionName = "";
     }
 
-    const translators = getActiveTranslatorList(systemContext);
+    const translators = systemContext.agents.getActiveTranslators();
     return toTemplate(systemContext, translators, data);
 }
 

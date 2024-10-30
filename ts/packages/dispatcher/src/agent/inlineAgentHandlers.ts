@@ -228,7 +228,7 @@ class ActionCommandHandler implements CommandHandler {
         const completions: string[] = [];
         for (const name of names) {
             if (name === "translatorName") {
-                const translators = systemContext.agents.getTranslatorNames();
+                const translators = systemContext.agents.getActiveTranslators();
                 completions.push(...translators);
                 continue;
             }

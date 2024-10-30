@@ -87,6 +87,7 @@ export class AppAgentManager implements TranslatorConfigProvider {
         string
     >();
     private readonly emojis: Record<string, string> = {};
+    private readonly transientAgents: Record<string, boolean | undefined> = {};
 
     public getAppAgentNames(): string[] {
         return Array.from(this.agents.keys());
@@ -103,7 +104,27 @@ export class AppAgentManager implements TranslatorConfigProvider {
         return record.translators.has(translatorName);
     }
 
-    public isActionEnabled(translatorName: string) {
+    public isTranslatorActive(translatorName: string) {
+        return (
+            this.isTranslatorEnabled(translatorName) &&
+            this.transientAgents[translatorName] !== false
+        );
+    }
+
+    public getActiveTranslators() {
+        return this.getTranslatorNames().filter((name) =>
+            this.isTranslatorActive(name),
+        );
+    }
+
+    public isActionActive(translatorName: string) {
+        return (
+            this.isActionEnabled(translatorName) &&
+            this.transientAgents[translatorName] !== false
+        );
+    }
+
+    private isActionEnabled(translatorName: string) {
         const appAgentName = getAppAgentName(translatorName);
         const record = this.getRecord(appAgentName);
         return record.actions.has(translatorName);
@@ -140,6 +161,9 @@ export class AppAgentManager implements TranslatorConfigProvider {
                 this.translatorConfigs.set(name, config);
                 this.emojis[name] = config.emojiChar;
 
+                if (config.transient) {
+                    this.transientAgents[name] = false;
+                }
                 if (config.injected) {
                     const actionInfos = getTranslatorActionInfos(config, name);
                     for (const info of actionInfos.values()) {
@@ -336,6 +360,19 @@ export class AppAgentManager implements TranslatorConfigProvider {
         };
     }
 
+    public getTransientState(translatorName: string) {
+        return this.transientAgents[translatorName];
+    }
+
+    public toggleTransient(translatorName: string, enable: boolean) {
+        if (this.transientAgents[translatorName] === undefined) {
+            throw new Error(`Transient sub agent not found: ${translatorName}`);
+        }
+        debug(
+            `Toggle transient agent '${translatorName}' to ${enable ? "enabled" : "disabled"}`,
+        );
+        this.transientAgents[translatorName] = enable;
+    }
     public async close() {
         for (const record of this.agents.values()) {
             record.actions.clear();
