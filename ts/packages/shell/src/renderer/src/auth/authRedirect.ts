@@ -46,7 +46,6 @@ export class SPAAuthRedirect {
         });
     }
 
-
     selectAccount() {
 
         /**
@@ -67,15 +66,6 @@ export class SPAAuthRedirect {
             showWelcomeMessage(this.username);
         }
     }
-
-    // handleResponse(response) {
-    //     if (response !== null) {
-    //         this.username = response.account.username;
-    //         showWelcomeMessage(this.username);
-    //     } else {
-    //         this.selectAccount();
-    //     }
-    // }
 
     signIn() {
 
@@ -139,5 +129,9 @@ export class SPAAuthRedirect {
             }).catch(error => {
                 console.error(error);
             });
+    }
+
+    public async getToken(): Promise<msal.AuthenticationResult | undefined | void> {
+        return await this.getTokenRedirect(tokenRequest);
     }
 }
