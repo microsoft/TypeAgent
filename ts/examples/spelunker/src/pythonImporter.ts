@@ -26,7 +26,6 @@ TypeScript, of course).
 */
 
 import * as fs from "fs";
-import * as path from "path";
 
 import { ObjectFolder } from "typeagent";
 import { CodeBlock, SemanticCodeIndex } from "code-processor";
@@ -50,7 +49,7 @@ export async function importPythonFile(
     const chunks: Chunk[] = result;
     console.log(`[Importing ${chunks.length} chunks from ${filename}]`);
 
-    // Compute and store embedding. (TODO: concurrency.)
+    // Compute and store embedding. (TODO: Concurrency -- can do but debug output is garbled.)
     for (const chunk of chunks) {
         const t0 = Date.now();
         chunk.filename = filename;
@@ -60,33 +59,42 @@ export async function importPythonFile(
         );
         console.log(`[Embedding ${chunk.id} (${lineCount} lines)]`);
         const putCall = objectFolder.put(chunk, chunk.id);
-        const rawText = makeChunkText(chunk);
-        const codeBlock: CodeBlock = { code: rawText, language: "python" };
-        let embeddingText = "";
-        for (let i = 0; i < 3; i++) {
-            try {
-                embeddingText = await codeIndex.put(
-                    codeBlock,
-                    chunk.id,
-                    chunk.filename,
+        const blobLines = extractBlobLines(chunk);
+        const codeBlock: CodeBlock = { code: blobLines, language: "python" };
+        const docs = await codeIndex.put(codeBlock, chunk.id, chunk.filename);
+        await putCall;
+        let blobIndex = 0;
+        if (docs.comments) {
+            for (const comment of docs.comments) {
+                while (blobIndex + 1 < comment.lineNumber) {
+                    console.log(
+                        `${(blobIndex + 1).toString().padStart(3)}: ${blobLines[blobIndex].trimEnd()}`,
+                    );
+                    blobIndex++;
+                }
+                console.log(
+                    "####",
+                    comment.comment.trimEnd().replace(/\n/g, "\n#### "),
                 );
-                console.log(embeddingText);
-                break;
-            } catch (error) {
-                console.error(`Try ${i + 1}: ${error}`);
             }
         }
-        await putCall;
+        while (blobIndex < blobLines.length) {
+            console.log(
+                `${(blobIndex + 1).toString().padStart(3)}: ${blobLines[blobIndex].trimEnd()}`,
+            );
+            blobIndex++;
+        }
         const t1 = Date.now();
         console.log(
-            `[${embeddingText ? "Embedded" : "FAILED TO EMBED"} ` +
-                `${chunk.id} (${lineCount} lines) in ${t1 - t0} ms]`,
+            `[Embedded ${chunk.id} (${lineCount} lines) in ${t1 - t0} ms]\n`,
         );
     }
 }
 
-function makeChunkText(chunk: Chunk): string {
-    let text = `${path.basename(chunk.filename ?? "")}\n${chunk.treeName}\n\n`;
-    text += chunk.blobs.map((blob) => blob.lines.join("")).join("\n");
-    return text;
+function extractBlobLines(chunk: Chunk): string[] {
+    const lines: string[] = [];
+    for (const blob of chunk.blobs) {
+        lines.push(...blob.lines);
+    }
+    return lines;
 }
