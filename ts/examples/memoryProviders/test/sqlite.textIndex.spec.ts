@@ -1,22 +1,28 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import * as sqlite from "better-sqlite3";
 import { createDb } from "../src/sqlite/common.js";
 import { createStringTable } from "../src/sqlite/textIndex.js";
 import { ensureTestDir, testFilePath } from "./testCore.js";
 
 describe("sqlite.textIndex", () => {
     const testTimeout = 1000 * 60 * 5;
-
+    let db: sqlite.Database | undefined;
     beforeAll(async () => {
         await ensureTestDir();
+        db = await createDb(testFilePath("strings.db"), true);
+    });
+    afterAll(() => {
+        if (db) {
+            db.close();
+        }
     });
 
     test(
         "stringTable",
         async () => {
-            const db = await createDb(testFilePath("strings.db"), true);
-            const table = createStringTable(db, "Names");
+            const table = createStringTable(db!, "Names");
             const strings: string[] = ["One", "Two", "Three"];
             const stringIds: number[] = [];
 

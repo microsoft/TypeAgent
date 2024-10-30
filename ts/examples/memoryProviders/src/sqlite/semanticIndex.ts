@@ -14,7 +14,7 @@ export function createVectorStore<TKeyId extends ColumnType = string>(
     const schemaSql = `  
     CREATE TABLE IF NOT EXISTS ${tableName} (  
       keyId ${keyType} PRIMARY KEY NOT NULL,
-      embedding BLOB NOT NULL,
+      embedding BLOB NOT NULL
     );`;
 
     if (ensureExists) {
@@ -49,7 +49,7 @@ export function createVectorStore<TKeyId extends ColumnType = string>(
             // TODO: ID generation
             throw Error("id required");
         }
-        const buffer = Buffer.from(value);
+        const buffer = Buffer.from(value.buffer);
         sql_add.run(id, buffer);
         return Promise.resolve(id);
     }
