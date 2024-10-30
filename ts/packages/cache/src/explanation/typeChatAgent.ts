@@ -85,22 +85,33 @@ export class TypeChatAgent<InputType, ResultType extends object>
 
         let attempt = 0;
         const corrections: CorrectionRecord[] = [];
+
         while (result.success) {
             if (!this.validate) {
                 break;
             }
-            const error = this.validate(input, result.data);
+            let error: ValidationError | undefined;
+            let message: string | undefined;
+            try {
+                error = this.validate(input, result.data);
+            } catch (e: any) {
+                message = e.message;
+                error = e.message;
+            }
             if (error === undefined) {
                 break;
             }
             corrections.push({ data: result.data, correction: error });
-            if (attempt >= this.correctionAttempt) {
+            if (message !== undefined || attempt >= this.correctionAttempt) {
                 return {
                     success: false,
-                    message: `${this.resultName} error: correction failed after ${attempt} attempts`,
+                    message:
+                        message ??
+                        `${this.resultName} error: correction failed after ${attempt} attempts`,
                     corrections,
                 };
             }
+
             attempt++;
             debugAgent(
                 `Attempting to correct ${this.resultName} (${attempt}): \n  ${

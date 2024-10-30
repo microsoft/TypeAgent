@@ -20,6 +20,7 @@ import {
 import {
     Actions,
     getDefaultExplainerName,
+    HistoryContext,
     printImportConstructionResult,
     RequestAction,
 } from "agent-cache";
@@ -156,6 +157,11 @@ export default class ExplanationDataRegenerateCommmand extends Command {
                 "failed",
                 "resume",
             ],
+        }),
+        entities: Flags.boolean({
+            description: "Synthesize entities",
+            dependsOn: ["explanation"],
+            default: false,
         }),
     };
     static description = "Regenerate the data in the explanation data file";
@@ -393,18 +399,27 @@ export default class ExplanationDataRegenerateCommmand extends Command {
                         }
                     }
 
+                    let history: HistoryContext | undefined;
+                    if (flags.entities) {
+                        if (e.action === undefined) {
+                            return undefined;
+                        }
+                        const entities = toEntities(Actions.fromJSON(e.action));
+                        e.action;
+                        if (entities.length === 0) {
+                            return undefined;
+                        }
+                        history = { promptSections: [], entities };
+                    }
+
                     const requestAction = e.action
                         ? new RequestAction(
                               e.request,
                               Actions.fromJSON(e.action),
-                              {
-                                  promptSections: [],
-                                  entities: toEntities(
-                                      Actions.fromJSON(e.action),
-                                  ),
-                              },
+                              history,
                           )
                         : undefined;
+
                     if (flags.validate) {
                         if (requestAction === undefined) {
                             return undefined;
