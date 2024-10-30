@@ -27,7 +27,7 @@ import { createObjectFolder, loadSchema } from "typeagent";
 // Local imports
 import { ChunkDocumentation } from "./chunkDocSchema.js";
 import { Chunk } from "./pythonChunker.js";
-import { importPythonFile } from "./pythonImporter.js";
+import { importPythonFile, wordWrap } from "./pythonImporter.js";
 
 // Set __dirname to emulate old JS behavior
 const __filename = fileURLToPath(import.meta.url);
@@ -40,6 +40,7 @@ dotenv.config({ path: envPath });
 // Usage: node main.js [file1.py] [file2.py] ...
 // OR:    node main.js --files filelist.txt
 // OR:    node main.js -  # Load sample file (sample.py.txt)
+// OR:    node main.js    # Query previously loaded files
 async function main(): Promise<void> {
     const sampleFile = path.join(__dirname, "sample.py.txt");
     let files: string[];
@@ -67,7 +68,7 @@ async function main(): Promise<void> {
     }
     const dataRoot = `${homeDir}/data`;
     const spelunkerRoot = `${dataRoot}/spelunker`;
-    const objectFolder = await createObjectFolder<Chunk>(
+    const chunkFolder = await createObjectFolder<Chunk>(
         `${spelunkerRoot}/chunks`,
         { serializer: (obj) => JSON.stringify(obj, null, 2) },
     );
@@ -79,10 +80,14 @@ async function main(): Promise<void> {
         undefined,
         (obj) => JSON.stringify(obj, null, 2),
     );
+    const summaryFolder = await createObjectFolder<CodeDocumentation>(
+        `${spelunkerRoot}/summaries`,
+        { serializer: (obj) => JSON.stringify(obj, null, 2) },
+    );
 
     // Import all files. (TODO: concurrently but avoid timestamp conflicts)
     for (const file of files) {
-        await importPythonFile(file, objectFolder, codeIndex, chatModel);
+        await importPythonFile(file, chunkFolder, codeIndex, summaryFolder);
     }
 
     while (true) {
@@ -95,12 +100,12 @@ async function main(): Promise<void> {
             return;
         }
         const searchKey = input.replace(/\W+/g, " ").trim();
-        const hits = await codeIndex.find(searchKey, 5);
+        const hits = await codeIndex.find(searchKey, 2);
         console.log(
             `Got ${hits.length} hit${hits.length == 0 ? "s." : hits.length === 1 ? ":" : "s:"}`,
         );
         for (const hit of hits) {
-            const chunk: Chunk | undefined = await objectFolder.get(hit.item);
+            const chunk: Chunk | undefined = await chunkFolder.get(hit.item);
             if (!chunk) {
                 console.log(hit, "--> [No data]");
             } else {
@@ -110,11 +115,25 @@ async function main(): Promise<void> {
                         `file: ${path.relative(process.cwd(), chunk.filename!)}, ` +
                         `type: ${chunk.treeName}`,
                 );
+                const summary: CodeDocumentation | undefined =
+                    await summaryFolder.get(hit.item);
+                if (
+                    summary &&
+                    summary.comments &&
+                    summary.comments.length > 0
+                ) {
+                    for (const comment of summary.comments)
+                        console.log(
+                            wordWrap(
+                                `${comment.lineNumber}. ${comment.comment}`,
+                            ),
+                        );
+                }
                 for (const blob of chunk.blobs) {
                     let lineno = 1 + blob.start;
                     for (const index in blob.lines) {
                         console.log(
-                            `${lineno}: ${blob.lines[index].trimEnd()}`,
+                            `${String(lineno).padStart(3)}: ${blob.lines[index].trimEnd()}`,
                         );
                         lineno += 1;
                     }

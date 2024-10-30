@@ -3,5 +3,5 @@
 
 // Documentation for a chunk of code
 export type ChunkDocumentation = {
-    description: string; // Description of a chunk of code
+    description: string; // Concise description of a chunk of code
 };

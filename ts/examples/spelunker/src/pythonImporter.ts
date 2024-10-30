@@ -31,16 +31,19 @@ TypeScript, of course).
 import * as fs from "fs";
 
 import { ObjectFolder } from "typeagent";
-import { CodeBlock, SemanticCodeIndex } from "code-processor";
+import {
+    CodeBlock,
+    CodeDocumentation,
+    SemanticCodeIndex,
+} from "code-processor";
 
 import { Chunk, chunkifyPythonFile } from "./pythonChunker.js";
-import { ChatModel } from "aiclient";
 
 export async function importPythonFile(
     file: string,
     objectFolder: ObjectFolder<Chunk>,
     codeIndex: SemanticCodeIndex,
-    chatModel: ChatModel,
+    summaryFolder: ObjectFolder<CodeDocumentation>,
 ): Promise<void> {
     let filename = fs.realpathSync(file);
     const result = await chunkifyPythonFile(filename);
@@ -63,18 +66,22 @@ export async function importPythonFile(
             0,
         );
         console.log(`[Embedding ${chunk.id} (${lineCount} lines)]`);
-        const putCall = objectFolder.put(chunk, chunk.id);
+        const putPromise = objectFolder.put(chunk, chunk.id);
         const blobLines = extractBlobLines(chunk);
         const codeBlock: CodeBlock = { code: blobLines, language: "python" };
         const docs = await codeIndex.put(codeBlock, chunk.id, chunk.filename);
-        await putCall;
         for (const comment of docs.comments || []) {
-            // console.log(wordWrap(`${comment.lineNumber}. ${comment.comment}`));
-            console.log(wordWrap(comment.comment));
+            comment.lineNumber += chunk.blobs[0].start;
+        }
+        await summaryFolder.put(docs, chunk.id);
+        await putPromise;
+        for (const comment of docs.comments || []) {
+            console.log(wordWrap(`${comment.lineNumber}. ${comment.comment}`));
         }
         const t1 = Date.now();
         console.log(
-            `[Embedded ${chunk.id} (${lineCount} lines) in ${(t1 - t0 * 0.001).toFixed(3)} sec]\n`,
+            `[Embedded ${chunk.id} (${lineCount} lines @ ${chunk.blobs[0].start}) ` +
+                `in ${((t1 - t0) * 0.001).toFixed(3)} sec]\n`,
         );
     }
 }
@@ -88,7 +95,7 @@ function extractBlobLines(chunk: Chunk): string[] {
 }
 
 // Wrap words in anger. Written by Github Copilot.
-function wordWrap(text: string, width: number = 80): string {
+export function wordWrap(text: string, width: number = 80): string {
     const words = text.split(/\s+/);
     let line = "";
     let lines = [];
