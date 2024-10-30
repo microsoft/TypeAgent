@@ -4,6 +4,7 @@
 export type PlayerAction =
     | PlayRandomAction
     | PlayTrackAction
+    | PlayFromCurrentTrackListAction
     | PlayAlbumAction
     | PlayAlbumTrackAction
     | PlayArtistAction
@@ -51,6 +52,15 @@ export interface PlayAlbumAction {
         albumName: string;
         artists?: string[];
         trackNumber?: number[];
+    };
+}
+
+// play the track single track at index 'trackNumber' in the current track list
+// report if there is no current track list
+export interface PlayFromCurrentTrackListAction {
+    actionName: "playFromCurrentTrackList";
+    parameters: {
+        trackNumber: number;
     };
 }
 
