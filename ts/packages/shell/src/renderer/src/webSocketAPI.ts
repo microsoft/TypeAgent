@@ -8,7 +8,8 @@ import {
 } from "@typeagent/agent-sdk";
 import { CommandCompletionResult, RequestMetrics } from "agent-dispatcher";
 import { ClientAPI, SpeechToken } from "../../preload/electronTypes";
-import { AzureSpeech } from "./azureSpeech";
+import { AzureSpeech, TokenResponse } from "./azureSpeech";
+import { SPAAuthRedirect } from "./auth/authRedirect";
 
 export const webapi: ClientAPI = {
     // TODO: implement
@@ -182,36 +183,22 @@ export const webapi: ClientAPI = {
                 });
             }
 
-            let speechToken: | { token: string; expire: number; region: string; endpoint: string }
-                            | undefined;
-
-            // TODO: debug
-            const tokenResponse = await AzureSpeech.getInstance().getBrowserTokenAsync();
-
-
-
-            //AzureSpeech.getInstance().getTokenAsync();
-            // authProvider.getToken().then((value: msal.AuthenticationResult | undefined | void) => {
-            //     if (value) {
-            //         resolve({
-            //             token: value.accessToken,
-            //             expire: Number(value.expiresOn),
-            //             region: "",
-            //             endpoint: ""
-            //         });
-            //     } else {
-            //         resolve(undefined);
-            //     }
-            // });
-
-            speechToken = {
-                token: tokenResponse.token,
-                expire: Date.now() + 9 * 60 * 1000, // 9 minutes (token expires in 10 minutes)
-                region: tokenResponse.region,
-                endpoint: tokenResponse.endpoint,
-            };
-
-            resolve(speechToken); // currently not supported
+            // wait for auth initialization to complete
+            if (!SPAAuthRedirect.IsInitialized()) {
+                // wait
+                SPAAuthRedirect.registerInitializationCallback((response) => {
+                    const result: TokenResponse = {
+                        token: response.accessToken,
+                        expire: Number(response.expiresOn),
+                        region: AzureSpeech.getInstance().Region,
+                        endpoint: AzureSpeech.getInstance().Endpoint,
+                    };
+        
+                    resolve(result);
+                })
+            } else {
+                resolve(await AzureSpeech.getInstance().getBrowserTokenAsync());
+            }
         });
     },
     getLocalWhisperStatus: () => {

@@ -2,13 +2,13 @@
 // Licensed under the MIT License.
 
 import * as sdk from "microsoft-cognitiveservices-speech-sdk";
-import { Result, success } from "typechat";
 import * as msal from "@azure/msal-browser";
 import { SPAAuthRedirect } from "./auth/authRedirect.js";
 //import { auth } from "aiclient";
 
 export interface TokenResponse {
     token: string;
+    expire: number;
     region: string;
     endpoint: string;
 }
@@ -33,6 +33,14 @@ export class AzureSpeech {
         private readonly endpoint: string,
     ) {
         // ...
+    }
+
+    public get Region() {
+        return this.region;
+    }
+
+    public get Endpoint() {
+        return this.endpoint;
     }
 
     public static initializeAsync = async (config: {
@@ -65,37 +73,39 @@ export class AzureSpeech {
     public getTokenAsync = async (): Promise<TokenResponse> => {
         let result: TokenResponse;
 
-        if (
-            this.subscriptionKey.toLowerCase() == IdentityApiKey.toLowerCase()
-        ) {
-            result = await this.getIdentityBasedTokenAsync();
-        } else {
-            result = await this.getKeyBasedTokenAsync();
-        }
+        // if (
+        //     this.subscriptionKey.toLowerCase() == IdentityApiKey.toLowerCase()
+        // ) {
+        //     result = await this.getIdentityBasedTokenAsync();
+        // } else {
+        //     result = await this.getKeyBasedTokenAsync();
+        // }
+
+        result = await this.getBrowserTokenAsync();
 
         this.token = result.token;
 
         return result;
     };
 
-    private getIdentityBasedTokenAsync = async (): Promise<TokenResponse> => {
-        const tokenResult: Result<string> = 
-           success("sdlf"); //await azureTokenProvider.getAccessToken();
+    // private getIdentityBasedTokenAsync = async (): Promise<TokenResponse> => {
+    //     const tokenResult: Result<string> = 
+    //        success("sdlf"); //await azureTokenProvider.getAccessToken();
 
-        if (!tokenResult.success) {
-            throw new Error(
-                `AzureSpeech: getIdentityBasedTokenAsync: Failed to get identity based token! tokenResult: ${tokenResult}`,
-            );
-        }
+    //     if (!tokenResult.success) {
+    //         throw new Error(
+    //             `AzureSpeech: getIdentityBasedTokenAsync: Failed to get identity based token! tokenResult: ${tokenResult}`,
+    //         );
+    //     }
 
-        const result: TokenResponse = {
-            token: tokenResult.data,
-            region: this.region,
-            endpoint: this.endpoint,
-        };
+    //     const result: TokenResponse = {
+    //         token: tokenResult.data,
+    //         region: this.region,
+    //         endpoint: this.endpoint,
+    //     };
 
-        return result;
-    };
+    //     return result;
+    // };
 
     public getBrowserTokenAsync = async (): Promise<TokenResponse> => {
         
@@ -121,6 +131,7 @@ export class AzureSpeech {
         if (loginResult) {
             const result: TokenResponse = {
                 token: loginResult.accessToken,
+                expire: Number(loginResult.expiresOn),
                 region: this.region,
                 endpoint: this.endpoint,
             };
@@ -128,34 +139,34 @@ export class AzureSpeech {
             return result;
         }
         
-        return { token: "", region: this.region, endpoint: this.endpoint};
+        return { token: "", expire: Date.now(), region: this.region, endpoint: this.endpoint};
     };
 
-    private getKeyBasedTokenAsync = async (): Promise<TokenResponse> => {
-        const options: RequestInit = {
-            method: "POST",
-            headers: new Headers({
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Ocp-Apim-Subscription-Key": this.subscriptionKey,
-            }),
-        };
+    // private getKeyBasedTokenAsync = async (): Promise<TokenResponse> => {
+    //     const options: RequestInit = {
+    //         method: "POST",
+    //         headers: new Headers({
+    //             "Content-Type": "application/x-www-form-urlencoded",
+    //             "Ocp-Apim-Subscription-Key": this.subscriptionKey,
+    //         }),
+    //     };
 
-        const tokenEndpoint = `https://${this.region}.api.cognitive.microsoft.com/sts/v1.0/issuetoken`;
-        const response = await fetch(tokenEndpoint, options);
-        if (!response.ok) {
-            throw new Error(
-                `AzureSpeech: getTokenAsync: ${response.status} ${response.statusText}`,
-            );
-        }
+    //     const tokenEndpoint = `https://${this.region}.api.cognitive.microsoft.com/sts/v1.0/issuetoken`;
+    //     const response = await fetch(tokenEndpoint, options);
+    //     if (!response.ok) {
+    //         throw new Error(
+    //             `AzureSpeech: getTokenAsync: ${response.status} ${response.statusText}`,
+    //         );
+    //     }
 
-        const result: TokenResponse = {
-            token: await response.text(),
-            region: this.region,
-            endpoint: this.endpoint,
-        };
+    //     const result: TokenResponse = {
+    //         token: await response.text(),
+    //         region: this.region,
+    //         endpoint: this.endpoint,
+    //     };
 
-        return result;
-    };
+    //     return result;
+    // };
 
     public getTextToSpeechAsync = async (
         text: string,

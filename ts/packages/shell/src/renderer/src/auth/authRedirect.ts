@@ -7,9 +7,13 @@ import { showWelcomeMessage, updateUI } from "./ui.js";
 import { callMSGraph } from "./graph.js";
 import { graphConfig } from "./graphConfig.js";
 
+export type AuthResponseCallback = (response: msal.AuthenticationResult) => void;
+
 export class SPAAuthRedirect {
 
     private static instance: SPAAuthRedirect;
+    private static initialized: boolean = false;
+    private static initializedCallbacks: Array<AuthResponseCallback> = new Array<AuthResponseCallback>();
 
     public static getInstance = (): SPAAuthRedirect => {
         if (!SPAAuthRedirect.instance) {
@@ -17,6 +21,19 @@ export class SPAAuthRedirect {
         }
 
         return SPAAuthRedirect.instance;
+    }
+
+    public static IsInitialized(): boolean {
+        return SPAAuthRedirect.initialized;
+    }
+
+    public static registerInitializationCallback(callback: AuthResponseCallback) {
+
+        if (SPAAuthRedirect.initialized) {
+            throw new Error("Authentication already initialized");
+        }
+
+        this.initializedCallbacks.push(callback);
     }
 
     // Create the main myMSALObj instance
@@ -30,7 +47,7 @@ export class SPAAuthRedirect {
         this.myMSALObj = new msal.PublicClientApplication(msalConfig);
     }
 
-    async initalize(signInButton: HTMLButtonElement) {
+    async initalize(signInButton: HTMLButtonElement): Promise<void> {
         signInButton.onclick = () => {
             if (this.username.length == 0) {
                 this.signIn();
@@ -54,13 +71,17 @@ export class SPAAuthRedirect {
                 this.token = response.accessToken;
                 this.expires = response.expiresOn;             
                 showWelcomeMessage(this.username);
+
+                // invoke callbacks
             } else {
                 this.selectAccount();
             }
+
+            SPAAuthRedirect.initialized = true;
         })
         .catch((error) => {
             console.error(error);
-        });
+        });        
     }
 
     selectAccount() {
@@ -154,8 +175,6 @@ export class SPAAuthRedirect {
             //return this.token;
         }
 
-        await this.getTokenRedirect(tokenRequest).then(
-
-        );
+        return await this.getTokenRedirect(tokenRequest)
     }
 }

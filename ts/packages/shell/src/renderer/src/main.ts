@@ -304,7 +304,7 @@ export class IdGenerator {
     }
 }
 
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", async function () {
     const wrapper = document.getElementById("wrapper")!;
     const idGenerator = new IdGenerator();
     const agents = new Map<string, string>();
