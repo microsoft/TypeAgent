@@ -48,7 +48,7 @@ export function createKeyValueIndex<
         );
     }
 
-    function getMultiple(
+    async function getMultiple(
         ids: TKeyId[],
         concurrency?: number,
     ): Promise<TValueId[][]> {
@@ -59,10 +59,10 @@ export function createKeyValueIndex<
                 matches.push(rows.map((r) => r.valueId));
             }
         }
-        return Promise.resolve(matches);
+        return matches;
     }
 
-    function put(values: TValueId[], id?: TKeyId): Promise<TKeyId> {
+    async function put(values: TValueId[], id?: TKeyId): Promise<TKeyId> {
         if (id === undefined) {
             // TODO: support
             throw new Error("Not supported");
@@ -72,15 +72,15 @@ export function createKeyValueIndex<
             sql_add.run(id, values[i]);
         }
 
-        return Promise.resolve(id);
+        return id;
     }
 
-    function replace(values: TValueId[], id: TKeyId): Promise<TKeyId> {
+    async function replace(values: TValueId[], id: TKeyId): Promise<TKeyId> {
         sql_remove.run(id);
         return put(values, id);
     }
 
-    function remove(id: TKeyId): Promise<void> {
+    async function remove(id: TKeyId): Promise<void> {
         sql_remove.run(id);
         return Promise.resolve();
     }

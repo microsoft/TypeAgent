@@ -74,31 +74,30 @@ export function createVectorStore<TKeyId extends ColumnType = string>(
         return Promise.resolve();
     }
 
-    function nearestNeighbor(
+    async function nearestNeighbor(
         value: Embedding,
         type: SimilarityType,
         minScore?: number,
     ): Promise<ScoredItem<TKeyId> | undefined> {
+        minScore ??= 0;
         let bestScore = Number.MIN_VALUE;
         let bestKey: TKeyId | undefined;
         for (const row of allRows()) {
             const score = similarity(deserialize(row.embedding), value, type);
-            if (score > bestScore) {
+            if (score >= minScore && score > bestScore) {
                 bestScore = score;
                 bestKey = row.keyId;
             }
         }
-        return Promise.resolve(
-            bestKey
-                ? {
-                      score: bestScore,
-                      item: bestKey,
-                  }
-                : undefined,
-        );
+        return bestKey
+            ? {
+                  score: bestScore,
+                  item: bestKey,
+              }
+            : undefined;
     }
 
-    function nearestNeighbors(
+    async function nearestNeighbors(
         value: Embedding,
         maxMatches: number,
         type: SimilarityType,
@@ -116,7 +115,7 @@ export function createVectorStore<TKeyId extends ColumnType = string>(
                 matches.push(row.keyId, score);
             }
         }
-        return Promise.resolve(matches.byRank());
+        return matches.byRank();
     }
 
     function* allRows(): IterableIterator<VectorRow> {
