@@ -10,6 +10,7 @@ import {
     Actions,
     HistoryContext,
     FullAction,
+    ProcessRequestActionResult,
 } from "agent-cache";
 import {
     CommandHandlerContext,
@@ -647,11 +648,16 @@ async function requestExplain(
 ) {
     // Make sure the current requestId is captured
     const requestId = context.requestId;
-    const notifyExplained = () => {
+    const notifyExplained = (result?: ProcessRequestActionResult) => {
+        const explanationResult = result?.explanationResult.explanation;
+        const error = explanationResult?.success
+            ? undefined
+            : explanationResult?.message;
         context.requestIO.notify("explained", requestId, {
             time: new Date().toLocaleTimeString(),
             fromCache,
             fromUser,
+            error,
         });
     };
 
@@ -700,7 +706,7 @@ async function requestExplain(
             chalk.grey(`Generating explanation for '${requestAction}'`),
         );
         const processRequestActionResult = await processRequestActionP;
-        notifyExplained();
+        notifyExplained(processRequestActionResult);
 
         // Only capture if done synchronously.
         updateCorrectionContext(
