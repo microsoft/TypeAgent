@@ -3,7 +3,7 @@
 
 import { Result, success, error } from "typechat";
 import { getJson } from "./restClient";
-import { appendNV, getEnvSetting } from "./common";
+import { getEnvSetting } from "./common";
 
 export type ApiSettings = {
     apiKey: string;
@@ -266,4 +266,14 @@ function createApiHeaders(settings: ApiSettings): Record<string, string> {
     return {
         "Ocp-Apim-Subscription-Key": settings.apiKey,
     };
+}
+
+function appendNV(text: string, name: string, value?: any): string {
+    if (text.length > 0) {
+        text += "&";
+    }
+    if (value) {
+        text += `${name}=${value}`;
+    }
+    return text;
 }

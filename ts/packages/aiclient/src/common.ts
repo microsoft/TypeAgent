@@ -30,12 +30,20 @@ export function getEnvSetting(
     return value;
 }
 
-export function appendNV(text: string, name: string, value?: any): string {
-    if (text.length > 0) {
-        text += "&";
-    }
-    if (value) {
-        text += `${name}=${value}`;
-    }
-    return text;
+/**
+ * Returns true if the given environment setting/key is available
+ * @param key
+ * @param keySuffix
+ * @returns true if available, false otherwise
+ */
+export function hasEnvSettings(
+    env: Record<string, string | undefined>,
+    key: string,
+    keySuffix?: string | undefined,
+) {
+    try {
+        const setting = getEnvSetting(env, key, keySuffix, undefined, true);
+        return setting !== undefined && setting.length > 0;
+    } catch {}
+    return false;
 }
