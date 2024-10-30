@@ -61,7 +61,7 @@ export function normalizeInPlace(v: Vector): void {
  * @param y
  * @returns
  */
-export function cosineSimilarity(x: Vector, y: Vector): number {
+export function cosineSimilaritySimple(x: Vector, y: Vector): number {
     if (x.length != y.length) {
         throw new Error("Array length mismatch");
     }

@@ -13,7 +13,6 @@ import {
     normalizeInPlace,
     writeBlobFile,
     generateNotesForWebPage,
-    createSemanticList,
     collections,
     readAllText,
     dotProductSimple,
@@ -108,16 +107,6 @@ export async function testEmbeddingModel() {
             console.log("Success");
         }
     }
-
-    stopWatch.start();
-    const list = createSemanticList<string>(model, undefined, (value) => value);
-    for (const str of strings) {
-        await list.push(str);
-    }
-    stopWatch.stop();
-    console.log(stopWatch.elapsedMs);
-    const match = await list.nearestNeighbor("pizza");
-    console.log(match);
 }
 
 export function generateMessageLines(count: number): string[] {
