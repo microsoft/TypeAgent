@@ -16,6 +16,7 @@ import {
     ExplanationDataEntry,
     GenericExplanationResult,
     Action,
+    HistoryContext,
 } from "agent-cache";
 import { getElapsedString, createLimiter, Limiter } from "common-utils";
 import { getCacheFactory } from "../cacheFactory.js";
@@ -44,6 +45,7 @@ export type FailedTestDataEntry<T extends object = object> = {
     message: string;
     request: string;
     action?: JSONAction | JSONAction[] | undefined;
+    history?: HistoryContext | undefined;
     explanation?: undefined;
     corrections?: CorrectionRecord<T>[] | undefined;
 
@@ -115,6 +117,7 @@ export type GenerateTestDataResult = {
 type Pending = {
     request: string;
     action: Action | Action[] | undefined;
+    history: HistoryContext | undefined;
     tags: string[] | undefined;
 };
 
@@ -175,9 +178,9 @@ function getInitialTestData(
     });
     const pending = new Map<string, Pending>();
     for (const input of inputs) {
-        const { request, actions } =
+        const { request, actions, history } =
             typeof input === "string"
-                ? { request: input, actions: undefined }
+                ? { request: input, actions: undefined, history: undefined }
                 : input;
 
         if (!overwrite) {
@@ -195,6 +198,7 @@ function getInitialTestData(
         pending.set(request, {
             request,
             action: actions?.data,
+            history,
             tags: tagsMap.get(request),
         });
     }
@@ -319,6 +323,7 @@ function getGenerateTestDataFn(
     return async (
         request: string,
         action: Action | Action[] | undefined,
+        history: HistoryContext | undefined,
         tags: string[] | undefined,
     ): Promise<AddResult> => {
         const startTime = performance.now();
@@ -357,7 +362,7 @@ function getGenerateTestDataFn(
             });
         }
         const explanation = await safeExplain(
-            RequestAction.create(request, action),
+            RequestAction.create(request, action, history),
         );
 
         if (!explanation.success) {
@@ -477,6 +482,7 @@ async function generateTestDataFile(
         const { success, elapsedMs, entry } = await generateTestData(
             pendingInput.request,
             pendingInput.action,
+            pendingInput.history,
             pendingInput.tags,
         );
 

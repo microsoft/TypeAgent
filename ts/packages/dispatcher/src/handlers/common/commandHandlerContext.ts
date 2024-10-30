@@ -108,8 +108,6 @@ export type CommandHandlerContext = {
     lastRequestAction?: RequestAction;
     lastExplanation?: object;
 
-    transientAgents: Record<string, boolean | undefined>;
-
     streamingActionContext?: ActionContextWithClose | undefined;
 
     metricsManager?: RequestMetricsManager | undefined;
@@ -284,7 +282,6 @@ export async function initializeCommandHandlerContext(
         logger,
         serviceHost: serviceHost,
         localWhisper: undefined,
-        transientAgents: {},
         metricsManager: metrics ? new RequestMetricsManager() : undefined,
     };
     context.requestIO.context = context;
@@ -294,12 +291,6 @@ export async function initializeCommandHandlerContext(
     if (appAgentProviders !== undefined) {
         for (const provider of appAgentProviders) {
             await agents.addProvider(provider, context);
-        }
-    }
-
-    for (const [name, config] of agents.getTranslatorConfigs()) {
-        if (config.transient) {
-            context.transientAgents[name] = false;
         }
     }
 
@@ -485,34 +476,8 @@ export async function changeContextConfig(
     return changed;
 }
 
-export function getActiveTranslatorList(context: CommandHandlerContext) {
-    return context.agents
-        .getTranslatorNames()
-        .filter((name) => isTranslatorActive(name, context));
-}
-
 function getActiveTranslators(context: CommandHandlerContext) {
     return Object.fromEntries(
-        getActiveTranslatorList(context).map((name) => [name, true]),
-    );
-}
-
-export function isTranslatorActive(
-    translatorName: string,
-    context: CommandHandlerContext,
-) {
-    return (
-        context.agents.isTranslatorEnabled(translatorName) &&
-        context.transientAgents[translatorName] !== false
-    );
-}
-
-export function isActionActive(
-    translatorName: string,
-    context: CommandHandlerContext,
-) {
-    return (
-        context.agents.isActionEnabled(translatorName) &&
-        context.transientAgents[translatorName] !== false
+        context.agents.getActiveTranslators().map((name) => [name, true]),
     );
 }
