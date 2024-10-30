@@ -27,7 +27,9 @@ describe("openai.textEmbeddings", () => {
     ];
     let standardModel: TextEmbeddingModel | undefined;
     beforeAll(() => {
-        standardModel = createEmbeddingModel();
+        if (hasEmbeddingModel()) {
+            standardModel = createEmbeddingModel();
+        }
     });
     testIf(
         hasEmbeddingModel,
