@@ -245,6 +245,9 @@ importers:
       typeagent:
         specifier: workspace:*
         version: link:../../packages/typeagent
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.3)
       typescript:
         specifier: ^5.4.2
         version: 5.4.3

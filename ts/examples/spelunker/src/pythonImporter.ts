@@ -50,7 +50,9 @@ export async function importPythonFile(
         return;
     }
     const chunks: Chunk[] = result;
-    console.log(`[Importing ${chunks.length} chunks from ${filename}]`);
+    console.log(
+        `[Importing ${chunks.length} chunk${chunks.length === 1 ? "" : "s"} from ${filename}]`,
+    );
 
     // Compute and store embedding. (TODO: Concurrency -- can do but debug output is garbled.)
     for (const chunk of chunks) {
@@ -66,30 +68,13 @@ export async function importPythonFile(
         const codeBlock: CodeBlock = { code: blobLines, language: "python" };
         const docs = await codeIndex.put(codeBlock, chunk.id, chunk.filename);
         await putCall;
-        let blobIndex = 0;
-        if (docs.comments) {
-            for (const comment of docs.comments) {
-                while (blobIndex + 1 < comment.lineNumber) {
-                    console.log(
-                        `${(blobIndex + 1).toString().padStart(3)}: ${blobLines[blobIndex].trimEnd()}`,
-                    );
-                    blobIndex++;
-                }
-                console.log(
-                    "####",
-                    comment.comment.trimEnd().replace(/\n/g, "\n#### "),
-                );
-            }
-        }
-        while (blobIndex < blobLines.length) {
-            console.log(
-                `${(blobIndex + 1).toString().padStart(3)}: ${blobLines[blobIndex].trimEnd()}`,
-            );
-            blobIndex++;
+        for (const comment of docs.comments || []) {
+            // console.log(wordWrap(`${comment.lineNumber}. ${comment.comment}`));
+            console.log(wordWrap(comment.comment));
         }
         const t1 = Date.now();
         console.log(
-            `[Embedded ${chunk.id} (${lineCount} lines) in ${t1 - t0} ms]\n`,
+            `[Embedded ${chunk.id} (${lineCount} lines) in ${(t1 - t0 * 0.001).toFixed(3)} sec]\n`,
         );
     }
 }
@@ -100,4 +85,21 @@ function extractBlobLines(chunk: Chunk): string[] {
         lines.push(...blob.lines);
     }
     return lines;
+}
+
+// Wrap words in anger. Written by Github Copilot.
+function wordWrap(text: string, width: number = 80): string {
+    const words = text.split(/\s+/);
+    let line = "";
+    let lines = [];
+    for (const word of words) {
+        if (line.length + word.length + 1 > width) {
+            lines.push(line);
+            line = word;
+        } else {
+            line += (line.length ? " " : "") + word;
+        }
+    }
+    lines.push(line);
+    return lines.join("\n");
 }

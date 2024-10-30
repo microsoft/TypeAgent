@@ -7,17 +7,25 @@
 import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
-import { createObjectFolder } from "typeagent";
 import { fileURLToPath } from "url";
 
 // 3rd party package imports
 import * as readlineSync from "readline-sync";
+import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
+import { createTypeScriptJsonValidator } from "typechat/ts";
 
 // Workspace package imports
-import { openai } from "aiclient";
-import { createCodeReviewer, createSemanticCodeIndex } from "code-processor";
+import { ChatModel, openai } from "aiclient";
+import {
+    CodeBlock,
+    CodeDocumentation,
+    CodeDocumenter,
+    createSemanticCodeIndex,
+} from "code-processor";
+import { createObjectFolder, loadSchema } from "typeagent";
 
 // Local imports
+import { ChunkDocumentation } from "./chunkDocSchema.js";
 import { Chunk } from "./pythonChunker.js";
 import { importPythonFile } from "./pythonImporter.js";
 
@@ -64,10 +72,10 @@ async function main(): Promise<void> {
         { serializer: (obj) => JSON.stringify(obj, null, 2) },
     );
     const chatModel = openai.createChatModelDefault("spelunkerChat");
-    const codeReviewer = createCodeReviewer(chatModel);
+    const codeDocumenter = await createCodeDocumenter(chatModel);
     const codeIndex = await createSemanticCodeIndex(
         `${spelunkerRoot}/index`,
-        codeReviewer,
+        codeDocumenter,
         undefined,
         (obj) => JSON.stringify(obj, null, 2),
     );
@@ -118,3 +126,46 @@ async function main(): Promise<void> {
 }
 
 await main();
+
+// We have our own code documenter to pass to createSemanticCodeIndex.
+
+async function createCodeDocumenter(model: ChatModel): Promise<CodeDocumenter> {
+    const docTranslator = await createDocTranslator(model);
+    return {
+        document,
+    };
+
+    async function document(code: CodeBlock): Promise<CodeDocumentation> {
+        const text =
+            typeof code.code === "string" ? code.code : code.code.join("");
+        const promptPrefix =
+            `Document the following ${code.language} code:\n\n${text}\n\n` +
+            "Return 1-3 short paragraphs of text describing the code, " +
+            "its purpose, and any relevant details.\n" +
+            "The docs must be: accurate, active voice, crisp, succinct.";
+        const result = await docTranslator.translate(text, promptPrefix);
+        if (result.success) {
+            return {
+                comments: [{ lineNumber: 1, comment: result.data.description }],
+            };
+        } else {
+            throw new Error(result.message);
+        }
+    }
+}
+
+async function createDocTranslator(
+    model: ChatModel,
+): Promise<TypeChatJsonTranslator<ChunkDocumentation>> {
+    const typeName = "ChunkDocumentation";
+    const schema = loadSchema(["chunkDocSchema.ts"], import.meta.url);
+    const validator = createTypeScriptJsonValidator<ChunkDocumentation>(
+        schema,
+        typeName,
+    );
+    const translator = createJsonTranslator<ChunkDocumentation>(
+        model,
+        validator,
+    );
+    return translator;
+}
