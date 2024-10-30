@@ -58,7 +58,7 @@ describe("openai.textEmbeddings", () => {
         "generateBatch.maxBatchSize",
         async () => {
             if (standardModel!.generateEmbeddingBatch) {
-                const inputs = new Array(standardModel!.maxBatchSize! + 1);
+                const inputs = new Array(standardModel!.maxBatchSize + 1);
                 inputs.fill("Foo");
                 const result =
                     await standardModel!.generateEmbeddingBatch(inputs);
