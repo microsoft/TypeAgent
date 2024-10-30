@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 import {
+    ObjectFolderSettings,
+    ObjectSerializer,
     ScoredItem,
     createEmbeddingFolder,
     createObjectFolder,
@@ -11,6 +13,7 @@ import { CodeBlock, StoredCodeBlock } from "./code.js";
 import { CodeReviewer } from "./codeReviewer.js";
 import { TextEmbeddingModel } from "aiclient";
 import path from "path";
+import { CodeDocumentation } from "./codeDocSchema.js";
 
 export interface SemanticCodeIndex {
     find(question: string, maxMatches: number): Promise<ScoredItem<string>[]>;
@@ -19,7 +22,7 @@ export interface SemanticCodeIndex {
         code: CodeBlock,
         name: string,
         sourcePath?: string | undefined,
-    ): Promise<string>;
+    ): Promise<CodeDocumentation>;
     remove(name: string): Promise<void>;
 }
 
@@ -27,13 +30,19 @@ export async function createSemanticCodeIndex(
     folderPath: string,
     codeReviewer: CodeReviewer,
     embeddingModel?: TextEmbeddingModel,
+    objectSerializer?: ObjectSerializer,
 ): Promise<SemanticCodeIndex> {
     const embeddingFolder = await createEmbeddingFolder(
         path.join(folderPath, "embeddings"),
     );
     const codeIndex = createSemanticIndex(embeddingFolder, embeddingModel);
+    const codeStoreSettings: ObjectFolderSettings = {};
+    if (objectSerializer) {
+        codeStoreSettings.serializer = objectSerializer;
+    }
     const codeStore = await createObjectFolder<StoredCodeBlock>(
         path.join(folderPath, "code"),
+        codeStoreSettings,
     );
     return {
         find,
@@ -53,18 +62,17 @@ export async function createSemanticCodeIndex(
         code: CodeBlock,
         name: string,
         sourcePath?: string | undefined,
-    ): Promise<string> {
+    ): Promise<CodeDocumentation> {
         const docs = await codeReviewer.document(code);
         let text = name;
         if (docs.comments) {
             for (const docLine of docs.comments) {
-                text += "\n";
-                text += docLine.comment;
+                text += `\n${docLine.lineNumber}: ${docLine.comment}`;
             }
         }
         await codeIndex.put(text, name);
         await codeStore.put({ code, sourcePath }, name);
-        return text;
+        return docs;
     }
 
     function remove(name: string): Promise<void> {
