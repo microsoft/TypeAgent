@@ -68,7 +68,7 @@ export function validateSubPhraseText(
             const matchAnywhere = new RegExp(escapeMatch(phrase.text), "i");
             const anyResult = matchAnywhere.exec(requestAction.request);
             if (anyResult !== null) {
-                return `Overlapping sub-phrase: explanation has overlapping text '${phrase.text}'`;
+                return `Overlapping sub-phrase: explanation has overlapping text '${phrase.text}'.`;
             }
             return `Extraneous sub-phrase: sub-phrase text '${phrase.text}' not found in request.  ${getExactStringRequirementMessage()}`;
         }
