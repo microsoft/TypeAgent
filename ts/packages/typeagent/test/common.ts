@@ -3,6 +3,7 @@
 import path from "path";
 import os from "os";
 import { hasEnvSettings, openai } from "aiclient";
+import { Embedding } from "../src/vector/embeddings";
 
 export function hasEmbeddingModel(endpoint?: string | undefined) {
     return hasEnvSettings(
@@ -26,4 +27,12 @@ export function testIf(
         return test.skip(name, () => {});
     }
     return test(name, fn, testTimeout);
+}
+
+export function generateRandomEmbedding(length: number): Embedding {
+    const embedding = new Float32Array(length);
+    for (let i = 0; i < length; ++i) {
+        embedding[i] = Math.random();
+    }
+    return embedding;
 }

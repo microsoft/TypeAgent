@@ -40,7 +40,7 @@ export function similarity(
     type: SimilarityType,
 ): number {
     if (type === SimilarityType.Cosine) {
-        return vector.cosineSimilaritySimple(x, y);
+        return vector.cosineSimilarity(x, y);
     }
     return vector.dotProduct(x, y);
 }
@@ -132,8 +132,8 @@ export function indexesOfNearest(
  * @returns
  */
 export function cosineSimilarityLoop(
-    x: Embedding,
-    other: Embedding,
+    x: vector.Vector,
+    other: vector.Vector,
     otherLen: number,
 ): number {
     if (x.length != other.length) {

@@ -57,11 +57,12 @@ export function normalizeInPlace(v: Vector): void {
 /**
  * Extremely vanilla implementation.
  * When possible, use Normalized Embeddings and dotProduct.
+ * Use cosineSimilarityLoop for loops
  * @param x
  * @param y
  * @returns
  */
-export function cosineSimilaritySimple(x: Vector, y: Vector): number {
+export function cosineSimilarity(x: Vector, y: Vector): number {
     if (x.length != y.length) {
         throw new Error("Array length mismatch");
     }
