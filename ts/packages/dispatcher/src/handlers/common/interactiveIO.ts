@@ -31,6 +31,13 @@ export interface IAgentMessage {
     metrics?: RequestMetrics | undefined;
 }
 
+export type NotifyExplainedData = {
+    error?: string | undefined;
+    fromCache: boolean;
+    fromUser: boolean;
+    time: string;
+};
+
 // Client provided IO
 export interface ClientIO {
     clear(): void;
@@ -74,11 +81,7 @@ export interface ClientIO {
     notify(
         event: "explained",
         requestId: RequestId,
-        data: {
-            time: string;
-            fromCache: boolean;
-            fromUser: boolean;
-        },
+        data: NotifyExplainedData,
         source: string,
     ): void;
 
@@ -121,11 +124,7 @@ export interface RequestIO {
     notify(
         event: "explained",
         requestId: RequestId,
-        data: {
-            time: string;
-            fromCache: boolean;
-            fromUser: boolean;
-        },
+        data: NotifyExplainedData,
     ): void;
     notify(
         event: "randomCommandSelected",

@@ -23,6 +23,7 @@ import {
     createDispatcher,
     RequestId,
     Dispatcher,
+    NotifyExplainedData,
 } from "agent-dispatcher";
 
 import { IAgentMessage, TemplateEditConfig } from "agent-dispatcher";
@@ -433,24 +434,13 @@ function updateDisplay(message: IAgentMessage, mode?: DisplayAppendMode) {
     chatView?.webContents.send("updateDisplay", message, mode);
 }
 
-function markRequestExplained(
-    requestId: RequestId,
-    timestamp: string,
-    fromCache?: boolean,
-    fromUser?: boolean,
-) {
+function notifyExplained(requestId: RequestId, data: NotifyExplainedData) {
     // Ignore message without requestId
     if (requestId === undefined) {
-        console.warn("markRequestExplained: requestId is undefined");
+        console.warn("notifyExplained: requestId is undefined");
         return;
     }
-    chatView?.webContents.send(
-        "mark-explained",
-        requestId,
-        timestamp,
-        fromCache,
-        fromUser,
-    );
+    chatView?.webContents.send("notifyExplained", requestId, data);
 }
 
 function updateRandomCommandSelected(requestId: RequestId, message: string) {
@@ -570,12 +560,7 @@ const clientIO: ClientIO = {
     notify(event: string, requestId: RequestId, data: any, source: string) {
         switch (event) {
             case "explained":
-                markRequestExplained(
-                    requestId,
-                    data.time,
-                    data.fromCache,
-                    data.fromUser,
-                );
+                notifyExplained(requestId, data);
                 break;
             case "randomCommandSelected":
                 updateRandomCommandSelected(requestId, data.message);
