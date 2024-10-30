@@ -7,3 +7,4 @@ export * as bing from "./bing";
 export * from "./restClient";
 export * from "./auth";
 export * from "./tokenCounter";
+export * as auth from "./auth";

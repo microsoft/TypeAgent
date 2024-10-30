@@ -309,6 +309,11 @@ document.addEventListener("DOMContentLoaded", function () {
     const idGenerator = new IdGenerator();
     const agents = new Map<string, string>();
 
+    // setup SPA (login)
+    const loginButton: HTMLButtonElement = document.getElementById("SignIn") as HTMLButtonElement;
+    SPAAuthRedirect.getInstance().initalize(loginButton);
+    
+
     const tabs = new TabView(
         ["Settings", "Metrics", "Help"],
         [iconSettings(), iconMetrics(), iconHelp()],
@@ -357,12 +362,6 @@ document.addEventListener("DOMContentLoaded", function () {
     addEvents(chatView, agents, settingsView, tabs, cameraView);
 
     chatView.chatInputFocus();
-
-    // setup SPA
-    const loginButton: HTMLButtonElement = document.getElementById("SignIn") as HTMLButtonElement;
-    const auth: SPAAuthRedirect = new SPAAuthRedirect(loginButton);
-    auth.initalize();
-
 
     if ((window as any).electron) {
         (window as any).electron.ipcRenderer.send("dom ready");

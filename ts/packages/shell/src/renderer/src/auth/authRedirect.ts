@@ -2,17 +2,35 @@
 // Licensed under the MIT License.
 
 import * as msal from "@azure/msal-browser";
-import { loginRequest, msalConfig, tokenRequest } from "./authConfig";
-import { showWelcomeMessage, updateUI } from "./ui";
-import { callMSGraph } from "./graph";
+import { loginRequest, msalConfig, tokenRequest } from "./authConfig.js";
+import { showWelcomeMessage, updateUI } from "./ui.js";
+import { callMSGraph } from "./graph.js";
+import { graphConfig } from "./graphConfig.js";
 
 export class SPAAuthRedirect {
+
+    private static instance: SPAAuthRedirect;
+
+    public static getInstance = (): SPAAuthRedirect => {
+        if (!SPAAuthRedirect.instance) {
+            SPAAuthRedirect.instance = new SPAAuthRedirect();
+        }
+
+        return SPAAuthRedirect.instance;
+    }
+
     // Create the main myMSALObj instance
     // configuration parameters are located at authConfig.js
     private myMSALObj: msal.PublicClientApplication;
     private username: string = "";
+    private token: string = "";
+    private expires: Date | null = new Date();
 
-    constructor(signInButton: HTMLButtonElement) {
+    private constructor() {
+        this.myMSALObj = new msal.PublicClientApplication(msalConfig);
+    }
+
+    async initalize(signInButton: HTMLButtonElement) {
         signInButton.onclick = () => {
             if (this.username.length == 0) {
                 this.signIn();
@@ -20,10 +38,7 @@ export class SPAAuthRedirect {
                 this.signOut();
             }
         }
-        this.myMSALObj = new msal.PublicClientApplication(msalConfig);
-    }
 
-    async initalize() {
         await this.myMSALObj.initialize();
 
         /**
@@ -35,7 +50,9 @@ export class SPAAuthRedirect {
         .then((response) => {
             if (response !== null) {
                 console.log(`Logged in as ${response.account.username}`);
-                this.username = response.account.username;                
+                this.username = response.account.username; 
+                this.token = response.accessToken;
+                this.expires = response.expiresOn;             
                 showWelcomeMessage(this.username);
             } else {
                 this.selectAccount();
@@ -132,6 +149,13 @@ export class SPAAuthRedirect {
     }
 
     public async getToken(): Promise<msal.AuthenticationResult | undefined | void> {
-        return await this.getTokenRedirect(tokenRequest);
+
+        if (new Date() < this.expires! && this.token.length > 0) {
+            //return this.token;
+        }
+
+        await this.getTokenRedirect(tokenRequest).then(
+
+        );
     }
 }

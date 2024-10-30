@@ -8,6 +8,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { CommandCompletionResult, RequestMetrics } from "agent-dispatcher";
 import { ClientAPI, SpeechToken } from "../../preload/electronTypes";
+import { AzureSpeech } from "./azureSpeech";
 
 export const webapi: ClientAPI = {
     // TODO: implement
@@ -169,13 +170,46 @@ export const webapi: ClientAPI = {
     getSpeechToken: () => {
         // TODO: implement client side token acquisition
         // Depends on implementing client side EntraID Auth first
-        return new Promise<SpeechToken | undefined>((resolve) => {
+        return new Promise<SpeechToken | undefined>(async (resolve) => {
+
+            // TODO: get from node instance from now - in the future get form users datastore
+            // intialize speech
+            if (!AzureSpeech.IsInitialized()) {
+                await AzureSpeech.initializeAsync({
+                    azureSpeechSubscriptionKey: "identity",
+                    azureSpeechRegion: "westus",
+                    azureSpeechEndpoint: "/subscriptions/b64471de-f2ac-4075-a3cb-7656bca768d0/resourceGroups/openai_dev/providers/Microsoft.CognitiveServices/accounts/octo-aisystems",
+                });
+            }
 
             let speechToken: | { token: string; expire: number; region: string; endpoint: string }
                             | undefined;
 
+            // TODO: debug
+            const tokenResponse = await AzureSpeech.getInstance().getBrowserTokenAsync();
 
-            // TODO: implement
+
+
+            //AzureSpeech.getInstance().getTokenAsync();
+            // authProvider.getToken().then((value: msal.AuthenticationResult | undefined | void) => {
+            //     if (value) {
+            //         resolve({
+            //             token: value.accessToken,
+            //             expire: Number(value.expiresOn),
+            //             region: "",
+            //             endpoint: ""
+            //         });
+            //     } else {
+            //         resolve(undefined);
+            //     }
+            // });
+
+            speechToken = {
+                token: tokenResponse.token,
+                expire: Date.now() + 9 * 60 * 1000, // 9 minutes (token expires in 10 minutes)
+                region: tokenResponse.region,
+                endpoint: tokenResponse.endpoint,
+            };
 
             resolve(speechToken); // currently not supported
         });

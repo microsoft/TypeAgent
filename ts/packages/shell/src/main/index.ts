@@ -15,7 +15,6 @@ import {
 } from "electron";
 import { join } from "node:path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
-import { AzureSpeech } from "./azureSpeech.js";
 import { runDemo } from "./demo.js";
 import registerDebug from "debug";
 import {
@@ -34,6 +33,10 @@ import { AppAgentEvent, DisplayAppendMode } from "@typeagent/agent-sdk";
 import { shellAgentProvider } from "./agent.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
 import { WebSocketMessage } from "common-utils";
+import { AzureSpeech } from "./azureSpeech.js"
+import { auth } from "aiclient";
+
+console.log(auth.AzureTokenScopes.CogServices);
 
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
