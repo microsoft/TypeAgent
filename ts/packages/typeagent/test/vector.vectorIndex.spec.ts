@@ -11,10 +11,18 @@ dotenv.config({
 import { openai } from "aiclient";
 import { hasEmbeddingModel, testIf } from "./common";
 import { generateTextEmbeddings } from "../src/vector/vectorIndex";
+import { dotProduct, dotProductSimple } from "../src/vector/vector";
 
 describe("vector.vectorIndex", () => {
     const timeoutMs = 5 * 1000 * 60;
-
+    test("dot", () => {
+        const length = 1536;
+        const x = new Array<number>(length).fill(0.37);
+        const y = new Array<number>(length).fill(0.15);
+        const dot = dotProduct(x, y);
+        const dot2 = dotProductSimple(x, y);
+        expect(dot).toEqual(dot2);
+    });
     testIf(
         hasEmbeddingModel,
         "generateEmbeddings",

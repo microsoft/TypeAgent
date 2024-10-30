@@ -63,7 +63,7 @@ export function createTabTitleIndex() {
       embeddings,
       embedding,
       maxMatches,
-      SimilarityType.Cosine,
+      SimilarityType.Dot,
     );
 
     return topN.map((m) => {

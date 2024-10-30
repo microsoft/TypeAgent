@@ -16,6 +16,7 @@ import {
     createSemanticList,
     collections,
     readAllText,
+    dotProductSimple,
 } from "typeagent";
 import * as path from "path";
 import { getData } from "typechat";
@@ -198,9 +199,65 @@ export async function runTestCases(): Promise<void> {
     // await testFetch();
 }
 
-export async function runTests(): Promise<void> {
-    await testEmbeddingModel();
+export function testDotPerf() {
+    const x = generateRandomEmbedding(1536);
+    const y = generateRandomEmbedding(1536);
+    const count = 1000;
 
+    if (dotProduct(x, y) !== dotProductSimple(x, y)) {
+        console.log("Bug");
+        return;
+    }
+    let sum = 0;
+    console.log("==dot==");
+    console.time("dot");
+    for (let i = 0; i < count; ++i) {
+        sum += dotProduct(x, y);
+    }
+    console.timeEnd("dot");
+    console.log(sum);
+
+    sum = 0;
+    console.log("==dotSimple==");
+    console.time("dotSimple");
+    for (let i = 0; i < count; ++i) {
+        sum += dotProductSimple(x, y);
+    }
+    console.timeEnd("dotSimple");
+    console.log(sum);
+}
+
+export function testDotPerf2(size: number) {
+    const x = generateRandomEmbedding(size);
+    let vectors: NormalizedEmbedding[] = [];
+    for (let i = 0; i <= 1000; ++i) {
+        vectors.push(generateRandomEmbedding(size));
+    }
+
+    let len = vectors.length;
+    console.log("==dot==");
+    console.time("dot");
+    let sum = 0;
+    for (let i = 0; i < len; ++i) {
+        sum += dotProduct(x, vectors[i]);
+    }
+    console.timeEnd("dot");
+    console.log(sum);
+    console.log("==dotSimple==");
+
+    sum = 0;
+    console.time("dotSimple");
+    for (let i = 0; i < len; ++i) {
+        sum += dotProductSimple(x, vectors[i]);
+    }
+    console.timeEnd("dotSimple");
+    console.log(sum);
+}
+
+export async function runTests(): Promise<void> {
+    //testDotPerf();
+    //testDotPerf2(1536);
+    //await testEmbeddingModel();
     //await runTestCases();
     // await runKnowledgeTests();
 }

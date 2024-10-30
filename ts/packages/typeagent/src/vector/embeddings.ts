@@ -12,7 +12,7 @@ export type Embedding = Float32Array;
 export type NormalizedEmbedding = Float32Array;
 
 export enum SimilarityType {
-    Cosine,
+    Cosine, // Note: Use Dot if working with Normalized Embeddings
     Dot,
 }
 
@@ -58,11 +58,21 @@ export function indexOfNearest(
     type: SimilarityType,
 ): ScoredItem {
     let best: ScoredItem = { score: Number.MIN_VALUE, item: -1 };
-    for (let i = 0; i < list.length; ++i) {
-        const score: number = similarity(list[i], other, type);
-        if (score > best.score) {
-            best.score = score;
-            best.item = i;
+    if (type === SimilarityType.Dot) {
+        for (let i = 0; i < list.length; ++i) {
+            const score: number = vector.dotProduct(list[i], other);
+            if (score > best.score) {
+                best.score = score;
+                best.item = i;
+            }
+        }
+    } else {
+        for (let i = 0; i < list.length; ++i) {
+            const score: number = vector.cosineSimilarity(list[i], other);
+            if (score > best.score) {
+                best.score = score;
+                best.item = i;
+            }
         }
     }
     return best;
@@ -73,7 +83,7 @@ export function indexOfNearest(
  * @param list
  * @param other
  * @param maxMatches
- * @param distance
+ * @param type Note: Most of our embeddings are *normalized* which will run significantly faster with Dot
  * @returns
  */
 export function indexesOfNearest(
@@ -84,13 +94,51 @@ export function indexesOfNearest(
     minScore: number = 0,
 ): ScoredItem[] {
     const matches = new TopNCollection(maxMatches, -1);
-    for (let i = 0; i < list.length; ++i) {
-        const score: number = similarity(list[i], other, type);
-        if (score >= minScore) {
-            matches.push(i, score);
+    if (type === SimilarityType.Dot) {
+        for (let i = 0; i < list.length; ++i) {
+            const score: number = vector.dotProduct(list[i], other);
+            if (score >= minScore) {
+                matches.push(i, score);
+            }
+        }
+    } else {
+        const otherLen = vector.euclideanLength(other);
+        for (let i = 0; i < list.length; ++i) {
+            const score: number = cosineSimilarityLoop(
+                list[i],
+                other,
+                otherLen,
+            );
+            if (score >= minScore) {
+                matches.push(i, score);
+            }
         }
     }
     return matches.byRank();
+}
+
+function cosineSimilarityLoop(
+    x: Embedding,
+    y: Embedding,
+    yLen: number,
+): number {
+    if (x.length != y.length) {
+        throw new Error("Array length mismatch");
+    }
+
+    let dotSum = 0;
+    let lenXSum = 0;
+    for (let i = 0; i < x.length; ++i) {
+        const xVal: number = x[i];
+        const yVal: number = y[i];
+
+        dotSum += xVal * yVal; // Dot product
+        lenXSum += xVal * xVal; // For magnitude of x
+    }
+
+    // Cosine Similarity of X, Y
+    // Sum(X * Y) / |X| * |Y|
+    return dotSum / (Math.sqrt(lenXSum) * yLen);
 }
 
 export interface TopNList<T> {
