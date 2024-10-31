@@ -85,15 +85,17 @@ async function main(): Promise<void> {
     );
 
     // Import all files. (TODO: Break up very long lists.)
-    console.log(`[Importing ${files.length} files]`);
-    await importPythonFiles(
-        files,
-        chunkFolder,
-        codeIndex,
-        summaryFolder,
-        true,
-        verbose,
-    );
+    if (files.length > 0) {
+        console.log(`[Importing ${files.length} files]`);
+        await importPythonFiles(
+            files,
+            chunkFolder,
+            codeIndex,
+            summaryFolder,
+            true,
+            verbose,
+        );
+    }
 
     // Loop processing searches. (TODO: Use interactiveApp.)
     while (true) {
