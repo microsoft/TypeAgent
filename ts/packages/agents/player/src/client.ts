@@ -10,6 +10,7 @@ import {
     GetFavoritesAction,
     GetPlaylistAction,
     PlayAlbumAction,
+    PlayFromCurrentTrackListAction,
     PlayAlbumTrackAction,
     PlayArtistAction,
     PlayerAction,
@@ -458,6 +459,28 @@ async function playTrackAction(
     return playTrackCollection(collection, clientContext);
 }
 
+async function playFromCurrentTrackListAction(
+    clientContext: IClientContext,
+    action: PlayFromCurrentTrackListAction,
+): Promise<ActionResult> {
+    const trackList = clientContext.currentTrackList;
+    if (trackList) {
+        const tracks = trackList.getTracks();
+        const trackIndex = action.parameters.trackNumber - 1;
+        if (trackIndex < tracks.length) {
+            return playTrackCollection(
+                new TrackCollection([tracks[trackIndex]]),
+                clientContext,
+            );
+        } else {
+            return createErrorActionResult(
+                `Track number ${action.parameters.trackNumber} not found in current track list`,
+            );
+        }
+    } else {
+        return createErrorActionResult("No current track list");
+    }
+}
 async function playAlbumAction(
     clientContext: IClientContext,
     action: PlayAlbumAction,
@@ -676,6 +699,8 @@ export async function handleCall(
             return playRandomAction(clientContext, action);
         case "playTrack":
             return playTrackAction(clientContext, action);
+        case "playFromCurrentTrackList":
+            return playFromCurrentTrackListAction(clientContext, action);
         case "playAlbum":
             return playAlbumAction(clientContext, action);
         case "playAlbumTrack":

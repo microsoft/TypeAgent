@@ -9,12 +9,34 @@ dotenv.config({
 });
 
 import { openai } from "aiclient";
-import { hasEmbeddingModel, testIf } from "./common";
+import { generateRandomEmbedding, hasEmbeddingModel, testIf } from "./common";
 import { generateTextEmbeddings } from "../src/vector/vectorIndex";
+import {
+    cosineSimilarity,
+    dotProduct,
+    dotProductSimple,
+    euclideanLength,
+} from "../src/vector/vector";
+import { cosineSimilarityLoop } from "../src/vector/embeddings";
 
 describe("vector.vectorIndex", () => {
     const timeoutMs = 5 * 1000 * 60;
-
+    test("dot", () => {
+        const length = 1536;
+        const x = generateRandomEmbedding(length);
+        const y = generateRandomEmbedding(length);
+        const dot = dotProduct(x, y);
+        const dot2 = dotProductSimple(x, y);
+        expect(dot).toEqual(dot2);
+    });
+    test("cosine", () => {
+        const length = 1536;
+        const x = generateRandomEmbedding(length);
+        const y = generateRandomEmbedding(length);
+        const cosine = cosineSimilarityLoop(x, y, euclideanLength(y));
+        const cosine2 = cosineSimilarity(x, y);
+        expect(cosine).toEqual(cosine2);
+    });
     testIf(
         hasEmbeddingModel,
         "generateEmbeddings",

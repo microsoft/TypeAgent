@@ -7,6 +7,9 @@
       "trackName": "wildcard",
       "artists.*": "wildcard"
     },
+    "playFromCurrentTrackList": {
+      "trackNumber": "ordinal"
+    },
     "playAlbum": {
       "albumName": "wildcard",
       "artists.*": "wildcard",
@@ -15,7 +18,7 @@
     "playAlbumTrack": {
       "albumName": "wildcard",
       "trackName": "wildcard",
-      "trackNumber.*": "ordinal"
+      "artists.*": "wildcard"
     },
     "playArtist": {
       "artistName": "wildcard",
