@@ -2,7 +2,13 @@
 // Licensed under the MIT License.
 
 import * as sqlite from "better-sqlite3";
-
+/*
+import { ColumnType, SqlColumnType, tablePath } from "./common.js";
+import { createKeyValueIndex } from "./keyValueIndex.js";
+import { TextIndexSettings } from "knowledge-processor";
+import { createSemanticIndex, SemanticIndex, VectorStore } from "typeagent";
+import { createVectorStore } from "./semanticIndex.js";
+*/
 export interface StringTable {
     ids(): IterableIterator<number>;
     values(): IterableIterator<string>;
@@ -82,3 +88,34 @@ export function createStringTable(
         value: string;
     };
 }
+
+/*
+export async function createTextIndex<TSourceId extends ColumnType = string>(
+    settings: TextIndexSettings,
+    db: sqlite.Database,
+    name: string,
+    valueType: SqlColumnType<TSourceId>,
+) {
+    type TextId = number;
+    const entries = createStringTable(db, tablePath(name, "entries"));
+    const postings = createKeyValueIndex<number, TSourceId>(
+        db,
+        tablePath(name, "postings"),
+        "INTEGER",
+        valueType,
+    );
+    let semanticIndex: SemanticIndex<TextId> | undefined;
+    if (settings.semanticIndex !== undefined && settings.semanticIndex) {
+        const store = createVectorStore<TextId>(
+            db,
+            tablePath(name, "embeddings"),
+            "INTEGER",
+        );
+        semanticIndex = createSemanticIndex<TextId>(
+            store,
+            settings.embeddingModel,
+        );
+    }
+    return {};
+}
+*/

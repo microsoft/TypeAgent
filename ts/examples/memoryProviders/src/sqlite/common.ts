@@ -23,3 +23,7 @@ export async function createDb(
     db.pragma("journal_mode = WAL");
     return db;
 }
+
+export function tablePath(rootName: string, name: string): string {
+    return rootName + "_" + name;
+}
