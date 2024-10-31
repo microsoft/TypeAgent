@@ -3,10 +3,10 @@
 
 import * as sqlite from "better-sqlite3";
 import { AssignedId, createDb } from "../src/sqlite/common.js";
-import { createStringTable, StringTable } from "../src/sqlite/textIndex.js";
+import { createStringTable, StringTable } from "../src/sqlite/textTable.js";
 import { ensureTestDir, testFilePath } from "./testCore.js";
 
-describe("sqlite.textIndex", () => {
+describe("sqlite.textTable", () => {
     const testTimeout = 1000 * 60 * 5;
     let db: sqlite.Database | undefined;
     beforeAll(async () => {

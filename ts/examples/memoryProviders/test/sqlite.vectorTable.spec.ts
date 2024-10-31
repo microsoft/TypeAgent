@@ -4,18 +4,20 @@
 import * as sqlite from "better-sqlite3";
 import {
     ensureTestDir,
+    generateRandomTestEmbedding,
     generateRandomTestEmbeddings,
     generateTestEmbedding,
     testFilePath,
+    testIf,
 } from "./testCore.js";
 import { createDb } from "../src/sqlite/common.js";
-import { createVectorStore } from "../src/sqlite/semanticIndex.js";
+import { createVectorTable } from "../src/sqlite/vectorTable.js";
 import { NormalizedEmbedding, SimilarityType } from "typeagent";
 
-describe("sqlite.semanticIndex", () => {
+describe("sqlite.vectorTable", () => {
     const testTimeout = 1000 * 60 * 5;
     let db: sqlite.Database | undefined;
-    const embeddingLength = 4;
+    const embeddingLength = 1536;
 
     beforeAll(async () => {
         await ensureTestDir();
@@ -29,7 +31,7 @@ describe("sqlite.semanticIndex", () => {
     test(
         "string_id",
         async () => {
-            const index = createVectorStore<string>(db!, "string_id", "TEXT");
+            const index = createVectorTable<string>(db!, "string_id", "TEXT");
             const keys: string[] = ["One", "Two"];
             const embeddings = generateRandomTestEmbeddings(
                 embeddingLength,
@@ -49,7 +51,7 @@ describe("sqlite.semanticIndex", () => {
     test(
         "string_id_match",
         async () => {
-            const index = createVectorStore<string>(
+            const index = createVectorTable<string>(
                 db!,
                 "string_id_match",
                 "TEXT",
@@ -76,6 +78,40 @@ describe("sqlite.semanticIndex", () => {
                 SimilarityType.Dot,
             );
             expect(matches.length).toEqual(2);
+        },
+        testTimeout,
+    );
+
+    testIf(
+        () => false,
+        "number_id_perf",
+        async () => {
+            const index = createVectorTable<number>(
+                db!,
+                "number_id_perf",
+                "INTEGER",
+            );
+
+            const testEmbedding = generateRandomTestEmbedding(embeddingLength);
+            let embeddingCount = 10000;
+            console.log(
+                `##${embeddingCount} Embeddings, ${embeddingLength} dimensions ###`,
+            );
+            console.time("put");
+            const embeddings = generateRandomTestEmbeddings(
+                embeddingLength,
+                embeddingCount,
+            );
+            console.timeEnd("put");
+            for (let i = 0; i < embeddings.length; ++i) {
+                await index.put(embeddings[i], i);
+            }
+            for (let i = 0; i < 4; ++i) {
+                console.log(`##${i}##`);
+                console.time("nn");
+                await index.nearestNeighbor(testEmbedding, SimilarityType.Dot);
+                console.timeEnd("nn");
+            }
         },
         testTimeout,
     );

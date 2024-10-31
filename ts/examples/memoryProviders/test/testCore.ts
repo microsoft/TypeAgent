@@ -9,6 +9,18 @@ export function skipTest(name: string) {
     return test.skip(name, () => {});
 }
 
+export function testIf(
+    runIf: () => boolean,
+    name: string,
+    fn: jest.ProvidesCallback,
+    testTimeout?: number | undefined,
+) {
+    if (!runIf()) {
+        return test.skip(name, () => {});
+    }
+    return test(name, fn, testTimeout);
+}
+
 export async function ensureTestDir() {
     return ensureDir(getRootDataPath());
 }

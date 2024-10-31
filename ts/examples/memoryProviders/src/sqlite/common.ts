@@ -29,6 +29,16 @@ export async function createDb(
     return db;
 }
 
+export function createInQuery(
+    db: sqlite.Database,
+    tableName: string,
+    select: string,
+    values: any[],
+): sqlite.Statement {
+    const sql = `SELECT ${select} from ${tableName} WHERE stringId IN (${values})`;
+    return db.prepare(sql);
+}
+
 export function tablePath(rootName: string, name: string): string {
     return rootName + "_" + name;
 }

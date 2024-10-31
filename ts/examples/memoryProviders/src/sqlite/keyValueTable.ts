@@ -3,7 +3,7 @@
 
 import * as sqlite from "better-sqlite3";
 import * as knowLib from "knowledge-processor";
-import { ColumnType, SqlColumnType } from "./common.js";
+import { ColumnType, createInQuery, SqlColumnType } from "./common.js";
 
 export interface KeyValueTable<
     TKeyId extends ColumnType = string,
@@ -15,7 +15,7 @@ export interface KeyValueTable<
     putSync(postings: TValueId[], id: TKeyId): TKeyId;
 }
 
-export function createKeyValueIndex<
+export function createKeyValueTable<
     TKeyId extends ColumnType = string,
     TValueId extends ColumnType = string,
 >(
@@ -38,9 +38,6 @@ export function createKeyValueIndex<
 
     const sql_get = db.prepare(
         `SELECT valueId from ${tableName} WHERE keyId = ? ORDER BY valueId ASC`,
-    );
-    const sql_getIn = db.prepare(
-        `SELECT DISTINCT valueId from ${tableName} WHERE keyId IN ? ORDER BY valueId ASC`,
     );
     const sql_add = db.prepare(
         `INSERT OR IGNORE INTO ${tableName} (keyId, valueId) VALUES (?, ?)`,
@@ -85,7 +82,8 @@ export function createKeyValueIndex<
     function* iterateMultiple(
         ids: TKeyId[],
     ): IterableIterator<TValueId> | undefined {
-        const rows = sql_getIn.iterate(ids);
+        const stmt = createInQuery(db, tableName, "keyId", ids);
+        const rows = stmt.iterate(ids);
         let count = 0;
         for (const row of rows) {
             yield (row as KeyValueRow).valueId;
@@ -96,7 +94,7 @@ export function createKeyValueIndex<
         }
     }
 
-    async function getMultiple(
+    function getMultiple(
         ids: TKeyId[],
         concurrency?: number,
     ): Promise<TValueId[][]> {
@@ -107,20 +105,15 @@ export function createKeyValueIndex<
                 matches.push(rows.map((r) => r.valueId));
             }
         }
-        return matches;
+        return Promise.resolve(matches);
     }
 
-    async function put(values: TValueId[], id?: TKeyId): Promise<TKeyId> {
+    function put(values: TValueId[], id?: TKeyId): Promise<TKeyId> {
         if (id === undefined) {
             // TODO: support
             throw new Error("Not supported");
         }
-        // TODO: investigate batches
-        for (let i = 0; i < values.length; ++i) {
-            sql_add.run(id, values[i]);
-        }
-
-        return id;
+        return Promise.resolve(putSync(values, id));
     }
 
     function putSync(values: TValueId[], id: TKeyId): TKeyId {
@@ -130,12 +123,12 @@ export function createKeyValueIndex<
         return id;
     }
 
-    async function replace(values: TValueId[], id: TKeyId): Promise<TKeyId> {
+    function replace(values: TValueId[], id: TKeyId): Promise<TKeyId> {
         sql_remove.run(id);
         return put(values, id);
     }
 
-    async function remove(id: TKeyId): Promise<void> {
+    function remove(id: TKeyId): Promise<void> {
         sql_remove.run(id);
         return Promise.resolve();
     }

@@ -3,8 +3,14 @@
 
 import * as sqlite from "better-sqlite3";
 
-import { AssignedId, ColumnType, SqlColumnType, tablePath } from "./common.js";
-import { createKeyValueIndex } from "./keyValueIndex.js";
+import {
+    AssignedId,
+    ColumnType,
+    createInQuery,
+    SqlColumnType,
+    tablePath,
+} from "./common.js";
+import { createKeyValueTable } from "./keyValueTable.js";
 import {
     TextBlock,
     TextBlockType,
@@ -12,7 +18,7 @@ import {
     TextIndexSettings,
 } from "knowledge-processor";
 import { createSemanticIndex, SemanticIndex, VectorStore } from "typeagent";
-import { createVectorStore } from "./semanticIndex.js";
+import { createVectorTable } from "./vectorTable.js";
 
 export type StringTableRow = {
     stringId: number;
@@ -103,8 +109,7 @@ export function createStringTable(
     }
 
     function* getTextMultiple(ids: number[]): IterableIterator<string> {
-        const sql = `SELECT value from ${tableName} WHERE stringId IN (${ids})`;
-        const stmt = db.prepare(sql);
+        const stmt = createInQuery(db, tableName, "value", ids);
         let rows = stmt.iterate();
         for (const row of rows) {
             yield (row as StringTableRow).value;
@@ -154,7 +159,7 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
 ) {
     type TextId = number;
     const textTable = createStringTable(db, tablePath(name, "entries"));
-    const postingsTable = createKeyValueIndex<number, TSourceId>(
+    const postingsTable = createKeyValueTable<number, TSourceId>(
         db,
         tablePath(name, "postings"),
         "INTEGER",
@@ -185,7 +190,7 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         VectorStore<TextId>,
         SemanticIndex<TextId>,
     ] {
-        const store = createVectorStore<TextId>(
+        const store = createVectorTable<TextId>(
             db,
             tablePath(name, "embeddings"),
             "INTEGER",
