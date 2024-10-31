@@ -2,8 +2,9 @@
 // Licensed under the MIT License.
 
 import * as sdk from "microsoft-cognitiveservices-speech-sdk";
-import * as msal from "@azure/msal-browser";
-import { SPAAuthRedirect } from "./auth/authRedirect.js";
+//import * as msal from "@azure/msal-browser";
+//import { SPAAuthRedirect } from "./auth/authRedirect.js";
+import { SPAAuthPopup } from "./auth/authPopup.js";
 //import { auth } from "aiclient";
 
 export interface TokenResponse {
@@ -126,20 +127,25 @@ export class AzureSpeech {
         //         }
         //     });
 
-        const loginResult: msal.AuthenticationResult | undefined | void = await SPAAuthRedirect.getInstance().getToken();
+        //const loginResult: msal.AuthenticationResult | undefined | void = await SPAAuthRedirect.getInstance().getToken();
+ 
+        // if (loginResult) {
+        //     const result: TokenResponse = {
+        //         token: loginResult.accessToken,
+        //         expire: Number(loginResult.expiresOn),
+        //         region: this.region,
+        //         endpoint: this.endpoint,
+        //     };
 
-        if (loginResult) {
-            const result: TokenResponse = {
-                token: loginResult.accessToken,
-                expire: Number(loginResult.expiresOn),
-                region: this.region,
-                endpoint: this.endpoint,
-            };
-
-            return result;
-        }
+        //     return result;
+        // }
         
-        return { token: "", expire: Date.now(), region: this.region, endpoint: this.endpoint};
+        // return { token: "", expire: Date.now(), region: this.region, endpoint: this.endpoint};
+        
+
+        return new Promise<TokenResponse>((resolve) => {
+            resolve(SPAAuthPopup.getInstance().getToken());
+        });
     };
 
     // private getKeyBasedTokenAsync = async (): Promise<TokenResponse> => {

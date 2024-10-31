@@ -9,7 +9,8 @@ import {
 import { CommandCompletionResult, RequestMetrics } from "agent-dispatcher";
 import { ClientAPI, SpeechToken } from "../../preload/electronTypes";
 import { AzureSpeech, TokenResponse } from "./azureSpeech";
-import { SPAAuthRedirect } from "./auth/authRedirect";
+//import { SPAAuthRedirect } from "./auth/authRedirect";
+import { SPAAuthPopup } from "./auth/authPopup";
 
 export const webapi: ClientAPI = {
     // TODO: implement
@@ -184,9 +185,9 @@ export const webapi: ClientAPI = {
             }
 
             // wait for auth initialization to complete
-            if (!SPAAuthRedirect.IsInitialized()) {
+            if (!SPAAuthPopup.IsInitialized()) {
                 // wait
-                SPAAuthRedirect.registerInitializationCallback((response) => {
+                SPAAuthPopup.registerInitializationCallback((response) => {
                     const result: TokenResponse = {
                         token: response.accessToken,
                         expire: Number(response.expiresOn),
