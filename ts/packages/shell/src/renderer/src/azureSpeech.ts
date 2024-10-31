@@ -143,8 +143,8 @@ export class AzureSpeech {
         // return { token: "", expire: Date.now(), region: this.region, endpoint: this.endpoint};
         
 
-        return new Promise<TokenResponse>((resolve) => {
-            resolve(SPAAuthPopup.getInstance().getToken());
+        return new Promise<TokenResponse>(async (resolve) => {
+            resolve(await SPAAuthPopup.getInstance().getToken());
         });
     };
 

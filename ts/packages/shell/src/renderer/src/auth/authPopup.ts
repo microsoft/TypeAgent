@@ -3,7 +3,7 @@
 
 import * as msal from "@azure/msal-browser";
 import { AuthResponseCallback } from "./authRedirect.js";
-import { loginRequest, msalConfig } from "./authConfig.js";
+import { loginRequest, msalConfig, tokenRequest } from "./authConfig.js";
 
 export class SPAAuthPopup {
 
@@ -119,7 +119,7 @@ export class SPAAuthPopup {
          */
 
         this.myMSALObj.loginPopup(loginRequest)
-            .then((response) => {
+            .then(async (response) => {
                 if (response !== null) {
                     this.username = response.account.username;
                     this.token = response.accessToken;
@@ -129,22 +129,28 @@ export class SPAAuthPopup {
                 } else {
                     this.selectAccount();
         
-                    /**
-                     * If you already have a session that exists with the authentication server, you can use the ssoSilent() API
-                     * to make request for tokens without interaction, by providing a "login_hint" property. To try this, comment the 
-                     * line above and uncomment the section below.
-                     */
+                    // /**
+                    //  * If you already have a session that exists with the authentication server, you can use the ssoSilent() API
+                    //  * to make request for tokens without interaction, by providing a "login_hint" property. To try this, comment the 
+                    //  * line above and uncomment the section below.
+                    //  */
+                    // this.myMSALObj.ssoSilent({loginHint: this.username})
+                    //     .then((response) => {
+                    //         this.username = response.account.username;
+                    //         this.token = response.accessToken;
+                    //         this.expires = response.expiresOn;
         
-                    // myMSALObj.ssoSilent(silentRequest).
-                    //     then((response) => {
-                    //          welcomeUser(response.account.username);
-                    //          updateTable(response.account);
+                    //         //  welcomeUser(response.account.username);
+                    //         //  updateTable(response.account);
                     //     }).catch(error => {
                     //         console.error("Silent Error: " + error);
                     //         if (error instanceof msal.InteractionRequiredAuthError) {
-                    //             signIn();
+                    //             this.signIn();
                     //         }
                     //     });
+                    
+                    // let r = await this.myMSALObj.acquireTokenSilent(tokenRequest);
+                    // console.log(r);
                 }                  
             })
             .catch(error => {
@@ -162,17 +168,27 @@ export class SPAAuthPopup {
         // Choose which account to logout from by passing a username.
         const logoutRequest = {
             account: this.myMSALObj.getAccountByUsername(this.username),
-            mainWindowRedirectUri: '/signout'
+            mainWindowRedirectUri: '/'
         };
 
         this.myMSALObj.logoutPopup(logoutRequest);
     }
 
-    getToken() { //: Promise<msal.AuthenticationResult | undefined | void> {
+    async getToken() { //: Promise<msal.AuthenticationResult | undefined | void> {
 
         if (new Date() < this.expires! && this.token.length > 0) {
             //return this.token;
         }
+
+        try {
+            this.myMSALObj.setActiveAccount(this.myMSALObj.getAllAccounts()[0]);
+            let r = await this.myMSALObj.acquireTokenSilent(tokenRequest);
+            console.log(r);
+        } catch(error) {
+            if (error instanceof msal.InteractionRequiredAuthError) {
+                this.signIn();
+            }
+        };
 
         return {
                 token: this.token,

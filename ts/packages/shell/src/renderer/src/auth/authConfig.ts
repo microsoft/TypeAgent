@@ -12,6 +12,7 @@ export const msalConfig = {
     auth: {
         // 'Application (client) ID' of app registration in Azure portal - this value is a GUID
         clientId: "de5757b7-986f-4f02-aea1-395670da6da0",
+        //clientId: "04b07795-8ddb-461a-bbee-02f9e1bf7b46",
         // Full directory URL, in the form of https://login.microsoftonline.com/<tenant-id>
         authority: "https://login.microsoftonline.com/72f988bf-86f1-41af-91ab-2d7cd011db47",
         // Full redirect URL, in form of http://localhost:3000
@@ -53,7 +54,7 @@ export const msalConfig = {
  * https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-permissions-and-consent#openid-connect-scopes
  */
 export const loginRequest = {
-    scopes: ["User.Read"]
+    scopes: ["https://internal.cognitiveservices.azure.us/user_impersonation"],
 };
 
 /**
@@ -61,6 +62,6 @@ export const loginRequest = {
  * https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/resources-and-scopes.md
  */
 export const tokenRequest = {
-    scopes: [],
+    scopes: ["https://cognitiveservices.azure.com/.default"],
     forceRefresh: false // Set this to "true" to skip a cached token and go to the server to get a new token
 };
