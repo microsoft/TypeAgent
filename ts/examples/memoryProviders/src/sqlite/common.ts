@@ -12,6 +12,11 @@ export type SqlColumnType<T> = T extends string
       ? "INTEGER"
       : never;
 
+export type AssignedId<T> = {
+    id: T;
+    isNew: boolean;
+};
+
 export async function createDb(
     filePath: string,
     createNew: boolean,

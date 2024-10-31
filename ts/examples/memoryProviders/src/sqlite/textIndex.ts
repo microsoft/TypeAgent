@@ -3,7 +3,7 @@
 
 import * as sqlite from "better-sqlite3";
 
-import { ColumnType, SqlColumnType, tablePath } from "./common.js";
+import { AssignedId, ColumnType, SqlColumnType, tablePath } from "./common.js";
 import { createKeyValueIndex } from "./keyValueIndex.js";
 import {
     TextBlock,
@@ -11,10 +11,9 @@ import {
     TextIndex,
     TextIndexSettings,
 } from "knowledge-processor";
-/*
-import { createSemanticIndex, SemanticIndex } from "typeagent";
+import { createSemanticIndex, SemanticIndex, VectorStore } from "typeagent";
 import { createVectorStore } from "./semanticIndex.js";
-*/
+
 export type StringTableRow = {
     stringId: number;
     value: string;
@@ -27,7 +26,7 @@ export interface StringTable {
     entries(): IterableIterator<StringTableRow>;
     getId(value: string): number | undefined;
     getText(id: number): string | undefined;
-    add(value: string): number;
+    add(value: string): AssignedId<number>;
     remove(value: string): void;
 }
 
@@ -100,16 +99,16 @@ export function createStringTable(
         return row ? row.value : undefined;
     }
 
-    function add(value: string): number {
+    function add(value: string): AssignedId<number> {
         if (!value) {
             throw Error("value is empty");
         }
         const result = sql_add.run(value);
         if (result.changes > 0) {
-            return result.lastInsertRowid as number;
+            return { id: result.lastInsertRowid as number, isNew: true };
         }
         const row = sql_getId.get(value) as StringTableRow;
-        return row.stringId;
+        return { id: row.stringId, isNew: false };
     }
 
     function remove(value: string) {
@@ -134,20 +133,11 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         "INTEGER",
         valueType,
     );
-    /*
-    let semanticIndex: SemanticIndex<TextId> | undefined;
-    if (settings.semanticIndex !== undefined && settings.semanticIndex) {
-        const store = createVectorStore<TextId>(
-            db,
-            tablePath(name, "embeddings"),
-            "INTEGER",
-        );
-        semanticIndex = createSemanticIndex<TextId>(
-            store,
-            settings.embeddingModel,
-        );
-    }
-        */
+    let [vectorStore, semanticIndex] =
+        settings.semanticIndex !== undefined && settings.semanticIndex
+            ? createSemanticTable()
+            : [undefined, undefined];
+
     return {
         text,
         ids,
@@ -162,6 +152,22 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         put,
         putMultiple,
     };
+
+    function createSemanticTable(): [
+        VectorStore<TextId>,
+        SemanticIndex<TextId>,
+    ] {
+        const store = createVectorStore<TextId>(
+            db,
+            tablePath(name, "embeddings"),
+            "INTEGER",
+        );
+        const index = createSemanticIndex<TextId>(
+            store,
+            settings.embeddingModel,
+        );
+        return [store, index];
+    }
 
     async function* text(): AsyncIterableIterator<string> {
         for (const value of textTable.values()) {
@@ -223,7 +229,17 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
     }
 
     async function put(text: string, postings?: TSourceId[]): Promise<TextId> {
-        return putSync(text, postings);
+        let assignedId = textTable.add(text);
+        if (postings && postings.length > 0) {
+            postingsTable.putSync(postings, assignedId.id);
+        }
+        if (
+            semanticIndex &&
+            (assignedId.isNew || !vectorStore?.exists(assignedId.id))
+        ) {
+            await semanticIndex.put(text, assignedId.id);
+        }
+        return assignedId.id;
     }
 
     async function putMultiple(
@@ -231,17 +247,9 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
     ): Promise<TextId[]> {
         const ids: TextId[] = [];
         for (const b of blocks) {
-            const id = putSync(b.value, b.sourceIds);
+            const id = await put(b.value, b.sourceIds);
             ids.push(id);
         }
         return ids;
-    }
-
-    function putSync(text: string, postings?: TSourceId[]): TextId {
-        let textId = textTable.add(text);
-        if (postings && postings.length > 0) {
-            postingsTable.putSync(postings, textId);
-        }
-        return textId;
     }
 }

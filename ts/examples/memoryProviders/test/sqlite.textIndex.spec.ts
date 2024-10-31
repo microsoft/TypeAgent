@@ -28,13 +28,13 @@ describe("sqlite.textIndex", () => {
 
             for (const value of strings) {
                 const id = table.add(value);
-                stringIds.push(id);
+                stringIds.push(id.id);
             }
             // Add dupes
             const dupeIds: number[] = [];
             for (const value of strings) {
                 const id = table.add(value);
-                dupeIds.push(id);
+                dupeIds.push(id.id);
             }
             expect(stringIds).toEqual(dupeIds);
 

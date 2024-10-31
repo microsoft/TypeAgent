@@ -10,6 +10,7 @@ export interface KeyValueTable<
     TValueId extends ColumnType = string,
 > extends knowLib.KeyValueIndex<TKeyId, TValueId> {
     getSync(id: TKeyId): TValueId[] | undefined;
+    iterate(id: TKeyId): IterableIterator<TValueId> | undefined;
     putSync(postings: TValueId[], id: TKeyId): TKeyId;
 }
 
@@ -45,6 +46,7 @@ export function createKeyValueIndex<
         get,
         getSync,
         getMultiple,
+        iterate,
         put,
         putSync,
         replace,
@@ -61,6 +63,18 @@ export function createKeyValueIndex<
     function getSync(id: TKeyId): TValueId[] | undefined {
         const rows = sql_get.all(id) as KeyValueRow[];
         return rows.length > 0 ? rows.map((r) => r.valueId) : undefined;
+    }
+
+    function* iterate(id: TKeyId): IterableIterator<TValueId> | undefined {
+        const rows = sql_get.iterate(id);
+        let count = 0;
+        for (const row of rows) {
+            yield (row as KeyValueRow).valueId;
+            ++count;
+        }
+        if (count === 0) {
+            return undefined;
+        }
     }
 
     async function getMultiple(
