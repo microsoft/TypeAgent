@@ -30,7 +30,7 @@ TypeScript, of course).
 
 import * as fs from "fs";
 
-import { ObjectFolder } from "typeagent";
+import { asyncArray, ObjectFolder } from "typeagent";
 import {
     CodeBlock,
     CodeDocumentation,
@@ -108,10 +108,11 @@ async function processChunkedFile(
             verbose,
         );
     }
-    const promises = chunks.map((chunk) =>
-        processChunk(chunk, chunkFolder, codeIndex, summaryFolder, verbose),
+
+    // Limit concurrency to avoid 429 errors.
+    await asyncArray.forEachAsync(chunks, 4, async (chunk) =>
+        await processChunk(chunk, chunkFolder, codeIndex, summaryFolder, verbose),
     );
-    await Promise.all(promises);
 
     const t1 = Date.now();
     console.log(
