@@ -17,7 +17,12 @@ import {
     TextIndex,
     TextIndexSettings,
 } from "knowledge-processor";
-import { createSemanticIndex, SemanticIndex, VectorStore } from "typeagent";
+import {
+    createSemanticIndex,
+    ScoredItem,
+    SemanticIndex,
+    VectorStore,
+} from "typeagent";
 import { createVectorTable } from "./vectorTable.js";
 import * as knowLib from "knowledge-processor";
 
@@ -187,6 +192,8 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         getNearest,
         put,
         putMultiple,
+        nearestNeighbors,
+        nearestNeighborsText,
     };
 
     function createVectorIndex(): [VectorStore<TextId>, SemanticIndex<TextId>] {
@@ -318,6 +325,48 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
             }
         }
         return [];
+    }
+
+    async function nearestNeighbors(
+        value: string,
+        maxMatches: number,
+        minScore?: number,
+    ): Promise<ScoredItem<TSourceId[]>[]> {
+        const matches = await nearestNeighborsText(value, maxMatches, minScore);
+        const scoredPostings = matches.map((m) => {
+            const item = postingsTable.getSync(m.item) ?? [];
+            return {
+                score: m.score,
+                item,
+            };
+        });
+        return scoredPostings;
+    }
+
+    async function nearestNeighborsText(
+        value: string,
+        maxMatches: number,
+        minScore?: number,
+    ): Promise<ScoredItem<TextId>[]> {
+        if (!semanticIndex) {
+            return [];
+        }
+        let matches = await semanticIndex.nearestNeighbors(
+            value,
+            maxMatches,
+            minScore,
+        );
+        // Also do an exact match
+        let textId = textTable.getId(value);
+        if (textId) {
+            // Remove prior match
+            const pos = matches.findIndex((m) => m.item === textId);
+            if (pos >= 0) {
+                matches.splice(pos, 1);
+            }
+            matches.splice(0, 0, { score: 1.0, item: textId });
+        }
+        return matches;
     }
 
     async function getNearestTextId(

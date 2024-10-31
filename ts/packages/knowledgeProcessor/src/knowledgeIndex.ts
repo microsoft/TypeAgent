@@ -105,7 +105,6 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
     getId(value: string): Promise<TTextId | undefined>;
     getIds(values: string[]): Promise<(TTextId | undefined)[]>;
     getText(id: TTextId): Promise<string | undefined>;
-    getTextMultiple(ids: TTextId[]): Promise<(string | undefined)[]>;
     put(value: string, postings?: TSourceId[]): Promise<TTextId>;
     putMultiple(values: TextBlock<TSourceId>[]): Promise<TTextId[]>;
     getNearest(
@@ -139,17 +138,6 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
     ): Promise<ScoredItem<TSourceId[]>[]>;
     getNearestText(
         text: string,
-        maxMatches: number,
-        minScore?: number,
-    ): Promise<TTextId[]>;
-    getNearestTextScored(
-        text: string,
-        maxMatches: number,
-        minScore?: number,
-    ): Promise<ScoredItem<TTextId>[]>;
-    getNearestTextMultiple(
-        values: string[],
-        orMatches: boolean,
         maxMatches: number,
         minScore?: number,
     ): Promise<TTextId[]>;
@@ -210,7 +198,6 @@ export async function createTextIndex<TSourceId = any>(
         getId,
         getIds,
         getText,
-        getTextMultiple,
         put,
         putMultiple,
         getNearest,
@@ -218,8 +205,6 @@ export async function createTextIndex<TSourceId = any>(
         getNearestHitsMultiple,
         getNearestMultiple,
         getNearestText,
-        getNearestTextMultiple,
-        getNearestTextScored,
         nearestNeighbors,
         nearestNeighborsText,
         remove,
@@ -271,14 +256,6 @@ export async function createTextIndex<TSourceId = any>(
 
     async function getText(id: TextId): Promise<string | undefined> {
         return entriesFolder.get(id);
-    }
-
-    async function getTextMultiple(
-        ids: TextId[],
-    ): Promise<(string | undefined)[]> {
-        return asyncArray.mapAsync(ids, settings.concurrency, (id) =>
-            getText(id),
-        );
     }
 
     async function put(text: string, postings?: TSourceId[]): Promise<TextId> {
@@ -501,52 +478,6 @@ export async function createTextIndex<TSourceId = any>(
             }
         }
         return matchedIds;
-    }
-
-    async function getNearestTextScored(
-        value: string,
-        maxMatches?: number,
-        minScore?: number,
-    ): Promise<ScoredItem<TextId>[]> {
-        maxMatches ??= 1;
-        // Check exact match first
-        let matchedIds: ScoredItem<TextId>[] = [];
-        let exactMatchId = textToId(value);
-        if (exactMatchId) {
-            matchedIds.push({ item: exactMatchId, score: 1.0 });
-        }
-        if (semanticIndex && maxMatches > 1) {
-            const nearestMatches = await semanticIndex.nearestNeighbors(
-                value,
-                maxMatches,
-                minScore,
-            );
-            if (nearestMatches.length > 0) {
-                for (const match of nearestMatches) {
-                    if (match.item !== exactMatchId) {
-                        matchedIds.push(match);
-                    }
-                }
-            }
-        }
-        return matchedIds;
-    }
-
-    async function getNearestTextMultiple(
-        values: string[],
-        orMatches: boolean,
-        maxMatches: number,
-        minScore?: number,
-    ): Promise<TextId[]> {
-        const matches = await asyncArray.mapAsync(
-            values,
-            settings.concurrency,
-            (t) => getNearestText(t, maxMatches, minScore),
-        );
-        const combined = orMatches
-            ? unionMultiple(...matches)
-            : intersectMultiple(...matches);
-        return [...combined];
     }
 
     async function nearestNeighbors(
