@@ -1,10 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatModelWithStreaming, openai } from "aiclient";
+import { ChatModel, ChatModelWithStreaming, openai } from "aiclient";
 import dotenv from "dotenv";
 import * as fs from 'fs';
 import { createVscodeActionsIndex } from "./embedActions.js";
+import { generateActionRequests } from "./actionGen.js";
+import {
+    TypeSchema
+} from "typeagent";
 
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
@@ -43,7 +47,6 @@ export async function createVSCODESchemaGen(model: ChatModelWithStreaming, jsonS
 async function genActionSchemaForNode(jsonNode: any) {
 
     const model = openai.createChatModel("GPT_4_O");
-
     const prompt = `
 Generate a compact TypeScript type for the following VSCode action. The type should have the following structure:
 
@@ -75,7 +78,7 @@ function parseTypeComponents(schema: string): { typeName: string, actionName: st
     };
 }
 
-export async function processVscodeCommandsJsonFile(jsonFilePath: string, outputFilePath: string, actionPrefix: string | undefined) {
+export async function processVscodeCommandsJsonFile(model: ChatModel, jsonFilePath: string, outputFilePath: string, actionPrefix: string | undefined) {
     const jsonData = JSON.parse(fs.readFileSync(jsonFilePath, 'utf8'));
 
     const vscodeActionIndex = createVscodeActionsIndex();
@@ -99,6 +102,14 @@ export async function processVscodeCommandsJsonFile(jsonFilePath: string, output
 
                 let actionData:any = parseTypeComponents(schema);
                 vscodeActionIndex.addOrUpdate(actionData.actionName, actionData);
+
+                let typeSchema:TypeSchema  = {
+                    typeName: actionData.typeName,
+                    schemaText: schema,
+                }
+
+                let actionRequests:string[] = await generateActionRequests("variations", model, typeSchema, actionData.comments.join(' '), 5);
+                console.log(actionRequests);
             }
 
             if (processedNodeCount % 50 === 0) {
