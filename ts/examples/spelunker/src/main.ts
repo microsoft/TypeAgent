@@ -68,19 +68,19 @@ async function main(): Promise<void> {
     const spelunkerRoot = dataRoot + "/spelunker";
 
     const chunkFolder = await createObjectFolder<Chunk>(
-        spelunkerRoot + "chunks",
+        spelunkerRoot + "/chunks",
         { serializer: (obj) => JSON.stringify(obj, null, 2) },
     );
     const chatModel = openai.createChatModelDefault("spelunkerChat");
     const codeDocumenter = await createCodeDocumenter(chatModel);
     const codeIndex = await createSemanticCodeIndex(
-        spelunkerRoot + "index",
+        spelunkerRoot + "/index",
         codeDocumenter,
         undefined,
         (obj) => JSON.stringify(obj, null, 2),
     );
     const summaryFolder = await createObjectFolder<CodeDocumentation>(
-        spelunkerRoot + "summaries",
+        spelunkerRoot + "/summaries",
         { serializer: (obj) => JSON.stringify(obj, null, 2) },
     );
 
