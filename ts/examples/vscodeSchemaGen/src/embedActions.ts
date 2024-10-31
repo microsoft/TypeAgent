@@ -36,13 +36,14 @@ export function createVscodeActionsIndex() {
     async function addOrUpdate(
         actionName: string,
         actionData: any,
-    ): Promise<void> {
+    ): Promise<Float32Array> {
         const actionString: string = `${actionData.typeName} ${actionData.actionName} ${actionData.comments.join(" ")}`;
         let embedding = await generateEmbedding(
             embeddingModel,
             JSON.stringify(actionString, null, 2),
         );
         vscodeActionEmbeddings[actionName] = embedding;
+        return embedding;
     }
 
     async function remove(actionName: string): Promise<void> {

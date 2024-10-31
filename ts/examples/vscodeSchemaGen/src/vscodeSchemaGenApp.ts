@@ -27,6 +27,7 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
         const __filename = fileURLToPath(import.meta.url);
         const __dirname = path.dirname(__filename);
 
+        const output_dir = path.join(__dirname, "data", "output");
         //const sample_commandsnkb_filepath = path.join(__dirname, 'data', 'input', 'sample_commandsnkb.json');
         const master_commandsnkb_filepath = path.join(
             __dirname,
@@ -55,6 +56,7 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
                 master_commandsnkb_filepath,
                 vscodeCommandsSchema_filepath,
                 undefined,
+                output_dir,
             );
         }
 
@@ -77,6 +79,7 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
                 master_commandsnkb_filepath,
                 schemaFile,
                 actionPrefix,
+                output_dir,
             );
         }
 

@@ -1,12 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatModel, ChatModelWithStreaming, openai } from "aiclient";
+import * as path from "path";
 import dotenv from "dotenv";
 import * as fs from "fs";
-import { createVscodeActionsIndex } from "./embedActions.js";
+
+import {
+    ChatModel,
+    ChatModelWithStreaming,
+    EmbeddingModel,
+    openai,
+} from "aiclient";
 import { generateActionRequests } from "./actionGen.js";
-import { TypeSchema } from "typeagent";
+import { dedupeList, generateEmbedding, TypeSchema } from "typeagent";
+import { processPrecisionRecall } from "./genStats.js";
 
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
@@ -87,19 +94,33 @@ function parseTypeComponents(schema: string): {
     };
 }
 
+export async function generateEmbeddingForActionsRequests(
+    model: EmbeddingModel<string>,
+    actionRequests: string[],
+): Promise<any> {
+    const userRequestEmbeddings = await Promise.all(
+        actionRequests.map(async (request: string) => ({
+            request,
+            embedding: Array.from(await generateEmbedding(model, request)),
+        })),
+    );
+    return userRequestEmbeddings;
+}
+
 export async function processVscodeCommandsJsonFile(
     model: ChatModel,
     jsonFilePath: string,
     outputFilePath: string,
     actionPrefix: string | undefined,
+    output_dir: string,
 ) {
     const jsonData = JSON.parse(fs.readFileSync(jsonFilePath, "utf8"));
-
-    const vscodeActionIndex = createVscodeActionsIndex();
+    const embeddingModel = openai.createEmbeddingModel();
 
     const schemaDefinitions: string[] = [];
     let processedNodeCount = 0;
     let schemaCount = 0;
+    let aggrData: any = [];
 
     for (const node of jsonData) {
         try {
@@ -116,9 +137,10 @@ export async function processVscodeCommandsJsonFile(
                 schemaCount++;
 
                 let actionSchemaData: any = parseTypeComponents(schemaStr);
-                vscodeActionIndex.addOrUpdate(
-                    actionSchemaData.actionName,
-                    actionSchemaData,
+                const actionString: string = `${actionSchemaData.typeName} ${actionSchemaData.actionName} ${actionSchemaData.comments.join(" ")}`;
+                let actionEmbedding: Float32Array = await generateEmbedding(
+                    embeddingModel,
+                    JSON.stringify(actionString),
                 );
 
                 let typeSchema: TypeSchema = {
@@ -131,9 +153,25 @@ export async function processVscodeCommandsJsonFile(
                     model,
                     typeSchema,
                     actionSchemaData.comments.join(" "),
-                    5,
+                    20,
                 );
-                console.log(actionRequests);
+
+                actionRequests = dedupeList(actionRequests);
+                actionRequests.sort();
+
+                //console.log(actionRequests);
+                let actionReqEmbeddings =
+                    await generateEmbeddingForActionsRequests(
+                        embeddingModel,
+                        actionRequests,
+                    );
+
+                aggrData.push({
+                    ...actionSchemaData,
+                    schema: schemaStr,
+                    embedding: Array.from(actionEmbedding),
+                    requests: actionReqEmbeddings,
+                });
             }
 
             if (processedNodeCount % 50 === 0) {
@@ -141,6 +179,8 @@ export async function processVscodeCommandsJsonFile(
                     `Processed ${processedNodeCount} nodes so far. Schemas generated: ${schemaCount}`,
                 );
             }
+
+            if (schemaCount == 10) break;
         } catch (error) {
             console.error(
                 `Error generating schema for node ${node.id}:`,
@@ -154,4 +194,18 @@ export async function processVscodeCommandsJsonFile(
     console.log(
         `Total nodes processed: ${processedNodeCount}, Total schemas generated: ${schemaCount}`,
     );
+
+    const jsonlData = aggrData
+        .map((item: any) => JSON.stringify(item))
+        .join("\n");
+    const jsonlFileName = path.join(
+        output_dir,
+        "aggr_data_[" + actionPrefix + "].jsonl",
+    );
+    fs.writeFileSync(jsonlFileName, jsonlData);
+    console.log(
+        `Aggregate action and request data written to ${jsonlFileName}`,
+    );
+
+    processPrecisionRecall(jsonlFileName, 0.8);
 }
