@@ -25,9 +25,21 @@ export function testIf(
 export function hasEmbeddingEndpoint(endpoint?: string | undefined) {
     return hasEnvSettings(
         process.env,
-        openai.EnvVars.AZURE_OPENAI_API_KEY_EMBEDDING,
+        openai.EnvVars.AZURE_OPENAI_ENDPOINT_EMBEDDING,
         endpoint,
     );
+}
+
+export function createEmbeddingModel(
+    endpoint?: string | undefined,
+    dimensions?: number,
+) {
+    const settings = openai.apiSettingsFromEnv(
+        openai.ModelType.Embedding,
+        process.env,
+        endpoint,
+    );
+    return openai.createEmbeddingModel(settings, dimensions);
 }
 
 export async function ensureTestDir() {
