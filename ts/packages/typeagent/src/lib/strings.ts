@@ -81,4 +81,32 @@ export function stringCompareArray(
     }  
     // If items are equal, then shorter string is less in ascending order 
     return (xLength === yLength) ? 0 : (xLength < yLength) ? -1 : 1;
-} 
+}
+
+export function* getStringChunks(
+    values: Iterable<string>,
+    maxChunkLength: number,
+    maxCharsPerChunk: number,
+): IterableIterator<string[]> {
+    let chunk: string[] = [];
+    let totalCharsInChunk = 0;
+    for (let value of values) {
+        if (value.length > maxCharsPerChunk) {
+            // Truncate strings that are too long
+            value = value.slice(0, maxCharsPerChunk);
+        }
+        if (chunk.length === maxChunkLength || value.length + totalCharsInChunk > maxCharsPerChunk) {
+            if (totalCharsInChunk > 0) {
+                yield chunk;
+            }
+            chunk = [];
+            totalCharsInChunk = 0;
+        }
+        chunk.push(value);
+        totalCharsInChunk += value.length;
+    }
+    
+    if (totalCharsInChunk > 0) {
+        yield chunk;
+    }
+}

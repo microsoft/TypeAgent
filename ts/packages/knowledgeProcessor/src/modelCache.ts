@@ -9,10 +9,12 @@ export function createEmbeddingCache(
     model: TextEmbeddingModel,
     cacheSize: number,
 ): TextEmbeddingModel {
+    const maxBatchSize = 1;
     const cache: collections.Cache<string, number[]> =
         collections.createLRUCache(cacheSize);
     return {
         generateEmbedding,
+        maxBatchSize,
     };
 
     async function generateEmbedding(input: string): Promise<Result<number[]>> {

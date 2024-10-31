@@ -1,11 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { JSONAction } from "./requestAction.js";
+import { HistoryContext, JSONAction } from "./requestAction.js";
 
 export type ExplanationDataEntry<T extends object = object> = {
     request: string;
     action: JSONAction | JSONAction[];
+    history?: HistoryContext | undefined;
     explanation: T;
 };
 

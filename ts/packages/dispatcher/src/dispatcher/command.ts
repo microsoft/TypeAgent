@@ -9,10 +9,7 @@ import {
     DispatcherName,
 } from "../handlers/common/interactiveIO.js";
 import { getDefaultExplainerName } from "agent-cache";
-import {
-    CommandHandlerContext,
-    getActiveTranslatorList,
-} from "../handlers/common/commandHandlerContext.js";
+import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
 
 import { unicodeChar } from "../utils/interactive.js";
 import {
@@ -291,7 +288,7 @@ export function getSettingSummary(context: CommandHandlerContext) {
         }
     }
 
-    const names = getActiveTranslatorList(context);
+    const names = context.agents.getActiveTranslators();
     const ordered = names.filter(
         (name) => name !== context.lastActionTranslatorName,
     );

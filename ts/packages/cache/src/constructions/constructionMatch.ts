@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { HistoryContext } from "../explanation/requestAction.js";
+import { getLanguageTools } from "../utils/language.js";
 import {
     isSpaceOrPunctuation,
     isSpaceOrPunctuationRange,
@@ -27,14 +28,19 @@ type MatchState = {
     pendingWildcard: number;
 };
 
+export type MatchConfig = {
+    readonly enableWildcard: boolean;
+    readonly rejectReferences: boolean;
+    readonly history?: HistoryContext | undefined;
+    readonly matchPartsCache?: MatchPartsCache | undefined;
+    readonly conflicts?: boolean | undefined;
+};
+
 export function matchParts(
     request: string,
     parts: ConstructionPart[],
-    enableWildcard: boolean,
+    config: MatchConfig,
     matchValueTranslator: MatchedValueTranslator,
-    history?: HistoryContext,
-    matchPartsCache?: MatchPartsCache,
-    conflicts?: boolean,
 ): MatchedValues | undefined {
     const state: MatchState = {
         capture: [],
@@ -46,29 +52,18 @@ export function matchParts(
 
     const wildcardQueue: MatchState[] = [];
     do {
-        if (finishMatchParts(state, request, parts, matchPartsCache)) {
+        if (finishMatchParts(state, request, parts, config)) {
             const values = matchedValues(
                 parts,
                 state.capture,
-                enableWildcard,
+                config,
                 matchValueTranslator,
-                history,
-                conflicts,
             );
             if (values !== undefined) {
                 return values;
             }
         }
-    } while (
-        backtrack(
-            state,
-            request,
-            parts,
-            enableWildcard,
-            matchPartsCache,
-            wildcardQueue,
-        )
-    );
+    } while (backtrack(state, request, parts, config, wildcardQueue));
 
     return undefined;
 }
@@ -91,15 +86,58 @@ function findPendingWildcard(request: string, matchedCurrent: number) {
     return current - matchedCurrent;
 }
 
+const langTool = getLanguageTools("en");
+function captureMatch(
+    state: MatchState,
+    part: ConstructionPart,
+    m: MatchedPart,
+    rejectReference: boolean,
+) {
+    if (part.capture) {
+        state.capture.push(m.text);
+
+        if (rejectReference && langTool?.possibleReferentialPhrase(m.text)) {
+            // The captured text can't be a referential phrase.
+            // Return false after adding the text to capture so that backtrack will
+            // try longer wildcard before this part or shorter match for this part.
+            return false;
+        }
+    }
+    return true;
+}
+
+function captureWildcardMatch(
+    state: MatchState,
+    wildcardText: string,
+    rejectReferences: boolean,
+) {
+    if (rejectReferences && langTool?.possibleReferentialPhrase(wildcardText)) {
+        // The wildcard can't be a referential phrase. Return false before adding
+        // the wildcard text to capture to stop backtrack and try another state
+        // from the wildcard queue (that is not at this position).
+        return false;
+    }
+
+    state.pendingWildcard = -1;
+    state.capture.push(wildcardText);
+    state.matchedEnd.push(-1); // Use -1 to indicate a wildcard match
+    return true;
+}
+
 function finishMatchParts(
     state: MatchState,
     request: string,
     parts: ConstructionPart[],
-    matchPartsCache: MatchPartsCache | undefined,
+    config: MatchConfig,
 ) {
     while (state.matchedStart.length < parts.length) {
         const part = parts[state.matchedStart.length];
-        const m = matchRegExp(state, request, part.regExp, matchPartsCache);
+        const m = matchRegExp(
+            state,
+            request,
+            part.regExp,
+            config.matchPartsCache,
+        );
 
         if (m === undefined) {
             // No match
@@ -114,9 +152,16 @@ function finishMatchParts(
 
         // Matched
         if (state.pendingWildcard !== -1) {
-            state.pendingWildcard = -1;
-            state.capture.push(m.wildcard!);
-            state.matchedEnd.push(-1); // Use -1 to indicate a wildcard match
+            const wildcardText = m.wildcard!;
+            if (
+                !captureWildcardMatch(
+                    state,
+                    wildcardText,
+                    config.rejectReferences,
+                )
+            ) {
+                return false;
+            }
             state.matchedStart.push(m.start);
         } else {
             state.matchedStart.push(state.matchedCurrent);
@@ -124,8 +169,8 @@ function finishMatchParts(
         const matchedEnd = m.start + m.text.length;
         state.matchedEnd.push(matchedEnd);
         state.matchedCurrent = matchedEnd;
-        if (part.capture) {
-            state.capture.push(m.text);
+        if (!captureMatch(state, part, m, config.rejectReferences)) {
+            return false;
         }
     }
 
@@ -146,9 +191,15 @@ function finishMatchParts(
     const wildcardMatch = wildcardRegex.exec(wildcardRange);
     if (wildcardMatch !== null) {
         // Update the state in case we need to backtrack because value translation failed.
-        state.pendingWildcard = -1;
-        state.capture.push(wildcardMatch[1]);
-        state.matchedEnd.push(-1); // Use -1 to indicate a wildcard match
+        if (
+            !captureWildcardMatch(
+                state,
+                wildcardMatch[1],
+                config.rejectReferences,
+            )
+        ) {
+            return false;
+        }
         state.matchedCurrent = request.length;
         return true;
     }
@@ -193,11 +244,10 @@ function backtrack(
     state: MatchState,
     request: string,
     parts: ConstructionPart[],
-    enableWildcard: boolean,
-    matchPartsCache: MatchPartsCache | undefined,
+    config: MatchConfig,
     wildcardQueue: MatchState[],
 ) {
-    if (enableWildcard) {
+    if (config.enableWildcard) {
         // if the part we failed to match could be wildcard, queue up the wildcard match for later
         const failedPart = parts[state.matchedStart.length];
         if (failedPart && failedPart.wildcard) {
@@ -260,7 +310,7 @@ function backtrack(
             backtrackStart,
             backtrackEnd,
             backtrackPart,
-            matchPartsCache,
+            config.matchPartsCache,
         );
 
         if (backtrackMatch !== undefined) {
@@ -270,14 +320,22 @@ function backtrack(
                 backtrackMatch.start + backtrackMatch.text.length;
             state.matchedEnd.push(matchedEnd);
             state.matchedCurrent = matchedEnd;
-            if (backtrackPart.capture) {
-                state.capture.push(backtrackMatch.text);
+            if (
+                !captureMatch(
+                    state,
+                    backtrackPart,
+                    backtrackMatch,
+                    config.rejectReferences,
+                )
+            ) {
+                // continue to backtrack.
+                continue;
             }
             return true;
         }
 
         // Give up on the current backtrackPart, queue up wildcard match for later if enabled.
-        if (enableWildcard && backtrackPart.wildcard) {
+        if (config.enableWildcard && backtrackPart.wildcard) {
             // queue up wildcard match
             wildcardQueue.push(cloneMatchState(state));
         }

@@ -15,7 +15,6 @@ export interface Property {
     value: PropertyValuetype;
     // all substring(s) from the original request that is needed to compute the value.  The text must be exact copy of a part of the original request. Do NOT change the text by correct misspelling or grammar.
     substrings: string[];
-    implied: boolean; // implied by the context of the substrings in the request
 }
 
 export interface PropertyExplanation {

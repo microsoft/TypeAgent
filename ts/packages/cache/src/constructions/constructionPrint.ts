@@ -195,7 +195,10 @@ export function printConstructionCache(
             // Print the resulting JSON with symbolic values.
             const result = construction.getMatchedValues(
                 symbolicValues,
-                false,
+                {
+                    enableWildcard: false,
+                    rejectReferences: false,
+                },
                 printMatchedValueTranslator,
             );
 

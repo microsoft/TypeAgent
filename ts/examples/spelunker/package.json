@@ -1,0 +1,48 @@
+{
+  "name": "spelunker-example",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Spelunker Example",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/spelunker"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "files": [
+    "dist/",
+    "src/chunker.py",
+    "src/sample.py.txt"
+  ],
+  "scripts": {
+    "build": "npm run tsc",
+    "postbuild": "copyfiles -u 1 \"src/**/*Schema.ts\" \"src/**/*.txt\" \"src/*.py\" dist",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "start": "node dist/main.js",
+    "tsc": "tsc -p src"
+  },
+  "dependencies": {
+    "aiclient": "workspace:*",
+    "code-processor": "workspace:*",
+    "dotenv": "^16.3.1",
+    "readline-sync": "^1.4.10",
+    "typeagent": "workspace:*",
+    "typechat": "^0.1.1",
+    "typescript": "^5.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^18.18.7",
+    "@types/readline-sync": "^1.4.8",
+    "copyfiles": "^2.4.1",
+    "rimraf": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=8"
+  }
+}

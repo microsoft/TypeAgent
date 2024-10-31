@@ -143,12 +143,17 @@ export class AgentCache {
             const startTime = performance.now();
             const actions = requestAction.actions;
             const explainer = this.getExplainerForActions(actions);
-            const createConstructionInfo = {
+            const constructionCreationConfig = {
                 getSchemaConfig: this.getSchemaConfig,
+            };
+
+            const explainerConfig = {
+                rejectReferences: true,
+                constructionCreationConfig,
             };
             const explanation = await explainer.generate(
                 requestAction,
-                createConstructionInfo,
+                explainerConfig,
             );
             const elapsedMs = performance.now() - startTime;
 

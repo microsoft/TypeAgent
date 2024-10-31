@@ -10,7 +10,7 @@ importers:
     devDependencies:
       '@fluidframework/build-tools':
         specifier: ^0.35.0-247707
-        version: 0.35.0-247707(@types/node@20.8.9)(encoding@0.1.13)
+        version: 0.35.0-247707(@types/node@20.8.9)
       '@types/node':
         specifier: ^20.8.9
         version: 20.8.9
@@ -221,6 +221,43 @@ importers:
       '@types/node':
         specifier: ^18.18.7
         version: 18.18.7
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+
+  examples/spelunker:
+    dependencies:
+      aiclient:
+        specifier: workspace:*
+        version: link:../../packages/aiclient
+      code-processor:
+        specifier: workspace:*
+        version: link:../../packages/codeProcessor
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.3.1
+      readline-sync:
+        specifier: ^1.4.10
+        version: 1.4.10
+      typeagent:
+        specifier: workspace:*
+        version: link:../../packages/typeagent
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.3)
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^18.18.7
+        version: 18.18.7
+      '@types/readline-sync':
+        specifier: ^1.4.8
+        version: 1.4.8
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
@@ -1060,6 +1097,9 @@ importers:
       '@oclif/plugin-help':
         specifier: ^5
         version: 5.2.20(@types/node@18.18.7)(typescript@5.4.3)
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../agentSdk
       agent-cache:
         specifier: workspace:*
         version: link:../cache
@@ -1453,24 +1493,12 @@ importers:
 
   packages/knowledgeVisualizer:
     dependencies:
-      '@electron-toolkit/preload':
-        specifier: ^2.0.0
-        version: 2.0.0(electron@30.0.1)
-      '@electron-toolkit/utils':
-        specifier: ^2.0.0
-        version: 2.0.1(electron@30.0.1)
-      '@typeagent/agent-sdk':
-        specifier: workspace:*
-        version: link:../agentSdk
       agent-dispatcher:
         specifier: workspace:*
         version: link:../dispatcher
-      aiclient:
-        specifier: workspace:*
-        version: link:../aiclient
-      ansi_up:
-        specifier: ^6.0.2
-        version: 6.0.2
+      chalk:
+        specifier: ^5.3.0
+        version: 5.3.0
       d3:
         specifier: ^7.9.0
         version: 7.9.0
@@ -1478,38 +1506,17 @@ importers:
         specifier: ^1.2.7
         version: 1.2.7
       debug:
-        specifier: 4.3.4
+        specifier: ^4.3.4
         version: 4.3.4(supports-color@8.1.1)
-      dompurify:
-        specifier: ^3.1.6
-        version: 3.1.6
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.3.1
-      electron-updater:
-        specifier: ^6.3.2
-        version: 6.3.2
-      microsoft-cognitiveservices-speech-sdk:
-        specifier: ^1.38.0
-        version: 1.38.0
-      typechat:
-        specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.3)
-      ws:
-        specifier: ^8.17.1
-        version: 8.17.1
     devDependencies:
-      '@electron-toolkit/tsconfig':
-        specifier: ^1.0.1
-        version: 1.0.1(@types/node@18.18.7)
       '@types/debug':
         specifier: ^4.1.10
         version: 4.1.10
-      '@types/dompurify':
-        specifier: ^3.0.5
-        version: 3.0.5
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.7
       '@types/node':
-        specifier: ^18.17.5
+        specifier: ^18.18.7
         version: 18.18.7
       concurrently:
         specifier: ^8.2.2
@@ -1529,15 +1536,33 @@ importers:
       less:
         specifier: ^4.2.0
         version: 4.2.0
+      copy-webpack-plugin:
+        specifier: ^12.0.1
+        version: 12.0.2(webpack@5.94.0(webpack-cli@5.1.4))
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@18.18.7)(ts-node@10.9.1(@types/node@18.18.7)(typescript@5.4.3))
+      prettier:
+        specifier: ^3.2.5
+        version: 3.2.5
       rimraf:
         specifier: ^5.0.5
         version: 5.0.5
+      ts-loader:
+        specifier: ^9.5.1
+        version: 9.5.1(typescript@5.4.3)(webpack@5.94.0(webpack-cli@5.1.4))
       typescript:
         specifier: ^5.4.2
         version: 5.4.3
-      vite:
-        specifier: ^5.2.14
-        version: 5.4.8(@types/node@18.18.7)(less@4.2.0)(terser@5.27.0)
+      webpack:
+        specifier: ^5.94.0
+        version: 5.94.0(webpack-cli@5.1.4)
+      webpack-cli:
+        specifier: ^5.1.4
+        version: 5.1.4(webpack-dev-server@5.0.4)(webpack@5.94.0)
+      webpack-dev-server:
+        specifier: ^5.0.4
+        version: 5.0.4(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0)
 
   packages/schemaAuthor:
     dependencies:
@@ -1694,6 +1719,9 @@ importers:
       debug:
         specifier: ^4.3.4
         version: 4.3.4(supports-color@8.1.1)
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.3.1
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.3)
@@ -3095,6 +3123,9 @@ packages:
   '@types/range-parser@1.2.7':
     resolution: {integrity: sha512-hKormJbkJqzQGhziax5PItDUTMAM9uE2XXQmM37dyd4hVM+5aVl7oVxMVUiVQn2oCQFN/LKCZdvSM0pFRqbSmQ==}
 
+  '@types/readline-sync@1.4.8':
+    resolution: {integrity: sha512-BL7xOf0yKLA6baAX6MMOnYkoflUyj/c7y3pqMRfU0va7XlwHAOTOIo4x55P/qLfMsuaYdJJKubToLqRVmRtRZA==}
+
   '@types/responselike@1.0.3':
     resolution: {integrity: sha512-H/+L+UkTV33uf49PH5pCAUBVPNj2nDBXTN+qS1dOwyyg24l3CcicicCA7ca+HMvJBZcFgl5r8e+RR6elsb4Lyw==}
 
@@ -4428,9 +4459,6 @@ packages:
   encodeurl@2.0.0:
     resolution: {integrity: sha512-Q0n9HRi4m6JuGIV1eFlmvJB7ZEVxu93IrMyiMsGC0lrMJMWzRgx6WGquyfQgZVb31vhGgXnfmPNNXmxnOkRBrg==}
     engines: {node: '>= 0.8'}
-
-  encoding@0.1.13:
-    resolution: {integrity: sha512-ETBauow1T35Y/WZMkio9jiM0Z5xjHHmJ4XmjZOq1l/dXz3lr2sRn87nJy20RupqSh1F2m3HHPSp8ShIPQJrJ3A==}
 
   end-of-stream@1.4.4:
     resolution: {integrity: sha512-+uw1inIHVPQoaVuHzRyXd21icM+cnt4CzD5rW+NC1wjOUSTOs+Te7FOv7AhN7vS9x/oIyhLP5PR1H+phQAHu5Q==}
@@ -8228,17 +8256,17 @@ snapshots:
       - supports-color
       - typescript
 
-  '@fluidframework/build-tools@0.35.0-247707(@types/node@20.8.9)(encoding@0.1.13)':
+  '@fluidframework/build-tools@0.35.0-247707(@types/node@20.8.9)':
     dependencies:
       '@fluid-tools/version-tools': 0.35.0-247707(@types/node@20.8.9)(typescript@5.1.6)
       '@fluidframework/bundle-size-tools': 0.35.0-247707
       '@manypkg/get-packages': 2.2.0
-      '@octokit/core': 4.2.4(encoding@0.1.13)
+      '@octokit/core': 4.2.4
       '@rushstack/node-core-library': 3.66.1(@types/node@20.8.9)
       async: 3.2.5
       chalk: 2.4.2
       cosmiconfig: 8.3.6(typescript@5.1.6)
-      danger: 11.3.1(encoding@0.1.13)
+      danger: 11.3.1
       date-fns: 2.30.0
       debug: 4.3.4(supports-color@8.1.1)
       detect-indent: 6.1.0
@@ -8847,11 +8875,11 @@ snapshots:
 
   '@octokit/auth-token@3.0.4': {}
 
-  '@octokit/core@3.6.0(encoding@0.1.13)':
+  '@octokit/core@3.6.0':
     dependencies:
       '@octokit/auth-token': 2.5.0
-      '@octokit/graphql': 4.8.0(encoding@0.1.13)
-      '@octokit/request': 5.6.3(encoding@0.1.13)
+      '@octokit/graphql': 4.8.0
+      '@octokit/request': 5.6.3
       '@octokit/request-error': 2.1.0
       '@octokit/types': 6.41.0
       before-after-hook: 2.2.3
@@ -8859,11 +8887,11 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  '@octokit/core@4.2.4(encoding@0.1.13)':
+  '@octokit/core@4.2.4':
     dependencies:
       '@octokit/auth-token': 3.0.4
-      '@octokit/graphql': 5.0.6(encoding@0.1.13)
-      '@octokit/request': 6.2.8(encoding@0.1.13)
+      '@octokit/graphql': 5.0.6
+      '@octokit/request': 6.2.8
       '@octokit/request-error': 3.0.3
       '@octokit/types': 9.3.2
       before-after-hook: 2.2.3
@@ -8883,17 +8911,17 @@ snapshots:
       is-plain-object: 5.0.0
       universal-user-agent: 6.0.1
 
-  '@octokit/graphql@4.8.0(encoding@0.1.13)':
+  '@octokit/graphql@4.8.0':
     dependencies:
-      '@octokit/request': 5.6.3(encoding@0.1.13)
+      '@octokit/request': 5.6.3
       '@octokit/types': 6.41.0
       universal-user-agent: 6.0.1
     transitivePeerDependencies:
       - encoding
 
-  '@octokit/graphql@5.0.6(encoding@0.1.13)':
+  '@octokit/graphql@5.0.6':
     dependencies:
-      '@octokit/request': 6.2.8(encoding@0.1.13)
+      '@octokit/request': 6.2.8
       '@octokit/types': 9.3.2
       universal-user-agent: 6.0.1
     transitivePeerDependencies:
@@ -8903,18 +8931,18 @@ snapshots:
 
   '@octokit/openapi-types@18.1.1': {}
 
-  '@octokit/plugin-paginate-rest@2.21.3(@octokit/core@3.6.0(encoding@0.1.13))':
+  '@octokit/plugin-paginate-rest@2.21.3(@octokit/core@3.6.0)':
     dependencies:
-      '@octokit/core': 3.6.0(encoding@0.1.13)
+      '@octokit/core': 3.6.0
       '@octokit/types': 6.41.0
 
-  '@octokit/plugin-request-log@1.0.4(@octokit/core@3.6.0(encoding@0.1.13))':
+  '@octokit/plugin-request-log@1.0.4(@octokit/core@3.6.0)':
     dependencies:
-      '@octokit/core': 3.6.0(encoding@0.1.13)
+      '@octokit/core': 3.6.0
 
-  '@octokit/plugin-rest-endpoint-methods@5.16.2(@octokit/core@3.6.0(encoding@0.1.13))':
+  '@octokit/plugin-rest-endpoint-methods@5.16.2(@octokit/core@3.6.0)':
     dependencies:
-      '@octokit/core': 3.6.0(encoding@0.1.13)
+      '@octokit/core': 3.6.0
       '@octokit/types': 6.41.0
       deprecation: 2.3.1
 
@@ -8930,34 +8958,34 @@ snapshots:
       deprecation: 2.3.1
       once: 1.4.0
 
-  '@octokit/request@5.6.3(encoding@0.1.13)':
+  '@octokit/request@5.6.3':
     dependencies:
       '@octokit/endpoint': 6.0.12
       '@octokit/request-error': 2.1.0
       '@octokit/types': 6.41.0
       is-plain-object: 5.0.0
-      node-fetch: 2.7.0(encoding@0.1.13)
+      node-fetch: 2.7.0
       universal-user-agent: 6.0.1
     transitivePeerDependencies:
       - encoding
 
-  '@octokit/request@6.2.8(encoding@0.1.13)':
+  '@octokit/request@6.2.8':
     dependencies:
       '@octokit/endpoint': 7.0.6
       '@octokit/request-error': 3.0.3
       '@octokit/types': 9.3.2
       is-plain-object: 5.0.0
-      node-fetch: 2.7.0(encoding@0.1.13)
+      node-fetch: 2.7.0
       universal-user-agent: 6.0.1
     transitivePeerDependencies:
       - encoding
 
-  '@octokit/rest@18.12.0(encoding@0.1.13)':
+  '@octokit/rest@18.12.0':
     dependencies:
-      '@octokit/core': 3.6.0(encoding@0.1.13)
-      '@octokit/plugin-paginate-rest': 2.21.3(@octokit/core@3.6.0(encoding@0.1.13))
-      '@octokit/plugin-request-log': 1.0.4(@octokit/core@3.6.0(encoding@0.1.13))
-      '@octokit/plugin-rest-endpoint-methods': 5.16.2(@octokit/core@3.6.0(encoding@0.1.13))
+      '@octokit/core': 3.6.0
+      '@octokit/plugin-paginate-rest': 2.21.3(@octokit/core@3.6.0)
+      '@octokit/plugin-request-log': 1.0.4(@octokit/core@3.6.0)
+      '@octokit/plugin-rest-endpoint-methods': 5.16.2(@octokit/core@3.6.0)
     transitivePeerDependencies:
       - encoding
 
@@ -9271,6 +9299,8 @@ snapshots:
   '@types/qs@6.9.10': {}
 
   '@types/range-parser@1.2.7': {}
+
+  '@types/readline-sync@1.4.8': {}
 
   '@types/responselike@1.0.3':
     dependencies:
@@ -10596,11 +10626,11 @@ snapshots:
       d3-transition: 3.0.1(d3-selection@3.0.0)
       d3-zoom: 3.0.0
 
-  danger@11.3.1(encoding@0.1.13):
+  danger@11.3.1:
     dependencies:
       '@gitbeaker/core': 35.8.1
       '@gitbeaker/node': 35.8.1
-      '@octokit/rest': 18.12.0(encoding@0.1.13)
+      '@octokit/rest': 18.12.0
       async-retry: 1.2.3
       chalk: 2.4.2
       commander: 2.20.3
@@ -10620,10 +10650,10 @@ snapshots:
       lodash.keys: 4.2.0
       lodash.mapvalues: 4.6.0
       lodash.memoize: 4.1.2
-      memfs-or-file-map-to-github-branch: 1.2.1(encoding@0.1.13)
+      memfs-or-file-map-to-github-branch: 1.2.1
       micromatch: 4.0.5
       node-cleanup: 2.1.2
-      node-fetch: 2.7.0(encoding@0.1.13)
+      node-fetch: 2.7.0
       override-require: 1.1.1
       p-limit: 2.3.0
       parse-diff: 0.7.1
@@ -10959,11 +10989,6 @@ snapshots:
   encodeurl@1.0.2: {}
 
   encodeurl@2.0.0: {}
-
-  encoding@0.1.13:
-    dependencies:
-      iconv-lite: 0.6.3
-    optional: true
 
   end-of-stream@1.4.4:
     dependencies:
@@ -12733,9 +12758,9 @@ snapshots:
 
   media-typer@0.3.0: {}
 
-  memfs-or-file-map-to-github-branch@1.2.1(encoding@0.1.13):
+  memfs-or-file-map-to-github-branch@1.2.1:
     dependencies:
-      '@octokit/rest': 18.12.0(encoding@0.1.13)
+      '@octokit/rest': 18.12.0
     transitivePeerDependencies:
       - encoding
 
@@ -12939,11 +12964,9 @@ snapshots:
 
   node-cleanup@2.1.2: {}
 
-  node-fetch@2.7.0(encoding@0.1.13):
+  node-fetch@2.7.0:
     dependencies:
       whatwg-url: 5.0.0
-    optionalDependencies:
-      encoding: 0.1.13
 
   node-forge@1.3.1: {}
 

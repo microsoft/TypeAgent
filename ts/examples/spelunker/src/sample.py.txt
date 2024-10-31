@@ -1,0 +1,23 @@
+# Sample code only; various definitions are missing
+
+@identity
+@lru_cache
+def chunker(text: str) -> Chunk:  # Returns a toplevel chunk for the whole file
+    """Chunker for Python code."""
+    tree = ast.parse(text)  # TODO: Error handling
+    # Universal attributes: lineno, col_offset, end_lineno, end_col_offset
+
+    def debug():
+        print(ast.dump(tree, indent=4))
+
+    def undebug():
+        pass
+
+    return create_chunks(text, tree)
+
+def create_chunks(text: str, node: ast.AST) -> Chunk:
+    """Recursively create chunks for the AST."""
+    root_id = generate_id()
+    root_text = text
+    blobs = [text]
+    return Chunk(root_id, blobs, "", 0, [])

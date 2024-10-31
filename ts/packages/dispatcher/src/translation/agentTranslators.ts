@@ -30,7 +30,6 @@ export type TranslatorConfig = {
 
 export interface TranslatorConfigProvider {
     getTranslatorConfig(translatorName: string): TranslatorConfig;
-    getTranslatorNames(): string[];
     getTranslatorConfigs(): [string, TranslatorConfig][];
 }
 
@@ -125,9 +124,6 @@ export function getBuiltinTranslatorConfigProvider(): TranslatorConfigProvider {
                 throw new Error(`Unknown translator: ${translatorName}`);
             }
             return config;
-        },
-        getTranslatorNames() {
-            return Object.keys(translatorConfigs);
         },
         getTranslatorConfigs() {
             return Object.entries(translatorConfigs);

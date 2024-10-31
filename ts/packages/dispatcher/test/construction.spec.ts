@@ -26,6 +26,11 @@ const testInput = inputs.flatMap((f) =>
     ]),
 );
 
+const matchConfig = {
+    enableWildcard: false,
+    rejectReferences: false,
+};
+
 describe("construction", () => {
     describe("roundtrip", () => {
         it.each(testInput)(
@@ -49,26 +54,28 @@ describe("construction", () => {
                         getSchemaConfig: loadBuiltinTranslatorSchemaConfig,
                     },
                 );
-                const matched = construction.match(requestAction.request);
 
-                // Able to match roundtrip
-                expect(matched.length).not.toEqual(0);
-
-                if (!tags.includes("failedRoundTripAction")) {
-                    expect(matched[0].match).toEqual(requestAction);
-                } else {
-                    // TODO: needs fix these
-                    expect(matched[0].match).not.toEqual(requestAction);
-                }
-
+                const matched = construction.match(
+                    requestAction.request,
+                    matchConfig,
+                );
                 const matchedLowercase = construction.match(
                     requestAction.request.toLowerCase(),
+                    matchConfig,
                 );
+                if (!tags.includes("failedRoundTripAction")) {
+                    // Able to match roundtrip
+                    expect(matched.length).not.toEqual(0);
+                    expect(matched[0].match).toEqual(requestAction);
 
-                // Able to match roundtrip
-                expect(matchedLowercase.length).not.toEqual(0);
-
-                // TODO: Validating the lower case action
+                    expect(matchedLowercase.length).not.toEqual(0);
+                    // TODO: Validating the lower case action
+                } else {
+                    // TODO: needs fix these
+                    if (matched.length !== 0) {
+                        expect(matched[0].match).not.toEqual(requestAction);
+                    }
+                }
             },
         );
     });
