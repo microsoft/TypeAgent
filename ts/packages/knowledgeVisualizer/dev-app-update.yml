@@ -1,6 +1,0 @@
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.
-
-provider: generic
-url: https://example.com/auto-updates
-updaterCacheDirName: knowledgeVisualizer-updater
