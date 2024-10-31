@@ -25,7 +25,7 @@ import { readAllLines, readAllText, writeAllLines } from "./objStream";
 import fs from "fs";
 import { textToProcessSection } from "./promptLib";
 import { ProcessProgress, mapAsync } from "./arrayAsync";
-import { generateEmbeddings, similarity, SimilarityType } from ".";
+import { generateTextEmbeddings, similarity, SimilarityType } from ".";
 
 function splitIntoSentences(text: string): string[] {
     return text.split(/(?<=[.!?;\r\n])\s+/);
@@ -1403,7 +1403,7 @@ export async function stringSimilarity(
         if (x === y) {
             return 1.0;
         }
-        const embeddings = await generateEmbeddings(model, [x, y]);
+        const embeddings = await generateTextEmbeddings(model, [x, y]);
         return similarity(embeddings[0], embeddings[1], SimilarityType.Dot); // Embeddings are normalized
     } else if (x === undefined && y === undefined) {
         return 1.0;

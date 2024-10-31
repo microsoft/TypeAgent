@@ -23,7 +23,6 @@ export interface Blob {
 
 export interface Chunk {
     // Names here must match names in chunker.py.
-    // TODO: Make them consistent -- Py or TS naming style?
     id: IdType;
     treeName: string;
     blobs: Blob[];
@@ -32,22 +31,28 @@ export interface Chunk {
     filename?: string;
 }
 
+export interface ChunkedFile {
+    filename: string;
+    chunks: Chunk[];
+}
+
 export interface ErrorItem {
     error: string;
+    filename?: string;
     output?: string;
 }
 
-export async function chunkifyPythonFile(
-    filename: string,
-): Promise<Chunk[] | ErrorItem> {
+export async function chunkifyPythonFiles(
+    filenames: string[],
+): Promise<(ChunkedFile | ErrorItem)[]> {
     let output,
         errors,
         success = false;
     try {
         const chunkerPath = path.join(__dirname, "chunker.py");
         let { stdout, stderr } = await execPromise(
-            `python3 ${chunkerPath} ${filename}`,
-            { maxBuffer: 16 * 1024 * 1024 }, // Extra large buffer
+            `python3 ${chunkerPath} ${filenames.join(" ")}`,
+            { maxBuffer: 64 * 1024 * 1024 }, // Super large buffer
         );
         output = stdout;
         errors = stderr;
@@ -57,13 +62,13 @@ export async function chunkifyPythonFile(
         errors = error?.stderr || error.message || "Unknown error";
     }
     if (!success) {
-        return { error: errors, output: output };
+        return [{ error: errors, output: output }];
     }
     if (errors) {
-        return { error: errors, output: output };
+        return [{ error: errors, output: output }];
     }
     if (!output) {
-        return { error: "No output" };
+        return [{ error: "No output from chunker script" }];
     }
     // TODO: validate JSON
     return JSON.parse(output);

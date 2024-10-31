@@ -5,7 +5,8 @@ import { RequestAction, HistoryContext } from "./requestAction.js";
 import {
     GenericExplanationResult,
     ConstructionFactory,
-    CreateConstructionInfo,
+    ConstructionCreationConfig,
+    ExplainerConfig,
 } from "./genericExplainer.js";
 import { GenericTypeChatAgent, ValidationError } from "./typeChatAgent.js";
 
@@ -65,46 +66,57 @@ function getLeafNames(params: any) {
 
 export class Explainer<T extends object> {
     constructor(
-        private readonly agent: GenericTypeChatAgent<RequestAction, T>,
+        private readonly agent: GenericTypeChatAgent<
+            RequestAction,
+            T,
+            ExplainerConfig
+        >,
         public readonly createConstruction?: ConstructionFactory<T>,
         public readonly toPrettyString?: (explanation: T) => string,
         public readonly augmentExplanation?: (
             explanation: T,
             requestAction: RequestAction,
-            createConstructionInfo: CreateConstructionInfo,
+            constructionCreationConfig: ConstructionCreationConfig,
         ) => Promise<void>,
     ) {}
 
-    public validate(requestAction: RequestAction, explanation: T) {
-        return this.agent.validate?.(requestAction, explanation);
+    public validate(
+        requestAction: RequestAction,
+        explanation: T,
+        config?: ExplainerConfig,
+    ) {
+        return this.agent.validate?.(requestAction, explanation, config);
     }
 
     public async generate(
         requestAction: RequestAction,
-        createConstructionInfo?: CreateConstructionInfo, // create construction if information is provided.
+        config?: ExplainerConfig, // create construction if information is provided.
     ): Promise<GenericExplanationResult<T>> {
-        const result: GenericExplanationResult<T> =
-            await this.agent.run(requestAction);
+        const result: GenericExplanationResult<T> = await this.agent.run(
+            requestAction,
+            config,
+        );
+        const constructionCreationConfig = config?.constructionCreationConfig;
         if (
             result.success &&
             this.augmentExplanation &&
-            createConstructionInfo
+            constructionCreationConfig
         ) {
             await this.augmentExplanation(
                 result.data,
                 requestAction,
-                createConstructionInfo,
+                constructionCreationConfig,
             );
         }
         if (
             result.success &&
-            createConstructionInfo &&
+            constructionCreationConfig &&
             this.createConstruction
         ) {
             result.construction = this.createConstruction(
                 requestAction,
                 result.data,
-                createConstructionInfo,
+                constructionCreationConfig,
             );
         }
 

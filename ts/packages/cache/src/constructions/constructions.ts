@@ -7,7 +7,7 @@ import {
     Actions,
     HistoryContext,
 } from "../explanation/requestAction.js";
-import { MatchPartsCache, matchParts } from "./constructionMatch.js";
+import { MatchConfig, matchParts } from "./constructionMatch.js";
 import {
     ParsePart,
     ParsePartJSON,
@@ -102,21 +102,12 @@ export class Construction {
         return this.implicitParameters ? this.implicitParameters.length : 0;
     }
 
-    public match(
-        request: string,
-        enableWildcard: boolean = false,
-        history?: HistoryContext,
-        matchPartsCache?: MatchPartsCache,
-        conflicts?: boolean,
-    ): MatchResult[] {
+    public match(request: string, config: MatchConfig): MatchResult[] {
         const matchedValues = matchParts(
             request,
             this.parts,
-            enableWildcard,
+            config,
             getDefaultTranslator(this.transformNamespaces),
-            history,
-            matchPartsCache,
-            conflicts,
         );
 
         if (matchedValues === undefined) {
@@ -130,7 +121,7 @@ export class Construction {
                 match: new RequestAction(
                     request,
                     Actions.fromJSON(actionProps),
-                    history,
+                    config.history,
                 ),
                 conflictValues: matchedValues.conflictValues,
                 matchedCount: matchedValues.matchedCount,
@@ -142,16 +133,14 @@ export class Construction {
 
     public getMatchedValues(
         matched: string[],
-        enableWildcard: boolean,
+        config: MatchConfig,
         matchValueTranslator: MatchedValueTranslator,
-        history?: HistoryContext,
     ) {
         const result = matchedValues(
             this.parts,
             matched,
-            enableWildcard,
+            config,
             matchValueTranslator,
-            history,
         );
         if (result === undefined) {
             return undefined;

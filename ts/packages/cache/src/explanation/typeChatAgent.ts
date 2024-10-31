@@ -29,14 +29,28 @@ const debugAgent = registerDebug("typeagent:typechatagent:correction");
 
 export type ValidationError = string | string[];
 
-export type TypeChatAgentValidator<InputType, ResultType extends object> = (
+export type TypeChatAgentValidator<
+    InputType,
+    ResultType extends object,
+    ConfigType,
+> = (
     input: InputType,
     result: ResultType,
+    config?: ConfigType,
 ) => ValidationError | undefined;
 
-export interface GenericTypeChatAgent<InputType, ResultType extends object> {
-    run(input: InputType): Promise<TypeChatAgentResult<ResultType>>;
-    validate?: TypeChatAgentValidator<InputType, ResultType> | undefined;
+export interface GenericTypeChatAgent<
+    InputType,
+    ResultType extends object,
+    ConfigType,
+> {
+    run(
+        input: InputType,
+        config?: ConfigType,
+    ): Promise<TypeChatAgentResult<ResultType>>;
+    validate?:
+        | TypeChatAgentValidator<InputType, ResultType, ConfigType>
+        | undefined;
     correct?(
         input: InputType,
         result: ResultType,
@@ -45,8 +59,8 @@ export interface GenericTypeChatAgent<InputType, ResultType extends object> {
 }
 
 // TODO: probably most (all?) of these can be integrated into TypeChat
-export class TypeChatAgent<InputType, ResultType extends object>
-    implements GenericTypeChatAgent<InputType, ResultType>
+export class TypeChatAgent<InputType, ResultType extends object, ConfigType>
+    implements GenericTypeChatAgent<InputType, ResultType, ConfigType>
 {
     private static readonly defaultCorrectionAttempt = 3;
     constructor(
@@ -58,7 +72,8 @@ export class TypeChatAgent<InputType, ResultType extends object>
         private readonly createRequest: (input: InputType) => string,
         public readonly validate?: TypeChatAgentValidator<
             InputType,
-            ResultType
+            ResultType,
+            ConfigType
         >,
         private readonly correctionAttempt: number = TypeChatAgent.defaultCorrectionAttempt,
     ) {}
@@ -75,6 +90,7 @@ export class TypeChatAgent<InputType, ResultType extends object>
 
     public async run(
         input: InputType,
+        config?: ConfigType,
     ): Promise<TypeChatAgentResult<ResultType>> {
         const promptPreamble = this.createPromptPreamble(input);
         let result: TypeChatAgentResult<ResultType> =
@@ -93,7 +109,7 @@ export class TypeChatAgent<InputType, ResultType extends object>
             let error: ValidationError | undefined;
             let message: string | undefined;
             try {
-                error = this.validate(input, result.data);
+                error = this.validate(input, result.data, config);
             } catch (e: any) {
                 message = e.message;
                 error = e.message;
@@ -267,23 +283,35 @@ export class SequentialTypeChatAgents<
     InputType,
     IntermediateType extends object,
     ResultType extends object,
-> implements GenericTypeChatAgent<InputType, [IntermediateType, ResultType]>
+    ConfigType,
+> implements
+        GenericTypeChatAgent<
+            InputType,
+            [IntermediateType, ResultType],
+            ConfigType
+        >
 {
     constructor(
-        private readonly agent1: TypeChatAgent<InputType, IntermediateType>,
+        private readonly agent1: TypeChatAgent<
+            InputType,
+            IntermediateType,
+            ConfigType
+        >,
         private readonly agent2: TypeChatAgent<
             [InputType, IntermediateType],
-            ResultType
+            ResultType,
+            ConfigType
         >,
     ) {}
     async run(
         input: InputType,
+        config?: ConfigType,
     ): Promise<TypeChatAgentResult<[IntermediateType, ResultType]>> {
-        const result1 = await this.agent1.run(input);
+        const result1 = await this.agent1.run(input, config);
         if (!result1.success) {
             return result1;
         }
-        const result2 = await this.agent2.run([input, result1.data]);
+        const result2 = await this.agent2.run([input, result1.data], config);
         if (result2.corrections) {
             // includes the data from agent1 in corrections
             result2.corrections.forEach((correction) => {
@@ -313,12 +341,17 @@ export class SequentialTypeChatAgents<
     public validate(
         input: InputType,
         result: [IntermediateType, ResultType],
+        config?: ConfigType,
     ): ValidationError | undefined {
-        const error1 = this.agent1.validate?.(input, result[0]);
+        const error1 = this.agent1.validate?.(input, result[0], config);
         if (error1 !== undefined) {
             return error1;
         }
-        const error2 = this.agent2.validate?.([input, result[0]], result[1]);
+        const error2 = this.agent2.validate?.(
+            [input, result[0]],
+            result[1],
+            config,
+        );
         if (error2 !== undefined) {
             return error2;
         }

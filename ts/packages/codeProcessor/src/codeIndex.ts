@@ -10,7 +10,6 @@ import {
     createSemanticIndex,
 } from "typeagent";
 import { CodeBlock, StoredCodeBlock } from "./code.js";
-import { CodeReviewer } from "./codeReviewer.js";
 import { TextEmbeddingModel } from "aiclient";
 import path from "path";
 import { CodeDocumentation } from "./codeDocSchema.js";
@@ -26,9 +25,14 @@ export interface SemanticCodeIndex {
     remove(name: string): Promise<void>;
 }
 
+// A subset of CodeReviewer -- this is all we use of the latter.
+export interface CodeDocumenter {
+    document(code: CodeBlock): Promise<CodeDocumentation>;
+}
+
 export async function createSemanticCodeIndex(
     folderPath: string,
-    codeReviewer: CodeReviewer,
+    codeReviewer: CodeDocumenter,
     embeddingModel?: TextEmbeddingModel,
     objectSerializer?: ObjectSerializer,
 ): Promise<SemanticCodeIndex> {

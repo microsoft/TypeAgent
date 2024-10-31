@@ -34,14 +34,29 @@ export interface ChatModelWithStreaming extends ChatModel {
  * A model that returns embeddings for the input K
  */
 export interface EmbeddingModel<K> {
+    /**
+     * Generate an embedding for the given input
+     * @param input
+     */
     generateEmbedding(input: K): Promise<Result<number[]>>;
-    // Future: support batch operations
 }
 
 /**
  * A Model that generates embeddings for the given input
  */
-export interface TextEmbeddingModel extends EmbeddingModel<string> {}
+export interface TextEmbeddingModel extends EmbeddingModel<string> {
+    /**
+     * Optional: batching support
+     * Not all models/apis support batching
+     * @param inputs
+     */
+    generateEmbeddingBatch?(inputs: string[]): Promise<Result<number[][]>>;
+    /**
+     * Maximum batch size
+     * If no batching, maxBatchSize should be 1
+     */
+    readonly maxBatchSize: number;
+}
 
 /**
  * A model that generates images given the image prompt/description
