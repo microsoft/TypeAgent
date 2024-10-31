@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/// <reference path="../../lib/lib.android.d.ts" /> 
+/// <reference path="../../lib/lib.android.d.ts" />
 
 import { ClientAPI, NotifyCommands } from "../../preload/electronTypes";
 import { ChatView } from "./chatView";
@@ -204,7 +204,6 @@ function addEvents(
         },
     );
     api.onTakeAction((_, action: string, data?: unknown) => {
-
         // Android object gets injected on Android devices, otherwise unavailable
         try {
             //Android?.showToast("woohooo 2!");
@@ -220,7 +219,6 @@ function addEvents(
                     return;
                 }
             }
-
         } catch (e) {
             console.log(e);
         }
@@ -311,10 +309,11 @@ document.addEventListener("DOMContentLoaded", async function () {
     const agents = new Map<string, string>();
 
     // setup SPA (login)
-    const loginButton: HTMLButtonElement = document.getElementById("SignIn") as HTMLButtonElement;
+    const loginButton: HTMLButtonElement = document.getElementById(
+        "SignIn",
+    ) as HTMLButtonElement;
     //SPAAuthRedirect.getInstance().initalize(loginButton);
     SPAAuthPopup.getInstance().initalize(loginButton);
-    
 
     const tabs = new TabView(
         ["Settings", "Metrics", "Help"],

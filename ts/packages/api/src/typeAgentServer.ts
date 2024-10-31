@@ -11,14 +11,16 @@ import {
 import { WebAPIClientIO } from "./webClientIO.js";
 import { TypeAgentAPIWebSocketServer } from "./webSocketServer.js";
 
-
 export class TypeAgentServer {
     private dispatcher: Dispatcher | undefined;
     private webClientIO: WebAPIClientIO | undefined;
     private webSocketServer: TypeAgentAPIWebSocketServer | undefined;
     private webServer: TypeAgentAPIWebServer | undefined;
 
-    constructor(private envPath: string, private wsPort: number = 3030) {
+    constructor(
+        private envPath: string,
+        private wsPort: number = 3030,
+    ) {
         // typeAgent config
         dotenv.config({ path: this.envPath });
     }
@@ -36,9 +38,14 @@ export class TypeAgentServer {
         });
 
         // websocket server
-        const hostEndpoint = process.env["WEBSOCKET_HOST"] ?? `ws://localhost:${this.wsPort}`;
+        const hostEndpoint =
+            process.env["WEBSOCKET_HOST"] ?? `ws://localhost:${this.wsPort}`;
         const url = new URL(hostEndpoint);
-        this.webSocketServer = new TypeAgentAPIWebSocketServer(url, this.dispatcher, this.webClientIO!);
+        this.webSocketServer = new TypeAgentAPIWebSocketServer(
+            url,
+            this.dispatcher,
+            this.webClientIO!,
+        );
 
         // web server config
         const config: TypeAgentAPIServerConfig = JSON.parse(

@@ -24,7 +24,7 @@ const IdentityApiKey = "identity";
 export class AzureSpeech {
     private static instance: AzureSpeech;
     private token: string = "";
-    public static  IsInitialized(): boolean {
+    public static IsInitialized(): boolean {
         return AzureSpeech.instance !== undefined;
     }
 
@@ -90,7 +90,7 @@ export class AzureSpeech {
     };
 
     // private getIdentityBasedTokenAsync = async (): Promise<TokenResponse> => {
-    //     const tokenResult: Result<string> = 
+    //     const tokenResult: Result<string> =
     //        success("sdlf"); //await azureTokenProvider.getAccessToken();
 
     //     if (!tokenResult.success) {
@@ -109,7 +109,6 @@ export class AzureSpeech {
     // };
 
     public getBrowserTokenAsync = async (): Promise<TokenResponse> => {
-        
         // let silent: msal.SsoSilentRequest = msal.SsoSilentRequest.
         // authProvider.ssoSilent(new msal.sso).
         //     then((response) => {
@@ -118,7 +117,7 @@ export class AzureSpeech {
         //             region: this.region,
         //             endpoint: this.endpoint,
         //         };
-        
+
         //         return result;
         //     }).catch(error => {
         //         console.error("Silent Error: " + error);
@@ -128,7 +127,7 @@ export class AzureSpeech {
         //     });
 
         //const loginResult: msal.AuthenticationResult | undefined | void = await SPAAuthRedirect.getInstance().getToken();
- 
+
         // if (loginResult) {
         //     const result: TokenResponse = {
         //         token: loginResult.accessToken,
@@ -139,9 +138,8 @@ export class AzureSpeech {
 
         //     return result;
         // }
-        
+
         // return { token: "", expire: Date.now(), region: this.region, endpoint: this.endpoint};
-        
 
         return new Promise<TokenResponse>(async (resolve) => {
             resolve(await SPAAuthPopup.getInstance().getToken());

@@ -173,14 +173,14 @@ export const webapi: ClientAPI = {
         // TODO: implement client side token acquisition
         // Depends on implementing client side EntraID Auth first
         return new Promise<SpeechToken | undefined>(async (resolve) => {
-
             // TODO: get from node instance from now - in the future get form users datastore
             // intialize speech
             if (!AzureSpeech.IsInitialized()) {
                 await AzureSpeech.initializeAsync({
                     azureSpeechSubscriptionKey: "identity",
                     azureSpeechRegion: "westus",
-                    azureSpeechEndpoint: "/subscriptions/b64471de-f2ac-4075-a3cb-7656bca768d0/resourceGroups/openai_dev/providers/Microsoft.CognitiveServices/accounts/octo-aisystems",
+                    azureSpeechEndpoint:
+                        "/subscriptions/b64471de-f2ac-4075-a3cb-7656bca768d0/resourceGroups/openai_dev/providers/Microsoft.CognitiveServices/accounts/octo-aisystems",
                 });
             }
 
@@ -194,9 +194,9 @@ export const webapi: ClientAPI = {
                         region: AzureSpeech.getInstance().Region,
                         endpoint: AzureSpeech.getInstance().Endpoint,
                     };
-        
+
                     resolve(result);
-                })
+                });
             } else {
                 resolve(await AzureSpeech.getInstance().getBrowserTokenAsync());
             }
@@ -293,7 +293,11 @@ export async function createWebSocket(
                     fnMap.get("clear")(undefined, msgObj.data);
                     break;
                 case "take-action":
-                    fnMap.get("take-action")(undefined, msgObj.data.action, msgObj.data.data);
+                    fnMap.get("take-action")(
+                        undefined,
+                        msgObj.data.action,
+                        msgObj.data.data,
+                    );
                     break;
                 case "notify":
                     notify(msgObj);

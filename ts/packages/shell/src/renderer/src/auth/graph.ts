@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/** 
+/**
  * Helper function to call MS Graph API endpoint
  * using the authorization bearer token scheme
-*/
+ */
 export function callMSGraph(endpoint, token, callback) {
     const headers = new Headers();
     const bearer = `Bearer ${token}`;
@@ -13,13 +13,13 @@ export function callMSGraph(endpoint, token, callback) {
 
     const options = {
         method: "GET",
-        headers: headers
+        headers: headers,
     };
 
-    console.log('request made to Graph API at: ' + new Date().toString());
+    console.log("request made to Graph API at: " + new Date().toString());
 
     fetch(endpoint, options)
-        .then(response => response.json())
-        .then(response => callback(response, endpoint))
-        .catch(error => console.log(error));
+        .then((response) => response.json())
+        .then((response) => callback(response, endpoint))
+        .catch((error) => console.log(error));
 }

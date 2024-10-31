@@ -10,4 +10,3 @@ assert(envPath, ".env file not found!");
 
 const typeAgentServer: TypeAgentServer = new TypeAgentServer(envPath);
 typeAgentServer.start();
-

@@ -45,7 +45,7 @@
     "typechat": "^0.1.1",
     "ws": "^8.17.1"
   },
-  "devDependencies": {    
+  "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
     "@types/debug": "^4.1.10",
     "@types/dompurify": "^3.0.5",

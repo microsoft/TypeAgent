@@ -33,7 +33,7 @@ import { AppAgentEvent, DisplayAppendMode } from "@typeagent/agent-sdk";
 import { shellAgentProvider } from "./agent.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
 import { WebSocketMessage } from "common-utils";
-import { AzureSpeech } from "./azureSpeech.js"
+import { AzureSpeech } from "./azureSpeech.js";
 import { auth } from "aiclient";
 
 console.log(auth.AzureTokenScopes.CogServices);

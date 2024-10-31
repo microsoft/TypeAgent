@@ -7,13 +7,15 @@ import { showWelcomeMessage, updateUI } from "./ui.js";
 import { callMSGraph } from "./graph.js";
 import { graphConfig } from "./graphConfig.js";
 
-export type AuthResponseCallback = (response: msal.AuthenticationResult) => void;
+export type AuthResponseCallback = (
+    response: msal.AuthenticationResult,
+) => void;
 
 export class SPAAuthRedirect {
-
     private static instance: SPAAuthRedirect;
     private static initialized: boolean = false;
-    private static initializedCallbacks: Array<AuthResponseCallback> = new Array<AuthResponseCallback>();
+    private static initializedCallbacks: Array<AuthResponseCallback> =
+        new Array<AuthResponseCallback>();
 
     public static getInstance = (): SPAAuthRedirect => {
         if (!SPAAuthRedirect.instance) {
@@ -21,14 +23,15 @@ export class SPAAuthRedirect {
         }
 
         return SPAAuthRedirect.instance;
-    }
+    };
 
     public static IsInitialized(): boolean {
         return SPAAuthRedirect.initialized;
     }
 
-    public static registerInitializationCallback(callback: AuthResponseCallback) {
-
+    public static registerInitializationCallback(
+        callback: AuthResponseCallback,
+    ) {
         if (SPAAuthRedirect.initialized) {
             throw new Error("Authentication already initialized");
         }
@@ -54,7 +57,7 @@ export class SPAAuthRedirect {
             } else {
                 this.signOut();
             }
-        }
+        };
 
         await this.myMSALObj.initialize();
 
@@ -63,31 +66,31 @@ export class SPAAuthRedirect {
          * response returned from redirect flow. For more information, visit:
          * https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/acquire-token.md
          */
-        this.myMSALObj.handleRedirectPromise()
-        .then((response) => {
-            if (response !== null) {
-                console.log(`Logged in as ${response.account.username}`);
-                this.username = response.account.username; 
-                this.token = response.accessToken;
-                this.expires = response.expiresOn;             
-                showWelcomeMessage(this.username);
+        this.myMSALObj
+            .handleRedirectPromise()
+            .then((response) => {
+                if (response !== null) {
+                    console.log(`Logged in as ${response.account.username}`);
+                    this.username = response.account.username;
+                    this.token = response.accessToken;
+                    this.expires = response.expiresOn;
+                    showWelcomeMessage(this.username);
 
-                // invoke callbacks
-            } else {
-                this.selectAccount();
-            }
+                    // invoke callbacks
+                } else {
+                    this.selectAccount();
+                }
 
-            SPAAuthRedirect.initialized = true;
-        })
-        .catch((error) => {
-            console.error(error);
-        });        
+                SPAAuthRedirect.initialized = true;
+            })
+            .catch((error) => {
+                console.error(error);
+            });
     }
 
     selectAccount() {
-
         /**
-         * See here for more info on account retrieval: 
+         * See here for more info on account retrieval:
          * https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-common/docs/Accounts.md
          */
 
@@ -106,7 +109,6 @@ export class SPAAuthRedirect {
     }
 
     signIn() {
-
         /**
          * You can pass a custom request object below. This will override the initial configuration. For more information, visit:
          * https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/request-response-object.md#request
@@ -116,7 +118,6 @@ export class SPAAuthRedirect {
     }
 
     signOut() {
-
         /**
          * You can pass a custom request object below. This will override the initial configuration. For more information, visit:
          * https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-browser/docs/request-response-object.md#request
@@ -132,49 +133,61 @@ export class SPAAuthRedirect {
 
     getTokenRedirect(request) {
         /**
-         * See here for more info on account retrieval: 
+         * See here for more info on account retrieval:
          * https://github.com/AzureAD/microsoft-authentication-library-for-js/blob/dev/lib/msal-common/docs/Accounts.md
          */
         request.account = this.myMSALObj.getAccountByUsername(this.username);
 
-        return this.myMSALObj.acquireTokenSilent(request)
-            .catch(error => {
-                console.warn("silent token acquisition fails. acquiring token using redirect");
-                if (error instanceof msal.InteractionRequiredAuthError) {
-                    // fallback to interaction when silent call fails
-                    return this.myMSALObj.acquireTokenRedirect(request);
-                } else {
-                    console.warn(error);   
-                }
+        return this.myMSALObj.acquireTokenSilent(request).catch((error) => {
+            console.warn(
+                "silent token acquisition fails. acquiring token using redirect",
+            );
+            if (error instanceof msal.InteractionRequiredAuthError) {
+                // fallback to interaction when silent call fails
+                return this.myMSALObj.acquireTokenRedirect(request);
+            } else {
+                console.warn(error);
+            }
 
-                return;
-            });
+            return;
+        });
     }
 
     seeProfile() {
         this.getTokenRedirect(loginRequest)
-            .then(response => {
-                callMSGraph(graphConfig.graphMeEndpoint, response!.accessToken, updateUI);
-            }).catch(error => {
+            .then((response) => {
+                callMSGraph(
+                    graphConfig.graphMeEndpoint,
+                    response!.accessToken,
+                    updateUI,
+                );
+            })
+            .catch((error) => {
                 console.error(error);
             });
     }
 
     readMail() {
         this.getTokenRedirect(tokenRequest)
-            .then(response => {
-                callMSGraph(graphConfig.graphMailEndpoint, response!.accessToken, updateUI);
-            }).catch(error => {
+            .then((response) => {
+                callMSGraph(
+                    graphConfig.graphMailEndpoint,
+                    response!.accessToken,
+                    updateUI,
+                );
+            })
+            .catch((error) => {
                 console.error(error);
             });
     }
 
-    public async getToken(): Promise<msal.AuthenticationResult | undefined | void> {
-
+    public async getToken(): Promise<
+        msal.AuthenticationResult | undefined | void
+    > {
         if (new Date() < this.expires! && this.token.length > 0) {
             //return this.token;
         }
 
-        return await this.getTokenRedirect(tokenRequest)
+        return await this.getTokenRedirect(tokenRequest);
     }
 }

@@ -10,7 +10,7 @@ export type SetAlarmAction = {
         // the original request of the user
         originalRequest: string;
         // the time for the alarm in the format YYYY-mm-ddThh:mm:ss (i.e. 2024-02-15T08:30:15 )
-        time: string
+        time: string;
     };
 };
 

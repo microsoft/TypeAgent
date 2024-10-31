@@ -1,6 +1,11 @@
 {
   "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
-  "include": ["electron.vite.config.*", "src/main/*", "src/preload/*", "src/renderer/src/azurespeech.ts"],
+  "include": [
+    "electron.vite.config.*",
+    "src/main/*",
+    "src/preload/*",
+    "src/renderer/src/azurespeech.ts"
+  ],
   "compilerOptions": {
     "module": "node16",
     "moduleResolution": "node16",

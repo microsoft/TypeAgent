@@ -26,7 +26,12 @@ export type DisplayMessageKind =
 
 export type DisplayAppendMode = "inline" | "block" | "temporary";
 
-export type ClientAction = "show-camera" | "open-app" | "show-notification" | "start-intent" | "set-alarm";
+export type ClientAction =
+    | "show-camera"
+    | "open-app"
+    | "show-notification"
+    | "start-intent"
+    | "set-alarm";
 
 export interface ActionIO {
     readonly type: DisplayType;
