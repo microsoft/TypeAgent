@@ -49,7 +49,9 @@ export async function importPythonFiles(
     firstFile = true,
     verbose = false,
 ): Promise<boolean> {
-    let filenames = files.map((file) => fs.existsSync(file) ? fs.realpathSync(file) : file);
+    let filenames = files.map((file) =>
+        fs.existsSync(file) ? fs.realpathSync(file) : file,
+    );
     const result = await chunkifyPythonFiles(filenames);
 
     // TODO: concurrency.
@@ -61,7 +63,14 @@ export async function importPythonFiles(
             }
             continue;
         }
-        firstFile = await processChunkedFile(item, chunkFolder, codeIndex, summaryFolder, firstFile, verbose);
+        firstFile = await processChunkedFile(
+            item,
+            chunkFolder,
+            codeIndex,
+            summaryFolder,
+            firstFile,
+            verbose,
+        );
     }
     return firstFile;
 }
@@ -91,7 +100,13 @@ async function processChunkedFile(
     // Handle the first chunk of the first file separately, it waits for API key setup.
     if (firstFile) {
         const chunk = chunks.shift()!;
-        await processChunk(chunk, chunkFolder, codeIndex, summaryFolder, verbose);
+        await processChunk(
+            chunk,
+            chunkFolder,
+            codeIndex,
+            summaryFolder,
+            verbose,
+        );
     }
     const promises = chunks.map((chunk) =>
         processChunk(chunk, chunkFolder, codeIndex, summaryFolder, verbose),
@@ -99,7 +114,9 @@ async function processChunkedFile(
     await Promise.all(promises);
 
     const t1 = Date.now();
-    console.log(`[Processed ${+firstFile + chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} sec]`);
+    console.log(
+        `[Processed ${+firstFile + chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} sec]`,
+    );
     return false;
 }
 
