@@ -42,6 +42,7 @@ dotenv.config({ path: envPath });
 // OR:    node main.js -  # Load sample file (sample.py.txt)
 // OR:    node main.js    # Query previously loaded files
 async function main(): Promise<void> {
+    console.log("Hi!");
     const verbose = false;
     let files: string[];
     // TODO: Use a proper command-line parser.
@@ -108,7 +109,13 @@ async function main(): Promise<void> {
             return;
         }
         const searchKey = input.replace(/\W+/g, " ").trim();
-        const hits = await codeIndex.find(searchKey, 2);
+        let hits;
+        try {
+            hits = await codeIndex.find(searchKey, 2);
+        } catch (error) {
+            console.log(`[${error}]`);
+            continue;
+        }
         console.log(
             `Got ${hits.length} hit${hits.length == 0 ? "s." : hits.length === 1 ? ":" : "s:"}`,
         );
