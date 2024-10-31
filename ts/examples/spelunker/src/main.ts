@@ -27,7 +27,7 @@ import { createObjectFolder, loadSchema } from "typeagent";
 // Local imports
 import { ChunkDocumentation } from "./chunkDocSchema.js";
 import { Chunk } from "./pythonChunker.js";
-import { importPythonFile, wordWrap } from "./pythonImporter.js";
+import { importPythonFiles, wordWrap } from "./pythonImporter.js";
 
 // Set __dirname to emulate old JS behavior
 const __filename = fileURLToPath(import.meta.url);
@@ -42,12 +42,13 @@ dotenv.config({ path: envPath });
 // OR:    node main.js -  # Load sample file (sample.py.txt)
 // OR:    node main.js    # Query previously loaded files
 async function main(): Promise<void> {
-    const sampleFile = path.join(__dirname, "sample.py.txt");
+    const verbose = false;
     let files: string[];
     // TODO: Use a proper command-line parser.
     if (process.argv.length > 2) {
         files = process.argv.slice(2);
         if (files.length === 1 && files[0] === "-") {
+            const sampleFile = path.join(__dirname, "sample.py.txt");
             files = [sampleFile];
         } else if (files.length === 2 && files[0] === "--files") {
             // Read list of files from a file.
@@ -62,34 +63,32 @@ async function main(): Promise<void> {
         files = [];
     }
 
-    let homeDir = "";
-    if (process.platform === "darwin") {
-        homeDir = process.env.HOME || "";
-    }
-    const dataRoot = `${homeDir}/data`;
-    const spelunkerRoot = `${dataRoot}/spelunker`;
+    let homeDir = process.platform === "darwin" ? process.env.HOME || "" : "";
+    const dataRoot = homeDir + "/data";
+    const spelunkerRoot = dataRoot + "/spelunker";
+
     const chunkFolder = await createObjectFolder<Chunk>(
-        `${spelunkerRoot}/chunks`,
+        spelunkerRoot + "chunks",
         { serializer: (obj) => JSON.stringify(obj, null, 2) },
     );
     const chatModel = openai.createChatModelDefault("spelunkerChat");
     const codeDocumenter = await createCodeDocumenter(chatModel);
     const codeIndex = await createSemanticCodeIndex(
-        `${spelunkerRoot}/index`,
+        spelunkerRoot + "index",
         codeDocumenter,
         undefined,
         (obj) => JSON.stringify(obj, null, 2),
     );
     const summaryFolder = await createObjectFolder<CodeDocumentation>(
-        `${spelunkerRoot}/summaries`,
+        spelunkerRoot + "summaries",
         { serializer: (obj) => JSON.stringify(obj, null, 2) },
     );
 
-    // Import all files. (TODO: concurrently but avoid timestamp conflicts)
-    for (const file of files) {
-        await importPythonFile(file, chunkFolder, codeIndex, summaryFolder);
-    }
+    // Import all files. (TODO: Break up very long lists.)
+    console.log(`[Importing ${files.length} files]`);
+    await importPythonFiles(files, chunkFolder, codeIndex, summaryFolder, true, verbose);
 
+    // Loop processing searches. (TODO: Use interactiveApp.)
     while (true) {
         const input = readlineSync.question("~> ", {
             history: true, // Enable history

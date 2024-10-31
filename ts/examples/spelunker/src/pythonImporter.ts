@@ -37,51 +37,102 @@ import {
     SemanticCodeIndex,
 } from "code-processor";
 
-import { Chunk, chunkifyPythonFile } from "./pythonChunker.js";
+import { Chunk, ChunkedFile, chunkifyPythonFiles } from "./pythonChunker.js";
 
-export async function importPythonFile(
-    file: string,
-    objectFolder: ObjectFolder<Chunk>,
+// TODO: Turn (chunkFolder, codeIndex, summaryFolder) into a single object.
+
+export async function importPythonFiles(
+    files: string[],
+    chunkFolder: ObjectFolder<Chunk>,
     codeIndex: SemanticCodeIndex,
     summaryFolder: ObjectFolder<CodeDocumentation>,
-): Promise<void> {
-    let filename = fs.realpathSync(file);
-    const result = await chunkifyPythonFile(filename);
-    if (!(result instanceof Array)) {
-        console.log(result.output);
-        console.error(result.error);
-        return;
-    }
-    const chunks: Chunk[] = result;
-    console.log(
-        `[Importing ${chunks.length} chunk${chunks.length === 1 ? "" : "s"} from ${filename}]`,
-    );
+    firstFile = true,
+    verbose = false,
+): Promise<boolean> {
+    let filenames = files.map((file) => fs.existsSync(file) ? fs.realpathSync(file) : file);
+    const result = await chunkifyPythonFiles(filenames);
 
-    // Compute and store embedding. (TODO: Concurrency -- can do but debug output is garbled.)
+    // TODO: concurrency.
+    for (const item of result) {
+        if ("error" in item) {
+            console.log(`[Error: ${item.error}]`);
+            if (item.output) {
+                console.log(`[output: ${item.output}]`);
+            }
+            continue;
+        }
+        firstFile = await processChunkedFile(item, chunkFolder, codeIndex, summaryFolder, firstFile, verbose);
+    }
+    return firstFile;
+}
+
+async function processChunkedFile(
+    chunkedFile: ChunkedFile,
+    chunkFolder: ObjectFolder<Chunk>,
+    codeIndex: SemanticCodeIndex,
+    summaryFolder: ObjectFolder<CodeDocumentation>,
+    firstFile = false,
+    verbose = false,
+): Promise<boolean> {
+    const chunks: Chunk[] = chunkedFile.chunks;
+    if (chunks.length === 0) {
+        console.log(`[Empty file ${chunkedFile.filename} skipped]`);
+        return firstFile;
+    }
+    console.log(
+        `[Processing ${chunks.length} chunks from ${chunkedFile.filename}]`,
+    );
+    const t0 = Date.now();
+
+    // Compute and store embedding.
     for (const chunk of chunks) {
-        const t0 = Date.now();
-        chunk.filename = filename;
-        const lineCount = chunk.blobs.reduce(
-            (acc, blob) => acc + blob.lines.length,
-            0,
-        );
-        console.log(`[Embedding ${chunk.id} (${lineCount} lines)]`);
-        const putPromise = objectFolder.put(chunk, chunk.id);
-        const blobLines = extractBlobLines(chunk);
-        const codeBlock: CodeBlock = { code: blobLines, language: "python" };
-        const docs = await codeIndex.put(codeBlock, chunk.id, chunk.filename);
-        for (const comment of docs.comments || []) {
-            comment.lineNumber += chunk.blobs[0].start;
-        }
-        await summaryFolder.put(docs, chunk.id);
-        await putPromise;
-        for (const comment of docs.comments || []) {
-            console.log(wordWrap(`${comment.lineNumber}. ${comment.comment}`));
-        }
-        const t1 = Date.now();
+        chunk.filename = chunkedFile.filename;
+    }
+    // Handle the first chunk of the first file separately, it waits for API key setup.
+    if (firstFile) {
+        const chunk = chunks.shift()!;
+        await processChunk(chunk, chunkFolder, codeIndex, summaryFolder, verbose);
+    }
+    const promises = chunks.map((chunk) =>
+        processChunk(chunk, chunkFolder, codeIndex, summaryFolder, verbose),
+    );
+    await Promise.all(promises);
+
+    const t1 = Date.now();
+    console.log(`[Processed ${+firstFile + chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} sec]`);
+    return false;
+}
+
+async function processChunk(
+    chunk: Chunk,
+    chunkFolder: ObjectFolder<Chunk>,
+    codeIndex: SemanticCodeIndex,
+    summaryFolder: ObjectFolder<CodeDocumentation>,
+    verbose = false,
+): Promise<void> {
+    const t0 = Date.now();
+    const lineCount = chunk.blobs.reduce(
+        (acc, blob) => acc + blob.lines.length,
+        0,
+    );
+    // console.log(`[Embedding ${chunk.id} (${lineCount} lines)]`);
+    const putPromise = chunkFolder.put(chunk, chunk.id);
+    const blobLines = extractBlobLines(chunk);
+    const codeBlock: CodeBlock = { code: blobLines, language: "python" };
+    const docs = await codeIndex.put(codeBlock, chunk.id, chunk.filename);
+    for (const comment of docs.comments || []) {
+        comment.lineNumber += chunk.blobs[0].start;
+    }
+    await summaryFolder.put(docs, chunk.id);
+    await putPromise;
+    // for (const comment of docs.comments || []) {
+    //     console.log(wordWrap(`${comment.lineNumber}. ${comment.comment}`));
+    // }
+    const t1 = Date.now();
+    if (verbose) {
         console.log(
             `[Embedded ${chunk.id} (${lineCount} lines @ ${chunk.blobs[0].start}) ` +
-                `in ${((t1 - t0) * 0.001).toFixed(3)} sec]\n`,
+                `in ${((t1 - t0) * 0.001).toFixed(3)} sec]`,
         );
     }
 }
