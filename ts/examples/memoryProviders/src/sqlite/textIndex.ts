@@ -26,7 +26,9 @@ export interface StringTable {
     entries(): IterableIterator<StringTableRow>;
     getId(value: string): number | undefined;
     getText(id: number): string | undefined;
+    getTextMultiple(ids: number[]): IterableIterator<string>;
     add(value: string): AssignedId<number>;
+    add(values: string[]): AssignedId<number>[];
     remove(value: string): void;
 }
 
@@ -39,7 +41,7 @@ export function createStringTable(
     const schemaSql = `  
     CREATE TABLE IF NOT EXISTS ${tableName} (  
       stringId INTEGER PRIMARY KEY AUTOINCREMENT,
-      value TEXT ${caseSensitive ? "COLLATE NOCASE" : ""} NOT NULL,
+      value TEXT ${caseSensitive ? "" : "COLLATE NOCASE"} NOT NULL,
       UNIQUE(value)  
     );`;
 
@@ -67,6 +69,7 @@ export function createStringTable(
         entries,
         getId,
         getText,
+        getTextMultiple,
         add,
         remove,
     };
@@ -85,7 +88,7 @@ export function createStringTable(
 
     function* values(): IterableIterator<string> {
         for (const value of sql_values.iterate()) {
-            yield value as string;
+            yield (value as StringTableRow).value;
         }
     }
 
@@ -99,7 +102,31 @@ export function createStringTable(
         return row ? row.value : undefined;
     }
 
-    function add(value: string): AssignedId<number> {
+    function* getTextMultiple(ids: number[]): IterableIterator<string> {
+        const sql = `SELECT value from ${tableName} WHERE stringId IN (${ids})`;
+        const stmt = db.prepare(sql);
+        let rows = stmt.iterate();
+        for (const row of rows) {
+            yield (row as StringTableRow).value;
+        }
+    }
+
+    function add(values: string[]): AssignedId<number>[];
+    function add(value: string): AssignedId<number>;
+    function add(
+        values: string | string[],
+    ): AssignedId<number> | AssignedId<number>[] {
+        if (typeof values === "string") {
+            return addOne(values);
+        } else {
+            const ids: AssignedId<number>[] = [];
+            for (const value of values) {
+                ids.push(addOne(value));
+            }
+            return ids;
+        }
+    }
+    function addOne(value: string): AssignedId<number> {
         if (!value) {
             throw Error("value is empty");
         }
@@ -149,6 +176,7 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         getIds,
         getText,
         getTextMultiple,
+        getNearest,
         put,
         putMultiple,
     };
@@ -251,5 +279,26 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
             ids.push(id);
         }
         return ids;
+    }
+
+    async function getNearest(
+        value: string,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<TSourceId[]> {
+        if (semanticIndex) {
+            const keyIds = await semanticIndex.nearestNeighbors(
+                value,
+                maxMatches ?? 2,
+                minScore,
+            );
+            const values = postingsTable.iterateMultiple(
+                keyIds.map((id) => id.item),
+            );
+            if (values) {
+                return [...values];
+            }
+        }
+        return [];
     }
 }

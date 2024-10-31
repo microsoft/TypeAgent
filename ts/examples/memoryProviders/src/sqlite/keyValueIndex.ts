@@ -11,6 +11,7 @@ export interface KeyValueTable<
 > extends knowLib.KeyValueIndex<TKeyId, TValueId> {
     getSync(id: TKeyId): TValueId[] | undefined;
     iterate(id: TKeyId): IterableIterator<TValueId> | undefined;
+    iterateMultiple(ids: TKeyId[]): IterableIterator<TValueId> | undefined;
     putSync(postings: TValueId[], id: TKeyId): TKeyId;
 }
 
@@ -38,6 +39,9 @@ export function createKeyValueIndex<
     const sql_get = db.prepare(
         `SELECT valueId from ${tableName} WHERE keyId = ? ORDER BY valueId ASC`,
     );
+    const sql_getIn = db.prepare(
+        `SELECT DISTINCT valueId from ${tableName} WHERE keyId IN ? ORDER BY valueId ASC`,
+    );
     const sql_add = db.prepare(
         `INSERT OR IGNORE INTO ${tableName} (keyId, valueId) VALUES (?, ?)`,
     );
@@ -47,6 +51,7 @@ export function createKeyValueIndex<
         getSync,
         getMultiple,
         iterate,
+        iterateMultiple,
         put,
         putSync,
         replace,
@@ -67,6 +72,20 @@ export function createKeyValueIndex<
 
     function* iterate(id: TKeyId): IterableIterator<TValueId> | undefined {
         const rows = sql_get.iterate(id);
+        let count = 0;
+        for (const row of rows) {
+            yield (row as KeyValueRow).valueId;
+            ++count;
+        }
+        if (count === 0) {
+            return undefined;
+        }
+    }
+
+    function* iterateMultiple(
+        ids: TKeyId[],
+    ): IterableIterator<TValueId> | undefined {
+        const rows = sql_getIn.iterate(ids);
         let count = 0;
         for (const row of rows) {
             yield (row as KeyValueRow).valueId;
