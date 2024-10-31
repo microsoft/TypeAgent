@@ -5,6 +5,14 @@ import * as sqlite from "better-sqlite3";
 import * as knowLib from "knowledge-processor";
 import { ColumnType, SqlColumnType } from "./common.js";
 
+export interface KeyValueTable<
+    TKeyId extends ColumnType = string,
+    TValueId extends ColumnType = string,
+> extends knowLib.KeyValueIndex<TKeyId, TValueId> {
+    getSync(id: TKeyId): TValueId[] | undefined;
+    putSync(postings: TValueId[], id: TKeyId): TKeyId;
+}
+
 export function createKeyValueIndex<
     TKeyId extends ColumnType = string,
     TValueId extends ColumnType = string,
@@ -14,7 +22,7 @@ export function createKeyValueIndex<
     keyType: SqlColumnType<TKeyId>,
     valueType: SqlColumnType<TValueId>,
     ensureExists: boolean = true,
-): knowLib.KeyValueIndex<TKeyId, TValueId> {
+): KeyValueTable<TKeyId, TValueId> {
     const schemaSql = `  
     CREATE TABLE IF NOT EXISTS ${tableName} (  
       keyId ${keyType} NOT NULL,
@@ -35,8 +43,10 @@ export function createKeyValueIndex<
     const sql_remove = db.prepare(`DELETE FROM ${tableName} WHERE keyId = ?`);
     return {
         get,
+        getSync,
         getMultiple,
         put,
+        putSync,
         replace,
         remove,
     };
@@ -46,6 +56,11 @@ export function createKeyValueIndex<
         return Promise.resolve(
             rows.length > 0 ? rows.map((r) => r.valueId) : undefined,
         );
+    }
+
+    function getSync(id: TKeyId): TValueId[] | undefined {
+        const rows = sql_get.all(id) as KeyValueRow[];
+        return rows.length > 0 ? rows.map((r) => r.valueId) : undefined;
     }
 
     async function getMultiple(
@@ -72,6 +87,13 @@ export function createKeyValueIndex<
             sql_add.run(id, values[i]);
         }
 
+        return id;
+    }
+
+    function putSync(values: TValueId[], id: TKeyId): TKeyId {
+        for (let i = 0; i < values.length; ++i) {
+            sql_add.run(id, values[i]);
+        }
         return id;
     }
 

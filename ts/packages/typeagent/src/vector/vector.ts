@@ -5,6 +5,12 @@
 
 export type Vector = number[] | Float32Array;
 
+/**
+ * Vanilla dot product, implemented as a simple loop
+ * @param x
+ * @param y
+ * @returns
+ */
 export function dotProductSimple(x: Vector, y: Vector): number {
     if (x.length != y.length) {
         throw new Error("Array length mismatch");
@@ -18,7 +24,7 @@ export function dotProductSimple(x: Vector, y: Vector): number {
 }
 
 /**
- * Faster version that unrolls the dot product
+ * Return the dot product of two vectors
  * @param x
  * @param y
  * @returns
@@ -33,9 +39,13 @@ export function dotProduct(x: Vector, y: Vector): number {
     let i = 0;
     while (i < unrolledLength) {
         sum += x[i] * y[i];
-        sum += x[i + 1] * y[i + 1];
-        sum += x[i + 2] * y[i + 2];
-        sum += x[i + 3] * y[i + 3];
+
+        let j = i + 1;
+        sum += x[j] * y[j];
+        j = i + 2;
+        sum += x[j] * y[j];
+        j = i + 3;
+        sum += x[j] * y[j];
         i += 4;
     }
 
