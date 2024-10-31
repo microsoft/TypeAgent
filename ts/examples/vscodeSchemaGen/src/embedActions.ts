@@ -33,8 +33,11 @@ export function createVscodeActionsIndex() {
         search,
     };
 
-    async function addOrUpdate(actionName: string, actionData: any): Promise<void> {
-         const actionString:string = `${actionData.typeName} ${actionData.actionName} ${actionData.comments.join(' ')}`;
+    async function addOrUpdate(
+        actionName: string,
+        actionData: any,
+    ): Promise<void> {
+        const actionString: string = `${actionData.typeName} ${actionData.actionName} ${actionData.comments.join(" ")}`;
         let embedding = await generateEmbedding(
             embeddingModel,
             JSON.stringify(actionString, null, 2),

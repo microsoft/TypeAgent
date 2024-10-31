@@ -3,12 +3,10 @@
 
 import { ChatModel, ChatModelWithStreaming, openai } from "aiclient";
 import dotenv from "dotenv";
-import * as fs from 'fs';
+import * as fs from "fs";
 import { createVscodeActionsIndex } from "./embedActions.js";
 import { generateActionRequests } from "./actionGen.js";
-import {
-    TypeSchema
-} from "typeagent";
+import { TypeSchema } from "typeagent";
 
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
@@ -17,7 +15,7 @@ async function getModelCompletionResponse(
     chatModel: ChatModelWithStreaming,
     prompt: string,
     jsonNode: any,
-): Promise<string|undefined> {
+): Promise<string | undefined> {
     const chatResponse = await chatModel.complete(prompt);
     if (chatResponse.success) {
         const responseText = chatResponse.data;
@@ -29,23 +27,27 @@ async function getModelCompletionResponse(
     }
 }
 
-export async function createVSCODESchemaGen(model: ChatModelWithStreaming, jsonSchema: any) {
+export async function createVSCODESchemaGen(
+    model: ChatModelWithStreaming,
+    jsonSchema: any,
+) {
     console.log("Generating VSCODE schema...");
 
     model.complete("Generate VSCODE schema").then((response: any) => {
-        if(response.choices) {
+        if (response.choices) {
             const schema = response.choices[0].text;
             console.log(schema);
 
             console.log(`Prompt tokens: ${response.usage.prompt_tokens}`);
-            console.log(`Completion tokens: ${response.usage.completion_tokens}`);
+            console.log(
+                `Completion tokens: ${response.usage.completion_tokens}`,
+            );
             console.log(`Total tokens: ${response.usage.total_tokens}`);
         }
-    })
+    });
 }
 
 async function genActionSchemaForNode(jsonNode: any) {
-
     const model = openai.createChatModel("GPT_4_O");
     const prompt = `
 Generate a compact TypeScript type for the following VSCode action. The type should have the following structure:
@@ -66,20 +68,32 @@ ${JSON.stringify(jsonNode, null, 2)}
 
 TypeScript Type:
 `;
-    
+
     return await getModelCompletionResponse(model, prompt, jsonNode);
 }
 
-function parseTypeComponents(schema: string): { typeName: string, actionName: string, comments: string[] } {
+function parseTypeComponents(schema: string): {
+    typeName: string;
+    actionName: string;
+    comments: string[];
+} {
     return {
-        typeName: (schema.match(/type\s+(\w+)\s*=/) || [])[1] || '',
-        actionName: (schema.match(/actionName:\s*['"](.+?)['"]/) || [])[1] || '',
-        comments: (schema.match(/\/\/.*/g) || []).map(comment => comment.trim()),
+        typeName: (schema.match(/type\s+(\w+)\s*=/) || [])[1] || "",
+        actionName:
+            (schema.match(/actionName:\s*['"](.+?)['"]/) || [])[1] || "",
+        comments: (schema.match(/\/\/.*/g) || []).map((comment) =>
+            comment.trim(),
+        ),
     };
 }
 
-export async function processVscodeCommandsJsonFile(model: ChatModel, jsonFilePath: string, outputFilePath: string, actionPrefix: string | undefined) {
-    const jsonData = JSON.parse(fs.readFileSync(jsonFilePath, 'utf8'));
+export async function processVscodeCommandsJsonFile(
+    model: ChatModel,
+    jsonFilePath: string,
+    outputFilePath: string,
+    actionPrefix: string | undefined,
+) {
+    const jsonData = JSON.parse(fs.readFileSync(jsonFilePath, "utf8"));
 
     const vscodeActionIndex = createVscodeActionsIndex();
 
@@ -93,34 +107,51 @@ export async function processVscodeCommandsJsonFile(model: ChatModel, jsonFilePa
                 continue;
             }
 
-            const schema: string | undefined = await genActionSchemaForNode(node);
+            const schemaStr: string | undefined =
+                await genActionSchemaForNode(node);
             processedNodeCount++;
 
-            if (schema) {
-                schemaDefinitions.push(schema);
+            if (schemaStr) {
+                schemaDefinitions.push(schemaStr);
                 schemaCount++;
 
-                let actionData:any = parseTypeComponents(schema);
-                vscodeActionIndex.addOrUpdate(actionData.actionName, actionData);
+                let actionSchemaData: any = parseTypeComponents(schemaStr);
+                vscodeActionIndex.addOrUpdate(
+                    actionSchemaData.actionName,
+                    actionSchemaData,
+                );
 
-                let typeSchema:TypeSchema  = {
-                    typeName: actionData.typeName,
-                    schemaText: schema,
-                }
+                let typeSchema: TypeSchema = {
+                    typeName: actionSchemaData.typeName,
+                    schemaText: schemaStr,
+                };
 
-                let actionRequests:string[] = await generateActionRequests("variations", model, typeSchema, actionData.comments.join(' '), 5);
+                let actionRequests: string[] = await generateActionRequests(
+                    "variations",
+                    model,
+                    typeSchema,
+                    actionSchemaData.comments.join(" "),
+                    5,
+                );
                 console.log(actionRequests);
             }
 
             if (processedNodeCount % 50 === 0) {
-                console.log(`Processed ${processedNodeCount} nodes so far. Schemas generated: ${schemaCount}`);
+                console.log(
+                    `Processed ${processedNodeCount} nodes so far. Schemas generated: ${schemaCount}`,
+                );
             }
         } catch (error) {
-            console.error(`Error generating schema for node ${node.id}:`, error);
+            console.error(
+                `Error generating schema for node ${node.id}:`,
+                error,
+            );
         }
     }
 
-    fs.writeFileSync(outputFilePath, schemaDefinitions.join('\n\n'));
+    fs.writeFileSync(outputFilePath, schemaDefinitions.join("\n\n"));
     console.log(`Schema definitions written to ${outputFilePath}`);
-    console.log(`Total nodes processed: ${processedNodeCount}, Total schemas generated: ${schemaCount}`);
+    console.log(
+        `Total nodes processed: ${processedNodeCount}, Total schemas generated: ${schemaCount}`,
+    );
 }

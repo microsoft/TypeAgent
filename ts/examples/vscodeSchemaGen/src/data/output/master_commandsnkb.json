@@ -54,9 +54,7 @@
           "description": "Property-value pairs that can be passed through this argument:\n\t\t\t\t\t* 'to': A mandatory logical position value providing where to move the cursor.\n\t\t\t\t\t\t```\n\t\t\t\t\t\t'left', 'right', 'up', 'down', 'prevBlankLine', 'nextBlankLine',\n\t\t\t\t\t\t'wrappedLineStart', 'wrappedLineEnd', 'wrappedLineColumnCenter'\n\t\t\t\t\t\t'wrappedLineFirstNonWhitespaceCharacter', 'wrappedLineLastNonWhitespaceCharacter'\n\t\t\t\t\t\t'viewPortTop', 'viewPortCenter', 'viewPortBottom', 'viewPortIfOutside'\n\t\t\t\t\t\t```\n\t\t\t\t\t* 'by': Unit to move. Default is computed based on 'to' value.\n\t\t\t\t\t\t```\n\t\t\t\t\t\t'line', 'wrappedLine', 'character', 'halfLine'\n\t\t\t\t\t\t```\n\t\t\t\t\t* 'value': Number of units to move. Default is '1'.\n\t\t\t\t\t* 'select': If 'true' makes the selection. Default is 'false'.\n\t\t\t\t",
           "schema": {
             "type": "object",
-            "required": [
-              "to"
-            ],
+            "required": ["to"],
             "properties": {
               "to": {
                 "type": "string",
@@ -80,12 +78,7 @@
               },
               "by": {
                 "type": "string",
-                "enum": [
-                  "line",
-                  "wrappedLine",
-                  "character",
-                  "halfLine"
-                ]
+                "enum": ["line", "wrappedLine", "character", "halfLine"]
               },
               "value": {
                 "type": "number",
@@ -242,26 +235,15 @@
           "description": "Property-value pairs that can be passed through this argument:\n\t\t\t\t\t* 'to': A mandatory direction value.\n\t\t\t\t\t\t```\n\t\t\t\t\t\t'up', 'down'\n\t\t\t\t\t\t```\n\t\t\t\t\t* 'by': Unit to move. Default is computed based on 'to' value.\n\t\t\t\t\t\t```\n\t\t\t\t\t\t'line', 'wrappedLine', 'page', 'halfPage', 'editor'\n\t\t\t\t\t\t```\n\t\t\t\t\t* 'value': Number of units to move. Default is '1'.\n\t\t\t\t\t* 'revealCursor': If 'true' reveals the cursor if it is outside view port.\n\t\t\t\t",
           "schema": {
             "type": "object",
-            "required": [
-              "to"
-            ],
+            "required": ["to"],
             "properties": {
               "to": {
                 "type": "string",
-                "enum": [
-                  "up",
-                  "down"
-                ]
+                "enum": ["up", "down"]
               },
               "by": {
                 "type": "string",
-                "enum": [
-                  "line",
-                  "wrappedLine",
-                  "page",
-                  "halfPage",
-                  "editor"
-                ]
+                "enum": ["line", "wrappedLine", "page", "halfPage", "editor"]
               },
               "value": {
                 "type": "number",
@@ -331,23 +313,14 @@
           "description": "Property-value pairs that can be passed through this argument:\n\t\t\t\t\t* 'lineNumber': A mandatory line number value.\n\t\t\t\t\t* 'at': Logical position at which line has to be revealed.\n\t\t\t\t\t\t```\n\t\t\t\t\t\t'top', 'center', 'bottom'\n\t\t\t\t\t\t```\n\t\t\t\t",
           "schema": {
             "type": "object",
-            "required": [
-              "lineNumber"
-            ],
+            "required": ["lineNumber"],
             "properties": {
               "lineNumber": {
-                "type": [
-                  "number",
-                  "string"
-                ]
+                "type": ["number", "string"]
               },
               "at": {
                 "type": "string",
-                "enum": [
-                  "top",
-                  "center",
-                  "bottom"
-                ]
+                "enum": ["top", "center", "bottom"]
               }
             }
           }
@@ -389,9 +362,7 @@
           "name": "args",
           "schema": {
             "type": "object",
-            "required": [
-              "text"
-            ],
+            "required": ["text"],
             "properties": {
               "text": {
                 "type": "string"
@@ -691,11 +662,7 @@
                 "type": "string",
                 "description": "Controls when the returned actions are applied.",
                 "default": "ifSingle",
-                "enum": [
-                  "first",
-                  "ifSingle",
-                  "never"
-                ],
+                "enum": ["first", "ifSingle", "never"],
                 "enumDescriptions": [
                   "Always apply the first returned code action.",
                   "Apply the first returned code action if it is the only one.",
@@ -739,11 +706,7 @@
                 "type": "string",
                 "description": "Controls when the returned actions are applied.",
                 "default": "ifSingle",
-                "enum": [
-                  "first",
-                  "ifSingle",
-                  "never"
-                ],
+                "enum": ["first", "ifSingle", "never"],
                 "enumDescriptions": [
                   "Always apply the first returned code action.",
                   "Apply the first returned code action if it is the only one.",
@@ -797,11 +760,7 @@
                 "type": "string",
                 "description": "Controls when the returned actions are applied.",
                 "default": "ifSingle",
-                "enum": [
-                  "first",
-                  "ifSingle",
-                  "never"
-                ],
+                "enum": ["first", "ifSingle", "never"],
                 "enumDescriptions": [
                   "Always apply the first returned code action.",
                   "Apply the first returned code action if it is the only one.",
@@ -1265,10 +1224,7 @@
               },
               "direction": {
                 "type": "string",
-                "enum": [
-                  "up",
-                  "down"
-                ],
+                "enum": ["up", "down"],
                 "default": "down"
               },
               "selectionLines": {
@@ -1304,10 +1260,7 @@
               },
               "direction": {
                 "type": "string",
-                "enum": [
-                  "up",
-                  "down"
-                ]
+                "enum": ["up", "down"]
               },
               "selectionLines": {
                 "type": "array",
@@ -4906,23 +4859,15 @@
           "description": "Argument Properties:\n\t* 'to': String value providing where to move.\n\t* 'by': String value providing the unit for move (by tab or by group).\n\t* 'value': Number value providing how many positions or an absolute position to move.",
           "schema": {
             "type": "object",
-            "required": [
-              "to"
-            ],
+            "required": ["to"],
             "properties": {
               "to": {
                 "type": "string",
-                "enum": [
-                  "left",
-                  "right"
-                ]
+                "enum": ["left", "right"]
               },
               "by": {
                 "type": "string",
-                "enum": [
-                  "tab",
-                  "group"
-                ]
+                "enum": ["tab", "group"]
               },
               "value": {
                 "type": "number"
@@ -4943,23 +4888,15 @@
           "description": "Argument Properties:\n\t* 'to': String value providing where to copy.\n\t* 'value': Number value providing how many positions or an absolute position to copy.",
           "schema": {
             "type": "object",
-            "required": [
-              "to"
-            ],
+            "required": ["to"],
             "properties": {
               "to": {
                 "type": "string",
-                "enum": [
-                  "left",
-                  "right"
-                ]
+                "enum": ["left", "right"]
               },
               "by": {
                 "type": "string",
-                "enum": [
-                  "tab",
-                  "group"
-                ]
+                "enum": ["tab", "group"]
               },
               "value": {
                 "type": "number"
@@ -4982,29 +4919,18 @@
           "name": "args",
           "schema": {
             "type": "object",
-            "required": [
-              "groups"
-            ],
+            "required": ["groups"],
             "properties": {
               "orientation": {
                 "type": "number",
                 "default": 0,
                 "description": "The orientation of the root group in the layout. 0 for horizontal, 1 for vertical.",
-                "enum": [
-                  0,
-                  1
-                ],
-                "enumDescriptions": [
-                  "Horizontal",
-                  "Vertical"
-                ]
+                "enum": [0, 1],
+                "enumDescriptions": ["Horizontal", "Vertical"]
               },
               "groups": {
                 "$ref": "#/definitions/editorGroupsSchema",
-                "default": [
-                  {},
-                  {}
-                ]
+                "default": [{}, {}]
               }
             }
           }
@@ -5694,20 +5620,14 @@
           "description": "The cell index",
           "schema": {
             "type": "object",
-            "required": [
-              "index",
-              "direction"
-            ],
+            "required": ["index", "direction"],
             "properties": {
               "index": {
                 "type": "number"
               },
               "direction": {
                 "type": "string",
-                "enum": [
-                  "up",
-                  "down"
-                ],
+                "enum": ["up", "down"],
                 "default": "down"
               },
               "levels": {
@@ -5735,20 +5655,14 @@
           "description": "The cell index",
           "schema": {
             "type": "object",
-            "required": [
-              "index",
-              "direction"
-            ],
+            "required": ["index", "direction"],
             "properties": {
               "index": {
                 "type": "number"
               },
               "direction": {
                 "type": "string",
-                "enum": [
-                  "up",
-                  "down"
-                ],
+                "enum": ["up", "down"],
                 "default": "down"
               },
               "levels": {
@@ -5843,19 +5757,14 @@
           "description": "The cell range options",
           "schema": {
             "type": "object",
-            "required": [
-              "ranges"
-            ],
+            "required": ["ranges"],
             "properties": {
               "ranges": {
                 "type": "array",
                 "items": [
                   {
                     "type": "object",
-                    "required": [
-                      "start",
-                      "end"
-                    ],
+                    "required": ["start", "end"],
                     "properties": {
                       "start": {
                         "type": "number"
@@ -5905,19 +5814,14 @@
           "description": "The cell range options",
           "schema": {
             "type": "object",
-            "required": [
-              "ranges"
-            ],
+            "required": ["ranges"],
             "properties": {
               "ranges": {
                 "type": "array",
                 "items": [
                   {
                     "type": "object",
-                    "required": [
-                      "start",
-                      "end"
-                    ],
+                    "required": ["start", "end"],
                     "properties": {
                       "start": {
                         "type": "number"
@@ -5954,19 +5858,14 @@
           "description": "The cell range options",
           "schema": {
             "type": "object",
-            "required": [
-              "ranges"
-            ],
+            "required": ["ranges"],
             "properties": {
               "ranges": {
                 "type": "array",
                 "items": [
                   {
                     "type": "object",
-                    "required": [
-                      "start",
-                      "end"
-                    ],
+                    "required": ["start", "end"],
                     "properties": {
                       "start": {
                         "type": "number"
@@ -6246,10 +6145,7 @@
           "description": "The cell range",
           "schema": {
             "type": "object",
-            "required": [
-              "start",
-              "end"
-            ],
+            "required": ["start", "end"],
             "properties": {
               "start": {
                 "type": "number"
@@ -6391,9 +6287,7 @@
           "name": "args",
           "schema": {
             "type": "object",
-            "required": [
-              "index"
-            ],
+            "required": ["index"],
             "properties": {
               "index": {
                 "type": "number"
@@ -6858,19 +6752,14 @@
           "description": "The cell range options",
           "schema": {
             "type": "object",
-            "required": [
-              "ranges"
-            ],
+            "required": ["ranges"],
             "properties": {
               "ranges": {
                 "type": "array",
                 "items": [
                   {
                     "type": "object",
-                    "required": [
-                      "start",
-                      "end"
-                    ],
+                    "required": ["start", "end"],
                     "properties": {
                       "start": {
                         "type": "number"
@@ -7747,9 +7636,7 @@
             "anyOf": [
               {
                 "type": "object",
-                "required": [
-                  "query"
-                ],
+                "required": ["query"],
                 "properties": {
                   "query": {
                     "description": "The query to open the quick chat with",
@@ -10733,9 +10620,7 @@
           "name": "args",
           "schema": {
             "type": "object",
-            "required": [
-              "commands"
-            ],
+            "required": ["commands"],
             "properties": {
               "commands": {
                 "type": "array",
@@ -10750,9 +10635,7 @@
                     },
                     {
                       "type": "object",
-                      "required": [
-                        "command"
-                      ],
+                      "required": ["command"],
                       "properties": {
                         "command": {
                           "anyOf": [
@@ -11007,10 +10890,7 @@
                 "default": false
               },
               "justification": {
-                "type": [
-                  "string",
-                  "object"
-                ],
+                "type": ["string", "object"],
                 "description": "Justification for installing the extension. This is a string or an object that can be used to pass any information to the installation handlers. i.e. `{reason: 'This extension wants to open a URI', action: 'Open URI'}` will show a message box with the reason and action upon install."
               },
               "enable": {
@@ -11083,27 +10963,18 @@
           "name": "args",
           "schema": {
             "type": "object",
-            "required": [
-              "profileName"
-            ],
+            "required": ["profileName"],
             "properties": {
               "profileName": {
                 "description": "The name of the profile to create",
                 "type": "string",
-                "enum": [
-                  null
-                ],
-                "markdownEnumDescriptions": [
-                  "Automatically detect the default"
-                ]
+                "enum": [null],
+                "markdownEnumDescriptions": ["Automatically detect the default"]
               },
               "location": {
                 "description": "Where to create the terminal",
                 "type": "string",
-                "enum": [
-                  "view",
-                  "editor"
-                ],
+                "enum": ["view", "editor"],
                 "enumDescriptions": [
                   "Create the terminal in the terminal view",
                   "Create the terminal in the editor"
@@ -11497,9 +11368,7 @@
           "name": "args",
           "schema": {
             "type": "object",
-            "required": [
-              "cwd"
-            ],
+            "required": ["cwd"],
             "properties": {
               "cwd": {
                 "description": "The directory to start the terminal at",
@@ -11520,9 +11389,7 @@
           "name": "args",
           "schema": {
             "type": "object",
-            "required": [
-              "name"
-            ],
+            "required": ["name"],
             "properties": {
               "name": {
                 "description": "The new name for the terminal",
