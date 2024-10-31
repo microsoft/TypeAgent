@@ -4,6 +4,7 @@
 import path from "path";
 import os from "node:os";
 import { createNormalized, ensureDir, NormalizedEmbedding } from "typeagent";
+import { hasEnvSettings, openai } from "aiclient";
 
 export function skipTest(name: string) {
     return test.skip(name, () => {});
@@ -19,6 +20,14 @@ export function testIf(
         return test.skip(name, () => {});
     }
     return test(name, fn, testTimeout);
+}
+
+export function hasEmbeddingEndpoint(endpoint?: string | undefined) {
+    return hasEnvSettings(
+        process.env,
+        openai.EnvVars.AZURE_OPENAI_API_KEY_EMBEDDING,
+        endpoint,
+    );
 }
 
 export async function ensureTestDir() {

@@ -19,6 +19,7 @@ import {
 } from "knowledge-processor";
 import { createSemanticIndex, SemanticIndex, VectorStore } from "typeagent";
 import { createVectorTable } from "./vectorTable.js";
+import * as knowLib from "knowledge-processor";
 
 export type StringTableRow = {
     stringId: number;
@@ -109,10 +110,12 @@ export function createStringTable(
     }
 
     function* getTextMultiple(ids: number[]): IterableIterator<string> {
-        const stmt = createInQuery(db, tableName, "value", ids);
-        let rows = stmt.iterate();
-        for (const row of rows) {
-            yield (row as StringTableRow).value;
+        if (ids.length > 0) {
+            const stmt = createInQuery(db, tableName, "value", "stringId", ids);
+            let rows = stmt.iterate();
+            for (const row of rows) {
+                yield (row as StringTableRow).value;
+            }
         }
     }
 
@@ -167,7 +170,7 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
     );
     let [vectorStore, semanticIndex] =
         settings.semanticIndex !== undefined && settings.semanticIndex
-            ? createSemanticTable()
+            ? createVectorIndex()
             : [undefined, undefined];
 
     return {
@@ -186,10 +189,7 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         putMultiple,
     };
 
-    function createSemanticTable(): [
-        VectorStore<TextId>,
-        SemanticIndex<TextId>,
-    ] {
+    function createVectorIndex(): [VectorStore<TextId>, SemanticIndex<TextId>] {
         const store = createVectorTable<TextId>(
             db,
             tablePath(name, "embeddings"),
@@ -219,12 +219,16 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
             yield {
                 type: TextBlockType.Sentence,
                 value: entry.value,
-                sourceIds: await postingsTable.get(entry.stringId),
+                sourceIds: postingsTable.getSync(entry.stringId),
             };
         }
     }
 
-    async function get(text: string): Promise<TSourceId[] | undefined> {
+    function get(text: string): Promise<TSourceId[] | undefined> {
+        return Promise.resolve(getSync(text));
+    }
+
+    function getSync(text: string): TSourceId[] | undefined {
         const textId = textTable.getId(text);
         if (textId) {
             return postingsTable.getSync(textId);
@@ -232,33 +236,30 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         return undefined;
     }
 
-    async function getById(id: TextId): Promise<TSourceId[] | undefined> {
-        return postingsTable.getSync(id);
+    function getById(id: TextId): Promise<TSourceId[] | undefined> {
+        return postingsTable.get(id);
     }
 
-    async function getByIds(
-        ids: TextId[],
-    ): Promise<(TSourceId[] | undefined)[]> {
+    function getByIds(ids: TextId[]): Promise<(TSourceId[] | undefined)[]> {
         const postings = ids.map((id) => postingsTable.getSync(id));
-        return postings;
+        return Promise.resolve(postings);
     }
 
-    async function getId(text: string): Promise<TextId | undefined> {
-        return textTable.getId(text);
+    function getId(text: string): Promise<TextId | undefined> {
+        return Promise.resolve(textTable.getId(text));
     }
 
-    async function getIds(texts: string[]): Promise<(TextId | undefined)[]> {
-        return texts.map((t) => textTable.getId(t));
+    function getIds(texts: string[]): Promise<(TextId | undefined)[]> {
+        // TODO: use IN clause
+        return Promise.resolve(texts.map((t) => textTable.getId(t)));
     }
 
-    async function getText(id: TextId): Promise<string | undefined> {
-        return textTable.getText(id);
+    function getText(id: TextId): Promise<string | undefined> {
+        return Promise.resolve(textTable.getText(id));
     }
 
-    async function getTextMultiple(
-        ids: TextId[],
-    ): Promise<(string | undefined)[]> {
-        return ids.map((id) => textTable.getText(id));
+    function getTextMultiple(ids: TextId[]): Promise<(string | undefined)[]> {
+        return Promise.resolve(ids.map((id) => textTable.getText(id)));
     }
 
     async function put(text: string, postings?: TSourceId[]): Promise<TextId> {
@@ -291,19 +292,61 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         maxMatches?: number,
         minScore?: number,
     ): Promise<TSourceId[]> {
-        if (semanticIndex) {
-            const keyIds = await semanticIndex.nearestNeighbors(
-                value,
-                maxMatches ?? 2,
-                minScore,
-            );
-            const values = postingsTable.iterateMultiple(
-                keyIds.map((id) => id.item),
-            );
-            if (values) {
-                return [...values];
+        maxMatches ??= 1;
+        // Check exact match first
+        let matchedIds: TextId[] | undefined;
+
+        let exactId = textTable.getId(value);
+        if (exactId) {
+            matchedIds = [exactId];
+        }
+        let nearestIds: TextId[] | undefined;
+        if (maxMatches > 1) {
+            nearestIds = await getNearestTextIds(value, maxMatches, minScore);
+        } else if (!exactId) {
+            const nearestId = await getNearestTextId(value, minScore);
+            if (nearestId) {
+                nearestIds = [nearestId];
+            }
+        }
+        matchedIds = knowLib.sets.unionArrays(matchedIds, nearestIds);
+        if (matchedIds && matchedIds.length > 0) {
+            // Iterate over matched postings
+            const postings = postingsTable.iterateMultiple(matchedIds);
+            if (postings) {
+                return [...postings];
             }
         }
         return [];
+    }
+
+    async function getNearestTextId(
+        value: string,
+        minScore?: number,
+    ): Promise<TextId | undefined> {
+        if (semanticIndex) {
+            const nearest = await semanticIndex.nearestNeighbor(
+                value,
+                minScore,
+            );
+            return nearest ? nearest.item : undefined;
+        }
+        return undefined;
+    }
+
+    async function getNearestTextIds(
+        value: string,
+        maxMatches: number,
+        minScore?: number,
+    ): Promise<TextId[] | undefined> {
+        if (semanticIndex) {
+            const scoredTextIds = await semanticIndex.nearestNeighbors(
+                value,
+                maxMatches,
+                minScore,
+            );
+            return scoredTextIds.map((s) => s.item);
+        }
+        return undefined;
     }
 }

@@ -3,7 +3,7 @@
 
 import * as sqlite from "better-sqlite3";
 import * as knowLib from "knowledge-processor";
-import { ColumnType, createInQuery, SqlColumnType } from "./common.js";
+import { ColumnType, SqlColumnType } from "./common.js";
 
 export interface KeyValueTable<
     TKeyId extends ColumnType = string,
@@ -82,8 +82,16 @@ export function createKeyValueTable<
     function* iterateMultiple(
         ids: TKeyId[],
     ): IterableIterator<TValueId> | undefined {
-        const stmt = createInQuery(db, tableName, "keyId", ids);
-        const rows = stmt.iterate(ids);
+        if (ids.length === 0) {
+            return undefined;
+        }
+        if (ids.length === 0) {
+            return iterate(ids[0]);
+        }
+
+        const sql = `SELECT DISTINCT valueId from ${tableName} WHERE keyId IN (${ids}) ORDER BY valueId ASC`;
+        const stmt = db.prepare(sql);
+        const rows = stmt.iterate();
         let count = 0;
         for (const row of rows) {
             yield (row as KeyValueRow).valueId;

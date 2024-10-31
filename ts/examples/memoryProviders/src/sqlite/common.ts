@@ -32,10 +32,11 @@ export async function createDb(
 export function createInQuery(
     db: sqlite.Database,
     tableName: string,
-    select: string,
+    selectCol: string,
+    testCol: string,
     values: any[],
 ): sqlite.Statement {
-    const sql = `SELECT ${select} from ${tableName} WHERE stringId IN (${values})`;
+    const sql = `SELECT ${selectCol} from ${tableName} WHERE ${testCol} IN (${values})`;
     return db.prepare(sql);
 }
 

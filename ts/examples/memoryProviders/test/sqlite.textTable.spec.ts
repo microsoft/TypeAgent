@@ -3,11 +3,22 @@
 
 import * as sqlite from "better-sqlite3";
 import { AssignedId, createDb } from "../src/sqlite/common.js";
-import { createStringTable, StringTable } from "../src/sqlite/textTable.js";
-import { ensureTestDir, testFilePath } from "./testCore.js";
+import {
+    createStringTable,
+    createTextIndex,
+    StringTable,
+} from "../src/sqlite/textTable.js";
+import {
+    ensureTestDir,
+    hasEmbeddingEndpoint,
+    testFilePath,
+    testIf,
+} from "./testCore.js";
+import { TextBlock, TextBlockType } from "knowledge-processor";
 
 describe("sqlite.textTable", () => {
     const testTimeout = 1000 * 60 * 5;
+    const smallEndpoint = "3_SMALL";
     let db: sqlite.Database | undefined;
     beforeAll(async () => {
         await ensureTestDir();
@@ -45,7 +56,36 @@ describe("sqlite.textTable", () => {
         },
         testTimeout,
     );
-
+    test("getNearest_exact", async () => {
+        const table = await createTextIndex<number>(
+            { caseSensitive: false, concurrency: 2, semanticIndex: false },
+            db!,
+            "NameIndex_Exact",
+            "INTEGER",
+        );
+        const blocks: TextBlock<number>[] = [
+            {
+                type: TextBlockType.Raw,
+                value: "Bach",
+                sourceIds: [1, 3, 5, 7],
+            },
+            {
+                type: TextBlockType.Raw,
+                value: "Debussy",
+                sourceIds: [2, 3, 4, 7],
+            },
+        ];
+        await table.putMultiple(blocks);
+        for (let i = 0; i < blocks.length; ++i) {
+            const matches = await table.getNearest(blocks[i].value);
+            expect(matches).toEqual(blocks[i].sourceIds);
+        }
+    });
+    testIf(
+        () => hasEmbeddingEndpoint(smallEndpoint),
+        "getNearest",
+        async () => {},
+    );
     function checkIsNew(ids: AssignedId<number>[], expected: boolean) {
         for (const id of ids) {
             expect(id.isNew).toEqual(expected);
