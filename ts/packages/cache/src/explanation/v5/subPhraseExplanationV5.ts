@@ -131,11 +131,14 @@ function validateSubPhraseExplanationV5(
             }
 
             prop.substrings.forEach((substring) => {
-                const found = subPhrases.some(
-                    (phrase) =>
-                        phrase.text.includes(substring) ||
-                        substring.includes(phrase.text),
-                );
+                const lowerCaseSubString = substring.toLowerCase();
+                const found = subPhrases.some((phrase) => {
+                    const lowerCasePhrase = phrase.text.toLowerCase();
+                    return (
+                        lowerCasePhrase.includes(lowerCaseSubString) ||
+                        lowerCaseSubString.includes(lowerCasePhrase)
+                    );
+                });
                 if (!found) {
                     corrections.push(
                         `Explicit property '${prop.name}' must be included as property names for all subphrases that contain the substring '${substring}'`,
@@ -143,10 +146,7 @@ function validateSubPhraseExplanationV5(
                 }
             });
         } else {
-            if (
-                !isImplicitParameter(prop) &&
-                (isEntityParameter(prop) || !prop.implied)
-            ) {
+            if (!isImplicitParameter(prop) && isEntityParameter(prop)) {
                 corrections.push(
                     `Property '${prop.name}' is expected to be explicit and should be included as a property name for a sub-phrase`,
                 );

@@ -667,14 +667,6 @@ export async function createTextIndex<TSourceId = any>(
         postings: TSourceId[],
         score: number,
     ): IterableIterator<ScoredItem<TSourceId>> {
-        /*
-        return postings.map((item) => {
-            return {
-                item,
-                score,
-            };
-        });
-        */
         for (const item of postings) {
             yield { item, score };
         }

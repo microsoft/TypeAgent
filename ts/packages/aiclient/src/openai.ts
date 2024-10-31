@@ -730,7 +730,7 @@ function verifyFilterResults(filterResult: FilterResult) {
  * @returns
  */
 export function createChatModelDefault(tag: string): ChatModelWithStreaming {
-    return createChatModel(undefined, undefined, undefined, [tag]);
+    return createJsonChatModel(undefined, [tag]);
 }
 
 /**
@@ -793,6 +793,8 @@ export function createEmbeddingModel(
     apiSettings?: ApiSettings,
     dimensions?: number | undefined,
 ): TextEmbeddingModel {
+    // https://platform.openai.com/docs/api-reference/embeddings/create#embeddings-create-input
+    const maxBatchSize = 2048;
     const settings = apiSettings ?? apiSettingsFromEnv(ModelType.Embedding);
     const defaultParams: any = settings.isAzure
         ? {}
@@ -804,10 +806,42 @@ export function createEmbeddingModel(
     }
     const model: TextEmbeddingModel = {
         generateEmbedding,
+        generateEmbeddingBatch,
+        maxBatchSize,
     };
     return model;
 
     async function generateEmbedding(input: string): Promise<Result<number[]>> {
+        if (!input) {
+            return error("Empty input");
+        }
+        const result = await callApi(input);
+        if (!result.success) {
+            return result;
+        }
+        const data = result.data as EmbeddingData;
+        return success(data.data[0].embedding);
+    }
+
+    // Support optional method, since OAI supports batching
+    async function generateEmbeddingBatch(
+        input: string[],
+    ): Promise<Result<number[][]>> {
+        if (input.length === 0) {
+            return error("Empty input array");
+        }
+        if (input.length > maxBatchSize) {
+            return error(`Batch size must be < ${maxBatchSize}`);
+        }
+        const result = await callApi(input);
+        if (!result.success) {
+            return result;
+        }
+        const data = result.data as EmbeddingData;
+        return success(data.data.map((d) => d.embedding));
+    }
+
+    async function callApi(input: string | string[]): Promise<Result<unknown>> {
         const headerResult = await createApiHeaders(settings);
         if (!headerResult.success) {
             return headerResult;
@@ -817,21 +851,16 @@ export function createEmbeddingModel(
             input,
         };
 
-        const result = await callJsonApi(
+        return callJsonApi(
             headerResult.data,
             settings.endpoint,
             params,
             settings.maxRetryAttempts,
             settings.retryPauseMs,
         );
-        if (!result.success) {
-            return result;
-        }
-
-        const data = result.data as { data: { embedding: number[] }[] };
-
-        return success(data.data[0].embedding);
     }
+
+    type EmbeddingData = { data: { embedding: number[] }[] };
 }
 
 /**

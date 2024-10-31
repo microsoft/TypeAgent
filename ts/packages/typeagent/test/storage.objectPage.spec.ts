@@ -4,9 +4,8 @@
 import { createHashObjectFolder } from "../src/storage/objectPage";
 import { testDirectoryPath } from "./common";
 
-const timeoutMs = 30000;
-
 describe("storage.objectHashFolder", () => {
+    const timeoutMs = 30000;
     const folderPath = testDirectoryPath("./data/test/objectHash");
     test("end2end", async () => {
         const hashFolder = await createHashObjectFolder<string>(

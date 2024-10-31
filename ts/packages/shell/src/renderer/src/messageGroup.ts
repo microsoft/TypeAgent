@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { DisplayContent } from "@typeagent/agent-sdk";
-import { IAgentMessage } from "agent-dispatcher";
+import { IAgentMessage, NotifyExplainedData } from "agent-dispatcher";
 import { RequestMetrics } from "agent-dispatcher";
 
 import { MessageContainer } from "./messageContainer";
@@ -188,8 +188,8 @@ export class MessageGroup {
         this.userMessage.setMessage(message, "");
     }
 
-    public markRequestExplained(timestamp: string, fromCache?: boolean) {
-        this.userMessage.markRequestExplained(timestamp, fromCache);
+    public notifyExplained(data: NotifyExplainedData) {
+        this.userMessage.notifyExplained(data);
     }
 
     public hideUserMessage() {

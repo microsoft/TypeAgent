@@ -12,7 +12,7 @@ export type Embedding = Float32Array;
 export type NormalizedEmbedding = Float32Array;
 
 export enum SimilarityType {
-    Cosine,
+    Cosine, // Note: Use Dot if working with Normalized Embeddings
     Dot,
 }
 
@@ -58,11 +58,26 @@ export function indexOfNearest(
     type: SimilarityType,
 ): ScoredItem {
     let best: ScoredItem = { score: Number.MIN_VALUE, item: -1 };
-    for (let i = 0; i < list.length; ++i) {
-        const score: number = similarity(list[i], other, type);
-        if (score > best.score) {
-            best.score = score;
-            best.item = i;
+    if (type === SimilarityType.Dot) {
+        for (let i = 0; i < list.length; ++i) {
+            const score: number = vector.dotProduct(list[i], other);
+            if (score > best.score) {
+                best.score = score;
+                best.item = i;
+            }
+        }
+    } else {
+        const otherLen = vector.euclideanLength(other);
+        for (let i = 0; i < list.length; ++i) {
+            const score: number = cosineSimilarityLoop(
+                list[i],
+                other,
+                otherLen,
+            );
+            if (score > best.score) {
+                best.score = score;
+                best.item = i;
+            }
         }
     }
     return best;
@@ -73,7 +88,7 @@ export function indexOfNearest(
  * @param list
  * @param other
  * @param maxMatches
- * @param distance
+ * @param type Note: Most of our embeddings are *normalized* which will run significantly faster with Dot
  * @returns
  */
 export function indexesOfNearest(
@@ -84,13 +99,88 @@ export function indexesOfNearest(
     minScore: number = 0,
 ): ScoredItem[] {
     const matches = new TopNCollection(maxMatches, -1);
-    for (let i = 0; i < list.length; ++i) {
-        const score: number = similarity(list[i], other, type);
-        if (score >= minScore) {
-            matches.push(i, score);
+    if (type === SimilarityType.Dot) {
+        for (let i = 0; i < list.length; ++i) {
+            const score: number = vector.dotProduct(list[i], other);
+            if (score >= minScore) {
+                matches.push(i, score);
+            }
+        }
+    } else {
+        const otherLen = vector.euclideanLength(other);
+        for (let i = 0; i < list.length; ++i) {
+            const score: number = cosineSimilarityLoop(
+                list[i],
+                other,
+                otherLen,
+            );
+            if (score >= minScore) {
+                matches.push(i, score);
+            }
         }
     }
     return matches.byRank();
+}
+
+/**
+ * A faster unrolled version of cosine similarity designed to run in a loop
+ * When possible, use NormalizedEmbeddings and Dot products instead.
+ * To normalize your embedding, call createNormalized(...)
+ * @param x
+ * @param other
+ * @param otherLen Magnitude of other
+ * @returns
+ */
+export function cosineSimilarityLoop(
+    x: vector.Vector,
+    other: vector.Vector,
+    otherLen: number,
+): number {
+    if (x.length != other.length) {
+        throw new Error("Array length mismatch");
+    }
+
+    const len = x.length;
+    const unrolledLength = len - (len % 4);
+    let dotSum = 0;
+    let lenXSum = 0;
+    let i = 0;
+    while (i < unrolledLength) {
+        const xVal0 = x[i];
+        const yVal0 = other[i];
+        const xVal1 = x[i + 1];
+        const yVal1 = other[i + 1];
+        const xVal2 = x[i + 2];
+        const yVal2 = other[i + 2];
+        const xVal3 = x[i + 3];
+        const yVal3 = other[i + 3];
+
+        dotSum += xVal0 * yVal0;
+        dotSum += xVal1 * yVal1;
+        dotSum += xVal2 * yVal2;
+        dotSum += xVal3 * yVal3;
+
+        lenXSum += xVal0 * xVal0;
+        lenXSum += xVal1 * xVal1;
+        lenXSum += xVal2 * xVal2;
+        lenXSum += xVal3 * xVal3;
+
+        i += 4;
+    }
+
+    while (i < len) {
+        const xVal = x[i];
+        const yVal = other[i];
+
+        dotSum += xVal * yVal;
+        lenXSum += xVal * xVal;
+
+        ++i;
+    }
+
+    // Cosine Similarity of X, Y
+    // Sum(X * Y) / |X| * |Y|
+    return dotSum / (Math.sqrt(lenXSum) * otherLen);
 }
 
 export interface TopNList<T> {

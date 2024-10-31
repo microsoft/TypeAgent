@@ -16,7 +16,7 @@ export enum FileNameType {
     Tick,
 }
 
-export type ObjectSerializer = (obj: any) => Buffer;
+export type ObjectSerializer = (obj: any) => Buffer | string;
 export type ObjectDeserializer = (buffer: Buffer) => any;
 
 export interface ObjectFolderSettings {

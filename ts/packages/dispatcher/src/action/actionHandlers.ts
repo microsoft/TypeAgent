@@ -32,7 +32,6 @@ import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incremen
 import { ProfileNames } from "../utils/profileNames.js";
 import { conversation } from "knowledge-processor";
 
-const debugAgent = registerDebug("typeagent:agent");
 const debugActions = registerDebug("typeagent:actions");
 
 export function getTranslatorPrefix(
@@ -133,23 +132,21 @@ export function createSessionContext<T = unknown>(
             if (!subAgentName.startsWith(`${name}.`)) {
                 throw new Error(`Invalid sub agent name: ${subAgentName}`);
             }
-            if (context.transientAgents[subAgentName] === undefined) {
+            const state = context.agents.getTransientState(subAgentName);
+            if (state === undefined) {
                 throw new Error(
                     `Transient sub agent not found: ${subAgentName}`,
                 );
             }
 
-            if (context.transientAgents[subAgentName] === enable) {
+            if (state === enable) {
                 return;
             }
 
             // acquire the lock to prevent change the state while we are processing a command.
             // WARNING: deadlock if this is call because we are processing a request
             return context.commandLock(async () => {
-                debugAgent(
-                    `Toggle transient agent: ${subAgentName} to ${enable}`,
-                );
-                context.transientAgents[subAgentName] = enable;
+                context.agents.toggleTransient(subAgentName, enable);
                 // Because of the embedded switcher, we need to clear the cache.
                 context.translatorCache.clear();
                 if (enable) {

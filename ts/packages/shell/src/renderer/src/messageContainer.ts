@@ -3,7 +3,11 @@
 
 import { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
 import { TTS, TTSMetrics } from "./tts/tts";
-import { TemplateEditConfig, PhaseTiming } from "agent-dispatcher";
+import {
+    TemplateEditConfig,
+    PhaseTiming,
+    NotifyExplainedData,
+} from "agent-dispatcher";
 
 import { ChoicePanel, InputChoice } from "./choicePanel";
 import { setContent } from "./setContent";
@@ -542,19 +546,25 @@ export class MessageContainer {
         updateMetricsVisibility(visible, this.messageBodyDiv);
     }
 
-    public markRequestExplained(timestamp: string, fromCache?: boolean) {
-        if (timestamp !== undefined) {
-            const cachePart = fromCache ? "by cache match" : "by model";
-            this.messageDiv.setAttribute(
-                "data-expl",
-                `Explained ${cachePart} at ${timestamp}`,
-            );
+    public notifyExplained(data: NotifyExplainedData) {
+        const fromCache = data.fromCache;
+        const timestamp = data.time;
+        const cachePart = fromCache
+            ? "Translated by cache match"
+            : "Translated by model";
+        let message: string;
+        let color: string;
+        if (data.error === undefined) {
+            message = `${cachePart}. Explained at ${timestamp}`;
+            color = fromCache ? "#00c000" : "#c0c000";
+        } else {
+            message = `${cachePart}. Nothing to put in cache: ${data.error}`;
+            color = "lightblue";
         }
+        this.messageDiv.setAttribute("data-expl", message);
         this.messageDiv.classList.add("chat-message-explained");
         const icon = iconRoadrunner();
-        icon.getElementsByTagName("svg")[0].style.fill = fromCache
-            ? "#00c000"
-            : "#c0c000";
+        icon.getElementsByTagName("svg")[0].style.fill = color;
         icon.className = "chat-message-explained-icon";
         this.messageDiv.appendChild(icon);
     }

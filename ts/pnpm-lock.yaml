@@ -92,6 +92,55 @@ importers:
         specifier: ^5.4.2
         version: 5.4.3
 
+  examples/memoryProviders:
+    dependencies:
+      better-sqlite3:
+        specifier: 11.5.0
+        version: 11.5.0
+      debug:
+        specifier: ^4.3.4
+        version: 4.3.4(supports-color@8.1.1)
+      knowledge-processor:
+        specifier: workspace:*
+        version: link:../../packages/knowledgeProcessor
+      typeagent:
+        specifier: workspace:*
+        version: link:../../packages/typeagent
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.3)
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: 7.6.11
+        version: 7.6.11
+      '@types/debug':
+        specifier: ^4.1.10
+        version: 4.1.10
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.7
+      '@types/node':
+        specifier: ^18.18.7
+        version: 18.18.7
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.3.1
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@18.18.7)(ts-node@10.9.1(@types/node@18.18.7)(typescript@5.4.3))
+      prettier:
+        specifier: ^3.2.5
+        version: 3.2.5
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+
   examples/parserTest:
     dependencies:
       copyfiles:
@@ -178,6 +227,89 @@ importers:
       rimraf:
         specifier: ^5.0.5
         version: 5.0.5
+
+  examples/spelunker:
+    dependencies:
+      aiclient:
+        specifier: workspace:*
+        version: link:../../packages/aiclient
+      code-processor:
+        specifier: workspace:*
+        version: link:../../packages/codeProcessor
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.3.1
+      readline-sync:
+        specifier: ^1.4.10
+        version: 1.4.10
+      typeagent:
+        specifier: workspace:*
+        version: link:../../packages/typeagent
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.3)
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^18.18.7
+        version: 18.18.7
+      '@types/readline-sync':
+        specifier: ^1.4.8
+        version: 1.4.8
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+
+  examples/viewList:
+    dependencies:
+      chalk:
+        specifier: ^5.3.0
+        version: 5.3.0
+      debug:
+        specifier: ^4.3.4
+        version: 4.3.4(supports-color@8.1.1)
+    devDependencies:
+      '@types/debug':
+        specifier: ^4.1.10
+        version: 4.1.10
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.7
+      '@types/node':
+        specifier: ^18.18.7
+        version: 18.18.7
+      copy-webpack-plugin:
+        specifier: ^12.0.1
+        version: 12.0.2(webpack@5.94.0(webpack-cli@5.1.4))
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@18.18.7)(ts-node@10.9.1(@types/node@18.18.7)(typescript@5.4.3))
+      prettier:
+        specifier: ^3.2.5
+        version: 3.2.5
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+      ts-loader:
+        specifier: ^9.5.1
+        version: 9.5.1(typescript@5.4.3)(webpack@5.94.0(webpack-cli@5.1.4))
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+      webpack:
+        specifier: ^5.94.0
+        version: 5.94.0(webpack-cli@5.1.4)
+      webpack-cli:
+        specifier: ^5.1.4
+        version: 5.1.4(webpack-dev-server@5.0.4)(webpack@5.94.0)
+      webpack-dev-server:
+        specifier: ^5.0.4
+        version: 5.0.4(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0)
 
   examples/vscodeSchemaGen:
     dependencies:
@@ -977,6 +1109,9 @@ importers:
       '@oclif/plugin-help':
         specifier: ^5
         version: 5.2.20(@types/node@18.18.7)(typescript@5.4.3)
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../agentSdk
       agent-cache:
         specifier: workspace:*
         version: link:../cache
@@ -1605,6 +1740,9 @@ importers:
       debug:
         specifier: ^4.3.4
         version: 4.3.4(supports-color@8.1.1)
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.3.1
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.3)
@@ -2854,6 +2992,9 @@ packages:
   '@types/babel__traverse@7.20.3':
     resolution: {integrity: sha512-Lsh766rGEFbaxMIDH7Qa+Yha8cMVI3qAK6CHt3OR0YfxOIn5Z54iHiyDRycHrBqeIiqGa20Kpsv1cavfBKkRSw==}
 
+  '@types/better-sqlite3@7.6.11':
+    resolution: {integrity: sha512-i8KcD3PgGtGBLl3+mMYA8PdKkButvPyARxA7IQAd6qeslht13qxb1zzO8dRCtE7U3IoJS782zDBAeoKiM695kg==}
+
   '@types/body-parser@1.19.5':
     resolution: {integrity: sha512-fB3Zu92ucau0iQ0JMCFQE7b/dv8Ot07NI3KaZIkIUNXq82k4eBAqUaneXfleGY9JWskeS9y+u0nXMyspcuQrCg==}
 
@@ -2994,6 +3135,9 @@ packages:
 
   '@types/range-parser@1.2.7':
     resolution: {integrity: sha512-hKormJbkJqzQGhziax5PItDUTMAM9uE2XXQmM37dyd4hVM+5aVl7oVxMVUiVQn2oCQFN/LKCZdvSM0pFRqbSmQ==}
+
+  '@types/readline-sync@1.4.8':
+    resolution: {integrity: sha512-BL7xOf0yKLA6baAX6MMOnYkoflUyj/c7y3pqMRfU0va7XlwHAOTOIo4x55P/qLfMsuaYdJJKubToLqRVmRtRZA==}
 
   '@types/responselike@1.0.3':
     resolution: {integrity: sha512-H/+L+UkTV33uf49PH5pCAUBVPNj2nDBXTN+qS1dOwyyg24l3CcicicCA7ca+HMvJBZcFgl5r8e+RR6elsb4Lyw==}
@@ -3390,9 +3534,15 @@ packages:
   bent@7.3.12:
     resolution: {integrity: sha512-T3yrKnVGB63zRuoco/7Ybl7BwwGZR0lceoVG5XmQyMIH9s19SV5m+a8qam4if0zQuAmOQTyPTPmsQBdAorGK3w==}
 
+  better-sqlite3@11.5.0:
+    resolution: {integrity: sha512-e/6eggfOutzoK0JWiU36jsisdWoHOfN9iWiW/SieKvb7SAa6aGNmBM/UKyp+/wWSXpLlWNN8tCPwoDNPhzUvuQ==}
+
   binary-extensions@2.2.0:
     resolution: {integrity: sha512-jDctJ/IVQbZoJykoeHbhXpOlNBqGNcwXJKJog42E5HDPUwQTSdjCHdihjj0DlnheQ7blbT6dHOafNAiS8ooQKA==}
     engines: {node: '>=8'}
+
+  bindings@1.5.0:
+    resolution: {integrity: sha512-p2q/t/mhvuOj/UeLlV6566GD/guowlr0hHxClI0W9m7MWYkL1F0hLo+0Aexs9HSPCtR1SXQ0TD3MMKrXZajbiQ==}
 
   bl@4.1.0:
     resolution: {integrity: sha512-1W07cM9gS6DcLperZfFSj+bWLtaPGSOHWhPiGzXmvVJbRLdG82sH/Kn8EtW1VqWVA54AKf2h5k5BbnIbwF3h6w==}
@@ -4549,6 +4699,9 @@ packages:
 
   fd-slicer@1.1.0:
     resolution: {integrity: sha512-cE1qsB/VwyQozZ+q1dGxR8LBYNZeofhEdUNGSMbQD3Gw2lAzX9Zb3uIU6Ebc/Fmyjo9AWWfnn0AUCHqtevs/8g==}
+
+  file-uri-to-path@1.0.0:
+    resolution: {integrity: sha512-0Zt+s3L7Vf1biwWZ29aARiVYLx7iMGnEUl9x33fbB/j3jR81u/O2LbqK+Bm1CDSNDKVtJ/YjwY7TUd5SkeLQLw==}
 
   filelist@1.0.4:
     resolution: {integrity: sha512-w1cEuf3S+DrLCQL7ET6kz+gmlJdbq9J7yXCSjK/OZCPA+qEN1WyF4ZAf0YYJa4/shHJra2t/d/r8SV4Ji+x+8Q==}
@@ -8980,6 +9133,10 @@ snapshots:
     dependencies:
       '@babel/types': 7.24.0
 
+  '@types/better-sqlite3@7.6.11':
+    dependencies:
+      '@types/node': 20.11.20
+
   '@types/body-parser@1.19.5':
     dependencies:
       '@types/connect': 3.4.38
@@ -9148,6 +9305,8 @@ snapshots:
   '@types/qs@6.9.10': {}
 
   '@types/range-parser@1.2.7': {}
+
+  '@types/readline-sync@1.4.8': {}
 
   '@types/responselike@1.0.3':
     dependencies:
@@ -9685,7 +9844,16 @@ snapshots:
       caseless: 0.12.0
       is-stream: 2.0.1
 
+  better-sqlite3@11.5.0:
+    dependencies:
+      bindings: 1.5.0
+      prebuild-install: 7.1.2
+
   binary-extensions@2.2.0: {}
+
+  bindings@1.5.0:
+    dependencies:
+      file-uri-to-path: 1.0.0
 
   bl@4.1.0:
     dependencies:
@@ -11149,6 +11317,8 @@ snapshots:
   fd-slicer@1.1.0:
     dependencies:
       pend: 1.2.0
+
+  file-uri-to-path@1.0.0: {}
 
   filelist@1.0.4:
     dependencies:

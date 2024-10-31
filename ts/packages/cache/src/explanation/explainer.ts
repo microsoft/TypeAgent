@@ -43,7 +43,7 @@ export function getActionDescription(requestAction: RequestAction) {
         propertyPart = `There are no properties.`;
     }
 
-    return `${propertyPart}. Ignore properties that are not listed. ${getContextPart(requestAction.history)}`;
+    return `${propertyPart} Ignore properties that are not listed. ${getContextPart(requestAction.history)}`;
 }
 
 function getLeafNames(params: any) {

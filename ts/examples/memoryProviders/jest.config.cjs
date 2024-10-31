@@ -1,4 +1,4 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-//export * from "./textTables.js";
+module.exports = require("../../jest.config.js");
