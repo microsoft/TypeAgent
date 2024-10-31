@@ -119,7 +119,7 @@ export function createProgramNameIndex(
             embeddings,
             embedding,
             maxMatches,
-            SimilarityType.Cosine,
+            SimilarityType.Dot,
         );
 
         return topN.map((m: { item: { toString: () => any }; score: any }) => {
