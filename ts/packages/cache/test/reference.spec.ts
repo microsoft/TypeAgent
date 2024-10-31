@@ -21,7 +21,12 @@ const referenceTests = [
     "somewhere over there",
 ];
 
-const nonReferenceTests = ["this week", "it's a good day", "Chemical Brothers"];
+const nonReferenceTests = [
+    "this week",
+    "it's a good day",
+    "Chemical Brothers",
+    "here comes the sun",
+];
 
 const langTool = getLanguageTools("en")!;
 describe("LanguageTools", () => {
