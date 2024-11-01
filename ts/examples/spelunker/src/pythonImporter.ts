@@ -110,8 +110,17 @@ async function processChunkedFile(
     }
 
     // Limit concurrency to avoid 429 errors.
-    await asyncArray.forEachAsync(chunks, 4, async (chunk) =>
-        await processChunk(chunk, chunkFolder, codeIndex, summaryFolder, verbose),
+    await asyncArray.forEachAsync(
+        chunks,
+        4,
+        async (chunk) =>
+            await processChunk(
+                chunk,
+                chunkFolder,
+                codeIndex,
+                summaryFolder,
+                verbose,
+            ),
     );
 
     const t1 = Date.now();
