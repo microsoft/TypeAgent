@@ -3,6 +3,27 @@
 
 import Server from "webpack-dev-server";
 import fs from "fs";
+import { getSessionsDirPath } from "agent-dispatcher/explorer";
+import path from "node:path";
+
+function getListFilePath() {
+    const sessionsDir = getSessionsDirPath();
+    const dirent = fs.readdirSync(sessionsDir, { withFileTypes: true });
+    const sessions = dirent.filter((d) => d.isDirectory()).map((d) => d.name);
+
+    // Sort the array in descending order
+    sessions.sort((a, b) => {
+        if (a < b) {
+            return 1;
+        } else if (a > b) {
+            return -1;
+        } else {
+            return 0;
+        }
+    });
+
+    return path.join(getSessionsDirPath(), sessions[0], "list", "lists.json");
+}
 
 export function setupMiddlewares(
     middlewares: Server.Middleware[],
@@ -12,11 +33,11 @@ export function setupMiddlewares(
     let clients: any[] = [];
 
     // Get the lists file path from command-line arguments
-    const listsFilePath = process.env.LISTS_FILE || process.env.NODE_ENV;
+    const listsFilePath = process.env.LISTS_FILE || getListFilePath();
 
-    if (!listsFilePath) {
+    if (!listsFilePath || !fs.existsSync(listsFilePath)) {
         console.error(
-            "Please provide the path to the lists file using the --node-env command-line argument.",
+            "There is no lists file in the current session. Make sure the Lists application agent is enabled.",
         );
         process.exit(1);
     }
