@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.microsoft.typeagent.sample"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.microsoft.typeagent.sample"
