@@ -27,6 +27,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "aiclient": "workspace:*",
     "better-sqlite3": "11.5.0",
     "debug": "^4.3.4",
     "knowledge-processor": "workspace:*",
