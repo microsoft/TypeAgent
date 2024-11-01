@@ -4,6 +4,7 @@
 import * as sqlite from "better-sqlite3";
 import * as knowLib from "knowledge-processor";
 import { ColumnType, SqlColumnType } from "./common.js";
+import { ScoredItem } from "typeagent";
 
 export interface KeyValueTable<
     TKeyId extends ColumnType = string,
@@ -11,6 +12,10 @@ export interface KeyValueTable<
 > extends knowLib.KeyValueIndex<TKeyId, TValueId> {
     getSync(id: TKeyId): TValueId[] | undefined;
     iterate(id: TKeyId): IterableIterator<TValueId> | undefined;
+    iterateScored(
+        id: TKeyId,
+        score?: number,
+    ): IterableIterator<ScoredItem<TValueId>> | undefined;
     iterateMultiple(ids: TKeyId[]): IterableIterator<TValueId> | undefined;
     putSync(postings: TValueId[], id: TKeyId): TKeyId;
 }
@@ -48,6 +53,7 @@ export function createKeyValueTable<
         getSync,
         getMultiple,
         iterate,
+        iterateScored,
         iterateMultiple,
         put,
         putSync,
@@ -72,6 +78,22 @@ export function createKeyValueTable<
         let count = 0;
         for (const row of rows) {
             yield (row as KeyValueRow).valueId;
+            ++count;
+        }
+        if (count === 0) {
+            return undefined;
+        }
+    }
+
+    function* iterateScored(
+        id: TKeyId,
+        score: number,
+    ): IterableIterator<ScoredItem<TValueId>> | undefined {
+        const rows = sql_get.iterate(id);
+        let count = 0;
+        for (const row of rows) {
+            let item = (row as KeyValueRow).valueId;
+            yield { score, item };
             ++count;
         }
         if (count === 0) {

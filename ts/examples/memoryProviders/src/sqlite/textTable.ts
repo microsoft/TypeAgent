@@ -190,6 +190,8 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         getText,
         getTextMultiple,
         getNearest,
+        getNearestText,
+        getNearestHits,
         put,
         putMultiple,
         nearestNeighbors,
@@ -300,31 +302,54 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         minScore?: number,
     ): Promise<TSourceId[]> {
         maxMatches ??= 1;
-        // Check exact match first
-        let matchedIds: TextId[] | undefined;
-
-        let exactId = textTable.getId(value);
-        if (exactId) {
-            matchedIds = [exactId];
-        }
-        let nearestIds: TextId[] | undefined;
-        if (maxMatches > 1) {
-            nearestIds = await getNearestTextIds(value, maxMatches, minScore);
-        } else if (!exactId) {
-            const nearestId = await getNearestTextId(value, minScore);
-            if (nearestId) {
-                nearestIds = [nearestId];
-            }
-        }
-        matchedIds = knowLib.sets.unionArrays(matchedIds, nearestIds);
-        if (matchedIds && matchedIds.length > 0) {
+        let matchedTextIds = await getExactAndNearestTextIds(
+            value,
+            maxMatches,
+            minScore,
+        );
+        if (matchedTextIds && matchedTextIds.length > 0) {
             // Iterate over matched postings
-            const postings = postingsTable.iterateMultiple(matchedIds);
+            const postings = postingsTable.iterateMultiple(matchedTextIds);
             if (postings) {
                 return [...postings];
             }
         }
         return [];
+    }
+
+    async function getNearestHits(
+        value: string,
+        hitTable: knowLib.sets.HitTable<TSourceId>,
+        maxMatches?: number,
+        minScore?: number,
+        scoreBoost?: number,
+    ): Promise<void> {
+        let matchedTextIds = await getExactAndNearestTextIdsScored(
+            value,
+            maxMatches,
+            minScore,
+        );
+        if (matchedTextIds && matchedTextIds.length > 0) {
+            for (const textId of matchedTextIds) {
+                const scoredPostings = postingsTable.iterateScored(
+                    textId.item,
+                    scoreBoost ? scoreBoost * textId.score : textId.score,
+                );
+                if (scoredPostings) {
+                    hitTable.addMultipleScored(scoredPostings);
+                }
+            }
+        }
+    }
+
+    async function getNearestText(
+        value: string,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<TextId[]> {
+        maxMatches ??= 1;
+        const matches = await getNearestTextIds(value, maxMatches, minScore);
+        return matches ?? [];
     }
 
     async function nearestNeighbors(
@@ -373,14 +398,70 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         value: string,
         minScore?: number,
     ): Promise<TextId | undefined> {
-        if (semanticIndex) {
-            const nearest = await semanticIndex.nearestNeighbor(
+        const match = await getNearestTextIdScored(value, minScore);
+        return match ? match.item : undefined;
+    }
+
+    async function getExactAndNearestTextIds(
+        value: string,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<TextId[] | undefined> {
+        maxMatches ??= 1;
+        // Check exact match first
+        let matchedIds: TextId[] | undefined;
+
+        let exactId = textTable.getId(value);
+        if (exactId) {
+            matchedIds = [exactId];
+        }
+        let nearestIds: TextId[] | undefined;
+        if (maxMatches > 1) {
+            nearestIds = await getNearestTextIds(value, maxMatches, minScore);
+        } else if (!exactId) {
+            const nearestId = await getNearestTextId(value, minScore);
+            if (nearestId) {
+                nearestIds = [nearestId];
+            }
+        }
+        matchedIds = knowLib.sets.unionArrays(matchedIds, nearestIds);
+        return matchedIds;
+    }
+
+    async function getExactAndNearestTextIdsScored(
+        value: string,
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<ScoredItem<TextId>[] | undefined> {
+        maxMatches ??= 1;
+        // Check exact match first
+        let matchedIds: ScoredItem<TextId>[] | undefined;
+        let exactId = textTable.getId(value);
+        if (exactId) {
+            matchedIds = [
+                {
+                    item: exactId,
+                    score: 1.0,
+                },
+            ];
+        }
+        let nearestIds: ScoredItem<TextId>[] | undefined;
+        if (maxMatches > 1) {
+            nearestIds = await getNearestTextIdsScored(
                 value,
+                maxMatches,
                 minScore,
             );
-            return nearest ? nearest.item : undefined;
+        } else if (!exactId) {
+            const nearestId = await getNearestTextIdScored(value, minScore);
+            if (nearestId) {
+                nearestIds = [nearestId];
+            }
         }
-        return undefined;
+        matchedIds = [
+            ...knowLib.sets.unionMultipleScored(matchedIds, nearestIds),
+        ];
+        return matchedIds;
     }
 
     async function getNearestTextIds(
@@ -388,14 +469,32 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         maxMatches: number,
         minScore?: number,
     ): Promise<TextId[] | undefined> {
-        if (semanticIndex) {
-            const scoredTextIds = await semanticIndex.nearestNeighbors(
-                value,
-                maxMatches,
-                minScore,
-            );
-            return scoredTextIds.map((s) => s.item);
-        }
-        return undefined;
+        const scoredTextIds = await getNearestTextIdsScored(
+            value,
+            maxMatches,
+            minScore,
+        );
+        return scoredTextIds && scoredTextIds.length > 0
+            ? scoredTextIds.map((s) => s.item)
+            : undefined;
+    }
+
+    async function getNearestTextIdScored(
+        value: string,
+        minScore?: number,
+    ): Promise<ScoredItem<TextId> | undefined> {
+        return semanticIndex
+            ? semanticIndex.nearestNeighbor(value, minScore)
+            : undefined;
+    }
+
+    async function getNearestTextIdsScored(
+        value: string,
+        maxMatches: number,
+        minScore?: number,
+    ): Promise<ScoredItem<TextId>[] | undefined> {
+        return semanticIndex
+            ? semanticIndex.nearestNeighbors(value, maxMatches, minScore)
+            : undefined;
     }
 }
