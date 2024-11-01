@@ -10,6 +10,7 @@ export interface KeyValueTable<
     TKeyId extends ColumnType = string,
     TValueId extends ColumnType = string,
 > extends knowLib.KeyValueIndex<TKeyId, TValueId> {
+    readonly tableName: string;
     getSync(id: TKeyId): TValueId[] | undefined;
     iterate(id: TKeyId): IterableIterator<TValueId> | undefined;
     iterateScored(
@@ -49,6 +50,7 @@ export function createKeyValueTable<
     );
     const sql_remove = db.prepare(`DELETE FROM ${tableName} WHERE keyId = ?`);
     return {
+        tableName,
         get,
         getSync,
         getMultiple,

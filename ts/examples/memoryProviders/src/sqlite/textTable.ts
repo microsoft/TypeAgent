@@ -34,6 +34,7 @@ export type StringTableRow = {
 };
 
 export interface StringTable {
+    readonly tableName: string;
     readonly schemaSql: string;
     ids(): IterableIterator<number>;
     values(): IterableIterator<string>;
@@ -77,6 +78,7 @@ export function createStringTable(
     );
     const sql_remove = db.prepare(`DELETE FROM ${tableName} WHERE value = ?`);
     return {
+        tableName,
         schemaSql,
         ids,
         values,
@@ -172,6 +174,14 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         "INTEGER",
         valueType,
     );
+    const sql_getPostings = db.prepare(
+        `SELECT valueId 
+         FROM ${textTable.tableName} 
+         INNER JOIN ${postingsTable.tableName} 
+         ON keyId = stringId          
+         WHERE value = ?`,
+    );
+
     let [vectorStore, semanticIndex] =
         settings.semanticIndex !== undefined && settings.semanticIndex
             ? createVectorIndex()
@@ -233,11 +243,10 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
     }
 
     function getSync(text: string): TSourceId[] | undefined {
-        const textId = textTable.getId(text);
-        if (textId) {
-            return postingsTable.getSync(textId);
-        }
-        return undefined;
+        const rows = sql_getPostings.all(text);
+        return rows.length > 0
+            ? rows.map((r) => (r as any).valueId)
+            : undefined;
     }
 
     function getById(id: TextId): Promise<TSourceId[] | undefined> {

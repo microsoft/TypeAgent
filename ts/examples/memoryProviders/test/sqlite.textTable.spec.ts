@@ -69,6 +69,9 @@ describe("sqlite.textTable", () => {
         );
         const blocks = composers();
         await table.putMultiple(blocks);
+        const ids = await table.get(blocks[0].value);
+        expect(ids).toEqual(blocks[0].sourceIds);
+
         for (let i = 0; i < blocks.length; ++i) {
             const matches = await table.getNearest(blocks[i].value);
             expect(matches).toEqual(blocks[i].sourceIds);
