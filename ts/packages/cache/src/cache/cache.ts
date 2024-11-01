@@ -118,6 +118,7 @@ export class AgentCache {
         requestAction: RequestAction,
         cache: boolean,
         concurrent: boolean = false, // whether to limit to run one at a time, require cache to be false
+        checkExplainable?: (requestAction: RequestAction) => void, // throw exception if not explainable
     ): Promise<ProcessRequestActionResult> {
         const actions = requestAction.actions;
         for (const action of actions) {
@@ -151,6 +152,8 @@ export class AgentCache {
                 rejectReferences: true,
                 constructionCreationConfig,
             };
+
+            await checkExplainable?.(requestAction);
             const explanation = await explainer.generate(
                 requestAction,
                 explainerConfig,
@@ -230,9 +233,15 @@ export class AgentCache {
         requestAction: RequestAction,
         cache: boolean = true,
         concurrent: boolean = false, // whether to limit to run one at a time, require cache to be false
+        checkExplainable?: (requestAction: RequestAction) => void,
     ): Promise<ProcessRequestActionResult> {
         try {
-            return await this.queueTask(requestAction, cache, concurrent);
+            return await this.queueTask(
+                requestAction,
+                cache,
+                concurrent,
+                checkExplainable,
+            );
         } catch (e: any) {
             this.logger?.logEvent("error", {
                 request: requestAction.request,

@@ -450,11 +450,11 @@ async function finalizeAction(
     }
 
     if (isChangeAssistantAction(currentAction)) {
-        currentTranslatorName = DispatcherName;
-        currentAction = {
+        const unknownAction: UnknownAction = {
             actionName: "unknown",
-            parameters: { text: currentAction.parameters.request },
+            parameters: { request: currentAction.parameters.request },
         };
+        currentAction = unknownAction;
     }
 
     return new Action(
@@ -702,6 +702,8 @@ async function requestExplain(
     const processRequestActionP = context.agentCache.processRequestAction(
         requestAction,
         true,
+        false,
+        (requestAction: RequestAction) => {},
     );
 
     if (context.explanationAsynchronousMode) {

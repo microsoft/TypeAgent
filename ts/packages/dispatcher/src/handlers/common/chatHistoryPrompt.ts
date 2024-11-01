@@ -4,7 +4,6 @@
 import { Entity } from "@typeagent/agent-sdk";
 import { HistoryContext } from "agent-cache";
 import { CachedImageWithDetails } from "common-utils";
-import { request } from "http";
 import { TypeChatJsonTranslator } from "typechat";
 
 function entityToText(entity: Entity) {
