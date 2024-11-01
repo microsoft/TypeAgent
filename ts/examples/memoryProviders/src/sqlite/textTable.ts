@@ -39,6 +39,7 @@ export interface StringTable {
     ids(): IterableIterator<number>;
     values(): IterableIterator<string>;
     entries(): IterableIterator<StringTableRow>;
+    exists(value: string): boolean;
     getId(value: string): number | undefined;
     getIds(value: string[]): IterableIterator<number>;
     getText(id: number): string | undefined;
@@ -68,6 +69,7 @@ export function createStringTable(
     const sql_entries = db.prepare(`SELECT * from ${tableName}`);
     const sql_ids = db.prepare(`SELECT stringId from ${tableName}`);
     const sql_values = db.prepare(`SELECT value from ${tableName}`);
+    const sql_exists = db.prepare(`SELECT 1 from ${tableName} WHERE value = ?`);
     const sql_getId = db.prepare(
         `SELECT stringId from ${tableName} WHERE value = ?`,
     );
@@ -84,6 +86,7 @@ export function createStringTable(
         ids,
         values,
         entries,
+        exists,
         getId,
         getIds,
         getText,
@@ -108,6 +111,11 @@ export function createStringTable(
         for (const row of sql_values.iterate()) {
             yield (row as StringTableRow).value;
         }
+    }
+
+    function exists(value: string): boolean {
+        const row = sql_exists.get(value);
+        return row !== undefined;
     }
 
     function getId(value: string): number | undefined {

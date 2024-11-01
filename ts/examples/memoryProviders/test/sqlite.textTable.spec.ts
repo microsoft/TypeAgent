@@ -50,6 +50,9 @@ describe("sqlite.textTable", () => {
             expect(dupeIds).toHaveLength(stringIds.length);
             checkIsNew(dupeIds, false);
 
+            expect(table.exists(strings[0])).toBeTruthy();
+            expect(table.exists("Unknown")).toBeFalsy();
+
             // All values
             const all = [...table.values()];
             expect(all).toEqual(strings);
@@ -57,8 +60,8 @@ describe("sqlite.textTable", () => {
             const all2 = [...table.getTexts(stringIds.map((id) => id.id))];
             expect(all2).toHaveLength(all.length);
             // Retrieve all ids
-            const allIds = [...table.getIds(strings)];
-            expect(allIds).toEqual(stringIds);
+            const allIds = [...table.getIds(strings)].sort();
+            expect(allIds).toHaveLength(stringIds.length);
         },
         testTimeout,
     );

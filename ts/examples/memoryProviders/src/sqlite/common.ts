@@ -17,6 +17,8 @@ export type AssignedId<T> = {
     isNew: boolean;
 };
 
+export type BooleanRow = {};
+
 export async function createDb(
     filePath: string,
     createNew: boolean,
