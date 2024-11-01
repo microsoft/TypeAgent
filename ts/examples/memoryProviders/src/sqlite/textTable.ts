@@ -18,6 +18,8 @@ import {
     TextIndexSettings,
 } from "knowledge-processor";
 import {
+    asyncArray,
+    collections,
     createSemanticIndex,
     ScoredItem,
     SemanticIndex,
@@ -156,15 +158,12 @@ export function createStringTable(
     }
 }
 
-export interface TextTable<TTextId = any, TSourceId = any>
-    extends TextIndex<TTextId, TSourceId> {}
-
 export async function createTextIndex<TSourceId extends ColumnType = string>(
     settings: TextIndexSettings,
     db: sqlite.Database,
     name: string,
     valueType: SqlColumnType<TSourceId>,
-) {
+): Promise<TextIndex<number>> {
     type TextId = number;
     const textTable = createStringTable(db, tablePath(name, "entries"));
     const postingsTable = createKeyValueTable<number, TSourceId>(
@@ -179,7 +178,7 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
             : [undefined, undefined];
 
     return {
-        text,
+        text: () => textTable.values(),
         ids,
         entries,
         get,
@@ -188,14 +187,16 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         getId,
         getIds,
         getText,
-        getTextMultiple,
         getNearest,
+        getNearestMultiple,
         getNearestText,
         getNearestHits,
+        getNearestHitsMultiple,
         put,
         putMultiple,
         nearestNeighbors,
         nearestNeighborsText,
+        remove,
     };
 
     function createVectorIndex(): [VectorStore<TextId>, SemanticIndex<TextId>] {
@@ -209,12 +210,6 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
             settings.embeddingModel,
         );
         return [store, index];
-    }
-
-    async function* text(): AsyncIterableIterator<string> {
-        for (const value of textTable.values()) {
-            yield value;
-        }
     }
 
     async function* ids(): AsyncIterableIterator<TextId> {
@@ -267,10 +262,6 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         return Promise.resolve(textTable.getText(id));
     }
 
-    function getTextMultiple(ids: TextId[]): Promise<(string | undefined)[]> {
-        return Promise.resolve(ids.map((id) => textTable.getText(id)));
-    }
-
     async function put(text: string, postings?: TSourceId[]): Promise<TextId> {
         let assignedId = textTable.add(text);
         if (postings && postings.length > 0) {
@@ -317,6 +308,22 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         return [];
     }
 
+    // This can be optimized
+    async function getNearestMultiple(
+        values: string[],
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<TSourceId[]> {
+        const matches = await asyncArray.mapAsync(
+            values,
+            settings.concurrency,
+            (t) => getNearest(t, maxMatches, minScore),
+        );
+
+        const combined = knowLib.sets.intersectMultiple(...matches);
+        return Array.isArray(combined) ? combined : [...combined];
+    }
+
     async function getNearestHits(
         value: string,
         hitTable: knowLib.sets.HitTable<TSourceId>,
@@ -340,6 +347,18 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
                 }
             }
         }
+    }
+
+    async function getNearestHitsMultiple(
+        values: string[],
+        hitTable: knowLib.sets.HitTable<TSourceId>,
+        maxMatches?: number,
+        minScore?: number,
+        scoreBoost?: number,
+    ): Promise<void> {
+        return asyncArray.forEachAsync(values, settings.concurrency, (v) =>
+            getNearestHits(v, hitTable, maxMatches, minScore, scoreBoost),
+        );
     }
 
     async function getNearestText(
@@ -392,6 +411,26 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
             matches.splice(0, 0, { score: 1.0, item: textId });
         }
         return matches;
+    }
+
+    // TODO: Optimize
+    async function remove(
+        textId: TextId,
+        postings: TSourceId | TSourceId[],
+    ): Promise<void> {
+        const existingPostings = await postingsTable.get(textId);
+        if (!existingPostings || existingPostings.length === 0) {
+            return;
+        }
+        let updatedPostings = collections.removeItemFromArray(
+            existingPostings,
+            postings,
+        );
+        if (updatedPostings.length === 0) {
+            await postingsTable.remove(textId);
+        } else {
+            await postingsTable.replace(updatedPostings, textId);
+        }
     }
 
     async function getNearestTextId(

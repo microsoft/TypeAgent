@@ -7,7 +7,6 @@ import {
     ObjectFolder,
     ObjectFolderSettings,
     ScoredItem,
-    SearchOptions,
     SemanticIndex,
     asyncArray,
     collections,
@@ -18,9 +17,7 @@ import {
 } from "typeagent";
 import {
     HitTable,
-    SetOp,
     intersectMultiple,
-    intersectUnionMultiple,
     removeUndefined,
     union,
     unionArrays,
@@ -112,6 +109,11 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         maxMatches?: number,
         minScore?: number,
     ): Promise<TSourceId[]>;
+    getNearestMultiple(
+        values: string[],
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<TSourceId[]>;
     getNearestHits(
         value: string,
         hitTable: HitTable<TSourceId>,
@@ -126,11 +128,6 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         minScore?: number,
         scoreBoost?: number,
     ): Promise<void>;
-    getNearestMultiple(
-        values: string[],
-        combineOp: SetOp,
-        nearestMatchOptions: SearchOptions,
-    ): Promise<TSourceId[]>;
     nearestNeighbors(
         value: string,
         maxMatches: number,
@@ -417,41 +414,17 @@ export async function createTextIndex<TSourceId = any>(
 
     async function getNearestMultiple(
         values: string[],
-        combineOp: SetOp,
-        nearestMatchOptions: SearchOptions,
+        maxMatches?: number,
+        minScore?: number,
     ): Promise<TSourceId[]> {
         const matches = await asyncArray.mapAsync(
             values,
             settings.concurrency,
-            (t) =>
-                getNearest(
-                    t,
-                    nearestMatchOptions.maxMatches,
-                    nearestMatchOptions.minScore,
-                ),
+            (t) => getNearest(t, maxMatches, minScore),
         );
 
-        const combined = combineMultiple(
-            combineOp,
-            nearestMatchOptions.maxMatches,
-            matches,
-        );
+        const combined = intersectMultiple(...matches);
         return Array.isArray(combined) ? combined : [...combined];
-    }
-
-    function combineMultiple(
-        setOp: SetOp,
-        maxMatches: number,
-        matches: TSourceId[][],
-    ): IterableIterator<TSourceId> | TSourceId[] {
-        switch (setOp) {
-            case SetOp.Union:
-                return unionMultiple(...matches);
-            case SetOp.Intersect:
-                return intersectMultiple(...matches);
-            case SetOp.IntersectUnion:
-                return intersectUnionMultiple(...matches) ?? [];
-        }
     }
 
     async function getNearestText(

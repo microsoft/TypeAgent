@@ -269,11 +269,8 @@ export async function createEntityIndex<TSourceId = string>(
         if (filter.type && filter.type.length > 0) {
             typeMatchIds = await typeIndex.getNearestMultiple(
                 filter.type,
-                options.combinationSetOp ?? SetOp.Intersect,
-                {
-                    maxMatches: options.maxMatches,
-                    minScore: options.minScore,
-                },
+                options.maxMatches,
+                options.minScore,
             );
         }
         if (filter.name && filter.name.length > 0) {
