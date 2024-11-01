@@ -6,8 +6,7 @@ export type CodeActions =
     | SplitEditorAction
     | ChangeEditorLayoutAction
     | NewFileAction
-    | AddCodeSnippetAction
-    | UnknownAction;
+    | AddCodeSnippetAction;
 
 export type ColorTheme =
     | "Default Light+"
@@ -82,13 +81,5 @@ export type AddCodeSnippetAction = {
     parameters: {
         snippet: string; // Code snippet to add
         language: string; // Programming language of the snippet
-    };
-};
-
-export type UnknownAction = {
-    actionName: "unknown";
-    parameters: {
-        // text typed by the user that the system did not understand
-        text: string;
     };
 };

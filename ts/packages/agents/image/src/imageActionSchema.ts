@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type ImageAction = FindImageAction | CreateImageAction | UnknownAction;
+export type ImageAction = FindImageAction | CreateImageAction;
 
 // Choose this action if the request is to "see", "show", "lookup" pictures/images/photos/memes or implicitly requesting visual output
 // Finds images on the internet to show the user
@@ -30,12 +30,3 @@ export type CreateImageAction = {
         numImages: number;
     };
 };
-
-// if the user types text that can not easily be understood as a list action, this action is used
-export interface UnknownAction {
-    actionName: "unknown";
-    parameters: {
-        // text typed by the user that the system did not understand
-        text: string;
-    };
-}

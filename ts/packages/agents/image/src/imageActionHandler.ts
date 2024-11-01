@@ -144,7 +144,7 @@ async function handlePhotoAction(
             }
             break;
         default:
-            throw new Error(`Unknown action: ${action.actionName}`);
+            throw new Error(`Unknown action: ${(action as any).actionName}`);
     }
     return result;
 }

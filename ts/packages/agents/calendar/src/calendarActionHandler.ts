@@ -759,10 +759,8 @@ export async function handleCalendarAction(
                 }
             }
             break;
-        case "unknown":
         default:
-            console.log(chalk.gray("UNKNOWN action type:"));
-            break;
+            throw new Error(`Unknown action: ${(action as any).actionName}`);
     }
     return createActionResultFromError("Failed to execute the action!");
 }

@@ -7,8 +7,7 @@ export type EmailAction =
     | SendEmailAction
     | ReplyEmailAction
     | ForwardEmailAction
-    | FindEmailAction
-    | UnknownAction;
+    | FindEmailAction;
 
 // Type for generating the body content of an email based on the user input
 export interface GenerateContent {
@@ -117,12 +116,3 @@ export type FindEmailAction = {
         messageRef: MessageReference;
     };
 };
-
-// if the user types text that can not easily be understood as an email action, this action is used
-export interface UnknownAction {
-    actionName: "unknown";
-    parameters: {
-        // text typed by the user that the system did not understand
-        text: string;
-    };
-}

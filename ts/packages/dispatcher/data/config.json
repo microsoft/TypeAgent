@@ -3,13 +3,15 @@
     "player": {
       "type": "module",
       "name": "music",
-      "imports": ["./test/data/player/**/*.json"]
+      "imports": [
+        "./test/data/player/**/*.json"
+      ]
     },
     "calendar": {
       "type": "module",
       "name": "calendar",
-      "imports": [        
-        "./test/data/calendar/**/*.json"        
+      "imports": [
+        "./test/data/calendar/**/*.json"
       ]
     },
     "email": {
@@ -22,7 +24,7 @@
     },
     "browser": {
       "type": "module",
-      "name": "browser-typeagent"      
+      "name": "browser-typeagent"
     },
     "desktop": {
       "type": "module",
@@ -39,7 +41,13 @@
     },
     "dispatcher": {
       "emojiChar": "🤖",
-      "description": "Built-in agent to dispatch request"
+      "description": "Built-in agent to dispatch request",
+      "schema": {
+        "schemaType": "DispatcherActions",
+        "schemaFile": "./src/dispatcher/dispatcherActionSchema.ts",
+        "injected": true,
+        "cached": false
+      }
     },
     "system": {
       "emojiChar": "🔧",
@@ -67,9 +75,9 @@
       "execMode": "separate"
     },
     "greeting": {
-        "type": "module",
-        "name": "greeting-agent",
-        "execMode": "dispatcher"
+      "type": "module",
+      "name": "greeting-agent",
+      "execMode": "dispatcher"
     },
     "image": {
       "type": "module",
@@ -80,7 +88,9 @@
   "explainers": {
     "v5": {
       "constructions": {
-        "data": ["./data/explainer/v5/data/player/basic.json"],
+        "data": [
+          "./data/explainer/v5/data/player/basic.json"
+        ],
         "file": "./data/explainer/v5/constructions.json"
       }
     }

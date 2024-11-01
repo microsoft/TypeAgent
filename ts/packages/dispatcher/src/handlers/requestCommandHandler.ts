@@ -448,6 +448,7 @@ async function finalizeAction(
     }
 
     if (isChangeAssistantAction(currentAction)) {
+        currentTranslatorName = DispatcherName;
         currentAction = {
             actionName: "unknown",
             parameters: { text: currentAction.parameters.request },
@@ -608,18 +609,30 @@ function canExecute(
     }
 
     if (unknown.length > 0) {
-        displayError(
-            `Unable to determine action for ${actions.action === undefined ? "one or more actions in " : ""}'${requestAction.request}'.\n- ${unknown.map((action) => action.parameters.text).join("\n- ")}`,
-            context,
+        const message = `Unable to determine ${actions.action === undefined ? "one or more actions in" : "action for"} the request.`;
+        const details = `- ${unknown.map((action) => action.parameters.text).join("\n- ")}`;
+        const fullMessage = `${message}\n${details}`;
+        systemContext.chatHistory.addEntry(
+            fullMessage,
+            [],
+            "assistant",
+            systemContext.requestId,
         );
+
+        displayError(fullMessage, context);
         return false;
     }
 
     if (disabled.size > 0) {
-        displayWarn(
-            `Not executed. Action disabled for ${Array.from(disabled.values()).join(", ")}`,
-            context,
+        const message = `Not executed. Action disabled for ${Array.from(disabled.values()).join(", ")}`;
+        systemContext.chatHistory.addEntry(
+            message,
+            [],
+            "assistant",
+            systemContext.requestId,
         );
+
+        displayWarn(message, context);
         return false;
     }
 
