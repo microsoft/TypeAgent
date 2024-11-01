@@ -6,7 +6,7 @@ import * as sqlite from "better-sqlite3";
 import {
     AssignedId,
     ColumnType,
-    makeInClause,
+    sql_makeInClause,
     SqlColumnType,
     tablePath,
 } from "./common.js";
@@ -125,7 +125,7 @@ export function createStringTable(
 
     function* getIds(values: string[]): IterableIterator<number> {
         if (values.length > 0) {
-            const inClause = makeInClause(values);
+            const inClause = sql_makeInClause(values);
             const sql = `SELECT stringId from ${tableName} WHERE value IN (${inClause})`;
             const stmt = db.prepare(sql);
             let rows = stmt.all();
@@ -184,10 +184,8 @@ export function createStringTable(
     }
 }
 
-export interface TextTable<
-    TTextId extends ColumnType = number,
-    TSourceId extends ColumnType = string,
-> extends TextIndex<TTextId, TSourceId> {
+export interface TextTable<TTextId = any, TSourceId = any>
+    extends TextIndex<TTextId, TSourceId> {
     getHitsSync(values: string[]): IterableIterator<ScoredItem<TSourceId>>;
 }
 
@@ -197,9 +195,10 @@ export async function createTextIndex<
 >(
     settings: TextIndexSettings,
     db: sqlite.Database,
-    name: string,
+    baseName: string,
     textType: SqlColumnType<TTextId>,
     valueType: SqlColumnType<TSourceId>,
+    ensureExists: boolean = true,
 ): Promise<TextTable<TTextId, TSourceId>> {
     type TextId = number;
     const isIdInt = textType === "INTEGER";
@@ -207,12 +206,17 @@ export async function createTextIndex<
         serialize: isIdInt ? (x: any) => x : (x: any) => x.toString(),
         deserialize: isIdInt ? (x: any) => x : (x: any) => Number.parseInt(x),
     };
-    const textTable = createStringTable(db, tablePath(name, "entries"));
+    const textTable = createStringTable(
+        db,
+        tablePath(baseName, "entries"),
+        ensureExists,
+    );
     const postingsTable = createKeyValueTable<number, TSourceId>(
         db,
-        tablePath(name, "postings"),
+        tablePath(baseName, "postings"),
         "INTEGER",
         valueType,
+        ensureExists,
     );
     const sql_getPostings = db.prepare(
         `SELECT valueId 
@@ -253,7 +257,7 @@ export async function createTextIndex<
     function createVectorIndex(): [VectorStore<TextId>, SemanticIndex<TextId>] {
         const store = createVectorTable<TextId>(
             db,
-            tablePath(name, "embeddings"),
+            tablePath(baseName, "embeddings"),
             "INTEGER",
         );
         const index = createSemanticIndex<TextId>(

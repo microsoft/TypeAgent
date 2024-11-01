@@ -25,6 +25,7 @@ describe("sqlite.textTable", () => {
     const testTimeout = 1000 * 60 * 5;
     const smallEndpoint = "3_SMALL";
     let db: sqlite.Database | undefined;
+
     beforeAll(async () => {
         await ensureTestDir();
         db = await createDb(testFilePath("strings.db"), true);

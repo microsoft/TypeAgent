@@ -35,7 +35,7 @@ export function tablePath(rootName: string, name: string): string {
     return rootName + "_" + name;
 }
 
-export function makeInClause(values: string[]): string {
+export function sql_makeInClause(values: string[]): string {
     let sql = "";
     for (let i = 0; i < values.length; ++i) {
         if (i > 0) {
