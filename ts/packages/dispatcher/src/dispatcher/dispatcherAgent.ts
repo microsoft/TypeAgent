@@ -49,8 +49,6 @@ function clarifyRequestAction(
         content: clarifyingQuestion,
     });
 
-    context.actionIO.appendDisplay(`\n${JSON.stringify(action, undefined, 2)}`);
-
     return createActionResultNoDisplay(clarifyingQuestion);
 }
 
