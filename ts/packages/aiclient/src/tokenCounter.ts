@@ -6,6 +6,45 @@ import registerDebug from "debug";
 
 const debugTokens = registerDebug("typeagent:tokenCounter");
 
+type TokenStats = {
+    max: CompletionUsageStats;
+    total: CompletionUsageStats;
+    count: number;
+};
+
+function initTokenStats(): TokenStats {
+    return {
+        max: { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0 },
+        total: { completion_tokens: 0, prompt_tokens: 0, total_tokens: 0 },
+        count: 0,
+    };
+}
+
+function updateStats(data: TokenStats, tokens: CompletionUsageStats) {
+    data.total.completion_tokens += tokens.completion_tokens;
+    data.total.prompt_tokens += tokens.prompt_tokens;
+    data.total.total_tokens += tokens.total_tokens;
+    data.count++;
+
+    data.max.completion_tokens = Math.max(
+        data.max.completion_tokens,
+        tokens.completion_tokens,
+    );
+    data.max.prompt_tokens = Math.max(
+        data.max.prompt_tokens,
+        tokens.prompt_tokens,
+    );
+    data.max.total_tokens = Math.max(
+        data.max.total_tokens,
+        tokens.total_tokens,
+    );
+}
+
+export type TokenCounterData = {
+    counters: Record<string, TokenStats>;
+    all: TokenStats;
+};
+
 /**
  *  Token counter for LLM calls.
  *  Counter has total counts and counts grouped by tags
@@ -13,26 +52,10 @@ const debugTokens = registerDebug("typeagent:tokenCounter");
  */
 export class TokenCounter {
     private static instance: TokenCounter;
-    private counters: Map<string, CompletionUsageStats>;
-    private totals: CompletionUsageStats = {
-        completion_tokens: 0,
-        prompt_tokens: 0,
-        total_tokens: 0,
-    };
-    private numSamples: number = 0;
-    private maxUsage: CompletionUsageStats = {
-        completion_tokens: 0,
-        prompt_tokens: 0,
-        total_tokens: 0,
-    };
-    private _tags: string[] = [];
-    private _stats: CompletionUsageStats[] = [];
+    private _counters = new Map<string, TokenStats>();
+    private all: TokenStats = initTokenStats();
 
     // TODO: intermittently cache these with the session
-    private constructor() {
-        this.counters = new Map<string, CompletionUsageStats>();
-    }
-
     public static getInstance = (): TokenCounter => {
         if (!TokenCounter.instance) {
             TokenCounter.instance = new TokenCounter();
@@ -48,104 +71,91 @@ export class TokenCounter {
      */
     add(tokens: CompletionUsageStats, tags?: string[]) {
         // bump the totals
-        this.totals.total_tokens += tokens.total_tokens;
-        this.totals.completion_tokens += tokens.completion_tokens;
-        this.totals.prompt_tokens += tokens.prompt_tokens;
+        updateStats(this.all, tokens);
 
         // bump the counts for the supplied tags
         tags?.map((t) => {
-            let updatedCount: CompletionUsageStats = {
-                completion_tokens: tokens.completion_tokens,
-                prompt_tokens: tokens.prompt_tokens,
-                total_tokens: tokens.total_tokens,
-            };
-
-            if (this.counters.has(t)) {
-                updatedCount.completion_tokens += tokens.completion_tokens;
-                updatedCount.prompt_tokens += tokens.prompt_tokens;
-                updatedCount.total_tokens += tokens.total_tokens;
+            let data = this._counters.get(t);
+            if (data === undefined) {
+                data = initTokenStats();
+                this._counters.set(t, data);
             }
 
-            this.counters.set(t, updatedCount);
-            this._tags = Array.from(this.counters.keys());
-            this._stats = Array.from(this.counters.values());
+            updateStats(data, tokens);
         });
-
-        this.numSamples++;
-
-        if (tokens.total_tokens > this.maxUsage.total_tokens) {
-            this.maxUsage.completion_tokens = tokens.completion_tokens;
-            this.maxUsage.prompt_tokens = tokens.prompt_tokens;
-            this.maxUsage.total_tokens = tokens.total_tokens;
-        }
 
         debugTokens(
             "Token Odometer: " +
-                JSON.stringify(this.totals) +
+                JSON.stringify(this.all.total) +
                 "\nAverage Tokens per call: " +
-                (this.totals.total_tokens / this.numSamples).toFixed(0),
+                (this.all.total.total_tokens / this.all.count).toFixed(0),
         );
     }
 
+    public toJSON(): TokenCounterData {
+        return {
+            counters: Object.fromEntries(this._counters.entries()),
+            all: this.all,
+        };
+    }
+
+    private static fromJSON(json: TokenCounterData) {
+        const counter = new TokenCounter();
+        if ((json as any).numSamples !== undefined) {
+            // old format, ignore
+            return counter;
+        }
+        counter.all = json.all;
+        counter._counters = new Map(Object.entries(json.counters));
+        return counter;
+    }
     /**
      * Gets the # of tokens for the supplied tag.
      * @param tag The tag for which to get the token counts
      * @returns The token usage stats
      */
-    public getTokenUsage(tag: string): CompletionUsageStats | undefined {
-        if (this.counters.has(tag)) {
-            return this.counters.get(tag);
-        } else {
-            return undefined;
-        }
+    public getTokenUsage(tag: string): TokenStats | undefined {
+        return this._counters.get(tag);
     }
 
     /**
      * Sets the token counter to a specific state (i.e. continuing from a previously stored state)
      * @param data the token counter data to load
      */
-    public static load(data: TokenCounter) {
-        this.instance = new TokenCounter();
-        this.instance.numSamples = data.numSamples;
-        this.instance._stats = Array.from(data._stats);
-        this.instance._tags = Array.from(data._tags);
-        this.instance.maxUsage = data.maxUsage;
-        this.instance.totals = data.totals;
-
-        this.instance._tags.forEach((tag, index) => {
-            this.instance.counters.set(tag, this.instance._stats[index]);
-        });
-    }
-
-    public get tags(): string[] {
-        return this._tags;
-    }
-
-    public get stats(): CompletionUsageStats[] {
-        return this._stats;
+    public static load(data: TokenCounterData) {
+        if ((data as any).numSamples !== undefined) {
+            // old format, ignore
+            return;
+        }
+        this.instance = TokenCounter.fromJSON(data);
     }
 
     public get total(): CompletionUsageStats {
         return {
-            completion_tokens: this.totals.completion_tokens,
-            prompt_tokens: this.totals.prompt_tokens,
-            total_tokens: this.totals.total_tokens,
+            completion_tokens: this.all.total.completion_tokens,
+            prompt_tokens: this.all.total.prompt_tokens,
+            total_tokens: this.all.total.total_tokens,
         };
     }
 
     public get average(): CompletionUsageStats {
         return {
-            completion_tokens: this.totals.completion_tokens / this.numSamples,
-            prompt_tokens: this.totals.prompt_tokens / this.numSamples,
-            total_tokens: this.totals.total_tokens / this.numSamples,
+            completion_tokens:
+                this.all.total.completion_tokens / this.all.count,
+            prompt_tokens: this.all.total.prompt_tokens / this.all.count,
+            total_tokens: this.all.total.total_tokens / this.all.count,
         };
     }
 
     public get maximum(): CompletionUsageStats {
         return {
-            completion_tokens: this.maxUsage.completion_tokens,
-            prompt_tokens: this.maxUsage.prompt_tokens,
-            total_tokens: this.maxUsage.total_tokens,
+            completion_tokens: this.all.max.completion_tokens,
+            prompt_tokens: this.all.max.prompt_tokens,
+            total_tokens: this.all.max.total_tokens,
         };
+    }
+
+    public get counters(): Map<string, TokenStats> {
+        return this._counters;
     }
 }

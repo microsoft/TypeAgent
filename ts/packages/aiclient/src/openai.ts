@@ -492,6 +492,7 @@ type ChatCompletionChoice = {
 type ChatCompletionChunk = {
     id: string;
     choices: ChatCompletionDelta[];
+    usage?: CompletionUsageStats;
 };
 
 type ChatCompletionDelta = {
@@ -650,6 +651,7 @@ export function createChatModel(
             ...defaultParams,
             messages: messages,
             stream: true,
+            stream_options: { include_usage: true },
             ...completionParams,
         };
         const result = await callApi(
@@ -676,6 +678,14 @@ export function createChatModel(
                             if (delta) {
                                 yield delta;
                             }
+                        }
+                        if (data.usage) {
+                            try {
+                                TokenCounter.getInstance().add(
+                                    data.usage,
+                                    tags,
+                                );
+                            } catch {}
                         }
                     }
                 }
