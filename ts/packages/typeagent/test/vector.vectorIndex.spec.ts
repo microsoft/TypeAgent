@@ -13,11 +13,11 @@ import { generateRandomEmbedding, hasEmbeddingModel, testIf } from "./common";
 import { generateTextEmbeddings } from "../src/vector/vectorIndex";
 import {
     cosineSimilarity,
+    cosineSimilarityLoop,
     dotProduct,
     dotProductSimple,
     euclideanLength,
 } from "../src/vector/vector";
-import { cosineSimilarityLoop } from "../src/vector/embeddings";
 
 describe("vector.vectorIndex", () => {
     const timeoutMs = 5 * 1000 * 60;

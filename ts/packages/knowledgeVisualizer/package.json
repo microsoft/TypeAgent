@@ -11,53 +11,38 @@
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
-  "main": "./out/main/index.js",
+  "exports": {
+    "./route": "./dist/route/route.js"
+  },
+  "main": "dist/index.js",
   "scripts": {
-    "build": "concurrently npm:typecheck npm:build:electron",
-    "build:electron": "electron-vite build",
-    "build:linux": "npm run build && electron-builder --linux --config",
-    "build:mac": "npm run build && electron-builder --mac --config",
-    "build:win": "npm run build && electron-builder --win --config",
-    "clean": "rimraf --glob out *.tsbuildinfo *.done.build.log",
-    "dev": "electron-vite dev",
-    "postinstall": "cross-env \"npm_execpath=\" electron-builder install-app-deps",
+    "build": "npm run tsc && npm run webpack",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
-    "start": "electron-vite preview",
-    "typecheck": "concurrently npm:typecheck:node npm:typecheck:web",
-    "typecheck:node": "tsc -p tsconfig.node.json",
-    "typecheck:web": "tsc -p tsconfig.web.json"
+    "start": "webpack serve --open",
+    "tsc": "tsc -b tsconfig.json",
+    "webpack": "webpack"
   },
   "dependencies": {
-    "@electron-toolkit/preload": "^2.0.0",
-    "@electron-toolkit/utils": "^2.0.0",
-    "@typeagent/agent-sdk": "workspace:*",
     "agent-dispatcher": "workspace:*",
-    "aiclient": "workspace:*",
-    "ansi_up": "^6.0.2",
+    "chalk": "^5.3.0",
     "d3": "^7.9.0",
     "d3-cloud": "^1.2.7",
-    "debug": "4.3.4",
-    "dompurify": "^3.1.6",
-    "dotenv": "^16.3.1",
-    "electron-updater": "^6.3.2",
-    "microsoft-cognitiveservices-speech-sdk": "^1.38.0",
-    "typechat": "^0.1.1",
-    "ws": "^8.17.1"
+    "debug": "^4.3.4"
   },
   "devDependencies": {
-    "@electron-toolkit/tsconfig": "^1.0.1",
     "@types/debug": "^4.1.10",
-    "@types/dompurify": "^3.0.5",
-    "@types/node": "^18.17.5",
-    "concurrently": "^8.2.2",
-    "cross-env": "^7.0.3",
-    "electron": "^30.0.1",
-    "electron-builder": "^24.13.2",
-    "electron-vite": "^2.1.0",
-    "less": "^4.2.0",
+    "@types/jest": "^29.5.7",
+    "@types/node": "^18.18.7",
+    "copy-webpack-plugin": "^12.0.1",
+    "jest": "^29.7.0",
+    "prettier": "^3.2.5",
     "rimraf": "^5.0.5",
+    "ts-loader": "^9.5.1",
     "typescript": "^5.4.2",
-    "vite": "^5.2.14"
+    "webpack": "^5.94.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^5.0.4"
   }
 }

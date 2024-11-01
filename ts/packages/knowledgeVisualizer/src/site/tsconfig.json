@@ -9,6 +9,9 @@
     "moduleResolution": "bundler",
     "module": "ESNext",
     "lib": ["DOM"],
+    "exactOptionalPropertyTypes": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
   },
   "include": ["./*"],
   "ts-node": {

@@ -12,6 +12,11 @@ export type SqlColumnType<T> = T extends string
       ? "INTEGER"
       : never;
 
+export type AssignedId<T> = {
+    id: T;
+    isNew: boolean;
+};
+
 export async function createDb(
     filePath: string,
     createNew: boolean,
@@ -22,4 +27,19 @@ export async function createDb(
     const db = new Database(filePath);
     db.pragma("journal_mode = WAL");
     return db;
+}
+
+export function createInQuery(
+    db: sqlite.Database,
+    tableName: string,
+    selectCol: string,
+    testCol: string,
+    values: any[],
+): sqlite.Statement {
+    const sql = `SELECT ${selectCol} from ${tableName} WHERE ${testCol} IN (${values})`;
+    return db.prepare(sql);
+}
+
+export function tablePath(rootName: string, name: string): string {
+    return rootName + "_" + name;
 }

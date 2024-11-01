@@ -1,9 +1,7 @@
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-@chat-bg: #f8f8f8;
-@chat-input-bg: white;
-
+/* 
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT License.
+*/
 #html,
 body {
   margin: 0;
@@ -12,12 +10,10 @@ body {
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   font-size: 14px;
 }
-
 .mainContainer {
   display: flex;
   flex-wrap: auto;
 }
-
 .chartContainer {
   display: inline;
   border-color: #3a7bd0;
@@ -27,19 +23,28 @@ body {
   margin: 5px;
   overflow: hidden;
 }
-
 .chartContainer-collapsed {
-  .chartContainer;
+  display: inline;
+  border-color: #3a7bd0;
+  border-width: 2px;
+  border-radius: 5px;
+  border-style: solid;
+  margin: 5px;
+  overflow: hidden;
   width: 200px;
   height: 200px;
 }
-
 .chartContainer-expanded {
-  .chartContainer;
+  display: inline;
+  border-color: #3a7bd0;
+  border-width: 2px;
+  border-radius: 5px;
+  border-style: solid;
+  margin: 5px;
+  overflow: hidden;
   width: auto;
   height: auto;
 }
-
 .chart-title {
   background-color: #3a7bd0;
   color: white;
@@ -48,7 +53,6 @@ body {
   padding-left: 10px;
   padding-top: 4px;
 }
-
 .sizeButton {
   padding: 0px;
   float: right;
@@ -61,11 +65,9 @@ body {
   cursor: pointer;
   border-radius: 3px;
 }
-
 .sizeButton:hover {
   background-color: #555555aa;
 }
-
 .hidden {
   display: none;
 }

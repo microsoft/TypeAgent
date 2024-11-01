@@ -5,9 +5,9 @@ import * as sqlite from "better-sqlite3";
 import * as knowLib from "knowledge-processor";
 import { createDb } from "../src/sqlite/common.js";
 import { ensureTestDir, testFilePath } from "./testCore.js";
-import { createKeyValueIndex } from "../src/sqlite/keyValueIndex.js";
+import { createKeyValueTable } from "../src/sqlite/keyValueTable.js";
 
-describe("sqlite.keyValueIndex", () => {
+describe("sqlite.keyValueTable", () => {
     const testTimeout = 1000 * 60 * 5;
     let db: sqlite.Database | undefined;
     beforeAll(async () => {
@@ -22,7 +22,7 @@ describe("sqlite.keyValueIndex", () => {
     test(
         "string_string",
         async () => {
-            const index = createKeyValueIndex<string, string>(
+            const index = createKeyValueTable<string, string>(
                 db!,
                 "string_string",
                 "TEXT",
@@ -40,7 +40,7 @@ describe("sqlite.keyValueIndex", () => {
     test(
         "string_number",
         async () => {
-            const index = createKeyValueIndex<string, number>(
+            const index = createKeyValueTable<string, number>(
                 db!,
                 "string_number",
                 "TEXT",
@@ -59,7 +59,7 @@ describe("sqlite.keyValueIndex", () => {
     test(
         "number_number",
         async () => {
-            const index = createKeyValueIndex<number, number>(
+            const index = createKeyValueTable<number, number>(
                 db!,
                 "number_number",
                 "INTEGER",

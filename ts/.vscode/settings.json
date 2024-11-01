@@ -4,6 +4,7 @@
         "aiclient",
         "AUTOINCREMENT",
         "lightgray",
+        "NOCASE",
         "oclif",
         "openai",
         "regen",
