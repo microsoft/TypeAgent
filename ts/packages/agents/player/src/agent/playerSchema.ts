@@ -27,8 +27,7 @@ export type PlayerAction =
     | FilterTracksAction
     | CreatePlaylistAction
     | DeletePlaylistAction
-    | GetQueueAction
-    | UnknownAction;
+    | GetQueueAction;
 
 // Use playRandom when the user asks for some music to play
 export interface PlayRandomAction {
@@ -240,13 +239,4 @@ export interface DeletePlaylistAction {
 export interface GetQueueAction {
     actionName: "getQueue";
     parameters: {};
-}
-
-// use this action for requests that weren't understood
-export interface UnknownAction {
-    actionName: "unknown";
-    parameters: {
-        // text typed by the user that the system did not understand
-        text: string;
-    };
 }

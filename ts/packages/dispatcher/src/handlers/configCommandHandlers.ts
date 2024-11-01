@@ -26,7 +26,7 @@ import {
     displayResult,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
-import { alwaysEnabledCommandsAgent } from "./common/appAgentManager.js";
+import { alwaysEnabledAgents } from "./common/appAgentManager.js";
 
 const enum AgentToggle {
     Translator,
@@ -49,11 +49,17 @@ function getAgentToggleOptions(
 ) {
     switch (toggle) {
         case AgentToggle.Translator:
+            for (const name of alwaysEnabledAgents.translators) {
+                delete options[name];
+            }
             return { translators: options };
         case AgentToggle.Action:
+            for (const name of alwaysEnabledAgents.actions) {
+                delete options[name];
+            }
             return { actions: options };
         case AgentToggle.Command:
-            for (const name of alwaysEnabledCommandsAgent) {
+            for (const name of alwaysEnabledAgents.commands) {
                 delete options[name];
             }
             return { commands: options };
@@ -64,12 +70,19 @@ function getAgentToggleOptions(
                     options[getAppAgentName(name)],
                 ]),
             );
-            for (const name of alwaysEnabledCommandsAgent) {
+            const actionOptions = { ...translatorOptions };
+            for (const name of alwaysEnabledAgents.translators) {
+                delete translatorOptions[name];
+            }
+            for (const name of alwaysEnabledAgents.actions) {
+                delete actionOptions[name];
+            }
+            for (const name of alwaysEnabledAgents.commands) {
                 delete options[name];
             }
             return {
                 translators: translatorOptions,
-                actions: translatorOptions,
+                actions: actionOptions,
                 commands: options,
             };
     }

@@ -9,8 +9,7 @@ export type CalendarAction =
     | AddParticipantsAction
     | ChangeTimeAction
     | ChangeDescriptionAction
-    | FindEventsAction
-    | UnknownAction;
+    | FindEventsAction;
 
 // Don't use the translation history or context to fill the properties of the AddEventAction object
 // The parameters should be based on current user input only
@@ -68,15 +67,6 @@ export type FindEventsAction = {
         eventReference: EventReference;
     };
 };
-
-// if the user types text that can not easily be understood as a calendar action, this action is used
-export interface UnknownAction {
-    actionName: "unknown";
-    parameters: {
-        // text typed by the user that the system did not understand
-        text: string;
-    };
-}
 
 // EventTimeRange is filled only if the user specifies the start time and/or the end time in the event
 // For requests like: Create a meeting for next Friday note than the time range is not specified

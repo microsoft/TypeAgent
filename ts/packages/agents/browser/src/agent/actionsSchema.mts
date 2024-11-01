@@ -23,16 +23,7 @@ export type BrowserActions =
   | ZoomOut
   | ZoomReset
   | CaptureScreenshot
-  | ReloadPage
-  | UnknownAction;
-
-export type UnknownAction = {
-  actionName: "unknown";
-  parameters: {
-    // text typed by the user that the system did not understand
-    text: string;
-  };
-};
+  | ReloadPage;
 
 // This opens a new tab in an existing browser window.
 // IMPORTANT: This does NOT launch new browser windows.

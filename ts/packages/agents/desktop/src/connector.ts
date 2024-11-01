@@ -147,10 +147,6 @@ export async function runDesktopActions(
             actionData = String(action.parameters.on);
             break;
         }
-        case "unknown": {
-            confirmationMessage = `Did not understand the request "${action.parameters.text}"`;
-            break;
-        }
     }
 
     // send message to child process

@@ -10,16 +10,7 @@ export type PaleoBioDbActions =
   | TogglePaleogeographyMap
   | SetMapLocation
   | PanMap
-  | ClearFilters
-  | UnknownAction;
-
-export type UnknownAction = {
-  actionName: "unknown";
-  parameters: {
-    // text typed by the user that the system did not understand
-    text: string;
-  };
-};
+  | ClearFilters;
 
 export type ZoomIn = {
   actionName: "zoomIn";

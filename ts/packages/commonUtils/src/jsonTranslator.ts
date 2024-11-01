@@ -21,8 +21,6 @@ import {
 } from "./incrementalJsonParser.js";
 import { CachedImageWithDetails, extractRelevantExifTags } from "./image.js";
 
-const debug = registerDebug("typeagent:prompt");
-
 export type InlineTranslatorSchemaDef = {
     kind: "inline";
     typeName: string;
@@ -95,7 +93,6 @@ export function enableJsonTranslatorStreaming<T extends object>(
             model.complete = async (
                 prompt: string | PromptSection[] | ChatMessage[],
             ) => {
-                debug(prompt);
                 const chunks = [];
                 const result = await model.completeStream(prompt);
                 if (!result.success) {
@@ -172,15 +169,24 @@ export function createJsonTranslatorFromSchemaDef<T extends object>(
                 response_format: { type: "json_object" },
             },
             undefined,
-            ["translator"],
+            ["translator", typeName.toLowerCase()],
         );
     }
 
+    const debug = registerDebug(`typeagent:prompt:${typeName.toLowerCase()}`);
     const complete = model.complete.bind(model);
     model.complete = async (prompt: string | PromptSection[]) => {
         debug(prompt);
         return complete(prompt);
     };
+
+    if (ai.supportsStreaming(model)) {
+        const completeStream = model.completeStream.bind(model);
+        model.completeStream = async (prompt: string | PromptSection[]) => {
+            debug(prompt);
+            return completeStream(prompt);
+        };
+    }
 
     const schema = Array.isArray(schemas)
         ? composeTranslatorSchemas(typeName, schemas)

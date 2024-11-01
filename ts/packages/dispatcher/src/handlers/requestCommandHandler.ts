@@ -50,6 +50,8 @@ import {
 import { DispatcherName } from "./common/interactiveIO.js";
 import { getActionTemplateEditConfig } from "../translation/actionTemplate.js";
 import { getActionInfo, validateAction } from "../translation/actionInfo.js";
+import { isUnknownAction } from "../dispatcher/dispatcherAgent.js";
+import { UnknownAction } from "../dispatcher/dispatcherActionSchema.js";
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugConstValidation = registerDebug("typeagent:const:validation");
@@ -381,8 +383,8 @@ async function getNextTranslation(
             };
         }
         request = action.parameters.request;
-    } else if (action.actionName === "unknown") {
-        request = action.parameters.text as string;
+    } else if (isUnknownAction(action)) {
+        request = action.parameters.request;
     } else {
         return undefined;
     }
@@ -448,6 +450,7 @@ async function finalizeAction(
     }
 
     if (isChangeAssistantAction(currentAction)) {
+        currentTranslatorName = DispatcherName;
         currentAction = {
             actionName: "unknown",
             parameters: { text: currentAction.parameters.request },
@@ -593,10 +596,10 @@ function canExecute(
 ): boolean {
     const actions = requestAction.actions;
     const systemContext = context.sessionContext.agentContext;
-    const unknown: Action[] = [];
+    const unknown: UnknownAction[] = [];
     const disabled = new Set<string>();
     for (const action of actions) {
-        if (action.actionName === "unknown") {
+        if (isUnknownAction(action)) {
             unknown.push(action);
         }
         if (
@@ -608,18 +611,30 @@ function canExecute(
     }
 
     if (unknown.length > 0) {
-        displayError(
-            `Unable to determine action for ${actions.action === undefined ? "one or more actions in " : ""}'${requestAction.request}'.\n- ${unknown.map((action) => action.parameters.text).join("\n- ")}`,
-            context,
+        const message = `Unable to determine ${actions.action === undefined ? "one or more actions in" : "action for"} the request.`;
+        const details = `- ${unknown.map((action) => action.parameters.request).join("\n- ")}`;
+        const fullMessage = `${message}\n${details}`;
+        systemContext.chatHistory.addEntry(
+            fullMessage,
+            [],
+            "assistant",
+            systemContext.requestId,
         );
+
+        displayError(fullMessage, context);
         return false;
     }
 
     if (disabled.size > 0) {
-        displayWarn(
-            `Not executed. Action disabled for ${Array.from(disabled.values()).join(", ")}`,
-            context,
+        const message = `Not executed. Action disabled for ${Array.from(disabled.values()).join(", ")}`;
+        systemContext.chatHistory.addEntry(
+            message,
+            [],
+            "assistant",
+            systemContext.requestId,
         );
+
+        displayWarn(message, context);
         return false;
     }
 
@@ -671,7 +686,7 @@ async function requestExplain(
 
     const actions = requestAction.actions;
     for (const action of actions) {
-        if (action.actionName === "unknown") {
+        if (isUnknownAction(action)) {
             return;
         }
 

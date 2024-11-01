@@ -11,16 +11,7 @@ export type DesktopActions =
     | SetVolumeAction
     | RestoreVolumeAction
     | MuteVolumeAction
-    | SetWallpaperAction
-    | UnknownAction;
-
-export type UnknownAction = {
-    actionName: "unknown";
-    parameters: {
-        // text typed by the user that the system did not understand
-        text: string;
-    };
-};
+    | SetWallpaperAction;
 
 // Launches a new program window on a Windows Desktop
 // Example:
