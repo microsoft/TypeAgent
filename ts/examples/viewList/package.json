@@ -25,6 +25,7 @@
     "webpack": "webpack"
   },
   "dependencies": {
+    "agent-dispatcher": "workspace:*",
     "chalk": "^5.3.0",
     "debug": "^4.3.4"
   },

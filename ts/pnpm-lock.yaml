@@ -267,6 +267,9 @@ importers:
 
   examples/viewList:
     dependencies:
+      agent-dispatcher:
+        specifier: workspace:*
+        version: link:../../packages/dispatcher
       chalk:
         specifier: ^5.3.0
         version: 5.3.0
