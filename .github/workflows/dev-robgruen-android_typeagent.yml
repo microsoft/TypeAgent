@@ -22,6 +22,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Setup Git LF
+        env:
+          NODE_OPTIONS: "--max_old_space_size=16392"
         run: |
           git config --global core.autocrlf false
       - uses: actions/checkout@v4
