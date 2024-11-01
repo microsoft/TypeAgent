@@ -1,7 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type AndroidMobileAction = SetAlarmAction | UnknownAction;
+export type AndroidMobileAction = CallPhoneNumberAction | SetAlarmAction | UnknownAction;
+
+// calls a user's phone number but only if we know the phone number
+export type CallPhoneNumberAction = {
+    actionName: "callPhoneNumber",
+    parameters: {
+        // the original request of the user
+        originalRequest: string;
+        // the phone number to dial
+        phoneNumber: string;
+    }
+}
 
 // sets an alarm on the local mobile device
 export type SetAlarmAction = {

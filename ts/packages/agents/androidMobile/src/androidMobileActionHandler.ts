@@ -9,7 +9,7 @@ import {
     ActionResult,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
-import { SetAlarmAction } from "./androidMobileSchema.js";
+import { AndroidMobileAction, CallPhoneNumberAction, SetAlarmAction } from "./androidMobileSchema.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -49,11 +49,17 @@ async function updateAgentContext(
 ): Promise<void> {}
 
 async function handlePhotoAction(
-    action: SetAlarmAction,
+    action: AndroidMobileAction,
     context: ActionContext<PhotoActionContext>,
 ) {
     let result: ActionResult | undefined = undefined;
     switch (action.actionName) {
+        case "callPhoneNumber": {
+            let callAction = action as CallPhoneNumberAction;
+            result = createActionResult(`Calling ${callAction.parameters.phoneNumber}`);
+            context.actionIO.takeAction("call-phonenumber", callAction.parameters);
+            break;
+        }
         case "setAlarm": {
             let alarmAction = action as SetAlarmAction;
             result = createActionResult("Setting Alarm");

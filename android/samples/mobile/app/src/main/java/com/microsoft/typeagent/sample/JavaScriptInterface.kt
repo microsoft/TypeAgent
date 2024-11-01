@@ -38,4 +38,11 @@ class JavaScriptInterface(var context: Context) {
             .putExtra(AlarmClock.EXTRA_MINUTES, t.minute)
         startActivity(context, intent, null)
     }
+
+    @JavascriptInterface
+    fun callPhoneNumber(phoneNumber: String) {
+        val uri = String.format(Locale.ROOT, "tel:%s", phoneNumber)
+        val intent = Intent(Intent.ACTION_CALL, Uri.parse(uri))
+        startActivity(context, intent, null);
+    }
 }

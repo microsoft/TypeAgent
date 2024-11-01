@@ -31,7 +31,8 @@ export type ClientAction =
     | "open-app"
     | "show-notification"
     | "start-intent"
-    | "set-alarm";
+    | "set-alarm"
+    | "call-phonenumber";
 
 export interface ActionIO {
     readonly type: DisplayType;

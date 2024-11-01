@@ -4,4 +4,5 @@
 declare var Android: {
     showToast: (message: string) => void;
     setAlarm: (time: string) => void;
+    callPhoneNumber: (phoneNumber: string) => void;
 };

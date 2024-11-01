@@ -218,6 +218,10 @@ function addEvents(
                     Android?.setAlarm(d.time);
                     return;
                 }
+                case "call-phonenumber": {
+                    let d: any = data;
+                    Android?.callPhoneNumber(d.phoneNumber);
+                }
             }
         } catch (e) {
             console.log(e);
