@@ -9,13 +9,18 @@ import { RequestCommandHandler } from "../handlers/requestCommandHandler.js";
 import { TranslateCommandHandler } from "../handlers/translateCommandHandler.js";
 import { ExplainCommandHandler } from "../handlers/explainCommandHandler.js";
 import { CorrectCommandHandler } from "../handlers/correctCommandHandler.js";
-import { ActionContext, AppAgent } from "@typeagent/agent-sdk";
+import { ActionContext, AppAction, AppAgent } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../internal.js";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import {
     ClarifyRequestAction,
     DispatcherActions,
+    UnknownAction,
 } from "./dispatcherActionSchema.js";
+
+export function isUnknownAction(action: AppAction): action is UnknownAction {
+    return action.actionName === "unknown";
+}
 
 const dispatcherHandlers: CommandHandlerTable = {
     description: "Type Agent Dispatcher Commands",
