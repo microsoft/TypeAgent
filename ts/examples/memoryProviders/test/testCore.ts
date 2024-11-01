@@ -4,9 +4,42 @@
 import path from "path";
 import os from "node:os";
 import { createNormalized, ensureDir, NormalizedEmbedding } from "typeagent";
+import { hasEnvSettings, openai } from "aiclient";
 
 export function skipTest(name: string) {
     return test.skip(name, () => {});
+}
+
+export function testIf(
+    runIf: () => boolean,
+    name: string,
+    fn: jest.ProvidesCallback,
+    testTimeout?: number | undefined,
+) {
+    if (!runIf()) {
+        return test.skip(name, () => {});
+    }
+    return test(name, fn, testTimeout);
+}
+
+export function hasEmbeddingEndpoint(endpoint?: string | undefined) {
+    return hasEnvSettings(
+        process.env,
+        openai.EnvVars.AZURE_OPENAI_ENDPOINT_EMBEDDING,
+        endpoint,
+    );
+}
+
+export function createEmbeddingModel(
+    endpoint?: string | undefined,
+    dimensions?: number,
+) {
+    const settings = openai.apiSettingsFromEnv(
+        openai.ModelType.Embedding,
+        process.env,
+        endpoint,
+    );
+    return openai.createEmbeddingModel(settings, dimensions);
 }
 
 export async function ensureTestDir() {

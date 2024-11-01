@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type PhotoAction = TakePhotoAction | UnknownAction;
+export type PhotoAction = TakePhotoAction;
 
 // uses a camera attached to the system to take a photo
 export type TakePhotoAction = {
@@ -11,12 +11,3 @@ export type TakePhotoAction = {
         originalRequest: string;
     };
 };
-
-// if the user types text that can not easily be understood as a list action, this action is used
-export interface UnknownAction {
-    actionName: "unknown";
-    parameters: {
-        // text typed by the user that the system did not understand
-        text: string;
-    };
-}

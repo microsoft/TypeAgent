@@ -270,6 +270,7 @@ function getInjectedSchemaDefs(
     if (multipleActionSchemaDef) {
         injectedSchemaDefs.push(multipleActionSchemaDef);
     }
+
     return injectedSchemaDefs;
 }
 

@@ -47,19 +47,10 @@ export type AnswerQuestionBasedOnPage = {
   };
 };
 
-export type UnknownAction = {
-  actionName: "unknown";
-  parameters: {
-    // text provided by the user that the system did not understand
-    text: string;
-  };
-};
-
 export type ShoppingActions =
   | AddToCartAction
   | PickUpAtStoreAction
   | LookupAtStoreAction
   | SearchForProductAction
   | SelectSearchResult
-  | AnswerQuestionBasedOnPage
-  | UnknownAction;
+  | AnswerQuestionBasedOnPage;

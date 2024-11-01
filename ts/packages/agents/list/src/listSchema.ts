@@ -6,8 +6,7 @@ export type ListAction =
     | RemoveItemsAction
     | CreateListAction
     | GetListAction
-    | ClearListAction
-    | UnknownAction;
+    | ClearListAction;
 
 // add one or more items to a list; if the list does not exist, create it
 export type AddItemsAction = {
@@ -49,11 +48,3 @@ export type ClearListAction = {
         listName: string;
     };
 };
-// if the user types text that can not easily be understood as a list action, this action is used
-export interface UnknownAction {
-    actionName: "unknown";
-    parameters: {
-        // text typed by the user that the system did not understand
-        text: string;
-    };
-}
