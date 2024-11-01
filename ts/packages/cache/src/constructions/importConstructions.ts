@@ -69,7 +69,10 @@ function createConstructions(
                     "  ",
                 );
             }
-            const matched = construction.match(entry.request);
+            const matched = construction.match(entry.request, {
+                enableWildcard: false,
+                rejectReferences: false,
+            });
             if (explainer.validate !== undefined) {
                 const error = explainer.validate(requestAction, explanation);
                 if (error !== undefined) {

@@ -12,13 +12,11 @@ import {
 } from "../utils/config.js";
 import { createRequire } from "module";
 import path from "node:path";
-import { promises as fs } from "node:fs";
 
 import { createAgentProcessShim } from "./agentProcessShim.js";
 import { AppAgentProvider } from "./agentProvider.js";
 import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
 import { loadInlineAgent } from "./inlineAgentHandlers.js";
-import { fileURLToPath } from "node:url";
 import { getUserProfileDir } from "../utils/userData.js";
 
 export type InlineAppAgentInfo = {

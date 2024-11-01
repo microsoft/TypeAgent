@@ -19,13 +19,13 @@ import {
 import { Transforms, TransformsJSON } from "./transforms.js";
 
 import registerDebug from "debug";
-const debugConst = registerDebug("typeagent:const");
-const debugConstMatchStat = registerDebug("typeagent:const:match:stat");
 import {
-    MatchPartsCache,
+    MatchConfig,
     createMatchPartsCache,
     getMatchPartsCacheStats,
 } from "./constructionMatch.js";
+const debugConst = registerDebug("typeagent:const");
+const debugConstMatchStat = registerDebug("typeagent:const:match:stat");
 // Namespace policies
 function getConstructionNamespace(translatorNames: string[]) {
     // Constructions namespaces are just the set to translator names so that we can
@@ -75,10 +75,11 @@ type Constructions = {
 };
 
 export type MatchOptions = {
-    wildcard?: boolean; // default is true
     useTranslators?: string[] | undefined;
-    history?: HistoryContext | undefined;
+    wildcard?: boolean; // default is true
+    rejectReferences?: boolean; // default is true
     conflicts?: boolean; // default is false
+    history?: HistoryContext | undefined;
 };
 
 export class ConstructionCache {
@@ -234,34 +235,27 @@ export class ConstructionCache {
 
     private getMatches(
         request: string,
-        enableWildcard: boolean,
-        history: HistoryContext | undefined,
+        matchConfig: MatchConfig,
         constructionNamespace: Constructions,
-        matchPartsCache: MatchPartsCache,
-        conflicts?: boolean,
     ): MatchResult[] {
         return constructionNamespace.constructions.flatMap((construction) => {
-            return construction.match(
-                request,
-                enableWildcard,
-                history,
-                matchPartsCache,
-                conflicts,
-            );
+            return construction.match(request, matchConfig);
         });
     }
 
     public match(request: string, options?: MatchOptions): MatchResult[] {
         const useTranslators = options?.useTranslators;
-        const enableWildcard = options?.wildcard ?? true; // default to true.
-        const history = options?.history;
-        const conflicts = options?.conflicts;
-        const matches: MatchResult[] = [];
-
-        const matchPartsCache = createMatchPartsCache(request);
+        const config = {
+            enableWildcard: options?.wildcard ?? true, // default to true.
+            rejectReferences: options?.rejectReferences ?? true, // default to true.
+            history: options?.history,
+            conflicts: options?.conflicts,
+            matchPartsCache: createMatchPartsCache(request),
+        };
 
         // If the useTranslators is undefined use all the translators
         // otherwise filter the translators based on the useTranslators
+        const matches: MatchResult[] = [];
         const filter = useTranslators ? new Set(useTranslators) : undefined;
         for (const [
             name,
@@ -278,17 +272,10 @@ export class ConstructionCache {
             }
 
             matches.push(
-                ...this.getMatches(
-                    request,
-                    enableWildcard,
-                    history,
-                    constructionNamespace,
-                    matchPartsCache,
-                    conflicts,
-                ),
+                ...this.getMatches(request, config, constructionNamespace),
             );
         }
-        debugConstMatchStat(getMatchPartsCacheStats(matchPartsCache));
+        debugConstMatchStat(getMatchPartsCacheStats(config.matchPartsCache));
         return matches.sort((a, b) => {
             // REVIEW: temporary heuristics to get better result with wildcards
 

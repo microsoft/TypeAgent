@@ -5,50 +5,82 @@ export interface LanguageTools {
     possibleReferentialPhrase(phrase: string): boolean;
 }
 
-const referenceWords = [
-    "he",
-    "she",
-    "it",
-    "they",
+const referenceWordList = [
+    // object pronouns
+    "me",
+    "you",
     "him",
-    "her",
+    // "her",   // doubled by possessive pronouns in referenceParts
+    "it",
+    "us",
+    // "you",  // doubled above/
     "them",
-    "his",
+
+    // possessive pronons
+    "mine",
+    "yours",
+    // "his", // doubled by possessive pronouns in referenceParts
     "hers",
+    // "its"  // doubled by possessive pronouns in referenceParts
+    "ours",
+    // "yours",  // doubled above
     "theirs",
-    "its",
-    "this",
-    "that",
-    "these",
-    "those",
-    "here",
-    "there",
+
+    // reflexive pronouns
+    "myself",
+    "yourself",
+    "himself",
+    "herself",
+    "itself",
+    "ourselves",
+    "yourselves",
+    "themselves",
 ];
 
-const referencePrefixes = [
-    "his ",
-    "her ",
-    "its",
-    "their ",
-    "this ",
-    "that ",
-    "these ",
-    "those ",
-];
+const referenceWords = new RegExp(`^(?:${referenceWordList.join("|")})$`, "i");
+const referenceOfSuffixes = new RegExp(
+    `\\bof\\s(?:${referenceWordList.join("|")})$`,
+    "i",
+);
+
+const referenceSuffixes = new RegExp(
+    `\\b(?:${["here", "there"].join("|")})$`,
+    "i",
+);
+
+const referenceParts = new RegExp(
+    `\\b(?:${[
+        // possessive adjectives
+        "my",
+        "your",
+        "his",
+        "her",
+        "its",
+        "our",
+        "your",
+        "their",
+
+        // demostratives pronouns
+        "this",
+        "that",
+        "these",
+        "those",
+    ].join("|")})\\b`,
+    "i",
+);
 
 // REVIEW: Heuristics to allow time references from now.
 const relativeToNow =
-    /^this (week|month|year|quarter|season|day|hour|minute|second|morning|afternoon)$/;
+    /this (week|month|year|quarter|season|day|hour|minute|second|morning|afternoon)$/i;
 
 const languageToolsEn: LanguageTools = {
     possibleReferentialPhrase(phrase: string) {
         // TODO: initiali implemention. Can be overbroad and incomplete.
-        const lowerCase = phrase.toLowerCase();
         return (
-            (referenceWords.includes(lowerCase) ||
-                referencePrefixes.some((prefix) =>
-                    lowerCase.startsWith(prefix),
-                )) &&
+            (referenceWords.test(phrase) ||
+                referenceSuffixes.test(phrase) ||
+                referenceOfSuffixes.test(phrase) ||
+                referenceParts.test(phrase)) &&
             !relativeToNow.test(phrase)
         );
     },

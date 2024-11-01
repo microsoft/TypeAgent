@@ -234,11 +234,6 @@
       }
     },
     {
-      "tags": [
-        "failedRoundTripAction",
-        "failedImportRoundTripAction",
-        "failedImportMergeRoundTripAction"
-      ],
       "request": "Ayo, DJ, drop that 'Gin and Juice' like it's hot, ya dig?",
       "action": {
         "fullActionName": "player.playTrack",

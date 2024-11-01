@@ -186,7 +186,10 @@ export function defineRoundtripTest(merge: boolean, testFileName: string) {
                     const cache = await cacheP;
                     const matched = cache.constructionStore.match(
                         requestAction.request,
-                        { conflicts: true },
+                        {
+                            rejectReferences: false,
+                            conflicts: true,
+                        },
                     );
                     const matchedActions = matched.flatMap((m) =>
                         expandActions(m.match.actions, m.conflictValues),
