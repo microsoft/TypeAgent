@@ -172,10 +172,8 @@ async function handleEmailAction(
             await handleForwardOrReplyAction(action, mailClient);
             break;
 
-        case "unknown":
         default:
-            console.log(chalk.gray("UNKNOWN action type:"));
-            break;
+            throw new Error(`Unknown action: ${(action as any).actionName}`);
     }
 }
 

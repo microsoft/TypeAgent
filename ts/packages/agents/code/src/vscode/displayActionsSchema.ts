@@ -16,8 +16,7 @@ export type CodeDisplayActions =
     | OpenMarkdownPreviewToSideAction
     | ZenModeAction
     | CloseEditorAction
-    | OpenSettingsAction
-    | UnknownAction;
+    | OpenSettingsAction;
 
 // Zoom in the editor
 export type ZoomInAction = {
@@ -108,12 +107,4 @@ export type CloseEditorAction = {
 export type OpenSettingsAction = {
     actionName: "openSettings";
     parameters: {};
-};
-
-export type UnknownAction = {
-    actionName: "unknown";
-    parameters: {
-        // text typed by the user that the system did not understand
-        text: string;
-    };
 };

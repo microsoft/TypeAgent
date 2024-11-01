@@ -1009,7 +1009,7 @@ export async function handleCall(
         }
         default:
             return createErrorActionResult(
-                `Action not supported: ${action.actionName}`,
+                `Action not supported: ${(action as any).actionName}`,
             );
     }
 }

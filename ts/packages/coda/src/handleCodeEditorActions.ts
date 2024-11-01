@@ -394,7 +394,6 @@ export async function handleBaseEditorActions(
             break;
         }
 
-        case "unknown":
         default: {
             actionResult.message = `Did not understand the request "${action.parameters.text}"`;
             break;

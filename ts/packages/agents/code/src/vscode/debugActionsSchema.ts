@@ -7,8 +7,7 @@ export type CodeDebugActions =
     | StartOrContinueDebugAction
     | StepAction
     | StopDebugAction
-    | ShowHoverAction
-    | UnknownAction;
+    | ShowHoverAction;
 
 // Show debug panel or window in the editor or code window, if not already visible
 export type ShowDebugAction = {
@@ -46,13 +45,4 @@ export type StopDebugAction = {
 export type ShowHoverAction = {
     actionName: "showHover";
     parameters: {};
-};
-
-// Unknown action
-export type UnknownAction = {
-    actionName: "unknown";
-    parameters: {
-        // text typed by the user that the system did not understand
-        text: string;
-    };
 };
