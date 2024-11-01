@@ -15,6 +15,7 @@ import { getPackageFilePath } from "../../utils/getPackageFilePath.js";
 import { PromptSection } from "typechat";
 import { form } from "./explanationV5.js";
 import { hasPropertyNames } from "./subPhraseExplanationV5.js";
+import { ExplainerConfig } from "../genericExplainer.js";
 
 type AlternativeExplainerInput = [
     RequestAction,
@@ -72,7 +73,8 @@ function createInstructions([
 
 export type AlternativesExplainer = TypeChatAgent<
     AlternativeExplainerInput,
-    AlternativesExplanation
+    AlternativesExplanation,
+    ExplainerConfig
 >;
 
 export function createAlternativesExplainer(

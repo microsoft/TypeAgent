@@ -32,6 +32,7 @@
     "dotenv": "^16.3.1",
     "readline-sync": "^1.4.10",
     "typeagent": "workspace:*",
+    "typechat": "^0.1.1",
     "typescript": "^5.4.2"
   },
   "devDependencies": {

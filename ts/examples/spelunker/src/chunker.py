@@ -1,8 +1,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# TODO: Make it a service
-
 """A chunker for Python code using the ast module.
 
 - Basic idea: Chunks can nest!
@@ -73,6 +71,33 @@ class Chunk:
             "children": self.children,
         }
 
+
+@dataclass
+class ChunkedFile:
+    """A file with chunks."""
+
+    filename: str
+    chunks: list[Chunk]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "filename": self.filename,
+            "chunks": self.chunks,
+        }
+
+@dataclass
+class ErrorItem:
+    """An error item."""
+
+    error: str
+    filename: str
+    output: str | None = None
+
+    def to_dict(self) -> dict[str, str]:
+        result = {"error": self.error, "filename": self.filename}
+        if self.output:
+            result["output"] = self.output
+        return result
 
 # Support for JSON serialization of Chunks
 
@@ -208,24 +233,11 @@ def chunker(text: str, tree: ast.AST) -> list[Chunk]:
     return chunks
 
 
-def main():
-    if len(sys.argv) != 2:
-        print("Usage: python chunker.py <filename>")
-        return 2
-
-    filename = sys.argv[1]
-    try:
-        with open(filename, "r") as f:
-            text = f.read()
-    except OSError as e:
-        print({"error": repr(e)})
-        return 1
-
+def chunkify(text: str, filename: str) -> list[Chunk] | ErrorItem:
     try:
         tree = ast.parse(text, filename=filename)
     except SyntaxError as e:
-        print({"error": repr(e)})
-        return 1
+        return ErrorItem(repr(e), filename)
 
     chunks = chunker(text, tree)
 
@@ -246,7 +258,30 @@ def main():
                 new_blobs.append(blob)
         chunk.blobs = new_blobs
 
-    print(json.dumps(chunks, indent=4, default=custom_json))
+    return chunks
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: python chunker.py FILE [FILE] ...")
+        return 2
+
+    items: list[ErrorItem | ChunkedFile] = []
+    for filename in sys.argv[1:]:
+        try:
+            with open(filename) as f:
+               text = f.read()
+        except IOError as err:
+            items.append(ErrorItem(str(err), filename))
+        else:
+            result = chunkify(text, filename)
+            if isinstance(result, ErrorItem):
+                items.append(result)
+            else:
+                chunks = [chunk for chunk in result if chunk.blobs]
+                items.append(ChunkedFile(filename, chunks))
+
+    print(json.dumps(items, default=custom_json, indent=2))
     return 0
 
 
