@@ -42,6 +42,7 @@ dotenv.config({ path: envPath });
 // OR:    node main.js -  # Load sample file (sample.py.txt)
 // OR:    node main.js    # Query previously loaded files
 async function main(): Promise<void> {
+    console.log("Hi!");
     const verbose = false;
     let files: string[];
     // TODO: Use a proper command-line parser.
@@ -68,32 +69,34 @@ async function main(): Promise<void> {
     const spelunkerRoot = dataRoot + "/spelunker";
 
     const chunkFolder = await createObjectFolder<Chunk>(
-        spelunkerRoot + "chunks",
+        spelunkerRoot + "/chunks",
         { serializer: (obj) => JSON.stringify(obj, null, 2) },
     );
     const chatModel = openai.createChatModelDefault("spelunkerChat");
     const codeDocumenter = await createCodeDocumenter(chatModel);
     const codeIndex = await createSemanticCodeIndex(
-        spelunkerRoot + "index",
+        spelunkerRoot + "/index",
         codeDocumenter,
         undefined,
         (obj) => JSON.stringify(obj, null, 2),
     );
     const summaryFolder = await createObjectFolder<CodeDocumentation>(
-        spelunkerRoot + "summaries",
+        spelunkerRoot + "/summaries",
         { serializer: (obj) => JSON.stringify(obj, null, 2) },
     );
 
     // Import all files. (TODO: Break up very long lists.)
-    console.log(`[Importing ${files.length} files]`);
-    await importPythonFiles(
-        files,
-        chunkFolder,
-        codeIndex,
-        summaryFolder,
-        true,
-        verbose,
-    );
+    if (files.length > 0) {
+        console.log(`[Importing ${files.length} files]`);
+        await importPythonFiles(
+            files,
+            chunkFolder,
+            codeIndex,
+            summaryFolder,
+            true,
+            verbose,
+        );
+    }
 
     // Loop processing searches. (TODO: Use interactiveApp.)
     while (true) {
@@ -106,7 +109,13 @@ async function main(): Promise<void> {
             return;
         }
         const searchKey = input.replace(/\W+/g, " ").trim();
-        const hits = await codeIndex.find(searchKey, 2);
+        let hits;
+        try {
+            hits = await codeIndex.find(searchKey, 2);
+        } catch (error) {
+            console.log(`[${error}]`);
+            continue;
+        }
         console.log(
             `Got ${hits.length} hit${hits.length == 0 ? "s." : hits.length === 1 ? ":" : "s:"}`,
         );
