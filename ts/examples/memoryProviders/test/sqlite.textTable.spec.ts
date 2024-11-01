@@ -19,6 +19,7 @@ import {
     testIf,
 } from "./testCore.js";
 import * as knowLib from "knowledge-processor";
+import { asyncArray } from "typeagent";
 
 describe("sqlite.textTable", () => {
     const testTimeout = 1000 * 60 * 5;
@@ -60,16 +61,52 @@ describe("sqlite.textTable", () => {
         },
         testTimeout,
     );
-    test("getNearest_exact", async () => {
-        const table = await createTextIndex<number>(
+    test("getNearest_exact_number", async () => {
+        const table = await createTextIndex<number, number>(
             { caseSensitive: false, concurrency: 2, semanticIndex: false },
             db!,
             "NameIndex_Exact",
             "INTEGER",
+            "INTEGER",
         );
         const blocks = composers();
         await table.putMultiple(blocks);
+
+        const allIds = await asyncArray.toArray(table.ids());
+        allIds.forEach((id) => expect(typeof id === "number").toBeTruthy());
+        let textIds = await table.getIds(blocks.map((b) => b.value));
+        expect(allIds).toEqual(textIds);
+
         const ids = await table.get(blocks[0].value);
+        expect(ids).toEqual(blocks[0].sourceIds);
+
+        for (let i = 0; i < blocks.length; ++i) {
+            const matches = await table.getNearest(blocks[i].value);
+            expect(matches).toEqual(blocks[i].sourceIds);
+        }
+    });
+    test("getNearest_exact_string", async () => {
+        const table = await createTextIndex<string, number>(
+            { caseSensitive: false, concurrency: 2, semanticIndex: false },
+            db!,
+            "NameIndex_Exact",
+            "TEXT",
+            "INTEGER",
+        );
+        const blocks = composers();
+        await table.putMultiple(blocks);
+
+        const names = blocks.map((b) => b.value);
+        const allTextIds = await asyncArray.toArray(table.ids());
+        allTextIds.forEach((id) => expect(typeof id === "string").toBeTruthy());
+        let textIds = await table.getIds(names);
+        expect(allTextIds).toEqual(textIds);
+        const gotNames = await asyncArray.mapAsync(allTextIds, 1, (id) =>
+            table.getText(id),
+        );
+        expect(gotNames).toEqual(names);
+
+        let ids = await table.get(blocks[0].value);
         expect(ids).toEqual(blocks[0].sourceIds);
 
         for (let i = 0; i < blocks.length; ++i) {
@@ -82,7 +119,7 @@ describe("sqlite.textTable", () => {
         "getNearest",
         async () => {
             const embeddingModel = createEmbeddingModel(smallEndpoint, 256);
-            const table = await createTextIndex<number>(
+            const table = await createTextIndex<number, number>(
                 {
                     caseSensitive: false,
                     concurrency: 2,
@@ -91,6 +128,7 @@ describe("sqlite.textTable", () => {
                 },
                 db!,
                 "NameIndex",
+                "INTEGER",
                 "INTEGER",
             );
 

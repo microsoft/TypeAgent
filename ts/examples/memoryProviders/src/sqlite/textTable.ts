@@ -97,14 +97,14 @@ export function createStringTable(
     }
 
     function* ids(): IterableIterator<number> {
-        for (const id of sql_ids.iterate()) {
-            yield id as number;
+        for (const row of sql_ids.iterate()) {
+            yield (row as StringTableRow).stringId;
         }
     }
 
     function* values(): IterableIterator<string> {
-        for (const value of sql_values.iterate()) {
-            yield (value as StringTableRow).value;
+        for (const row of sql_values.iterate()) {
+            yield (row as StringTableRow).value;
         }
     }
 
@@ -160,13 +160,27 @@ export function createStringTable(
     }
 }
 
-export async function createTextIndex<TSourceId extends ColumnType = string>(
+export interface TextTable<
+    TTextId extends ColumnType = number,
+    TSourceId extends ColumnType = string,
+> extends TextIndex<TTextId, TSourceId> {}
+
+export async function createTextIndex<
+    TTextId extends ColumnType = number,
+    TSourceId extends ColumnType = string,
+>(
     settings: TextIndexSettings,
     db: sqlite.Database,
     name: string,
+    textType: SqlColumnType<TTextId>,
     valueType: SqlColumnType<TSourceId>,
-): Promise<TextIndex<number>> {
+): Promise<TextTable<TTextId, TSourceId>> {
     type TextId = number;
+    const isIdInt = textType === "INTEGER";
+    const serializer: IdSerializer = {
+        serialize: isIdInt ? (x: any) => x : (x: any) => x.toString(),
+        deserialize: isIdInt ? (x: any) => x : (x: any) => Number.parseInt(x),
+    };
     const textTable = createStringTable(db, tablePath(name, "entries"));
     const postingsTable = createKeyValueTable<number, TSourceId>(
         db,
@@ -222,9 +236,9 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         return [store, index];
     }
 
-    async function* ids(): AsyncIterableIterator<TextId> {
+    async function* ids(): AsyncIterableIterator<TTextId> {
         for (const value of textTable.ids()) {
-            yield value;
+            yield serializer.serialize(value);
         }
     }
 
@@ -249,29 +263,33 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
             : undefined;
     }
 
-    function getById(id: TextId): Promise<TSourceId[] | undefined> {
-        return postingsTable.get(id);
+    function getById(id: TTextId): Promise<TSourceId[] | undefined> {
+        return postingsTable.get(serializer.deserialize(id));
     }
 
-    function getByIds(ids: TextId[]): Promise<(TSourceId[] | undefined)[]> {
-        const postings = ids.map((id) => postingsTable.getSync(id));
+    function getByIds(ids: TTextId[]): Promise<(TSourceId[] | undefined)[]> {
+        const postings = ids.map((id) =>
+            postingsTable.getSync(serializer.deserialize(id)),
+        );
         return Promise.resolve(postings);
     }
 
-    function getId(text: string): Promise<TextId | undefined> {
-        return Promise.resolve(textTable.getId(text));
+    function getId(text: string): Promise<TTextId | undefined> {
+        return Promise.resolve(serializer.serialize(textTable.getId(text)));
     }
 
-    function getIds(texts: string[]): Promise<(TextId | undefined)[]> {
+    function getIds(texts: string[]): Promise<(TTextId | undefined)[]> {
         // TODO: use IN clause
-        return Promise.resolve(texts.map((t) => textTable.getId(t)));
+        return Promise.resolve(
+            texts.map((t) => serializer.serialize(textTable.getId(t))),
+        );
     }
 
-    function getText(id: TextId): Promise<string | undefined> {
-        return Promise.resolve(textTable.getText(id));
+    function getText(id: TTextId): Promise<string | undefined> {
+        return Promise.resolve(textTable.getText(serializer.deserialize(id)));
     }
 
-    async function put(text: string, postings?: TSourceId[]): Promise<TextId> {
+    async function put(text: string, postings?: TSourceId[]): Promise<TTextId> {
         let assignedId = textTable.add(text);
         if (postings && postings.length > 0) {
             postingsTable.putSync(postings, assignedId.id);
@@ -282,16 +300,16 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         ) {
             await semanticIndex.put(text, assignedId.id);
         }
-        return assignedId.id;
+        return serializer.serialize(assignedId.id);
     }
 
     async function putMultiple(
         blocks: TextBlock<TSourceId>[],
-    ): Promise<TextId[]> {
-        const ids: TextId[] = [];
+    ): Promise<TTextId[]> {
+        const ids: TTextId[] = [];
         for (const b of blocks) {
             const id = await put(b.value, b.sourceIds);
-            ids.push(id);
+            ids.push(serializer.serialize(id));
         }
         return ids;
     }
@@ -374,10 +392,15 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         value: string,
         maxMatches?: number,
         minScore?: number,
-    ): Promise<TextId[]> {
+    ): Promise<TTextId[]> {
         maxMatches ??= 1;
         const matches = await getNearestTextIds(value, maxMatches, minScore);
-        return matches ?? [];
+        if (matches) {
+            return isIdInt
+                ? matches
+                : matches.map((m) => serializer.serialize(m));
+        }
+        return [];
     }
 
     async function nearestNeighbors(
@@ -385,7 +408,11 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
         maxMatches: number,
         minScore?: number,
     ): Promise<ScoredItem<TSourceId[]>[]> {
-        const matches = await nearestNeighborsText(value, maxMatches, minScore);
+        const matches = await nearestNeighborsTextIds(
+            value,
+            maxMatches,
+            minScore,
+        );
         const scoredPostings = matches.map((m) => {
             const item = postingsTable.getSync(m.item) ?? [];
             return {
@@ -397,6 +424,22 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
     }
 
     async function nearestNeighborsText(
+        value: string,
+        maxMatches: number,
+        minScore?: number,
+    ): Promise<ScoredItem<TTextId>[]> {
+        if (!semanticIndex) {
+            return [];
+        }
+        let matches = await nearestNeighborsTextIds(
+            value,
+            maxMatches,
+            minScore,
+        );
+        return isIdInt ? matches : matches.map((m) => serializer.serialize(m));
+    }
+
+    async function nearestNeighborsTextIds(
         value: string,
         maxMatches: number,
         minScore?: number,
@@ -424,10 +467,11 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
 
     // TODO: Optimize
     async function remove(
-        textId: TextId,
+        textId: TTextId,
         postings: TSourceId | TSourceId[],
     ): Promise<void> {
-        const existingPostings = await postingsTable.get(textId);
+        const id = serializer.deserialize(textId);
+        const existingPostings = await postingsTable.get(id);
         if (!existingPostings || existingPostings.length === 0) {
             return;
         }
@@ -436,9 +480,9 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
             postings,
         );
         if (updatedPostings.length === 0) {
-            await postingsTable.remove(textId);
+            await postingsTable.remove(id);
         } else {
-            await postingsTable.replace(updatedPostings, textId);
+            await postingsTable.replace(updatedPostings, id);
         }
     }
 
@@ -545,4 +589,9 @@ export async function createTextIndex<TSourceId extends ColumnType = string>(
             ? semanticIndex.nearestNeighbors(value, maxMatches, minScore)
             : undefined;
     }
+
+    type IdSerializer = {
+        serialize: (x: any) => any;
+        deserialize: (x: any) => any;
+    };
 }
