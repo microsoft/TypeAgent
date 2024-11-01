@@ -10,8 +10,8 @@ export type DesktopActions =
     | SwitchToWindowAction
     | SetVolumeAction
     | RestoreVolumeAction
-    | MuteVolumeAction;
-    | SetWallpaperAction
+    | MuteVolumeAction
+    | SetWallpaperAction;
 
 // Launches a new program window on a Windows Desktop
 // Example:
