@@ -20,6 +20,7 @@ export function getStorage(name: string, baseDir: string): Storage {
         return path.join(baseDir, name, storagePath);
     };
     return {
+        getBaseDir: async() => { return baseDir; },
         list: async (storagePath: string, options?: StorageListOptions) => {
             const fullPath = getFullPath(storagePath);
             const items = await fs.promises.readdir(fullPath, {

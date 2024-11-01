@@ -11,6 +11,7 @@ export type DesktopActions =
     | SetVolumeAction
     | RestoreVolumeAction
     | MuteVolumeAction;
+    | SetWallpaperAction
 
 // Launches a new program window on a Windows Desktop
 // Example:
@@ -88,6 +89,21 @@ export type MuteVolumeAction = {
     };
 };
 
+// Sets the desktop wallpaper 
+// Example:
+//  user: Set desktop wallpaper to this image
+//  agent: {
+//     "actionName": "setWallpaper",
+//     "parameters": {
+//        "filePath": "path to image"
+//     }
+//  }
+export type SetWallpaperAction = {
+    actionName: "setWallpaper";
+    parameters: {
+        filePath:  string; // The path to the file
+    };
+};
 export type KnownPrograms =
     | "chrome"
     | "word"

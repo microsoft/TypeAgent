@@ -128,6 +128,7 @@ export interface TokenCachePersistence {
 }
 
 export interface Storage {
+    getBaseDir(): Promise<string>;
     read(storagePath: string, options: StorageEncoding): Promise<string>;
     write(storagePath: string, data: string): Promise<void>;
     list(storagePath: string, options?: StorageListOptions): Promise<string[]>;
