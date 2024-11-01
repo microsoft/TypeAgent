@@ -147,6 +147,13 @@ export async function createAgentProcessShim(
             const context = contextMap.get(param.contextId);
             return context.toggleTransientAgent(param.name, param.enable);
         },
+        storageGetBaseDir: async (param: {
+            contextId: number;
+            session: boolean;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            return getStorage(param, context).getBaseDir();
+        },        
         storageRead: async (param: {
             contextId: number;
             session: boolean;

@@ -4,10 +4,10 @@
 import child_process from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ProgramNameIndex, loadProgramNameIndex } from "./programNameIndex.js";
-import { Storage } from "@typeagent/agent-sdk";
+import { SessionContext, Storage } from "@typeagent/agent-sdk";
 import registerDebug from "debug";
 import { DesktopActions } from "./actionsSchema.js";
-
+import path from "path";
 const debug = registerDebug("typeagent:desktop");
 const debugData = registerDebug("typeagent:desktop:data");
 const debugError = registerDebug("typeagent:desktop:error");
@@ -63,11 +63,25 @@ async function ensureAutomationProcess(agentContext: DesktopActionContext) {
 export async function runDesktopActions(
     action: DesktopActions,
     agentContext: DesktopActionContext,
+    sessionContext: SessionContext
 ) {
     let confirmationMessage = "OK";
     let actionData = "";
     const actionName = action.actionName;
     switch (actionName) {
+        case "setWallpaper": {
+            //HACK: Taking the path to the generated.png image in the user_files session folder.
+            if (sessionContext.sessionStorage != undefined)
+            {
+                actionData = path.join(await sessionContext.sessionStorage.getBaseDir(), "user_files", "generated.png");
+                confirmationMessage = "Set wallpaper to " + actionData;
+            }
+            else
+            {
+                confirmationMessage = "Sorry, I couldn't locate the session storage location to complete the task.";
+            }
+            break;
+        }
         case "launchProgram": {
             actionData = await mapInputToAppName(
                 action.parameters.name,
