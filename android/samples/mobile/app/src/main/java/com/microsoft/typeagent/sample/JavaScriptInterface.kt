@@ -45,4 +45,12 @@ class JavaScriptInterface(var context: Context) {
         val intent = Intent(Intent.ACTION_CALL, Uri.parse(uri))
         startActivity(context, intent, null);
     }
+
+    @JavascriptInterface
+     fun sendSMS(phoneNumber: String, message: String) {
+        val uri = String.format(Locale.ROOT, "smsto:%s", phoneNumber)
+        val intent = Intent(Intent.ACTION_SENDTO, Uri.parse(uri))
+            .putExtra("sms_body", message);
+        startActivity(context, intent, null)
+    }
 }
