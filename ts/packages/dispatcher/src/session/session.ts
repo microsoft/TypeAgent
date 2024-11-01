@@ -20,7 +20,7 @@ import {
     AppAgentStateOptions,
 } from "../handlers/common/appAgentManager.js";
 import { cloneConfig, mergeConfig } from "./options.js";
-import { TokenCounter } from "aiclient";
+import { TokenCounter, TokenCounterData } from "aiclient";
 
 const debugSession = registerDebug("typeagent:session");
 
@@ -168,7 +168,7 @@ type SessionCacheData = {
 type SessionData = {
     config: SessionConfig;
     cacheData: SessionCacheData;
-    tokens?: TokenCounter;
+    tokens?: TokenCounterData;
 };
 
 // Fill in missing fields when loading sessions from disk
