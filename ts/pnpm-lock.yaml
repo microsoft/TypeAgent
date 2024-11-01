@@ -94,6 +94,9 @@ importers:
 
   examples/memoryProviders:
     dependencies:
+      aiclient:
+        specifier: workspace:*
+        version: link:../../packages/aiclient
       better-sqlite3:
         specifier: 11.5.0
         version: 11.5.0
