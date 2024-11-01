@@ -10,15 +10,19 @@ export interface KeyValueTable<
     TKeyId extends ColumnType = string,
     TValueId extends ColumnType = string,
 > extends knowLib.KeyValueIndex<TKeyId, TValueId> {
+    readonly schemaSql: string;
     readonly tableName: string;
+
     getSync(id: TKeyId): TValueId[] | undefined;
+    putSync(postings: TValueId[], id: TKeyId): TKeyId;
     iterate(id: TKeyId): IterableIterator<TValueId> | undefined;
     iterateScored(
         id: TKeyId,
         score?: number,
     ): IterableIterator<ScoredItem<TValueId>> | undefined;
     iterateMultiple(ids: TKeyId[]): IterableIterator<TValueId> | undefined;
-    putSync(postings: TValueId[], id: TKeyId): TKeyId;
+
+    getHitsSync(ids: TKeyId[]): IterableIterator<ScoredItem<TValueId>>;
 }
 
 export function createKeyValueTable<
@@ -50,10 +54,12 @@ export function createKeyValueTable<
     );
     const sql_remove = db.prepare(`DELETE FROM ${tableName} WHERE keyId = ?`);
     return {
+        schemaSql,
         tableName,
         get,
         getSync,
         getMultiple,
+        getHitsSync,
         iterate,
         iterateScored,
         iterateMultiple,
@@ -138,6 +144,20 @@ export function createKeyValueTable<
             }
         }
         return Promise.resolve(matches);
+    }
+
+    function* getHitsSync(
+        ids: TKeyId[],
+    ): IterableIterator<ScoredItem<TValueId>> {
+        const sql = `SELECT valueId as item, count(*) as score 
+        FROM ${tableName}
+        WHERE keyId IN (${ids})
+        GROUP BY valueId 
+        ORDER BY score DESC`;
+        const stmt = db.prepare(sql);
+        for (const row of stmt.iterate()) {
+            yield row as ScoredItem<TValueId>;
+        }
     }
 
     function put(values: TValueId[], id?: TKeyId): Promise<TKeyId> {

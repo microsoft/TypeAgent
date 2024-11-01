@@ -6,7 +6,7 @@ import * as sqlite from "better-sqlite3";
 import {
     AssignedId,
     ColumnType,
-    createInQuery,
+    makeInClause,
     SqlColumnType,
     tablePath,
 } from "./common.js";
@@ -40,8 +40,9 @@ export interface StringTable {
     values(): IterableIterator<string>;
     entries(): IterableIterator<StringTableRow>;
     getId(value: string): number | undefined;
+    getIds(value: string[]): IterableIterator<number>;
     getText(id: number): string | undefined;
-    getTextMultiple(ids: number[]): IterableIterator<string>;
+    getTexts(ids: number[]): IterableIterator<string>;
     add(value: string): AssignedId<number>;
     add(values: string[]): AssignedId<number>[];
     remove(value: string): void;
@@ -84,8 +85,9 @@ export function createStringTable(
         values,
         entries,
         getId,
+        getIds,
         getText,
-        getTextMultiple,
+        getTexts,
         add,
         remove,
     };
@@ -113,14 +115,28 @@ export function createStringTable(
         return row ? row.stringId : undefined;
     }
 
+    function* getIds(values: string[]): IterableIterator<number> {
+        if (values.length > 0) {
+            const inClause = makeInClause(values);
+            const sql = `SELECT stringId from ${tableName} WHERE value IN (${inClause})`;
+            const stmt = db.prepare(sql);
+            let rows = stmt.all();
+            for (const row of rows) {
+                yield (row as StringTableRow).stringId;
+            }
+        }
+    }
+
     function getText(id: number): string | undefined {
         const row: StringTableRow = sql_getText.get(id) as StringTableRow;
         return row ? row.value : undefined;
     }
 
-    function* getTextMultiple(ids: number[]): IterableIterator<string> {
+    function* getTexts(ids: number[]): IterableIterator<string> {
         if (ids.length > 0) {
-            const stmt = createInQuery(db, tableName, "value", "stringId", ids);
+            const stmt = db.prepare(
+                `SELECT value from ${tableName} WHERE stringId IN (${ids})`,
+            );
             let rows = stmt.iterate();
             for (const row of rows) {
                 yield (row as StringTableRow).value;
@@ -163,7 +179,9 @@ export function createStringTable(
 export interface TextTable<
     TTextId extends ColumnType = number,
     TSourceId extends ColumnType = string,
-> extends TextIndex<TTextId, TSourceId> {}
+> extends TextIndex<TTextId, TSourceId> {
+    getHitsSync(values: string[]): IterableIterator<ScoredItem<TSourceId>>;
+}
 
 export async function createTextIndex<
     TTextId extends ColumnType = number,
@@ -211,6 +229,7 @@ export async function createTextIndex<
         getId,
         getIds,
         getText,
+        getHitsSync,
         getNearest,
         getNearestMultiple,
         getNearestText,
@@ -312,6 +331,14 @@ export async function createTextIndex<
             ids.push(serializer.serialize(id));
         }
         return ids;
+    }
+
+    function getHitsSync(
+        values: string[],
+    ): IterableIterator<ScoredItem<TSourceId>> {
+        // TODO: use a JOIN
+        const textIds = [...textTable.getIds(values)];
+        return postingsTable.getHitsSync(textIds);
     }
 
     async function getNearest(

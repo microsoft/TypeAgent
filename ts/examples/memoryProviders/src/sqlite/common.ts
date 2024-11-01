@@ -29,17 +29,17 @@ export async function createDb(
     return db;
 }
 
-export function createInQuery(
-    db: sqlite.Database,
-    tableName: string,
-    selectCol: string,
-    testCol: string,
-    values: any[],
-): sqlite.Statement {
-    const sql = `SELECT ${selectCol} from ${tableName} WHERE ${testCol} IN (${values})`;
-    return db.prepare(sql);
-}
-
 export function tablePath(rootName: string, name: string): string {
     return rootName + "_" + name;
+}
+
+export function makeInClause(values: string[]): string {
+    let sql = "";
+    for (let i = 0; i < values.length; ++i) {
+        if (i > 0) {
+            sql += ", ";
+        }
+        sql += `'${values[i]}'`;
+    }
+    return sql;
 }
