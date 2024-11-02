@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+  },
+  "include": [],
+  "references": [
+    { "path": "./src/site" },
+    { "path": "./src/route" }
+  ],
+  "ts-node": {
+    "esm": true
+  }
+}
