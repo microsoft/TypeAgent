@@ -4,9 +4,15 @@
 import * as sqlite from "better-sqlite3";
 import * as knowLib from "knowledge-processor";
 import { dateTime, NameValue } from "typeagent";
+import {
+    ColumnType,
+    getTypeSerializer,
+    sql_makeInClause,
+    SqlColumnType,
+} from "./common.js";
 
 export type TemporalLogRow = {
-    sequenceNumber: number;
+    logId: number;
     timestamp: string;
     dateTime: string;
     value: string;
@@ -17,15 +23,20 @@ export interface TemporalTable<TId = any, T = any>
     iterateRange(startAt: Date, stopAt?: Date): IterableIterator<string>;
 }
 
-export function createTemporalLogTable<T = any>(
+export function createTemporalLogTable<
+    TLogId extends ColumnType = number,
+    T = any,
+>(
     db: sqlite.Database,
     tableName: string,
+    keyType: SqlColumnType<TLogId>,
     ensureExists: boolean = true,
 ) {
-    type SequenceNumber = number;
+    const [isIdInt, idSerializer] = getTypeSerializer<TLogId>(keyType);
+
     const schemaSql = `  
     CREATE TABLE IF NOT EXISTS ${tableName} (
-      sequenceNumber INTEGER PRIMARY KEY AUTOINCREMENT,
+      logId ${keyType} PRIMARY KEY AUTOINCREMENT,
       timestamp TEXT NOT NULL,
       dateTime TEXT NOT NULL,
       value TEXT NOT NULL
@@ -38,22 +49,22 @@ export function createTemporalLogTable<T = any>(
     }
     const sql_size = db.prepare(`SELECT count(*) as count from ${tableName}`);
     const sql_get = db.prepare(
-        `SELECT dateTime, value FROM ${tableName} WHERE sequenceNumber = ?`,
+        `SELECT dateTime, value FROM ${tableName} WHERE logId = ?`,
     );
     const sql_add = db.prepare(
         `INSERT INTO ${tableName} (timestamp, dateTime, value) VALUES (?, ?, ?)`,
     );
     const sql_rangeStartAt = db.prepare(
-        `SELECT sequenceNumber FROM ${tableName} WHERE timestamp >= ?`,
+        `SELECT logId FROM ${tableName} WHERE timestamp >= ?`,
     );
     const sql_range = db.prepare(
-        `SELECT sequenceNumber, FROM ${tableName} WHERE timestamp >= ? AND timestamp <= ?`,
+        `SELECT logId FROM ${tableName} WHERE timestamp >= ? AND timestamp <= ?`,
     );
     const sql_rangeStartAtObj = db.prepare(
-        `SELECT sequenceNumber, dateTime, value, FROM ${tableName} WHERE timestamp >= ?`,
+        `SELECT logId, dateTime, value FROM ${tableName} WHERE timestamp >= ?`,
     );
     const sql_rangeObj = db.prepare(
-        `SELECT sequenceNumber, dateTime, value, FROM ${tableName} WHERE timestamp >= ? AND timestamp <= ?`,
+        `SELECT logId, dateTime, value FROM ${tableName} WHERE timestamp >= ? AND timestamp <= ?`,
     );
     const sql_oldest = db.prepare(
         `SELECT dateTime, value FROM ${tableName}
@@ -63,7 +74,7 @@ export function createTemporalLogTable<T = any>(
             ORDER BY timestamp ASC 
             LIMIT ?
         )
-        ORDER BY sequenceNumber ASC`,
+        ORDER BY timestamp ASC`,
     );
     const sql_newest = db.prepare(
         `SELECT dateTime, value FROM ${tableName}
@@ -73,19 +84,19 @@ export function createTemporalLogTable<T = any>(
             ORDER BY timestamp DESC 
             LIMIT ?
         )
-        ORDER BY sequenceNumber DESC`,
+        ORDER BY timestamp DESC`,
     );
     const sql_all = db.prepare(
-        `SELECT sequenceNumber, dateTime, value FROM ${tableName}`,
+        `SELECT logId, dateTime, value FROM ${tableName}`,
     );
     const sql_allNewest = db.prepare(
-        `SELECT dateTime, value FROM ${tableName} ORDER BY sequenceNumber DESC`,
+        `SELECT dateTime, value FROM ${tableName} ORDER BY timestamp DESC`,
     );
     const sql_minMax = db.prepare(`
         SELECT 
-            (SELECT timestamp from ${tableName} ORDER BY sequenceNumber ASC LIMIT 1) 
+            (SELECT timestamp from ${tableName} ORDER BY timestamp ASC LIMIT 1) 
             AS start,
-            (SELECT timestamp from ${tableName} ORDER BY sequenceNumber DESC LIMIT 1) 
+            (SELECT timestamp from ${tableName} ORDER BY timestamp DESC LIMIT 1) 
             AS end`);
     return {
         size,
@@ -102,6 +113,9 @@ export function createTemporalLogTable<T = any>(
         getOldest,
         getTimeRange,
         newestObjects,
+        remove,
+        removeInRange,
+        clear,
         iterateAll,
         iterateIdsRange,
         iterateRange,
@@ -116,7 +130,7 @@ export function createTemporalLogTable<T = any>(
     }
 
     async function* all(): AsyncIterableIterator<
-        NameValue<dateTime.Timestamped<T>, SequenceNumber>
+        NameValue<dateTime.Timestamped<T>, TLogId>
     > {
         for (const entry of iterateAll()) {
             yield entry;
@@ -131,11 +145,11 @@ export function createTemporalLogTable<T = any>(
         }
     }
 
-    function put(value: any, timestamp?: Date): Promise<SequenceNumber> {
+    function put(value: any, timestamp?: Date): Promise<TLogId> {
         return Promise.resolve(addSync(value, timestamp));
     }
 
-    function addSync(value: T, timestamp?: Date): SequenceNumber {
+    function addSync(value: T, timestamp?: Date): TLogId {
         timestamp ??= new Date();
         const timestampString = dateTime.timestampString(timestamp);
         const result = sql_add.run(
@@ -143,20 +157,19 @@ export function createTemporalLogTable<T = any>(
             timestamp.toISOString(),
             JSON.stringify(value),
         );
-        return result.lastInsertRowid as number;
+        return idSerializer.serialize(result.lastInsertRowid);
     }
 
-    function get(
-        id: SequenceNumber,
-    ): Promise<dateTime.Timestamped<T> | undefined> {
+    function get(id: TLogId): Promise<dateTime.Timestamped<T> | undefined> {
         return Promise.resolve(getSync(id));
     }
 
     async function getMultiple(
-        ids: SequenceNumber[],
+        ids: TLogId[],
     ): Promise<(dateTime.Timestamped<T> | undefined)[]> {
+        const idsClause = isIdInt ? ids : sql_makeInClause(ids);
         const stmt = db.prepare(
-            `SELECT dateTime, value FROM ${tableName} WHERE sequenceNumber IN (${ids})`,
+            `SELECT dateTime, value FROM ${tableName} WHERE logId IN (${idsClause})`,
         );
         const objects: dateTime.Timestamped<T>[] = [];
         for (const row of stmt.iterate()) {
@@ -165,42 +178,47 @@ export function createTemporalLogTable<T = any>(
         return objects;
     }
 
-    function getSync(id: SequenceNumber): dateTime.Timestamped<T> | undefined {
-        const row = sql_get.get(id);
+    function getSync(id: TLogId): dateTime.Timestamped<T> | undefined {
+        const row = sql_get.get(idSerializer.deserialize(id));
         return row ? deserialize(row) : undefined;
     }
 
-    function getIdsInRange(
+    async function getIdsInRange(
         startAt: Date,
         stopAt?: Date,
-    ): Promise<SequenceNumber[]> {
-        return Promise.resolve([...iterateIdsRange(startAt, stopAt)]);
+    ): Promise<TLogId[]> {
+        return [...iterateIdsRange(startAt, stopAt)];
     }
 
-    function getEntriesInRange(
+    async function getEntriesInRange(
         startAt: Date,
         stopAt?: Date,
     ): Promise<dateTime.Timestamped<T>[]> {
-        return Promise.resolve([...iterateRange(startAt, stopAt)]);
+        return [...iterateRange(startAt, stopAt)];
     }
 
-    function getTimeRange(): Promise<dateTime.DateRange | undefined> {
+    async function getTimeRange(): Promise<dateTime.DateRange | undefined> {
         const row = sql_minMax.get();
         if (row) {
             const { min, max } = row as any;
-            return Promise.resolve({
+            return {
                 startDate: new Date(min),
                 stopDate: new Date(max),
-            });
+            };
         }
-        return Promise.resolve(undefined);
+        return undefined;
     }
 
-    function getNewest(count: number): Promise<dateTime.Timestamped<T>[]> {
-        return Promise.resolve([...iterateNewest(count)]);
+    async function getNewest(
+        count: number,
+    ): Promise<dateTime.Timestamped<T>[]> {
+        return [...iterateNewest(count)];
     }
-    function getOldest(count: number): Promise<dateTime.Timestamped<T>[]> {
-        return Promise.resolve([...iterateOldest(count)]);
+
+    async function getOldest(
+        count: number,
+    ): Promise<dateTime.Timestamped<T>[]> {
+        return [...iterateOldest(count)];
     }
 
     async function* newestObjects(): AsyncIterableIterator<
@@ -212,12 +230,31 @@ export function createTemporalLogTable<T = any>(
         }
     }
 
+    async function remove(id: TLogId): Promise<void> {
+        const stmt = db.prepare(`DELETE FROM ${tableName} WHERE logId = ?`);
+        stmt.run(idSerializer.deserialize(id));
+    }
+
+    async function removeInRange(startAt: Date, stopAt: Date): Promise<void> {
+        const rangeStart = dateTime.timestampString(startAt);
+        const rangeEnd = dateTime.timestampString(stopAt);
+        const stmt = db.prepare(
+            `DELETE FROM ${tableName} WHERE timestamp >= ? AND timestamp <= rangeEnd`,
+        );
+        stmt.run(rangeStart, rangeEnd);
+    }
+
+    async function clear() {
+        const stmt = db.prepare(`DELETE * FROM ${tableName}`);
+        stmt.run();
+    }
+
     function* iterateAll(): IterableIterator<
-        NameValue<dateTime.Timestamped<T>, SequenceNumber>
+        NameValue<dateTime.Timestamped<T>, TLogId>
     > {
         for (const row of sql_all.iterate()) {
             yield {
-                name: (row as TemporalLogRow).sequenceNumber,
+                name: idSerializer.serialize((row as TemporalLogRow).logId),
                 value: deserialize(row),
             };
         }
@@ -243,16 +280,16 @@ export function createTemporalLogTable<T = any>(
     function* iterateIdsRange(
         startAt: Date,
         stopAt?: Date,
-    ): IterableIterator<SequenceNumber> {
+    ): IterableIterator<TLogId> {
         const rangeStart = dateTime.timestampString(startAt);
         const rangeEnd = stopAt ? dateTime.timestampString(stopAt) : undefined;
         if (rangeEnd) {
             for (const row of sql_range.iterate(rangeStart, rangeEnd)) {
-                yield (row as TemporalLogRow).sequenceNumber;
+                yield idSerializer.serialize((row as TemporalLogRow).logId);
             }
         } else {
             for (const row of sql_rangeStartAt.iterate(rangeStart)) {
-                yield (row as TemporalLogRow).sequenceNumber;
+                yield idSerializer.serialize((row as TemporalLogRow).logId);
             }
         }
     }

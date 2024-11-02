@@ -42,7 +42,7 @@ export interface TemporalLog<TId = any, T = any> {
     getTimeRange(): Promise<DateRange | undefined>;
 
     remove(id: TId): Promise<void>;
-    removeInRange(startAt: Date, stopAt?: Date): Promise<TId[]>;
+    removeInRange(startAt: Date, stopAt: Date): Promise<void>;
     clear(): Promise<void>;
 
     getUrl(id: TId): URL;
@@ -188,12 +188,11 @@ export async function createTemporalLog<T>(
         sequence.remove(id);
     }
 
-    async function removeInRange(startAt: Date, stopAt?: Date): Promise<TId[]> {
+    async function removeInRange(startAt: Date, stopAt: Date): Promise<void> {
         const idsToRemove = await getIdsInRange(startAt, stopAt);
         for (const id of idsToRemove) {
             await sequence.remove(id);
         }
-        return idsToRemove;
     }
 
     function getUrl(id: string): URL {

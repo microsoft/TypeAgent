@@ -6,6 +6,7 @@ import * as sqlite from "better-sqlite3";
 import {
     AssignedId,
     ColumnType,
+    getTypeSerializer,
     sql_makeInClause,
     SqlColumnType,
     tablePath,
@@ -201,11 +202,7 @@ export async function createTextIndex<
     ensureExists: boolean = true,
 ): Promise<TextTable<TTextId, TSourceId>> {
     type TextId = number;
-    const isIdInt = textType === "INTEGER";
-    const serializer: IdSerializer = {
-        serialize: isIdInt ? (x: any) => x : (x: any) => x.toString(),
-        deserialize: isIdInt ? (x: any) => x : (x: any) => Number.parseInt(x),
-    };
+    const [isIdInt, serializer] = getTypeSerializer<TTextId>(textType);
     const textTable = createStringTable(
         db,
         tablePath(baseName, "entries"),
@@ -628,9 +625,4 @@ export async function createTextIndex<
             ? semanticIndex.nearestNeighbors(value, maxMatches, minScore)
             : undefined;
     }
-
-    type IdSerializer = {
-        serialize: (x: any) => any;
-        deserialize: (x: any) => any;
-    };
 }

@@ -22,7 +22,7 @@ describe("sqlite.temporalTable", () => {
     test(
         "addIds",
         async () => {
-            const table = createTemporalLogTable(db!, "idLog");
+            const table = createTemporalLogTable(db!, "idLog", "INTEGER");
             const blocks = composers();
             let timestamps: Date[] = [];
             let allIds: number[] = [];
