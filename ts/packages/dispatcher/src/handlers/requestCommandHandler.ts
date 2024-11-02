@@ -22,7 +22,6 @@ import {
     CachedImageWithDetails,
     getColorElapsedString,
     Logger,
-    TypeChatJsonTranslatorWithStreaming,
 } from "common-utils";
 import {
     executeActions,
@@ -31,13 +30,15 @@ import {
     validateWildcardMatch,
 } from "../action/actionHandlers.js";
 import { unicodeChar } from "../utils/interactive.js";
-import { isChangeAssistantAction } from "../translation/agentTranslators.js";
+import {
+    isChangeAssistantAction,
+    TypeAgentTranslator,
+} from "../translation/agentTranslators.js";
 import { loadAssistantSelectionJsonTranslator } from "../translation/unknownSwitcher.js";
 import {
     MultipleAction,
     isMultipleAction,
 } from "../translation/multipleActionSchema.js";
-import { makeRequestPromptCreator } from "./common/chatHistoryPrompt.js";
 import { MatchResult } from "../../../cache/dist/constructions/constructions.js";
 import registerDebug from "debug";
 import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
@@ -301,48 +302,24 @@ async function translateRequestWithTranslator(
               }
             : undefined;
     const translator = getTranslator(systemContext, translatorName);
-    const response = await translateRequestToAction(
-        translator,
-        request,
-        history,
-        attachments,
-        onProperty,
-    );
-
-    // TODO: figure out if we want to keep track of this
-    //Profiler.getInstance().incrementLLMCallCount(context.requestId);
-
-    if (!response.success) {
-        displayError(response.message, context);
-        return undefined;
-    }
-    // console.log(`response: ${JSON.stringify(response.data)}`);
-    return response.data as IAction;
-}
-
-async function translateRequestToAction(
-    translator: TypeChatJsonTranslatorWithStreaming<object>,
-    request: string,
-    history?: HistoryContext,
-    attachments?: CachedImageWithDetails[],
-    onProperty?: IncrementalJsonValueCallBack,
-    profiler?: Profiler,
-) {
-    const orp = translator.createRequestPrompt;
-    translator.createRequestPrompt = makeRequestPromptCreator(
-        translator,
-        history,
-        attachments,
-    );
     try {
-        return await translator.translate(
+        const response = await translator.translate(
             request,
-            history?.promptSections,
-            onProperty,
+            history,
             attachments,
+            onProperty,
         );
+
+        // TODO: figure out if we want to keep track of this
+        //Profiler.getInstance().incrementLLMCallCount(context.requestId);
+
+        if (!response.success) {
+            displayError(response.message, context);
+            return undefined;
+        }
+        // console.log(`response: ${JSON.stringify(response.data)}`);
+        return response.data as IAction;
     } finally {
-        translator.createRequestPrompt = orp;
         profiler?.stop();
     }
 }
@@ -677,7 +654,7 @@ async function requestExecute(
 
 async function canTranslateWithoutContext(
     requestAction: RequestAction,
-    usedTranslators: Map<string, TypeChatJsonTranslatorWithStreaming<object>>,
+    usedTranslators: Map<string, TypeAgentTranslator<object>>,
     logger?: Logger,
 ) {
     if (requestAction.history === undefined) {
@@ -690,7 +667,7 @@ async function canTranslateWithoutContext(
     try {
         const translations = new Map<string, IAction>();
         for (const [translatorName, translator] of usedTranslators) {
-            const result = await translateRequestToAction(translator, request);
+            const result = await translator.translate(request);
             if (!result.success) {
                 throw new Error("Failed to translate without history context");
             }
@@ -792,10 +769,7 @@ async function requestExplain(
         return;
     }
 
-    const usedTranslators = new Map<
-        string,
-        TypeChatJsonTranslatorWithStreaming<object>
-    >();
+    const usedTranslators = new Map<string, TypeAgentTranslator<object>>();
     const actions = requestAction.actions;
     for (const action of actions) {
         if (isUnknownAction(action)) {

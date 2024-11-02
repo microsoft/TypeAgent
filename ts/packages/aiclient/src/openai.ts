@@ -5,7 +5,6 @@ import {
     TextEmbeddingModel,
     CompletionSettings,
     ChatModel,
-    ChatMessage,
     ChatModelWithStreaming,
     ImageModel,
     ImageGeneration,
@@ -578,7 +577,7 @@ export function createChatModel(
     return model;
 
     async function complete(
-        prompt: string | PromptSection[] | ChatMessage[],
+        prompt: string | PromptSection[],
     ): Promise<Result<string>> {
         verifyPromptLength(settings, prompt);
 
@@ -629,7 +628,7 @@ export function createChatModel(
     }
 
     async function completeStream(
-        prompt: string | PromptSection[] | ChatMessage[],
+        prompt: string | PromptSection[],
     ): Promise<Result<AsyncIterableIterator<string>>> {
         verifyPromptLength(settings, prompt);
 
