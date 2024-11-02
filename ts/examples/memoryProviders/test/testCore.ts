@@ -5,6 +5,7 @@ import path from "path";
 import os from "node:os";
 import { createNormalized, ensureDir, NormalizedEmbedding } from "typeagent";
 import { hasEnvSettings, openai } from "aiclient";
+import * as knowLib from "knowledge-processor";
 
 export function skipTest(name: string) {
     return test.skip(name, () => {});
@@ -79,4 +80,54 @@ export function generateRandomTestEmbeddings(length: number, count: number) {
         embeddings.push(generateRandomTestEmbedding(length));
     }
     return embeddings;
+}
+
+export function composers() {
+    const blocks: knowLib.TextBlock<number>[] = [
+        {
+            type: knowLib.TextBlockType.Raw,
+            value: "Bach",
+            sourceIds: [1, 3, 5, 7],
+        },
+        {
+            type: knowLib.TextBlockType.Raw,
+            value: "Debussy",
+            sourceIds: [2, 3, 4, 7],
+        },
+        {
+            type: knowLib.TextBlockType.Raw,
+            value: "Gershwin",
+            sourceIds: [1, 5, 8, 9],
+        },
+    ];
+    return blocks;
+}
+
+export function fruits() {
+    const blocks: knowLib.TextBlock<number>[] = [
+        {
+            type: knowLib.TextBlockType.Raw,
+            value: "Banana",
+            sourceIds: [11, 13, 15, 17],
+        },
+        {
+            type: knowLib.TextBlockType.Raw,
+            value: "Apple",
+            sourceIds: [12, 13, 14, 17],
+        },
+        {
+            type: knowLib.TextBlockType.Raw,
+            value: "Peach",
+            sourceIds: [11, 15, 18, 19],
+        },
+    ];
+    return blocks;
+}
+
+export function uniqueSourceIds(blocks: knowLib.TextBlock[]): number[] {
+    const set = new Set<number>();
+    for (const block of blocks) {
+        block.sourceIds?.forEach((id) => set.add(id));
+    }
+    return [...set.values()].sort();
 }
