@@ -12,11 +12,14 @@ import {
     StringTable,
 } from "../src/sqlite/textTable.js";
 import {
+    composers,
     createEmbeddingModel,
     ensureTestDir,
+    fruits,
     hasEmbeddingEndpoint,
     testFilePath,
     testIf,
+    uniqueSourceIds,
 } from "./testCore.js";
 import * as knowLib from "knowledge-processor";
 import { asyncArray } from "typeagent";
@@ -196,55 +199,5 @@ describe("sqlite.textTable", () => {
             expect(id).toBeDefined();
             expect(id).toEqual(expectedIds[i].id);
         }
-    }
-
-    function composers() {
-        const blocks: knowLib.TextBlock<number>[] = [
-            {
-                type: knowLib.TextBlockType.Raw,
-                value: "Bach",
-                sourceIds: [1, 3, 5, 7],
-            },
-            {
-                type: knowLib.TextBlockType.Raw,
-                value: "Debussy",
-                sourceIds: [2, 3, 4, 7],
-            },
-            {
-                type: knowLib.TextBlockType.Raw,
-                value: "Gershwin",
-                sourceIds: [1, 5, 8, 9],
-            },
-        ];
-        return blocks;
-    }
-
-    function fruits() {
-        const blocks: knowLib.TextBlock<number>[] = [
-            {
-                type: knowLib.TextBlockType.Raw,
-                value: "Banana",
-                sourceIds: [11, 13, 15, 17],
-            },
-            {
-                type: knowLib.TextBlockType.Raw,
-                value: "Apple",
-                sourceIds: [12, 13, 14, 17],
-            },
-            {
-                type: knowLib.TextBlockType.Raw,
-                value: "Peach",
-                sourceIds: [11, 15, 18, 19],
-            },
-        ];
-        return blocks;
-    }
-
-    function uniqueSourceIds(blocks: knowLib.TextBlock[]): number[] {
-        const set = new Set<number>();
-        for (const block of blocks) {
-            block.sourceIds?.forEach((id) => set.add(id));
-        }
-        return [...set.values()].sort();
     }
 });
