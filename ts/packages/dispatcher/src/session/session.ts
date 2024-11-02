@@ -111,7 +111,7 @@ type DispatcherConfig = {
     stream: boolean;
     explanation: boolean;
     explanationOptions: {
-        rejectReference: boolean;
+        rejectReferences: boolean;
         retranslateWithoutContext: boolean;
     };
     switch: {
@@ -147,7 +147,7 @@ const defaultSessionConfig: SessionConfig = {
     stream: true,
     explanation: true,
     explanationOptions: {
-        rejectReference: true,
+        rejectReferences: true,
         retranslateWithoutContext: true,
     },
     switch: {

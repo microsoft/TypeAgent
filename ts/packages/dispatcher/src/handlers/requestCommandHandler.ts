@@ -188,6 +188,7 @@ async function matchRequest(
         const useTranslators = systemContext.agents.getActiveTranslators();
         const matches = constructionStore.match(request, {
             wildcard: config.matchWildcard,
+            rejectReferences: config.explanationOptions.rejectReferences,
             useTranslators,
             history,
         });
@@ -813,13 +814,14 @@ async function requestExplain(
             getTranslator(context, translatorName),
         );
     }
-    const explanationOptions = context.session.getConfig().explanationOptions;
+    const { rejectReferences, retranslateWithoutContext } =
+        context.session.getConfig().explanationOptions;
 
     const processRequestActionP = context.agentCache.processRequestAction(
         requestAction,
         true,
         {
-            checkExplainable: explanationOptions.retranslateWithoutContext
+            checkExplainable: retranslateWithoutContext
                 ? (requestAction: RequestAction) =>
                       canTranslateWithoutContext(
                           requestAction,
@@ -827,6 +829,7 @@ async function requestExplain(
                           context.logger,
                       )
                 : undefined,
+            rejectReferences,
         },
     );
 
