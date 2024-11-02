@@ -40,9 +40,6 @@ export interface TemporalLog<TId = any, T = any> {
     getNewest(count: number): Promise<dateTime.Timestamped<T>[]>;
     getOldest(count: number): Promise<dateTime.Timestamped<T>[]>;
 
-    getPrevious(id: TId): Promise<dateTime.Timestamped<T> | undefined>;
-    getNext(id: TId): Promise<dateTime.Timestamped<T> | undefined>;
-
     getTimeRange(): Promise<DateRange | undefined>;
 
     remove(id: TId): Promise<void>;
@@ -81,9 +78,7 @@ export async function createTemporalLog<T>(
         put,
         newestObjects,
         getNewest,
-        getPrevious,
         getOldest,
-        getNext,
         getTimeRange,
         getUrl,
         remove,
@@ -168,28 +163,6 @@ export async function createTemporalLog<T>(
         count = Math.min(allIds.length, count);
         const ids = allIds.slice(0, count);
         return (await getMultiple(ids)) as dateTime.Timestamped<T>[];
-    }
-
-    async function getPrevious(
-        id: TId,
-    ): Promise<dateTime.Timestamped<T> | undefined> {
-        const allIds = await sequence.allNames();
-        const pos = collections.binarySearch(allIds, id, strCmp);
-        if (pos <= 0) {
-            return undefined;
-        }
-        return await get(allIds[pos - 1]);
-    }
-
-    async function getNext(
-        id: TId,
-    ): Promise<dateTime.Timestamped<T> | undefined> {
-        const allIds = await sequence.allNames();
-        const pos = collections.binarySearch(allIds, id, strCmp);
-        if (pos < 0 || pos === allIds.length - 1) {
-            return undefined;
-        }
-        return await get(allIds[pos + 1]);
     }
 
     async function getTimeRange(): Promise<DateRange | undefined> {
