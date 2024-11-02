@@ -9,7 +9,7 @@ import {
     ActionResult,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
-import { AndroidMobileAction, CallPhoneNumberAction, SetAlarmAction } from "./androidMobileSchema.js";
+import { AndroidMobileAction, CallPhoneNumberAction, SendSMSAction, SetAlarmAction } from "./androidMobileSchema.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -54,6 +54,12 @@ async function handlePhotoAction(
 ) {
     let result: ActionResult | undefined = undefined;
     switch (action.actionName) {
+        case "sendSMS": {
+            let smsAction = action as SendSMSAction;
+            result = createActionResult(`Sending SMS to ${smsAction.parameters.phoneNumber} message '${smsAction.parameters.message}'`);
+            context.actionIO.takeAction("send-sms", smsAction.parameters);
+            break;
+        }
         case "callPhoneNumber": {
             let callAction = action as CallPhoneNumberAction;
             result = createActionResult(`Calling ${callAction.parameters.phoneNumber}`);
@@ -67,7 +73,7 @@ async function handlePhotoAction(
             break;
         }
         default:
-            throw new Error(`Unknown action: ${action.actionName}`);
+            throw new Error(`Unknown action: ${action}`);
     }
     return result;
 }

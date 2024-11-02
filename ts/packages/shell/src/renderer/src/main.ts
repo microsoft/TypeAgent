@@ -222,6 +222,10 @@ function addEvents(
                     let d: any = data;
                     Android?.callPhoneNumber(d.phoneNumber);
                 }
+                case "send-sms": {
+                    let d: any = data;
+                    Android.sendSMS(d.phoneNumber, d.message);
+                }
             }
         } catch (e) {
             console.log(e);

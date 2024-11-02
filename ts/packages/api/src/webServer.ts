@@ -62,6 +62,11 @@ export class TypeAgentAPIWebServer {
         this.server.listen(3000, "127.0.0.1", () => {
             console.log("Listening on 127.0.0.1:3000");
         });
+
+        // // starts a simple http server locally on port 3000
+        // this.server.listen(3000, "192.168.1.142", () => {
+        //     console.log("Listening on 192.168.1.142:3000");
+        // });
     }
 
     stop() {

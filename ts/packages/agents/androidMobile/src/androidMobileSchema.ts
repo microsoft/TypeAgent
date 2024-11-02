@@ -1,7 +1,20 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type AndroidMobileAction = CallPhoneNumberAction | SetAlarmAction | UnknownAction;
+export type AndroidMobileAction = SendSMSAction | CallPhoneNumberAction | SetAlarmAction;
+
+// sends a SMS to the supplied phone number
+export type SendSMSAction = {
+    actionName: "sendSMS",
+    parameters: {
+        // the original request of the user
+        originalRequest: string;
+        // the phone number to message
+        phoneNumber: string;
+        // the sms message
+        message: string;
+    }
+}
 
 // calls a user's phone number but only if we know the phone number
 export type CallPhoneNumberAction = {
@@ -24,12 +37,3 @@ export type SetAlarmAction = {
         time: string;
     };
 };
-
-// if the user types text that can not easily be understood as a list action, this action is used
-export interface UnknownAction {
-    actionName: "unknown";
-    parameters: {
-        // text typed by the user that the system did not understand
-        text: string;
-    };
-}

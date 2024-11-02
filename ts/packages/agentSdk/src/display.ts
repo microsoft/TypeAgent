@@ -28,11 +28,10 @@ export type DisplayAppendMode = "inline" | "block" | "temporary";
 
 export type ClientAction =
     | "show-camera"
-    | "open-app"
     | "show-notification"
-    | "start-intent"
     | "set-alarm"
-    | "call-phonenumber";
+    | "call-phonenumber"
+    | "send-sms";
 
 export interface ActionIO {
     readonly type: DisplayType;

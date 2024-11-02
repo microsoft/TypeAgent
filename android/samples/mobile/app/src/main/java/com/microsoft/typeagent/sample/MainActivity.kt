@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
 @Preview
 fun Browser() {
     val url = "http://10.0.2.2:3000"
+    //val url = "http://192.168.1.142:3000/"
     var wvv: WebView? = null
     var jsi: JavaScriptInterface? = null
 
