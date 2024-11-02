@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type CrosswordActions = EnterTextAction | GetClueAction | UnknownAction;
+export type CrosswordActions = EnterTextAction | GetClueAction;
 
 export type EnterTextAction = {
   actionName: "enterText";
@@ -17,13 +17,5 @@ export type GetClueAction = {
   parameters: {
     clueNumber: number;
     clueDirection: "across" | "down";
-  };
-};
-
-export type UnknownAction = {
-  actionName: "unknown";
-  parameters: {
-    // text typed by the user that the system did not understand
-    text: string;
   };
 };

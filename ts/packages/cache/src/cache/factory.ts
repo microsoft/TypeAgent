@@ -68,9 +68,21 @@ export class AgentCacheFactory {
             throw new Error(`Invalid explainer name '${explainerName}'`);
         }
         const customFactory = this.getCustomExplainerFactory?.(explainerName);
-        const cache = new Map<string | undefined, GenericExplainer>();
+        const cache = new Map<string, GenericExplainer>();
+        const defaultCache = new Map<string, GenericExplainer>();
+        const getDefaultExplainer = (model?: string) => {
+            const key = model ?? "";
+            let explainer = defaultCache.get(key);
+            if (explainer !== undefined) {
+                return explainer;
+            }
+            explainer = defaultFactory(model);
+            defaultCache.set(key, explainer);
+            return explainer;
+        };
         const factory = (translator: string | undefined, model?: string) => {
-            const existing = cache.get(`${translator ?? ""}|${model ?? ""}`);
+            const key = `${translator ?? ""}|${model ?? ""}`;
+            const existing = cache.get(key);
             if (existing) {
                 return existing;
             }
@@ -84,8 +96,8 @@ export class AgentCacheFactory {
                 throw new Error("Custom model not supported");
             }
 
-            const explainer = customExplainer ?? defaultFactory(model);
-            cache.set(translator, explainer);
+            const explainer = customExplainer ?? getDefaultExplainer(model);
+            cache.set(key, explainer);
             return explainer;
         };
 

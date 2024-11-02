@@ -6,8 +6,7 @@ export type CodeGeneralActions =
     | GotoFileOrLineOrSymbolAction
     | NewWindowAction
     | ShowUserSettingsAction
-    | ShowKeyboardShortcutsAction
-    | UnknownAction;
+    | ShowKeyboardShortcutsAction;
 
 // Show or open the command palette that allows to search and execute commands
 // Triggger this action only when asked to show/open the command palette explicitly
@@ -45,13 +44,4 @@ export type ShowUserSettingsAction = {
 export type ShowKeyboardShortcutsAction = {
     actionName: "showKeyboardShortcuts";
     parameters: {};
-};
-
-// Unknown action
-export type UnknownAction = {
-    actionName: "unknown";
-    parameters: {
-        // text typed by the user that the system did not understand
-        text: string;
-    };
 };

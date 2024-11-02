@@ -619,7 +619,7 @@ async function pauseActionCall(
 ): Promise<ActionResult> {
     const state = await getPlaybackState(clientContext.service);
     if (!state) {
-        return createWarningActionResult("No active playback to resume");
+        return createWarningActionResult("No active playback to pause");
     }
     const deviceId = ensureClientId(state);
     if (deviceId === undefined) {
@@ -638,7 +638,7 @@ async function pauseActionCall(
 async function nextActionCall(clientContext: IClientContext) {
     const state = await getPlaybackState(clientContext.service);
     if (!state) {
-        return createWarningActionResult("No active playback to resume");
+        return createWarningActionResult("No active playback to move next to");
     }
     const deviceId = ensureClientId(state);
     if (deviceId === undefined) {
@@ -654,7 +654,9 @@ async function nextActionCall(clientContext: IClientContext) {
 async function previousActionCall(clientContext: IClientContext) {
     const state = await getPlaybackState(clientContext.service);
     if (!state) {
-        return createWarningActionResult("No active playback to resume");
+        return createWarningActionResult(
+            "No active playback to move previous to",
+        );
     }
     const deviceId = ensureClientId(state);
     if (deviceId === undefined) {
@@ -670,7 +672,7 @@ async function previousActionCall(clientContext: IClientContext) {
 async function shuffleActionCall(clientContext: IClientContext, on: boolean) {
     const state = await getPlaybackState(clientContext.service);
     if (!state) {
-        return createWarningActionResult("No active playback to resume");
+        return createWarningActionResult("No active playback to shuffle");
     }
     const deviceId = ensureClientId(state);
     if (deviceId === undefined) {
@@ -1009,7 +1011,7 @@ export async function handleCall(
         }
         default:
             return createErrorActionResult(
-                `Action not supported: ${action.actionName}`,
+                `Action not supported: ${(action as any).actionName}`,
             );
     }
 }

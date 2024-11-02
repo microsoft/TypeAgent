@@ -3,7 +3,7 @@
   "compilerOptions": {
     "composite": false,
     "rootDir": ".",
-    "outDir": "../dist/site",
+    "outDir": "../../dist/site",
     "declaration": false,
     "declarationMap": false,
     "moduleResolution": "bundler",

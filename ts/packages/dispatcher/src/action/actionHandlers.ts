@@ -32,7 +32,7 @@ import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incremen
 import { ProfileNames } from "../utils/profileNames.js";
 import { conversation } from "knowledge-processor";
 
-const debugActions = registerDebug("typeagent:actions");
+const debugActions = registerDebug("typeagent:dispatcher:actions");
 
 export function getTranslatorPrefix(
     translatorName: string,

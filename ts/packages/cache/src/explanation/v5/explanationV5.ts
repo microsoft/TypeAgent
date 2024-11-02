@@ -63,8 +63,6 @@ import {
 } from "../../constructions/matchPart.js";
 import { Transforms } from "../../constructions/transforms.js";
 
-import Path from "path";
-
 type Explanation = PropertyExplanation &
     SubPhraseExplanation &
     AlternativesExplanation;
