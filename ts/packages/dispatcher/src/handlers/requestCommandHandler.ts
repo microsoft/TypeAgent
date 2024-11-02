@@ -821,7 +821,11 @@ async function requestExplain(
         {
             checkExplainable: explanationOptions.retranslateWithoutContext
                 ? (requestAction: RequestAction) =>
-                      canTranslateWithoutContext(requestAction, usedTranslators)
+                      canTranslateWithoutContext(
+                          requestAction,
+                          usedTranslators,
+                          context.logger,
+                      )
                 : undefined,
         },
     );
