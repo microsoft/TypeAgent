@@ -50,7 +50,9 @@ function getFailedResult(message: string): ProcessRequestActionResult {
 type ExplanationOptions = {
     concurrent?: boolean; // whether to limit to run one at a time, require cache to be false
     rejectReferences?: boolean;
-    checkExplainable?: ((requestAction: RequestAction) => Promise<void>) | undefined; // throw exception if not explainable
+    checkExplainable?:
+        | ((requestAction: RequestAction) => Promise<void>)
+        | undefined; // throw exception if not explainable
 };
 
 export class AgentCache {
