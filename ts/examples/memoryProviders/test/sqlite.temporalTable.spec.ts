@@ -11,7 +11,7 @@ describe("sqlite.temporalTable", () => {
     let db: sqlite.Database | undefined;
     beforeAll(async () => {
         await ensureTestDir();
-        db = await createDb(testFilePath("strings.db"), true);
+        db = await createDb(testFilePath("temporal.db"), true);
     });
     afterAll(() => {
         if (db) {
@@ -26,7 +26,7 @@ describe("sqlite.temporalTable", () => {
             const blocks = composers();
             let timestamps: Date[] = [];
             let allIds: number[] = [];
-            const addCount = 10;
+            const addCount = 100;
             for (let i = 1; i <= addCount; ++i) {
                 let timestamp = new Date(2024, 1, 1, i);
                 timestamps.push(timestamp);
@@ -37,7 +37,7 @@ describe("sqlite.temporalTable", () => {
                 allIds.push(...ids);
             }
 
-            const windowLength = 3;
+            const windowLength = 8;
             const latest = [...table.iterateNewest(windowLength)];
             expect(latest).toHaveLength(windowLength * blocks.length);
             expect(latest[0].timestamp).toEqual(
@@ -47,6 +47,14 @@ describe("sqlite.temporalTable", () => {
             const oldest = [...table.iterateOldest(windowLength)];
             expect(oldest).toHaveLength(windowLength * blocks.length);
             expect(oldest[0].timestamp).toEqual(timestamps[0]);
+
+            const iStart = 1;
+            const iEnd = timestamps.length / 2;
+            const entries = await table.getEntriesInRange(
+                timestamps[iStart],
+                timestamps[iEnd],
+            );
+            expect(entries).toHaveLength((iEnd - iStart + 1) * blocks.length);
         },
         testTimeout,
     );

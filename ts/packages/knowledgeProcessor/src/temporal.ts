@@ -45,7 +45,7 @@ export interface TemporalLog<TId = any, T = any> {
     removeInRange(startAt: Date, stopAt: Date): Promise<void>;
     clear(): Promise<void>;
 
-    getUrl(id: TId): URL;
+    getUrl?: (id: TId) => URL;
 }
 
 export type TemporalLogSettings = {

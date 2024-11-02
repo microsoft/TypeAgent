@@ -41,7 +41,7 @@ describe("sqlite.textTable", () => {
 
     test(
         "stringTable",
-        async () => {
+        () => {
             const table = createStringTable(db!, "Names");
             const strings: string[] = ["One", "Two", "Three"];
 
@@ -121,7 +121,7 @@ describe("sqlite.textTable", () => {
         const table = await createTextIndex<string, number>(
             { caseSensitive: false, concurrency: 2, semanticIndex: false },
             db!,
-            "NameIndex_Exact",
+            "NameIndex_Exact_string",
             "TEXT",
             "INTEGER",
         );

@@ -18,9 +18,18 @@ export type TemporalLogRow = {
     value: string;
 };
 
-export interface TemporalTable<TId = any, T = any>
-    extends knowLib.TemporalLog<TId, T> {
-    iterateRange(startAt: Date, stopAt?: Date): IterableIterator<string>;
+export interface TemporalTable<TLogId = any, T = any>
+    extends knowLib.TemporalLog<TLogId, T> {
+    addSync(value: T, timestamp?: Date): TLogId;
+    getSync(id: TLogId): dateTime.Timestamped<T> | undefined;
+    iterateAll(): IterableIterator<NameValue<dateTime.Timestamped<T>, TLogId>>;
+    iterateIdsRange(startAt: Date, stopAt?: Date): IterableIterator<TLogId>;
+    iterateRange(
+        startAt: Date,
+        stopAt?: Date,
+    ): IterableIterator<dateTime.Timestamped<T>>;
+    iterateOldest(count: number): IterableIterator<dateTime.Timestamped>;
+    iterateNewest(count: number): IterableIterator<dateTime.Timestamped>;
 }
 
 export function createTemporalLogTable<
@@ -31,7 +40,7 @@ export function createTemporalLogTable<
     tableName: string,
     keyType: SqlColumnType<TLogId>,
     ensureExists: boolean = true,
-) {
+): TemporalTable<TLogId, T> {
     const [isIdInt, idSerializer] = getTypeSerializer<TLogId>(keyType);
 
     const schemaSql = `  
