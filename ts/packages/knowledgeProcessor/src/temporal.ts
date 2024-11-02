@@ -26,7 +26,6 @@ export interface TemporalLog<TId = any, T = any> {
     size(): Promise<number>;
     all(): AsyncIterableIterator<NameValue<dateTime.Timestamped<T>, TId>>;
     allObjects(): AsyncIterableIterator<dateTime.Timestamped<T>>;
-    allIds(): Promise<TId[]>;
     get(id: TId): Promise<dateTime.Timestamped<T> | undefined>;
     getMultiple(ids: TId[]): Promise<(dateTime.Timestamped<T> | undefined)[]>;
     getIdsInRange(startAt: Date, stopAt?: Date): Promise<TId[]>;
@@ -69,7 +68,6 @@ export async function createTemporalLog<T>(
     return {
         size: sequence.size,
         all,
-        allIds: sequence.allNames,
         allObjects,
         get,
         getMultiple,

@@ -90,6 +90,7 @@ export function createTemporalLogTable<T = any>(
         addSync,
         put,
         get,
+        getMultiple,
         getSync,
         getIdsInRange,
         getNewest,
@@ -143,6 +144,19 @@ export function createTemporalLogTable<T = any>(
         id: SequenceNumber,
     ): Promise<dateTime.Timestamped<T> | undefined> {
         return Promise.resolve(getSync(id));
+    }
+
+    async function getMultiple(
+        ids: SequenceNumber[],
+    ): Promise<(dateTime.Timestamped<T> | undefined)[]> {
+        const stmt = db.prepare(
+            `SELECT dateTime, value FROM ${tableName} WHERE sequenceNumber IN (${ids})`,
+        );
+        const objects: dateTime.Timestamped<T>[] = [];
+        for (const row of stmt.iterate()) {
+            objects.push(deserialize(row));
+        }
+        return objects;
     }
 
     function getSync(id: SequenceNumber): dateTime.Timestamped<T> | undefined {
