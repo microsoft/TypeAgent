@@ -3,7 +3,7 @@
 
 import * as sqlite from "better-sqlite3";
 import * as knowLib from "knowledge-processor";
-import { dateTime } from "typeagent";
+import { dateTime, NameValue } from "typeagent";
 
 export type TemporalLogRow = {
     sequenceNumber: number;
@@ -66,7 +66,6 @@ export function createTemporalLogTable<T = any>(
         )
         ORDER BY sequenceNumber ASC`,
     );
-
     const sql_newest = db.prepare(
         `SELECT dateTime, value FROM ${tableName}
          WHERE timestamp IN (
@@ -77,12 +76,17 @@ export function createTemporalLogTable<T = any>(
         )
         ORDER BY sequenceNumber DESC`,
     );
+    const sql_all = db.prepare(
+        `SELECT sequenceNumber, dateTime, value FROM ${tableName}`,
+    );
     const sql_allNewest = db.prepare(
         `SELECT dateTime, value FROM ${tableName} ORDER BY sequenceNumber DESC`,
     );
 
     return {
         size,
+        all,
+        allObjects,
         addSync,
         put,
         get,
@@ -90,17 +94,34 @@ export function createTemporalLogTable<T = any>(
         getIdsInRange,
         getNewest,
         getOldest,
+        newestObjects,
+        iterate: iterateAll,
         iterateRange,
         iterateOldestTimestamps,
         iterateOldest,
         iterateNewest,
-        newestObjects,
     };
 
     function size(): Promise<number> {
         const row = sql_size.run();
         const count = row ? (row as any).count : 0;
         return Promise.resolve(count);
+    }
+
+    async function* all(): AsyncIterableIterator<
+        NameValue<dateTime.Timestamped<T>, SequenceNumber>
+    > {
+        for (const entry of iterateAll()) {
+            yield entry;
+        }
+    }
+
+    async function* allObjects(): AsyncIterableIterator<
+        dateTime.Timestamped<T>
+    > {
+        for (const row of sql_add.iterate()) {
+            yield deserialize(row);
+        }
     }
 
     function put(value: any, timestamp?: Date): Promise<SequenceNumber> {
@@ -149,6 +170,17 @@ export function createTemporalLogTable<T = any>(
         const rows = sql_allNewest.iterate();
         for (const row of rows) {
             yield deserialize(row);
+        }
+    }
+
+    function* iterateAll(): IterableIterator<
+        NameValue<dateTime.Timestamped<T>, SequenceNumber>
+    > {
+        for (const row of sql_all.iterate()) {
+            yield {
+                name: (row as TemporalLogRow).sequenceNumber,
+                value: deserialize(row),
+            };
         }
     }
 
