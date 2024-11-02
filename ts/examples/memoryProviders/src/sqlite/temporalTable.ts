@@ -77,6 +77,9 @@ export function createTemporalLogTable<T = any>(
         )
         ORDER BY sequenceNumber DESC`,
     );
+    const sql_allNewest = db.prepare(
+        `SELECT dateTime, value FROM ${tableName} ORDER BY sequenceNumber DESC`,
+    );
 
     return {
         size,
@@ -91,6 +94,7 @@ export function createTemporalLogTable<T = any>(
         iterateOldestTimestamps,
         iterateOldest,
         iterateNewest,
+        newestObjects,
     };
 
     function size(): Promise<number> {
@@ -122,7 +126,7 @@ export function createTemporalLogTable<T = any>(
 
     function getSync(id: SequenceNumber): dateTime.Timestamped<T> | undefined {
         const row = sql_get.get(id);
-        return row ? deserialize(row as TemporalLogRow) : undefined;
+        return row ? deserialize(row) : undefined;
     }
 
     function getIdsInRange(
@@ -137,6 +141,15 @@ export function createTemporalLogTable<T = any>(
     }
     function getOldest(count: number): Promise<dateTime.Timestamped<T>[]> {
         return Promise.resolve([...iterateOldest(count)]);
+    }
+
+    async function* newestObjects(): AsyncIterableIterator<
+        dateTime.Timestamped<T>
+    > {
+        const rows = sql_allNewest.iterate();
+        for (const row of rows) {
+            yield deserialize(row);
+        }
     }
 
     function* iterateRange(
@@ -168,7 +181,7 @@ export function createTemporalLogTable<T = any>(
         count: number,
     ): IterableIterator<dateTime.Timestamped> {
         for (const row of sql_oldest.iterate(count)) {
-            yield deserialize(row as TemporalLogRow);
+            yield deserialize(row);
         }
     }
 
@@ -176,14 +189,15 @@ export function createTemporalLogTable<T = any>(
         count: number,
     ): IterableIterator<dateTime.Timestamped> {
         for (const row of sql_newest.iterate(count)) {
-            yield deserialize(row as TemporalLogRow);
+            yield deserialize(row);
         }
     }
 
-    function deserialize(row: TemporalLogRow): dateTime.Timestamped<T> {
+    function deserialize(row: any): dateTime.Timestamped<T> {
+        const logRow = row as TemporalLogRow;
         return {
-            timestamp: new Date(row.dateTime),
-            value: JSON.parse(row.value),
+            timestamp: new Date(logRow.dateTime),
+            value: JSON.parse(logRow.value),
         };
     }
 }

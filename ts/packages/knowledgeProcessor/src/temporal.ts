@@ -36,7 +36,6 @@ export interface TemporalLog<TId = any, T = any> {
     ): Promise<dateTime.Timestamped<T>[]>;
     put(value: T, timestamp?: Date): Promise<TId>;
 
-    newest(): AsyncIterableIterator<NameValue<dateTime.Timestamped<T>, TId>>;
     newestObjects(): AsyncIterableIterator<dateTime.Timestamped<T>>;
     getNewest(count: number): Promise<dateTime.Timestamped<T>[]>;
     getOldest(count: number): Promise<dateTime.Timestamped<T>[]>;
@@ -80,7 +79,6 @@ export async function createTemporalLog<T>(
         getIdsInRange,
         getEntriesInRange,
         put,
-        newest,
         newestObjects,
         getNewest,
         getPrevious,
@@ -109,17 +107,6 @@ export async function createTemporalLog<T>(
     > {
         for await (const nv of sequence.all()) {
             yield dateTime.parseTimestamped<T>(nv.value);
-        }
-    }
-
-    async function* newest(): AsyncIterableIterator<
-        NameValue<dateTime.Timestamped<T>, TId>
-    > {
-        for await (const nv of sequence.newest()) {
-            yield {
-                name: nv.name,
-                value: dateTime.parseTimestamped<T>(nv.value),
-            };
         }
     }
 
