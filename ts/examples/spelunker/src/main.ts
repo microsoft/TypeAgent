@@ -21,8 +21,9 @@ import {
     CodeDocumentation,
     CodeDocumenter,
     createSemanticCodeIndex,
+    SemanticCodeIndex,
 } from "code-processor";
-import { createObjectFolder, loadSchema } from "typeagent";
+import { createObjectFolder, loadSchema, ObjectFolder } from "typeagent";
 
 // Local imports
 import { ChunkDocumentation } from "./chunkDocSchema.js";
@@ -37,32 +38,18 @@ const __dirname = path.dirname(__filename);
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
 
+const verbose = true; // true for more, false for less chatty output.
+
+await main();
+
 // Usage: node main.js [file1.py] [file2.py] ...
 // OR:    node main.js --files filelist.txt
 // OR:    node main.js -  # Load sample file (sample.py.txt)
 // OR:    node main.js    # Query previously loaded files
 async function main(): Promise<void> {
-    console.log("Hi!");
-    const verbose = false;
-    let files: string[];
-    // TODO: Use a proper command-line parser.
-    if (process.argv.length > 2) {
-        files = process.argv.slice(2);
-        if (files.length === 1 && files[0] === "-") {
-            const sampleFile = path.join(__dirname, "sample.py.txt");
-            files = [sampleFile];
-        } else if (files.length === 2 && files[0] === "--files") {
-            // Read list of files from a file.
-            const fileList = files[1];
-            files = fs
-                .readFileSync(fileList, "utf-8")
-                .split("\n")
-                .map((line) => line.trim())
-                .filter((line) => line.length > 0 && line[0] !== "#");
-        }
-    } else {
-        files = [];
-    }
+    console.log("[Hi!]");
+
+    const files = processArgs();
 
     let homeDir = process.platform === "darwin" ? process.env.HOME || "" : "";
     const dataRoot = homeDir + "/data";
@@ -88,6 +75,7 @@ async function main(): Promise<void> {
     // Import all files. (TODO: Break up very long lists.)
     if (files.length > 0) {
         console.log(`[Importing ${files.length} files]`);
+        const t0 = new Date().getTime();
         await importPythonFiles(
             files,
             chunkFolder,
@@ -95,6 +83,10 @@ async function main(): Promise<void> {
             summaryFolder,
             true,
             verbose,
+        );
+        const t1 = new Date().getTime();
+        console.log(
+            `[Imported ${files.length} files in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
         );
     }
 
@@ -105,61 +97,85 @@ async function main(): Promise<void> {
             keepWhitespace: true, // Keep leading/trailing whitespace in history
         });
         if (!input) {
-            console.log("Bye!");
+            console.log("[Bye!]");
             return;
         }
-        const searchKey = input.replace(/\W+/g, " ").trim();
-        let hits;
-        try {
-            hits = await codeIndex.find(searchKey, 2);
-        } catch (error) {
-            console.log(`[${error}]`);
-            continue;
+        await processQuery(input, chunkFolder, codeIndex, summaryFolder);
+    }
+}
+
+function processArgs() {
+    let files: string[];
+    // TODO: Use a proper command-line parser.
+    if (process.argv.length > 2) {
+        files = process.argv.slice(2);
+        if (files.length === 1 && files[0] === "-") {
+            const sampleFile = path.join(__dirname, "sample.py.txt");
+            files = [sampleFile];
+        } else if (files.length === 2 && files[0] === "--files") {
+            // Read list of files from a file.
+            const fileList = files[1];
+            files = fs
+                .readFileSync(fileList, "utf-8")
+                .split("\n")
+                .map((line) => line.trim())
+                .filter((line) => line.length > 0 && line[0] !== "#");
         }
-        console.log(
-            `Got ${hits.length} hit${hits.length == 0 ? "s." : hits.length === 1 ? ":" : "s:"}`,
-        );
-        for (const hit of hits) {
-            const chunk: Chunk | undefined = await chunkFolder.get(hit.item);
-            if (!chunk) {
-                console.log(hit, "--> [No data]");
-            } else {
-                console.log(
-                    `score: ${hit.score.toFixed(3)}, ` +
-                        `id: ${chunk.id}, ` +
-                        `file: ${path.relative(process.cwd(), chunk.filename!)}, ` +
-                        `type: ${chunk.treeName}`,
-                );
-                const summary: CodeDocumentation | undefined =
-                    await summaryFolder.get(hit.item);
-                if (
-                    summary &&
-                    summary.comments &&
-                    summary.comments.length > 0
-                ) {
-                    for (const comment of summary.comments)
-                        console.log(
-                            wordWrap(
-                                `${comment.lineNumber}. ${comment.comment}`,
-                            ),
-                        );
+    } else {
+        files = [];
+    }
+    return files;
+}
+
+async function processQuery(
+    input: string,
+    chunkFolder: ObjectFolder<Chunk>,
+    codeIndex: SemanticCodeIndex,
+    summaryFolder: ObjectFolder<CodeDocumentation>,
+): Promise<void> {
+    const searchKey = input.replace(/\W+/g, " ").trim();
+    let hits;
+    try {
+        hits = await codeIndex.find(searchKey, 2);
+    } catch (error) {
+        console.log(`[${error}]`);
+        return;
+    }
+    console.log(
+        `Got ${hits.length} hit${hits.length == 0 ? "s." : hits.length === 1 ? ":" : "s:"}`,
+    );
+    for (const hit of hits) {
+        const chunk: Chunk | undefined = await chunkFolder.get(hit.item);
+        if (!chunk) {
+            console.log(hit, "--> [No data]");
+        } else {
+            console.log(
+                `score: ${hit.score.toFixed(3)}, ` +
+                    `id: ${chunk.id}, ` +
+                    `file: ${path.relative(process.cwd(), chunk.filename!)}, ` +
+                    `type: ${chunk.treeName}`,
+            );
+            const summary: CodeDocumentation | undefined =
+                await summaryFolder.get(hit.item);
+            if (summary && summary.comments && summary.comments.length > 0) {
+                for (const comment of summary.comments)
+                    console.log(
+                        wordWrap(`${comment.lineNumber}. ${comment.comment}`),
+                    );
+            }
+            for (const blob of chunk.blobs) {
+                let lineno = 1 + blob.start;
+                for (const index in blob.lines) {
+                    console.log(
+                        `${String(lineno).padStart(3)}: ${blob.lines[index].trimEnd()}`,
+                    );
+                    lineno += 1;
                 }
-                for (const blob of chunk.blobs) {
-                    let lineno = 1 + blob.start;
-                    for (const index in blob.lines) {
-                        console.log(
-                            `${String(lineno).padStart(3)}: ${blob.lines[index].trimEnd()}`,
-                        );
-                        lineno += 1;
-                    }
-                    console.log("");
-                }
+                console.log("");
             }
         }
     }
 }
-
-await main();
 
 // We have our own code documenter to pass to createSemanticCodeIndex.
 
