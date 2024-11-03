@@ -31,14 +31,10 @@ TypeScript, of course).
 import * as fs from "fs";
 
 import { asyncArray, ObjectFolder } from "typeagent";
-import {
-    CodeBlock,
-    CodeDocumentation,
-    SemanticCodeIndex,
-} from "code-processor";
+import { CodeDocumentation, SemanticCodeIndex } from "code-processor";
 
 import { Chunk, ChunkedFile, chunkifyPythonFiles } from "./pythonChunker.js";
-import { FileDocumenter } from "./main.js";
+import { CodeBlockWithDocs, FileDocumenter } from "./main.js";
 
 // TODO: Turn (chunkFolder, codeIndex, summaryFolder) into a single object.
 
@@ -73,7 +69,7 @@ export async function importPythonFiles(
         const docs = await fileDocumenter.document(chunks);
         console.log(docs);
         firstFile = await processChunkedFile(
-            item,
+            chunkedFile,
             chunkFolder,
             codeIndex,
             summaryFolder,
@@ -85,7 +81,7 @@ export async function importPythonFiles(
 }
 
 async function processChunkedFile(
-    chunkedFile: ChunkedFile,
+    chunkedFile: ChunkedFile, // TODO: Use a type with filename and docs guaranteed present.
     chunkFolder: ObjectFolder<Chunk>,
     codeIndex: SemanticCodeIndex,
     summaryFolder: ObjectFolder<CodeDocumentation>,
@@ -150,7 +146,11 @@ async function processChunk(
     // console.log(`[Embedding ${chunk.id} (${lineCount} lines)]`);
     const putPromise = chunkFolder.put(chunk, chunk.id);
     const blobLines = extractBlobLines(chunk);
-    const codeBlock: CodeBlock = { code: blobLines, language: "python" };
+    const codeBlock: CodeBlockWithDocs = {
+        code: blobLines,
+        language: "python",
+        docs: chunk.docs!,
+    };
     const docs = await codeIndex.put(codeBlock, chunk.id, chunk.filename);
     for (const comment of docs.comments || []) {
         comment.lineNumber += chunk.blobs[0].start;

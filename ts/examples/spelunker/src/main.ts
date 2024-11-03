@@ -26,7 +26,6 @@ import {
 import { createObjectFolder, loadSchema, ObjectFolder } from "typeagent";
 
 // Local imports
-import { ChunkDocumentation } from "./chunkDocSchema.js";
 import { Chunk } from "./pythonChunker.js";
 import { importPythonFiles, wordWrap } from "./pythonImporter.js";
 
@@ -60,11 +59,11 @@ async function main(): Promise<void> {
         { serializer: (obj) => JSON.stringify(obj, null, 2) },
     );
     const chatModel = openai.createChatModelDefault("spelunkerChat");
-    const codeDocumenter = await createCodeDocumenter(chatModel);
     const fileDocumenter = await createFileDocumenter(chatModel);
+    const fakeCodeDocumenter = await createFakeCodeDocumenter();
     const codeIndex = await createSemanticCodeIndex(
         spelunkerRoot + "/index",
-        codeDocumenter,
+        fakeCodeDocumenter,
         undefined,
         (obj) => JSON.stringify(obj, null, 2),
     );
@@ -179,47 +178,25 @@ async function processQuery(
     }
 }
 
-// We have our own code documenter to pass to createSemanticCodeIndex.
+// Fake code documenter to pass to creteCodeIndex.
 
-async function createCodeDocumenter(model: ChatModel): Promise<CodeDocumenter> {
-    const docTranslator = await createDocTranslator(model);
+export interface CodeBlockWithDocs extends CodeBlock {
+    docs: CodeDocumentation;
+}
+
+async function createFakeCodeDocumenter(): Promise<CodeDocumenter> {
     return {
         document,
     };
 
-    async function document(code: CodeBlock): Promise<CodeDocumentation> {
-        const text =
-            typeof code.code === "string" ? code.code : code.code.join("");
-        const promptPrefix =
-            `Document the following ${code.language} code:\n\n${text}\n\n` +
-            "Return 1-3 short paragraphs of text describing the code, " +
-            "its purpose, and any relevant details.\n" +
-            "The docs must be: accurate, active voice, crisp, succinct.";
-        const result = await docTranslator.translate(text, promptPrefix);
-        if (result.success) {
-            return {
-                comments: [{ lineNumber: 1, comment: result.data.description }],
-            };
-        } else {
-            throw new Error(result.message);
+    async function document(
+        code: CodeBlock | CodeBlockWithDocs,
+    ): Promise<CodeDocumentation> {
+        if ("docs" in code && code.docs) {
+            return code.docs;
         }
+        return {};
     }
-}
-
-async function createDocTranslator(
-    model: ChatModel,
-): Promise<TypeChatJsonTranslator<ChunkDocumentation>> {
-    const typeName = "ChunkDocumentation";
-    const schema = loadSchema(["chunkDocSchema.ts"], import.meta.url);
-    const validator = createTypeScriptJsonValidator<ChunkDocumentation>(
-        schema,
-        typeName,
-    );
-    const translator = createJsonTranslator<ChunkDocumentation>(
-        model,
-        validator,
-    );
-    return translator;
 }
 
 export interface FileDocumenter {
@@ -246,11 +223,31 @@ async function createFileDocumenter(model: ChatModel): Promise<FileDocumenter> {
             "Document the given Python code, its purpose, and any relevant details.\n" +
             "The code has (non-contiguous) line numbers, e.g.: '[1]: def foo():'\n" +
             "There are also marker lines, e.g.: '***: Document the following FuncDef'\n" +
-            "Provide a comment for each such marker (and only for those).\n"
+            "Provide a comment for each such marker (and only for those).\n" +
             "The docs must be: accurate, active voice, crisp, succinct.";
         const result = await fileDocTranslator.translate(request, text);
+
+        // Now assign each comment to its chunk.
         if (result.success) {
-            return result.data;
+            const codeDocs: CodeDocumentation = result.data;
+            // Assign each comment to its chunk.
+            for (const comment of codeDocs.comments ?? []) {
+                for (const chunk of chunks) {
+                    for (const blob of chunk.blobs) {
+                        if (
+                            blob.start < comment.lineNumber &&
+                            comment.lineNumber <= blob.start + blob.lines.length
+                        ) {
+                            if (chunk.docs === undefined) {
+                                chunk.docs = { comments: [comment] };
+                            } else {
+                                chunk.docs.comments!.push(comment);
+                            }
+                        }
+                    }
+                }
+            }
+            return codeDocs;
         } else {
             throw new Error(result.message);
         }
