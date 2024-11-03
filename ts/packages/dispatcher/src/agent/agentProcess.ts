@@ -219,7 +219,7 @@ function getStorage(contextId: number, session: boolean): Storage {
             });
         },
     };
-    return {       
+    return {
         read: (
             storagePath: string,
             options: StorageEncoding,

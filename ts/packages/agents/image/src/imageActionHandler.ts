@@ -145,10 +145,15 @@ async function handlePhotoAction(
                 // save the generated image in the session store and add the image to the knoweledge store
                 const blobResponse = await getBlob(urls[0]);
                 if (blobResponse.success) {
-                    const ab = Buffer.from(await blobResponse.data.arrayBuffer());
+                    const ab = Buffer.from(
+                        await blobResponse.data.arrayBuffer(),
+                    );
                     const id = randomUUID();
                     const fileName = `../generated_images/${id.toString()}.png`;
-                    photoContext.sessionContext.sessionStorage?.write(fileName, ab.toString("base64"));
+                    photoContext.sessionContext.sessionStorage?.write(
+                        fileName,
+                        ab.toString("base64"),
+                    );
 
                     // add the generated image to the entities
                     result.entities.push({

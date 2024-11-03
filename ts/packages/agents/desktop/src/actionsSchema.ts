@@ -92,7 +92,7 @@ export type MuteVolumeAction = {
 export type SetWallpaperAction = {
     actionName: "setWallpaper";
     parameters: {
-        filePath:  string; // The path to the file
+        filePath: string; // The path to the file
     };
 };
 export type KnownPrograms =

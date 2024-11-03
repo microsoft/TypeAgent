@@ -51,10 +51,10 @@ export function isImageMimeTypeSupported(mime: string): boolean {
 
 export function isImageFileType(fileExtension: string): boolean {
     if (fileExtension.startsWith(".")) {
-        fileExtension = fileExtension.substring(1);    
+        fileExtension = fileExtension.substring(1);
     }
 
-    const imageFileTypes: Set<string> = new Set<string>(['png', 'jpg', 'jpeg']);
+    const imageFileTypes: Set<string> = new Set<string>(["png", "jpg", "jpeg"]);
 
     return imageFileTypes.has(fileExtension);
 }

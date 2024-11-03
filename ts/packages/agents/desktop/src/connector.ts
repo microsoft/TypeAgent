@@ -10,7 +10,7 @@ import { DesktopActions } from "./actionsSchema.js";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import * as _ from "lodash"
+import * as _ from "lodash";
 
 const debug = registerDebug("typeagent:desktop");
 const debugData = registerDebug("typeagent:desktop:data");
@@ -73,9 +73,12 @@ export async function runDesktopActions(
     const actionName = action.actionName;
     switch (actionName) {
         case "setWallpaper": {
-
             let file = action.parameters.filePath;
-            if (file.startsWith("/") || file.indexOf(":") == 2 || fs.existsSync(file)) {
+            if (
+                file.startsWith("/") ||
+                file.indexOf(":") == 2 ||
+                fs.existsSync(file)
+            ) {
                 actionData = file;
             } else {
                 // if the file path is relative we'll have to search for the image since
@@ -83,10 +86,17 @@ export async function runDesktopActions(
                 // TODO: add shared agent storage or known storage location
                 const rootTypeAgentDir = path.join(os.homedir(), ".typeagent");
                 //const files = fs.readdirSync(rootTypeAgentDir).filter((allFilesPaths) => allFilesPaths.match(`/${_.escapeRegExp(file)}$/`) !== null)
-                const files = fs.readdirSync(rootTypeAgentDir, { recursive: true }).filter((allFilesPaths) => (allFilesPaths as string).endsWith(path.basename(file)))
-                
+                const files = fs
+                    .readdirSync(rootTypeAgentDir, { recursive: true })
+                    .filter((allFilesPaths) =>
+                        (allFilesPaths as string).endsWith(path.basename(file)),
+                    );
+
                 if (files.length > 0) {
-                    actionData = path.join(rootTypeAgentDir, files[0] as string);
+                    actionData = path.join(
+                        rootTypeAgentDir,
+                        files[0] as string,
+                    );
                 } else {
                     actionData = file;
                 }

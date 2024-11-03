@@ -41,7 +41,6 @@ export function getStorage(name: string, baseDir: string): Storage {
             return fs.promises.readFile(fullPath, options);
         },
         write: async (storagePath: string, data: string) => {
-
             const fullPath = getFullPath(storagePath);
             const dirName = path.dirname(fullPath);
             if (!fs.existsSync(dirName)) {
@@ -50,7 +49,10 @@ export function getStorage(name: string, baseDir: string): Storage {
 
             // images are passed in as base64 strings so we need to encode them properly on disk
             if (isImageFileType(path.extname(storagePath))) {
-                return fs.promises.writeFile(fullPath, Buffer.from(data, "base64"));
+                return fs.promises.writeFile(
+                    fullPath,
+                    Buffer.from(data, "base64"),
+                );
             } else {
                 return fs.promises.writeFile(fullPath, data);
             }

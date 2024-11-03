@@ -35,7 +35,7 @@ export type AgentContextCallFunctions = {
     takeAction: (param: { actionContextId: number; action: string }) => void;
 };
 
-export type AgentContextInvokeFunctions = {  
+export type AgentContextInvokeFunctions = {
     storageRead: (param: {
         contextId: number;
         session: boolean;

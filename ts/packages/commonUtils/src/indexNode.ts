@@ -50,7 +50,7 @@ export {
     getFileExtensionForMimeType,
     getMimeTypeFromFileExtension as getMimeType,
     isImageMimeTypeSupported,
-    isImageFileType
+    isImageFileType,
 } from "./mimeTypes.js";
 
 export { getObjectProperty, setObjectProperty } from "./objectProperty.js";
