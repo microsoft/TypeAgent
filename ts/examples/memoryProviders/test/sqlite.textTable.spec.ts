@@ -22,7 +22,8 @@ import {
     uniqueSourceIds,
 } from "./testCore.js";
 import * as knowLib from "knowledge-processor";
-import { asyncArray } from "typeagent";
+import { asyncArray, ScoredItem } from "typeagent";
+import { HitTable } from "../../../packages/knowledgeProcessor/dist/setOperations.js";
 
 describe("sqlite.textTable", () => {
     const testTimeout = 1000 * 60 * 5;
@@ -97,9 +98,8 @@ describe("sqlite.textTable", () => {
             const matches = await table.getNearest(composerBlocks[i].value);
             expect(matches).toEqual(composerBlocks[i].sourceIds);
         }
-        // And lastly, a group by
         const hits = [
-            ...table.getHitsSync([
+            ...table.getExactHits([
                 composerBlocks[0].value,
                 composerBlocks[1].value,
                 composerBlocks[2].value,
@@ -109,13 +109,7 @@ describe("sqlite.textTable", () => {
         for (const block of composerBlocks) {
             expectedHits.addMultiple(block.sourceIds!, 1);
         }
-        for (const hit of hits) {
-            const expectedItem = expectedHits.get(hit.item);
-            expect(expectedItem).toBeDefined();
-            if (expectedItem) {
-                expect(hit.score).toEqual(expectedItem.score);
-            }
-        }
+        compareHitScores(hits, expectedHits);
     });
     test("getNearest_exact_string", async () => {
         const table = await createTextIndex<string, number>(
@@ -147,8 +141,8 @@ describe("sqlite.textTable", () => {
         }
     });
     testIf(
-        () => hasEmbeddingEndpoint(smallEndpoint),
         "getNearest",
+        () => hasEmbeddingEndpoint(smallEndpoint),
         async () => {
             const embeddingModel = createEmbeddingModel(smallEndpoint, 256);
             const table = await createTextIndex<number, number>(
@@ -174,12 +168,32 @@ describe("sqlite.textTable", () => {
             expect(matches.length).toBeGreaterThan(0);
             expect(matches).toEqual(uniqueSourceIds(fruitBlocks));
 
+            const uniqueIds = uniqueSourceIds(composerBlocks);
             matches = await table.getNearest(
                 "Beethoven",
                 composerBlocks.length,
             );
             expect(matches.length).toBeGreaterThan(0);
-            expect(matches).toEqual(uniqueSourceIds(composerBlocks));
+            expect(matches).toEqual(uniqueIds);
+
+            const hits = knowLib.sets.createHitTable<number>();
+            await table.getNearestHits(
+                "Beethoven",
+                hits,
+                composerBlocks.length,
+            );
+            expect(hits.size).toEqual(uniqueIds.length);
+            for (const hit of hits.values()) {
+                expect(hit.score).toBeGreaterThan(0);
+            }
+
+            hits.clear();
+            await table.getNearestHitsMultiple(
+                ["Beethoven", "Mozart"],
+                hits,
+                composerBlocks.length,
+            );
+            expect(hits.size).toEqual(uniqueIds.length);
         },
         testTimeout,
     );
@@ -198,6 +212,19 @@ describe("sqlite.textTable", () => {
             const id = table.getId(strings[i]);
             expect(id).toBeDefined();
             expect(id).toEqual(expectedIds[i].id);
+        }
+    }
+
+    function compareHitScores(
+        hits: Iterable<ScoredItem>,
+        expectedHits: HitTable,
+    ) {
+        for (const hit of hits) {
+            const expectedItem = expectedHits.get(hit.item);
+            expect(expectedItem).toBeDefined();
+            if (expectedItem) {
+                expect(hit.score).toEqual(expectedItem.score);
+            }
         }
     }
 });

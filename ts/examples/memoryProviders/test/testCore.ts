@@ -12,8 +12,8 @@ export function skipTest(name: string) {
 }
 
 export function testIf(
-    runIf: () => boolean,
     name: string,
+    runIf: () => boolean,
     fn: jest.ProvidesCallback,
     testTimeout?: number | undefined,
 ) {

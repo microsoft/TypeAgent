@@ -187,7 +187,7 @@ export function createStringTable(
 
 export interface TextTable<TTextId = any, TSourceId = any>
     extends TextIndex<TTextId, TSourceId> {
-    getHitsSync(values: string[]): IterableIterator<ScoredItem<TSourceId>>;
+    getExactHits(values: string[]): IterableIterator<ScoredItem<TSourceId>>;
 }
 
 export async function createTextIndex<
@@ -238,7 +238,7 @@ export async function createTextIndex<
         getId,
         getIds,
         getText,
-        getHitsSync,
+        getExactHits,
         getNearest,
         getNearestMultiple,
         getNearestText,
@@ -342,12 +342,12 @@ export async function createTextIndex<
         return ids;
     }
 
-    function getHitsSync(
+    function getExactHits(
         values: string[],
     ): IterableIterator<ScoredItem<TSourceId>> {
         // TODO: use a JOIN
         const textIds = [...textTable.getIds(values)];
-        return postingsTable.getHitsSync(textIds);
+        return postingsTable.getHits(textIds);
     }
 
     async function getNearest(
@@ -399,16 +399,10 @@ export async function createTextIndex<
             maxMatches,
             minScore,
         );
-        if (matchedTextIds && matchedTextIds.length > 0) {
-            for (const textId of matchedTextIds) {
-                const scoredPostings = postingsTable.iterateScored(
-                    textId.item,
-                    scoreBoost ? scoreBoost * textId.score : textId.score,
-                );
-                if (scoredPostings) {
-                    hitTable.addMultipleScored(scoredPostings);
-                }
-            }
+        if (matchedTextIds) {
+            const scoredPostings =
+                postingsTable.iterateMultipleScored(matchedTextIds);
+            hitTable.addMultipleScored(scoredPostings);
         }
     }
 
@@ -419,9 +413,25 @@ export async function createTextIndex<
         minScore?: number,
         scoreBoost?: number,
     ): Promise<void> {
+        /*
         return asyncArray.forEachAsync(values, settings.concurrency, (v) =>
             getNearestHits(v, hitTable, maxMatches, minScore, scoreBoost),
         );
+        */
+        let matchedTextIds = await asyncArray.mapAsync(
+            values,
+            settings.concurrency,
+            (value) =>
+                getExactAndNearestTextIdsScored(value, maxMatches, minScore),
+        );
+        if (matchedTextIds && matchedTextIds.length > 0) {
+            const allMatchedIds = knowLib.sets
+                .removeUndefined(matchedTextIds)
+                .flat();
+            const scoredPostings =
+                postingsTable.iterateMultipleScored(allMatchedIds);
+            hitTable.addMultipleScored(scoredPostings);
+        }
     }
 
     async function getNearestText(

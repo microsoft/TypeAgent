@@ -21,8 +21,10 @@ export interface KeyValueTable<
         score?: number,
     ): IterableIterator<ScoredItem<TValueId>> | undefined;
     iterateMultiple(ids: TKeyId[]): IterableIterator<TValueId> | undefined;
-
-    getHitsSync(ids: TKeyId[]): IterableIterator<ScoredItem<TValueId>>;
+    iterateMultipleScored(
+        items: ScoredItem<TKeyId>[],
+    ): IterableIterator<ScoredItem<TValueId>>;
+    getHits(ids: TKeyId[]): IterableIterator<ScoredItem<TValueId>>;
 }
 
 export function createKeyValueTable<
@@ -49,6 +51,10 @@ export function createKeyValueTable<
     const sql_get = db.prepare(
         `SELECT valueId from ${tableName} WHERE keyId = ? ORDER BY valueId ASC`,
     );
+    const sql_getScored = db.prepare(
+        `SELECT valueId as item, @score as score 
+        FROM ${tableName} WHERE keyId = @keyId ORDER BY valueId ASC`,
+    );
     const sql_add = db.prepare(
         `INSERT OR IGNORE INTO ${tableName} (keyId, valueId) VALUES (?, ?)`,
     );
@@ -59,10 +65,11 @@ export function createKeyValueTable<
         get,
         getSync,
         getMultiple,
-        getHitsSync,
+        getHits,
         iterate,
         iterateScored,
         iterateMultiple,
+        iterateMultipleScored,
         put,
         putSync,
         replace,
@@ -81,8 +88,8 @@ export function createKeyValueTable<
         return rows.length > 0 ? rows.map((r) => r.valueId) : undefined;
     }
 
-    function* iterate(id: TKeyId): IterableIterator<TValueId> | undefined {
-        const rows = sql_get.iterate(id);
+    function* iterate(keyId: TKeyId): IterableIterator<TValueId> | undefined {
+        const rows = sql_get.iterate(keyId);
         let count = 0;
         for (const row of rows) {
             yield (row as KeyValueRow).valueId;
@@ -93,20 +100,14 @@ export function createKeyValueTable<
         }
     }
 
-    function* iterateScored(
-        id: TKeyId,
+    function iterateScored(
+        keyId: TKeyId,
         score: number,
-    ): IterableIterator<ScoredItem<TValueId>> | undefined {
-        const rows = sql_get.iterate(id);
-        let count = 0;
-        for (const row of rows) {
-            let item = (row as KeyValueRow).valueId;
-            yield { score, item };
-            ++count;
-        }
-        if (count === 0) {
-            return undefined;
-        }
+    ): IterableIterator<ScoredItem<TValueId>> {
+        return sql_getScored.iterate({
+            score: score,
+            keyId,
+        }) as IterableIterator<ScoredItem<TValueId>>;
     }
 
     function* iterateMultiple(
@@ -119,7 +120,9 @@ export function createKeyValueTable<
             return iterate(ids[0]);
         }
 
-        const sql = `SELECT DISTINCT valueId from ${tableName} WHERE keyId IN (${ids}) ORDER BY valueId ASC`;
+        const sql = `SELECT DISTINCT valueId FROM ${tableName} 
+        WHERE keyId IN (${ids}) 
+        ORDER BY valueId ASC`;
         const stmt = db.prepare(sql);
         const rows = stmt.iterate();
         let count = 0;
@@ -130,6 +133,14 @@ export function createKeyValueTable<
         if (count === 0) {
             return undefined;
         }
+    }
+
+    function iterateMultipleScored(
+        items: ScoredItem<TKeyId>[],
+    ): IterableIterator<ScoredItem<TValueId>> {
+        const sql = sql_multipleScored(items);
+        const stmt = db.prepare(sql);
+        return stmt.iterate() as IterableIterator<ScoredItem<TValueId>>;
     }
 
     function getMultiple(
@@ -146,9 +157,7 @@ export function createKeyValueTable<
         return Promise.resolve(matches);
     }
 
-    function* getHitsSync(
-        ids: TKeyId[],
-    ): IterableIterator<ScoredItem<TValueId>> {
+    function* getHits(ids: TKeyId[]): IterableIterator<ScoredItem<TValueId>> {
         const sql = `SELECT valueId as item, count(*) as score 
         FROM ${tableName}
         WHERE keyId IN (${ids})
@@ -183,6 +192,27 @@ export function createKeyValueTable<
     function remove(id: TKeyId): Promise<void> {
         sql_remove.run(id);
         return Promise.resolve();
+    }
+
+    function sql_multipleScored(items: ScoredItem<TKeyId>[]) {
+        let sql = "SELECT item, SUM(score) AS score FROM (\n";
+        sql += sql_unionAllPostings(items);
+        sql += "\n)\n";
+        sql += "GROUP BY item";
+        return sql;
+    }
+
+    function sql_unionAllPostings(items: ScoredItem<TKeyId>[]) {
+        let sql = "";
+        for (const item of items) {
+            if (sql.length > 0) {
+                sql += "\nUNION ALL\n";
+            }
+            sql += `SELECT valueId as item, ${item.score} as score 
+            FROM ${tableName} WHERE keyId = ${item.item}`;
+        }
+        sql += "\nORDER BY valueId ASC";
+        return sql;
     }
 
     type KeyValueRow = {
