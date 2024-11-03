@@ -4,10 +4,14 @@
 import child_process from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ProgramNameIndex, loadProgramNameIndex } from "./programNameIndex.js";
-import { SessionContext, Storage } from "@typeagent/agent-sdk";
+import { Storage } from "@typeagent/agent-sdk";
 import registerDebug from "debug";
 import { DesktopActions } from "./actionsSchema.js";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import * as _ from "lodash"
+
 const debug = registerDebug("typeagent:desktop");
 const debugData = registerDebug("typeagent:desktop:data");
 const debugError = registerDebug("typeagent:desktop:error");
@@ -63,23 +67,32 @@ async function ensureAutomationProcess(agentContext: DesktopActionContext) {
 export async function runDesktopActions(
     action: DesktopActions,
     agentContext: DesktopActionContext,
-    sessionContext: SessionContext
 ) {
     let confirmationMessage = "OK";
     let actionData = "";
     const actionName = action.actionName;
     switch (actionName) {
         case "setWallpaper": {
-            //HACK: Taking the path to the generated.png image in the user_files session folder.
-            if (sessionContext.sessionStorage != undefined)
-            {
-                actionData = path.join(await sessionContext.sessionStorage.getBaseDir(), "user_files", "generated.png");
-                confirmationMessage = "Set wallpaper to " + actionData;
+
+            let file = action.parameters.filePath;
+            if (file.startsWith("/") || file.indexOf(":") == 2 || fs.existsSync(file)) {
+                actionData = file;
+            } else {
+                // if the file path is relative we'll have to search for the image since
+                // that means another agent provided this file
+                // TODO: add shared agent storage or known storage location
+                const rootTypeAgentDir = path.join(os.homedir(), ".typeagent");
+                //const files = fs.readdirSync(rootTypeAgentDir).filter((allFilesPaths) => allFilesPaths.match(`/${_.escapeRegExp(file)}$/`) !== null)
+                const files = fs.readdirSync(rootTypeAgentDir, { recursive: true }).filter((allFilesPaths) => (allFilesPaths as string).endsWith(path.basename(file)))
+                
+                if (files.length > 0) {
+                    actionData = path.join(rootTypeAgentDir, files[0] as string);
+                } else {
+                    actionData = file;
+                }
             }
-            else
-            {
-                confirmationMessage = "Sorry, I couldn't locate the session storage location to complete the task.";
-            }
+
+            confirmationMessage = "Set wallpaper to " + actionData;
             break;
         }
         case "launchProgram": {

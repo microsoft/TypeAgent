@@ -15,14 +15,12 @@ import {
 } from "@typeagent/agent-sdk/helpers/action";
 import { bing, GeneratedImage, openai, getBlob } from "aiclient";
 import { Image } from "../../../aiclient/dist/bing.js";
-import { randomBytes } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import {
     CreateImageAction,
     FindImageAction,
     ImageAction,
 } from "./imageActionSchema.js";
-import * as fs from "fs";
-import path from "path";
 
 export function instantiate(): AppAgent {
     return {
@@ -144,16 +142,19 @@ async function handlePhotoAction(
                 });
                 result = createCarouselForImages(urls, captions);
 
-                //HACK: Saving the generated image in the user_files session folder for later access.
-                let sessionStorageDir: string | undefined;
-                sessionStorageDir = await photoContext.sessionContext.sessionStorage?.getBaseDir();
-                if (sessionStorageDir != undefined)
-                {
-                    const blobResponse = await getBlob(urls[0]);
-                    if (blobResponse.success) {
-                        const filePath = path.join(sessionStorageDir, "user_files", "generated.png");
-                        await fs.promises.writeFile(filePath, blobResponse.data.stream());                    
-                    }
+                // save the generated image in the session store and add the image to the knoweledge store
+                const blobResponse = await getBlob(urls[0]);
+                if (blobResponse.success) {
+                    const ab = Buffer.from(await blobResponse.data.arrayBuffer());
+                    const id = randomUUID();
+                    const fileName = `../generated_images/${id.toString()}.png`;
+                    photoContext.sessionContext.sessionStorage?.write(fileName, ab.toString("base64"));
+
+                    // add the generated image to the entities
+                    result.entities.push({
+                        name: fileName.substring(3),
+                        type: ["file", "image", "ai_generated"],
+                    });
                 }
             }
             break;

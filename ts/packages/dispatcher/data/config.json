@@ -28,7 +28,8 @@
     },
     "desktop": {
       "type": "module",
-      "name": "desktop-automation"
+      "name": "desktop-automation",
+      "execMode": "dispatcher"
     },
     "code": {
       "type": "module",

@@ -35,11 +35,7 @@ export type AgentContextCallFunctions = {
     takeAction: (param: { actionContextId: number; action: string }) => void;
 };
 
-export type AgentContextInvokeFunctions = {
-    storageGetBaseDir: (param: {
-        contextId: number;
-        session: boolean;        
-    }) => Promise<string>;    
+export type AgentContextInvokeFunctions = {  
     storageRead: (param: {
         contextId: number;
         session: boolean;

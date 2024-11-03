@@ -89,15 +89,6 @@ export type MuteVolumeAction = {
     };
 };
 
-// Sets the desktop wallpaper 
-// Example:
-//  user: Set desktop wallpaper to this image
-//  agent: {
-//     "actionName": "setWallpaper",
-//     "parameters": {
-//        "filePath": "path to image"
-//     }
-//  }
 export type SetWallpaperAction = {
     actionName: "setWallpaper";
     parameters: {

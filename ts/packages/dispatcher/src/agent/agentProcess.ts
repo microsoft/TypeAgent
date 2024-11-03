@@ -219,14 +219,7 @@ function getStorage(contextId: number, session: boolean): Storage {
             });
         },
     };
-    return {
-        getBaseDir: async () => {
-            return rpc.invoke("storageGetBaseDir", 
-                {
-                    contextId,
-                    session
-                });
-        },        
+    return {       
         read: (
             storagePath: string,
             options: StorageEncoding,

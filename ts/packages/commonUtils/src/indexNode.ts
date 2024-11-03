@@ -49,7 +49,8 @@ export { CachedImageWithDetails, getImageElement } from "./image.js";
 export {
     getFileExtensionForMimeType,
     getMimeTypeFromFileExtension as getMimeType,
-    isMimeTypeSupported,
+    isImageMimeTypeSupported,
+    isImageFileType
 } from "./mimeTypes.js";
 
 export { getObjectProperty, setObjectProperty } from "./objectProperty.js";
