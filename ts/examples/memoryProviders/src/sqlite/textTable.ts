@@ -394,14 +394,18 @@ export async function createTextIndex<
         minScore?: number,
         scoreBoost?: number,
     ): Promise<void> {
-        let matchedTextIds = await getExactAndNearestTextIdsScored(
+        let scoredIds = await getExactAndNearestTextIdsScored(
             value,
             maxMatches,
             minScore,
         );
-        if (matchedTextIds) {
+        if (scoredIds) {
+            scoredIds = boostScore(
+                knowLib.sets.removeUndefined(scoredIds),
+                scoreBoost,
+            );
             const scoredPostings =
-                postingsTable.iterateMultipleScored(matchedTextIds);
+                postingsTable.iterateMultipleScored(scoredIds);
             hitTable.addMultipleScored(scoredPostings);
         }
     }
@@ -413,11 +417,6 @@ export async function createTextIndex<
         minScore?: number,
         scoreBoost?: number,
     ): Promise<void> {
-        /*
-        return asyncArray.forEachAsync(values, settings.concurrency, (v) =>
-            getNearestHits(v, hitTable, maxMatches, minScore, scoreBoost),
-        );
-        */
         let matchedTextIds = await asyncArray.mapAsync(
             values,
             settings.concurrency,
@@ -425,11 +424,10 @@ export async function createTextIndex<
                 getExactAndNearestTextIdsScored(value, maxMatches, minScore),
         );
         if (matchedTextIds && matchedTextIds.length > 0) {
-            const allMatchedIds = knowLib.sets
-                .removeUndefined(matchedTextIds)
-                .flat();
+            let scoredIds = knowLib.sets.removeUndefined(matchedTextIds).flat();
+            scoredIds = boostScore(scoredIds, scoreBoost);
             const scoredPostings =
-                postingsTable.iterateMultipleScored(allMatchedIds);
+                postingsTable.iterateMultipleScored(scoredIds);
             hitTable.addMultipleScored(scoredPostings);
         }
     }
@@ -634,5 +632,20 @@ export async function createTextIndex<
         return semanticIndex
             ? semanticIndex.nearestNeighbors(value, maxMatches, minScore)
             : undefined;
+    }
+
+    function boostScore(
+        items: ScoredItem<TextId>[],
+        boost?: number,
+    ): ScoredItem<TextId>[] {
+        if (boost) {
+            return items.map((scoredItem) => {
+                return {
+                    item: scoredItem.item,
+                    score: scoredItem.score * boost,
+                };
+            });
+        }
+        return items;
     }
 }
