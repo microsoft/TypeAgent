@@ -22,7 +22,12 @@ describe("sqlite.temporalTable", () => {
     test(
         "addIds",
         async () => {
-            const table = createTemporalLogTable(db!, "idLog", "INTEGER");
+            const table = createTemporalLogTable(
+                db!,
+                "idLog",
+                "INTEGER",
+                "TEXT",
+            );
             const blocks = composers();
             let timestamps: Date[] = [];
             let allIds: number[] = [];
@@ -58,4 +63,24 @@ describe("sqlite.temporalTable", () => {
         },
         testTimeout,
     );
+    test("addIds_number", async () => {
+        const table = createTemporalLogTable<number, number>(
+            db!,
+            "idLog_number",
+            "INTEGER",
+            "INTEGER",
+        );
+        let ids = [1, 2, 3, 4, 5];
+        let timestamp = new Date();
+        for (const id of ids) {
+            table.addSync(id, timestamp);
+        }
+        ids = [6, 7, 8];
+        timestamp = new Date();
+        for (const id of ids) {
+            table.addSync(id, timestamp);
+        }
+        const rows = await table.getNewest(1);
+        expect(rows).toHaveLength(ids.length);
+    });
 });
