@@ -61,6 +61,7 @@ async function main(): Promise<void> {
     );
     const chatModel = openai.createChatModelDefault("spelunkerChat");
     const codeDocumenter = await createCodeDocumenter(chatModel);
+    const fileDocumenter = await createFileDocumenter(chatModel);
     const codeIndex = await createSemanticCodeIndex(
         spelunkerRoot + "/index",
         codeDocumenter,
@@ -78,6 +79,7 @@ async function main(): Promise<void> {
         const t0 = new Date().getTime();
         await importPythonFiles(
             files,
+            fileDocumenter,
             chunkFolder,
             codeIndex,
             summaryFolder,
@@ -214,6 +216,57 @@ async function createDocTranslator(
         typeName,
     );
     const translator = createJsonTranslator<ChunkDocumentation>(
+        model,
+        validator,
+    );
+    return translator;
+}
+
+export interface FileDocumenter {
+    document(chunks: Chunk[]): Promise<CodeDocumentation>;
+}
+
+async function createFileDocumenter(model: ChatModel): Promise<FileDocumenter> {
+    const fileDocTranslator = await createFileDocTranslator(model);
+    return {
+        document,
+    };
+
+    async function document(chunks: Chunk[]): Promise<CodeDocumentation> {
+        let text = "";
+        for (const chunk of chunks) {
+            text += `***: Docmument the following ${chunk.treeName}:\n`;
+            for (const blob of chunk.blobs) {
+                for (let i = 0; i < blob.lines.length; i++) {
+                    text += `[${blob.start + i + 1}]: ${blob.lines[i]}\n`;
+                }
+            }
+        }
+        const request =
+            "Document the given Python code, its purpose, and any relevant details.\n" +
+            "The code has (non-contiguous) line numbers, e.g.: '[1]: def foo():'\n" +
+            "There are also marker lines, e.g.: '***: Document the following FuncDef'\n" +
+            "Provide a comment for each such marker (and only for those).\n"
+            "The docs must be: accurate, active voice, crisp, succinct.";
+        const result = await fileDocTranslator.translate(request, text);
+        if (result.success) {
+            return result.data;
+        } else {
+            throw new Error(result.message);
+        }
+    }
+}
+
+async function createFileDocTranslator(
+    model: ChatModel,
+): Promise<TypeChatJsonTranslator<CodeDocumentation>> {
+    const typeName = "CodeDocumentation";
+    const schema = loadSchema(["codeDocSchema.ts"], import.meta.url);
+    const validator = createTypeScriptJsonValidator<CodeDocumentation>(
+        schema,
+        typeName,
+    );
+    const translator = createJsonTranslator<CodeDocumentation>(
         model,
         validator,
     );

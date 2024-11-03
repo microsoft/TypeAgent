@@ -38,11 +38,13 @@ import {
 } from "code-processor";
 
 import { Chunk, ChunkedFile, chunkifyPythonFiles } from "./pythonChunker.js";
+import { FileDocumenter } from "./main.js";
 
 // TODO: Turn (chunkFolder, codeIndex, summaryFolder) into a single object.
 
 export async function importPythonFiles(
     files: string[],
+    fileDocumenter: FileDocumenter,
     chunkFolder: ObjectFolder<Chunk>,
     codeIndex: SemanticCodeIndex,
     summaryFolder: ObjectFolder<CodeDocumentation>,
@@ -52,10 +54,10 @@ export async function importPythonFiles(
     let filenames = files.map((file) =>
         fs.existsSync(file) ? fs.realpathSync(file) : file,
     );
-    const result = await chunkifyPythonFiles(filenames);
+    const results = await chunkifyPythonFiles(filenames);
 
     // TODO: concurrency.
-    for (const item of result) {
+    for (const item of results) {
         if ("error" in item) {
             console.log(`[Error: ${item.error}]`);
             if (item.output) {
@@ -63,6 +65,13 @@ export async function importPythonFiles(
             }
             continue;
         }
+        const chunkedFile = item;
+        const chunks = chunkedFile.chunks;
+        for (const chunk of chunks) {
+            chunk.filename = chunkedFile.filename;
+        }
+        const docs = await fileDocumenter.document(chunks);
+        console.log(docs);
         firstFile = await processChunkedFile(
             item,
             chunkFolder,
@@ -93,10 +102,6 @@ async function processChunkedFile(
     );
     const t0 = Date.now();
 
-    // Compute and store embedding.
-    for (const chunk of chunks) {
-        chunk.filename = chunkedFile.filename;
-    }
     // Handle the first chunk of the first file separately, it waits for API key setup.
     if (firstFile) {
         const chunk = chunks.shift()!;
