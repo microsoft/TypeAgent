@@ -85,7 +85,6 @@ export async function runDesktopActions(
                 // that means another agent provided this file
                 // TODO: add shared agent storage or known storage location
                 const rootTypeAgentDir = path.join(os.homedir(), ".typeagent");
-                //const files = fs.readdirSync(rootTypeAgentDir).filter((allFilesPaths) => allFilesPaths.match(`/${_.escapeRegExp(file)}$/`) !== null)
                 const files = fs
                     .readdirSync(rootTypeAgentDir, { recursive: true })
                     .filter((allFilesPaths) =>
