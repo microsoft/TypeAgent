@@ -28,7 +28,7 @@
     },
     "desktop": {
       "type": "module",
-      "name": "desktop-automation",
+      "name": "desktop-automation"
     },
     "code": {
       "type": "module",
