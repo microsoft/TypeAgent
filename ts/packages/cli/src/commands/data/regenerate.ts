@@ -409,10 +409,7 @@ export default class ExplanationDataRegenerateCommmand extends Command {
                         if (entities.length === 0) {
                             return undefined;
                         }
-                        history = {
-                            promptSections: [],
-                            entities,
-                        };
+                        history = { promptSections: [], entities };
                     }
 
                     const requestAction = e.action

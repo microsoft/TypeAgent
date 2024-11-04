@@ -10,16 +10,11 @@ function entityToText(entity: Entity) {
     return `${entity.name} (${entity.type})${entity.additionalEntityText ? `: ${entity.additionalEntityText}` : ""}`;
 }
 
-export type PromptOptions = {
-    additionalInformation?: boolean; // default to true
-};
-
 export function createTypeAgentRequestPrompt(
     translator: TypeChatJsonTranslator<object>,
     request: string,
     history: HistoryContext | undefined,
     attachments: CachedImageWithDetails[] | undefined,
-    options?: PromptOptions,
 ) {
     let promptSections: PromptSection[] = [];
     let entities: Entity[] = [];
@@ -70,16 +65,16 @@ export function createTypeAgentRequestPrompt(
             prompts.push("The latest entity discussed:");
             prompts.push(latestEntity);
         }
-        if (options?.additionalInformation !== false) {
-            const additionalInstructions = history?.additionalInstructions;
-            if (
-                additionalInstructions !== undefined &&
-                additionalInstructions.length > 0
-            ) {
-                prompts.push("Information about the latest assistant action:");
-                prompts.push(...additionalInstructions);
-            }
+
+        const additionalInstructions = history?.additionalInstructions;
+        if (
+            additionalInstructions !== undefined &&
+            additionalInstructions.length > 0
+        ) {
+            prompts.push("Information about the latest assistant action:");
+            prompts.push(...additionalInstructions);
         }
+
         prompts.push("The latest assistant response:");
         prompts.push(
             promptSections[promptSections.length - 1].content as string,

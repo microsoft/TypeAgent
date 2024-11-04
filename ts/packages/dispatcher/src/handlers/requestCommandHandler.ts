@@ -498,7 +498,10 @@ function getChatHistoryForTranslation(
         role: "system",
     });
     const entities = context.chatHistory.getTopKEntities(20);
-    const additionalInstructions = context.chatHistory.getCurrentInstructions();
+    const additionalInstructions = context.session.getConfig().promptOptions
+        .additionalInstructions
+        ? context.chatHistory.getCurrentInstructions()
+        : undefined;
     return { promptSections, entities, additionalInstructions };
 }
 
@@ -763,6 +766,11 @@ async function requestExplain(
 
     if (!context.session.explanation) {
         // Explanation is disabled
+        return;
+    }
+
+    if (requestAction.history?.additionalInstructions !== undefined) {
+        // Translation with additional instructions are not cachable.
         return;
     }
 
