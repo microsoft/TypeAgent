@@ -368,7 +368,7 @@ export type WithFrequency<T = any> = {
     count: number;
 };
 
-export interface HitTable<T> {
+export interface HitTable<T = any> {
     readonly size: number;
 
     get(value: T): ScoredItem<T> | undefined;
@@ -385,12 +385,16 @@ export interface HitTable<T> {
             | Array<ScoredItem<T>>,
     ): void;
     keys(): IterableIterator<any>;
+    values(): IterableIterator<ScoredItem<T>>;
+
     byHighestScore(): ScoredItem<T>[];
     getTop(): T[];
     getTopK(k: number): T[];
 
     getByKey(key: any): ScoredItem<T> | undefined;
     set(key: any, value: ScoredItem<T>): void;
+
+    clear(): void;
 }
 
 export function createHitTable<T>(
@@ -402,17 +406,20 @@ export function createHitTable<T>(
         get size() {
             return map.size;
         },
+        keys: () => map.keys(),
+        values: () => map.values(),
         get,
         set,
         getScore,
         add,
         addMultiple,
         addMultipleScored,
-        keys: () => map.keys(),
         byHighestScore,
         getTop,
         getTopK,
         getByKey,
+
+        clear: () => map.clear(),
     };
 
     function get(value: T): ScoredItem<T> | undefined {

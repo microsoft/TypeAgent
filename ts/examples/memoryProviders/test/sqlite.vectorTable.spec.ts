@@ -83,8 +83,8 @@ describe("sqlite.vectorTable", () => {
     );
 
     testIf(
-        () => false,
         "number_id_perf",
+        () => false,
         async () => {
             const index = createVectorTable<number>(
                 db!,

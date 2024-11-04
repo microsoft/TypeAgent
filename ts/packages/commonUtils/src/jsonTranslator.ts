@@ -14,9 +14,10 @@ import {
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { TypeChatConstraintsValidator } from "./constraints.js";
 import registerDebug from "debug";
-import { openai as ai, ChatMessage } from "aiclient";
+import { openai as ai } from "aiclient";
 import {
     createIncrementalJsonParser,
+    IncrementalJsonParser,
     IncrementalJsonValueCallBack,
 } from "./incrementalJsonParser.js";
 import { CachedImageWithDetails, extractRelevantExifTags } from "./image.js";
@@ -63,6 +64,56 @@ export interface TypeChatJsonTranslatorWithStreaming<T extends object>
     ) => Promise<Result<T>>;
 }
 
+// This rely on the fact that the prompt preamble based to typechat are copied to the final prompt.
+// Add a internal section so we can pass information from the caller to the model.complete function.
+type StreamingSection = {
+    role: "streaming";
+    content: IncrementalJsonParser;
+};
+
+function initializeStreamingParser(
+    promptPreamble?: string | PromptSection[],
+    cb?: IncrementalJsonValueCallBack,
+) {
+    if (cb === undefined) {
+        return promptPreamble;
+    }
+    const prompts: (PromptSection | StreamingSection)[] =
+        typeof promptPreamble === "string"
+            ? [{ role: "user", content: promptPreamble }]
+            : promptPreamble
+              ? [...promptPreamble] // Make a copy so that we don't modify the original array
+              : [];
+    const parser = createIncrementalJsonParser(cb, {
+        partial: true,
+    });
+    prompts.unshift({
+        role: "streaming",
+        content: parser,
+    });
+
+    return prompts as PromptSection[];
+}
+
+function getStreamingParser(
+    prompt: string | ReadonlyArray<PromptSection | StreamingSection>,
+) {
+    if (typeof prompt === "string") {
+        return undefined;
+    }
+    const internalIndex = prompt.findIndex((p) => p.role === "streaming");
+    if (internalIndex === -1) {
+        return undefined;
+    }
+    // Make a copy so that we don't modify the original array;
+    const newPrompt = [...prompt];
+    const internal = newPrompt.splice(internalIndex, 1) as [StreamingSection];
+    return {
+        parser: internal[0].content,
+        actualPrompt: newPrompt as PromptSection[],
+    };
+}
+
 export function enableJsonTranslatorStreaming<T extends object>(
     translator: TypeChatJsonTranslator<T>,
 ): TypeChatJsonTranslatorWithStreaming<T> {
@@ -70,7 +121,28 @@ export function enableJsonTranslatorStreaming<T extends object>(
     if (!ai.supportsStreaming(model)) {
         throw new Error("Model does not support streaming");
     }
-    const innerFn = translator.translate;
+
+    const originalComplete = model.complete;
+    model.complete = async (prompt: string | PromptSection[]) => {
+        const streamingParser = getStreamingParser(prompt);
+        if (streamingParser === undefined) {
+            return originalComplete(prompt);
+        }
+        const { parser, actualPrompt } = streamingParser;
+        const chunks = [];
+        const result = await model.completeStream(actualPrompt);
+        if (!result.success) {
+            return result;
+        }
+        for await (const chunk of result.data) {
+            chunks.push(chunk);
+            parser.parse(chunk);
+        }
+        parser.complete();
+        return success(chunks.join(""));
+    };
+
+    const originalTranslate = translator.translate;
     const translatorWithStreaming =
         translator as TypeChatJsonTranslatorWithStreaming<T>;
     translatorWithStreaming.translate = async (
@@ -80,35 +152,10 @@ export function enableJsonTranslatorStreaming<T extends object>(
         attachments?: CachedImageWithDetails[],
     ) => {
         attachAttachments(attachments, promptPreamble);
-
-        if (cb === undefined) {
-            return innerFn(request, promptPreamble);
-        }
-
-        const originalComplete = model.complete;
-        try {
-            const parser = createIncrementalJsonParser(cb, {
-                partial: true,
-            });
-            model.complete = async (
-                prompt: string | PromptSection[] | ChatMessage[],
-            ) => {
-                const chunks = [];
-                const result = await model.completeStream(prompt);
-                if (!result.success) {
-                    return result;
-                }
-                for await (const chunk of result.data) {
-                    chunks.push(chunk);
-                    parser.parse(chunk);
-                }
-                parser.complete();
-                return success(chunks.join(""));
-            };
-            return innerFn(request, promptPreamble);
-        } finally {
-            model.complete = originalComplete;
-        }
+        return originalTranslate(
+            request,
+            initializeStreamingParser(promptPreamble, cb),
+        );
     };
 
     return translatorWithStreaming;
@@ -159,7 +206,7 @@ export function createJsonTranslatorFromSchemaDef<T extends object>(
     typeName: string,
     schemas: string | TranslatorSchemaDef[],
     constraintsValidator?: TypeChatConstraintsValidator<T>, // Optional
-    instructions?: PromptSection[],
+    instructions?: PromptSection[], // Instructions before the per request preamble
     model?: string | TypeChatLanguageModel, // optional
 ) {
     if (typeof model !== "object") {
@@ -173,17 +220,22 @@ export function createJsonTranslatorFromSchemaDef<T extends object>(
         );
     }
 
-    const debug = registerDebug(`typeagent:prompt:${typeName.toLowerCase()}`);
+    const debugPrompt = registerDebug(
+        `typeagent:translate:${typeName.toLowerCase()}:prompt`,
+    );
+    const debugResult = registerDebug(
+        `typeagent:translate:${typeName.toLowerCase()}:result`,
+    );
     const complete = model.complete.bind(model);
     model.complete = async (prompt: string | PromptSection[]) => {
-        debug(prompt);
+        debugPrompt(prompt);
         return complete(prompt);
     };
 
     if (ai.supportsStreaming(model)) {
         const completeStream = model.completeStream.bind(model);
         model.completeStream = async (prompt: string | PromptSection[]) => {
-            debug(prompt);
+            debugPrompt(prompt);
             return completeStream(prompt);
         };
     }
@@ -200,16 +252,30 @@ export function createJsonTranslatorFromSchemaDef<T extends object>(
         translator.validateInstance = constraintsValidator.validateConstraints;
     }
 
+    const innerFn = translator.translate;
     if (!instructions) {
+        translator.translate = async (
+            request: string,
+            promptPreamble?: string | PromptSection[],
+        ) => {
+            const result = await innerFn(request, promptPreamble);
+            debugResult(result);
+            return result;
+        };
         return translator;
     }
 
-    const innerFn = translator.translate;
-    translator.translate = async function (
+    translator.translate = async (
         request: string,
         promptPreamble?: string | PromptSection[],
-    ) {
-        return innerFn(request, toPromptSections(instructions, promptPreamble));
+    ) => {
+        const result = await innerFn(
+            request,
+            toPromptSections(instructions, promptPreamble),
+        );
+
+        debugResult(result);
+        return result;
     };
 
     translator.createRequestPrompt = function (request: string) {
