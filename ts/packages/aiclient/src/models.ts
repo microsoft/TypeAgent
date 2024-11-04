@@ -19,14 +19,12 @@ export type CompletionSettings = {
 export interface ChatModel extends TypeChatLanguageModel {
     completionSettings: CompletionSettings;
     completionCallback?: ((request: any, response: any) => void) | undefined;
-    complete(
-        prompt: string | PromptSection[] | ChatMessage[],
-    ): Promise<Result<string>>;
+    complete(prompt: string | PromptSection[]): Promise<Result<string>>;
 }
 
 export interface ChatModelWithStreaming extends ChatModel {
     completeStream(
-        prompt: string | PromptSection[] | ChatMessage[],
+        prompt: string | PromptSection[],
     ): Promise<Result<AsyncIterableIterator<string>>>;
 }
 
@@ -69,31 +67,6 @@ export interface ImageModel {
         height: number,
     ): Promise<Result<ImageGeneration>>;
 }
-
-export type ChatMessage = {
-    role: "system" | "user" | "assistant";
-    content: ChatMessageContent[];
-};
-
-export type ChatMessageContent =
-    | string
-    | TextMessageContent
-    | ImageMessageContent;
-
-export type TextMessageContent = {
-    type: "text";
-    text: string;
-};
-
-export type ImageMessageContent = {
-    type: "image_url";
-    image_url: ImageUrl;
-};
-
-export type ImageUrl = {
-    url: string;
-    detail?: "auto" | "low" | "high";
-};
 
 export type ImageGeneration = {
     images: GeneratedImage[];

@@ -20,7 +20,6 @@ export type ObjectSerializer = (obj: any) => Buffer | string;
 export type ObjectDeserializer = (buffer: Buffer) => any;
 
 export interface ObjectFolderSettings {
-    allowSubFolders?: boolean;
     serializer?: ObjectSerializer;
     deserializer?: ObjectDeserializer;
     fileNameType?: FileNameType;
@@ -64,16 +63,6 @@ export interface ObjectFolder<T> {
     findObject(
         criteria: (nv: NameValue<T>) => boolean,
     ): Promise<NameValue<T> | undefined>;
-
-    getSubFolderNames(): Promise<string[]>;
-    getSubFolder<V>(
-        name: string | string[],
-        settings?: ObjectFolderSettings,
-    ): Promise<ObjectFolder<V> | undefined>;
-    createSubFolder<V>(
-        name: string | string[],
-        settings?: ObjectFolderSettings,
-    ): Promise<ObjectFolder<V>>;
 }
 
 /**
@@ -88,9 +77,7 @@ export async function createObjectFolder<T>(
     settings?: ObjectFolderSettings,
     fSys?: FileSystem,
 ): Promise<ObjectFolder<T>> {
-    const folderSettings = settings ?? {
-        allowSubFolders: false,
-    };
+    const folderSettings = settings ?? {};
     const fileSystem = fSys ?? fsDefault();
     const fileNameGenerator = createNameGenerator();
     const fileNames = createLazy<string[]>(
@@ -119,9 +106,6 @@ export async function createObjectFolder<T>(
         allNames: async () => {
             return fileNames.get();
         },
-        getSubFolderNames,
-        getSubFolder,
-        createSubFolder,
     };
 
     async function size(): Promise<number> {
@@ -241,9 +225,6 @@ export async function createObjectFolder<T>(
         if (folderSettings.safeWrites) {
             names = removeHidden(names);
         }
-        if (folderSettings.allowSubFolders) {
-            names = removeDirNames(names);
-        }
         names.sort();
         return names;
     }
@@ -294,68 +275,8 @@ export async function createObjectFolder<T>(
         return undefined;
     }
 
-    async function getSubFolderNames(): Promise<string[]> {
-        const allNames = await fileSystem.readdir(folderPath);
-        return getDirNames(allNames);
-    }
-
-    async function getSubFolder<V>(
-        name: string | string[],
-        subFolderSettings?: ObjectFolderSettings,
-    ): Promise<ObjectFolder<V> | undefined> {
-        subFoldersAllowed();
-
-        const dirPath = typeof name === "string" ? [name] : name;
-        const subFolderPath = await getSubFolderPath(dirPath);
-        const fullFolderPath = fullPath(subFolderPath);
-        if (fileSystem.exists(fullFolderPath)) {
-            return await createObjectFolder<V>(
-                fullFolderPath,
-                subFolderSettings ?? folderSettings,
-                fileSystem,
-            );
-        }
-        return undefined;
-    }
-
-    async function createSubFolder<V>(
-        name: string | string[],
-        subFolderSettings?: ObjectFolderSettings,
-    ): Promise<ObjectFolder<V>> {
-        subFoldersAllowed();
-
-        const dirPath = typeof name === "string" ? [name] : name;
-        const subFolderPath = await ensureSubFolders(dirPath);
-        return await createObjectFolder<V>(
-            fullPath(subFolderPath),
-            subFolderSettings ?? folderSettings,
-            fileSystem,
-        );
-    }
-
-    async function ensureSubFolders(dirPath: string[]): Promise<string> {
-        let subFolderPath = getSubFolderPath(dirPath);
-        const fullSubFolderPath = fullPath(subFolderPath);
-        await fileSystem.ensureDir(fullSubFolderPath);
-        return subFolderPath;
-    }
-
-    function getSubFolderPath(dirPath: string[]): string {
-        let subFolderPath: string = "";
-        for (let i = 0; i < dirPath.length; ++i) {
-            subFolderPath = path.join(subFolderPath, ensureDirName(dirPath[i]));
-        }
-        return subFolderPath;
-    }
-
     function fullPath(name: string): string {
         return path.join(folderPath, name);
-    }
-
-    function subFoldersAllowed(): void {
-        if (!folderSettings.allowSubFolders) {
-            throw new Error("Subfolders not permitted");
-        }
     }
 
     function createNameGenerator() {
@@ -415,34 +336,13 @@ function ensureDirName(name: string): string {
     return name;
 }
 
-function isDir(name: string): boolean {
-    return name[0] == DIR_PREFIX;
-}
-
 function isHidden(name: string): boolean {
     const lastChar = name[name.length - 1];
     return lastChar === TEMP_SUFFIX || lastChar === BACKUP_SUFFIX;
 }
 
-function removeDirNames(names: string[]): string[] {
-    return names.filter((d) => !isDir(d));
-}
-
 function removeHidden(names: string[]): string[] {
     return names.filter((n) => !isHidden(n));
-}
-
-function getDirNames(names: string[]): string[] {
-    const dirNames: string[] = [];
-    for (const name of names) {
-        if (isDir(name)) {
-            const actualName = name.substring(1);
-            if (actualName.length > 0) {
-                dirNames.push(actualName);
-            }
-        }
-    }
-    return dirNames;
 }
 
 function toTempPath(filePath: string) {

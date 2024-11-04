@@ -44,6 +44,9 @@ importers:
       knowledge-processor:
         specifier: workspace:*
         version: link:../../packages/knowledgeProcessor
+      memory-providers:
+        specifier: workspace:*
+        version: link:../memoryProviders
       typeagent:
         specifier: workspace:*
         version: link:../../packages/typeagent
