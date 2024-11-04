@@ -99,12 +99,19 @@ async function main(): Promise<void> {
     }
 
     // Loop processing searches. (TODO: Use interactiveApp.)
+    const help = "[Type 'q', 'quit' or 'exit' to end query session.]";
+    console.log(help);
     while (true) {
         const input = readlineSync.question("~> ", {
             history: true, // Enable history
             keepWhitespace: true, // Keep leading/trailing whitespace in history
-        });
-        if (!input.trim()) {
+        }).trimEnd();
+        // TODO: Distinguish between EOF (e.g. ^D) and blank line.
+        if (!input) {
+            console.log(help);
+            continue;
+        }
+        if (input === "q" || input == "quit" || input === "exit") {
             console.log("[Bye!]");
             return;
         }
