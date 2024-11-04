@@ -56,3 +56,7 @@ class Turn:
 Each podcast `Episode` contains a list of `Section` objects. These `Section` objects represent different topics discussed in the podcast episode. Each `Section` contains a list of `Turn` objects representing each turn in the dialogue for that section.
 
 The `speaker_role` field corresponds to the speaker's role in the podcast. For example if the speaker is the host, then the `speaker_role` is `host`. If the speaker is from an organization, that speaker's role will be `organization`.
+
+## Qdrant Instance
+
+To get a locally running qdrant instance, please follow these steps from the Qdrant docs: https://qdrant.tech/documentation/quickstart/
