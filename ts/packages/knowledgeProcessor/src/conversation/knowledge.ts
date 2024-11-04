@@ -204,7 +204,6 @@ export async function extractKnowledgeFromBlock(
     if (!knowledge) {
         return undefined;
     }
-
     return [message, createExtractedKnowledge(message, knowledge)];
 }
 
