@@ -225,9 +225,10 @@ async function createFileDocumenter(model: ChatModel): Promise<FileDocumenter> {
         }
         const request =
             "Document the given Python code, its purpose, and any relevant details.\n" +
-            "The code has (non-contiguous) line numbers, e.g.: '[1]: def foo():'\n" +
-            "There are also marker lines, e.g.: '***: Document the following FuncDef'\n" +
-            "Provide a comment for ALL markers. DON'T document any lines without markers!\n";
+            "The code has (non-contiguous) line numbers, e.g.: `[1]: def foo():`\n" +
+            "There are also marker lines, e.g.: `***: Document the following FuncDef`\n" +
+            "Write a concise paragraph for EACH marker. Also write a paragraph about the whole file." +
+            "DON'T document any lines without markers!\n";
         const result = await fileDocTranslator.translate(request, text);
 
         // Now assign each comment to its chunk.

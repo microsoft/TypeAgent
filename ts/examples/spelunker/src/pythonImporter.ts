@@ -91,6 +91,9 @@ export async function importPythonFiles(
         for (const chunk of chunks) {
             chunk.filename = chunkedFile.filename;
         }
+        console.log(
+            `[Documenting ${chunks.length} chunks from ${chunkedFile.filename}]`,
+        );
         const t0 = Date.now();
         const docs = await fileDocumenter.document(chunks);
         const t1 = Date.now();
@@ -124,7 +127,7 @@ async function processChunkedFile(
         return firstFile;
     }
     console.log(
-        `[Processing ${chunks.length} chunks from ${chunkedFile.filename}]`,
+        `[Embedding ${chunks.length} chunks from ${chunkedFile.filename}]`,
     );
     const t0 = Date.now();
 
@@ -156,7 +159,7 @@ async function processChunkedFile(
 
     const t1 = Date.now();
     console.log(
-        `[Processed ${+firstFile + chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+        `[Embedded ${+firstFile + chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
     );
     return false;
 }
@@ -173,7 +176,7 @@ async function processChunk(
         (acc, blob) => acc + blob.lines.length,
         0,
     );
-    // console.log(`[Embedding ${chunk.id} (${lineCount} lines)]`);
+    // console.log(`  [Embedding ${chunk.id} (${lineCount} lines)]`);
     const putPromise = chunkFolder.put(chunk, chunk.id);
     const blobLines = extractBlobLines(chunk);
     const codeBlock: CodeBlockWithDocs = {
@@ -185,12 +188,12 @@ async function processChunk(
     await summaryFolder.put(docs, chunk.id);
     await putPromise;
     // for (const comment of docs.comments || []) {
-    //     console.log(wordWrap(`${comment.lineNumber}. ${comment.comment}`));
+    //     console.log(wordWrap(`    ${comment.lineNumber}. ${comment.comment}`));
     // }
     const t1 = Date.now();
     if (verbose) {
         console.log(
-            `[Embedded ${chunk.id} (${lineCount} lines @ ${chunk.blobs[0].start}) ` +
+            `  [Embedded ${chunk.id} (${lineCount} lines @ ${chunk.blobs[0].start}) ` +
                 `in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
         );
     }
