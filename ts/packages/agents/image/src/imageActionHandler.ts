@@ -85,12 +85,12 @@ async function handlePhotoAction(
                 result = createCarouselForImages(urls, captions);
 
                 // add the found images to the entities
-                for(let i = 0; i < searchResults.length; i++) {
+                for (let i = 0; i < searchResults.length; i++) {
                     result.entities.push({
                         name: searchResults[i].contentUrl,
                         type: ["image", "url", "search"],
-                    });    
-                }                
+                    });
+                }
             }
             break;
         }
@@ -148,7 +148,13 @@ async function handlePhotoAction(
                 // save the generated image in the session store and add the image to the knoweledge store
                 const id = randomUUID();
                 const fileName = `../generated_images/${id.toString()}.png`;
-                if (await downloadImage(urls[0], fileName, photoContext.sessionContext.sessionStorage!)) {
+                if (
+                    await downloadImage(
+                        urls[0],
+                        fileName,
+                        photoContext.sessionContext.sessionStorage!,
+                    )
+                ) {
                     // add the generated image to the entities
                     result.entities.push({
                         name: fileName.substring(3),

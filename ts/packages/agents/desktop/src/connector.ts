@@ -83,13 +83,20 @@ export async function runDesktopActions(
                 if (path.extname(file).length == 0) {
                     file += ".png";
                 }
-                if (await downloadImage(action.parameters.url, file, sessionStorage!)) {
+                if (
+                    await downloadImage(
+                        action.parameters.url,
+                        file,
+                        sessionStorage!,
+                    )
+                ) {
                     file = file.substring(3);
                 } else {
-                    confirmationMessage = "Failed to dowload the requested image.";
+                    confirmationMessage =
+                        "Failed to dowload the requested image.";
                     break;
                 }
-            }            
+            }
 
             if (file !== undefined) {
                 if (
@@ -104,7 +111,9 @@ export async function runDesktopActions(
                     const files = fs
                         .readdirSync(rootTypeAgentDir, { recursive: true })
                         .filter((allFilesPaths) =>
-                            (allFilesPaths as string).endsWith(path.basename(file)),
+                            (allFilesPaths as string).endsWith(
+                                path.basename(file),
+                            ),
                         );
 
                     if (files.length > 0) {
@@ -115,11 +124,11 @@ export async function runDesktopActions(
                     } else {
                         actionData = file;
                     }
-                } 
+                }
             } else {
                 confirmationMessage = "Unknown wallpaper location.";
                 break;
-            }            
+            }
 
             confirmationMessage = "Set wallpaper to " + actionData;
             break;

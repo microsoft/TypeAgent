@@ -93,7 +93,7 @@ export type SetWallpaperAction = {
     actionName: "setWallpaper";
     parameters: {
         filePath?: string; // The path to the file
-        url?: string    // The url to the image
+        url?: string; // The url to the image
     };
 };
 export type KnownPrograms =

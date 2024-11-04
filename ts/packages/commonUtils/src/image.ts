@@ -38,24 +38,22 @@ export function extractRelevantExifTags(exifTags: ExifReader.Tags) {
  * @param uri The uri of the image to download
  * @param fileName The name of the file to save the image locally as (including relative path)
  */
-export async function downloadImage(uri: string, fileName: string, storage: Storage): Promise<boolean> {
+export async function downloadImage(
+    uri: string,
+    fileName: string,
+    storage: Storage,
+): Promise<boolean> {
     return new Promise<boolean>(async (resolve) => {
         // save the generated image in the session store
         const blobResponse = await getBlob(uri);
         if (blobResponse.success) {
-            const ab = Buffer.from(
-                await blobResponse.data.arrayBuffer(),
-            );
+            const ab = Buffer.from(await blobResponse.data.arrayBuffer());
 
-            storage.write(
-                fileName,
-                ab.toString("base64"),
-            );
+            storage.write(fileName, ab.toString("base64"));
 
             resolve(true);
-        } 
+        }
 
         resolve(false);
-
     });
 }
