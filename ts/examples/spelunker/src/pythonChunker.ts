@@ -8,6 +8,7 @@ import { exec } from "child_process";
 import path from "path";
 import { promisify } from "util";
 import { fileURLToPath } from "url";
+import { CodeDocumentation } from "code-processor";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,7 +29,8 @@ export interface Chunk {
     blobs: Blob[];
     parentId: IdType;
     children: IdType[];
-    filename?: string;
+    filename?: string; // Set on receiving end to reduce JSON size.
+    docs?: CodeDocumentation; // Computed on receiving end from file docs.
 }
 
 export interface ChunkedFile {
