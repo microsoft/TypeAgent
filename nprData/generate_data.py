@@ -36,9 +36,6 @@ if __name__ == "__main__":
     podcast_links = get_podcast_links(URL)
     print(f"Found {len(podcast_links)} podcast episodes to process")
 
-    # podcast_links = [podcast_links[2]]
-    # print(podcast_links)
-
     # For each podcast episode, extract the transcript
     output_episodes = []
     for i, podcast_link in enumerate(podcast_links):
