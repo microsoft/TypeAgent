@@ -310,14 +310,10 @@ async function translateRequestWithTranslator(
             onProperty,
         );
 
-        // TODO: figure out if we want to keep track of this
-        //Profiler.getInstance().incrementLLMCallCount(context.requestId);
-
         if (!response.success) {
             displayError(response.message, context);
             return undefined;
         }
-        // console.log(`response: ${JSON.stringify(response.data)}`);
         return response.data as IAction;
     } finally {
         profiler?.stop();
@@ -502,7 +498,8 @@ function getChatHistoryForTranslation(
         role: "system",
     });
     const entities = context.chatHistory.getTopKEntities(20);
-    return { promptSections, entities };
+    const additionalInstructions = context.chatHistory.getCurrentInstructions();
+    return { promptSections, entities, additionalInstructions };
 }
 
 export async function translateRequest(

@@ -7,7 +7,7 @@ export type DispatcherActions = ClarifyRequestAction | UnknownAction;
 export interface ClarifyRequestAction {
     actionName: "clarifyRequest";
     parameters: {
-        // user request that needs to be clarification
+        // the current understood user request that needs to be clarified
         request: string;
 
         // Possible action name that can be matched to the request.
