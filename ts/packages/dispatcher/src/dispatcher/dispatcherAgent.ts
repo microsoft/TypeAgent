@@ -47,14 +47,18 @@ function clarifyRequestAction(
     action: ClarifyRequestAction,
     context: ActionContext<CommandHandlerContext>,
 ) {
-    const { clarifyingQuestion } = action.parameters;
+    const { request, clarifyingQuestion } = action.parameters;
     context.actionIO.appendDisplay({
         type: "text",
         speak: true,
         content: clarifyingQuestion,
     });
 
-    return createActionResultNoDisplay(clarifyingQuestion);
+    const result = createActionResultNoDisplay(clarifyingQuestion);
+    result.additionalInstructions = [
+        `Asked the user to clarify the request '${request}'`,
+    ];
+    return result;
 }
 
 export const dispatcherAgent: AppAgent = {

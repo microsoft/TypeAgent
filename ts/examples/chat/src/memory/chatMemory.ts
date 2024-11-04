@@ -1271,10 +1271,9 @@ export async function runChatMemory(): Promise<void> {
     }
 
     function writeResultLinks(rr: conversation.SearchResponse): void {
-        if (rr && rr.messageIds) {
-            const links = rr.messageIds.map((id) =>
-                context.conversation.messages.getUrl(id).toString(),
-            );
+        const urlGet = context.conversation.messages.getUrl;
+        if (rr && rr.messageIds && urlGet !== undefined) {
+            const links = rr.messageIds.map((id) => urlGet(id).toString());
             printer.writeList(links, { type: "ul" });
         }
     }

@@ -18,7 +18,11 @@ import {
     updateCorrectionContext,
 } from "./common/commandHandlerContext.js";
 
-import { CachedImageWithDetails, getColorElapsedString } from "common-utils";
+import {
+    CachedImageWithDetails,
+    getColorElapsedString,
+    Logger,
+} from "common-utils";
 import {
     executeActions,
     getTranslatorPrefix,
@@ -26,20 +30,25 @@ import {
     validateWildcardMatch,
 } from "../action/actionHandlers.js";
 import { unicodeChar } from "../utils/interactive.js";
-import { isChangeAssistantAction } from "../translation/agentTranslators.js";
+import {
+    isChangeAssistantAction,
+    TypeAgentTranslator,
+} from "../translation/agentTranslators.js";
 import { loadAssistantSelectionJsonTranslator } from "../translation/unknownSwitcher.js";
 import {
     MultipleAction,
     isMultipleAction,
 } from "../translation/multipleActionSchema.js";
-import { makeRequestPromptCreator } from "./common/chatHistoryPrompt.js";
 import { MatchResult } from "../../../cache/dist/constructions/constructions.js";
 import registerDebug from "debug";
 import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
 import ExifReader from "exifreader";
-import { Result } from "typechat";
 import { ProfileNames } from "../utils/profileNames.js";
-import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
+import {
+    ActionContext,
+    ParsedCommandParams,
+    Profiler,
+} from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import {
     displayError,
@@ -54,6 +63,7 @@ import { isUnknownAction } from "../dispatcher/dispatcherAgent.js";
 import { UnknownAction } from "../dispatcher/dispatcherActionSchema.js";
 
 const debugTranslate = registerDebug("typeagent:translate");
+const debugExplain = registerDebug("typeagent:explain");
 const debugConstValidation = registerDebug("typeagent:const:validation");
 
 function validateReplaceActions(
@@ -179,6 +189,7 @@ async function matchRequest(
         const useTranslators = systemContext.agents.getActiveTranslators();
         const matches = constructionStore.match(request, {
             wildcard: config.matchWildcard,
+            rejectReferences: config.explanationOptions.rejectReferences,
             useTranslators,
             history,
         });
@@ -236,92 +247,77 @@ async function translateRequestWithTranslator(
     const prefix = getTranslatorPrefix(translatorName, systemContext);
     displayStatus(`${prefix}Translating '${request}'`, context);
 
-    const translator = getTranslator(systemContext, translatorName);
-
-    const orp = translator.createRequestPrompt;
     if (history) {
         debugTranslate(
             `Using history for translation. Entities: ${JSON.stringify(history.entities)}`,
         );
     }
 
-    translator.createRequestPrompt = makeRequestPromptCreator(
-        translator,
-        history,
-        attachments,
-    );
-
     const profiler = systemContext.commandProfiler?.measure(
         ProfileNames.translate,
     );
 
-    let response: Result<object>;
-    try {
-        let firstToken = true;
-        let streamFunction: IncrementalJsonValueCallBack | undefined;
-        systemContext.streamingActionContext = undefined;
-        const onProperty: IncrementalJsonValueCallBack | undefined =
-            systemContext.session.getConfig().stream
-                ? (prop: string, value: any, delta: string | undefined) => {
-                      // TODO: streaming currently doesn't not support multiple actions
-                      if (prop === "actionName" && delta === undefined) {
-                          const actionTranslatorName =
-                              systemContext.agents.getInjectedTranslatorForActionName(
-                                  value,
-                              ) ?? translatorName;
+    let firstToken = true;
+    let streamFunction: IncrementalJsonValueCallBack | undefined;
+    systemContext.streamingActionContext = undefined;
+    const onProperty: IncrementalJsonValueCallBack | undefined =
+        systemContext.session.getConfig().stream
+            ? (prop: string, value: any, delta: string | undefined) => {
+                  // TODO: streaming currently doesn't not support multiple actions
+                  if (prop === "actionName" && delta === undefined) {
+                      const actionTranslatorName =
+                          systemContext.agents.getInjectedTranslatorForActionName(
+                              value,
+                          ) ?? translatorName;
 
-                          const prefix = getTranslatorPrefix(
+                      const prefix = getTranslatorPrefix(
+                          actionTranslatorName,
+                          systemContext,
+                      );
+                      displayStatus(
+                          `${prefix}Translating '${request}' into action '${value}'`,
+                          context,
+                      );
+                      const config =
+                          systemContext.agents.getTranslatorConfig(
                               actionTranslatorName,
+                          );
+                      if (config.streamingActions?.includes(value)) {
+                          streamFunction = startStreamPartialAction(
+                              actionTranslatorName,
+                              value,
                               systemContext,
                           );
-                          displayStatus(
-                              `${prefix}Translating '${request}' into action '${value}'`,
-                              context,
-                          );
-                          const config =
-                              systemContext.agents.getTranslatorConfig(
-                                  actionTranslatorName,
-                              );
-                          if (config.streamingActions?.includes(value)) {
-                              streamFunction = startStreamPartialAction(
-                                  actionTranslatorName,
-                                  value,
-                                  systemContext,
-                              );
-                          }
-                      }
-
-                      if (firstToken) {
-                          profiler?.mark(ProfileNames.firstToken);
-                          firstToken = false;
-                      }
-
-                      if (streamFunction) {
-                          streamFunction(prop, value, delta);
                       }
                   }
-                : undefined;
 
-        response = await translator.translate(
+                  if (firstToken) {
+                      profiler?.mark(ProfileNames.firstToken);
+                      firstToken = false;
+                  }
+
+                  if (streamFunction) {
+                      streamFunction(prop, value, delta);
+                  }
+              }
+            : undefined;
+    const translator = getTranslator(systemContext, translatorName);
+    try {
+        const response = await translator.translate(
             request,
-            history?.promptSections,
-            onProperty,
+            history,
             attachments,
+            onProperty,
         );
+
+        if (!response.success) {
+            displayError(response.message, context);
+            return undefined;
+        }
+        return response.data as IAction;
     } finally {
-        translator.createRequestPrompt = orp;
         profiler?.stop();
     }
-
-    // TODO: figure out if we want to keep track of this
-    //Profiler.getInstance().incrementLLMCallCount(context.requestId);
-
-    if (!response.success) {
-        displayError(response.message, context);
-        return undefined;
-    }
-    // console.log(`response: ${JSON.stringify(response.data)}`);
-    return response.data as IAction;
 }
 
 type NextTranslation = {
@@ -450,11 +446,11 @@ async function finalizeAction(
     }
 
     if (isChangeAssistantAction(currentAction)) {
-        currentTranslatorName = DispatcherName;
-        currentAction = {
+        const unknownAction: UnknownAction = {
             actionName: "unknown",
-            parameters: { text: currentAction.parameters.request },
+            parameters: { request: currentAction.parameters.request },
         };
+        currentAction = unknownAction;
     }
 
     return new Action(
@@ -502,7 +498,11 @@ function getChatHistoryForTranslation(
         role: "system",
     });
     const entities = context.chatHistory.getTopKEntities(20);
-    return { promptSections, entities };
+    const additionalInstructions = context.session.getConfig().promptOptions
+        .additionalInstructions
+        ? context.chatHistory.getCurrentInstructions()
+        : undefined;
+    return { promptSections, entities, additionalInstructions };
 }
 
 export async function translateRequest(
@@ -652,6 +652,91 @@ async function requestExecute(
     await executeActions(requestAction.actions, context);
 }
 
+async function canTranslateWithoutContext(
+    requestAction: RequestAction,
+    usedTranslators: Map<string, TypeAgentTranslator<object>>,
+    logger?: Logger,
+) {
+    if (requestAction.history === undefined) {
+        return;
+    }
+
+    const oldActions: IAction[] = requestAction.actions.toIActions();
+    const newActions: (IAction | undefined)[] = [];
+    const request = requestAction.request;
+    try {
+        const translations = new Map<string, IAction>();
+        for (const [translatorName, translator] of usedTranslators) {
+            const result = await translator.translate(request);
+            if (!result.success) {
+                throw new Error("Failed to translate without history context");
+            }
+            const newActions = result.data as IAction;
+            const count = isMultipleAction(newActions)
+                ? newActions.parameters.requests.length
+                : 1;
+
+            if (count !== oldActions.length) {
+                throw new Error("Action count mismatch without context");
+            }
+            translations.set(translatorName, result.data as IAction);
+        }
+
+        let index = 0;
+        for (const action of requestAction.actions) {
+            const translatorName = action.translatorName;
+            const newTranslatedActions = translations.get(translatorName)!;
+            const newAction = isMultipleAction(newTranslatedActions)
+                ? newTranslatedActions.parameters.requests[index].action
+                : newTranslatedActions;
+            newActions.push(newAction);
+        }
+
+        debugExplain(
+            `With context: ${JSON.stringify(oldActions)}\nWithout context: ${JSON.stringify(newActions)}`,
+        );
+
+        if (oldActions.length !== newActions.length) {
+            throw new Error("Action count mismatch without context");
+        }
+
+        index = 0;
+        for (const oldAction of oldActions) {
+            const newAction = newActions[index];
+            if (newAction === undefined) {
+                throw new Error(`Action missing without context`);
+            }
+
+            if (newAction.actionName !== oldAction.actionName) {
+                throw new Error(`Action Name mismatch without context`);
+            }
+
+            if (
+                JSON.stringify(newAction.parameters) !==
+                JSON.stringify(oldAction.parameters)
+            ) {
+                throw new Error(`Action parameters mismatch without context`);
+            }
+            index++;
+        }
+        logger?.logEvent("contextlessTranslation", {
+            request,
+            actions: oldActions,
+            history: requestAction.history,
+            newActions,
+        });
+    } catch (e: any) {
+        logger?.logEvent("contextlessTranslation", {
+            requestAction,
+            actions: oldActions,
+            history: requestAction.history,
+            newActions,
+            error: e.message,
+        });
+        throw e;
+    }
+}
+
 async function requestExplain(
     requestAction: RequestAction,
     context: CommandHandlerContext,
@@ -684,24 +769,47 @@ async function requestExplain(
         return;
     }
 
+    if (requestAction.history?.additionalInstructions !== undefined) {
+        // Translation with additional instructions are not cachable.
+        return;
+    }
+
+    const usedTranslators = new Map<string, TypeAgentTranslator<object>>();
     const actions = requestAction.actions;
     for (const action of actions) {
         if (isUnknownAction(action)) {
             return;
         }
 
+        const translatorName = action.translatorName;
         if (
-            action.translatorName !== undefined &&
-            context.agents.getTranslatorConfig(action.translatorName).cached ===
-                false
+            context.agents.getTranslatorConfig(translatorName).cached === false
         ) {
             return;
         }
+
+        usedTranslators.set(
+            translatorName,
+            getTranslator(context, translatorName),
+        );
     }
+    const { rejectReferences, retranslateWithoutContext } =
+        context.session.getConfig().explanationOptions;
 
     const processRequestActionP = context.agentCache.processRequestAction(
         requestAction,
         true,
+        {
+            checkExplainable: retranslateWithoutContext
+                ? (requestAction: RequestAction) =>
+                      canTranslateWithoutContext(
+                          requestAction,
+                          usedTranslators,
+                          context.logger,
+                      )
+                : undefined,
+            rejectReferences,
+        },
     );
 
     if (context.explanationAsynchronousMode) {
@@ -762,8 +870,7 @@ export class RequestCommandHandler implements CommandHandler {
             }
 
             // store attachments for later reuse
-            let cachedAttachments: CachedImageWithDetails[] =
-                new Array<CachedImageWithDetails>();
+            const cachedAttachments: CachedImageWithDetails[] = [];
             if (attachments) {
                 for (let i = 0; i < attachments?.length; i++) {
                     const [attachmentName, tags]: [string, ExifReader.Tags] =
@@ -798,7 +905,11 @@ export class RequestCommandHandler implements CommandHandler {
             // Make sure we clear any left over streaming context
             systemContext.streamingActionContext = undefined;
 
-            const match = await matchRequest(request, context, history);
+            const canUseCacheMatch =
+                attachments === undefined || attachments.length === 0;
+            const match = canUseCacheMatch
+                ? await matchRequest(request, context, history)
+                : undefined;
             const translationResult =
                 match === undefined // undefined means not found
                     ? await translateRequest(
@@ -828,12 +939,14 @@ export class RequestCommandHandler implements CommandHandler {
                 );
             }
             await requestExecute(requestAction, context);
-            await requestExplain(
-                requestAction,
-                systemContext,
-                fromCache,
-                fromUser,
-            );
+            if (canUseCacheMatch) {
+                await requestExplain(
+                    requestAction,
+                    systemContext,
+                    fromCache,
+                    fromUser,
+                );
+            }
         } finally {
             profiler?.stop();
         }

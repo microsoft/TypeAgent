@@ -110,6 +110,13 @@ type DispatcherConfig = {
     bot: boolean;
     stream: boolean;
     explanation: boolean;
+    explanationOptions: {
+        rejectReferences: boolean;
+        retranslateWithoutContext: boolean;
+    };
+    promptOptions: {
+        additionalInstructions: boolean;
+    };
     switch: {
         inline: boolean;
         search: boolean;
@@ -142,6 +149,13 @@ const defaultSessionConfig: SessionConfig = {
     bot: true,
     stream: true,
     explanation: true,
+    explanationOptions: {
+        rejectReferences: true,
+        retranslateWithoutContext: true,
+    },
+    promptOptions: {
+        additionalInstructions: true,
+    },
     switch: {
         inline: true,
         search: true,
