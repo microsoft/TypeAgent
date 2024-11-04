@@ -14,11 +14,11 @@ And it was quite a long road from there. It was about 15 years of trying to get 
 
 KEVIN SCOTT: And when you were a kid, were you writing short stories and fiction, or did that come later?
 
-ADRIAN TCHAIKOVSKY: I really wasn't. I remember being quite actively resistant to it at school. I mean, this is kind of for any parents who, for whatever unknown reason, would want their children to become a writer and are seeing no interest in it as yet, it was ï¿½ I was about 17 before I really put pen to paper. But I think, looking before then, I can certainly see I had a lot of desire to create. I was just using it in other outlets.
+ADRIAN TCHAIKOVSKY: I really wasn't. I remember being quite actively resistant to it at school. I mean, this is kind of for any parents who, for whatever unknown reason, would want their children to become a writer and are seeing no interest in it as yet, it was I was about 17 before I really put pen to paper. But I think, looking before then, I can certainly see I had a lot of desire to create. I was just using it in other outlets.
 
 KEVIN SCOTT: And so, I'm curious, like, you played role playing games. Like, what was your favorite role playing setup? Like, what game? What characters did you play?
 
-ADRIAN TCHAIKOVSKY: We were we played quite a few that were kicking around in the, it would be ï¿½80s, early ï¿½90s. And Dungeons and Dragons was definitely the main one, which was, I suspect, a common experience for most people at the time.
+ADRIAN TCHAIKOVSKY: We were we played quite a few that were kicking around in the, it would be 80s, early 90s. And Dungeons and Dragons was definitely the main one, which was, I suspect, a common experience for most people at the time.
 
 One of the things, my role was, as often as not, I was running the game, which meant creating the world and creating many, many characters, and sort of portraying characters in a fairly quickfire fashion for the other players. And this turned out to be an enormously useful sort of skillset for writing fantasy and science fiction novels, because the same kind of world creating, the same presentation of characters just crosses over very neatly from one to another.
 
