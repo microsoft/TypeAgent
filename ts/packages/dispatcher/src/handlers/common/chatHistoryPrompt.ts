@@ -25,18 +25,19 @@ export function createTypeAgentRequestPrompt(
         promptSections = history.promptSections;
         entities = history.entities;
 
-        entityStr =
-            "Most recent entities found in chat history, in order, newest first:\n";
+        if (entities.length > 0) {
+            entityStr =
+                "Most recent entities found in chat history, in order, newest first:\n";
 
-        latestEntity = "";
-        for (let i = 0; i < entities.length; ++i) {
-            const entity = entities[i];
+            for (let i = 0; i < entities.length; ++i) {
+                const entity = entities[i];
 
-            let curEntityStr = entityToText(entity) + "\n";
-            if (i > 0) {
-                entityStr += curEntityStr;
-            } else {
-                latestEntity = curEntityStr;
+                let curEntityStr = entityToText(entity) + "\n";
+                if (i > 0) {
+                    entityStr += curEntityStr;
+                } else {
+                    latestEntity = curEntityStr;
+                }
             }
         }
     }
@@ -47,26 +48,46 @@ export function createTypeAgentRequestPrompt(
         }
     }
 
-    let prompt =
-        `You are a service that translates user requests into JSON objects of type "${translator.validator.getTypeName()}" according to the following TypeScript definitions:\n` +
-        `\`\`\`\n${translator.validator.getSchemaText()}\`\`\`\n`;
+    const prompts: string[] = [
+        `You are a service that translates user requests into JSON objects of type "${translator.validator.getTypeName()}" according to the following TypeScript definitions:`,
+        `\`\`\``,
+        translator.validator.getSchemaText(),
+        `\`\`\``,
+    ];
     if (promptSections.length > 1) {
-        prompt +=
-            `The following is a summary of the chat history:\n###\n` +
-            entityStr +
-            "###\n" +
-            "The latest entity discussed:\n" +
-            latestEntity +
-            "\n" +
-            `The latest assistant response:\n` +
-            promptSections[promptSections.length - 1].content +
-            "\n";
+        prompts.push("The following is a summary of the chat history:");
+        if (entityStr.length > 0) {
+            prompts.push("###");
+            prompts.push(entityStr);
+            prompts.push("###");
+        }
+        if (latestEntity.length > 0) {
+            prompts.push("The latest entity discussed:");
+            prompts.push(latestEntity);
+        }
+
+        const additionalInstructions = history?.additionalInstructions;
+        if (
+            additionalInstructions !== undefined &&
+            additionalInstructions.length > 0
+        ) {
+            prompts.push("Information about the latest assistant action:");
+            prompts.push(...additionalInstructions);
+        }
+
+        prompts.push("The latest assistant response:");
+        prompts.push(
+            promptSections[promptSections.length - 1].content as string,
+        );
     }
-    prompt +=
-        `Current Date is ${new Date().toLocaleDateString("en-US")}. The time is ${new Date().toLocaleTimeString()}.\n` +
-        `The following is the latest user request:\n` +
-        `"""\n${request}\n"""\n` +
-        `Based primarily on the request but considering all available information in our chat history, the following is the latest user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`;
+    prompts.push(
+        `Current Date is ${new Date().toLocaleDateString("en-US")}. The time is ${new Date().toLocaleTimeString()}.`,
+    );
+    prompts.push(`The following is the latest user request:`);
+    prompts.push(`"""\n${request}\n"""`);
+    prompts.push(
+        `Based primarily on the request but considering all available information in our chat history, the following is the latest user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:`,
+    );
     //console.log(prompt);
-    return prompt;
+    return prompts.join("\n");
 }
