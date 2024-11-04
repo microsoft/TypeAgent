@@ -12,8 +12,8 @@ export function skipTest(name: string) {
 }
 
 export function testIf(
-    runIf: () => boolean,
     name: string,
+    runIf: () => boolean,
     fn: jest.ProvidesCallback,
     testTimeout?: number | undefined,
 ) {
@@ -82,7 +82,7 @@ export function generateRandomTestEmbeddings(length: number, count: number) {
     return embeddings;
 }
 
-export function composers() {
+export function composers(offset?: number) {
     const blocks: knowLib.TextBlock<number>[] = [
         {
             type: knowLib.TextBlockType.Raw,
@@ -100,6 +100,14 @@ export function composers() {
             sourceIds: [1, 5, 8, 9],
         },
     ];
+    if (offset) {
+        blocks.forEach((b) => {
+            const sourceIds = b.sourceIds!;
+            for (let i = 0; i < sourceIds.length; ++i) {
+                sourceIds[i] = sourceIds[i] + offset;
+            }
+        });
+    }
     return blocks;
 }
 
@@ -130,4 +138,11 @@ export function uniqueSourceIds(blocks: knowLib.TextBlock[]): number[] {
         block.sourceIds?.forEach((id) => set.add(id));
     }
     return [...set.values()].sort();
+}
+
+export function countSourceIds(blocks: knowLib.TextBlock[]): number {
+    return blocks.reduce<number>(
+        (total, b) => total + (b.sourceIds?.length ?? 0),
+        0,
+    );
 }
