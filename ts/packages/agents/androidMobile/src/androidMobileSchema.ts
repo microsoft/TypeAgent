@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type AndroidMobileAction = SendSMSAction | CallPhoneNumberAction | SetAlarmAction;
+export type AndroidMobileAction = SendSMSAction | CallPhoneNumberAction | SetAlarmAction | SearchNearbyAction;
 
 // sends a SMS to the supplied phone number
 export type SendSMSAction = {
@@ -37,3 +37,13 @@ export type SetAlarmAction = {
         time: string;
     };
 };
+
+export type SearchNearbyAction = {
+    actionName: "searchNearby";
+    parameters: {
+        // the original request of the user
+        originalRequest: string;
+        // the search term to use when searching nearby locations
+        searchTerm: string;
+    };
+}

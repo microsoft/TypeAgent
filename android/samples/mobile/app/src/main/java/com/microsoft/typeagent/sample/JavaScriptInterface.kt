@@ -2,15 +2,12 @@ package com.microsoft.typeagent.sample
 
 import android.content.Context
 import android.content.Intent
-import android.icu.util.Calendar
 import android.net.Uri
 import android.provider.AlarmClock
 import android.webkit.JavascriptInterface
 import android.widget.Toast
-import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat.startActivity
 import java.time.LocalDateTime
-import java.util.Date
 import java.util.Locale
 
 
@@ -51,6 +48,14 @@ class JavaScriptInterface(var context: Context) {
         val uri = String.format(Locale.ROOT, "smsto:%s", phoneNumber)
         val intent = Intent(Intent.ACTION_SENDTO, Uri.parse(uri))
             .putExtra("sms_body", message);
+        startActivity(context, intent, null)
+    }
+
+    @JavascriptInterface
+    fun searchNearby(searchTerm: String) {
+        val uri = Uri.parse("geo:0,0?q=$searchTerm")
+        val intent = Intent(Intent.ACTION_VIEW, uri)
+        intent.setPackage("com.google.android.apps.maps")
         startActivity(context, intent, null)
     }
 }

@@ -31,7 +31,8 @@ export type ClientAction =
     | "show-notification"
     | "set-alarm"
     | "call-phonenumber"
-    | "send-sms";
+    | "send-sms"
+    | "search-nearby";
 
 export interface ActionIO {
     readonly type: DisplayType;

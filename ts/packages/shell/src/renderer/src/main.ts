@@ -206,7 +206,6 @@ function addEvents(
     api.onTakeAction((_, action: string, data?: unknown) => {
         // Android object gets injected on Android devices, otherwise unavailable
         try {
-            //Android?.showToast("woohooo 2!");
             console.log(`Take Action '${action}' Data: ${data}`);
             switch (action) {
                 case "show-camera": {
@@ -224,7 +223,11 @@ function addEvents(
                 }
                 case "send-sms": {
                     let d: any = data;
-                    Android.sendSMS(d.phoneNumber, d.message);
+                    Android?.sendSMS(d.phoneNumber, d.message);
+                }
+                case "search-nearby": {
+                    let d: any = data;
+                    Android?.searchNearby(d.searchTerm);
                 }
             }
         } catch (e) {

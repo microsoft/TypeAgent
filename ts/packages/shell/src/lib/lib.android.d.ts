@@ -6,4 +6,5 @@ declare var Android: {
     setAlarm: (time: string) => void;
     callPhoneNumber: (phoneNumber: string) => void;
     sendSMS: (phoneNumber: string, message: string) => void;
+    searchNearby: (searchTerm: string) => void;
 };

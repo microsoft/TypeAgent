@@ -9,7 +9,7 @@ import {
     ActionResult,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
-import { AndroidMobileAction, CallPhoneNumberAction, SendSMSAction, SetAlarmAction } from "./androidMobileSchema.js";
+import { AndroidMobileAction, CallPhoneNumberAction, SearchNearbyAction, SendSMSAction, SetAlarmAction } from "./androidMobileSchema.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -70,6 +70,12 @@ async function handlePhotoAction(
             let alarmAction = action as SetAlarmAction;
             result = createActionResult("Setting Alarm");
             context.actionIO.takeAction("set-alarm", alarmAction.parameters);
+            break;
+        }
+        case "searchNearby": {
+            let nearbySearchAction = action as SearchNearbyAction;
+            result = createActionResult("Local search");
+            context.actionIO.takeAction("search-nearby", nearbySearchAction.parameters);
             break;
         }
         default:
