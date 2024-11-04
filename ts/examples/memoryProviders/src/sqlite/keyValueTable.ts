@@ -24,7 +24,10 @@ export interface KeyValueTable<
     iterateMultipleScored(
         items: ScoredItem<TKeyId>[],
     ): IterableIterator<ScoredItem<TValueId>>;
-    getHits(ids: TKeyId[]): IterableIterator<ScoredItem<TValueId>>;
+    getHits(
+        ids: TKeyId[],
+        join?: string,
+    ): IterableIterator<ScoredItem<TValueId>>;
 }
 
 export function createKeyValueTable<
@@ -157,9 +160,16 @@ export function createKeyValueTable<
         return Promise.resolve(matches);
     }
 
-    function* getHits(ids: TKeyId[]): IterableIterator<ScoredItem<TValueId>> {
-        const sql = `SELECT valueId as item, count(*) as score 
-        FROM ${tableName}
+    function* getHits(
+        ids: TKeyId[],
+        join?: string,
+    ): IterableIterator<ScoredItem<TValueId>> {
+        const sql = join
+            ? `SELECT valueId AS item, count(*) AS score FROM ${tableName}
+        ${join} AND keyId IN (${ids})
+        GROUP BY valueId 
+        ORDER BY score DESC`
+            : `SELECT valueId AS item, count(*) AS score FROM ${tableName}
         WHERE keyId IN (${ids})
         GROUP BY valueId 
         ORDER BY score DESC`;

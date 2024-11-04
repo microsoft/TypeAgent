@@ -30,6 +30,8 @@ export interface TemporalTable<TLogId = any, T = any>
     ): IterableIterator<dateTime.Timestamped<T>>;
     iterateOldest(count: number): IterableIterator<dateTime.Timestamped>;
     iterateNewest(count: number): IterableIterator<dateTime.Timestamped>;
+
+    sql_joinRange(startAt: Date, stopAt?: Date): string;
 }
 
 export function createTemporalLogTable<
@@ -132,6 +134,7 @@ export function createTemporalLogTable<
         iterateRange,
         iterateOldest,
         iterateNewest,
+        sql_joinRange,
     };
 
     function size(): Promise<number> {
@@ -151,7 +154,7 @@ export function createTemporalLogTable<
     async function* allObjects(): AsyncIterableIterator<
         dateTime.Timestamped<T>
     > {
-        for (const row of sql_add.iterate()) {
+        for (const row of sql_all.iterate()) {
             yield deserialize(row);
         }
     }
@@ -301,14 +304,16 @@ export function createTemporalLogTable<
         startAt: Date,
         stopAt?: Date,
     ): IterableIterator<TLogId> {
-        const rangeStart = dateTime.timestampString(startAt);
-        const rangeEnd = stopAt ? dateTime.timestampString(stopAt) : undefined;
-        if (rangeEnd) {
-            for (const row of sql_range.iterate(rangeStart, rangeEnd)) {
+        const range = dateTime.timestampRange(startAt, stopAt);
+        if (range.endTimestamp) {
+            for (const row of sql_range.iterate(
+                range.startTimestamp,
+                range.endTimestamp,
+            )) {
                 yield idSerializer.serialize((row as TemporalLogRow<T>).logId);
             }
         } else {
-            for (const row of sql_rangeStartAt.iterate(rangeStart)) {
+            for (const row of sql_rangeStartAt.iterate(range.startTimestamp)) {
                 yield idSerializer.serialize((row as TemporalLogRow<T>).logId);
             }
         }
@@ -328,6 +333,16 @@ export function createTemporalLogTable<
         for (const row of sql_newest.iterate(count)) {
             yield deserialize(row);
         }
+    }
+
+    function sql_joinRange(startAt: Date, stopAt?: Date): string {
+        const range = dateTime.timestampRange(startAt, stopAt);
+        let sql = `INNER JOIN ${tableName} ON ${tableName}.value = valueId\n`;
+        sql += `WHERE ${tableName}.timestamp >= '${range.startTimestamp}'`;
+        if (range.endTimestamp) {
+            sql += ` AND ${tableName}.timestamp <= '${range.endTimestamp}'`;
+        }
+        return sql;
     }
 
     function deserialize(row: any): dateTime.Timestamped<T> {

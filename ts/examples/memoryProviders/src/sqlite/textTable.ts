@@ -187,7 +187,10 @@ export function createStringTable(
 
 export interface TextTable<TTextId = any, TSourceId = any>
     extends TextIndex<TTextId, TSourceId> {
-    getExactHits(values: string[]): IterableIterator<ScoredItem<TSourceId>>;
+    getExactHits(
+        values: string[],
+        join?: string,
+    ): IterableIterator<ScoredItem<TSourceId>>;
 }
 
 export async function createTextIndex<
@@ -197,12 +200,12 @@ export async function createTextIndex<
     settings: TextIndexSettings,
     db: sqlite.Database,
     baseName: string,
-    textType: SqlColumnType<TTextId>,
+    textIdType: SqlColumnType<TTextId>,
     valueType: SqlColumnType<TSourceId>,
     ensureExists: boolean = true,
 ): Promise<TextTable<TTextId, TSourceId>> {
     type TextId = number;
-    const [isIdInt, serializer] = getTypeSerializer<TTextId>(textType);
+    const [isIdInt, serializer] = getTypeSerializer<TTextId>(textIdType);
     const textTable = createStringTable(
         db,
         tablePath(baseName, "entries"),
@@ -344,10 +347,11 @@ export async function createTextIndex<
 
     function getExactHits(
         values: string[],
+        join?: string,
     ): IterableIterator<ScoredItem<TSourceId>> {
         // TODO: use a JOIN
         const textIds = [...textTable.getIds(values)];
-        return postingsTable.getHits(textIds);
+        return postingsTable.getHits(textIds, join);
     }
 
     async function getNearest(
