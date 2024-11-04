@@ -1,4 +1,4 @@
-# Copyright (c) Microsoft Corporation and Henry Lucco
+# Copyright (c) Microsoft Corporation and Henry Lucco.
 # Licensed under the MIT License.
 
 typeagent_entity_extraction_system = """
