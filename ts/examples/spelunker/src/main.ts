@@ -48,6 +48,8 @@ await main();
 async function main(): Promise<void> {
     console.log("[Hi!]");
 
+    const t0 = Date.now();
+
     const files = processArgs();
 
     let homeDir = process.platform === "darwin" ? process.env.HOME || "" : "";
@@ -72,10 +74,14 @@ async function main(): Promise<void> {
         { serializer: (obj) => JSON.stringify(obj, null, 2) },
     );
 
+    const t1 = Date.now();
+    console.log(`[Initialized in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`);
+
     // Import all files. (TODO: Break up very long lists.)
     if (files.length > 0) {
         console.log(`[Importing ${files.length} files]`);
-        const t0 = new Date().getTime();
+        const t0 = Date.now();
+
         await importPythonFiles(
             files,
             fileDocumenter,
@@ -85,7 +91,8 @@ async function main(): Promise<void> {
             true,
             verbose,
         );
-        const t1 = new Date().getTime();
+
+        const t1 = Date.now();
         console.log(
             `[Imported ${files.length} files in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
         );
@@ -97,7 +104,7 @@ async function main(): Promise<void> {
             history: true, // Enable history
             keepWhitespace: true, // Keep leading/trailing whitespace in history
         });
-        if (!input) {
+        if (!input.trim()) {
             console.log("[Bye!]");
             return;
         }
@@ -134,10 +141,9 @@ async function processQuery(
     codeIndex: SemanticCodeIndex,
     summaryFolder: ObjectFolder<CodeDocumentation>,
 ): Promise<void> {
-    const searchKey = input.replace(/\W+/g, " ").trim();
     let hits;
     try {
-        hits = await codeIndex.find(searchKey, 2);
+        hits = await codeIndex.find(input, 2);
     } catch (error) {
         console.log(`[${error}]`);
         return;
@@ -158,19 +164,17 @@ async function processQuery(
             );
             const summary: CodeDocumentation | undefined =
                 await summaryFolder.get(hit.item);
-            if (summary && summary.comments && summary.comments.length > 0) {
+            if (summary?.comments?.length) {
                 for (const comment of summary.comments)
                     console.log(
                         wordWrap(`${comment.lineNumber}. ${comment.comment}`),
                     );
             }
             for (const blob of chunk.blobs) {
-                let lineno = 1 + blob.start;
-                for (const index in blob.lines) {
+                for (let index = 0; index < blob.lines.length; index++) {
                     console.log(
-                        `${String(lineno).padStart(3)}: ${blob.lines[index].trimEnd()}`,
+                        `${(1 + blob.start + index).toString().padStart(3)}: ${blob.lines[index].trimEnd()}`,
                     );
-                    lineno += 1;
                 }
                 console.log("");
             }
@@ -223,8 +227,7 @@ async function createFileDocumenter(model: ChatModel): Promise<FileDocumenter> {
             "Document the given Python code, its purpose, and any relevant details.\n" +
             "The code has (non-contiguous) line numbers, e.g.: '[1]: def foo():'\n" +
             "There are also marker lines, e.g.: '***: Document the following FuncDef'\n" +
-            "Provide a comment for each such marker (and only for those).\n" +
-            "The docs must be: accurate, active voice, crisp, succinct.";
+            "Provide a comment for ALL markers. DON'T document any lines without markers!\n";
         const result = await fileDocTranslator.translate(request, text);
 
         // Now assign each comment to its chunk.

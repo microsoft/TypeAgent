@@ -50,7 +50,32 @@ export async function importPythonFiles(
     let filenames = files.map((file) =>
         fs.existsSync(file) ? fs.realpathSync(file) : file,
     );
+    const t0 = Date.now();
     const results = await chunkifyPythonFiles(filenames);
+    const t1 = Date.now();
+
+    // Compute some stats for log message.
+    let lines = 0;
+    let blobs = 0;
+    let errors = 0;
+    for (const result of results) {
+        if ("error" in result) {
+            errors++;
+        } else {
+            const chunkedFile = result;
+            for (const chunk of chunkedFile.chunks) {
+                blobs += chunk.blobs.length;
+                for (const blob of chunk.blobs) {
+                    lines += blob.lines.length;
+                }
+            }
+        }
+    }
+    console.log(
+        `[Chunked ${filenames.length} files ` +
+            `(${lines} lines, ${blobs} blobs, ${errors} errors) ` +
+            `in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+    );
 
     // TODO: concurrency.
     for (const item of results) {
@@ -66,8 +91,13 @@ export async function importPythonFiles(
         for (const chunk of chunks) {
             chunk.filename = chunkedFile.filename;
         }
+        const t0 = Date.now();
         const docs = await fileDocumenter.document(chunks);
+        const t1 = Date.now();
         console.log(docs);
+        console.log(
+            `[Documented ${chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+        );
         firstFile = await processChunkedFile(
             chunkedFile,
             chunkFolder,
@@ -126,7 +156,7 @@ async function processChunkedFile(
 
     const t1 = Date.now();
     console.log(
-        `[Processed ${+firstFile + chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} sec]`,
+        `[Processed ${+firstFile + chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
     );
     return false;
 }
@@ -152,9 +182,6 @@ async function processChunk(
         docs: chunk.docs!,
     };
     const docs = await codeIndex.put(codeBlock, chunk.id, chunk.filename);
-    for (const comment of docs.comments || []) {
-        comment.lineNumber += chunk.blobs[0].start;
-    }
     await summaryFolder.put(docs, chunk.id);
     await putPromise;
     // for (const comment of docs.comments || []) {
@@ -164,7 +191,7 @@ async function processChunk(
     if (verbose) {
         console.log(
             `[Embedded ${chunk.id} (${lineCount} lines @ ${chunk.blobs[0].start}) ` +
-                `in ${((t1 - t0) * 0.001).toFixed(3)} sec]`,
+                `in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
         );
     }
 }
