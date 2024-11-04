@@ -95,9 +95,14 @@ export async function importPythonFiles(
             `[Documenting ${chunks.length} chunks from ${chunkedFile.filename}]`,
         );
         const t0 = Date.now();
-        const docs = await fileDocumenter.document(chunks);
+        try {
+            const docs = await fileDocumenter.document(chunks);
+            console.log(docs);
+        } catch (error) {
+            console.log(`[Error documenting ${chunkedFile.filename}: ${error}]`);
+            continue;
+        }
         const t1 = Date.now();
-        console.log(docs);
         console.log(
             `[Documented ${chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
         );
