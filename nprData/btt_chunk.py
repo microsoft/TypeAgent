@@ -27,7 +27,9 @@ if __name__ == "__main__":
         for turn in tqdm(episode_data.sections[0].transcript):
             chunk = process_turn(episode_data.id, episode_data.sections[0], turn, use_llm)
             chunks.append(chunk)
-        
+
+        # Removed concurrent processing due to rate limiting from LLM API
+        # if wanting to generate chunks where use_llm = False, uncomment the following block 
         """
         with ThreadPoolExecutor() as executor:
             futures = []
