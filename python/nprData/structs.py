@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation and Henry Lucco
+# Licensed under the MIT License.
+
 from dataclasses import dataclass
 from bs4 import BeautifulSoup
 import requests

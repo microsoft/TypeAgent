@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation and Henry Lucco
+# Licensed under the MIT License.
+
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance
 from structs import Chunk

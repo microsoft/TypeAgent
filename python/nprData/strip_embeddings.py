@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation and Henry Lucco
+# Licensed under the MIT License.
+
 # Utility script to remove embeddings from chunks
 # if desired.
 

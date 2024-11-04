@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation and Henry Lucco
+# Licensed under the MIT License.
+
 import requests
 from bs4 import BeautifulSoup
 from structs import Episode

@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation and Henry Lucco
+# Licensed under the MIT License.
+
 from dataclasses import dataclass
 from typing import List
 from openai import OpenAI

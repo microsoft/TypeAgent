@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation and Henry Lucco
+# Licensed under the MIT License.
+
 from llm_util import LLMChat
 from prompts import typeagent_entity_extraction_system_full
 from structs import Episode

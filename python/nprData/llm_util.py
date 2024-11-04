@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation and Henry Lucco
+# Licensed under the MIT License.
+
 from groq import Groq
 from dotenv import load_dotenv
 from dataclasses import dataclass

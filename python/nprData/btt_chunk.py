@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation and Henry Lucco
+# Licensed under the MIT License.
+
 from structs import Episode
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed

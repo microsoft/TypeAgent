@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation and Henry Lucco
+# Licensed under the MIT License.
+
 import json
 from structs import Episode, Chunk, Turn, Section
 from embedding import Embedding

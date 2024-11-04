@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation and Henry Lucco
+# Licensed under the MIT License.
+
 typeagent_entity_extraction_system = """
 You are a service that extracts all entities and actions from a conversation passage into a JSON object of type KnowledgeResponsea according to the following TypeScript definitions:
 export type Quantity = {
