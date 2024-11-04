@@ -187,7 +187,10 @@ export function createStringTable(
 
 export interface TextTable<TTextId = any, TSourceId = any>
     extends TextIndex<TTextId, TSourceId> {
-    getHitsSync(values: string[]): IterableIterator<ScoredItem<TSourceId>>;
+    getExactHits(
+        values: string[],
+        join?: string,
+    ): IterableIterator<ScoredItem<TSourceId>>;
 }
 
 export async function createTextIndex<
@@ -197,12 +200,12 @@ export async function createTextIndex<
     settings: TextIndexSettings,
     db: sqlite.Database,
     baseName: string,
-    textType: SqlColumnType<TTextId>,
+    textIdType: SqlColumnType<TTextId>,
     valueType: SqlColumnType<TSourceId>,
     ensureExists: boolean = true,
 ): Promise<TextTable<TTextId, TSourceId>> {
     type TextId = number;
-    const [isIdInt, serializer] = getTypeSerializer<TTextId>(textType);
+    const [isIdInt, serializer] = getTypeSerializer<TTextId>(textIdType);
     const textTable = createStringTable(
         db,
         tablePath(baseName, "entries"),
@@ -238,7 +241,7 @@ export async function createTextIndex<
         getId,
         getIds,
         getText,
-        getHitsSync,
+        getExactHits,
         getNearest,
         getNearestMultiple,
         getNearestText,
@@ -342,12 +345,13 @@ export async function createTextIndex<
         return ids;
     }
 
-    function getHitsSync(
+    function getExactHits(
         values: string[],
+        join?: string,
     ): IterableIterator<ScoredItem<TSourceId>> {
         // TODO: use a JOIN
         const textIds = [...textTable.getIds(values)];
-        return postingsTable.getHitsSync(textIds);
+        return postingsTable.getHits(textIds, join);
     }
 
     async function getNearest(
@@ -394,21 +398,19 @@ export async function createTextIndex<
         minScore?: number,
         scoreBoost?: number,
     ): Promise<void> {
-        let matchedTextIds = await getExactAndNearestTextIdsScored(
+        let scoredIds = await getExactAndNearestTextIdsScored(
             value,
             maxMatches,
             minScore,
         );
-        if (matchedTextIds && matchedTextIds.length > 0) {
-            for (const textId of matchedTextIds) {
-                const scoredPostings = postingsTable.iterateScored(
-                    textId.item,
-                    scoreBoost ? scoreBoost * textId.score : textId.score,
-                );
-                if (scoredPostings) {
-                    hitTable.addMultipleScored(scoredPostings);
-                }
-            }
+        if (scoredIds) {
+            scoredIds = boostScore(
+                knowLib.sets.removeUndefined(scoredIds),
+                scoreBoost,
+            );
+            const scoredPostings =
+                postingsTable.iterateMultipleScored(scoredIds);
+            hitTable.addMultipleScored(scoredPostings);
         }
     }
 
@@ -419,9 +421,19 @@ export async function createTextIndex<
         minScore?: number,
         scoreBoost?: number,
     ): Promise<void> {
-        return asyncArray.forEachAsync(values, settings.concurrency, (v) =>
-            getNearestHits(v, hitTable, maxMatches, minScore, scoreBoost),
+        let matchedTextIds = await asyncArray.mapAsync(
+            values,
+            settings.concurrency,
+            (value) =>
+                getExactAndNearestTextIdsScored(value, maxMatches, minScore),
         );
+        if (matchedTextIds && matchedTextIds.length > 0) {
+            let scoredIds = knowLib.sets.removeUndefined(matchedTextIds).flat();
+            scoredIds = boostScore(scoredIds, scoreBoost);
+            const scoredPostings =
+                postingsTable.iterateMultipleScored(scoredIds);
+            hitTable.addMultipleScored(scoredPostings);
+        }
     }
 
     async function getNearestText(
@@ -624,5 +636,20 @@ export async function createTextIndex<
         return semanticIndex
             ? semanticIndex.nearestNeighbors(value, maxMatches, minScore)
             : undefined;
+    }
+
+    function boostScore(
+        items: ScoredItem<TextId>[],
+        boost?: number,
+    ): ScoredItem<TextId>[] {
+        if (boost) {
+            return items.map((scoredItem) => {
+                return {
+                    item: scoredItem.item,
+                    score: scoredItem.score * boost,
+                };
+            });
+        }
+        return items;
     }
 }
