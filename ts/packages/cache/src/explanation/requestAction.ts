@@ -186,6 +186,12 @@ export class Actions {
             : this.actions.toIAction();
     }
 
+    public toIActions(): IAction[] {
+        return Array.isArray(this.actions)
+            ? this.actions.map((a) => a.toIAction())
+            : [this.actions.toIAction()];
+    }
+
     public toFullActions(): FullAction[] {
         return Array.isArray(this.actions)
             ? this.actions.map((a) => a.toFullAction())

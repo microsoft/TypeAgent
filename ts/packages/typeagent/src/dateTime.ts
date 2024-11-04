@@ -56,6 +56,18 @@ export function timestampStringUtc(date: Date, sep: boolean = true): string {
         : `${year}${month}${day}${hour}${minute}${seconds}${ms}`;
 }
 
+export type TimestampRange = {
+    startTimestamp: string;
+    endTimestamp?: string | undefined;
+};
+
+export function timestampRange(startAt: Date, stopAt?: Date): TimestampRange {
+    return {
+        startTimestamp: timestampString(startAt),
+        endTimestamp: stopAt ? timestampString(stopAt) : undefined,
+    };
+}
+
 function numberToString(value: number, length: number): string {
     return value.toString().padStart(length, "0");
 }

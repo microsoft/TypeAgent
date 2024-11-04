@@ -47,6 +47,14 @@ function getFailedResult(message: string): ProcessRequestActionResult {
     };
 }
 
+type ExplanationOptions = {
+    concurrent?: boolean; // whether to limit to run one at a time, require cache to be false
+    rejectReferences?: boolean;
+    checkExplainable?:
+        | ((requestAction: RequestAction) => Promise<void>)
+        | undefined; // throw exception if not explainable
+};
+
 export class AgentCache {
     private _constructionStore: ConstructionStoreImpl;
     private queue: QueueObject<{
@@ -96,7 +104,7 @@ export class AgentCache {
         const explanation = await explainMultipleActions(
             requestAction,
             async (subRequestAction) => {
-                return this.queueTask(subRequestAction, cache, false);
+                return this.queueTask(subRequestAction, cache);
             },
         );
         return {
@@ -117,8 +125,11 @@ export class AgentCache {
     private async queueTask(
         requestAction: RequestAction,
         cache: boolean,
-        concurrent: boolean = false, // whether to limit to run one at a time, require cache to be false
+        options?: ExplanationOptions,
     ): Promise<ProcessRequestActionResult> {
+        const concurrent = options?.concurrent ?? false;
+        const rejectReferences = options?.rejectReferences ?? true;
+        const checkExplainable = options?.checkExplainable;
         const actions = requestAction.actions;
         for (const action of actions) {
             const translatorName = action.translatorName;
@@ -148,9 +159,11 @@ export class AgentCache {
             };
 
             const explainerConfig = {
-                rejectReferences: true,
+                rejectReferences,
                 constructionCreationConfig,
             };
+
+            await checkExplainable?.(requestAction);
             const explanation = await explainer.generate(
                 requestAction,
                 explainerConfig,
@@ -229,17 +242,18 @@ export class AgentCache {
     public async processRequestAction(
         requestAction: RequestAction,
         cache: boolean = true,
-        concurrent: boolean = false, // whether to limit to run one at a time, require cache to be false
+        options?: ExplanationOptions,
     ): Promise<ProcessRequestActionResult> {
         try {
-            return await this.queueTask(requestAction, cache, concurrent);
+            return await this.queueTask(requestAction, cache, options);
         } catch (e: any) {
             this.logger?.logEvent("error", {
                 request: requestAction.request,
                 actions: requestAction.actions,
                 history: requestAction.history,
                 cache,
-                concurrent,
+                concurrent: options?.concurrent,
+                rejectReferences: options?.rejectReferences,
                 message: e.message,
                 stack: e.stack,
             });

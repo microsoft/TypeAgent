@@ -472,3 +472,7 @@ export function createIncrementalJsonParser(
         },
     };
 }
+
+export type IncrementalJsonParser = ReturnType<
+    typeof createIncrementalJsonParser
+>;
