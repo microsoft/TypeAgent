@@ -10,7 +10,7 @@ import { DesktopActions } from "./actionsSchema.js";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import * as _ from "lodash";
+import { downloadImage } from "common-utils";
 
 const debug = registerDebug("typeagent:desktop");
 const debugData = registerDebug("typeagent:desktop:data");
@@ -67,6 +67,7 @@ async function ensureAutomationProcess(agentContext: DesktopActionContext) {
 export async function runDesktopActions(
     action: DesktopActions,
     agentContext: DesktopActionContext,
+    sessionStorage: Storage,
 ) {
     let confirmationMessage = "OK";
     let actionData = "";
@@ -74,32 +75,51 @@ export async function runDesktopActions(
     switch (actionName) {
         case "setWallpaper": {
             let file = action.parameters.filePath;
-            if (
-                file.startsWith("/") ||
-                file.indexOf(":") == 2 ||
-                fs.existsSync(file)
-            ) {
-                actionData = file;
-            } else {
-                // if the file path is relative we'll have to search for the image since
-                // that means another agent provided this file
-                // TODO: add shared agent storage or known storage location
-                const rootTypeAgentDir = path.join(os.homedir(), ".typeagent");
-                const files = fs
-                    .readdirSync(rootTypeAgentDir, { recursive: true })
-                    .filter((allFilesPaths) =>
-                        (allFilesPaths as string).endsWith(path.basename(file)),
-                    );
+            const rootTypeAgentDir = path.join(os.homedir(), ".typeagent");
 
-                if (files.length > 0) {
-                    actionData = path.join(
-                        rootTypeAgentDir,
-                        files[0] as string,
-                    );
-                } else {
-                    actionData = file;
+            // if the requested image a URL, then download it
+            if (action.parameters.url !== undefined) {
+                file = `../downloaded_images/${path.basename(action.parameters.url)}`;
+                if (path.extname(file).length == 0) {
+                    file += ".png";
                 }
-            }
+                if (await downloadImage(action.parameters.url, file, sessionStorage!)) {
+                    file = file.substring(3);
+                } else {
+                    confirmationMessage = "Failed to dowload the requested image.";
+                    break;
+                }
+            }            
+
+            if (file !== undefined) {
+                if (
+                    file.startsWith("/") ||
+                    file.indexOf(":") == 2 ||
+                    fs.existsSync(file)
+                ) {
+                    actionData = file;
+                } else {
+                    // if the file path is relative we'll have to search for the image since we don't have root storage dir
+                    // TODO: add shared agent storage or known storage location (requires permissions, trusted agents, etc.)
+                    const files = fs
+                        .readdirSync(rootTypeAgentDir, { recursive: true })
+                        .filter((allFilesPaths) =>
+                            (allFilesPaths as string).endsWith(path.basename(file)),
+                        );
+
+                    if (files.length > 0) {
+                        actionData = path.join(
+                            rootTypeAgentDir,
+                            files[0] as string,
+                        );
+                    } else {
+                        actionData = file;
+                    }
+                } 
+            } else {
+                confirmationMessage = "Unknown wallpaper location.";
+                break;
+            }            
 
             confirmationMessage = "Set wallpaper to " + actionData;
             break;

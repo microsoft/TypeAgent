@@ -8,12 +8,12 @@ import {
     ActionResult,
     ActionResultSuccess,
 } from "@typeagent/agent-sdk";
-import { StopWatch } from "common-utils";
+import { downloadImage, StopWatch } from "common-utils";
 import {
     createActionResult,
     createActionResultFromHtmlDisplayWithScript,
 } from "@typeagent/agent-sdk/helpers/action";
-import { bing, GeneratedImage, openai, getBlob } from "aiclient";
+import { bing, GeneratedImage, openai } from "aiclient";
 import { Image } from "../../../aiclient/dist/bing.js";
 import { randomBytes, randomUUID } from "crypto";
 import {
@@ -75,11 +75,6 @@ async function handlePhotoAction(
                 result = createActionResult(
                     `Unable to find any images for ${findImageAction.parameters.searchTerm}`,
                 );
-                // } else if (searchResults.length == 1) {
-                //     result = createActionResultFromHtmlDisplay(
-                //         `<img class="chat-input-image" src="${searchResults[0].contentUrl}" />`,
-                //         "Found 1 image.",
-                //     );
             } else {
                 const urls: string[] = [];
                 const captions: string[] = [];
@@ -88,6 +83,14 @@ async function handlePhotoAction(
                     captions.push(findImageAction.parameters.searchTerm);
                 });
                 result = createCarouselForImages(urls, captions);
+
+                // add the found images to the entities
+                for(let i = 0; i < searchResults.length; i++) {
+                    result.entities.push({
+                        name: searchResults[i].contentUrl,
+                        type: ["image", "url", "search"],
+                    });    
+                }                
             }
             break;
         }
@@ -143,18 +146,9 @@ async function handlePhotoAction(
                 result = createCarouselForImages(urls, captions);
 
                 // save the generated image in the session store and add the image to the knoweledge store
-                const blobResponse = await getBlob(urls[0]);
-                if (blobResponse.success) {
-                    const ab = Buffer.from(
-                        await blobResponse.data.arrayBuffer(),
-                    );
-                    const id = randomUUID();
-                    const fileName = `../generated_images/${id.toString()}.png`;
-                    photoContext.sessionContext.sessionStorage?.write(
-                        fileName,
-                        ab.toString("base64"),
-                    );
-
+                const id = randomUUID();
+                const fileName = `../generated_images/${id.toString()}.png`;
+                if (await downloadImage(urls[0], fileName, photoContext.sessionContext.sessionStorage!)) {
                     // add the generated image to the entities
                     result.entities.push({
                         name: fileName.substring(3),

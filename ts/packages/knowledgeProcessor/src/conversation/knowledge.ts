@@ -304,7 +304,7 @@ function mergeEntities(
 }
 
 function prepareEntityForMerge(entity: ConcreteEntity) {
-    entity.name = entity.name.toLowerCase();
+    entity.name = entity.name;
     collections.lowerAndSort(entity.type);
     return entity;
 }
