@@ -1,3 +1,6 @@
+# Utility script to remove embeddings from chunks
+# if desired.
+
 import json
 from tqdm import tqdm
 
