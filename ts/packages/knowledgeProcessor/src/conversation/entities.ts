@@ -15,7 +15,10 @@ import {
     TextIndexSettings,
     createTermSet,
 } from "../knowledgeIndex.js";
-import { KnowledgeStore, createKnowledgeStore } from "../knowledgeStore.js";
+import {
+    KnowledgeStore,
+    createKnowledgeStoreOnStorage,
+} from "../knowledgeStore.js";
 import { ExtractedEntity, knowledgeValueToString } from "./knowledge.js";
 import { TextBlock, TextBlockType } from "../text.js";
 import { EntityFilter } from "./knowledgeSearchSchema.js";
@@ -43,7 +46,10 @@ import { ConcreteEntity, Facet } from "./knowledgeSchema.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
-import { StorageProvider } from "../storageProvider.js";
+import {
+    createFileSystemStorageProvider,
+    StorageProvider,
+} from "../storageProvider.js";
 
 export interface EntitySearchOptions extends SearchOptions {
     loadEntities?: boolean | undefined;
@@ -102,20 +108,31 @@ export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
     ): Promise<Set<TSourceId> | undefined>;
 }
 
-export async function createEntityIndex<TSourceId = string>(
+export function createEntityIndex<TSourceId = string>(
     settings: TextIndexSettings,
     rootPath: string,
-    storageProvider: StorageProvider,
     folderSettings?: ObjectFolderSettings,
     fSys?: FileSystem,
 ): Promise<EntityIndex<string, TSourceId, string>> {
+    return createEntityIndexOnStorage(
+        settings,
+        rootPath,
+        createFileSystemStorageProvider(folderSettings, fSys),
+    );
+}
+
+export async function createEntityIndexOnStorage<TSourceId = string>(
+    settings: TextIndexSettings,
+    rootPath: string,
+    storageProvider: StorageProvider,
+): Promise<EntityIndex<string, TSourceId, string>> {
     type EntityId = string;
+    storageProvider ??= createFileSystemStorageProvider();
     const [entityStore, nameIndex, typeIndex, facetIndex] = await Promise.all([
-        createKnowledgeStore<ExtractedEntity<TSourceId>>(
+        createKnowledgeStoreOnStorage<ExtractedEntity<TSourceId>>(
             settings,
             rootPath,
-            folderSettings,
-            fSys,
+            storageProvider,
         ),
         storageProvider.createTextIndex<EntityId>(
             settings,

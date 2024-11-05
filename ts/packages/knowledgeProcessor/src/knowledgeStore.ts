@@ -2,15 +2,18 @@
 // Licensed under the MIT License.
 import {
     asyncArray,
-    createObjectFolder,
     FileSystem,
     ObjectFolder,
     ObjectFolderSettings,
 } from "typeagent";
 import { TextIndexSettings } from "./knowledgeIndex.js";
-import { createTemporalLog, TemporalLog } from "./temporal.js";
+import { TemporalLog } from "./temporal.js";
 import path from "path";
 import { removeUndefined } from "./setOperations.js";
+import {
+    createFileSystemStorageProvider,
+    StorageProvider,
+} from "./storageProvider.js";
 
 export interface KnowledgeStore<T, TId = any> {
     readonly settings: TextIndexSettings;
@@ -29,19 +32,26 @@ export async function createKnowledgeStore<T>(
     folderSettings?: ObjectFolderSettings,
     fSys?: FileSystem,
 ): Promise<KnowledgeStore<T, string>> {
+    return createKnowledgeStoreOnStorage<T>(
+        settings,
+        rootPath,
+        createFileSystemStorageProvider(folderSettings, fSys),
+    );
+}
+
+export async function createKnowledgeStoreOnStorage<T>(
+    settings: TextIndexSettings,
+    rootPath: string,
+    storageProvider: StorageProvider,
+): Promise<KnowledgeStore<T, string>> {
     type TId = string;
     const [sequence, entries] = await Promise.all([
-        createTemporalLog<TId[]>(
+        storageProvider.createTemporalLog<TId[]>(
             { concurrency: settings.concurrency },
-            path.join(rootPath, "sequence"),
-            folderSettings,
-            fSys,
+            rootPath,
+            "sequence",
         ),
-        createObjectFolder<T>(
-            path.join(rootPath, "entries"),
-            folderSettings,
-            fSys,
-        ),
+        storageProvider.createObjectFolder<T>(path.join(rootPath, "entries")),
     ]);
 
     return {

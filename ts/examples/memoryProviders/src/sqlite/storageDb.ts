@@ -7,6 +7,9 @@ import { createDb, tablePath } from "./common.js";
 import { createTextIndex } from "./textTable.js";
 import { createObjectTable } from "./objectTable.js";
 import { ObjectFolder, ObjectFolderSettings } from "typeagent";
+import { createTemporalLogTable, TemporalTable } from "./temporalTable.js";
+import { TemporalLogSettings } from "knowledge-processor";
+import { createKeyValueTable, KeyValueTable } from "./keyValueTable.js";
 
 export interface StorageDb extends knowLib.StorageProvider {
     readonly rootPath: string;
@@ -23,7 +26,9 @@ export async function createStorageDb(
         rootPath,
         name,
         createObjectFolder: _createObjectFolder,
+        createTemporalLog: _createTemporalLog,
         createTextIndex: _createTextIndex,
+        createIndex: _createIndex,
     };
 
     async function _createObjectFolder<T>(
@@ -31,6 +36,19 @@ export async function createStorageDb(
         settings?: ObjectFolderSettings,
     ): Promise<ObjectFolder<T>> {
         return createObjectTable<T>(db, folderPath, settings);
+    }
+
+    async function _createTemporalLog<T>(
+        settings: TemporalLogSettings,
+        basePath: string,
+        name: string,
+    ): Promise<TemporalTable<string, T>> {
+        return createTemporalLogTable<T, string, string>(
+            db,
+            getTablePath(basePath, name),
+            "TEXT",
+            "TEXT",
+        );
     }
 
     async function _createTextIndex<TSourceId extends knowLib.ValueType>(
@@ -45,6 +63,19 @@ export async function createStorageDb(
             getTablePath(basePath, name),
             "TEXT",
             sourceIdType,
+        );
+    }
+
+    async function _createIndex<TValueId extends knowLib.ValueType>(
+        basePath: string,
+        name: string,
+        valueType: knowLib.ValueDataType<TValueId>,
+    ): Promise<KeyValueTable<string, TValueId>> {
+        return createKeyValueTable<string, TValueId>(
+            db,
+            getTablePath(basePath, name),
+            "TEXT",
+            valueType,
         );
     }
 
