@@ -114,6 +114,9 @@ type DispatcherConfig = {
         rejectReferences: boolean;
         retranslateWithoutContext: boolean;
     };
+    promptOptions: {
+        additionalInstructions: boolean;
+    };
     switch: {
         inline: boolean;
         search: boolean;
@@ -149,6 +152,9 @@ const defaultSessionConfig: SessionConfig = {
     explanationOptions: {
         rejectReferences: true,
         retranslateWithoutContext: true,
+    },
+    promptOptions: {
+        additionalInstructions: true,
     },
     switch: {
         inline: true,
