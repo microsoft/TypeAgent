@@ -11,15 +11,15 @@ import {
     dotProduct,
     similarity,
 } from "typeagent";
-import { ColumnType, SqlColumnType } from "./common.js";
+import { ValueType, ValueDataType } from "knowledge-processor";
 
-export interface VectorTable<TKeyId extends ColumnType = string>
+export interface VectorTable<TKeyId extends ValueType = string>
     extends VectorStore<TKeyId> {}
 
-export function createVectorTable<TKeyId extends ColumnType = string>(
+export function createVectorTable<TKeyId extends ValueType = string>(
     db: sqlite.Database,
     tableName: string,
-    keyType: SqlColumnType<TKeyId>,
+    keyType: ValueDataType<TKeyId>,
     ensureExists: boolean = true,
 ): VectorTable<TKeyId> {
     const schemaSql = `  

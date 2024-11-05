@@ -24,6 +24,7 @@ import {
 import { isValidChunkSize, splitLargeTextIntoChunks } from "../textChunker.js";
 import { ChatModel } from "aiclient";
 import { KnownEntityTypes } from "../conversation/knowledge.js";
+import { StorageProvider } from "../storageProvider.js";
 
 export function emailAddressToString(address: EmailAddress): string {
     if (address.displayName) {
@@ -281,9 +282,16 @@ export async function createEmailMemory(
     name: string,
     rootPath: string,
     settings: ConversationSettings,
+    storageProvider?: StorageProvider,
 ) {
     const storePath = path.join(rootPath, name);
-    const emailConversation = await createConversation(settings, storePath);
+    const emailConversation = await createConversation(
+        settings,
+        storePath,
+        undefined,
+        undefined,
+        storageProvider,
+    );
 
     const actions = await emailConversation.getActionIndex();
     actions.verbTermMap.put("say", EmailVerbs.send);
