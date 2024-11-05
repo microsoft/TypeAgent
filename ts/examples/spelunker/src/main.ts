@@ -10,7 +10,6 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 // 3rd party package imports
-import * as readlineSync from "readline-sync";
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 
@@ -21,13 +20,13 @@ import {
     CodeDocumentation,
     CodeDocumenter,
     createSemanticCodeIndex,
-    SemanticCodeIndex,
 } from "code-processor";
-import { createObjectFolder, loadSchema, ObjectFolder } from "typeagent";
+import { createObjectFolder, loadSchema } from "typeagent";
 
 // Local imports
 import { Chunk } from "./pythonChunker.js";
-import { importPythonFiles, wordWrap } from "./pythonImporter.js";
+import { importPythonFiles } from "./pythonImporter.js";
+import { runQueryInterface } from "./queryInterface.js";
 
 // Set __dirname to emulate old JS behavior
 const __filename = fileURLToPath(import.meta.url);
@@ -104,33 +103,35 @@ async function main(): Promise<void> {
         );
     }
 
-    // Loop processing searches. (TODO: Use interactiveApp.)
-    const help = "[Type 'q', 'quit' or 'exit' to end query session.]";
-    console.log(help);
-    while (true) {
-        const input = readlineSync
-            .question("~> ", {
-                history: true, // Enable history (TODO: Doesn't seem to work)
-                keepWhitespace: true, // Keep leading/trailing whitespace in history
-            })
-            .trimEnd();
-        // TODO: Distinguish between EOF (e.g. ^D) and blank line.
-        if (!input) {
-            console.log(help);
-            continue;
-        }
-        if (input === "q" || input == "quit" || input === "exit") {
-            console.log("[Bye!]");
-            return;
-        }
-        await processQuery(
-            input,
-            chunkFolder,
-            codeIndex,
-            summaryFolder,
-            verbose,
-        );
-    }
+    await runQueryInterface(chunkFolder, codeIndex, summaryFolder, verbose);
+
+    // // Loop processing searches. (TODO: Use interactiveApp.)
+    // const help = "[Type 'q', 'quit' or 'exit' to end query session.]";
+    // console.log(help);
+    // while (true) {
+    //     const input = readlineSync
+    //         .question("~> ", {
+    //             history: true, // Enable history (TODO: Doesn't seem to work)
+    //             keepWhitespace: true, // Keep leading/trailing whitespace in history
+    //         })
+    //         .trimEnd();
+    //     // TODO: Distinguish between EOF (e.g. ^D) and blank line.
+    //     if (!input) {
+    //         console.log(help);
+    //         continue;
+    //     }
+    //     if (input === "q" || input == "quit" || input === "exit") {
+    //         console.log("[Bye!]");
+    //         return;
+    //     }
+    //     await processQuery(
+    //         input,
+    //         chunkFolder,
+    //         codeIndex,
+    //         summaryFolder,
+    //         verbose,
+    //     );
+    // }
 }
 
 function processArgs(): string[] {
@@ -154,56 +155,6 @@ function processArgs(): string[] {
         files = [];
     }
     return files;
-}
-
-async function processQuery(
-    input: string,
-    chunkFolder: ObjectFolder<Chunk>,
-    codeIndex: SemanticCodeIndex,
-    summaryFolder: ObjectFolder<CodeDocumentation>,
-    verbose = false,
-): Promise<void> {
-    let hits;
-    try {
-        hits = await codeIndex.find(input, 2);
-    } catch (error) {
-        console.log(`[${error}]`);
-        return;
-    }
-    console.log(
-        `Got ${hits.length} hit${hits.length == 0 ? "s." : hits.length === 1 ? ":" : "s:"}`,
-    );
-    for (let i = 0; i < hits.length; i++) {
-        const hit = hits[i];
-        const chunk: Chunk | undefined = await chunkFolder.get(hit.item);
-        if (!chunk) {
-            console.log(hit, "--> [No data]");
-        } else {
-            console.log(
-                `Hit ${i + 1}: score: ${hit.score.toFixed(3)}, ` +
-                    `id: ${chunk.id}, ` +
-                    `file: ${path.relative(process.cwd(), chunk.filename!)}, ` +
-                    `type: ${chunk.treeName}`,
-            );
-            const summary: CodeDocumentation | undefined =
-                await summaryFolder.get(hit.item);
-            if (summary?.comments?.length) {
-                for (const comment of summary.comments)
-                    console.log(
-                        wordWrap(`${comment.comment} (${comment.lineNumber})`),
-                    );
-            }
-            for (const blob of chunk.blobs) {
-                for (let index = 0; index < blob.lines.length; index++) {
-                    console.log(
-                        `${(1 + blob.start + index).toString().padStart(3)}: ${blob.lines[index].trimEnd()}`,
-                    );
-                }
-                console.log("");
-                if (!verbose) break;
-            }
-        }
-    }
 }
 
 // Fake code documenter to pass to creteCodeIndex.
