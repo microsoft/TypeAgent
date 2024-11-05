@@ -2,15 +2,8 @@
 // Licensed under the MIT License.
 
 import Database, * as sqlite from "better-sqlite3";
+import { ValueDataType, ValueType } from "knowledge-processor";
 import { removeDir } from "typeagent";
-
-export type ColumnType = string | number;
-
-export type SqlColumnType<T> = T extends string
-    ? "TEXT"
-    : T extends number
-      ? "INTEGER"
-      : never;
 
 export type AssignedId<T> = {
     id: T;
@@ -51,8 +44,8 @@ export type ColumnSerializer = {
     deserialize: (x: any) => any;
 };
 
-export function getTypeSerializer<T extends ColumnType>(
-    type: SqlColumnType<T>,
+export function getTypeSerializer<T extends ValueType>(
+    type: ValueDataType<T>,
 ): [boolean, ColumnSerializer] {
     const isIdInt = type === "INTEGER";
     const serializer: ColumnSerializer = {

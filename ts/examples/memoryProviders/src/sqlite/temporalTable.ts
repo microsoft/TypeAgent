@@ -4,12 +4,8 @@
 import * as sqlite from "better-sqlite3";
 import * as knowLib from "knowledge-processor";
 import { dateTime, NameValue } from "typeagent";
-import {
-    ColumnType,
-    getTypeSerializer,
-    sql_makeInClause,
-    SqlColumnType,
-} from "./common.js";
+import { getTypeSerializer, sql_makeInClause } from "./common.js";
+import { ValueType, ValueDataType } from "knowledge-processor";
 
 export type TemporalLogRow<T> = {
     logId: number;
@@ -20,6 +16,8 @@ export type TemporalLogRow<T> = {
 
 export interface TemporalTable<TLogId = any, T = any>
     extends knowLib.TemporalLog<TLogId, T> {
+    // Additional behaviors that we can supply because we are using sqlite
+
     addSync(value: T, timestamp?: Date): TLogId;
     getSync(id: TLogId): dateTime.Timestamped<T> | undefined;
     iterateAll(): IterableIterator<NameValue<dateTime.Timestamped<T>, TLogId>>;
@@ -36,13 +34,13 @@ export interface TemporalTable<TLogId = any, T = any>
 
 export function createTemporalLogTable<
     T = any,
-    TValue extends ColumnType = string,
-    TLogId extends ColumnType = number,
+    TValue extends ValueType = string,
+    TLogId extends ValueType = number,
 >(
     db: sqlite.Database,
     tableName: string,
-    keyType: SqlColumnType<TLogId>,
-    valueType: SqlColumnType<TValue>,
+    keyType: ValueDataType<TLogId>,
+    valueType: ValueDataType<TValue>,
     ensureExists: boolean = true,
 ): TemporalTable<TLogId, T> {
     const [isIdInt, idSerializer] = getTypeSerializer<TLogId>(keyType);

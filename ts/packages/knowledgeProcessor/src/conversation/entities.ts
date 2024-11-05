@@ -46,6 +46,7 @@ import { ConcreteEntity, Facet } from "./knowledgeSchema.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
+import { StorageProvider } from "../storageProvider.js";
 
 export interface EntitySearchOptions extends SearchOptions {
     loadEntities?: boolean | undefined;
@@ -107,6 +108,7 @@ export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
 export async function createEntityIndex<TSourceId = string>(
     settings: TextIndexSettings,
     rootPath: string,
+    storageProvider: StorageProvider,
     folderSettings?: ObjectFolderSettings,
     fSys?: FileSystem,
 ): Promise<EntityIndex<string, TSourceId, string>> {
@@ -118,17 +120,17 @@ export async function createEntityIndex<TSourceId = string>(
             folderSettings,
             fSys,
         ),
-        createTextIndex<EntityId>(
+        storageProvider.createTextIndex<EntityId>(
             settings,
-            path.join(rootPath, "names"),
-            folderSettings,
-            fSys,
+            rootPath,
+            "names",
+            "TEXT",
         ),
-        createTextIndex<EntityId>(
+        storageProvider.createTextIndex<EntityId>(
             settings,
-            path.join(rootPath, "types"),
-            folderSettings,
-            fSys,
+            rootPath,
+            "types",
+            "TEXT",
         ),
         createTextIndex<EntityId>(
             settings,

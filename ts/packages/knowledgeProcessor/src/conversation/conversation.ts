@@ -57,6 +57,10 @@ import { getAllTermsInFilter } from "./searchProcessor.js";
 import { TypeChatLanguageModel } from "typechat";
 import { TextEmbeddingModel } from "aiclient";
 import { createSearchResponse, SearchResponse } from "./searchResponse.js";
+import {
+    createFileSystemProvider,
+    StorageProvider,
+} from "../storageProvider.js";
 
 export interface RecentItems<T> {
     readonly entries: collections.CircularArray<T>;
@@ -254,6 +258,7 @@ export async function createConversation(
     rootPath: string,
     folderSettings?: ObjectFolderSettings | undefined,
     fSys?: FileSystem | undefined,
+    storageProvider?: StorageProvider,
 ): Promise<Conversation<string, string, string>> {
     type MessageId = string;
     type TopicId = string;
@@ -265,6 +270,7 @@ export async function createConversation(
         cacheNames: true,
         useWeakRefs: true,
     };
+    storageProvider ??= createFileSystemProvider(folderSettings, fSys);
     const messages = await createTextStore(
         { concurrency: settings.indexSettings.concurrency },
         path.join(rootPath, "messages"),
@@ -329,6 +335,7 @@ export async function createConversation(
             entityIndex = await createEntityIndex<MessageId>(
                 settings.indexSettings,
                 entityPath,
+                storageProvider!,
                 folderSettings,
                 fSys,
             );

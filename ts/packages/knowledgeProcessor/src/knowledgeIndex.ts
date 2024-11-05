@@ -27,14 +27,7 @@ import {
 import { TextBlock, TextBlockType } from "./text.js";
 import { TemporalLog, createTemporalLog } from "./temporal.js";
 import { TextEmbeddingModel } from "aiclient";
-
-export interface KeyValueIndex<TKeyId = any, TValueId = any> {
-    get(id: TKeyId): Promise<TValueId[] | undefined>;
-    getMultiple(ids: TKeyId[], concurrency?: number): Promise<TValueId[][]>;
-    put(postings: TValueId[], id?: TKeyId): Promise<TKeyId>;
-    replace(postings: TValueId[], id: TKeyId): Promise<TKeyId>;
-    remove(id: TKeyId): Promise<void>;
-}
+import { KeyValueIndex } from "./keyValueIndex.js";
 
 export async function createIndexFolder<TValueId>(
     folderPath: string,
