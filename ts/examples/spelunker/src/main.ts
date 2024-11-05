@@ -260,19 +260,23 @@ async function createFileDocumenter(model: ChatModel): Promise<FileDocumenter> {
         if (result.success) {
             const codeDocs: CodeDocumentation = result.data;
             // Assign each comment to its chunk.
-            for (const comment of codeDocs.comments ?? []) {
-                for (const chunk of chunks) {
+            for (const chunk of chunks) {
+                chunk.docs = {
+                    comments: [
+                        {
+                            lineNumber: chunk.blobs[0].start + 1,
+                            comment: `${chunk.treeName}`,
+                        },
+                    ],
+                };
+                for (const comment of codeDocs.comments ?? []) {
                     for (const blob of chunk.blobs) {
                         if (
                             !blob.breadcrumb &&
                             blob.start < comment.lineNumber &&
                             comment.lineNumber <= blob.start + blob.lines.length
                         ) {
-                            if (chunk.docs === undefined) {
-                                chunk.docs = { comments: [comment] };
-                            } else {
-                                chunk.docs.comments!.push(comment);
-                            }
+                            chunk.docs.comments!.push(comment);
                         }
                     }
                 }
