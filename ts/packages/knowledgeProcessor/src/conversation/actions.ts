@@ -11,15 +11,14 @@ import {
     dateTime,
 } from "typeagent";
 import {
-    KnowledgeStore,
     TermMap,
     TextIndex,
     TextIndexSettings,
     createIndexFolder,
-    createKnowledgeStore,
     createTermMap,
     createTextIndex,
 } from "../knowledgeIndex.js";
+import { createKnowledgeStore, KnowledgeStore } from "../knowledgeStore.js";
 import { KeyValueIndex } from "../keyValueIndex.js";
 import { Action, ActionParam, VerbTense } from "./knowledgeSchema.js";
 import path from "path";

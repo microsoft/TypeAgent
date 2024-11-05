@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { FileSystem, ObjectFolderSettings } from "typeagent";
+import {
+    createObjectFolder,
+    FileSystem,
+    ObjectFolder,
+    ObjectFolderSettings,
+} from "typeagent";
 import {
     createTextIndex,
     TextIndex,
@@ -18,6 +23,10 @@ export type ValueDataType<T> = T extends string
       : never;
 
 export interface StorageProvider {
+    createObjectFolder<T>(
+        folderPath: string,
+        settings?: ObjectFolderSettings,
+    ): Promise<ObjectFolder<T>>;
     createTextIndex<TSourceId extends ValueType>(
         settings: TextIndexSettings,
         basePath: string,
@@ -27,12 +36,24 @@ export interface StorageProvider {
 }
 
 export function createFileSystemProvider(
-    folderSettings?: ObjectFolderSettings,
+    defaultFolderSettings?: ObjectFolderSettings,
     fSys?: FileSystem | undefined,
 ): StorageProvider {
     return {
+        createObjectFolder: _createObjectFolder,
         createTextIndex: _createTextIndex,
     };
+
+    async function _createObjectFolder<T>(
+        folderPath: string,
+        settings?: ObjectFolderSettings,
+    ): Promise<ObjectFolder<T>> {
+        return createObjectFolder<T>(
+            folderPath,
+            settings ?? defaultFolderSettings,
+            fSys,
+        );
+    }
 
     async function _createTextIndex<TSourceId extends ValueType>(
         settings: TextIndexSettings,
@@ -43,7 +64,7 @@ export function createFileSystemProvider(
         return createTextIndex<TSourceId>(
             settings,
             path.join(basePath, name),
-            folderSettings,
+            defaultFolderSettings,
             fSys,
         );
     }

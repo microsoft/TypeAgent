@@ -10,13 +10,12 @@ import {
     dateTime,
 } from "typeagent";
 import {
-    KnowledgeStore,
     TermSet,
     TextIndex,
     TextIndexSettings,
-    createKnowledgeStore,
     createTermSet,
 } from "../knowledgeIndex.js";
+import { KnowledgeStore, createKnowledgeStore } from "../knowledgeStore.js";
 import { ExtractedEntity, knowledgeValueToString } from "./knowledge.js";
 import { TextBlock, TextBlockType } from "../text.js";
 import { EntityFilter } from "./knowledgeSearchSchema.js";
