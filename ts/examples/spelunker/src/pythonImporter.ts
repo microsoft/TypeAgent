@@ -57,12 +57,14 @@ export async function importPythonFiles(
     // Compute some stats for log message.
     let lines = 0;
     let blobs = 0;
+    let chunks = 0;
     let errors = 0;
     for (const result of results) {
         if ("error" in result) {
             errors++;
         } else {
             const chunkedFile = result;
+            chunks += chunkedFile.chunks.length;
             for (const chunk of chunkedFile.chunks) {
                 blobs += chunk.blobs.length;
                 for (const blob of chunk.blobs) {
@@ -73,7 +75,7 @@ export async function importPythonFiles(
     }
     console.log(
         `[Chunked ${filenames.length} files ` +
-            `(${lines} lines, ${blobs} blobs, ${errors} errors) ` +
+            `(${lines} lines, ${blobs} blobs, ${chunks} chunks, ${errors} errors) ` +
             `in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
     );
 
