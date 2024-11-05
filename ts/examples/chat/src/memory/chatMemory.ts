@@ -39,7 +39,6 @@ import {
     argSourceFileOrFolder,
     getMessagesAndCount,
 } from "./common.js";
-import { KnowledgeResponse } from "../../../../packages/knowledgeProcessor/dist/conversation/knowledgeSchema.js";
 
 export type ChatContext = {
     storePath: string;
@@ -614,8 +613,8 @@ export async function runChatMemory(): Promise<void> {
     }
     function getContent(
         knowledge: knowLib.conversation.ExtractedKnowledge,
-    ): KnowledgeResponse {
-        const knowResponse: KnowledgeResponse = {
+    ): knowLib.conversation.KnowledgeResponse {
+        const knowResponse: knowLib.conversation.KnowledgeResponse = {
             entities: [],
             actions: [],
             topics: [],
@@ -641,7 +640,7 @@ export async function runChatMemory(): Promise<void> {
     }
     interface InfoPair {
         message: string;
-        knowledge: KnowledgeResponse;
+        knowledge: knowLib.conversation.KnowledgeResponse;
     }
     interface ExtractionData {
         prompt: string;
