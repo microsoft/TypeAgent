@@ -13,7 +13,7 @@ import {
 } from "aiclient";
 import { generateActionRequests } from "./actionGen.js";
 import { dedupeList, generateEmbedding, TypeSchema } from "typeagent";
-import { processPrecisionRecall } from "./genStats.js";
+import { processActionSchemaAndReqData } from "./genStats.js";
 
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
@@ -153,7 +153,7 @@ export async function processVscodeCommandsJsonFile(
                     model,
                     typeSchema,
                     actionSchemaData.comments.join(" "),
-                    20,
+                    25,
                 );
 
                 actionRequests = dedupeList(actionRequests);
@@ -180,7 +180,7 @@ export async function processVscodeCommandsJsonFile(
                 );
             }
 
-            if (schemaCount == 10) break;
+            //if (schemaCount == 10) break;
         } catch (error) {
             console.error(
                 `Error generating schema for node ${node.id}:`,
@@ -207,5 +207,7 @@ export async function processVscodeCommandsJsonFile(
         `Aggregate action and request data written to ${jsonlFileName}`,
     );
 
-    processPrecisionRecall(jsonlFileName, 0.8);
+    const statsfile = path.join(output_dir, "stats_[" + actionPrefix + "].csv");
+
+    processActionSchemaAndReqData(jsonlFileName, 0.7, statsfile);
 }

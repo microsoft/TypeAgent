@@ -84,9 +84,9 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
         }
 
         if (
-            !args.includes("-dataprep") &&
-            !args.includes("-schemagen") &&
-            !args.includes("-schemagen-actionprefix")
+            !args.some((arg) => arg.startsWith("-dataprep")) &&
+            !args.some((arg) => arg.startsWith("-schemagen")) &&
+            !args.some((arg) => arg.startsWith("-schemagen-actionprefix"))
         ) {
             console.log(
                 "No valid arguments passed. Please use -dataprep or -schemagen.",
