@@ -4,8 +4,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { Path, removeFile, renameFileSync } from "../objStream";
-import { NameValue, ScoredItem } from "../memory";
-import { createTopNList } from "../vector/embeddings";
+import { NameValue } from "../memory";
 import { createLazy, insertIntoSorted } from "../lib";
 import registerDebug from "debug";
 
@@ -22,7 +21,7 @@ export type ObjectDeserializer = (buffer: Buffer) => any;
 export interface ObjectFolderSettings {
     serializer?: ObjectSerializer;
     deserializer?: ObjectDeserializer;
-    fileNameType?: FileNameType;
+    fileNameType?: FileNameType | undefined;
     cacheNames?: boolean | undefined; // Default is true
     useWeakRefs?: boolean | undefined; // Default is false
     safeWrites?: boolean | undefined;
@@ -42,7 +41,6 @@ export interface ObjectFolder<T> {
         name?: string,
         onNameAssigned?: (obj: T, name: string) => void,
     ): Promise<string>;
-    append(...messages: T[]): Promise<void>;
 
     remove(name: string): Promise<void>;
     exists(name: string): boolean;
@@ -52,17 +50,7 @@ export interface ObjectFolder<T> {
     clear(): Promise<void>;
 
     allObjects(): AsyncIterableIterator<T>;
-    newestObjects(): AsyncIterableIterator<T>;
     allNames(): Promise<string[]>;
-
-    searchObjects(
-        maxMatches: number,
-        matcher: (nv: NameValue<T>) => number,
-    ): Promise<ScoredItem<T>[]>;
-
-    findObject(
-        criteria: (nv: NameValue<T>) => boolean,
-    ): Promise<NameValue<T> | undefined>;
 }
 
 /**
@@ -93,16 +81,12 @@ export async function createObjectFolder<T>(
         size,
         get,
         put,
-        append,
         remove,
         exists,
         all,
         newest,
         clear,
         allObjects,
-        newestObjects,
-        searchObjects,
-        findObject,
         allNames: async () => {
             return fileNames.get();
         },
@@ -145,12 +129,6 @@ export async function createObjectFolder<T>(
             pushName(fileName);
         }
         return fileName;
-    }
-
-    async function append(...objects: T[]): Promise<void> {
-        for (let obj of objects) {
-            await put(obj);
-        }
     }
 
     async function remove(name: string): Promise<void> {
@@ -244,47 +222,17 @@ export async function createObjectFolder<T>(
         }
     }
 
-    async function* newestObjects(): AsyncIterableIterator<T> {
-        for await (const nv of newest()) {
-            yield nv.value;
-        }
-    }
-
-    async function searchObjects(
-        maxMatches: number,
-        matcher: (nv: NameValue<T>) => number,
-    ): Promise<ScoredItem<T>[]> {
-        const topN = createTopNList<T>(maxMatches);
-        for await (const nv of newest()) {
-            let score = matcher(nv);
-            if (score) {
-                topN.push(nv.value, score);
-            }
-        }
-        return topN.byRank();
-    }
-
-    async function findObject(
-        criteria: (nv: NameValue<T>) => boolean,
-    ): Promise<NameValue<T> | undefined> {
-        for await (const nv of newest()) {
-            if (criteria(nv)) {
-                return nv;
-            }
-        }
-        return undefined;
-    }
-
     function fullPath(name: string): string {
         return path.join(folderPath, name);
     }
 
     function createNameGenerator() {
-        const fileNameType = settings?.fileNameType ?? FileNameType.Timestamp;
+        const fileNameType =
+            folderSettings.fileNameType ?? FileNameType.Timestamp;
         return createFileNameGenerator(
             fileNameType === FileNameType.Timestamp
                 ? generateTimestampString
-                : generateTickString,
+                : generateTicksString,
             (name: string) => {
                 return !fileSystem.exists(fullPath(name));
             },
@@ -316,7 +264,7 @@ export function ensureUniqueObjectName(
     }).name;
 }
 
-function generateTickString(timestamp?: Date): string {
+export function generateTicksString(timestamp?: Date): string {
     timestamp ??= new Date();
     return timestamp.getTime().toString();
 }

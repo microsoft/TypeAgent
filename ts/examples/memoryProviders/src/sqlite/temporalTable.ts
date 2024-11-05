@@ -58,7 +58,9 @@ export function createTemporalLogTable<
     if (ensureExists) {
         db.exec(schemaSql);
     }
-    const sql_size = db.prepare(`SELECT count(*) as count from ${tableName}`);
+    const sql_size = db.prepare(
+        `SELECT count(logId) as count from ${tableName}`,
+    );
     const sql_get = db.prepare(
         `SELECT dateTime, value FROM ${tableName} WHERE logId = ?`,
     );
@@ -136,7 +138,7 @@ export function createTemporalLogTable<
     };
 
     function size(): Promise<number> {
-        const row = sql_size.run();
+        const row = sql_size.get();
         const count = row ? (row as any).count : 0;
         return Promise.resolve(count);
     }

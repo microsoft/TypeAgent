@@ -29,14 +29,18 @@ export async function createStorageDb(
         name: string,
         sourceIdType: knowLib.ValueDataType<TSourceId>,
     ) {
-        basePath = basePath.replace(rootPath, "");
-        const baseDir = path.basename(basePath);
         return createTextIndex<string, TSourceId>(
             settings,
             db,
-            tablePath(baseDir, name),
+            getTablePath(basePath, name),
             "TEXT",
             sourceIdType,
         );
+    }
+
+    function getTablePath(basePath: string, name: string): string {
+        basePath = basePath.replace(rootPath, "");
+        const baseDir = path.basename(basePath);
+        return tablePath(baseDir, name);
     }
 }

@@ -151,17 +151,16 @@ async function createEmailMemory(
     chatModel: ChatModel,
     storePath: string,
     settings: conversation.ConversationSettings,
+    useSqlite: boolean = false,
 ) {
     const emailStorePath = path.join(
         storePath,
         ReservedConversationNames.outlook,
     );
     await ensureDir(emailStorePath);
-    const storage = await sqlite.createStorageDb(
-        emailStorePath,
-        "outlook.db",
-        false,
-    );
+    const storage = useSqlite
+        ? await sqlite.createStorageDb(emailStorePath, "outlook.db", false)
+        : undefined;
 
     return await knowLib.email.createEmailMemory(
         chatModel,
