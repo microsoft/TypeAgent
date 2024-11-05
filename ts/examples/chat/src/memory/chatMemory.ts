@@ -39,6 +39,7 @@ import {
     argSourceFileOrFolder,
     getMessagesAndCount,
 } from "./common.js";
+import { KnowledgeResponse } from "../../../../packages/knowledgeProcessor/dist/conversation/knowledgeSchema.js";
 
 export type ChatContext = {
     storePath: string;
@@ -607,8 +608,44 @@ export async function runChatMemory(): Promise<void> {
                 concurrency: argConcurrency(2),
                 pause: argPause(),
                 actions: argBool("Index actions", true),
+                logFile: argDestFile("Log file for extraction data"),
             },
         };
+    }
+    function getContent(
+        knowledge: knowLib.conversation.ExtractedKnowledge,
+    ): KnowledgeResponse {
+        const knowResponse: KnowledgeResponse = {
+            entities: [],
+            actions: [],
+            topics: [],
+            inverseActions: [],
+        };
+        if (knowledge.entities) {
+            for (const entity of knowledge.entities) {
+                knowResponse.entities.push(entity.value);
+            }
+        }
+        if (knowledge.actions) {
+            for (const action of knowledge.actions) {
+                knowResponse.actions.push(action.value);
+            }
+        }
+        if (knowledge.topics) {
+            for (const topic of knowledge.topics) {
+                knowResponse.topics.push(topic.value);
+            }
+        }
+        console.log(knowResponse);
+        return knowResponse;
+    }
+    interface InfoPair {
+        message: string;
+        knowledge: KnowledgeResponse;
+    }
+    interface ExtractionData {
+        prompt: string;
+        infoPairs: InfoPair[];
     }
     handlers.buildIndex.metadata = buildIndexDef();
     async function buildIndex(
@@ -616,7 +653,20 @@ export async function runChatMemory(): Promise<void> {
         io: InteractiveIo,
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, buildIndexDef());
+        const logFile = namedArgs.logFile as string;
         const cm = context.conversationManager;
+        let extractionData: ExtractionData | undefined = undefined;
+        if (logFile) {
+            const translator =
+                context.conversationManager.knowledgeExtractor.translator;
+            if (translator) {
+                const prompt = translator.createRequestPrompt(
+                    "<<messages>>",
+                ) as string;
+                extractionData = { prompt, infoPairs: [] };
+                // console.log(`Prompt for log: ${prompt}`);
+            }
+        }
         await cm.clear(false);
 
         let [messages, msgCount] = await getMessagesAndCount(
@@ -649,6 +699,14 @@ export async function runChatMemory(): Promise<void> {
                     continue;
                 }
                 const [message, knowledge] = knowledgeResult;
+                if (extractionData) {
+                    const msg = message.value;
+                    const knowResponse = getContent(knowledge);
+                    extractionData.infoPairs.push({
+                        message: msg,
+                        knowledge: knowResponse,
+                    });
+                }
                 await writeKnowledgeResult(message, knowledge);
                 const knowledgeIds =
                     await cm.conversation.addKnowledgeForMessage(
@@ -676,6 +734,14 @@ export async function runChatMemory(): Promise<void> {
                 );
                 printer.writeLine();
             }
+        }
+        if (extractionData) {
+            // open log file
+            const logPath = path.join(context.storePath, logFile);
+            const logStream = fs.createWriteStream(logPath);
+            // write out extraction data as JSON
+            logStream.write(JSON.stringify(extractionData, null, 2));
+            logStream.close();
         }
     }
 

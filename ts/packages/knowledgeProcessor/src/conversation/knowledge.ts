@@ -21,6 +21,7 @@ import { unionArrays } from "../setOperations.js";
 export interface KnowledgeExtractor {
     readonly settings: KnowledgeExtractorSettings;
     extract(message: string): Promise<KnowledgeResponse | undefined>;
+    translator?: TypeChatJsonTranslator<KnowledgeResponse>;
 }
 
 export type KnowledgeExtractorSettings = {
@@ -37,6 +38,7 @@ export function createKnowledgeExtractor(
     return {
         settings,
         extract,
+        translator,
     };
 
     async function extract(
