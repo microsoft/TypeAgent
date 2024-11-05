@@ -3,7 +3,7 @@
 
 import Database, * as sqlite from "better-sqlite3";
 import { ValueDataType, ValueType } from "knowledge-processor";
-import { removeDir } from "typeagent";
+import { removeFile } from "typeagent";
 
 export type AssignedId<T> = {
     id: T;
@@ -17,7 +17,9 @@ export async function createDb(
     createNew: boolean,
 ): Promise<sqlite.Database> {
     if (createNew) {
-        await removeDir(filePath);
+        await removeFile(filePath);
+        await removeFile(filePath + "-shm");
+        await removeFile(filePath + "-wal");
     }
     const db = new Database(filePath);
     db.pragma("journal_mode = WAL");
@@ -49,7 +51,9 @@ export function getTypeSerializer<T extends ValueType>(
 ): [boolean, ColumnSerializer] {
     const isIdInt = type === "INTEGER";
     const serializer: ColumnSerializer = {
-        serialize: isIdInt ? (x: any) => x : (x: any) => x.toString(),
+        serialize: isIdInt
+            ? (x: any) => x
+            : (x: any) => (x ? x.toString() : undefined),
         deserialize: isIdInt ? (x: any) => x : (x: any) => Number.parseInt(x),
     };
     return [isIdInt, serializer];

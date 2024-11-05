@@ -16,9 +16,7 @@ import {
     TextIndexSettings,
     createKnowledgeStore,
     createTermSet,
-    createTextIndex,
 } from "../knowledgeIndex.js";
-import path from "path";
 import { ExtractedEntity, knowledgeValueToString } from "./knowledge.js";
 import { TextBlock, TextBlockType } from "../text.js";
 import { EntityFilter } from "./knowledgeSearchSchema.js";
@@ -132,11 +130,11 @@ export async function createEntityIndex<TSourceId = string>(
             "types",
             "TEXT",
         ),
-        createTextIndex<EntityId>(
+        storageProvider.createTextIndex<EntityId>(
             settings,
-            path.join(rootPath, "facets"),
-            folderSettings,
-            fSys,
+            rootPath,
+            "facets",
+            "TEXT",
         ),
     ]);
     const noiseTerms = createTermSet();

@@ -3,19 +3,12 @@
 
 import path from "path";
 import * as knowLib from "knowledge-processor";
-import { createDb } from "./common.js";
-import { createTextIndex, TextTable } from "./textTable.js";
+import { createDb, tablePath } from "./common.js";
+import { createTextIndex } from "./textTable.js";
 
 export interface StorageDb extends knowLib.StorageProvider {
     readonly rootPath: string;
     readonly name: string;
-
-    createTextIndex<TSourceId extends knowLib.ValueType>(
-        settings: knowLib.TextIndexSettings,
-        basePath: string,
-        name: string,
-        sourceIdType: knowLib.ValueDataType<TSourceId>,
-    ): Promise<TextTable<string, TSourceId>>;
 }
 
 export async function createStorageDb(
@@ -36,10 +29,12 @@ export async function createStorageDb(
         name: string,
         sourceIdType: knowLib.ValueDataType<TSourceId>,
     ) {
+        basePath = basePath.replace(rootPath, "");
+        const baseDir = path.basename(basePath);
         return createTextIndex<string, TSourceId>(
             settings,
             db,
-            name,
+            tablePath(baseDir, name),
             "TEXT",
             sourceIdType,
         );
