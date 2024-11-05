@@ -270,6 +270,8 @@ async function executeAction(
             result.entities,
             "assistant",
             systemContext.requestId,
+            undefined,
+            result.additionalInstructions,
         );
     }
 
