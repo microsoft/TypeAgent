@@ -97,9 +97,11 @@ export async function importPythonFiles(
         const t0 = Date.now();
         try {
             const docs = await fileDocumenter.document(chunks);
-            console.log(docs);
+            if (verbose) console.log(docs);
         } catch (error) {
-            console.log(`[Error documenting ${chunkedFile.filename}: ${error}]`);
+            console.log(
+                `[Error documenting ${chunkedFile.filename}: ${error}]`,
+            );
             continue;
         }
         const t1 = Date.now();
@@ -181,7 +183,7 @@ async function processChunk(
         (acc, blob) => acc + blob.lines.length,
         0,
     );
-    // console.log(`  [Embedding ${chunk.id} (${lineCount} lines)]`);
+    if (verbose) console.log(`  [Embedding ${chunk.id} (${lineCount} lines)]`);
     const putPromise = chunkFolder.put(chunk, chunk.id);
     const blobLines = extractBlobLines(chunk);
     const codeBlock: CodeBlockWithDocs = {
@@ -192,9 +194,13 @@ async function processChunk(
     const docs = await codeIndex.put(codeBlock, chunk.id, chunk.filename);
     await summaryFolder.put(docs, chunk.id);
     await putPromise;
-    // for (const comment of docs.comments || []) {
-    //     console.log(wordWrap(`    ${comment.lineNumber}. ${comment.comment}`));
-    // }
+    if (verbose) {
+        for (const comment of docs.comments || []) {
+            console.log(
+                wordWrap(`    ${comment.lineNumber}. ${comment.comment}`),
+            );
+        }
+    }
     const t1 = Date.now();
     if (verbose) {
         console.log(

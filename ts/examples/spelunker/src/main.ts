@@ -37,8 +37,6 @@ const __dirname = path.dirname(__filename);
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
 
-const verbose = true; // true for more, false for less chatty output.
-
 await main();
 
 // Usage: node main.js [file1.py] [file2.py] ...
@@ -49,6 +47,14 @@ async function main(): Promise<void> {
     console.log("[Hi!]");
 
     const t0 = Date.now();
+
+    const verbose =
+        process.argv.includes("-v") || process.argv.includes("--verbose");
+    if (verbose) {
+        process.argv = process.argv.filter(
+            (arg) => arg !== "-v" && arg !== "--verbose",
+        );
+    }
 
     const files = processArgs();
 
@@ -102,10 +108,12 @@ async function main(): Promise<void> {
     const help = "[Type 'q', 'quit' or 'exit' to end query session.]";
     console.log(help);
     while (true) {
-        const input = readlineSync.question("~> ", {
-            history: true, // Enable history
-            keepWhitespace: true, // Keep leading/trailing whitespace in history
-        }).trimEnd();
+        const input = readlineSync
+            .question("~> ", {
+                history: true, // Enable history (TODO: Doesn't seem to work)
+                keepWhitespace: true, // Keep leading/trailing whitespace in history
+            })
+            .trimEnd();
         // TODO: Distinguish between EOF (e.g. ^D) and blank line.
         if (!input) {
             console.log(help);
@@ -115,11 +123,17 @@ async function main(): Promise<void> {
             console.log("[Bye!]");
             return;
         }
-        await processQuery(input, chunkFolder, codeIndex, summaryFolder);
+        await processQuery(
+            input,
+            chunkFolder,
+            codeIndex,
+            summaryFolder,
+            verbose,
+        );
     }
 }
 
-function processArgs() {
+function processArgs(): string[] {
     let files: string[];
     // TODO: Use a proper command-line parser.
     if (process.argv.length > 2) {
@@ -147,6 +161,7 @@ async function processQuery(
     chunkFolder: ObjectFolder<Chunk>,
     codeIndex: SemanticCodeIndex,
     summaryFolder: ObjectFolder<CodeDocumentation>,
+    verbose = false,
 ): Promise<void> {
     let hits;
     try {
@@ -158,13 +173,14 @@ async function processQuery(
     console.log(
         `Got ${hits.length} hit${hits.length == 0 ? "s." : hits.length === 1 ? ":" : "s:"}`,
     );
-    for (const hit of hits) {
+    for (let i = 0; i < hits.length; i++) {
+        const hit = hits[i];
         const chunk: Chunk | undefined = await chunkFolder.get(hit.item);
         if (!chunk) {
             console.log(hit, "--> [No data]");
         } else {
             console.log(
-                `score: ${hit.score.toFixed(3)}, ` +
+                `Hit ${i + 1}: score: ${hit.score.toFixed(3)}, ` +
                     `id: ${chunk.id}, ` +
                     `file: ${path.relative(process.cwd(), chunk.filename!)}, ` +
                     `type: ${chunk.treeName}`,
@@ -174,7 +190,7 @@ async function processQuery(
             if (summary?.comments?.length) {
                 for (const comment of summary.comments)
                     console.log(
-                        wordWrap(`${comment.lineNumber}. ${comment.comment}`),
+                        wordWrap(`${comment.comment} (${comment.lineNumber})`),
                     );
             }
             for (const blob of chunk.blobs) {
@@ -184,6 +200,7 @@ async function processQuery(
                     );
                 }
                 console.log("");
+                if (!verbose) break;
             }
         }
     }
@@ -234,7 +251,8 @@ async function createFileDocumenter(model: ChatModel): Promise<FileDocumenter> {
             "Document the given Python code, its purpose, and any relevant details.\n" +
             "The code has (non-contiguous) line numbers, e.g.: `[1]: def foo():`\n" +
             "There are also marker lines, e.g.: `***: Document the following FuncDef`\n" +
-            "Write a concise paragraph for EACH marker. Also write a paragraph about the whole file." +
+            "Write a concise paragraph for EACH marker.\n" +
+            "Also write a paragraph about the whole file.\n" +
             "DON'T document any lines without markers!\n";
         const result = await fileDocTranslator.translate(request, text);
 
