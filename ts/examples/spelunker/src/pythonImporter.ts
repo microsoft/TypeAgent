@@ -155,7 +155,7 @@ async function processChunkedFile(
     // Limit concurrency to avoid 429 errors.
     await asyncArray.forEachAsync(
         chunks,
-        4,
+        verbose ? 1 : 4,
         async (chunk) =>
             await processChunk(
                 chunk,
