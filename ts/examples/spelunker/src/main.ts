@@ -246,6 +246,7 @@ async function createFileDocumenter(model: ChatModel): Promise<FileDocumenter> {
                 for (const chunk of chunks) {
                     for (const blob of chunk.blobs) {
                         if (
+                            !blob.breadcrumb &&
                             blob.start < comment.lineNumber &&
                             comment.lineNumber <= blob.start + blob.lines.length
                         ) {

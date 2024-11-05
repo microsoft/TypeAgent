@@ -27,7 +27,7 @@ from dataclasses import dataclass
 import datetime
 import json
 import sys
-from typing import Iterator
+from typing import Any, Iterator
 
 
 @dataclass
@@ -36,12 +36,16 @@ class Blob:
 
     start: int  # 0-based!
     lines: list[str]
+    breadcrumb: bool = False # True for blobs that should be ignored in the reconstruction
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        result: dict[str, Any] = {
             "start": self.start,
             "lines": self.lines,
         }
+        if self.breadcrumb:
+            result["breadcrumb"] = True
+        return result
 
 
 IdType = str
@@ -230,7 +234,7 @@ def create_chunks_recursively(
                 parent.blobs.append(Blob(parent_start, lines[parent_start:first_start]))
                 summary = summarize_chunk(chunk, node)
                 if summary:
-                    parent.blobs.append(Blob(first_start, summary))
+                    parent.blobs.append(Blob(first_start, summary, breadcrumb=True))
                 parent.blobs.append(Blob(last_end, lines[last_end:parent_end]))
 
     return chunks
