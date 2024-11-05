@@ -2,18 +2,26 @@
 // Licensed under the MIT License.
 
 const copyrightText = "Copyright (c) Microsoft Corporation.";
-const licenseText = "Licensed under the MIT License."
-const prefixHeader = (prefix) => `${prefix} ${copyrightText}\n${prefix} ${licenseText}`;
-const enclosedHeader = (prefix, suffix) => `${prefix} ${copyrightText}\n ${licenseText} ${suffix}`;
+const licenseText = "Licensed under the MIT License.";
+const prefixHeader = (prefix) =>
+    `${prefix} ${copyrightText}\n${prefix} ${licenseText}`;
+const enclosedHeader = (prefix, suffix) =>
+    `${prefix} ${copyrightText}\n ${licenseText} ${suffix}`;
 
-const slashHeader = prefixHeader("//")
+const slashHeader = prefixHeader("//");
 const hashHeader = prefixHeader("#");
 const cmdHeader = prefixHeader("::");
 const htmlHeader = enclosedHeader("<!--", "-->");
 
 function checkExtraCopyRight(header, content) {
     const escaped = header.replaceAll(/([()\][{*+.$^\\|?])/g, "\\$1");
-    const regexp = new RegExp(escaped.replace("Microsoft Corporation", "Microsoft Corporation and .*"), "my");
+    const regexp = new RegExp(
+        escaped.replace(
+            "Microsoft Corporation",
+            "Microsoft Corporation and .*",
+        ),
+        "my",
+    );
     return regexp.test(content);
 }
 
@@ -34,7 +42,7 @@ function checkCopyrightHeader(file, header, fix, skipFirstLineWithPrefix) {
         file.content = `${firstLine}${header}\n\n${content}`;
         return false;
     }
-    
+
     return "Header is missing";
 }
 
