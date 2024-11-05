@@ -9,6 +9,7 @@ import {
     generateTicksString,
     generateTimestampString,
     NameValue,
+    ObjectFolder,
     ObjectFolderSettings,
 } from "typeagent";
 
@@ -21,9 +22,9 @@ export type ObjectTableRow = {
 export function createObjectTable<T>(
     db: sqlite.Database,
     tableName: string,
-    settings: ObjectFolderSettings,
+    settings?: ObjectFolderSettings | undefined,
     ensureExists: boolean = true,
-) {
+): ObjectFolder<T> {
     const tableSettings = settings ?? {};
     const fileNameGenerator = createNameGenerator();
 
@@ -31,8 +32,11 @@ export function createObjectTable<T>(
     CREATE TABLE IF NOT EXISTS ${tableName} (  
       name TEXT PRIMARY KEY NOT NULL,
       text TEXT,
-      blob BLOB,
+      blob BLOB
     );`;
+    if (ensureExists) {
+        db.exec(schemaSql);
+    }
     const sql_size = db.prepare(
         `SELECT count(name) as count from ${tableName}`,
     );
@@ -42,25 +46,26 @@ export function createObjectTable<T>(
     );
     const sql_getNames = db.prepare(`SELECT name FROM ${tableName}`);
     const sql_writeText = db.prepare(
-        `INSERT OR REPLACE INTO ${tableName} (name, text, blob) (? ? NULL)`,
+        `INSERT OR REPLACE INTO ${tableName} (name, text, blob) VALUES (?, ?, NULL)`,
     );
     const sql_writeBlob = db.prepare(
-        `INSERT OR REPLACE INTO ${tableName} (name, text, blob) (? NULL blob)`,
+        `INSERT OR REPLACE INTO ${tableName} (name, text, blob) VALUES (?, NULL, ?)`,
     );
     const sql_remove = db.prepare(`DELETE FROM ${tableName} WHERE name = ?`);
-    if (ensureExists) {
-        db.exec(schemaSql);
-    }
     return {
-        path: () => tableName,
+        get path() {
+            return tableName;
+        },
         size,
-        exists,
         get,
         put,
         remove,
-        allNames,
+        exists,
         all,
+        allObjects,
         newest,
+        clear,
+        allNames,
     };
 
     function exists(value: string): boolean {
@@ -85,6 +90,12 @@ export function createObjectTable<T>(
             names.push((row as ObjectTableRow).name);
         }
         return names;
+    }
+
+    async function* allObjects(): AsyncIterableIterator<T> {
+        for await (const nv of all()) {
+            yield nv.value;
+        }
     }
 
     function all() {
@@ -132,6 +143,17 @@ export function createObjectTable<T>(
         return Promise.resolve(objectName);
     }
 
+    async function clear(): Promise<void> {
+        const sql_remove = db.prepare(`DELETE * from ${tableName}`);
+        sql_remove.run();
+        return Promise.resolve();
+    }
+
+    function remove(name: string): Promise<void> {
+        sql_remove.run(name);
+        return Promise.resolve();
+    }
+
     function createNameGenerator() {
         const fileNameType =
             tableSettings.fileNameType ?? FileNameType.Timestamp;
@@ -143,11 +165,6 @@ export function createObjectTable<T>(
                 return !exists(name);
             },
         );
-    }
-
-    function remove(name: string): Promise<void> {
-        sql_remove.run(name);
-        return Promise.resolve();
     }
 
     function writeObject(name: string, obj: T): void {

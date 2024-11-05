@@ -32,7 +32,7 @@ export interface ObjectFolderSettings {
  * The folder can be implemented over native files OR an abstract file system
  */
 export interface ObjectFolder<T> {
-    path: Path;
+    readonly path: Path;
 
     size(): Promise<number>;
     get(name: string): Promise<T | undefined>;
