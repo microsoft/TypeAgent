@@ -3,6 +3,7 @@
 
 export interface LanguageTools {
     possibleReferentialPhrase(phrase: string): boolean;
+    hasClosedClass(phrase: string): boolean;
 }
 
 const referenceWordList = [
@@ -69,6 +70,87 @@ const referenceParts = new RegExp(
     "i",
 );
 
+const prepositions = new RegExp(
+    `\\b(?:${[
+        "aboard",
+        "about",
+        "above",
+        "across",
+        "after",
+        "against",
+        "along",
+        "amid",
+        "amidst",
+        "among",
+        "amongst",
+        "around",
+        "as",
+        "at",
+        "before",
+        "behind",
+        "below",
+        "beneath",
+        "beside",
+        "besides",
+        "between",
+        "beyond",
+        "but",
+        "by",
+        "concerning",
+        "considering",
+        "despite",
+        "down",
+        "during",
+        "except",
+        "following",
+        "for",
+        "from",
+        "in",
+        "inside",
+        "into",
+        "like",
+        "minus",
+        "near",
+        "next",
+        "of",
+        "off",
+        "on",
+        "onto",
+        "opposite",
+        "out",
+        "outside",
+        "over",
+        "past",
+        "per",
+        "plus",
+        "regarding",
+        "round",
+        "save",
+        "since",
+        "than",
+        "through",
+        "throughout",
+        "till",
+        "to",
+        "toward",
+        "towards",
+        "under",
+        "underneath",
+        "unlike",
+        "until",
+        "up",
+        "upon",
+        "versus",
+        "via",
+        "vs",
+        "while",
+        "with",
+        "within",
+        "without",
+    ].join("|")})\\b`,
+    "i",
+);
+
 // REVIEW: Heuristics to allow time references from now.
 const relativeToNow =
     /this (week|month|year|quarter|season|day|hour|minute|second|morning|afternoon)$/i;
@@ -83,6 +165,9 @@ const languageToolsEn: LanguageTools = {
                 referenceParts.test(phrase)) &&
             !relativeToNow.test(phrase)
         );
+    },
+    hasClosedClass(phrase: string) {
+        return prepositions.test(phrase);
     },
 };
 
