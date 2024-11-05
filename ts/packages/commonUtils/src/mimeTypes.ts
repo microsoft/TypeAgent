@@ -38,7 +38,7 @@ export function getMimeTypeFromFileExtension(fileExtension: string): string {
     throw "Unsupported file extension.";
 }
 
-export function isMimeTypeSupported(mime: string): boolean {
+export function isImageMimeTypeSupported(mime: string): boolean {
     switch (mime) {
         case "image/png":
         case "image/jpg":
@@ -47,4 +47,14 @@ export function isMimeTypeSupported(mime: string): boolean {
         default:
             return false;
     }
+}
+
+export function isImageFileType(fileExtension: string): boolean {
+    if (fileExtension.startsWith(".")) {
+        fileExtension = fileExtension.substring(1);
+    }
+
+    const imageFileTypes: Set<string> = new Set<string>(["png", "jpg", "jpeg"]);
+
+    return imageFileTypes.has(fileExtension);
 }

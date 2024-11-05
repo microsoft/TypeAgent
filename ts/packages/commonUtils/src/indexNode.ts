@@ -44,12 +44,13 @@ export * from "./profiler/profileReader.js";
 
 export { createRpc } from "./rpc.js";
 
-export { CachedImageWithDetails, getImageElement } from "./image.js";
+export * from "./image.js";
 
 export {
     getFileExtensionForMimeType,
     getMimeTypeFromFileExtension as getMimeType,
-    isMimeTypeSupported,
+    isImageMimeTypeSupported,
+    isImageFileType,
 } from "./mimeTypes.js";
 
 export { getObjectProperty, setObjectProperty } from "./objectProperty.js";

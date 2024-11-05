@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { Storage } from "@typeagent/agent-sdk";
+import { getBlob } from "aiclient";
 import ExifReader from "exifreader";
 
 export class CachedImageWithDetails {
@@ -29,4 +31,29 @@ export function extractRelevantExifTags(exifTags: ExifReader.Tags) {
     `;
     console.log(tags.replace("\n\n", "\n"));
     return tags;
+}
+
+/**
+ * Dowloads the supplied uri and saves it to local session storage
+ * @param uri The uri of the image to download
+ * @param fileName The name of the file to save the image locally as (including relative path)
+ */
+export async function downloadImage(
+    uri: string,
+    fileName: string,
+    storage: Storage,
+): Promise<boolean> {
+    return new Promise<boolean>(async (resolve) => {
+        // save the generated image in the session store
+        const blobResponse = await getBlob(uri);
+        if (blobResponse.success) {
+            const ab = Buffer.from(await blobResponse.data.arrayBuffer());
+
+            storage.write(fileName, ab.toString("base64"));
+
+            resolve(true);
+        }
+
+        resolve(false);
+    });
 }
