@@ -90,7 +90,7 @@ async function handlePhotoAction(
                     result.entities.push({
                         name: path.basename(searchResults[i].contentUrl),
                         type: ["image", "url", "search"],
-                        additionalEntityText: searchResults[i].contentUrl, 
+                        additionalEntityText: searchResults[i].contentUrl,
                     });
                 }
             }
@@ -240,7 +240,7 @@ function createCarouselForImages(
 
         carouselDots += `<span class="dot ${hash}" onclick="slideShow_${hash}.currentSlide(${index + 1})"></span>`;
 
-        literal += `Image ${index+1}: ${url}, Caption: ${captions[index]} `;
+        literal += `Image ${index + 1}: ${url}, Caption: ${captions[index]} `;
     });
 
     const carousel_end: string = `
