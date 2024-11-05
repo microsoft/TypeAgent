@@ -21,6 +21,7 @@ import {
     FindImageAction,
     ImageAction,
 } from "./imageActionSchema.js";
+import path from "path";
 
 export function instantiate(): AppAgent {
     return {
@@ -87,8 +88,9 @@ async function handlePhotoAction(
                 // add the found images to the entities
                 for (let i = 0; i < searchResults.length; i++) {
                     result.entities.push({
-                        name: searchResults[i].contentUrl,
+                        name: path.basename(searchResults[i].contentUrl),
                         type: ["image", "url", "search"],
+                        additionalEntityText: searchResults[i].contentUrl, 
                     });
                 }
             }
@@ -173,6 +175,7 @@ function createCarouselForImages(
     images: string[],
     captions: string[],
 ): ActionResultSuccess {
+    let literal: string = `There are ${images.length} shown. `;
     const hash: string = randomBytes(4).readUInt32LE(0).toString();
     const jScript: string = `
     <script>
@@ -236,6 +239,8 @@ function createCarouselForImages(
     </div>`;
 
         carouselDots += `<span class="dot ${hash}" onclick="slideShow_${hash}.currentSlide(${index + 1})"></span>`;
+
+        literal += `Image ${index+1}: ${url}, Caption: ${captions[index]} `;
     });
 
     const carousel_end: string = `
@@ -253,6 +258,6 @@ function createCarouselForImages(
 
     return createActionResultFromHtmlDisplayWithScript(
         carousel_start + carousel + carousel_end + jScript,
-        `There are ${images.length} shown.`,
+        literal,
     );
 }

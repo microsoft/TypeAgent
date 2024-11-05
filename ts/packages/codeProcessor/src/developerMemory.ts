@@ -205,7 +205,7 @@ export async function createDeveloperMemory(
         return {
             embeddingModel: settings.embeddingModel,
             semanticIndex: true,
-            caseSensitive: false,
+            caseSensitive: true,
             concurrency: 2,
         };
     }

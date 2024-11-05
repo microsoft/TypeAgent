@@ -387,7 +387,7 @@ export async function createConversationManager(
         );
         return {
             indexSettings: {
-                caseSensitive: true,
+                caseSensitive: false,
                 concurrency: 2,
                 embeddingModel,
                 semanticIndex: true,
