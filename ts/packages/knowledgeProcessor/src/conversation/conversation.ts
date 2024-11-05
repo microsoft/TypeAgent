@@ -208,7 +208,7 @@ export function createConversationSettings(
 ): ConversationSettings {
     return {
         indexSettings: {
-            caseSensitive: true,
+            caseSensitive: false,
             concurrency: 2,
             embeddingModel,
             semanticIndex: true,
