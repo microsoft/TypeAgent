@@ -46,6 +46,7 @@ async function executeDesktopAction(
     const message = await runDesktopActions(
         action as DesktopActions,
         context.sessionContext.agentContext,
+        context.sessionContext.sessionStorage!,
     );
     return createActionResult(message);
 }

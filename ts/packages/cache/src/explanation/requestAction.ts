@@ -6,6 +6,7 @@ import { AppAction, Entity } from "@typeagent/agent-sdk";
 export type HistoryContext = {
     promptSections: PromptSection[];
     entities: Entity[];
+    additionalInstructions?: string[] | undefined;
 };
 
 export function normalizeParamValue(value: ParamValueType) {
