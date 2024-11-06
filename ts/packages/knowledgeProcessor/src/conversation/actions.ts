@@ -11,18 +11,17 @@ import {
     dateTime,
 } from "typeagent";
 import {
-    KeyValueIndex,
-    KnowledgeStore,
     TermMap,
     TextIndex,
     TextIndexSettings,
-    createIndexFolder,
-    createKnowledgeStore,
     createTermMap,
-    createTextIndex,
 } from "../knowledgeIndex.js";
+import {
+    createKnowledgeStoreOnStorage,
+    KnowledgeStore,
+} from "../knowledgeStore.js";
+import { KeyValueIndex } from "../keyValueIndex.js";
 import { Action, ActionParam, VerbTense } from "./knowledgeSchema.js";
-import path from "path";
 import { ActionFilter } from "./knowledgeSearchSchema.js";
 import {
     TemporalLog,
@@ -50,6 +49,10 @@ import { toStopDate, toStartDate } from "./knowledgeActions.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
 import { TermFilterV2, ActionTerm } from "./knowledgeTermSearchSchema2.js";
 import { facetToString } from "./entities.js";
+import {
+    createFileSystemStorageProvider,
+    StorageProvider,
+} from "../storageProvider.js";
 
 export interface ActionSearchOptions extends SearchOptions {
     verbSearchOptions?: SearchOptions | undefined;
@@ -117,12 +120,25 @@ export interface ActionIndex<TActionId = any, TSourceId = any>
     getAllVerbs(): Promise<string[]>;
 }
 
-export async function createActionIndex<TSourceId = any>(
+export function createActionIndex<TSourceId = any>(
     settings: TextIndexSettings,
     getNameIndex: () => Promise<TextIndex<string>>,
     rootPath: string,
     folderSettings?: ObjectFolderSettings,
     fSys?: FileSystem,
+): Promise<ActionIndex<string, TSourceId>> {
+    return createActionIndexOnStorage<TSourceId>(
+        settings,
+        getNameIndex,
+        rootPath,
+        createFileSystemStorageProvider(folderSettings, fSys),
+    );
+}
+export async function createActionIndexOnStorage<TSourceId = any>(
+    settings: TextIndexSettings,
+    getNameIndex: () => Promise<TextIndex<string>>,
+    rootPath: string,
+    storageProvider: StorageProvider,
 ): Promise<ActionIndex<string, TSourceId>> {
     type ActionId = string;
     // Initialize indexes
@@ -133,32 +149,23 @@ export async function createActionIndex<TSourceId = any>(
         objectIndex,
         indirectObjectIndex,
     ] = await Promise.all([
-        createKnowledgeStore<ExtractedAction<TSourceId>>(
+        createKnowledgeStoreOnStorage<ExtractedAction<TSourceId>>(
             settings,
             rootPath,
-            folderSettings,
-            fSys,
+            storageProvider,
         ),
-        createTextIndex<ActionId>(
+        storageProvider.createTextIndex<ActionId>(
             settings,
-            path.join(rootPath, "verbs"),
-            folderSettings,
-            fSys,
+            rootPath,
+            "verbs",
+            "TEXT",
         ),
-        createIndexFolder<ActionId>(
-            path.join(rootPath, "subjects"),
-            folderSettings,
-            fSys,
-        ),
-        createIndexFolder<ActionId>(
-            path.join(rootPath, "objects"),
-            folderSettings,
-            fSys,
-        ),
-        createIndexFolder<ActionId>(
-            path.join(rootPath, "indirectObjects"),
-            folderSettings,
-            fSys,
+        storageProvider.createIndex<ActionId>(rootPath, "subjects", "TEXT"),
+        storageProvider.createIndex<ActionId>(rootPath, "objects", "TEXT"),
+        storageProvider.createIndex<ActionId>(
+            rootPath,
+            "indirectObjects",
+            "TEXT",
         ),
     ]);
     const verbTermMap = createTermMap();

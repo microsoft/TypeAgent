@@ -6,6 +6,7 @@ import { AppAction, Entity } from "@typeagent/agent-sdk";
 export type HistoryContext = {
     promptSections: PromptSection[];
     entities: Entity[];
+    additionalInstructions?: string[] | undefined;
 };
 
 export function normalizeParamValue(value: ParamValueType) {
@@ -184,6 +185,12 @@ export class Actions {
         return Array.isArray(this.actions)
             ? this.actions.map((a) => a.toIAction())
             : this.actions.toIAction();
+    }
+
+    public toIActions(): IAction[] {
+        return Array.isArray(this.actions)
+            ? this.actions.map((a) => a.toIAction())
+            : [this.actions.toIAction()];
     }
 
     public toFullActions(): FullAction[] {

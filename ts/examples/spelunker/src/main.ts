@@ -10,7 +10,6 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 // 3rd party package imports
-import * as readlineSync from "readline-sync";
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 
@@ -25,9 +24,9 @@ import {
 import { createObjectFolder, loadSchema } from "typeagent";
 
 // Local imports
-import { ChunkDocumentation } from "./chunkDocSchema.js";
 import { Chunk } from "./pythonChunker.js";
-import { importPythonFiles, wordWrap } from "./pythonImporter.js";
+import { importPythonFiles } from "./pythonImporter.js";
+import { runQueryInterface } from "./queryInterface.js";
 
 // Set __dirname to emulate old JS behavior
 const __filename = fileURLToPath(import.meta.url);
@@ -37,12 +36,77 @@ const __dirname = path.dirname(__filename);
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
 
+await main();
+
 // Usage: node main.js [file1.py] [file2.py] ...
 // OR:    node main.js --files filelist.txt
 // OR:    node main.js -  # Load sample file (sample.py.txt)
 // OR:    node main.js    # Query previously loaded files
 async function main(): Promise<void> {
-    const verbose = false;
+    console.log("[Hi!]");
+
+    const t0 = Date.now();
+
+    const verbose =
+        process.argv.includes("-v") || process.argv.includes("--verbose");
+    if (verbose) {
+        process.argv = process.argv.filter(
+            (arg) => arg !== "-v" && arg !== "--verbose",
+        );
+    }
+
+    const files = processArgs();
+
+    let homeDir = process.platform === "darwin" ? process.env.HOME || "" : "";
+    const dataRoot = homeDir + "/data";
+    const spelunkerRoot = dataRoot + "/spelunker";
+
+    const chunkFolder = await createObjectFolder<Chunk>(
+        spelunkerRoot + "/chunks",
+        { serializer: (obj) => JSON.stringify(obj, null, 2) },
+    );
+    const chatModel = openai.createChatModelDefault("spelunkerChat");
+    const fileDocumenter = await createFileDocumenter(chatModel);
+    const fakeCodeDocumenter = await createFakeCodeDocumenter();
+    const codeIndex = await createSemanticCodeIndex(
+        spelunkerRoot + "/index",
+        fakeCodeDocumenter,
+        undefined,
+        (obj) => JSON.stringify(obj, null, 2),
+    );
+    const summaryFolder = await createObjectFolder<CodeDocumentation>(
+        spelunkerRoot + "/summaries",
+        { serializer: (obj) => JSON.stringify(obj, null, 2) },
+    );
+
+    const t1 = Date.now();
+    console.log(`[Initialized in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`);
+
+    // Import all files. (TODO: Break up very long lists.)
+    if (files.length > 0) {
+        console.log(`[Importing ${files.length} files]`);
+        const t0 = Date.now();
+
+        await importPythonFiles(
+            files,
+            fileDocumenter,
+            chunkFolder,
+            codeIndex,
+            summaryFolder,
+            true,
+            verbose,
+        );
+
+        const t1 = Date.now();
+        console.log(
+            `[Imported ${files.length} files in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+        );
+    }
+
+    await runQueryInterface(chunkFolder, codeIndex, summaryFolder, verbose);
+}
+
+function processArgs(): string[] {
     let files: string[];
     // TODO: Use a proper command-line parser.
     if (process.argv.length > 2) {
@@ -62,133 +126,101 @@ async function main(): Promise<void> {
     } else {
         files = [];
     }
-
-    let homeDir = process.platform === "darwin" ? process.env.HOME || "" : "";
-    const dataRoot = homeDir + "/data";
-    const spelunkerRoot = dataRoot + "/spelunker";
-
-    const chunkFolder = await createObjectFolder<Chunk>(
-        spelunkerRoot + "chunks",
-        { serializer: (obj) => JSON.stringify(obj, null, 2) },
-    );
-    const chatModel = openai.createChatModelDefault("spelunkerChat");
-    const codeDocumenter = await createCodeDocumenter(chatModel);
-    const codeIndex = await createSemanticCodeIndex(
-        spelunkerRoot + "index",
-        codeDocumenter,
-        undefined,
-        (obj) => JSON.stringify(obj, null, 2),
-    );
-    const summaryFolder = await createObjectFolder<CodeDocumentation>(
-        spelunkerRoot + "summaries",
-        { serializer: (obj) => JSON.stringify(obj, null, 2) },
-    );
-
-    // Import all files. (TODO: Break up very long lists.)
-    console.log(`[Importing ${files.length} files]`);
-    await importPythonFiles(
-        files,
-        chunkFolder,
-        codeIndex,
-        summaryFolder,
-        true,
-        verbose,
-    );
-
-    // Loop processing searches. (TODO: Use interactiveApp.)
-    while (true) {
-        const input = readlineSync.question("~> ", {
-            history: true, // Enable history
-            keepWhitespace: true, // Keep leading/trailing whitespace in history
-        });
-        if (!input) {
-            console.log("Bye!");
-            return;
-        }
-        const searchKey = input.replace(/\W+/g, " ").trim();
-        const hits = await codeIndex.find(searchKey, 2);
-        console.log(
-            `Got ${hits.length} hit${hits.length == 0 ? "s." : hits.length === 1 ? ":" : "s:"}`,
-        );
-        for (const hit of hits) {
-            const chunk: Chunk | undefined = await chunkFolder.get(hit.item);
-            if (!chunk) {
-                console.log(hit, "--> [No data]");
-            } else {
-                console.log(
-                    `score: ${hit.score.toFixed(3)}, ` +
-                        `id: ${chunk.id}, ` +
-                        `file: ${path.relative(process.cwd(), chunk.filename!)}, ` +
-                        `type: ${chunk.treeName}`,
-                );
-                const summary: CodeDocumentation | undefined =
-                    await summaryFolder.get(hit.item);
-                if (
-                    summary &&
-                    summary.comments &&
-                    summary.comments.length > 0
-                ) {
-                    for (const comment of summary.comments)
-                        console.log(
-                            wordWrap(
-                                `${comment.lineNumber}. ${comment.comment}`,
-                            ),
-                        );
-                }
-                for (const blob of chunk.blobs) {
-                    let lineno = 1 + blob.start;
-                    for (const index in blob.lines) {
-                        console.log(
-                            `${String(lineno).padStart(3)}: ${blob.lines[index].trimEnd()}`,
-                        );
-                        lineno += 1;
-                    }
-                    console.log("");
-                }
-            }
-        }
-    }
+    return files;
 }
 
-await main();
+// Fake code documenter to pass to creteCodeIndex.
 
-// We have our own code documenter to pass to createSemanticCodeIndex.
+export interface CodeBlockWithDocs extends CodeBlock {
+    docs: CodeDocumentation;
+}
 
-async function createCodeDocumenter(model: ChatModel): Promise<CodeDocumenter> {
-    const docTranslator = await createDocTranslator(model);
+async function createFakeCodeDocumenter(): Promise<CodeDocumenter> {
     return {
         document,
     };
 
-    async function document(code: CodeBlock): Promise<CodeDocumentation> {
-        const text =
-            typeof code.code === "string" ? code.code : code.code.join("");
-        const promptPrefix =
-            `Document the following ${code.language} code:\n\n${text}\n\n` +
-            "Return 1-3 short paragraphs of text describing the code, " +
-            "its purpose, and any relevant details.\n" +
-            "The docs must be: accurate, active voice, crisp, succinct.";
-        const result = await docTranslator.translate(text, promptPrefix);
+    async function document(
+        code: CodeBlock | CodeBlockWithDocs,
+    ): Promise<CodeDocumentation> {
+        if ("docs" in code && code.docs) {
+            return code.docs;
+        }
+        return {};
+    }
+}
+
+export interface FileDocumenter {
+    document(chunks: Chunk[]): Promise<CodeDocumentation>;
+}
+
+async function createFileDocumenter(model: ChatModel): Promise<FileDocumenter> {
+    const fileDocTranslator = await createFileDocTranslator(model);
+    return {
+        document,
+    };
+
+    async function document(chunks: Chunk[]): Promise<CodeDocumentation> {
+        let text = "";
+        for (const chunk of chunks) {
+            text += `***: Docmument the following ${chunk.treeName}:\n`;
+            for (const blob of chunk.blobs) {
+                for (let i = 0; i < blob.lines.length; i++) {
+                    text += `[${blob.start + i + 1}]: ${blob.lines[i]}\n`;
+                }
+            }
+        }
+        const request =
+            "Document the given Python code, its purpose, and any relevant details.\n" +
+            "The code has (non-contiguous) line numbers, e.g.: `[1]: def foo():`\n" +
+            "There are also marker lines, e.g.: `***: Document the following FuncDef`\n" +
+            "Write a concise paragraph for EACH marker.\n" +
+            "Also write a paragraph about the whole file.\n" +
+            "DON'T document any lines without markers!\n";
+        const result = await fileDocTranslator.translate(request, text);
+
+        // Now assign each comment to its chunk.
         if (result.success) {
-            return {
-                comments: [{ lineNumber: 1, comment: result.data.description }],
-            };
+            const codeDocs: CodeDocumentation = result.data;
+            // Assign each comment to its chunk.
+            for (const chunk of chunks) {
+                chunk.docs = {
+                    comments: [
+                        {
+                            lineNumber: chunk.blobs[0].start + 1,
+                            comment: `${chunk.treeName}`,
+                        },
+                    ],
+                };
+                for (const comment of codeDocs.comments ?? []) {
+                    for (const blob of chunk.blobs) {
+                        if (
+                            !blob.breadcrumb &&
+                            blob.start < comment.lineNumber &&
+                            comment.lineNumber <= blob.start + blob.lines.length
+                        ) {
+                            chunk.docs.comments!.push(comment);
+                        }
+                    }
+                }
+            }
+            return codeDocs;
         } else {
             throw new Error(result.message);
         }
     }
 }
 
-async function createDocTranslator(
+async function createFileDocTranslator(
     model: ChatModel,
-): Promise<TypeChatJsonTranslator<ChunkDocumentation>> {
-    const typeName = "ChunkDocumentation";
-    const schema = loadSchema(["chunkDocSchema.ts"], import.meta.url);
-    const validator = createTypeScriptJsonValidator<ChunkDocumentation>(
+): Promise<TypeChatJsonTranslator<CodeDocumentation>> {
+    const typeName = "CodeDocumentation";
+    const schema = loadSchema(["codeDocSchema.ts"], import.meta.url);
+    const validator = createTypeScriptJsonValidator<CodeDocumentation>(
         schema,
         typeName,
     );
-    const translator = createJsonTranslator<ChunkDocumentation>(
+    const translator = createJsonTranslator<CodeDocumentation>(
         model,
         validator,
     );

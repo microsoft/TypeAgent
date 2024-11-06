@@ -357,11 +357,6 @@ async function runBrowserAction(action: any) {
 
             break;
         }
-
-        case "unknown": {
-            confirmationMessage = `Did not understand the request "${action.parameters.text}"`;
-            break;
-        }
     }
 
     return {

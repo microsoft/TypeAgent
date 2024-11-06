@@ -3,7 +3,7 @@
 
 import { Entity } from "@typeagent/agent-sdk";
 import { CachedImageWithDetails } from "common-utils";
-import { PromptSection, ImagePromptContent } from "typechat";
+import { PromptSection } from "typechat";
 import { extractRelevantExifTags } from "../../../../commonUtils/dist/image.js";
 type PromptRole = "user" | "assistant" | "system";
 
@@ -12,6 +12,7 @@ export interface ChatHistoryEntry {
     entities: Entity[];
     role: PromptRole;
     id: string | undefined;
+    additionalInstructions?: string[] | undefined;
     attachments?: CachedImageWithDetails[] | undefined;
 }
 
@@ -26,8 +27,10 @@ export interface ChatHistory {
         role: PromptRole,
         id?: string,
         attachments?: CachedImageWithDetails[],
+        additionalInstructions?: string[],
     ): void;
     getEntry(id: string): ChatHistoryEntry | undefined;
+    getCurrentInstructions(): string[] | undefined;
     getPromptSections(): PromptSection[];
 }
 
@@ -36,7 +39,6 @@ export function createChatHistory(): ChatHistory {
     const typeMap: Map<string, Entity[]> = new Map();
     const userIdMap: Map<string, number> = new Map();
     const assistantIdMap: Map<string, number> = new Map();
-    const attachmentsMap: Map<string, string[]> = new Map();
     return {
         entries: [],
         getPromptSections(maxChars = 2000) {
@@ -101,14 +103,43 @@ export function createChatHistory(): ChatHistory {
             }
             return sections;
         },
+        getCurrentInstructions(): string[] | undefined {
+            const instructions: string[] = [];
+            if (this.entries.length === 0) {
+                return undefined;
+            }
+            let i = this.entries.length - 1;
+            if (this.entries[i].role === "user") {
+                i--;
+            }
+            while (i >= 0) {
+                if (this.entries[i].role === "user") {
+                    break;
+                }
+                const entry = this.entries[i];
+                if (entry.additionalInstructions) {
+                    instructions.push(...entry.additionalInstructions);
+                }
+                i--;
+            }
+            return instructions.length > 0 ? instructions : undefined;
+        },
         addEntry(
             text: string,
             entities: Entity[],
             role: PromptRole = "user",
             id?: string,
             attachments?: CachedImageWithDetails[],
+            additionalInstructions?: string[],
         ): void {
-            this.entries.push({ text, entities, role, id, attachments });
+            this.entries.push({
+                text,
+                entities,
+                role,
+                id,
+                attachments,
+                additionalInstructions,
+            });
             const index = this.entries.length - 1;
             if (id) {
                 if (role === "user") {
@@ -131,6 +162,7 @@ export function createChatHistory(): ChatHistory {
                 }
             }
         },
+
         getEntitiesByName(name: string): Entity[] | undefined {
             return nameMap.get(name);
         },

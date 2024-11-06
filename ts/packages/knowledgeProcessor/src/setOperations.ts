@@ -114,10 +114,9 @@ export function unionMultiple<T>(
     return combined ?? [];
 }
 
-export function* unionScored<T = any>(
+export function* unionScored<T>(
     xArray: Iterator<ScoredItem<T>> | Array<ScoredItem<T>>,
     yArray: Iterator<ScoredItem<T>> | Array<ScoredItem<T>>,
-    comparer: (x: T, y: T) => number,
 ): IterableIterator<ScoredItem<T>> {
     const x: Iterator<ScoredItem<T>> = Array.isArray(xArray)
         ? xArray.values()
@@ -129,15 +128,15 @@ export function* unionScored<T = any>(
     let yVal = y.next();
 
     while (!xVal.done && !yVal.done) {
-        const cmp = comparer(xVal.value.item, yVal.value.item);
-        if (cmp === 0) {
-            // If both are equal, yield the one with the higher score
+        // TODO: replace with a comparer: currently for strings, this is 2 comparisons
+        if (xVal.value.item === yVal.value.item) {
+            // If both are equal, yield the one with a higher score
             yield xVal.value.score >= yVal.value.score
                 ? xVal.value
                 : yVal.value;
             xVal = x.next();
             yVal = y.next();
-        } else if (cmp < 0) {
+        } else if (xVal.value < yVal.value) {
             yield xVal.value;
             xVal = x.next();
         } else {
@@ -166,7 +165,7 @@ export function unionMultipleScored<T>(
     let combined: any | undefined;
     for (const array of arrays) {
         if (array) {
-            combined = combined ? union(combined, array) : array;
+            combined = combined ? unionScored(combined, array) : array;
         }
     }
     return combined ?? [];
@@ -369,7 +368,7 @@ export type WithFrequency<T = any> = {
     count: number;
 };
 
-export interface HitTable<T> {
+export interface HitTable<T = any> {
     readonly size: number;
 
     get(value: T): ScoredItem<T> | undefined;
@@ -386,12 +385,16 @@ export interface HitTable<T> {
             | Array<ScoredItem<T>>,
     ): void;
     keys(): IterableIterator<any>;
+    values(): IterableIterator<ScoredItem<T>>;
+
     byHighestScore(): ScoredItem<T>[];
     getTop(): T[];
     getTopK(k: number): T[];
 
     getByKey(key: any): ScoredItem<T> | undefined;
     set(key: any, value: ScoredItem<T>): void;
+
+    clear(): void;
 }
 
 export function createHitTable<T>(
@@ -403,17 +406,20 @@ export function createHitTable<T>(
         get size() {
             return map.size;
         },
+        keys: () => map.keys(),
+        values: () => map.values(),
         get,
         set,
         getScore,
         add,
         addMultiple,
         addMultipleScored,
-        keys: () => map.keys(),
         byHighestScore,
         getTop,
         getTopK,
         getByKey,
+
+        clear: () => map.clear(),
     };
 
     function get(value: T): ScoredItem<T> | undefined {

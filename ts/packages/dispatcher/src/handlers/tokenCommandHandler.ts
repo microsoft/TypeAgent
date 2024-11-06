@@ -42,13 +42,11 @@ class TokenDetailsCommandHandler implements CommandHandlerNoParams {
 
     public async run(context: ActionContext<CommandHandlerContext>) {
         let retValue: string[] = [];
-        TokenCounter.getInstance().tags.map((t) => {
-            const tokens: CompletionUsageStats =
-                TokenCounter.getInstance().getTokenUsage(t)!;
+        for (const [t, tokens] of TokenCounter.getInstance().counters) {
             retValue.push(
-                `#${t}\n------------------\nPrompt: ${tokens.prompt_tokens}\nCompletion: ${tokens.completion_tokens}\nTotal: ${tokens.total_tokens}\n`,
+                `#${t}\n------------------\nPrompt: ${tokens.total.prompt_tokens}\nCompletion: ${tokens.total.completion_tokens}\nTotal: ${tokens.total.total_tokens}\n`,
             );
-        });
+        }
 
         displaySuccess(retValue, context);
     }

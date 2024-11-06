@@ -30,19 +30,17 @@ TypeScript, of course).
 
 import * as fs from "fs";
 
-import { ObjectFolder } from "typeagent";
-import {
-    CodeBlock,
-    CodeDocumentation,
-    SemanticCodeIndex,
-} from "code-processor";
+import { asyncArray, ObjectFolder } from "typeagent";
+import { CodeDocumentation, SemanticCodeIndex } from "code-processor";
 
 import { Chunk, ChunkedFile, chunkifyPythonFiles } from "./pythonChunker.js";
+import { CodeBlockWithDocs, FileDocumenter } from "./main.js";
 
 // TODO: Turn (chunkFolder, codeIndex, summaryFolder) into a single object.
 
 export async function importPythonFiles(
     files: string[],
+    fileDocumenter: FileDocumenter,
     chunkFolder: ObjectFolder<Chunk>,
     codeIndex: SemanticCodeIndex,
     summaryFolder: ObjectFolder<CodeDocumentation>,
@@ -52,10 +50,37 @@ export async function importPythonFiles(
     let filenames = files.map((file) =>
         fs.existsSync(file) ? fs.realpathSync(file) : file,
     );
-    const result = await chunkifyPythonFiles(filenames);
+    const t0 = Date.now();
+    const results = await chunkifyPythonFiles(filenames);
+    const t1 = Date.now();
+
+    // Compute some stats for log message.
+    let lines = 0;
+    let blobs = 0;
+    let chunks = 0;
+    let errors = 0;
+    for (const result of results) {
+        if ("error" in result) {
+            errors++;
+        } else {
+            const chunkedFile = result;
+            chunks += chunkedFile.chunks.length;
+            for (const chunk of chunkedFile.chunks) {
+                blobs += chunk.blobs.length;
+                for (const blob of chunk.blobs) {
+                    lines += blob.lines.length;
+                }
+            }
+        }
+    }
+    console.log(
+        `[Chunked ${filenames.length} files ` +
+            `(${lines} lines, ${blobs} blobs, ${chunks} chunks, ${errors} errors) ` +
+            `in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+    );
 
     // TODO: concurrency.
-    for (const item of result) {
+    for (const item of results) {
         if ("error" in item) {
             console.log(`[Error: ${item.error}]`);
             if (item.output) {
@@ -63,8 +88,30 @@ export async function importPythonFiles(
             }
             continue;
         }
+        const chunkedFile = item;
+        const chunks = chunkedFile.chunks;
+        for (const chunk of chunks) {
+            chunk.filename = chunkedFile.filename;
+        }
+        console.log(
+            `[Documenting ${chunks.length} chunks from ${chunkedFile.filename}]`,
+        );
+        const t0 = Date.now();
+        try {
+            const docs = await fileDocumenter.document(chunks);
+            if (verbose) console.log(docs);
+        } catch (error) {
+            console.log(
+                `[Error documenting ${chunkedFile.filename}: ${error}]`,
+            );
+            continue;
+        }
+        const t1 = Date.now();
+        console.log(
+            `[Documented ${chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+        );
         firstFile = await processChunkedFile(
-            item,
+            chunkedFile,
             chunkFolder,
             codeIndex,
             summaryFolder,
@@ -76,7 +123,7 @@ export async function importPythonFiles(
 }
 
 async function processChunkedFile(
-    chunkedFile: ChunkedFile,
+    chunkedFile: ChunkedFile, // TODO: Use a type with filename and docs guaranteed present.
     chunkFolder: ObjectFolder<Chunk>,
     codeIndex: SemanticCodeIndex,
     summaryFolder: ObjectFolder<CodeDocumentation>,
@@ -89,14 +136,10 @@ async function processChunkedFile(
         return firstFile;
     }
     console.log(
-        `[Processing ${chunks.length} chunks from ${chunkedFile.filename}]`,
+        `[Embedding ${chunks.length} chunks from ${chunkedFile.filename}]`,
     );
     const t0 = Date.now();
 
-    // Compute and store embedding.
-    for (const chunk of chunks) {
-        chunk.filename = chunkedFile.filename;
-    }
     // Handle the first chunk of the first file separately, it waits for API key setup.
     if (firstFile) {
         const chunk = chunks.shift()!;
@@ -108,14 +151,24 @@ async function processChunkedFile(
             verbose,
         );
     }
-    const promises = chunks.map((chunk) =>
-        processChunk(chunk, chunkFolder, codeIndex, summaryFolder, verbose),
+
+    // Limit concurrency to avoid 429 errors.
+    await asyncArray.forEachAsync(
+        chunks,
+        verbose ? 1 : 4,
+        async (chunk) =>
+            await processChunk(
+                chunk,
+                chunkFolder,
+                codeIndex,
+                summaryFolder,
+                verbose,
+            ),
     );
-    await Promise.all(promises);
 
     const t1 = Date.now();
     console.log(
-        `[Processed ${+firstFile + chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} sec]`,
+        `[Embedded ${+firstFile + chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
     );
     return false;
 }
@@ -132,24 +185,29 @@ async function processChunk(
         (acc, blob) => acc + blob.lines.length,
         0,
     );
-    // console.log(`[Embedding ${chunk.id} (${lineCount} lines)]`);
+    if (verbose) console.log(`  [Embedding ${chunk.id} (${lineCount} lines)]`);
     const putPromise = chunkFolder.put(chunk, chunk.id);
     const blobLines = extractBlobLines(chunk);
-    const codeBlock: CodeBlock = { code: blobLines, language: "python" };
+    const codeBlock: CodeBlockWithDocs = {
+        code: blobLines,
+        language: "python",
+        docs: chunk.docs!,
+    };
     const docs = await codeIndex.put(codeBlock, chunk.id, chunk.filename);
-    for (const comment of docs.comments || []) {
-        comment.lineNumber += chunk.blobs[0].start;
-    }
     await summaryFolder.put(docs, chunk.id);
     await putPromise;
-    // for (const comment of docs.comments || []) {
-    //     console.log(wordWrap(`${comment.lineNumber}. ${comment.comment}`));
-    // }
+    if (verbose) {
+        for (const comment of docs.comments || []) {
+            console.log(
+                wordWrap(`    ${comment.lineNumber}. ${comment.comment}`),
+            );
+        }
+    }
     const t1 = Date.now();
     if (verbose) {
         console.log(
-            `[Embedded ${chunk.id} (${lineCount} lines @ ${chunk.blobs[0].start}) ` +
-                `in ${((t1 - t0) * 0.001).toFixed(3)} sec]`,
+            `  [Embedded ${chunk.id} (${lineCount} lines @ ${chunk.blobs[0].start}) ` +
+                `in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
         );
     }
 }

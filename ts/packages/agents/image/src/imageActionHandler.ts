@@ -8,19 +8,20 @@ import {
     ActionResult,
     ActionResultSuccess,
 } from "@typeagent/agent-sdk";
-import { StopWatch } from "common-utils";
+import { downloadImage, StopWatch } from "common-utils";
 import {
     createActionResult,
     createActionResultFromHtmlDisplayWithScript,
 } from "@typeagent/agent-sdk/helpers/action";
 import { bing, GeneratedImage, openai } from "aiclient";
 import { Image } from "../../../aiclient/dist/bing.js";
-import { randomBytes } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import {
     CreateImageAction,
     FindImageAction,
     ImageAction,
 } from "./imageActionSchema.js";
+import path from "path";
 
 export function instantiate(): AppAgent {
     return {
@@ -75,11 +76,6 @@ async function handlePhotoAction(
                 result = createActionResult(
                     `Unable to find any images for ${findImageAction.parameters.searchTerm}`,
                 );
-                // } else if (searchResults.length == 1) {
-                //     result = createActionResultFromHtmlDisplay(
-                //         `<img class="chat-input-image" src="${searchResults[0].contentUrl}" />`,
-                //         "Found 1 image.",
-                //     );
             } else {
                 const urls: string[] = [];
                 const captions: string[] = [];
@@ -88,6 +84,15 @@ async function handlePhotoAction(
                     captions.push(findImageAction.parameters.searchTerm);
                 });
                 result = createCarouselForImages(urls, captions);
+
+                // add the found images to the entities
+                for (let i = 0; i < searchResults.length; i++) {
+                    result.entities.push({
+                        name: path.basename(searchResults[i].contentUrl),
+                        type: ["image", "url", "search"],
+                        additionalEntityText: searchResults[i].contentUrl,
+                    });
+                }
             }
             break;
         }
@@ -141,10 +146,27 @@ async function handlePhotoAction(
                     captions.push(i.revised_prompt);
                 });
                 result = createCarouselForImages(urls, captions);
+
+                // save the generated image in the session store and add the image to the knoweledge store
+                const id = randomUUID();
+                const fileName = `../generated_images/${id.toString()}.png`;
+                if (
+                    await downloadImage(
+                        urls[0],
+                        fileName,
+                        photoContext.sessionContext.sessionStorage!,
+                    )
+                ) {
+                    // add the generated image to the entities
+                    result.entities.push({
+                        name: fileName.substring(3),
+                        type: ["file", "image", "ai_generated"],
+                    });
+                }
             }
             break;
         default:
-            throw new Error(`Unknown action: ${action.actionName}`);
+            throw new Error(`Unknown action: ${(action as any).actionName}`);
     }
     return result;
 }
@@ -153,6 +175,7 @@ function createCarouselForImages(
     images: string[],
     captions: string[],
 ): ActionResultSuccess {
+    let literal: string = `There are ${images.length} shown. `;
     const hash: string = randomBytes(4).readUInt32LE(0).toString();
     const jScript: string = `
     <script>
@@ -216,6 +239,8 @@ function createCarouselForImages(
     </div>`;
 
         carouselDots += `<span class="dot ${hash}" onclick="slideShow_${hash}.currentSlide(${index + 1})"></span>`;
+
+        literal += `Image ${index + 1}: ${url}, Caption: ${captions[index]} `;
     });
 
     const carousel_end: string = `
@@ -233,6 +258,6 @@ function createCarouselForImages(
 
     return createActionResultFromHtmlDisplayWithScript(
         carousel_start + carousel + carousel_end + jScript,
-        `There are ${images.length} shown.`,
+        literal,
     );
 }

@@ -5,7 +5,6 @@ import {
     TextEmbeddingModel,
     CompletionSettings,
     ChatModel,
-    ChatMessage,
     ChatModelWithStreaming,
     ImageModel,
     ImageGeneration,
@@ -492,6 +491,7 @@ type ChatCompletionChoice = {
 type ChatCompletionChunk = {
     id: string;
     choices: ChatCompletionDelta[];
+    usage?: CompletionUsageStats;
 };
 
 type ChatCompletionDelta = {
@@ -577,7 +577,7 @@ export function createChatModel(
     return model;
 
     async function complete(
-        prompt: string | PromptSection[] | ChatMessage[],
+        prompt: string | PromptSection[],
     ): Promise<Result<string>> {
         verifyPromptLength(settings, prompt);
 
@@ -628,7 +628,7 @@ export function createChatModel(
     }
 
     async function completeStream(
-        prompt: string | PromptSection[] | ChatMessage[],
+        prompt: string | PromptSection[],
     ): Promise<Result<AsyncIterableIterator<string>>> {
         verifyPromptLength(settings, prompt);
 
@@ -650,6 +650,7 @@ export function createChatModel(
             ...defaultParams,
             messages: messages,
             stream: true,
+            stream_options: { include_usage: true },
             ...completionParams,
         };
         const result = await callApi(
@@ -676,6 +677,14 @@ export function createChatModel(
                             if (delta) {
                                 yield delta;
                             }
+                        }
+                        if (data.usage) {
+                            try {
+                                TokenCounter.getInstance().add(
+                                    data.usage,
+                                    tags,
+                                );
+                            } catch {}
                         }
                     }
                 }

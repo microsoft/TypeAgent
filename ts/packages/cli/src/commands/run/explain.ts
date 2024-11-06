@@ -104,7 +104,7 @@ export default class ExplainCommand extends Command {
                             await context.agentCache.processRequestAction(
                                 requestAction,
                                 false,
-                                true,
+                                { concurrent: true },
                             );
                         console.log(
                             result.explanationResult.explanation.success

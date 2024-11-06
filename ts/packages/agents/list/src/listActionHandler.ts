@@ -13,14 +13,7 @@ import {
     createActionResultFromTextDisplay,
     createActionResultFromHtmlDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
-import {
-    ListAction,
-    AddItemsAction,
-    RemoveItemsAction,
-    CreateListAction,
-    ClearListAction,
-    GetListAction,
-} from "./listSchema.js";
+import { ListAction } from "./listSchema.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -107,14 +100,14 @@ function validateWildcardItems(
 }
 
 async function listValidateWildcardMatch(
-    action: AppAction,
+    action: ListAction,
     context: SessionContext<ListActionContext>,
 ) {
     if (action.actionName === "addItems") {
-        const addItemsAction = action as AddItemsAction;
+        const addItemsAction = action;
         return validateWildcardItems(addItemsAction.parameters.items, context);
     } else if (action.actionName === "removeItems") {
-        const removeItemsAction = action as RemoveItemsAction;
+        const removeItemsAction = action;
         return validateWildcardItems(
             removeItemsAction.parameters.items,
             context,
@@ -249,10 +242,16 @@ async function handleListAction(
     let displayText: string | undefined = undefined;
     switch (action.actionName) {
         case "addItems": {
-            const addAction = action as AddItemsAction;
+            const addAction = action;
             console.log(
                 `Adding items: ${addAction.parameters.items} to list ${addAction.parameters.listName}`,
             );
+            if (addAction.parameters.items.length === 0) {
+                throw new Error("No items to add");
+            }
+            if (addAction.parameters.listName === "") {
+                throw new Error("List name is empty");
+            }
             if (listContext.store !== undefined) {
                 listContext.store.addItems(
                     addAction.parameters.listName,
@@ -280,7 +279,13 @@ async function handleListAction(
             break;
         }
         case "removeItems": {
-            const removeAction = action as RemoveItemsAction;
+            const removeAction = action;
+            if (removeAction.parameters.items.length === 0) {
+                throw new Error("No items to remove");
+            }
+            if (removeAction.parameters.listName === "") {
+                throw new Error("List name is empty");
+            }
             console.log(
                 `Removing items: ${removeAction.parameters.items} from list ${removeAction.parameters.listName}`,
             );
@@ -311,7 +316,7 @@ async function handleListAction(
             break;
         }
         case "createList": {
-            const createListAction = action as CreateListAction;
+            const createListAction = action;
             if (listContext.store !== undefined) {
                 if (
                     listContext.store.createList(
@@ -343,7 +348,7 @@ async function handleListAction(
             break;
         }
         case "getList": {
-            const getListAction = action as GetListAction;
+            const getListAction = action;
             const list = listContext.store?.getList(
                 getListAction.parameters.listName,
             );
@@ -371,7 +376,7 @@ async function handleListAction(
             break;
         }
         case "clearList": {
-            const clearListAction = action as ClearListAction;
+            const clearListAction = action;
             if (listContext.store !== undefined) {
                 const list = listContext.store.getList(
                     clearListAction.parameters.listName,
@@ -395,7 +400,7 @@ async function handleListAction(
             break;
         }
         default:
-            throw new Error(`Unknown action: ${action.actionName}`);
+            throw new Error(`Unknown action: ${(action as any).actionName}`);
     }
     return result;
 }

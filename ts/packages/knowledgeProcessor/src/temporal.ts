@@ -26,7 +26,6 @@ export interface TemporalLog<TId = any, T = any> {
     size(): Promise<number>;
     all(): AsyncIterableIterator<NameValue<dateTime.Timestamped<T>, TId>>;
     allObjects(): AsyncIterableIterator<dateTime.Timestamped<T>>;
-    allIds(): Promise<TId[]>;
     get(id: TId): Promise<dateTime.Timestamped<T> | undefined>;
     getMultiple(ids: TId[]): Promise<(dateTime.Timestamped<T> | undefined)[]>;
     getIdsInRange(startAt: Date, stopAt?: Date): Promise<TId[]>;
@@ -36,21 +35,17 @@ export interface TemporalLog<TId = any, T = any> {
     ): Promise<dateTime.Timestamped<T>[]>;
     put(value: T, timestamp?: Date): Promise<TId>;
 
-    newest(): AsyncIterableIterator<NameValue<dateTime.Timestamped<T>, TId>>;
     newestObjects(): AsyncIterableIterator<dateTime.Timestamped<T>>;
     getNewest(count: number): Promise<dateTime.Timestamped<T>[]>;
     getOldest(count: number): Promise<dateTime.Timestamped<T>[]>;
 
-    getPrevious(id: TId): Promise<dateTime.Timestamped<T> | undefined>;
-    getNext(id: TId): Promise<dateTime.Timestamped<T> | undefined>;
-
     getTimeRange(): Promise<DateRange | undefined>;
 
     remove(id: TId): Promise<void>;
-    removeInRange(startAt: Date, stopAt?: Date): Promise<TId[]>;
+    removeInRange(startAt: Date, stopAt: Date): Promise<void>;
     clear(): Promise<void>;
 
-    getUrl(id: TId): URL;
+    getUrl?: (id: TId) => URL;
 }
 
 export type TemporalLogSettings = {
@@ -73,19 +68,15 @@ export async function createTemporalLog<T>(
     return {
         size: sequence.size,
         all,
-        allIds: sequence.allNames,
         allObjects,
         get,
         getMultiple,
         getIdsInRange,
         getEntriesInRange,
         put,
-        newest,
         newestObjects,
         getNewest,
-        getPrevious,
         getOldest,
-        getNext,
         getTimeRange,
         getUrl,
         remove,
@@ -109,17 +100,6 @@ export async function createTemporalLog<T>(
     > {
         for await (const nv of sequence.all()) {
             yield dateTime.parseTimestamped<T>(nv.value);
-        }
-    }
-
-    async function* newest(): AsyncIterableIterator<
-        NameValue<dateTime.Timestamped<T>, TId>
-    > {
-        for await (const nv of sequence.newest()) {
-            yield {
-                name: nv.name,
-                value: dateTime.parseTimestamped<T>(nv.value),
-            };
         }
     }
 
@@ -183,28 +163,6 @@ export async function createTemporalLog<T>(
         return (await getMultiple(ids)) as dateTime.Timestamped<T>[];
     }
 
-    async function getPrevious(
-        id: TId,
-    ): Promise<dateTime.Timestamped<T> | undefined> {
-        const allIds = await sequence.allNames();
-        const pos = collections.binarySearch(allIds, id, strCmp);
-        if (pos <= 0) {
-            return undefined;
-        }
-        return await get(allIds[pos - 1]);
-    }
-
-    async function getNext(
-        id: TId,
-    ): Promise<dateTime.Timestamped<T> | undefined> {
-        const allIds = await sequence.allNames();
-        const pos = collections.binarySearch(allIds, id, strCmp);
-        if (pos < 0 || pos === allIds.length - 1) {
-            return undefined;
-        }
-        return await get(allIds[pos + 1]);
-    }
-
     async function getTimeRange(): Promise<DateRange | undefined> {
         // TODO: cache the time range.
         const allIds = await sequence.allNames();
@@ -230,12 +188,11 @@ export async function createTemporalLog<T>(
         sequence.remove(id);
     }
 
-    async function removeInRange(startAt: Date, stopAt?: Date): Promise<TId[]> {
+    async function removeInRange(startAt: Date, stopAt: Date): Promise<void> {
         const idsToRemove = await getIdsInRange(startAt, stopAt);
         for (const id of idsToRemove) {
             await sequence.remove(id);
         }
-        return idsToRemove;
     }
 
     function getUrl(id: string): URL {

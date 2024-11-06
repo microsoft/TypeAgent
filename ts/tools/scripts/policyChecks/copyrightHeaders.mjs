@@ -1,17 +1,29 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-const slashHeader = `// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.`;
+const copyrightText = "Copyright (c) Microsoft Corporation.";
+const licenseText = "Licensed under the MIT License.";
+const prefixHeader = (prefix) =>
+    `${prefix} ${copyrightText}\n${prefix} ${licenseText}`;
+const enclosedHeader = (prefix, suffix) =>
+    `${prefix} ${copyrightText}\n ${licenseText} ${suffix}`;
 
-const hashHeader = `# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT License.`;
+const slashHeader = prefixHeader("//");
+const hashHeader = prefixHeader("#");
+const cmdHeader = prefixHeader("::");
+const htmlHeader = enclosedHeader("<!--", "-->");
 
-const htmlHeader = `<!-- Copyright (c) Microsoft Corporation.
- Licensed under the MIT License. -->`;
-
-const cmdHeader = `:: Copyright (c) Microsoft Corporation.
-:: Licensed under the MIT License.`;
+function checkExtraCopyRight(header, content) {
+    const escaped = header.replaceAll(/([()\][{*+.$^\\|?])/g, "\\$1");
+    const regexp = new RegExp(
+        escaped.replace(
+            "Microsoft Corporation",
+            "Microsoft Corporation and .*",
+        ),
+        "my",
+    );
+    return regexp.test(content);
+}
 
 function checkCopyrightHeader(file, header, fix, skipFirstLineWithPrefix) {
     let firstLine = "";
@@ -23,13 +35,14 @@ function checkCopyrightHeader(file, header, fix, skipFirstLineWithPrefix) {
             content = content.slice(index + 1);
         }
     }
-    if (content.startsWith(header)) {
+    if (content.startsWith(header) || checkExtraCopyRight(header, content)) {
         return true;
     }
     if (fix) {
         file.content = `${firstLine}${header}\n\n${content}`;
         return false;
     }
+
     return "Header is missing";
 }
 

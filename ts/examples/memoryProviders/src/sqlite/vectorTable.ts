@@ -8,16 +8,20 @@ import {
     SimilarityType,
     VectorStore,
     createTopNList,
+    dotProduct,
     similarity,
 } from "typeagent";
-import { ColumnType, SqlColumnType } from "./common.js";
+import { ValueType, ValueDataType } from "knowledge-processor";
 
-export function createVectorStore<TKeyId extends ColumnType = string>(
+export interface VectorTable<TKeyId extends ValueType = string>
+    extends VectorStore<TKeyId> {}
+
+export function createVectorTable<TKeyId extends ValueType = string>(
     db: sqlite.Database,
     tableName: string,
-    keyType: SqlColumnType<TKeyId>,
+    keyType: ValueDataType<TKeyId>,
     ensureExists: boolean = true,
-): VectorStore<TKeyId> {
+): VectorTable<TKeyId> {
     const schemaSql = `  
     CREATE TABLE IF NOT EXISTS ${tableName} (  
       keyId ${keyType} PRIMARY KEY NOT NULL,
@@ -38,6 +42,14 @@ export function createVectorStore<TKeyId extends ColumnType = string>(
     );
     const sql_remove = db.prepare(`DELETE FROM ${tableName} WHERE keyId = ?`);
     const sql_all = db.prepare(`SELECT * from ${tableName}`);
+
+    /*
+    let dotProductParam: NormalizedEmbedding | undefined;
+    db.function("dotProduct_1", dotProduct_1);
+    const sql_dot1 = db.prepare(
+        `SELECT keyId as item, dotProduct_1(embedding) as score FROM ${tableName}`,
+    );
+    */
 
     return {
         exists,
@@ -74,7 +86,7 @@ export function createVectorStore<TKeyId extends ColumnType = string>(
         return Promise.resolve();
     }
 
-    async function nearestNeighbor(
+    function nearestNeighbor(
         value: Embedding,
         type: SimilarityType,
         minScore?: number,
@@ -83,21 +95,24 @@ export function createVectorStore<TKeyId extends ColumnType = string>(
         let bestScore = Number.MIN_VALUE;
         let bestKey: TKeyId | undefined;
         for (const row of allRows()) {
-            const score = similarity(deserialize(row.embedding), value, type);
+            //const score = similarity(deserialize(row.embedding), value, type);
+            const score = dotProduct(deserialize(row.embedding), value);
             if (score >= minScore && score > bestScore) {
                 bestScore = score;
                 bestKey = row.keyId;
             }
         }
-        return bestKey
-            ? {
-                  score: bestScore,
-                  item: bestKey,
-              }
-            : undefined;
+        return Promise.resolve(
+            bestKey
+                ? {
+                      score: bestScore,
+                      item: bestKey,
+                  }
+                : undefined,
+        );
     }
 
-    async function nearestNeighbors(
+    function nearestNeighbors(
         value: Embedding,
         maxMatches: number,
         type: SimilarityType,
@@ -115,7 +130,7 @@ export function createVectorStore<TKeyId extends ColumnType = string>(
                 matches.push(row.keyId, score);
             }
         }
-        return matches.byRank();
+        return Promise.resolve(matches.byRank());
     }
 
     function* allRows(): IterableIterator<VectorRow> {
@@ -127,6 +142,14 @@ export function createVectorStore<TKeyId extends ColumnType = string>(
     function deserialize(embedding: Buffer): Float32Array {
         return new Float32Array(embedding.buffer);
     }
+
+    /*
+    function dotProduct_1(xBuffer: unknown): number {
+        const x = deserialize(xBuffer as Buffer);
+        const y = dotProductParam!;
+        return dotProduct(x, y);
+    }
+    */
 
     type VectorRow = {
         keyId: TKeyId;

@@ -11,15 +11,7 @@ export type DesktopActions =
     | SetVolumeAction
     | RestoreVolumeAction
     | MuteVolumeAction
-    | UnknownAction;
-
-export type UnknownAction = {
-    actionName: "unknown";
-    parameters: {
-        // text typed by the user that the system did not understand
-        text: string;
-    };
-};
+    | SetWallpaperAction;
 
 // Launches a new program window on a Windows Desktop
 // Example:
@@ -97,6 +89,13 @@ export type MuteVolumeAction = {
     };
 };
 
+export type SetWallpaperAction = {
+    actionName: "setWallpaper";
+    parameters: {
+        filePath?: string; // The path to the file
+        url?: string; // The url to the image
+    };
+};
 export type KnownPrograms =
     | "chrome"
     | "word"

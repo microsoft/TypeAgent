@@ -20,7 +20,7 @@ import {
     AppAgentStateOptions,
 } from "../handlers/common/appAgentManager.js";
 import { cloneConfig, mergeConfig } from "./options.js";
-import { TokenCounter } from "aiclient";
+import { TokenCounter, TokenCounterData } from "aiclient";
 
 const debugSession = registerDebug("typeagent:session");
 
@@ -110,6 +110,13 @@ type DispatcherConfig = {
     bot: boolean;
     stream: boolean;
     explanation: boolean;
+    explanationOptions: {
+        rejectReferences: boolean;
+        retranslateWithoutContext: boolean;
+    };
+    promptOptions: {
+        additionalInstructions: boolean;
+    };
     switch: {
         inline: boolean;
         search: boolean;
@@ -142,6 +149,13 @@ const defaultSessionConfig: SessionConfig = {
     bot: true,
     stream: true,
     explanation: true,
+    explanationOptions: {
+        rejectReferences: true,
+        retranslateWithoutContext: true,
+    },
+    promptOptions: {
+        additionalInstructions: true,
+    },
     switch: {
         inline: true,
         search: true,
@@ -168,7 +182,7 @@ type SessionCacheData = {
 type SessionData = {
     config: SessionConfig;
     cacheData: SessionCacheData;
-    tokens?: TokenCounter;
+    tokens?: TokenCounterData;
 };
 
 // Fill in missing fields when loading sessions from disk
