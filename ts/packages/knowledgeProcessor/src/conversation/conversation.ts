@@ -24,7 +24,7 @@ import {
     TopicIndex,
     TopicMerger,
     TopicSearchOptions,
-    createTopicIndex,
+    createTopicIndexOnStorage,
     createTopicMerger,
     createTopicSearchOptions,
 } from "./topics.js";
@@ -421,11 +421,12 @@ export async function createConversation(
     }
 
     async function loadTopicIndex(name: string): Promise<TopicIndex> {
-        const index = await createTopicIndex<MessageId>(
+        const index = await createTopicIndexOnStorage<MessageId>(
             settings.indexSettings,
-            path.join(rootPath, name),
-            folderSettings,
-            fSys,
+            rootPath,
+            name,
+            storageProvider!,
+            "TEXT",
         );
         return index;
     }
