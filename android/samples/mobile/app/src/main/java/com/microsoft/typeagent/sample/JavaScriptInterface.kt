@@ -2,17 +2,33 @@ package com.microsoft.typeagent.sample
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.AlarmClock
 import android.util.Log
 import android.webkit.JavascriptInterface
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import androidx.core.content.ContextCompat.startActivity
+import de.andycandy.android.bridge.CallType
+import de.andycandy.android.bridge.DefaultJSInterface
+import de.andycandy.android.bridge.JSFunctionWithArg
+import de.andycandy.android.bridge.NativeCall
+import de.andycandy.android.bridge.Promise
 import java.time.LocalDateTime
 import java.util.Locale
+import java.util.concurrent.locks.Condition
+
+typealias SpeechRecognitionCallback = (String) -> Void;
 
 
-class JavaScriptInterface(var context: Context) {
+class JavaScriptInterface(var context: Context) : DefaultJSInterface("Android") {
+
+    public var speechCallback: SpeechRecognitionCallback? = null
+    public var speechPromise: Promise<String?>? = null
+    private var recoId: Int = 0
+    private val recoLocks: MutableMap<Int, Condition> = mutableMapOf()
+    private val recoCallbacks: MutableMap<Int, JSFunctionWithArg<String?>> = mutableMapOf()
 
     @JavascriptInterface
     fun showToast(message: String) {
@@ -62,5 +78,34 @@ class JavaScriptInterface(var context: Context) {
         val intent = Intent(Intent.ACTION_VIEW, uri)
         intent.setPackage("com.google.android.apps.maps")
         startActivity(context, intent, null)
+    }
+
+    @JavascriptInterface
+    fun isSpeechRecognitionSupported(): Boolean {
+        return PackageManager.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO)
+    }
+
+
+    /**
+     * Starts a recognition request, awaits the result and returns the result as a promise
+     */
+    @NativeCall(CallType.FULL_SYNC)
+    fun recognize(callback: JSFunctionWithArg<String?>) {
+        // set speech callback
+        val id = ++recoId;
+        recoCallbacks[id] = callback
+
+        // start speech reco
+        MainActivity.currentActivity!!.speechToText(id)
+    }
+
+    /**
+     * Calls recognition callbacks
+     */
+    fun recognitionComplete(id: Int, text: String?) {
+        if (recoCallbacks.containsKey(id)) {
+            recoCallbacks[id]!!.call(text)
+            recoLocks.remove(id)
+        }
     }
 }

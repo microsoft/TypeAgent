@@ -7,4 +7,16 @@ declare var Android: {
     callPhoneNumber: (phoneNumber: string) => void;
     sendSMS: (phoneNumber: string, message: string) => void;
     searchNearby: (searchTerm: string) => void;
+
+    // Speech Reco
+    isSpeechRecognitionSupported: () => boolean;
+    recognize: (callback: (test: string | undefined) => void) => void;
 };
+
+declare var Bridge: {
+    interfaces: {
+        Android: {
+            recognize: (callback: (test: string | undefined) => void) => void;
+        }
+    }
+}

@@ -338,7 +338,7 @@ export class ChatInput {
         this.attachButton.className = "chat-input-button";
 
         getSpeechToken().then((result) => {
-            if (result == undefined) {
+            if (result == undefined && !Android?.isSpeechRecognitionSupported()) {
                 const button = document.querySelector<HTMLButtonElement>(
                     `#${buttonId}`,
                 )!;
