@@ -85,6 +85,10 @@ export class TokenCounter {
         });
 
         debugTokens(
+            "Token Increment: " + JSON.stringify(tokens)
+        );
+        
+        debugTokens(
             "Token Odometer: " +
                 JSON.stringify(this.all.total) +
                 "\nAverage Tokens per call: " +

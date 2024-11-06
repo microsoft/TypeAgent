@@ -77,9 +77,15 @@ export async function runDesktopActions(
             let file = action.parameters.filePath;
             const rootTypeAgentDir = path.join(os.homedir(), ".typeagent");
 
-            // if the requested image a URL, then download it
+            // if the requested image is a URL, then download it
             if (action.parameters.url !== undefined) {
-                file = `../downloaded_images/${path.basename(action.parameters.url)}`;
+                // Remove any query parameters from the url and get just the file name
+                const parsedUrl = new URL(action.parameters.url);
+                const pathname = parsedUrl.pathname; 
+                const fileName = pathname.substring(pathname.lastIndexOf('/') + 1); 
+                
+                // build the relative path to where we will store the file
+                file = `../downloaded_images/${fileName}`;
                 if (path.extname(file).length == 0) {
                     file += ".png";
                 }
