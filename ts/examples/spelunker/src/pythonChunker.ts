@@ -20,6 +20,7 @@ export type IdType = string;
 export interface Blob {
     start: number; // int; 0-based!
     lines: string[];
+    breadcrumb?: boolean;
 }
 
 export interface Chunk {

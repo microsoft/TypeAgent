@@ -245,9 +245,9 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
-      readline-sync:
-        specifier: ^1.4.10
-        version: 1.4.10
+      interactive-app:
+        specifier: workspace:*
+        version: link:../../packages/interactiveApp
       typeagent:
         specifier: workspace:*
         version: link:../../packages/typeagent
