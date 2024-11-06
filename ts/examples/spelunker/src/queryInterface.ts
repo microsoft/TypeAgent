@@ -10,6 +10,12 @@ import { Chunk } from "./pythonChunker.js";
 import { wordWrap } from "./pythonImporter.js";
 import path from "path";
 
+type QueryOptions = {
+    maxHits: number;
+    minScore: number;
+    verbose: boolean;
+};
+
 export async function runQueryInterface(
     chunkFolder: ObjectFolder<Chunk>,
     codeIndex: SemanticCodeIndex,
@@ -21,15 +27,63 @@ export async function runQueryInterface(
     };
     iapp.addStandardHandlers(handlers);
 
-    handlers.search.metadata = "Search command (TODO)";
-    async function search(args: string[] | iapp.NamedArgs, io: iapp.InteractiveIo): Promise<void> {
-        await processQuery("why is the sky blue", chunkFolder, codeIndex, summaryFolder, verbose);
+    function searchDef(): iapp.CommandMetadata {
+        return {
+            description: "Search for a query string in the code index.",
+            args: {
+                query: {
+                    description: "Natural language query",
+                    type: "string",
+                },
+            },
+            options: {
+                maxHits: {
+                    description: "Maximum number of hits to return",
+                    type: "integer",
+                    defaultValue: 10,
+                },
+                minScore: {
+                    description: "Minimum score to return",
+                    type: "number",
+                    defaultValue: 0.7,
+                },
+                verbose: {
+                    description: "More verbose output",
+                    type: "boolean",
+                },
+            },
+        };
     }
+    handlers.search.metadata = searchDef();
+    async function search(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        const namedArgs = iapp.parseNamedArguments(args, searchDef());
+        const query: string = namedArgs.query;
+        const options: QueryOptions = {
+            maxHits: namedArgs.maxHits,
+            minScore: namedArgs.minScore,
+            verbose: namedArgs.verbose ?? verbose,
+        };
+        await processQuery(
+            query,
+            chunkFolder,
+            codeIndex,
+            summaryFolder,
+            options,
+        );
+    }
+
+    // Define special handlers, then run the console loop.
 
     async function onStart(io: iapp.InteractiveIo): Promise<void> {
         io.writer.writeLine("Welcome to the query interface!");
     }
-    async function inputHandler(input: string, io: iapp.InteractiveIo): Promise<void> {
+    async function inputHandler(
+        input: string,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
         io.writer.writeLine("Use @ command prefix; see @help.");
     }
 
@@ -45,11 +99,11 @@ async function processQuery(
     chunkFolder: ObjectFolder<Chunk>,
     codeIndex: SemanticCodeIndex,
     summaryFolder: ObjectFolder<CodeDocumentation>,
-    verbose = false,
+    options: QueryOptions,
 ): Promise<void> {
     let hits;
     try {
-        hits = await codeIndex.find(input, 2);
+        hits = await codeIndex.find(input, options.maxHits, options.minScore);
     } catch (error) {
         console.log(`[${error}]`);
         return;
@@ -57,6 +111,9 @@ async function processQuery(
     console.log(
         `Got ${hits.length} hit${hits.length == 0 ? "s." : hits.length === 1 ? ":" : "s:"}`,
     );
+
+    if (!options.verbose) return;
+
     for (let i = 0; i < hits.length; i++) {
         const hit = hits[i];
         const chunk: Chunk | undefined = await chunkFolder.get(hit.item);
@@ -84,7 +141,7 @@ async function processQuery(
                     );
                 }
                 console.log("");
-                if (!verbose) break;
+                if (!options.verbose) break;
             }
         }
     }
