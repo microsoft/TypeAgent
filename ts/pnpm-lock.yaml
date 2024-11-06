@@ -92,6 +92,55 @@ importers:
         specifier: ^5.4.2
         version: 5.4.3
 
+  examples/markdownEdit:
+    dependencies:
+      aiclient:
+        specifier: workspace:*
+        version: link:../../packages/aiclient
+      common-utils:
+        specifier: workspace:*
+        version: link:../../packages/commonUtils
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.3.1
+      find-config:
+        specifier: ^1.0.0
+        version: 1.0.0
+      jsonpath:
+        specifier: ^1.1.1
+        version: 1.1.1
+      typeagent:
+        specifier: workspace:*
+        version: link:../../packages/typeagent
+      typechat:
+        specifier: ^0.1.0
+        version: 0.1.1(typescript@5.4.3)
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+      ws:
+        specifier: ^8.17.1
+        version: 8.17.1
+    devDependencies:
+      '@types/find-config':
+        specifier: 1.0.4
+        version: 1.0.4
+      '@types/jsonpath':
+        specifier: ^0.2.4
+        version: 0.2.4
+      '@types/node':
+        specifier: ^18.18.7
+        version: 18.18.7
+      '@types/ws':
+        specifier: ^8.5.10
+        version: 8.5.10
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+
   examples/memoryProviders:
     dependencies:
       better-sqlite3:
@@ -334,9 +383,6 @@ importers:
       markdown-it:
         specifier: ^14.1.0
         version: 14.1.0
-      markdown-it-task-lists:
-        specifier: ^2.1.1
-        version: 2.1.1
       markdown-it-texmath:
         specifier: ^1.0.0
         version: 1.0.0
@@ -860,6 +906,43 @@ importers:
         specifier: workspace:*
         version: link:../../agentSdk
     devDependencies:
+      prettier:
+        specifier: ^3.2.5
+        version: 3.2.5
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+
+  packages/agents/markdown:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+      aiclient:
+        specifier: workspace:*
+        version: link:../../aiclient
+      chat-agent:
+        specifier: workspace:*
+        version: link:../chat
+      common-utils:
+        specifier: workspace:*
+        version: link:../../commonUtils
+      knowledge-processor:
+        specifier: workspace:*
+        version: link:../../knowledgeProcessor
+      typeagent:
+        specifier: workspace:*
+        version: link:../../typeagent
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.3)
+    devDependencies:
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
       prettier:
         specifier: ^3.2.5
         version: 3.2.5
@@ -1428,6 +1511,9 @@ importers:
       list-agent:
         specifier: workspace:*
         version: link:../agents/list
+      markdown-agent:
+        specifier: workspace:*
+        version: link:../agents/markdown
       music:
         specifier: workspace:*
         version: link:../agents/player
@@ -5801,9 +5887,6 @@ packages:
 
   makeerror@1.0.12:
     resolution: {integrity: sha512-JmqCvUhmt43madlpFzG4BQzG2Z3m6tvQDNKdClZnO3VbIudJYmxsT0FNJMeiB2+JTSlTQTSbU8QdesVmwJcmLg==}
-
-  markdown-it-task-lists@2.1.1:
-    resolution: {integrity: sha512-TxFAc76Jnhb2OUu+n3yz9RMu4CwGfaT788br6HhEDlvWfdeJcLUsxk1Hgw2yJio0OXsxv7pyIPmvECY7bMbluA==}
 
   markdown-it-texmath@1.0.0:
     resolution: {integrity: sha512-4hhkiX8/gus+6e53PLCUmUrsa6ZWGgJW2XCW6O0ASvZUiezIK900ZicinTDtG3kAO2kon7oUA/ReWmpW2FByxg==}
@@ -12789,8 +12872,6 @@ snapshots:
   makeerror@1.0.12:
     dependencies:
       tmpl: 1.0.5
-
-  markdown-it-task-lists@2.1.1: {}
 
   markdown-it-texmath@1.0.0: {}
 

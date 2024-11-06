@@ -3,7 +3,6 @@
 
 import Server from "webpack-dev-server";
 import fs from "fs";
-import { fileURLToPath } from "node:url";
 import { getSessionsDirPath } from "agent-dispatcher/explorer";
 import path from "node:path";
 
@@ -12,7 +11,7 @@ import { GeoJSONPlugin } from "./plugins/geoJson.js";
 import { MermaidPlugin } from "./plugins/mermaid.js";
 import { LatexPlugin } from "./plugins/latex.js";
 
-export function getListFilePath() {
+export function getMarkdownFilePath() {
     const sessionsDir = getSessionsDirPath();
     const dirent = fs.readdirSync(sessionsDir, { withFileTypes: true });
     const sessions = dirent.filter((d) => d.isDirectory()).map((d) => d.name);
@@ -28,7 +27,7 @@ export function getListFilePath() {
         }
     });
 
-    return path.join(getSessionsDirPath(), sessions[0], "list", "lists.json");
+    return path.join(getSessionsDirPath(), sessions[0], "markdown", "live.md");
 }
 
 export function setupMiddlewares(
@@ -43,8 +42,7 @@ export function setupMiddlewares(
 
     let clients: any[] = [];
 
-    const dirName = fileURLToPath(new URL(".", import.meta.url));
-    const filePath = path.join(dirName, "../public/sample.md");
+    const filePath = process.env.MARKDOWN_FILE || getMarkdownFilePath();
 
     app.get("/preview", (req, res) => {
         const fileContent = fs.readFileSync(filePath, "utf-8");
@@ -68,7 +66,6 @@ export function setupMiddlewares(
     fs.watchFile(filePath, () => {
         const fileContent = fs.readFileSync(filePath, "utf-8");
         const htmlContent = md.render(fileContent);
-        // const htmlContent = marked(fileContent);
 
         clients.forEach((client) => {
             client.write(`data: ${htmlContent}\n\n`);
