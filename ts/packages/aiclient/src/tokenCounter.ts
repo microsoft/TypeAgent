@@ -84,6 +84,8 @@ export class TokenCounter {
             updateStats(data, tokens);
         });
 
+        debugTokens("Token Increment: " + JSON.stringify(tokens));
+
         debugTokens(
             "Token Odometer: " +
                 JSON.stringify(this.all.total) +
