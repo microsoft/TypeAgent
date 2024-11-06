@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.AlarmClock
+import android.util.Log
 import android.webkit.JavascriptInterface
 import android.widget.Toast
 import androidx.core.content.ContextCompat.startActivity
@@ -29,6 +30,7 @@ class JavaScriptInterface(var context: Context) {
 
     @JavascriptInterface
     fun setAlarm(time: String) {
+        Log.i("javascript", "setAlarm")
         val t: LocalDateTime = LocalDateTime.parse(time);
         val intent = Intent(AlarmClock.ACTION_SET_ALARM)
             .putExtra(AlarmClock.EXTRA_HOUR, t.hour)
@@ -38,6 +40,7 @@ class JavaScriptInterface(var context: Context) {
 
     @JavascriptInterface
     fun callPhoneNumber(phoneNumber: String) {
+        Log.i("javascript", "callPhoneNumber")
         val uri = String.format(Locale.ROOT, "tel:%s", phoneNumber)
         val intent = Intent(Intent.ACTION_CALL, Uri.parse(uri))
         startActivity(context, intent, null);
@@ -45,6 +48,7 @@ class JavaScriptInterface(var context: Context) {
 
     @JavascriptInterface
      fun sendSMS(phoneNumber: String, message: String) {
+         Log.i("javascript", "sendSMS")
         val uri = String.format(Locale.ROOT, "smsto:%s", phoneNumber)
         val intent = Intent(Intent.ACTION_SENDTO, Uri.parse(uri))
             .putExtra("sms_body", message);
@@ -53,6 +57,7 @@ class JavaScriptInterface(var context: Context) {
 
     @JavascriptInterface
     fun searchNearby(searchTerm: String) {
+        Log.i("javascript", "searchNearby")
         val uri = Uri.parse("geo:0,0?q=$searchTerm")
         val intent = Intent(Intent.ACTION_VIEW, uri)
         intent.setPackage("com.google.android.apps.maps")

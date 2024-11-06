@@ -210,24 +210,27 @@ function addEvents(
             switch (action) {
                 case "show-camera": {
                     cameraView.show();
-                    return;
+                    break;
                 }
                 case "set-alarm": {
                     let d: any = data;
                     Android?.setAlarm(d.time);
-                    return;
+                    break;
                 }
                 case "call-phonenumber": {
                     let d: any = data;
                     Android?.callPhoneNumber(d.phoneNumber);
+                    break;
                 }
                 case "send-sms": {
                     let d: any = data;
                     Android?.sendSMS(d.phoneNumber, d.message);
+                    break;
                 }
                 case "search-nearby": {
                     let d: any = data;
                     Android?.searchNearby(d.searchTerm);
+                    break;
                 }
             }
         } catch (e) {
