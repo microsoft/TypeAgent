@@ -68,7 +68,7 @@ export function setupMiddlewares(
         const htmlContent = md.render(fileContent);
 
         clients.forEach((client) => {
-            client.write(`data: ${htmlContent}\n\n`);
+            client.write(`data: ${encodeURIComponent(htmlContent)}\n\n`);
         });
     });
 
