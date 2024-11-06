@@ -23,11 +23,11 @@ export interface KeyValueTable<
     iterateMultiple(ids: TKeyId[]): IterableIterator<TValueId> | undefined;
     iterateMultipleScored(
         items: ScoredItem<TKeyId>[],
-    ): IterableIterator<ScoredItem<TValueId>>;
+    ): IterableIterator<ScoredItem<TValueId>> | undefined;
     getHits(
         ids: TKeyId[],
         join?: string,
-    ): IterableIterator<ScoredItem<TValueId>>;
+    ): IterableIterator<ScoredItem<TValueId>> | undefined;
 }
 
 export function createKeyValueTable<
@@ -140,7 +140,10 @@ export function createKeyValueTable<
 
     function iterateMultipleScored(
         items: ScoredItem<TKeyId>[],
-    ): IterableIterator<ScoredItem<TValueId>> {
+    ): IterableIterator<ScoredItem<TValueId>> | undefined {
+        if (items.length === 0) {
+            return undefined;
+        }
         const sql = sql_multipleScored(items);
         const stmt = db.prepare(sql);
         return stmt.iterate() as IterableIterator<ScoredItem<TValueId>>;
@@ -163,7 +166,10 @@ export function createKeyValueTable<
     function* getHits(
         ids: TKeyId[],
         join?: string,
-    ): IterableIterator<ScoredItem<TValueId>> {
+    ): IterableIterator<ScoredItem<TValueId>> | undefined {
+        if (ids.length === 0) {
+            return undefined;
+        }
         const sql = join
             ? `SELECT valueId AS item, count(*) AS score FROM ${tableName}
         ${join} AND keyId IN (${ids})

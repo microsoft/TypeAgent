@@ -8,7 +8,6 @@ import {
 } from "typeagent";
 import { TextIndexSettings } from "./knowledgeIndex.js";
 import { TemporalLog } from "./temporal.js";
-import path from "path";
 import { removeUndefined } from "./setOperations.js";
 import {
     createFileSystemStorageProvider,
@@ -51,7 +50,7 @@ export async function createKnowledgeStoreOnStorage<T>(
             rootPath,
             "sequence",
         ),
-        storageProvider.createObjectFolder<T>(path.join(rootPath, "entries")),
+        storageProvider.createObjectFolder<T>(rootPath, "entries"),
     ]);
 
     return {

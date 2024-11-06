@@ -32,10 +32,11 @@ export async function createStorageDb(
     };
 
     async function _createObjectFolder<T>(
-        folderPath: string,
+        basePath: string,
+        name: string,
         settings?: ObjectFolderSettings,
     ): Promise<ObjectFolder<T>> {
-        return createObjectTable<T>(db, folderPath, settings);
+        return createObjectTable<T>(db, getTablePath(basePath, name), settings);
     }
 
     async function _createTemporalLog<T>(
@@ -81,7 +82,10 @@ export async function createStorageDb(
 
     function getTablePath(basePath: string, name: string): string {
         basePath = basePath.replace(rootPath, "");
-        const baseDir = path.basename(basePath);
+        const baseDir = path
+            .basename(basePath)
+            .replaceAll("/", "_")
+            .replaceAll("\\", "_");
         return tablePath(baseDir, name);
     }
 }
