@@ -11,6 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { downloadImage } from "common-utils";
+import { randomUUID } from "crypto";
 
 const debug = registerDebug("typeagent:desktop");
 const debugData = registerDebug("typeagent:desktop:data");
@@ -81,11 +82,12 @@ export async function runDesktopActions(
             if (action.parameters.url !== undefined) {
                 // Remove any query parameters from the url and get just the file name
                 const parsedUrl = new URL(action.parameters.url);
-                const pathname = parsedUrl.pathname; 
-                const fileName = pathname.substring(pathname.lastIndexOf('/') + 1); 
+                const urlPath = parsedUrl.pathname; 
+                const urlFileName = urlPath.substring(urlPath.lastIndexOf('/') + 1); 
                 
-                // build the relative path to where we will store the file
-                file = `../downloaded_images/${fileName}`;
+                // Download the file and store it with a unique file name
+                const id = randomUUID();
+                file = `../downloaded_images/${id.toString()}${path.extname(urlFileName)}`;
                 if (path.extname(file).length == 0) {
                     file += ".png";
                 }
