@@ -82,9 +82,11 @@ export async function runDesktopActions(
             if (action.parameters.url !== undefined) {
                 // Remove any query parameters from the url and get just the file name
                 const parsedUrl = new URL(action.parameters.url);
-                const urlPath = parsedUrl.pathname; 
-                const urlFileName = urlPath.substring(urlPath.lastIndexOf('/') + 1); 
-                
+                const urlPath = parsedUrl.pathname;
+                const urlFileName = urlPath.substring(
+                    urlPath.lastIndexOf("/") + 1,
+                );
+
                 // Download the file and store it with a unique file name
                 const id = randomUUID();
                 file = `../downloaded_images/${id.toString()}${path.extname(urlFileName)}`;
