@@ -8,7 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
     eventSource.onmessage = function (event: MessageEvent) {
         const contentElement = document.getElementById("content");
         if (contentElement) {
-            contentElement.innerHTML = event.data;
+            contentElement.innerHTML = decodeURIComponent(event.data);
             mermaid.init(
                 undefined,
                 contentElement.querySelectorAll(".mermaid"),
