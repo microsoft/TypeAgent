@@ -5,7 +5,7 @@
 
 import { CodeDocumentation, SemanticCodeIndex } from "code-processor";
 import * as iapp from "interactive-app";
-import { ObjectFolder } from "typeagent";
+import { ObjectFolder, ScoredItem } from "typeagent";
 import { Chunk } from "./pythonChunker.js";
 import { wordWrap } from "./pythonImporter.js";
 import path from "path";
@@ -71,6 +71,7 @@ export async function runQueryInterface(
             chunkFolder,
             codeIndex,
             summaryFolder,
+            io,
             options,
         );
     }
@@ -99,49 +100,53 @@ async function processQuery(
     chunkFolder: ObjectFolder<Chunk>,
     codeIndex: SemanticCodeIndex,
     summaryFolder: ObjectFolder<CodeDocumentation>,
+    io: iapp.InteractiveIo,
     options: QueryOptions,
 ): Promise<void> {
-    let hits;
+    let hits: ScoredItem<string>[];
     try {
         hits = await codeIndex.find(input, options.maxHits, options.minScore);
     } catch (error) {
-        console.log(`[${error}]`);
+        io.writer.writeLine(`[${error}]`);
         return;
     }
-    console.log(
+    io.writer.writeLine(
         `Got ${hits.length} hit${hits.length == 0 ? "s." : hits.length === 1 ? ":" : "s:"}`,
     );
-
-    if (!options.verbose) return;
 
     for (let i = 0; i < hits.length; i++) {
         const hit = hits[i];
         const chunk: Chunk | undefined = await chunkFolder.get(hit.item);
         if (!chunk) {
-            console.log(hit, "--> [No data]");
-        } else {
-            console.log(
-                `Hit ${i + 1}: score: ${hit.score.toFixed(3)}, ` +
-                    `id: ${chunk.id}, ` +
-                    `file: ${path.relative(process.cwd(), chunk.filename!)}, ` +
-                    `type: ${chunk.treeName}`,
-            );
-            const summary: CodeDocumentation | undefined =
-                await summaryFolder.get(hit.item);
-            if (summary?.comments?.length) {
-                for (const comment of summary.comments)
-                    console.log(
-                        wordWrap(`${comment.comment} (${comment.lineNumber})`),
-                    );
-            }
-            for (const blob of chunk.blobs) {
-                for (let index = 0; index < blob.lines.length; index++) {
-                    console.log(
-                        `${(1 + blob.start + index).toString().padStart(3)}: ${blob.lines[index].trimEnd()}`,
-                    );
+            io.writer.writeLine(`${hit} --> [No data]`);
+            continue;
+        }
+
+        io.writer.writeLine(
+            `Hit ${i + 1}: score: ${hit.score.toFixed(3)}, ` +
+                `id: ${chunk.id}, ` +
+                `file: ${path.relative(process.cwd(), chunk.filename!)}, ` +
+                `type: ${chunk.treeName}`,
+        );
+        const summary: CodeDocumentation | undefined = await summaryFolder.get(
+            hit.item,
+        );
+        if (summary?.comments?.length) {
+            for (const comment of summary.comments)
+                io.writer.writeLine(
+                    wordWrap(`${comment.comment} (${comment.lineNumber})`),
+                );
+        }
+        let lineBudget = options.verbose ? 100 : 10;
+        outer: for (const blob of chunk.blobs) {
+            for (let i = 0; i < blob.lines.length; i++) {
+                if (lineBudget-- <= 0) {
+                    io.writer.writeLine("...");
+                    break outer;
                 }
-                console.log("");
-                if (!options.verbose) break;
+                io.writer.writeLine(
+                    `${(1 + blob.start + i).toString().padStart(6)}: ${blob.lines[i].trimEnd()}`,
+                );
             }
         }
     }
