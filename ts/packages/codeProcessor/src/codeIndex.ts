@@ -15,7 +15,11 @@ import path from "path";
 import { CodeDocumentation } from "./codeDocSchema.js";
 
 export interface SemanticCodeIndex {
-    find(question: string, maxMatches: number, minScore?: number): Promise<ScoredItem<string>[]>;
+    find(
+        question: string,
+        maxMatches: number,
+        minScore?: number,
+    ): Promise<ScoredItem<string>[]>;
     get(name: string): Promise<StoredCodeBlock | undefined>;
     put(
         code: CodeBlock,
