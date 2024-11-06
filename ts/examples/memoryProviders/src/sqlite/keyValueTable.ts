@@ -3,12 +3,12 @@
 
 import * as sqlite from "better-sqlite3";
 import * as knowLib from "knowledge-processor";
-import { ColumnType, SqlColumnType } from "./common.js";
+import { ValueType, ValueDataType } from "knowledge-processor";
 import { ScoredItem } from "typeagent";
 
 export interface KeyValueTable<
-    TKeyId extends ColumnType = string,
-    TValueId extends ColumnType = string,
+    TKeyId extends ValueType = string,
+    TValueId extends ValueType = string,
 > extends knowLib.KeyValueIndex<TKeyId, TValueId> {
     readonly schemaSql: string;
     readonly tableName: string;
@@ -31,13 +31,13 @@ export interface KeyValueTable<
 }
 
 export function createKeyValueTable<
-    TKeyId extends ColumnType = string,
-    TValueId extends ColumnType = string,
+    TKeyId extends ValueType = string,
+    TValueId extends ValueType = string,
 >(
     db: sqlite.Database,
     tableName: string,
-    keyType: SqlColumnType<TKeyId>,
-    valueType: SqlColumnType<TValueId>,
+    keyType: ValueDataType<TKeyId>,
+    valueType: ValueDataType<TValueId>,
     ensureExists: boolean = true,
 ): KeyValueTable<TKeyId, TValueId> {
     const schemaSql = `  

@@ -5,10 +5,8 @@ import * as sqlite from "better-sqlite3";
 
 import {
     AssignedId,
-    ColumnType,
     getTypeSerializer,
     sql_makeInClause,
-    SqlColumnType,
     tablePath,
 } from "./common.js";
 import { createKeyValueTable } from "./keyValueTable.js";
@@ -18,6 +16,7 @@ import {
     TextIndex,
     TextIndexSettings,
 } from "knowledge-processor";
+import { ValueType, ValueDataType } from "knowledge-processor";
 import {
     asyncArray,
     collections,
@@ -194,14 +193,14 @@ export interface TextTable<TTextId = any, TSourceId = any>
 }
 
 export async function createTextIndex<
-    TTextId extends ColumnType = number,
-    TSourceId extends ColumnType = string,
+    TTextId extends ValueType = number,
+    TSourceId extends ValueType = string,
 >(
     settings: TextIndexSettings,
     db: sqlite.Database,
     baseName: string,
-    textIdType: SqlColumnType<TTextId>,
-    valueType: SqlColumnType<TSourceId>,
+    textIdType: ValueDataType<TTextId>,
+    valueType: ValueDataType<TSourceId>,
     ensureExists: boolean = true,
 ): Promise<TextTable<TTextId, TSourceId>> {
     type TextId = number;

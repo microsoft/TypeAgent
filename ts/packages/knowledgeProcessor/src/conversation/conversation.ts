@@ -35,7 +35,7 @@ import {
 import {
     EntityIndex,
     EntitySearchOptions,
-    createEntityIndex,
+    createEntityIndexOnStorage,
     createEntitySearchOptions,
 } from "./entities.js";
 import { ExtractedKnowledge } from "./knowledge.js";
@@ -45,7 +45,7 @@ import { MessageIndex, createMessageIndex } from "./messages.js";
 import {
     ActionIndex,
     ActionSearchOptions,
-    createActionIndex,
+    createActionIndexOnStorage,
     createActionSearchOptions,
 } from "./actions.js";
 import { SearchTermsAction, TermFilter } from "./knowledgeTermSearchSchema.js";
@@ -57,6 +57,10 @@ import { getAllTermsInFilter } from "./searchProcessor.js";
 import { TypeChatLanguageModel } from "typechat";
 import { TextEmbeddingModel } from "aiclient";
 import { createSearchResponse, SearchResponse } from "./searchResponse.js";
+import {
+    createFileSystemStorageProvider,
+    StorageProvider,
+} from "../storageProvider.js";
 
 export interface RecentItems<T> {
     readonly entries: collections.CircularArray<T>;
@@ -254,6 +258,7 @@ export async function createConversation(
     rootPath: string,
     folderSettings?: ObjectFolderSettings | undefined,
     fSys?: FileSystem | undefined,
+    storageProvider?: StorageProvider,
 ): Promise<Conversation<string, string, string>> {
     type MessageId = string;
     type TopicId = string;
@@ -265,6 +270,7 @@ export async function createConversation(
         cacheNames: true,
         useWeakRefs: true,
     };
+    storageProvider ??= createFileSystemStorageProvider(folderSettings, fSys);
     const messages = await createTextStore(
         { concurrency: settings.indexSettings.concurrency },
         path.join(rootPath, "messages"),
@@ -326,11 +332,10 @@ export async function createConversation(
 
     async function getEntityIndex(): Promise<EntityIndex> {
         if (!entityIndex) {
-            entityIndex = await createEntityIndex<MessageId>(
+            entityIndex = await createEntityIndexOnStorage<MessageId>(
                 settings.indexSettings,
                 entityPath,
-                folderSettings,
-                fSys,
+                storageProvider!,
             );
         }
         return entityIndex;
@@ -342,12 +347,11 @@ export async function createConversation(
 
     async function getActionIndex(): Promise<ActionIndex> {
         if (!actionIndex) {
-            actionIndex = await createActionIndex<MessageId>(
+            actionIndex = await createActionIndexOnStorage<MessageId>(
                 settings.indexSettings,
                 getEntityNameIndex,
                 actionPath,
-                folderSettings,
-                fSys,
+                storageProvider!,
             );
         }
         return actionIndex;

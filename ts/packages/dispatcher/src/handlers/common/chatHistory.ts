@@ -30,7 +30,7 @@ export interface ChatHistory {
         additionalInstructions?: string[],
     ): void;
     getEntry(id: string): ChatHistoryEntry | undefined;
-    getCurrentInstructions(): string[];
+    getCurrentInstructions(): string[] | undefined;
     getPromptSections(): PromptSection[];
 }
 
@@ -103,10 +103,10 @@ export function createChatHistory(): ChatHistory {
             }
             return sections;
         },
-        getCurrentInstructions(): string[] {
+        getCurrentInstructions(): string[] | undefined {
             const instructions: string[] = [];
             if (this.entries.length === 0) {
-                return instructions;
+                return undefined;
             }
             let i = this.entries.length - 1;
             if (this.entries[i].role === "user") {
@@ -122,7 +122,7 @@ export function createChatHistory(): ChatHistory {
                 }
                 i--;
             }
-            return instructions;
+            return instructions.length > 0 ? instructions : undefined;
         },
         addEntry(
             text: string,
