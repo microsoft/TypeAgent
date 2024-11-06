@@ -27,7 +27,7 @@ from dataclasses import dataclass
 import datetime
 import json
 import sys
-from typing import Iterator
+from typing import Any, Iterator
 
 
 @dataclass
@@ -36,12 +36,16 @@ class Blob:
 
     start: int  # 0-based!
     lines: list[str]
+    breadcrumb: bool = False # True for blobs that should be ignored in the reconstruction
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        result: dict[str, Any] = {
             "start": self.start,
             "lines": self.lines,
         }
+        if self.breadcrumb:
+            result["breadcrumb"] = True
+        return result
 
 
 IdType = str
@@ -186,6 +190,22 @@ def extract_blob(lines: list[str], node: ast.AST) -> Blob:
     return Blob(start, lines[start:end])  # type: ignore
 
 
+def summarize_chunk(chunk: Chunk, node: ast.AST) -> list[str]:
+    """Summarize a chunk into a summary to insert in the parent chunk."""
+    summary: list[str] = []
+    indent: str = node.col_offset * " "  # type: ignore
+    if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+        decorators: list[ast.AST] = node.decorator_list  # type: ignore
+        for d in decorators:
+            if isinstance(d, ast.Name) and d.id == "property":
+                summary.append(f"{indent}@property")
+    if isinstance(node, ast.FunctionDef):
+        summary.append(f"{indent}def {node.name}...")
+    elif isinstance(node, ast.ClassDef):
+        summary.append(f"{indent}class {node.name}...")
+    return summary
+
+
 def create_chunks_recursively(
     lines: list[str], tree: ast.AST, parent: Chunk
 ) -> list[Chunk]:
@@ -212,6 +232,9 @@ def create_chunks_recursively(
             last_end = last_blob.start + len(last_blob.lines)
             if parent_start <= last_end and last_end <= parent_end:
                 parent.blobs.append(Blob(parent_start, lines[parent_start:first_start]))
+                summary = summarize_chunk(chunk, node)
+                if summary:
+                    parent.blobs.append(Blob(first_start, summary, breadcrumb=True))
                 parent.blobs.append(Blob(last_end, lines[last_end:parent_end]))
 
     return chunks

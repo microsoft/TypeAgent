@@ -46,12 +46,12 @@ export function createTemporalLogTable<
     const isValueInt = valueType === "INTEGER";
     const schemaSql = `  
     CREATE TABLE IF NOT EXISTS ${tableName} (
-      logId ${keyType} PRIMARY KEY AUTOINCREMENT,
+      logId INTEGER PRIMARY KEY AUTOINCREMENT,
       timestamp TEXT NOT NULL,
       dateTime TEXT NOT NULL,
       value ${valueType} NOT NULL
     );
-    CREATE INDEX idx_${tableName}_timestamp ON ${tableName} (timestamp);
+    CREATE INDEX IF NOT EXISTS idx_${tableName}_timestamp ON ${tableName} (timestamp);
     `;
 
     if (ensureExists) {
