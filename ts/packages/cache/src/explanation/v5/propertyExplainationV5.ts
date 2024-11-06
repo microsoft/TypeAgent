@@ -142,16 +142,6 @@ function validatePropertyExplanation(
                 }
             }
 
-            if (
-                config?.rejectReferences === true &&
-                typeof prop.value === "string" &&
-                langTool?.possibleReferentialPhrase(prop.value.toLowerCase())
-            ) {
-                throw new Error(
-                    "Request contains a possible referential phrase used for property values.",
-                );
-            }
-
             const lowerCaseRequest = requestAction.request.toLowerCase();
             for (const substring of prop.substrings) {
                 if (!lowerCaseRequest.includes(substring.toLowerCase())) {
