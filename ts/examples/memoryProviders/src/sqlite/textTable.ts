@@ -344,13 +344,18 @@ export async function createTextIndex<
         return ids;
     }
 
-    function getExactHits(
+    function* getExactHits(
         values: string[],
         join?: string,
     ): IterableIterator<ScoredItem<TSourceId>> {
         // TODO: use a JOIN
         const textIds = [...textTable.getIds(values)];
-        return postingsTable.getHits(textIds, join);
+        const hits = postingsTable.getHits(textIds, join);
+        if (hits) {
+            for (const hit of hits) {
+                yield hit;
+            }
+        }
     }
 
     async function getNearest(
@@ -409,7 +414,9 @@ export async function createTextIndex<
             );
             const scoredPostings =
                 postingsTable.iterateMultipleScored(scoredIds);
-            hitTable.addMultipleScored(scoredPostings);
+            if (scoredPostings) {
+                hitTable.addMultipleScored(scoredPostings);
+            }
         }
     }
 
@@ -431,7 +438,9 @@ export async function createTextIndex<
             scoredIds = boostScore(scoredIds, scoreBoost);
             const scoredPostings =
                 postingsTable.iterateMultipleScored(scoredIds);
-            hitTable.addMultipleScored(scoredPostings);
+            if (scoredPostings) {
+                hitTable.addMultipleScored(scoredPostings);
+            }
         }
     }
 
@@ -600,7 +609,7 @@ export async function createTextIndex<
         matchedIds = [
             ...knowLib.sets.unionMultipleScored(matchedIds, nearestIds),
         ];
-        return matchedIds;
+        return matchedIds.length > 0 ? matchedIds : undefined;
     }
 
     async function getNearestTextIds(
