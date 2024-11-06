@@ -1,6 +1,5 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-// import mermaid from 'mermaid';
 
 document.addEventListener("DOMContentLoaded", () => {
     const eventSource = new EventSource("/events");

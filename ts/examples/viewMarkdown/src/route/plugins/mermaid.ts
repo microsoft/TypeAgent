@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import MarkdownIt from "markdown-it";
 
 export function MermaidPlugin(md: MarkdownIt) {

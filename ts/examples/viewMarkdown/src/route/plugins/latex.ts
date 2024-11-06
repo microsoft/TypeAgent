@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import MarkdownIt from "markdown-it";
 // @ts-ignore
 import markdownItTexmath from "markdown-it-texmath";
