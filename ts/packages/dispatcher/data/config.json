@@ -83,6 +83,10 @@
       "type": "module",
       "name": "image-agent",
       "execMode": "dispatcher"
+    },
+    "markdown": {
+      "type": "module",
+      "name": "markdown-agent"
     }
   },
   "explainers": {

@@ -1,0 +1,9 @@
+{
+  "emojiChar": "🗎",
+  "description": "Agent to create and update markdown files",
+  "schema": {
+    "description": "Markdown editing agent that updates documents using Github markdown flavor.",
+    "schemaFile": "./markdownActionSchema.ts",
+    "schemaType": "MarkdownAction"
+  }
+}

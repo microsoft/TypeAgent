@@ -17,11 +17,7 @@ import {
     createJsonTranslator,
 } from "typechat";
 import { AggregateTopicResponse } from "./aggregateTopicSchema.js";
-import {
-    TextIndex,
-    TextIndexSettings,
-    createTextIndex,
-} from "../knowledgeIndex.js";
+import { TextIndex, TextIndexSettings } from "../knowledgeIndex.js";
 import path from "path";
 import {
     SourceTextBlock,
@@ -33,7 +29,6 @@ import {
 import { TopicFilter } from "./knowledgeSearchSchema.js";
 import {
     TemporalLog,
-    createTemporalLog,
     filterTemporalSequence,
     getRangeOfTemporalSequence,
     itemsFromTemporalSequence,
@@ -51,6 +46,12 @@ import { createRecentItemsWindow } from "./conversation.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
 import { getAllTermsInFilter } from "./searchProcessor.js";
+import {
+    createFileSystemStorageProvider,
+    StorageProvider,
+    ValueDataType,
+    ValueType,
+} from "../storageProvider.js";
 
 export interface TopicExtractor {
     nextTopic(
@@ -382,25 +383,44 @@ export interface TopicIndex<TTopicId = any, TSourceId = any> {
     ): Promise<Set<TSourceId> | undefined>;
 }
 
-export async function createTopicIndex<TSourceId = any>(
+export async function createTopicIndex<TSourceId extends ValueType = string>(
     settings: TextIndexSettings,
-    rootPath: string,
+    basePath: string,
+    name: string,
+    sourceIdType: ValueDataType<TSourceId>,
     folderSettings?: ObjectFolderSettings,
     fSys?: FileSystem,
 ): Promise<TopicIndex<string, TSourceId>> {
+    return createTopicIndexOnStorage<TSourceId>(
+        settings,
+        basePath,
+        name,
+        createFileSystemStorageProvider(folderSettings, fSys),
+        sourceIdType,
+    );
+}
+
+export async function createTopicIndexOnStorage<
+    TSourceId extends ValueType = string,
+>(
+    settings: TextIndexSettings,
+    basePath: string,
+    name: string,
+    storageProvider: StorageProvider,
+    sourceIdType: ValueDataType<TSourceId>,
+): Promise<TopicIndex<string, TSourceId>> {
     type TopicId = string;
     // Timestamped sequence of topics, as they were seen
-    const sequence = await createTemporalLog<TopicId[]>(
+    const sequence = await storageProvider.createTemporalLog<TopicId[]>(
         { concurrency: settings.concurrency },
-        path.join(rootPath, "sequence"),
-        folderSettings,
-        fSys,
+        path.join(basePath, name),
+        "sequence",
     );
-    const textIndex = await createTextIndex<TSourceId>(
+    const textIndex = await storageProvider.createTextIndex<TSourceId>(
         settings,
-        rootPath,
-        folderSettings,
-        fSys,
+        basePath,
+        name,
+        sourceIdType,
     );
     return {
         settings,

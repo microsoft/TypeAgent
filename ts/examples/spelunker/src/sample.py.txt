@@ -10,8 +10,10 @@ def chunker(text: str) -> Chunk:  # Returns a toplevel chunk for the whole file
     def debug():
         print(ast.dump(tree, indent=4))
 
-    def undebug():
-        pass
+    class C:
+        @property
+        def undebug():
+            pass
 
     return create_chunks(text, tree)
 
