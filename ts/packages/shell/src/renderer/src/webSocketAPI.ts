@@ -8,9 +8,6 @@ import {
 } from "@typeagent/agent-sdk";
 import { CommandCompletionResult, RequestMetrics } from "agent-dispatcher";
 import { ClientAPI, SpeechToken } from "../../preload/electronTypes";
-import { AzureSpeech, TokenResponse } from "./azureSpeech";
-//import { SPAAuthRedirect } from "./auth/authRedirect";
-import { SPAAuthPopup } from "./auth/authPopup";
 
 export const webapi: ClientAPI = {
     // TODO: implement
@@ -170,36 +167,9 @@ export const webapi: ClientAPI = {
         );
     },
     getSpeechToken: () => {
-        // TODO: implement client side token acquisition
-        // Depends on implementing client side EntraID Auth first
         return new Promise<SpeechToken | undefined>(async (resolve) => {
-            // TODO: get from node instance from now - in the future get form users datastore
-            // intialize speech
-            if (!AzureSpeech.IsInitialized()) {
-                await AzureSpeech.initializeAsync({
-                    azureSpeechSubscriptionKey: "identity",
-                    azureSpeechRegion: "westus",
-                    azureSpeechEndpoint:
-                        "/subscriptions/b64471de-f2ac-4075-a3cb-7656bca768d0/resourceGroups/openai_dev/providers/Microsoft.CognitiveServices/accounts/octo-aisystems",
-                });
-            }
-
-            // wait for auth initialization to complete
-            if (!SPAAuthPopup.IsInitialized()) {
-                // wait
-                SPAAuthPopup.registerInitializationCallback((response) => {
-                    const result: TokenResponse = {
-                        token: response.accessToken,
-                        expire: Number(response.expiresOn),
-                        region: AzureSpeech.getInstance().Region,
-                        endpoint: AzureSpeech.getInstance().Endpoint,
-                    };
-
-                    resolve(result);
-                });
-            } else {
-                resolve(await AzureSpeech.getInstance().getBrowserTokenAsync());
-            }
+            // We are not auth in this case and instead will rely on the device to provide speech reco
+            resolve(undefined);
         });
     },
     getLocalWhisperStatus: () => {

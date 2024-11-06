@@ -16,8 +16,6 @@ import { ShellSettings } from "../../main/shellSettings";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import { CameraView } from "./cameraView";
 import { createWebSocket, webapi } from "./webSocketAPI";
-//import { SPAAuthRedirect } from "./auth/authRedirect";
-import { SPAAuthPopup } from "./auth/authPopup";
 
 export function getClientAPI(): ClientAPI {
     if (globalThis.api !== undefined) {
@@ -321,13 +319,6 @@ document.addEventListener("DOMContentLoaded", async function () {
     const wrapper = document.getElementById("wrapper")!;
     const idGenerator = new IdGenerator();
     const agents = new Map<string, string>();
-
-    // setup SPA (login)
-    const loginButton: HTMLButtonElement = document.getElementById(
-        "SignIn",
-    ) as HTMLButtonElement;
-    //SPAAuthRedirect.getInstance().initalize(loginButton);
-    SPAAuthPopup.getInstance().initalize(loginButton);
 
     const tabs = new TabView(
         ["Settings", "Metrics", "Help"],
