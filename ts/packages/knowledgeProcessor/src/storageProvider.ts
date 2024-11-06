@@ -31,7 +31,8 @@ export type ValueDataType<T> = T extends string
 
 export interface StorageProvider {
     createObjectFolder<T>(
-        folderPath: string,
+        basePath: string,
+        name: string,
         settings?: ObjectFolderSettings,
     ): Promise<ObjectFolder<T>>;
     createTemporalLog<T>(
@@ -64,11 +65,12 @@ export function createFileSystemStorageProvider(
     };
 
     async function _createObjectFolder<T>(
-        folderPath: string,
+        basePath: string,
+        name: string,
         settings?: ObjectFolderSettings,
     ): Promise<ObjectFolder<T>> {
         return createObjectFolder<T>(
-            folderPath,
+            path.join(basePath, name),
             settings ?? defaultFolderSettings,
             fSys,
         );

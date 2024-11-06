@@ -141,6 +141,8 @@ export async function createChatMemoryContext(
             chatModel,
             storePath,
             conversationSettings,
+            true,
+            false,
         ),
     };
     context.searchMemory = await createSearchMemory(context);
@@ -152,6 +154,7 @@ async function createEmailMemory(
     storePath: string,
     settings: conversation.ConversationSettings,
     useSqlite: boolean = false,
+    createNew: boolean = false,
 ) {
     const emailStorePath = path.join(
         storePath,
@@ -159,7 +162,7 @@ async function createEmailMemory(
     );
     await ensureDir(emailStorePath);
     const storage = useSqlite
-        ? await sqlite.createStorageDb(emailStorePath, "outlook.db", false)
+        ? await sqlite.createStorageDb(emailStorePath, "outlook.db", createNew)
         : undefined;
 
     return await knowLib.email.createEmailMemory(
