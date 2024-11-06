@@ -104,34 +104,6 @@ async function main(): Promise<void> {
     }
 
     await runQueryInterface(chunkFolder, codeIndex, summaryFolder, verbose);
-
-    // // Loop processing searches. (TODO: Use interactiveApp.)
-    // const help = "[Type 'q', 'quit' or 'exit' to end query session.]";
-    // console.log(help);
-    // while (true) {
-    //     const input = readlineSync
-    //         .question("~> ", {
-    //             history: true, // Enable history (TODO: Doesn't seem to work)
-    //             keepWhitespace: true, // Keep leading/trailing whitespace in history
-    //         })
-    //         .trimEnd();
-    //     // TODO: Distinguish between EOF (e.g. ^D) and blank line.
-    //     if (!input) {
-    //         console.log(help);
-    //         continue;
-    //     }
-    //     if (input === "q" || input == "quit" || input === "exit") {
-    //         console.log("[Bye!]");
-    //         return;
-    //     }
-    //     await processQuery(
-    //         input,
-    //         chunkFolder,
-    //         codeIndex,
-    //         summaryFolder,
-    //         verbose,
-    //     );
-    // }
 }
 
 function processArgs(): string[] {
