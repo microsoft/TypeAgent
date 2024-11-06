@@ -127,7 +127,6 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
     storageProvider: StorageProvider,
 ): Promise<EntityIndex<string, TSourceId, string>> {
     type EntityId = string;
-    storageProvider ??= createFileSystemStorageProvider();
     const [entityStore, nameIndex, typeIndex, facetIndex] = await Promise.all([
         createKnowledgeStoreOnStorage<ExtractedEntity<TSourceId>>(
             settings,

@@ -20,7 +20,6 @@ export interface TemporalTable<TLogId = any, T = any>
 
     addSync(value: T, timestamp?: Date): TLogId;
     getSync(id: TLogId): dateTime.Timestamped<T> | undefined;
-    iterateAll(): IterableIterator<NameValue<dateTime.Timestamped<T>, TLogId>>;
     iterateIdsRange(startAt: Date, stopAt?: Date): IterableIterator<TLogId>;
     iterateRange(
         startAt: Date,
@@ -89,22 +88,7 @@ export function createTemporalLogTable<
         )
         ORDER BY timestamp ASC`,
     );
-    const sql_newest = db.prepare(
-        `SELECT dateTime, value FROM ${tableName}
-         WHERE timestamp IN (
-            SELECT DISTINCT timestamp 
-            FROM ${tableName} 
-            ORDER BY timestamp DESC 
-            LIMIT ?
-        )
-        ORDER BY timestamp DESC`,
-    );
-    const sql_all = db.prepare(
-        `SELECT logId, dateTime, value FROM ${tableName}`,
-    );
-    const sql_allNewest = db.prepare(
-        `SELECT dateTime, value FROM ${tableName} ORDER BY timestamp DESC`,
-    );
+    const sql_newest = create_sql_newest();
     const sql_minMax = db.prepare(`
         SELECT 
             (SELECT timestamp from ${tableName} ORDER BY timestamp ASC LIMIT 1) 
@@ -129,7 +113,6 @@ export function createTemporalLogTable<
         remove,
         removeInRange,
         clear,
-        iterateAll,
         iterateIdsRange,
         iterateRange,
         iterateOldest,
@@ -146,15 +129,20 @@ export function createTemporalLogTable<
     async function* all(): AsyncIterableIterator<
         NameValue<dateTime.Timestamped<T>, TLogId>
     > {
-        for (const entry of iterateAll()) {
-            yield entry;
+        const sql = create_sql_all();
+        for (const row of sql.iterate()) {
+            yield {
+                name: idSerializer.serialize((row as TemporalLogRow<T>).logId),
+                value: deserialize(row),
+            };
         }
     }
 
     async function* allObjects(): AsyncIterableIterator<
         dateTime.Timestamped<T>
     > {
-        for (const row of sql_all.iterate()) {
+        const sql = create_sql_all();
+        for (const row of sql.iterate()) {
             yield deserialize(row);
         }
     }
@@ -191,11 +179,11 @@ export function createTemporalLogTable<
         ids: TLogId[],
     ): Promise<(dateTime.Timestamped<T> | undefined)[]> {
         const idsClause = isIdInt ? ids : sql_makeInClause(ids);
-        const stmt = db.prepare(
+        const sql = db.prepare(
             `SELECT dateTime, value FROM ${tableName} WHERE logId IN (${idsClause})`,
         );
         const objects: dateTime.Timestamped<T>[] = [];
-        for (const row of stmt.iterate()) {
+        for (const row of sql.iterate()) {
             objects.push(deserialize(row));
         }
         return objects;
@@ -247,8 +235,9 @@ export function createTemporalLogTable<
     async function* newestObjects(): AsyncIterableIterator<
         dateTime.Timestamped<T>
     > {
-        const rows = sql_allNewest.iterate();
-        for (const row of rows) {
+        // Async iterable. Use a separate statement
+        const sql = create_sql_allNewest();
+        for (const row of sql.iterate()) {
             yield deserialize(row);
         }
     }
@@ -270,17 +259,6 @@ export function createTemporalLogTable<
     async function clear() {
         const stmt = db.prepare(`DELETE * FROM ${tableName}`);
         stmt.run();
-    }
-
-    function* iterateAll(): IterableIterator<
-        NameValue<dateTime.Timestamped<T>, TLogId>
-    > {
-        for (const row of sql_all.iterate()) {
-            yield {
-                name: idSerializer.serialize((row as TemporalLogRow<T>).logId),
-                value: deserialize(row),
-            };
-        }
     }
 
     function* iterateRange(
@@ -353,5 +331,28 @@ export function createTemporalLogTable<
                 ? (logRow.value as number)
                 : JSON.parse(logRow.value as string),
         };
+    }
+
+    function create_sql_all() {
+        return db.prepare(`SELECT logId, dateTime, value FROM ${tableName}`);
+    }
+
+    function create_sql_newest() {
+        return db.prepare(
+            `SELECT dateTime, value FROM ${tableName}
+             WHERE timestamp IN (
+                SELECT DISTINCT timestamp 
+                FROM ${tableName} 
+                ORDER BY timestamp DESC 
+                LIMIT ?
+            )
+            ORDER BY timestamp DESC`,
+        );
+    }
+
+    function create_sql_allNewest() {
+        return db.prepare(
+            `SELECT dateTime, value FROM ${tableName} ORDER BY timestamp DESC`,
+        );
     }
 }

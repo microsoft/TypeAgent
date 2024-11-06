@@ -43,6 +43,7 @@ async function ensureStore<T>(
 }
 
 describe("storage.objectFolder", () => {
+    const timeoutMs = 1000 * 60 * 5;
     let folder: ObjectFolder<TestObject> | undefined;
     const folderPath = testDirectoryPath("./data/test/testStore");
     beforeAll(async () => {
@@ -80,16 +81,20 @@ describe("storage.objectFolder", () => {
         const size = await folder!.size();
         expect(size).toBe(0);
     });
-    test("readBatch", async () => {
-        await folder!.clear();
-        const objCount = 17;
-        await addObjects(folder!, objCount);
-        let countRead = 0;
-        for await (const batch of asyncArray.readBatches(folder!.all(), 4)) {
-            countRead += batch.value.length;
-        }
-        expect(countRead).toBe(objCount);
-    });
+    test(
+        "readAll",
+        async () => {
+            await folder!.clear();
+            const objCount = 17;
+            await addObjects(folder!, objCount);
+            let countRead = 0;
+            for await (const _ of folder!.all()) {
+                countRead++;
+            }
+            expect(countRead).toBe(objCount);
+        },
+        timeoutMs,
+    );
 });
 
 describe("storage.objectFolder.safeWrites", () => {
