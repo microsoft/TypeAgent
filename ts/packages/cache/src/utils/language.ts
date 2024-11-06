@@ -19,6 +19,7 @@ const subjectPronouns = [
     "y'all",
     "thou",
     "ye",
+    "youse",
 ];
 
 const objectPronouns = [
@@ -33,6 +34,8 @@ const objectPronouns = [
     "you-all",
     "y'all",
     "thee",
+    "ye",
+    "youse",
 ];
 
 const possessivePronouns = [
@@ -44,7 +47,12 @@ const possessivePronouns = [
     "ours",
     "yours",
     "theirs",
+    "one's",
     "thine",
+    "yeers",
+    "y'all's",
+    "each other's",
+    "one another's",
 ];
 
 const reflexivePronouns = [
@@ -58,6 +66,7 @@ const reflexivePronouns = [
     "themselves",
     "oneself",
     "thyself",
+    "whoself",
 ];
 const demostrativePronouns = ["this", "that", "these", "those"];
 const indefinitePronouns = [
@@ -91,8 +100,10 @@ const indefinitePronouns = [
     "one",
     "other",
     "others",
+    "own",
     "plenty",
     "several",
+    "same",
     "some",
     "somebody",
     "someone",
@@ -100,6 +111,7 @@ const indefinitePronouns = [
     "somewhat",
     "such and such",
     "such",
+    "suchlike",
 ];
 
 const interrogativePronouns = [
@@ -122,7 +134,6 @@ const interrogativePronouns = [
 
 const relativePronuns = ["as", "that", ...interrogativePronouns];
 const reciprocalPronouns = ["each other", "one another"];
-const otherPronouns = ["same", "own", "suchlike"];
 const possessiveAdjectives = [
     "my",
     "your",
@@ -132,6 +143,11 @@ const possessiveAdjectives = [
     "our",
     "your",
     "their",
+    "one's",
+    "yeer",
+    "y'all's",
+    "each other's",
+    "one another's",
 ];
 
 const demostrativeAdverbs = ["here", "there"];
@@ -318,7 +334,7 @@ function combineSets(words: string[][]): string[] {
 }
 
 function exactMatch(words: string[][]): RegExp {
-    return new RegExp(`\\b(?:${combineSets(words).join("|")})\\b`, "i");
+    return new RegExp(`^(?:${combineSets(words).join("|")})$`, "i");
 }
 
 function suffixMatch(words: string[][], prefix?: string): RegExp {
