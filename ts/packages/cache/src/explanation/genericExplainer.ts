@@ -33,7 +33,6 @@ export type ExplanationValidator<T> = (
 ) => string | undefined;
 
 export type ExplainerConfig = {
-    rejectReferences?: boolean | undefined;
     constructionCreationConfig: ConstructionCreationConfig | undefined;
 };
 

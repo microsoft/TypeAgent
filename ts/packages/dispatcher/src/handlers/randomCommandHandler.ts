@@ -173,7 +173,7 @@ class RandomOnlineCommandHandler implements CommandHandlerNoParams {
 export function getRandomCommandHandlers(): CommandHandlerTable {
     return {
         description: "Random request commands",
-        defaultSubCommand: new RandomOfflineCommandHandler(),
+        defaultSubCommand: "offline",
         commands: {
             online: new RandomOnlineCommandHandler(),
             offline: new RandomOfflineCommandHandler(),

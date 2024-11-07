@@ -102,19 +102,25 @@ async function newSessionDir() {
 }
 
 type DispatcherConfig = {
-    explainerName: string;
     models: {
         translator: string;
         explainer: string;
     };
     bot: boolean;
     stream: boolean;
-    explanation: boolean;
-    explanationOptions: {
-        rejectReferences: boolean;
-        retranslateWithoutContext: boolean;
+    explainer: {
+        enabled: boolean;
+        name: string;
+        filter: {
+            multiple: boolean;
+            reference: {
+                value: boolean;
+                list: boolean;
+                translate: boolean;
+            };
+        };
     };
-    promptOptions: {
+    promptConfig: {
         additionalInstructions: boolean;
     };
     switch: {
@@ -141,19 +147,25 @@ const defaultSessionConfig: SessionConfig = {
     translators: undefined,
     actions: undefined,
     commands: undefined,
-    explainerName: getDefaultExplainerName(),
     models: {
         translator: "",
         explainer: "",
     },
     bot: true,
     stream: true,
-    explanation: true,
-    explanationOptions: {
-        rejectReferences: true,
-        retranslateWithoutContext: true,
+    explainer: {
+        enabled: true,
+        name: getDefaultExplainerName(),
+        filter: {
+            multiple: true,
+            reference: {
+                value: true,
+                list: true,
+                translate: true,
+            },
+        },
     },
-    promptOptions: {
+    promptConfig: {
         additionalInstructions: true,
     },
     switch: {
@@ -275,7 +287,7 @@ export class Session {
     }
 
     public get explainerName() {
-        return this.config.explainerName;
+        return this.config.explainer.name;
     }
 
     public get bot() {
@@ -283,7 +295,7 @@ export class Session {
     }
 
     public get explanation() {
-        return this.config.explanation;
+        return this.config.explainer.enabled;
     }
 
     public get cache() {
