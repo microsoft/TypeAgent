@@ -447,6 +447,7 @@ export async function addMessageToConversation(
 
     let extractedKnowledge = await extractKnowledgeFromMessage(
         knowledgeExtractor,
+        message,
         messageBlock,
         message.knowledge,
         extractKnowledge,
@@ -488,13 +489,15 @@ export async function addMessageBatchToConversation(
     const extractedKnowledge = await asyncArray.mapAsync(
         messageBlocks,
         concurrency,
-        (message, index) => {
-            return extractKnowledgeFromMessage(
+        async (messageBlock, index) => {
+            const knowledge = await extractKnowledgeFromMessage(
                 knowledgeExtractor,
-                message,
+                messages[index],
+                messageBlock,
                 messages[index].knowledge,
                 extractKnowledge,
             );
+            return knowledge;
         },
     );
 
@@ -515,7 +518,8 @@ export async function addMessageBatchToConversation(
 
 async function extractKnowledgeFromMessage(
     knowledgeExtractor: KnowledgeExtractor,
-    message: SourceTextBlock,
+    message: ConversationMessage,
+    messageBlock: SourceTextBlock,
     priorKnowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
     shouldExtractKnowledge: boolean = true,
 ): Promise<ExtractedKnowledge | undefined> {
@@ -523,10 +527,13 @@ async function extractKnowledgeFromMessage(
     let knownKnowledge: ExtractedKnowledge | undefined;
 
     if (hasPriorKnowledge(priorKnowledge)) {
-        knownKnowledge = createExtractedKnowledge(message, priorKnowledge!);
+        knownKnowledge = createExtractedKnowledge(
+            messageBlock,
+            priorKnowledge!,
+        );
     }
     const knowledgeResult = shouldExtractKnowledge
-        ? await extractKnowledgeFromBlock(knowledgeExtractor, message)
+        ? await extractKnowledgeFromBlock(knowledgeExtractor, messageBlock)
         : undefined;
 
     if (knowledgeResult) {
@@ -540,6 +547,9 @@ async function extractKnowledgeFromMessage(
         newKnowledge = knownKnowledge
             ? mergeKnowledge(knownKnowledge) // Eliminates any duplicate information
             : undefined;
+    }
+    if (newKnowledge) {
+        newKnowledge.sourceEntityName = message.sender;
     }
     return newKnowledge;
 
@@ -563,13 +573,13 @@ function removeMemorizedEntities(entities: ConcreteEntity[]): ConcreteEntity[] {
 async function indexKnowledge(
     conversation: Conversation,
     topicMerger: TopicMerger | undefined,
-    message: SourceTextBlock,
+    messageBlock: SourceTextBlock,
     knowledge: ExtractedKnowledge,
     timestamp: Date | undefined,
 ): Promise<void> {
     // Add next message... this updates the "sequence"
     const knowledgeIds = await conversation.addKnowledgeForMessage(
-        message,
+        messageBlock,
         knowledge,
     );
     await conversation.addKnowledgeToIndex(knowledge, knowledgeIds);

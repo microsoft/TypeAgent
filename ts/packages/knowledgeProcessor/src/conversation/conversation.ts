@@ -395,6 +395,7 @@ export async function createConversation(
             removeEntities(),
             removeActions(),
         ]);
+        topics.clear();
         await storageProvider!.clear();
     }
 
@@ -463,7 +464,7 @@ export async function createConversation(
     async function addKnowledgeToIndex(
         knowledge: ExtractedKnowledge<MessageId>,
         knowledgeIds: ExtractedKnowledgeIds<TopicId, EntityId, ActionId>,
-        message?: SourceTextBlock<MessageId>,
+        message?: SourceTextBlock<MessageId> | undefined,
     ): Promise<void> {
         // these indexes are independent, they can be updated concurrently.
         await Promise.all([
@@ -508,6 +509,7 @@ export async function createConversation(
             const topicIndex = await getTopicsIndex();
             await topicIndex.addMultiple(
                 knowledge.topics,
+                knowledge.sourceEntityName,
                 knowledgeIds.topicIds,
             );
         }

@@ -52,7 +52,6 @@ import {
     ValueDataType,
     ValueType,
 } from "../storageProvider.js";
-import { ExtractedTopic } from "./knowledge.js";
 
 export interface TopicExtractor {
     nextTopic(
@@ -373,11 +372,13 @@ export interface TopicIndex<TTopicId = any, TSourceId = any> {
      * @param topic
      */
     add(
-        topic: string | TextBlock<TSourceId> | ExtractedTopic<TSourceId>,
+        topic: string | TextBlock<TSourceId>,
+        sourceName?: string,
         id?: TTopicId,
     ): Promise<TTopicId>;
     addMultiple(
-        text: TextBlock<TSourceId>[] | ExtractedTopic<TSourceId>[],
+        text: TextBlock<TSourceId>[],
+        sourceName?: string,
         ids?: TTopicId[],
     ): Promise<TTopicId[]>;
     search(
@@ -521,7 +522,8 @@ export async function createTopicIndexOnStorage<
     }
 
     async function addMultiple(
-        topics: TextBlock<TSourceId>[] | ExtractedTopic<TSourceId>[],
+        topics: TextBlock<TSourceId>[],
+        sourceName?: string,
         ids?: TopicId[],
     ): Promise<TopicId[]> {
         if (ids && ids.length !== topics.length) {
@@ -529,7 +531,7 @@ export async function createTopicIndexOnStorage<
         }
         const topicIds: TopicId[] = [];
         for (let i = 0; i < topics.length; ++i) {
-            let id = await add(topics[i], ids ? ids[i] : undefined);
+            let id = await add(topics[i], sourceName, ids ? ids[i] : undefined);
             topicIds.push(id);
         }
 
@@ -549,18 +551,13 @@ export async function createTopicIndexOnStorage<
     }
 
     async function add(
-        topic: string | TextBlock<TSourceId> | ExtractedTopic<TSourceId>,
+        topic: string | TextBlock<TSourceId>,
+        sourceName?: string | undefined,
         id?: TopicId,
     ): Promise<TopicId> {
         let topicId: TopicId | undefined;
-        let sourceName: string | undefined;
         if (typeof topic === "string") {
             topicId = id ? id : await textIndex.put(topic);
-        } else if (isExtractedTopic<TSourceId>(topic)) {
-            topicId = id
-                ? id
-                : await textIndex.put(topic.value.value, topic.value.sourceIds);
-            sourceName = topic.sourceEntityName;
         } else {
             topicId = id
                 ? id
@@ -569,7 +566,7 @@ export async function createTopicIndexOnStorage<
 
         if (sourceName) {
             const names = await getNameIndex();
-            const nameId = await names.getId(name);
+            const nameId = await names.getId(sourceName);
             if (nameId) {
                 await sourceEntityIndex.put([topicId], nameId);
             }
@@ -712,10 +709,4 @@ export async function createTopicIndexOnStorage<
             yield block;
         }
     }
-}
-
-function isExtractedTopic<TSourceId = any>(
-    obj: any,
-): obj is ExtractedTopic<TSourceId> {
-    return obj && typeof obj === "object" && obj.value?.value;
 }

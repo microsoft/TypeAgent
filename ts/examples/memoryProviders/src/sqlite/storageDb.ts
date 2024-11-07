@@ -3,7 +3,7 @@
 
 import path from "path";
 import * as knowLib from "knowledge-processor";
-import { createDatabase, deleteDatabase, tablePath } from "./common.js";
+import { createDatabase, tablePath } from "./common.js";
 import { createTextIndex } from "./textTable.js";
 import { createObjectTable } from "./objectTable.js";
 import { ObjectFolder, ObjectFolderSettings } from "typeagent";
@@ -24,8 +24,8 @@ export async function createStorageDb(
     createNew: boolean,
 ): Promise<StorageDb> {
     const dbPath = path.join(rootPath, name);
-    let db = await createDb();
-
+    let db = await createDatabase(dbPath, createNew);
+    let counter = 0;
     return {
         rootPath,
         name,
@@ -42,6 +42,7 @@ export async function createStorageDb(
         name: string,
         settings?: ObjectFolderSettings,
     ): Promise<ObjectFolder<T>> {
+        ensureOpen();
         return createObjectTable<T>(db, getTablePath(basePath, name), settings);
     }
 
@@ -50,6 +51,7 @@ export async function createStorageDb(
         basePath: string,
         name: string,
     ): Promise<TemporalTable<string, T>> {
+        ensureOpen();
         return createTemporalLogTable<T, string, string>(
             db,
             getTablePath(basePath, name),
@@ -64,6 +66,7 @@ export async function createStorageDb(
         name: string,
         sourceIdType: knowLib.ValueDataType<TSourceId>,
     ) {
+        ensureOpen();
         return createTextIndex<string, TSourceId>(
             settings,
             db,
@@ -78,6 +81,7 @@ export async function createStorageDb(
         name: string,
         valueType: knowLib.ValueDataType<TValueId>,
     ): Promise<KeyValueTable<string, TValueId>> {
+        ensureOpen();
         return createKeyValueTable<string, TValueId>(
             db,
             getTablePath(basePath, name),
@@ -95,8 +99,11 @@ export async function createStorageDb(
         return tablePath(baseDir, name);
     }
 
-    function createDb() {
-        return createDatabase(dbPath, createNew);
+    function ensureOpen() {
+        if (db && db.open) {
+            return;
+        }
+        throw new Error(`Database ${rootPath}, version ${counter} is not open`);
     }
 
     function close() {
@@ -107,7 +114,7 @@ export async function createStorageDb(
 
     async function clear(): Promise<void> {
         close();
-        await deleteDatabase(dbPath);
-        db = await createDb();
+        db = await createDatabase(dbPath, true);
+        counter++;
     }
 }

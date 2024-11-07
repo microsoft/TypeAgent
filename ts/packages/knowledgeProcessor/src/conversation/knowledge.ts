@@ -130,11 +130,6 @@ export type ExtractedAction<TSourceId = any> = {
     sourceIds: TSourceId[];
 };
 
-export type ExtractedTopic<TSourceId = any> = {
-    value: TextBlock<TSourceId>;
-    sourceEntityName?: string;
-};
-
 /**
  * Knowledge extracted from a source text block
  */
@@ -142,6 +137,7 @@ export type ExtractedKnowledge<TSourceId = any> = {
     entities?: ExtractedEntity<TSourceId>[] | undefined;
     topics?: TextBlock<TSourceId>[] | undefined;
     actions?: ExtractedAction<TSourceId>[] | undefined;
+    sourceEntityName?: string | undefined;
 };
 
 /**

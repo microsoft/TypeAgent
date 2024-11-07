@@ -153,7 +153,7 @@ export function getInRange(
  * Array concatenation that handles (ignores) undefined arrays. The caller has to do fewer checks
  * @param arrays 
  */
-export function concatArrays<T>(...arrays: (Array<T> | undefined)[]): T[] {
+export function concatArrays<T=any>(...arrays: (Array<T> | undefined)[]): T[] {
     const result: T[] = [];
     for (const array of arrays) {
         if(array) {

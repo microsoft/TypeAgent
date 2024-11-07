@@ -208,6 +208,7 @@ export async function createTextIndex<
     const textTable = createStringTable(
         db,
         tablePath(baseName, "entries"),
+        false,
         ensureExists,
     );
     const postingsTable = createKeyValueTable<number, TSourceId>(
