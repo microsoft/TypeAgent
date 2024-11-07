@@ -799,12 +799,28 @@ export type AzureChatModelName =
  * @param dimensions (optional) text-embedding-03 and later models allow variable length embeddings
  */
 export function createEmbeddingModel(
-    apiSettings?: ApiSettings,
+    endpoint: string,
+    dimensions?: number | undefined,
+): TextEmbeddingModel;
+export function createEmbeddingModel(
+    apiSettings?: ApiSettings | undefined,
+    dimensions?: number | undefined,
+): TextEmbeddingModel;
+export function createEmbeddingModel(
+    apiSettingsOrEndpoint?: ApiSettings | string | undefined,
     dimensions?: number | undefined,
 ): TextEmbeddingModel {
+    if (typeof apiSettingsOrEndpoint === "string") {
+        apiSettingsOrEndpoint = apiSettingsFromEnv(
+            ModelType.Embedding,
+            undefined,
+            apiSettingsOrEndpoint,
+        );
+    }
     // https://platform.openai.com/docs/api-reference/embeddings/create#embeddings-create-input
     const maxBatchSize = 2048;
-    const settings = apiSettings ?? apiSettingsFromEnv(ModelType.Embedding);
+    const settings =
+        apiSettingsOrEndpoint ?? apiSettingsFromEnv(ModelType.Embedding);
     const defaultParams: any = settings.isAzure
         ? {}
         : {

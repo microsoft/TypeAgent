@@ -52,6 +52,7 @@ import {
     ValueDataType,
     ValueType,
 } from "../storageProvider.js";
+import { ExtractedTopic } from "./knowledge.js";
 
 export interface TopicExtractor {
     nextTopic(
@@ -291,11 +292,11 @@ export async function createTopicMerger<TTopicId = string>(
         };
         if (topicIndex) {
             if (updateIndex) {
-                await topicIndex.putNext(
+                await topicIndex.addNext(
                     [aggregateTopic.value],
                     aggregateTopic.timestamp,
                 );
-                await topicIndex.put(aggregateTopic.value);
+                await topicIndex.add(aggregateTopic.value);
             }
         }
         if (settings.trackRecent) {
@@ -358,12 +359,27 @@ export interface TopicIndex<TTopicId = any, TSourceId = any> {
      */
     getSourceIds(ids: TTopicId[]): Promise<TSourceId[]>;
     getSourceIdsForTopic(topic: string): Promise<TSourceId[] | undefined>;
-    put(topic: string | TextBlock<TSourceId>): Promise<TTopicId>;
-    putNext(
+    /**
+     * Add the topic to the topic index and the topic sequence with the supplied timestamp
+     * @param topics
+     * @param timestamp
+     */
+    addNext(
         topics: TextBlock<TSourceId>[],
         timestamp?: Date,
     ): Promise<TTopicId[]>;
-    putMultiple(text: TextBlock<TSourceId>[]): Promise<TTopicId[]>;
+    /**
+     * Add a topic to the index, but not to the sequence
+     * @param topic
+     */
+    add(
+        topic: string | TextBlock<TSourceId> | ExtractedTopic<TSourceId>,
+        id?: TTopicId,
+    ): Promise<TTopicId>;
+    addMultiple(
+        text: TextBlock<TSourceId>[],
+        ids?: TTopicId[],
+    ): Promise<TTopicId[]>;
     search(
         filter: TopicFilter,
         options: TopicSearchOptions,
@@ -385,7 +401,8 @@ export interface TopicIndex<TTopicId = any, TSourceId = any> {
 
 export async function createTopicIndex<TSourceId extends ValueType = string>(
     settings: TextIndexSettings,
-    basePath: string,
+    getNameIndex: () => Promise<TextIndex<string>>,
+    rootPath: string,
     name: string,
     sourceIdType: ValueDataType<TSourceId>,
     folderSettings?: ObjectFolderSettings,
@@ -393,9 +410,10 @@ export async function createTopicIndex<TSourceId extends ValueType = string>(
 ): Promise<TopicIndex<string, TSourceId>> {
     return createTopicIndexOnStorage<TSourceId>(
         settings,
-        basePath,
+        getNameIndex,
+        rootPath,
         name,
-        createFileSystemStorageProvider(folderSettings, fSys),
+        createFileSystemStorageProvider(rootPath, folderSettings, fSys),
         sourceIdType,
     );
 }
@@ -404,6 +422,7 @@ export async function createTopicIndexOnStorage<
     TSourceId extends ValueType = string,
 >(
     settings: TextIndexSettings,
+    getNameIndex: () => Promise<TextIndex<string>>,
     basePath: string,
     name: string,
     storageProvider: StorageProvider,
@@ -422,6 +441,13 @@ export async function createTopicIndexOnStorage<
         name,
         sourceIdType,
     );
+    // Optionally maintain an index of the entities that that were involved in discussing
+    // or formulating this topic...
+    const sourceEntityIndex = await storageProvider.createIndex<TopicId>(
+        basePath,
+        "sourceEntities",
+        "TEXT",
+    );
     return {
         settings,
         sequence,
@@ -436,9 +462,9 @@ export async function createTopicIndexOnStorage<
         getMultipleText,
         getSourceIds,
         getSourceIdsForTopic,
-        put,
-        putNext,
-        putMultiple,
+        add,
+        addNext,
+        addMultiple,
         search,
         searchTerms,
         searchTermsV2,
@@ -494,13 +520,23 @@ export async function createTopicIndexOnStorage<
         return textIndex.get(topic);
     }
 
-    async function putMultiple(
+    async function addMultiple(
         topics: TextBlock<TSourceId>[],
+        ids?: TopicId[],
     ): Promise<TopicId[]> {
-        return textIndex.putMultiple(topics);
+        if (ids && ids.length !== topics.length) {
+            throw Error("Id length mismatch");
+        }
+        const topicIds: TopicId[] = [];
+        for (let i = 0; i < topics.length; ++i) {
+            let id = await add(topics[i], ids ? ids[i] : undefined);
+            topicIds.push(id);
+        }
+
+        return topicIds;
     }
 
-    async function putNext(
+    async function addNext(
         topics: TextBlock<TSourceId>[],
         timestamp?: Date,
     ): Promise<TopicId[]> {
@@ -512,10 +548,33 @@ export async function createTopicIndexOnStorage<
         return topicIds;
     }
 
-    async function put(topic: string | TextBlock<TSourceId>): Promise<TopicId> {
-        return typeof topic === "string"
-            ? textIndex.put(topic)
-            : textIndex.put(topic.value, topic.sourceIds);
+    async function add(
+        topic: string | TextBlock<TSourceId> | ExtractedTopic<TSourceId>,
+        id?: TopicId,
+    ): Promise<TopicId> {
+        let topicId: TopicId | undefined;
+        let sourceName: string | undefined;
+        if (typeof topic === "string") {
+            topicId = id ? id : await textIndex.put(topic);
+        } else if (isExtractedTopic<TSourceId>(topic)) {
+            topicId = id
+                ? id
+                : await textIndex.put(topic.value.value, topic.value.sourceIds);
+            sourceName = topic.sourceEntityName;
+        } else {
+            topicId = id
+                ? id
+                : await textIndex.put(topic.value, topic.sourceIds);
+        }
+
+        if (sourceName) {
+            const names = await getNameIndex();
+            const nameId = await names.getId(name);
+            if (nameId) {
+                await sourceEntityIndex.put([topicId], nameId);
+            }
+        }
+        return topicId;
     }
 
     async function search(
@@ -653,4 +712,10 @@ export async function createTopicIndexOnStorage<
             yield block;
         }
     }
+}
+
+function isExtractedTopic<TSourceId = any>(
+    obj: any,
+): obj is ExtractedTopic<TSourceId> {
+    return obj && typeof obj === "object" && "value" in obj;
 }

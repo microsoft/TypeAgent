@@ -54,6 +54,10 @@ export type ConversationMessage = {
      * Message timestamp
      */
     timestamp?: Date | undefined;
+    /**
+     * Message sender
+     */
+    sender?: string | undefined;
 };
 
 export type AddMessageTask = {
@@ -226,7 +230,7 @@ export async function createConversationManager(
     };
 
     function addMessage(
-        message: string | TextBlock,
+        text: string | TextBlock,
         knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
         timestamp?: Date | undefined,
     ): Promise<void> {
@@ -234,9 +238,11 @@ export async function createConversationManager(
             conversation,
             knowledgeExtractor,
             topicMerger,
-            message,
-            timestamp,
-            knowledge,
+            {
+                text: text,
+                knowledge,
+                timestamp,
+            },
         );
     }
 
@@ -299,9 +305,7 @@ export async function createConversationManager(
                         conversation,
                         knowledgeExtractor,
                         topicMerger,
-                        addTask.message.text,
-                        addTask.message.timestamp,
-                        addTask.message.knowledge,
+                        addTask.message,
                         addTask.extractKnowledge,
                     );
                     break;
@@ -435,12 +439,13 @@ export async function addMessageToConversation(
     conversation: Conversation,
     knowledgeExtractor: KnowledgeExtractor,
     topicMerger: TopicMerger | undefined,
-    message: string | TextBlock,
-    timestamp: Date | undefined,
-    knownKnowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
+    message: ConversationMessage,
     extractKnowledge: boolean = true,
 ): Promise<void> {
-    const messageBlock = await conversation.addMessage(message, timestamp);
+    const messageBlock = await conversation.addMessage(
+        message.text,
+        message.timestamp,
+    );
 
     const messageIndex = await conversation.getMessageIndex();
     await messageIndex.put(messageBlock.value, messageBlock.blockId);
@@ -448,7 +453,7 @@ export async function addMessageToConversation(
     let extractedKnowledge = await extractKnowledgeFromMessage(
         knowledgeExtractor,
         messageBlock,
-        knownKnowledge,
+        message.knowledge,
         extractKnowledge,
     );
     if (extractedKnowledge) {
@@ -457,7 +462,7 @@ export async function addMessageToConversation(
             topicMerger,
             messageBlock,
             extractedKnowledge,
-            timestamp,
+            message.timestamp,
         );
     }
 }

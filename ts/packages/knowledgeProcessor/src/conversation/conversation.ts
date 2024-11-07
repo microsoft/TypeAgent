@@ -132,11 +132,6 @@ export interface Conversation<
     getEntityIndex(): Promise<EntityIndex<TEntityId, MessageId>>;
     getTopicsIndex(level?: number): Promise<TopicIndex<TTopicId, MessageId>>;
     getActionIndex(): Promise<ActionIndex<TActionId, MessageId>>;
-    removeEntities(): Promise<void>;
-    removeTopics(level?: number): Promise<void>;
-    removeKnowledge(): Promise<void>;
-    removeActions(): Promise<void>;
-    removeMessageIndex(): Promise<void>;
     /**
      *
      * @param removeMessages If you want the original messages also removed. Set to false if you just want to rebuild the indexes
@@ -270,7 +265,11 @@ export async function createConversation(
         cacheNames: true,
         useWeakRefs: true,
     };
-    storageProvider ??= createFileSystemStorageProvider(folderSettings, fSys);
+    storageProvider ??= createFileSystemStorageProvider(
+        rootPath,
+        folderSettings,
+        fSys,
+    );
     const messages = await createTextStore(
         { concurrency: settings.indexSettings.concurrency },
         path.join(rootPath, "messages"),
@@ -299,11 +298,6 @@ export async function createConversation(
         getEntityIndex,
         getTopicsIndex,
         getActionIndex,
-        removeEntities,
-        removeTopics,
-        removeKnowledge,
-        removeActions,
-        removeMessageIndex,
         clear,
         addMessage,
         addKnowledgeForMessage,
@@ -393,6 +387,7 @@ export async function createConversation(
     }
 
     async function removeKnowledge(): Promise<void> {
+        // TODO: Migrate to file system storage provider
         await Promise.all([
             knowledgeStore.clear(),
             removeTopics(1),
@@ -400,6 +395,7 @@ export async function createConversation(
             removeEntities(),
             removeActions(),
         ]);
+        await storageProvider!.clear();
     }
 
     async function removeMessageIndex(): Promise<void> {
@@ -423,6 +419,7 @@ export async function createConversation(
     async function loadTopicIndex(name: string): Promise<TopicIndex> {
         const index = await createTopicIndexOnStorage<MessageId>(
             settings.indexSettings,
+            getEntityNameIndex,
             rootPath,
             name,
             storageProvider!,
@@ -471,11 +468,13 @@ export async function createConversation(
         // these indexes are independent, they can be updated concurrently.
         await Promise.all([
             indexMessage(message),
-            indexTopics(knowledge),
             indexEntities(knowledge, knowledgeIds),
         ]);
-        // actions depends on entities
-        await indexActions(knowledge, knowledgeIds);
+        // actions and topics depend on entities
+        await Promise.all([
+            indexTopics(knowledge, knowledgeIds),
+            indexActions(knowledge, knowledgeIds),
+        ]);
     }
 
     async function indexMessage(
@@ -494,7 +493,7 @@ export async function createConversation(
     ): Promise<void> {
         if (knowledge.topics && knowledge.topics.length > 0) {
             const topicIndex = await getTopicsIndex();
-            knowledgeIds.topicIds = await topicIndex.putNext(
+            knowledgeIds.topicIds = await topicIndex.addNext(
                 knowledge.topics,
                 timestamp,
             );
@@ -503,10 +502,14 @@ export async function createConversation(
 
     async function indexTopics(
         knowledge: ExtractedKnowledge<MessageId>,
+        knowledgeIds: ExtractedKnowledgeIds<TopicId, EntityId, ActionId>,
     ): Promise<void> {
         if (knowledge.topics && knowledge.topics.length > 0) {
             const topicIndex = await getTopicsIndex();
-            await topicIndex.putMultiple(knowledge.topics);
+            await topicIndex.addMultiple(
+                knowledge.topics,
+                knowledgeIds.topicIds,
+            );
         }
     }
 

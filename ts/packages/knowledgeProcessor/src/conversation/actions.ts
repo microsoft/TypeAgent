@@ -131,7 +131,7 @@ export function createActionIndex<TSourceId = any>(
         settings,
         getNameIndex,
         rootPath,
-        createFileSystemStorageProvider(folderSettings, fSys),
+        createFileSystemStorageProvider(rootPath, folderSettings, fSys),
     );
 }
 export async function createActionIndexOnStorage<TSourceId = any>(

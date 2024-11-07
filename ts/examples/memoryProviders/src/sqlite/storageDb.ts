@@ -3,7 +3,7 @@
 
 import path from "path";
 import * as knowLib from "knowledge-processor";
-import { createDb, tablePath } from "./common.js";
+import { createDatabase, deleteDatabase, tablePath } from "./common.js";
 import { createTextIndex } from "./textTable.js";
 import { createObjectTable } from "./objectTable.js";
 import { ObjectFolder, ObjectFolderSettings } from "typeagent";
@@ -14,6 +14,8 @@ import { createKeyValueTable, KeyValueTable } from "./keyValueTable.js";
 export interface StorageDb extends knowLib.StorageProvider {
     readonly rootPath: string;
     readonly name: string;
+
+    close(): void;
 }
 
 export async function createStorageDb(
@@ -21,7 +23,9 @@ export async function createStorageDb(
     name: string,
     createNew: boolean,
 ): Promise<StorageDb> {
-    const db = await createDb(path.join(rootPath, name), createNew);
+    const dbPath = path.join(rootPath, name);
+    let db = await createDb();
+
     return {
         rootPath,
         name,
@@ -29,6 +33,8 @@ export async function createStorageDb(
         createTemporalLog: _createTemporalLog,
         createTextIndex: _createTextIndex,
         createIndex: _createIndex,
+        close,
+        clear,
     };
 
     async function _createObjectFolder<T>(
@@ -87,5 +93,21 @@ export async function createStorageDb(
             .replaceAll("/", "_")
             .replaceAll("\\", "_");
         return tablePath(baseDir, name);
+    }
+
+    function createDb() {
+        return createDatabase(dbPath, createNew);
+    }
+
+    function close() {
+        if (db) {
+            db.close();
+        }
+    }
+
+    async function clear(): Promise<void> {
+        close();
+        await deleteDatabase(dbPath);
+        db = await createDb();
     }
 }

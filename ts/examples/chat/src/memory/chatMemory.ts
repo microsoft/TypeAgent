@@ -46,6 +46,7 @@ export type ChatContext = {
     storePath: string;
     chatModel: ChatModel;
     embeddingModel: TextEmbeddingModel;
+    embeddingModelSmall?: TextEmbeddingModel | undefined;
     maxCharsPerChunk: number;
     topicWindowSize: number;
     searchConcurrency: number;
@@ -100,8 +101,10 @@ export async function createChatMemoryContext(
         openai.createEmbeddingModel(),
         64,
     );
+    const embeddingModelSmall = openai.createEmbeddingModel("3_SMALL");
     const conversationName = ReservedConversationNames.transcript;
-    const conversationSettings = createConversationSettings(embeddingModel);
+    const conversationSettings =
+        knowLib.conversation.createConversationSettings(embeddingModel);
 
     const conversationPath = path.join(storePath, conversationName);
     const conversation = await createConversation(
@@ -122,6 +125,7 @@ export async function createChatMemoryContext(
         storePath,
         chatModel,
         embeddingModel,
+        embeddingModelSmall,
         maxCharsPerChunk: 4096,
         topicWindowSize: 8,
         searchConcurrency: 2,
@@ -174,12 +178,6 @@ async function createEmailMemory(
     );
 }
 
-function createConversationSettings(
-    embeddingModel?: TextEmbeddingModel,
-): conversation.ConversationSettings {
-    return conversation.createConversationSettings(embeddingModel);
-}
-
 export function createConversation(
     rootPath: string,
     settings: knowLib.conversation.ConversationSettings,
@@ -229,7 +227,7 @@ export async function loadConversation(
 
         context.conversation = await createConversation(
             conversationPath,
-            createConversationSettings(context.embeddingModel),
+            conversation.createConversationSettings(context.embeddingModel),
         );
         context.conversationName = name;
         context.conversationManager =

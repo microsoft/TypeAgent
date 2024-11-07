@@ -354,10 +354,12 @@ export async function addEmailFileToConversation(
 }
 
 export function emailToMessage(email: Email): ConversationMessage {
+    const sender = email.from.displayName;
     return {
         text: emailToTextBlock(email),
         knowledge: emailToKnowledge(email),
         timestamp: dateTime.stringToDate(email.sentOn),
+        sender,
     };
 }
 

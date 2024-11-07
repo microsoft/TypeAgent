@@ -117,7 +117,7 @@ export function createEntityIndex<TSourceId = string>(
     return createEntityIndexOnStorage(
         settings,
         rootPath,
-        createFileSystemStorageProvider(folderSettings, fSys),
+        createFileSystemStorageProvider(rootPath, folderSettings, fSys),
     );
 }
 
@@ -223,7 +223,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
         entities: ExtractedEntity<TSourceId>[],
         ids?: EntityId[],
     ): Promise<EntityId[]> {
-        if (ids && entities.length !== ids?.length) {
+        if (ids && ids.length !== entities.length) {
             throw Error("Id length mismatch");
         }
         // TODO: parallelize

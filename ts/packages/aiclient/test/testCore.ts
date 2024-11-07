@@ -15,18 +15,6 @@ export function hasEmbeddingEndpoint(endpoint?: string | undefined) {
     );
 }
 
-export function createEmbeddingModel(
-    endpoint?: string | undefined,
-    dimensions?: number,
-) {
-    const settings = openai.apiSettingsFromEnv(
-        openai.ModelType.Embedding,
-        process.env,
-        endpoint,
-    );
-    return openai.createEmbeddingModel(settings, dimensions);
-}
-
 export function hasApiSettings(key: string, endpoint?: string | undefined) {
     return hasEnvSettings(process.env, key, endpoint);
 }
