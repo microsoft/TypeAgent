@@ -34,7 +34,7 @@ import { asyncArray, ObjectFolder } from "typeagent";
 import { CodeDocumentation, SemanticCodeIndex } from "code-processor";
 
 import { Chunk, ChunkedFile, chunkifyPythonFiles } from "./pythonChunker.js";
-import { CodeBlockWithDocs, FileDocumenter } from "./main.js";
+import { CodeBlockWithDocs, FileDocumenter } from "./fileDocumenter.js";
 
 // TODO: Turn (chunkFolder, codeIndex, summaryFolder) into a single object.
 
