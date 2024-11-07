@@ -32,7 +32,8 @@ export type ClientAction =
     | "set-alarm"
     | "call-phonenumber"
     | "send-sms"
-    | "search-nearby";
+    | "search-nearby"
+    | "automate-phone-ui";
 
 export interface ActionIO {
     readonly type: DisplayType;

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type AndroidMobileAction = SendSMSAction | CallPhoneNumberAction | SetAlarmAction | SearchNearbyAction;
+export type AndroidMobileAction = SendSMSAction | CallPhoneNumberAction | SetAlarmAction | SearchNearbyAction | AutomatePhoneUIAction;
 
 // sends a SMS to the supplied phone number
 export type SendSMSAction = {
@@ -38,6 +38,7 @@ export type SetAlarmAction = {
     };
 };
 
+// opens the maps application and performs a location search
 export type SearchNearbyAction = {
     actionName: "searchNearby";
     parameters: {
@@ -45,5 +46,14 @@ export type SearchNearbyAction = {
         originalRequest: string;
         // the search term to use when searching nearby locations
         searchTerm: string;
+    };
+}
+
+// Automation agent on the phone that can perform UI tasks on behalf of the user
+export type AutomatePhoneUIAction = {
+    actionName: "automateUI";
+    parameters: {
+        // the original request of the user
+        originalRequest: string;
     };
 }

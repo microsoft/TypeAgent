@@ -7,6 +7,7 @@ declare var Android: {
     callPhoneNumber: (phoneNumber: string) => void;
     sendSMS: (phoneNumber: string, message: string) => void;
     searchNearby: (searchTerm: string) => void;
+    automateUI: (prompt: string) => void;
 
     // Speech Reco
     isSpeechRecognitionSupported: () => boolean;

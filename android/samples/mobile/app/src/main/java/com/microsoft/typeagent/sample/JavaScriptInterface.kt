@@ -9,6 +9,7 @@ import android.util.Log
 import android.webkit.JavascriptInterface
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import androidx.core.content.ContextCompat.startActivities
 import androidx.core.content.ContextCompat.startActivity
 import de.andycandy.android.bridge.CallType
 import de.andycandy.android.bridge.DefaultJSInterface
@@ -85,6 +86,21 @@ class JavaScriptInterface(var context: Context) : DefaultJSInterface("Android") 
         return PackageManager.PERMISSION_GRANTED == ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO)
     }
 
+    @JavascriptInterface
+    fun automateUI(prompt: String) {
+        Log.i("javascript", "automateUI")
+        val uri = Uri.parse("maia://main?execute=true&prompt=${prompt}")
+        val intent = Intent(Intent.ACTION_VIEW)
+            .setData(uri)
+            .putExtra("prompt", prompt)
+            .addCategory(Intent.CATEGORY_BROWSABLE)
+        startActivity(context, intent, null)
+
+//        val uri = Uri.parse("geo:0,0?q=$searchTerm")
+//        val intent = Intent(Intent.ACTION_VIEW, uri)
+//        intent.setPackage("com.google.android.apps.maps")
+//        startActivity(context, intent, null)
+    }
 
     /**
      * Starts a recognition request, awaits the result and returns the result as a promise

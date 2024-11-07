@@ -205,30 +205,30 @@ function addEvents(
         // Android object gets injected on Android devices, otherwise unavailable
         try {
             console.log(`Take Action '${action}' Data: ${data}`);
+            let d: any = data;
             switch (action) {
                 case "show-camera": {
                     cameraView.show();
                     break;
                 }
                 case "set-alarm": {
-                    let d: any = data;
                     Android?.setAlarm(d.time);
                     break;
                 }
                 case "call-phonenumber": {
-                    let d: any = data;
                     Android?.callPhoneNumber(d.phoneNumber);
                     break;
                 }
                 case "send-sms": {
-                    let d: any = data;
                     Android?.sendSMS(d.phoneNumber, d.message);
                     break;
                 }
                 case "search-nearby": {
-                    let d: any = data;
                     Android?.searchNearby(d.searchTerm);
                     break;
+                }
+                case "automate-phone-ui": {
+                    Android.automateUI(d.originalRequest);
                 }
             }
         } catch (e) {
