@@ -10,15 +10,15 @@ import {
     dateTime,
 } from "typeagent";
 import {
-    KnowledgeStore,
     TermSet,
     TextIndex,
     TextIndexSettings,
-    createKnowledgeStore,
     createTermSet,
-    createTextIndex,
 } from "../knowledgeIndex.js";
-import path from "path";
+import {
+    KnowledgeStore,
+    createKnowledgeStoreOnStorage,
+} from "../knowledgeStore.js";
 import { ExtractedEntity, knowledgeValueToString } from "./knowledge.js";
 import { TextBlock, TextBlockType } from "../text.js";
 import { EntityFilter } from "./knowledgeSearchSchema.js";
@@ -46,6 +46,10 @@ import { ConcreteEntity, Facet } from "./knowledgeSchema.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
+import {
+    createFileSystemStorageProvider,
+    StorageProvider,
+} from "../storageProvider.js";
 
 export interface EntitySearchOptions extends SearchOptions {
     loadEntities?: boolean | undefined;
@@ -104,37 +108,48 @@ export interface EntityIndex<TEntityId = any, TSourceId = any, TTextId = any>
     ): Promise<Set<TSourceId> | undefined>;
 }
 
-export async function createEntityIndex<TSourceId = string>(
+export function createEntityIndex<TSourceId = string>(
     settings: TextIndexSettings,
     rootPath: string,
     folderSettings?: ObjectFolderSettings,
     fSys?: FileSystem,
 ): Promise<EntityIndex<string, TSourceId, string>> {
+    return createEntityIndexOnStorage(
+        settings,
+        rootPath,
+        createFileSystemStorageProvider(folderSettings, fSys),
+    );
+}
+
+export async function createEntityIndexOnStorage<TSourceId = string>(
+    settings: TextIndexSettings,
+    rootPath: string,
+    storageProvider: StorageProvider,
+): Promise<EntityIndex<string, TSourceId, string>> {
     type EntityId = string;
     const [entityStore, nameIndex, typeIndex, facetIndex] = await Promise.all([
-        createKnowledgeStore<ExtractedEntity<TSourceId>>(
+        createKnowledgeStoreOnStorage<ExtractedEntity<TSourceId>>(
             settings,
             rootPath,
-            folderSettings,
-            fSys,
+            storageProvider,
         ),
-        createTextIndex<EntityId>(
+        storageProvider.createTextIndex<EntityId>(
             settings,
-            path.join(rootPath, "names"),
-            folderSettings,
-            fSys,
+            rootPath,
+            "names",
+            "TEXT",
         ),
-        createTextIndex<EntityId>(
+        storageProvider.createTextIndex<EntityId>(
             settings,
-            path.join(rootPath, "types"),
-            folderSettings,
-            fSys,
+            rootPath,
+            "types",
+            "TEXT",
         ),
-        createTextIndex<EntityId>(
+        storageProvider.createTextIndex<EntityId>(
             settings,
-            path.join(rootPath, "facets"),
-            folderSettings,
-            fSys,
+            rootPath,
+            "facets",
+            "TEXT",
         ),
     ]);
     const noiseTerms = createTermSet();

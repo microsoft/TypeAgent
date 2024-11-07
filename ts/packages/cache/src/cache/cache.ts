@@ -12,7 +12,6 @@ import {
 import { GenericExplanationResult } from "../index.js";
 import { ConstructionStore, ConstructionStoreImpl } from "./store.js";
 import { ExplainerFactory } from "./factory.js";
-import { explainMultipleActions } from "../explanation/v5/multiRequestExplanationV5.js";
 
 export type ProcessExplanationResult = {
     explanation: GenericExplanationResult;
@@ -94,25 +93,6 @@ export class AgentCache {
 
     public get constructionStore(): ConstructionStore {
         return this._constructionStore;
-    }
-
-    private async processMultipleAction(
-        requestAction: RequestAction,
-        cache: boolean,
-    ): Promise<ProcessRequestActionResult> {
-        const startTime = performance.now();
-        const explanation = await explainMultipleActions(
-            requestAction,
-            async (subRequestAction) => {
-                return this.queueTask(subRequestAction, cache);
-            },
-        );
-        return {
-            explanationResult: {
-                explanation,
-                elapsedMs: performance.now() - startTime,
-            },
-        };
     }
 
     private getExplainerForActions(actions: Actions) {

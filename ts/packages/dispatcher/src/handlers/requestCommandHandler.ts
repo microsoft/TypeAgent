@@ -505,6 +505,14 @@ function getChatHistoryForTranslation(
     return { promptSections, entities, additionalInstructions };
 }
 
+function hasAdditionaInstructions(history?: HistoryContext) {
+    return (
+        history &&
+        history.additionalInstructions !== undefined &&
+        history.additionalInstructions.length > 0
+    );
+}
+
 export async function translateRequest(
     request: string,
     context: ActionContext<CommandHandlerContext>,
@@ -769,7 +777,7 @@ async function requestExplain(
         return;
     }
 
-    if (requestAction.history?.additionalInstructions !== undefined) {
+    if (hasAdditionaInstructions(requestAction.history)) {
         // Translation with additional instructions are not cachable.
         return;
     }
@@ -906,7 +914,8 @@ export class RequestCommandHandler implements CommandHandler {
             systemContext.streamingActionContext = undefined;
 
             const canUseCacheMatch =
-                attachments === undefined || attachments.length === 0;
+                (attachments === undefined || attachments.length === 0) &&
+                !hasAdditionaInstructions(history);
             const match = canUseCacheMatch
                 ? await matchRequest(request, context, history)
                 : undefined;

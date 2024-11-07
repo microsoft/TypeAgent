@@ -41,6 +41,8 @@ describe("sqlite.temporalTable", () => {
                 expect(ids).toHaveLength(blocks.length);
                 allIds.push(...ids);
             }
+            const size = await table.size();
+            expect(size).toEqual(allIds.length);
 
             const windowLength = 8;
             const latest = [...table.iterateNewest(windowLength)];

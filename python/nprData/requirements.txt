@@ -1,0 +1,7 @@
+bs4
+requests
+tqdm
+qdrant_client
+openai
+python-dotenv
+groq
