@@ -309,3 +309,6 @@ function prepareEntityForMerge(entity: ConcreteEntity) {
     collections.lowerAndSort(entity.type);
     return entity;
 }
+export function isValidEntityName(name: string | undefined): boolean {
+    return name !== undefined && name.length > 0 && name !== NoEntityName;
+}

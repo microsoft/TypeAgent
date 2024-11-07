@@ -1130,7 +1130,19 @@ export async function runChatMemory(): Promise<void> {
             searchOptions.fallbackSearch = { maxMatches: 10 };
         }
         if (!namedArgs.eval) {
-            await searchNoEval(query, searchOptions);
+            // just translate user query into structured query without eval
+            const translationContext =
+                await context.searcher.buildContext(searchOptions);
+            const searchResult: any = namedArgs.v2
+                ? await searcher.actions.translateSearchTermsV2(
+                      query,
+                      translationContext,
+                  )
+                : await context.searcher.actions.translateSearch(
+                      query,
+                      translationContext,
+                  );
+            printer.writeJson(searchResult);
             return;
         }
 

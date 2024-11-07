@@ -29,14 +29,15 @@ export type VerbsTerm = {
 export type ActionTerm = {
     verbs?: VerbsTerm | undefined; // action verbs
     // - subject and object for the verb
-    subject?: string | undefined;
+    subject: string | "none"; // 'performs' the action. (e.g email sender)
     object?: string | undefined; // 'receives' the action (e.g. 'email' in: What did X say in his email about Y the sent to Z')
 };
 
 // Search indexes for following search terms: typically single word keywords.
 export type TermFilterV2 = {
     action?: ActionTerm;
-    // do not include terms already in action
+    // Includes any search terms not already in action
+    // skip generic terms like "topic" and "subject"
     // Phrases like 'email address' or 'first name' are a single term
     searchTerms?: SearchTerm[];
     // Use only if request explicitly asks for time range

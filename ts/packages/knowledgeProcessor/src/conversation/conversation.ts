@@ -407,10 +407,10 @@ export async function createConversation(
     async function clear(removeMessages: boolean): Promise<void> {
         await removeMessageIndex();
         await removeKnowledge();
-
         if (removeMessages) {
             await messages.clear();
         }
+        await load();
     }
 
     async function load() {
@@ -682,13 +682,7 @@ export async function createConversation(
                 ? await actionIndex.searchTermsV2(filter, options.action)
                 : undefined;
             const tasks = [
-                topicIndex.searchTermsV2(
-                    {
-                        searchTerms: getAllTermsInFilter(filter),
-                        timeRange: filter.timeRange,
-                    },
-                    options.topic,
-                ),
+                topicIndex.searchTermsV2(filter, options.topic),
                 entityIndex.searchTermsV2(
                     {
                         searchTerms: getAllTermsInFilter(filter, false),
@@ -852,8 +846,8 @@ export async function createConversationTopicMerger(
         reset,
     };
 
-    async function reset(): Promise<void> {
-        await init();
+    function reset(): Promise<void> {
+        return init();
     }
 
     async function init() {

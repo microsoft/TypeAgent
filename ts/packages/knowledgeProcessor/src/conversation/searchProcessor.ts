@@ -38,6 +38,7 @@ import {
     TermFilterV2,
 } from "./knowledgeTermSearchSchema2.js";
 import { createTopicSearchOptions } from "./topics.js";
+import { NoEntityName } from "./knowledge.js";
 
 export type SearchProcessingOptions = {
     maxMatches: number;
@@ -584,7 +585,7 @@ export function getAllTermsInFilter(
         if (includeVerbs && action.verbs) {
             terms.push(...action.verbs.words);
         }
-        if (action.subject) {
+        if (action.subject && action.subject !== NoEntityName) {
             terms.push(action.subject);
         }
         if (action.object) {
