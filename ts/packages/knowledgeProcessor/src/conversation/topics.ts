@@ -43,7 +43,7 @@ import {
     unionMultiple,
     uniqueFrom,
 } from "../setOperations.js";
-import { createRecentItemsWindow } from "./conversation.js";
+import { createRecentItemsWindow } from "../temporal.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
 import { getAllTermsInFilter } from "./searchProcessor.js";
@@ -326,7 +326,7 @@ export function createTopicSearchOptions(
         minScore: 0.8,
         loadTopics: true,
         sourceNameSearchOptions: {
-            maxMatches: 1,
+            maxMatches: 8,
             minScore: 0.8,
         },
     };

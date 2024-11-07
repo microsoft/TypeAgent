@@ -6,17 +6,11 @@ import {
     ObjectFolder,
     ObjectFolderSettings,
     SearchOptions,
-    collections,
     createObjectFolder,
     dateTime,
     removeDir,
 } from "typeagent";
-import {
-    TextBlock,
-    SourceTextBlock,
-    valueToString,
-    TextBlockType,
-} from "../text.js";
+import { TextBlock, SourceTextBlock, TextBlockType } from "../text.js";
 import { Topic } from "./topicSchema.js";
 import { TextStore, createTextStore } from "../textStore.js";
 import path from "path";
@@ -61,61 +55,48 @@ import {
     createFileSystemStorageProvider,
     StorageProvider,
 } from "../storageProvider.js";
+import { RecentItems, createRecentItemsWindow } from "../temporal.js";
 
-export interface RecentItems<T> {
-    readonly entries: collections.CircularArray<T>;
-    push(items: T | T[]): void;
-    getContext(maxContextLength: number): string[];
-    getUnique(): T[];
-    reset(): void;
+export interface ConversationSettings {
+    indexSettings: TextIndexSettings;
+    indexActions?: boolean;
+    initializer?: ((conversation: Conversation) => Promise<void>) | undefined;
 }
 
-export function createRecentItemsWindow<T>(
-    windowSize: number,
-    stringify?: (value: T) => string,
-): RecentItems<T> {
-    const entries = new collections.CircularArray<T>(windowSize);
+export function createConversationSettings(
+    embeddingModel?: TextEmbeddingModel,
+): ConversationSettings {
     return {
-        entries,
-        push,
-        getContext,
-        getUnique,
-        reset() {
-            entries.reset();
+        indexSettings: {
+            caseSensitive: false,
+            concurrency: 2,
+            embeddingModel,
+            semanticIndex: true,
         },
     };
+}
 
-    function push(items: T | T[]): void {
-        if (Array.isArray(items)) {
-            for (const item of items) {
-                entries.push(item);
-            }
-        } else {
-            entries.push(items);
-        }
-    }
+export type ConversationSearchOptions = {
+    entity: EntitySearchOptions;
+    topic: TopicSearchOptions;
+    // Include if you want to use actions in your search
+    action?: ActionSearchOptions | undefined;
+    topicLevel?: number;
+    loadMessages?: boolean;
+};
 
-    function getContext(maxContextLength: number): string[] {
-        let sections: string[] = [];
-        let totalLength = 0;
-        // Get the range of sections that could be pushed on, NEWEST first
-        for (const item of entries.itemsReverse()) {
-            const content = valueToString(item, stringify);
-            const nextLength = content.length;
-            if (nextLength + totalLength > maxContextLength) {
-                break;
-            }
-            sections.push(content);
-            totalLength += nextLength;
-        }
-        sections.reverse();
-        return sections;
-    }
-
-    function getUnique(): T[] {
-        const unique = new Set<T>(entries);
-        return unique.size > 0 ? [...unique.values()] : [];
-    }
+export function createConversationSearchOptions(
+    topLevelSummary: boolean = false,
+): ConversationSearchOptions {
+    const topicLevel = topLevelSummary ? 2 : 1;
+    const searchOptions: ConversationSearchOptions = {
+        entity: createEntitySearchOptions(true),
+        topic: createTopicSearchOptions(topLevelSummary),
+        action: createActionSearchOptions(true),
+        topicLevel,
+        loadMessages: !topLevelSummary,
+    };
+    return searchOptions;
 }
 
 export interface Conversation<
@@ -197,47 +178,6 @@ export type ExtractedKnowledgeIds<
     actionIds?: TActionId[] | undefined;
 };
 
-export type ConversationSettings = {
-    indexSettings: TextIndexSettings;
-    indexActions?: boolean;
-};
-
-export function createConversationSettings(
-    embeddingModel?: TextEmbeddingModel,
-): ConversationSettings {
-    return {
-        indexSettings: {
-            caseSensitive: false,
-            concurrency: 2,
-            embeddingModel,
-            semanticIndex: true,
-        },
-    };
-}
-
-export type ConversationSearchOptions = {
-    entity: EntitySearchOptions;
-    topic: TopicSearchOptions;
-    // Include if you want to use actions in your search
-    action?: ActionSearchOptions | undefined;
-    topicLevel?: number;
-    loadMessages?: boolean;
-};
-
-export function createConversationSearchOptions(
-    topLevelSummary: boolean = false,
-): ConversationSearchOptions {
-    const topicLevel = topLevelSummary ? 2 : 1;
-    const searchOptions: ConversationSearchOptions = {
-        entity: createEntitySearchOptions(true),
-        topic: createTopicSearchOptions(topLevelSummary),
-        action: createActionSearchOptions(true),
-        topicLevel,
-        loadMessages: !topLevelSummary,
-    };
-    return searchOptions;
-}
-
 /**
  * Create or load a persistent conversation, using the given rootPath as the storage root.
  * - The conversation is stored in folders below the given root path
@@ -288,9 +228,7 @@ export async function createConversation(
     const actionPath = path.join(rootPath, "actions");
     let actionIndex: ActionIndex | undefined;
 
-    await load();
-
-    return {
+    const thisConversation: Conversation<string, string, string> = {
         settings,
         messages,
         knowledge: knowledgeStore,
@@ -311,6 +249,8 @@ export async function createConversation(
         addNextEntities,
         indexEntities,
     };
+    await load();
+    return thisConversation;
 
     async function getMessageIndex(): Promise<MessageIndex<MessageId>> {
         if (!messageIndex) {
@@ -415,6 +355,9 @@ export async function createConversation(
 
     async function load() {
         await Promise.all([loadKnowledge(), getMessageIndex()]);
+        if (settings.initializer) {
+            await settings.initializer(thisConversation);
+        }
     }
 
     async function loadTopicIndex(name: string): Promise<TopicIndex> {

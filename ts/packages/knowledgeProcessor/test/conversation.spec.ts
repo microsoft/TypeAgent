@@ -86,6 +86,7 @@ async function getContext(): Promise<TestContext> {
 
 async function createTestContext(): Promise<TestContext> {
     const cm = await conversation.createConversationManager(
+        {},
         "testConversation",
         path.join(os.tmpdir(), "/data/tests"),
         true,

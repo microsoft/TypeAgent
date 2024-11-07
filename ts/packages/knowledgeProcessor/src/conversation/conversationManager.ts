@@ -69,6 +69,11 @@ export type AddMessageTask = {
 
 export type ConversationManagerTask = AddMessageTask;
 
+export type ConversationManagerSettings = {
+    model?: ChatModel | undefined;
+    initializer?: ((cm: ConversationManager) => Promise<void>) | undefined;
+};
+
 /**
  * A conversation manager lets you dynamically:
  *  - add and index messages and entities to a conversation
@@ -165,17 +170,18 @@ export interface ConversationManager<TMessageId = any, TTopicId = any> {
  * @param createNew Use existing conversation or create a new one
  * @param existingConversation If using an existing conversation
  * @param model Pass in chat model to use
+ * @param initializer Optional initializer
  */
 export async function createConversationManager(
+    settings: ConversationManagerSettings,
     conversationName: string,
     conversationPath: string,
     createNew: boolean,
     existingConversation?: Conversation | undefined,
-    model?: ChatModel,
 ): Promise<ConversationManager<string, string>> {
     const conversationSettings = createConversationSettings();
     const chatModel =
-        model ?? openai.createChatModelDefault("conversationManager");
+        settings.model ?? openai.createChatModelDefault("conversationManager");
     const knowledgeModel = chatModel;
     const answerModel = chatModel;
 
@@ -207,9 +213,8 @@ export async function createConversationManager(
     const updateTaskQueue = collections.createTaskQueue(async (task) => {
         await handleUpdateTask(task);
     }, 64);
-    await conversation.getMessageIndex();
 
-    return {
+    const thisConversationManager: ConversationManager<string, string> = {
         conversationName,
         conversation,
         get topicMerger() {
@@ -226,6 +231,8 @@ export async function createConversationManager(
         generateAnswerForSearchResponse,
         clear,
     };
+    await load();
+    return thisConversationManager;
 
     function addMessage(
         message: string | ConversationMessage,
@@ -361,6 +368,13 @@ export async function createConversationManager(
             maxMessages,
         );
         return searchProcessor.generateAnswer(query, searchResponse, options);
+    }
+
+    async function load(): Promise<void> {
+        await conversation.getMessageIndex();
+        if (settings.initializer) {
+            await settings.initializer(thisConversationManager);
+        }
     }
 
     async function clear(removeMessages: boolean): Promise<void> {

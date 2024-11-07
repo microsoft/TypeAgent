@@ -113,11 +113,13 @@ export async function createChatMemoryContext(
     );
     const conversationManager =
         await knowLib.conversation.createConversationManager(
+            {
+                model: chatModel,
+            },
             conversationName,
             conversationPath,
             false,
             conversation,
-            chatModel,
         );
     const entityTopK = 16;
     const actionTopK = 16;
@@ -204,6 +206,9 @@ export async function createSearchMemory(
 ): Promise<conversation.ConversationManager> {
     const conversationName = "search";
     const memory = await conversation.createConversationManager(
+        {
+            model: context.chatModel,
+        },
         conversationName,
         context.storePath,
         true,
@@ -232,11 +237,11 @@ export async function loadConversation(
         context.conversationName = name;
         context.conversationManager =
             await conversation.createConversationManager(
+                { model: context.chatModel },
                 name,
                 conversationPath,
                 false,
                 context.conversation,
-                context.chatModel,
             );
     } else {
         context.conversation = reservedCm.conversation;
@@ -473,6 +478,7 @@ export async function runChatMemory(): Promise<void> {
                 concurrency: argConcurrency(1),
                 clean: argClean(),
                 chunkSize: argChunkSize(context.maxCharsPerChunk),
+                maxMessages: argNum("Max messages"),
             },
         };
     }
@@ -492,10 +498,13 @@ export async function runChatMemory(): Promise<void> {
             if (namedArgs.clean) {
                 await context.emailMemory.clear(true);
             }
-            const emails = await knowLib.email.loadEmailFolder(
+            let emails = await knowLib.email.loadEmailFolder(
                 sourcePath,
                 namedArgs.concurrency,
             );
+            if (namedArgs.maxMessages && namedArgs.maxMessages > 0) {
+                emails = emails.slice(0, namedArgs.maxMessages);
+            }
             let i = 0;
             for (const emailBatch of collections.slices(
                 emails,

@@ -29,7 +29,8 @@ export type VerbsTerm = {
 export type ActionTerm = {
     verbs?: VerbsTerm | undefined; // action verbs
     // - subject and object for the verb
-    subject: string | "none"; // 'performs' the action. (e.g email sender)
+    // - exclude all pronouns (e.g. we", "they")
+    subject: string | "none"; // The name of the entity that 'performs' the action. (e.g email sender). Don't include pronouns lke 'they', 'we'..
     object?: string | undefined; // 'receives' the action (e.g. 'email' in: What did X say in his email about Y the sent to Z')
 };
 
