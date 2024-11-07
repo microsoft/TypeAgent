@@ -13,10 +13,10 @@ import { ActionContext, AppAction, AppAgent } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../internal.js";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import {
-    ClarifyRequestAction,
     DispatcherActions,
     UnknownAction,
-} from "./dispatcherActionSchema.js";
+} from "./schema/dispatcherActionSchema.js";
+import { ClarifyRequestAction } from "./schema/clarifyActionSchema.js";
 
 export function isUnknownAction(action: AppAction): action is UnknownAction {
     return action.actionName === "unknown";
@@ -33,7 +33,7 @@ const dispatcherHandlers: CommandHandlerTable = {
 };
 
 async function executeDispatcherAction(
-    action: DispatcherActions,
+    action: DispatcherActions | ClarifyRequestAction,
     context: ActionContext<CommandHandlerContext>,
 ) {
     if (action.actionName === "clarifyRequest") {

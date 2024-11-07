@@ -45,11 +45,7 @@ import registerDebug from "debug";
 import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
 import ExifReader from "exifreader";
 import { ProfileNames } from "../utils/profileNames.js";
-import {
-    ActionContext,
-    ParsedCommandParams,
-    Profiler,
-} from "@typeagent/agent-sdk";
+import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import {
     displayError,
@@ -61,8 +57,7 @@ import { DispatcherName } from "./common/interactiveIO.js";
 import { getActionTemplateEditConfig } from "../translation/actionTemplate.js";
 import { getActionInfo, validateAction } from "../translation/actionInfo.js";
 import { isUnknownAction } from "../dispatcher/dispatcherAgent.js";
-import { UnknownAction } from "../dispatcher/dispatcherActionSchema.js";
-import { RequestMetricsManager } from "../utils/metrics.js";
+import { UnknownAction } from "../dispatcher/schema/dispatcherActionSchema.js";
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugExplain = registerDebug("typeagent:explain");
