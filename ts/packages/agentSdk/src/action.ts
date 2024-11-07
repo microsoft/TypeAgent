@@ -20,6 +20,7 @@ export type ActionResultSuccessNoDisplay = {
     entities: Entity[];
     dynamicDisplayId?: string | undefined;
     dynamicDisplayNextRefreshMs?: number | undefined;
+    additionalInstructions?: string[] | undefined;
     error?: undefined;
 };
 
@@ -29,6 +30,7 @@ export type ActionResultSuccess = {
     entities: Entity[];
     dynamicDisplayId?: string | undefined;
     dynamicDisplayNextRefreshMs?: number | undefined;
+    additionalInstructions?: string[] | undefined;
     error?: undefined;
 };
 

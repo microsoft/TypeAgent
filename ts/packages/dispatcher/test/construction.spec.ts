@@ -26,6 +26,11 @@ const testInput = inputs.flatMap((f) =>
     ]),
 );
 
+const matchConfig = {
+    enableWildcard: false,
+    rejectReferences: false,
+};
+
 describe("construction", () => {
     describe("roundtrip", () => {
         it.each(testInput)(
@@ -49,9 +54,14 @@ describe("construction", () => {
                         getSchemaConfig: loadBuiltinTranslatorSchemaConfig,
                     },
                 );
-                const matched = construction.match(requestAction.request);
+
+                const matched = construction.match(
+                    requestAction.request,
+                    matchConfig,
+                );
                 const matchedLowercase = construction.match(
                     requestAction.request.toLowerCase(),
+                    matchConfig,
                 );
                 if (!tags.includes("failedRoundTripAction")) {
                     // Able to match roundtrip

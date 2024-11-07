@@ -70,7 +70,7 @@ export default class ExplainCommand extends Command {
             {
                 translators,
                 actions: {}, // We don't need any actions
-                explainerName: flags.explainer,
+                explainer: { name: flags.explainer },
                 cache: false,
                 clientIO: flags.repeat > 1 ? null : undefined,
             },
@@ -104,7 +104,7 @@ export default class ExplainCommand extends Command {
                             await context.agentCache.processRequestAction(
                                 requestAction,
                                 false,
-                                true,
+                                { concurrent: true },
                             );
                         console.log(
                             result.explanationResult.explanation.success

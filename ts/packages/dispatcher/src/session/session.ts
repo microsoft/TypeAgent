@@ -20,7 +20,7 @@ import {
     AppAgentStateOptions,
 } from "../handlers/common/appAgentManager.js";
 import { cloneConfig, mergeConfig } from "./options.js";
-import { TokenCounter } from "aiclient";
+import { TokenCounter, TokenCounterData } from "aiclient";
 
 const debugSession = registerDebug("typeagent:session");
 
@@ -102,14 +102,27 @@ async function newSessionDir() {
 }
 
 type DispatcherConfig = {
-    explainerName: string;
     models: {
         translator: string;
         explainer: string;
     };
     bot: boolean;
     stream: boolean;
-    explanation: boolean;
+    explainer: {
+        enabled: boolean;
+        name: string;
+        filter: {
+            multiple: boolean;
+            reference: {
+                value: boolean;
+                list: boolean;
+                translate: boolean;
+            };
+        };
+    };
+    promptConfig: {
+        additionalInstructions: boolean;
+    };
     switch: {
         inline: boolean;
         search: boolean;
@@ -134,14 +147,27 @@ const defaultSessionConfig: SessionConfig = {
     translators: undefined,
     actions: undefined,
     commands: undefined,
-    explainerName: getDefaultExplainerName(),
     models: {
         translator: "",
         explainer: "",
     },
     bot: true,
     stream: true,
-    explanation: true,
+    explainer: {
+        enabled: true,
+        name: getDefaultExplainerName(),
+        filter: {
+            multiple: true,
+            reference: {
+                value: true,
+                list: true,
+                translate: true,
+            },
+        },
+    },
+    promptConfig: {
+        additionalInstructions: true,
+    },
     switch: {
         inline: true,
         search: true,
@@ -168,7 +194,7 @@ type SessionCacheData = {
 type SessionData = {
     config: SessionConfig;
     cacheData: SessionCacheData;
-    tokens?: TokenCounter;
+    tokens?: TokenCounterData;
 };
 
 // Fill in missing fields when loading sessions from disk
@@ -261,7 +287,7 @@ export class Session {
     }
 
     public get explainerName() {
-        return this.config.explainerName;
+        return this.config.explainer.name;
     }
 
     public get bot() {
@@ -269,7 +295,7 @@ export class Session {
     }
 
     public get explanation() {
-        return this.config.explanation;
+        return this.config.explainer.enabled;
     }
 
     public get cache() {

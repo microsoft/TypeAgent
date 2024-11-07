@@ -224,6 +224,7 @@ export function testDotPerf2(size: number) {
     }
 
     let len = vectors.length;
+    console.log(`RUNNING ${len} vectors`);
     console.log("==dot==");
     console.time("dot");
     let sum = 0;
@@ -243,10 +244,30 @@ export function testDotPerf2(size: number) {
     console.log(sum);
 }
 
+export type DataType = string | number;
+
+export function testTypes<TKey extends DataType, TValue extends DataType>() {
+    if (typeof (undefined as any as TKey) === "string") {
+        console.log("key string");
+    } else {
+        console.log("key number");
+    }
+
+    if (typeof (undefined as any as TValue) === "string") {
+        console.log("value string");
+    } else {
+        console.log("value number");
+    }
+}
+
+export async function testPerf() {
+    testDotPerf();
+    testDotPerf2(1536);
+}
 export async function runTests(): Promise<void> {
-    //testDotPerf();
-    //testDotPerf2(1536);
     //await testEmbeddingModel();
     //await runTestCases();
     // await runKnowledgeTests();
+    //await testPerf();
+    testTypes<number, string>();
 }

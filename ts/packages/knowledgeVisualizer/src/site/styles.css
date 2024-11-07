@@ -1,0 +1,73 @@
+/* 
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT License.
+*/
+#html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 14px;
+}
+.mainContainer {
+  display: flex;
+  flex-wrap: auto;
+}
+.chartContainer {
+  display: inline;
+  border-color: #3a7bd0;
+  border-width: 2px;
+  border-radius: 5px;
+  border-style: solid;
+  margin: 5px;
+  overflow: hidden;
+}
+.chartContainer-collapsed {
+  display: inline;
+  border-color: #3a7bd0;
+  border-width: 2px;
+  border-radius: 5px;
+  border-style: solid;
+  margin: 5px;
+  overflow: hidden;
+  width: 200px;
+  height: 200px;
+}
+.chartContainer-expanded {
+  display: inline;
+  border-color: #3a7bd0;
+  border-width: 2px;
+  border-radius: 5px;
+  border-style: solid;
+  margin: 5px;
+  overflow: hidden;
+  width: auto;
+  height: auto;
+}
+.chart-title {
+  background-color: #3a7bd0;
+  color: white;
+  font-weight: 400;
+  height: 28px;
+  padding-left: 10px;
+  padding-top: 4px;
+}
+.sizeButton {
+  padding: 0px;
+  float: right;
+  margin-top: 2px;
+  margin-right: 2px;
+  width: 24px;
+  height: 24px;
+  background-color: transparent;
+  border-width: 0px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.sizeButton:hover {
+  background-color: #555555aa;
+}
+.hidden {
+  display: none;
+}

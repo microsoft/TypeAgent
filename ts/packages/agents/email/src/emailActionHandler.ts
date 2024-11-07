@@ -39,7 +39,7 @@ export class MailClientLoginCommandHandler implements CommandHandlerNoParams {
 
 const handlers: CommandHandlerTable = {
     description: "Email login commmand",
-    defaultSubCommand: new MailClientLoginCommandHandler(),
+    defaultSubCommand: "login",
     commands: {
         login: new MailClientLoginCommandHandler(),
     },
@@ -172,10 +172,8 @@ async function handleEmailAction(
             await handleForwardOrReplyAction(action, mailClient);
             break;
 
-        case "unknown":
         default:
-            console.log(chalk.gray("UNKNOWN action type:"));
-            break;
+            throw new Error(`Unknown action: ${(action as any).actionName}`);
     }
 }
 

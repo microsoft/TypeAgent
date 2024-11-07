@@ -10,6 +10,7 @@ import {
 import { ConstructionPart } from "./constructions.js";
 import { TransformInfo, isMatchPart, toTransformInfoKey } from "./matchPart.js";
 import { ParsePart, isParsePart } from "./parsePart.js";
+import { MatchConfig } from "./constructionMatch.js";
 
 export type MatchedValueTranslator = {
     transform(
@@ -33,10 +34,8 @@ export type MatchedValues = {
 export function matchedValues(
     parts: ConstructionPart[],
     matched: string[],
-    enableWildcard: boolean,
+    config: MatchConfig,
     matchValueTranslator: MatchedValueTranslator,
-    history?: HistoryContext,
-    conflicts?: boolean,
 ): MatchedValues | undefined {
     const matchedParts = parts.filter((e) => e.capture);
     if (matchedParts.length !== matched.length) {
@@ -46,9 +45,8 @@ export function matchedValues(
     }
 
     const values: [string, ParamValueType][] = [];
-    const conflictValues: [string, ParamValueType[]][] | undefined = conflicts
-        ? []
-        : undefined;
+    const conflictValues: [string, ParamValueType[]][] | undefined =
+        config.conflicts ? [] : undefined;
     let matchedCount = 0;
     let wildcardCharCount = 0;
 
@@ -70,7 +68,7 @@ export function matchedValues(
                 } else {
                     entry = { transformInfo: info, text: [match] };
                     matchedTransformText.set(key, entry);
-                    if (enableWildcard && part.wildcard) {
+                    if (config.enableWildcard && part.wildcard) {
                         wildcardNames.add(key);
                     }
                 }
@@ -91,7 +89,7 @@ export function matchedValues(
         const value = matchValueTranslator.transform(
             matches.transformInfo,
             matches.text,
-            history,
+            config.history,
         );
         const { transformName, actionIndex } = matches.transformInfo;
         const propertyName = `${actionIndex !== undefined ? `${actionIndex}.` : ""}${transformName}`;

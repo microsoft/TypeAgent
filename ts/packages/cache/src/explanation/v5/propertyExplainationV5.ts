@@ -21,10 +21,12 @@ import {
 } from "../validateExplanation.js";
 import { form } from "./explanationV5.js";
 import { getLanguageTools } from "../../utils/language.js";
+import { ExplainerConfig } from "../genericExplainer.js";
 
 export type PropertyExplainer = TypeChatAgent<
     RequestAction,
-    PropertyExplanation
+    PropertyExplanation,
+    ExplainerConfig
 >;
 export function createPropertyExplainer(
     enableContext: boolean,
@@ -79,6 +81,7 @@ const langTool = getLanguageTools("en");
 function validatePropertyExplanation(
     requestAction: RequestAction,
     actionExplanation: PropertyExplanation,
+    config?: ExplainerConfig,
 ): string[] | undefined {
     const corrections: string[] = [];
     const propertyNameSet = new Set<string>();
@@ -137,15 +140,6 @@ function validatePropertyExplanation(
                         );
                     }
                 }
-            }
-
-            if (
-                typeof prop.value === "string" &&
-                langTool?.possibleReferentialPhrase(prop.value.toLowerCase())
-            ) {
-                throw new Error(
-                    "Request contains a possible referential phrase used for property values.",
-                );
             }
 
             const lowerCaseRequest = requestAction.request.toLowerCase();

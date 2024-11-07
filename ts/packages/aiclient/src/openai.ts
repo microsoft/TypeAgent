@@ -5,7 +5,6 @@ import {
     TextEmbeddingModel,
     CompletionSettings,
     ChatModel,
-    ChatMessage,
     ChatModelWithStreaming,
     ImageModel,
     ImageGeneration,
@@ -18,6 +17,8 @@ import {
     success,
     error,
     TypeChatLanguageModel,
+    MultimodalPromptContent,
+    ImagePromptContent,
 } from "typechat";
 import { readServerEventStream } from "./serverEvents";
 import { priorityQueue } from "async";
@@ -492,6 +493,7 @@ type ChatCompletionChoice = {
 type ChatCompletionChunk = {
     id: string;
     choices: ChatCompletionDelta[];
+    usage?: CompletionUsageStats;
 };
 
 type ChatCompletionDelta = {
@@ -577,7 +579,7 @@ export function createChatModel(
     return model;
 
     async function complete(
-        prompt: string | PromptSection[] | ChatMessage[],
+        prompt: string | PromptSection[],
     ): Promise<Result<string>> {
         verifyPromptLength(settings, prompt);
 
@@ -628,7 +630,7 @@ export function createChatModel(
     }
 
     async function completeStream(
-        prompt: string | PromptSection[] | ChatMessage[],
+        prompt: string | PromptSection[],
     ): Promise<Result<AsyncIterableIterator<string>>> {
         verifyPromptLength(settings, prompt);
 
@@ -637,7 +639,7 @@ export function createChatModel(
             return headerResult;
         }
 
-        const messages =
+        const messages: PromptSection[] =
             typeof prompt === "string"
                 ? [{ role: "user", content: prompt }]
                 : prompt;
@@ -646,10 +648,26 @@ export function createChatModel(
         if (completionSettings) {
             completionParams = { ...completionSettings };
         }
+
+        // BUGBUG - https://learn.microsoft.com/en-us/answers/questions/1805363/azure-openai-streaming-token-usage
+        // image_url content with streaming token usage reporting is currently broken
+        // TODO: remove after API endpoint correctly handles this case
+        let historyIncludesImages: boolean = false;
+        let isImageProptContent = (c: MultimodalPromptContent) =>
+            (c as ImagePromptContent).type == "image_url";
+        messages.map((ps) => {
+            if (Array.isArray(ps.content)) {
+                if (ps.content.some(isImageProptContent)) {
+                    historyIncludesImages = true;
+                }
+            }
+        });
+
         const params = {
             ...defaultParams,
             messages: messages,
             stream: true,
+            stream_options: { include_usage: true && !historyIncludesImages },
             ...completionParams,
         };
         const result = await callApi(
@@ -676,6 +694,14 @@ export function createChatModel(
                             if (delta) {
                                 yield delta;
                             }
+                        }
+                        if (data.usage) {
+                            try {
+                                TokenCounter.getInstance().add(
+                                    data.usage,
+                                    tags,
+                                );
+                            } catch {}
                         }
                     }
                 }

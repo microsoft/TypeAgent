@@ -9,11 +9,13 @@
 
 import {
     CorrectionRecord,
-    CreateConstructionInfo,
+    ConstructionCreationConfig,
     GenericExplanationResult,
+    ExplainerConfig,
 } from "../genericExplainer.js";
 import { Explainer } from "../explainer.js";
 import {
+    NonPropertySubPhrase,
     SubPhrase,
     SubPhraseExplanation,
     SubPhraseType,
@@ -61,8 +63,7 @@ import {
     createMatchPart,
 } from "../../constructions/matchPart.js";
 import { Transforms } from "../../constructions/transforms.js";
-
-import Path from "path";
+import { getLanguageTools } from "../../utils/language.js";
 
 type Explanation = PropertyExplanation &
     SubPhraseExplanation &
@@ -91,18 +92,18 @@ class ExplanationV5TypeChatAgent {
         this.subPhrasesExplainer = createSubPhraseExplainer(model);
         this.alternativesExplainer = createAlternativesExplainer(model);
     }
-    public async run(input: RequestAction) {
+    public async run(input: RequestAction, config?: ExplainerConfig) {
         const propertyExplainer = input.history
             ? this.propertyExplainerWithContext
             : this.propertyExplainerWithoutContext;
-        const result1 = await propertyExplainer.run(input);
+        const result1 = await propertyExplainer.run(input, config);
         if (!result1.success) {
             return result1;
         }
-        const result2 = await this.subPhrasesExplainer.run([
-            input,
-            result1.data,
-        ]);
+        const result2 = await this.subPhrasesExplainer.run(
+            [input, result1.data],
+            config,
+        );
         if (result2.corrections) {
             // includes the data from agent1 in corrections
             result2.corrections.forEach((correction) => {
@@ -115,11 +116,10 @@ class ExplanationV5TypeChatAgent {
         if (!result2.success) {
             return result2;
         }
-        const result3 = await this.alternativesExplainer.run([
-            input,
-            result1.data,
-            result2.data,
-        ]);
+        const result3 = await this.alternativesExplainer.run(
+            [input, result1.data, result2.data],
+            config,
+        );
         if (result3.corrections) {
             // includes the data from agent1 in corrections
             result3.corrections.forEach((correction) => {
@@ -159,18 +159,21 @@ class ExplanationV5TypeChatAgent {
     public validate(
         input: RequestAction,
         result: Explanation,
+        config?: ExplainerConfig,
     ): ValidationError | undefined {
         const propertyExplainer = input.history
             ? this.propertyExplainerWithContext
             : this.propertyExplainerWithoutContext;
-        const result1 = propertyExplainer.validate?.(input, result);
+        const result1 = propertyExplainer.validate?.(input, result, config);
         const result2 = this.subPhrasesExplainer.validate?.(
             [input, result],
             result,
+            config,
         );
         const result3 = this.alternativesExplainer.validate?.(
             [input, result, result],
             result,
+            config,
         );
 
         const corrections: string[] = [];
@@ -285,11 +288,11 @@ function getPropertyTransformInfo(
 async function augmentExplanation(
     explanation: Explanation,
     requestAction: RequestAction,
-    createConstructionInfo: CreateConstructionInfo,
+    constructionCreationConfig: ConstructionCreationConfig,
 ) {
     // for each non-implicit parameter that matches a type in the schema config, generate all of the alternatives for that parameter
 
-    const getSchemaConfig = createConstructionInfo.getSchemaConfig;
+    const getSchemaConfig = constructionCreationConfig.getSchemaConfig;
     const actions = requestAction.actions;
 
     for (const param of explanation.propertyAlternatives) {
@@ -426,13 +429,22 @@ function getParserForPropertyValue(
         : undefined;
 }
 
+const langTool = getLanguageTools("en");
+function canBeMergedNonPropertySubPhrase(phrase: NonPropertySubPhrase) {
+    return langTool?.hasClosedClass(phrase.text) !== true;
+}
+
+function useSynonymsForNonPropertySubPhrase(phrase: SubPhrase) {
+    return langTool?.hasClosedClass(phrase.text) !== true;
+}
+
 export function createConstructionV5(
     requestAction: RequestAction,
     explanation: Explanation,
-    createConstructionInfo: CreateConstructionInfo,
+    constructionCreationConfig: ConstructionCreationConfig,
 ) {
     const actions = requestAction.actions;
-    const getSchemaConfig = createConstructionInfo.getSchemaConfig;
+    const getSchemaConfig = constructionCreationConfig.getSchemaConfig;
     const entityParameters = explanation.properties.filter(
         (param) => isEntityParameter(param) && param.entityIndex !== undefined,
     ) as EntityProperty[];
@@ -453,30 +465,30 @@ export function createConstructionV5(
     );
 
     for (const phrase of explanation.subPhrases) {
-        if (hasPropertyNames(phrase)) {
-            // Disable synonyms for subphrase
-            if (
-                phrase.propertyNames.some((name) => disableSynonyms.has(name))
-            ) {
+        if (!hasPropertyNames(phrase)) {
+            if (!useSynonymsForNonPropertySubPhrase(phrase)) {
                 disableSynonymsSubPhrases.add(phrase);
             }
+            continue;
+        }
 
-            // Disable parameter alternatives
-            // Don't use alternatives if the type of the field is a set of string literals
-            if (
-                phrase.propertyNames.some(
-                    (propertyName) =>
-                        getPropertySpec(
-                            propertyName,
-                            actions,
-                            getSchemaConfig,
-                        ) === "literal",
-                )
-            ) {
-                phrase.propertyNames.forEach((propertyName) =>
-                    disableAlternateParamValues.add(propertyName),
-                );
-            }
+        // Disable synonyms for subphrase for properties that has multiple sub-phrases.
+        if (phrase.propertyNames.some((name) => disableSynonyms.has(name))) {
+            disableSynonymsSubPhrases.add(phrase);
+        }
+
+        // Disable parameter alternatives
+        // Don't use alternatives if the type of the field is a set of string literals
+        if (
+            phrase.propertyNames.some(
+                (propertyName) =>
+                    getPropertySpec(propertyName, actions, getSchemaConfig) ===
+                    "literal",
+            )
+        ) {
+            phrase.propertyNames.forEach((propertyName) =>
+                disableAlternateParamValues.add(propertyName),
+            );
         }
     }
 
@@ -591,79 +603,75 @@ export function createConstructionV5(
                 : [];
             const matches = [phrase.text, ...synonyms];
 
-            if (hasPropertyNames(phrase)) {
-                const hasSinglePropertyName = phrase.propertyNames.length === 1;
-                if (hasSinglePropertyName) {
-                    const propertyName = phrase.propertyNames[0];
-                    const parser = propertyParserMap.get(propertyName);
-                    if (parser !== undefined) {
-                        return createParsePart(propertyName, parser);
-                    }
-                }
-                let enableWildcard = true;
-
-                // REVIEW: can the match set be merged if it is for multiple param names?
-                let canBeMerged = hasSinglePropertyName;
-
-                const transformInfos: TransformInfo[] = [];
-                // Get the parameter info that this phase maps to
-                for (const propertyName of phrase.propertyNames) {
-                    const transformInfo = getPropertyTransformInfo(
-                        propertyName,
-                        actions,
-                        getSchemaConfig,
-                    );
-                    transformInfos.push(transformInfo);
-                    if (entityParamMap.has(propertyName)) {
-                        matches.length = 1; // remove the synonyms
-                        enableWildcard = false; // not a wildcard mapping
-                        canBeMerged = false; // REVIEW: can you merge matchset for entity references?
-
-                        // REVIEW: Don't use other synonyms or alternatives info for entities for now
-                        continue;
-                    }
-
-                    const paramInfo = propertyMap.get(propertyName);
-                    if (paramInfo === undefined) {
-                        // This shouldn't happen validate should have caught this
-                        throw new Error(`Parameter ${propertyName} not found`);
-                    }
-
-                    const shouldBeCopied = shouldValueBeCopied(
-                        phrase,
-                        paramInfo,
-                    );
-                    enableWildcard = enableWildcard && shouldBeCopied;
-
-                    // REVIEW: only add the synonyms transforms if there it has only 1 sub-phrase
-                    if (useSynonyms) {
-                        const transforms = getTransforms(
-                            transformInfo.namespace,
-                        );
-                        synonyms.forEach((synonym) => {
-                            transforms.add(
-                                transformInfo.transformName,
-                                synonym,
-                                // REVIEW: should we just use the synonym if shouldBeCopied be true?
-                                paramInfo.propertyValue,
-                                false,
-                            );
-                        });
-                    }
-                    if (!disableAlternateParamValues.has(propertyName)) {
-                        collectAltParamMatches(matches, phrase, paramInfo);
-                    }
-                }
-
-                const baseName = `M:${phrase.category}`;
-                return createMatchPart(matches, baseName, {
-                    transformInfos,
-                    canBeMerged,
-                    canBeWildcard: enableWildcard,
+            if (!hasPropertyNames(phrase)) {
+                return createMatchPart(matches, phrase.category, {
+                    optional: !!phrase.isOptional,
+                    canBeMerged: canBeMergedNonPropertySubPhrase(phrase),
                 });
             }
-            return createMatchPart(matches, phrase.category, {
-                optional: !!phrase.isOptional,
+            const hasSinglePropertyName = phrase.propertyNames.length === 1;
+            if (hasSinglePropertyName) {
+                const propertyName = phrase.propertyNames[0];
+                const parser = propertyParserMap.get(propertyName);
+                if (parser !== undefined) {
+                    return createParsePart(propertyName, parser);
+                }
+            }
+            let enableWildcard = true;
+
+            // REVIEW: can the match set be merged if it is for multiple param names?
+            let canBeMerged = hasSinglePropertyName;
+
+            const transformInfos: TransformInfo[] = [];
+            // Get the parameter info that this phase maps to
+            for (const propertyName of phrase.propertyNames) {
+                const transformInfo = getPropertyTransformInfo(
+                    propertyName,
+                    actions,
+                    getSchemaConfig,
+                );
+                transformInfos.push(transformInfo);
+                if (entityParamMap.has(propertyName)) {
+                    matches.length = 1; // remove the synonyms
+                    enableWildcard = false; // not a wildcard mapping
+                    canBeMerged = false; // REVIEW: can you merge matchset for entity references?
+
+                    // REVIEW: Don't use other synonyms or alternatives info for entities for now
+                    continue;
+                }
+
+                const paramInfo = propertyMap.get(propertyName);
+                if (paramInfo === undefined) {
+                    // This shouldn't happen validate should have caught this
+                    throw new Error(`Parameter ${propertyName} not found`);
+                }
+
+                const shouldBeCopied = shouldValueBeCopied(phrase, paramInfo);
+                enableWildcard = enableWildcard && shouldBeCopied;
+
+                // REVIEW: only add the synonyms transforms if there it has only 1 sub-phrase
+                if (useSynonyms) {
+                    const transforms = getTransforms(transformInfo.namespace);
+                    synonyms.forEach((synonym) => {
+                        transforms.add(
+                            transformInfo.transformName,
+                            synonym,
+                            // REVIEW: should we just use the synonym if shouldBeCopied be true?
+                            paramInfo.propertyValue,
+                            false,
+                        );
+                    });
+                }
+                if (!disableAlternateParamValues.has(propertyName)) {
+                    collectAltParamMatches(matches, phrase, paramInfo);
+                }
+            }
+
+            const baseName = `M:${phrase.category}`;
+            return createMatchPart(matches, baseName, {
+                transformInfos,
+                canBeMerged,
+                canBeWildcard: enableWildcard,
             });
         } catch (e: any) {
             throw new Error(

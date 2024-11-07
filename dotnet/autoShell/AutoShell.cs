@@ -361,6 +361,18 @@ namespace autoShell
             }
         }
 
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+
+        private const int SPI_SETDESKWALLPAPER = 20;
+        private const int SPIF_UPDATEINIFILE = 0x01;
+        private const int SPIF_SENDCHANGE = 0x02;
+
+        private static void SetDesktopWallpaper(string imagePath)
+        {
+            SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, imagePath, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+        }
+
         static bool execLine(string line)
         {
             var quit = false;
@@ -417,6 +429,9 @@ namespace autoShell
                     case "listAppNames":
                         var installedApps = GetAllInstalledAppsIds();
                         Console.WriteLine(JsonConvert.SerializeObject(installedApps.Keys));
+                        break;
+                    case "setWallpaper":
+                        SetDesktopWallpaper(value);
                         break;
                     default:
                         Debug.WriteLine("Unknown command: " + key);

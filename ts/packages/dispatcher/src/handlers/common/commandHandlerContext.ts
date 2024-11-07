@@ -8,11 +8,9 @@ import {
     Logger,
     LoggerSink,
     MultiSinkLogger,
-    TypeChatJsonTranslatorWithStreaming,
     createDebugLoggerSink,
     createLimiter,
     createMongoDBLoggerSink,
-    enableJsonTranslatorStreaming,
 } from "common-utils";
 import {
     AgentCache,
@@ -21,7 +19,6 @@ import {
 } from "agent-cache";
 import { randomUUID } from "crypto";
 import readline from "readline/promises";
-import type { TypeChatJsonTranslator } from "typechat";
 import {
     Session,
     SessionOptions,
@@ -31,6 +28,7 @@ import {
     getDefaultBuiltinTranslatorName,
     loadAgentJsonTranslator,
     TranslatorConfigProvider,
+    TypeAgentTranslator,
 } from "../../translation/agentTranslators.js";
 import { getCacheFactory } from "../../utils/cacheFactory.js";
 import { createServiceHost } from "../serviceHost/serviceHostCommandHandler.js";
@@ -95,7 +93,7 @@ export type CommandHandlerContext = {
     // Runtime context
     commandLock: Limiter; // Make sure we process one command at a time.
     lastActionTranslatorName: string;
-    translatorCache: Map<string, TypeChatJsonTranslatorWithStreaming<object>>;
+    translatorCache: Map<string, TypeAgentTranslator>;
     agentCache: AgentCache;
     currentScriptDir: string;
     logger?: Logger | undefined;
@@ -141,8 +139,7 @@ export function getTranslator(
         config.switch.inline ? getActiveTranslators(context) : undefined,
         config.multipleActions,
     );
-    const streamingTranslator = enableJsonTranslatorStreaming(newTranslator);
-    context.translatorCache.set(translatorName, streamingTranslator);
+    context.translatorCache.set(translatorName, newTranslator);
     return newTranslator;
 }
 
@@ -276,7 +273,7 @@ export async function initializeCommandHandlerContext(
         commandLock: createLimiter(1), // Make sure we process one command at a time.
         agentCache: await getAgentCache(session, agents, logger),
         lastActionTranslatorName: getDefaultBuiltinTranslatorName(), // REVIEW: just default to the first one on initialize?
-        translatorCache: new Map<string, TypeChatJsonTranslator<object>>(),
+        translatorCache: new Map<string, TypeAgentTranslator>(),
         currentScriptDir: process.cwd(),
         chatHistory: createChatHistory(),
         logger,
@@ -424,7 +421,7 @@ export async function changeContextConfig(
     if (translatorChanged || actionsChanged || commandsChanged) {
         Object.assign(changed, await updateAppAgentStates(context, changed));
     }
-    if (changed.explainerName !== undefined) {
+    if (changed.explainer?.name !== undefined) {
         try {
             systemContext.agentCache = await getAgentCache(
                 systemContext.session,
@@ -433,10 +430,12 @@ export async function changeContextConfig(
             );
         } catch (e: any) {
             displayError(`Failed to change explainer: ${e.message}`, context);
-            delete changed.explainerName;
+            delete changed.explainer?.name;
             // Restore old explainer name
             systemContext.session.setConfig({
-                explainerName: systemContext.agentCache.explainerName,
+                explainer: {
+                    name: systemContext.agentCache.explainerName,
+                },
             });
         }
 

@@ -25,6 +25,7 @@ import {
     isEntityParameter,
     isImplicitParameter,
 } from "./propertyExplainationV5.js";
+import { ExplainerConfig } from "../genericExplainer.js";
 
 // Subphrase explanation
 type SubPhraseExplainerInput = [RequestAction, PropertyExplanation];
@@ -51,7 +52,8 @@ function createInstructions([
 
 export type SubPhraseExplainer = TypeChatAgent<
     SubPhraseExplainerInput,
-    SubPhraseExplanation
+    SubPhraseExplanation,
+    ExplainerConfig
 >;
 export function createSubPhraseExplainer(model?: string) {
     return new TypeChatAgent(

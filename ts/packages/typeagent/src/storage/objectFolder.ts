@@ -4,8 +4,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { Path, removeFile, renameFileSync } from "../objStream";
-import { NameValue, ScoredItem } from "../memory";
-import { createTopNList } from "../vector/embeddings";
+import { NameValue } from "../memory";
 import { createLazy, insertIntoSorted } from "../lib";
 import registerDebug from "debug";
 
@@ -20,10 +19,9 @@ export type ObjectSerializer = (obj: any) => Buffer | string;
 export type ObjectDeserializer = (buffer: Buffer) => any;
 
 export interface ObjectFolderSettings {
-    allowSubFolders?: boolean;
     serializer?: ObjectSerializer;
     deserializer?: ObjectDeserializer;
-    fileNameType?: FileNameType;
+    fileNameType?: FileNameType | undefined;
     cacheNames?: boolean | undefined; // Default is true
     useWeakRefs?: boolean | undefined; // Default is false
     safeWrites?: boolean | undefined;
@@ -34,7 +32,7 @@ export interface ObjectFolderSettings {
  * The folder can be implemented over native files OR an abstract file system
  */
 export interface ObjectFolder<T> {
-    path: Path;
+    readonly path: Path;
 
     size(): Promise<number>;
     get(name: string): Promise<T | undefined>;
@@ -43,7 +41,6 @@ export interface ObjectFolder<T> {
         name?: string,
         onNameAssigned?: (obj: T, name: string) => void,
     ): Promise<string>;
-    append(...messages: T[]): Promise<void>;
 
     remove(name: string): Promise<void>;
     exists(name: string): boolean;
@@ -53,27 +50,7 @@ export interface ObjectFolder<T> {
     clear(): Promise<void>;
 
     allObjects(): AsyncIterableIterator<T>;
-    newestObjects(): AsyncIterableIterator<T>;
     allNames(): Promise<string[]>;
-
-    searchObjects(
-        maxMatches: number,
-        matcher: (nv: NameValue<T>) => number,
-    ): Promise<ScoredItem<T>[]>;
-
-    findObject(
-        criteria: (nv: NameValue<T>) => boolean,
-    ): Promise<NameValue<T> | undefined>;
-
-    getSubFolderNames(): Promise<string[]>;
-    getSubFolder<V>(
-        name: string | string[],
-        settings?: ObjectFolderSettings,
-    ): Promise<ObjectFolder<V> | undefined>;
-    createSubFolder<V>(
-        name: string | string[],
-        settings?: ObjectFolderSettings,
-    ): Promise<ObjectFolder<V>>;
 }
 
 /**
@@ -88,9 +65,7 @@ export async function createObjectFolder<T>(
     settings?: ObjectFolderSettings,
     fSys?: FileSystem,
 ): Promise<ObjectFolder<T>> {
-    const folderSettings = settings ?? {
-        allowSubFolders: false,
-    };
+    const folderSettings = settings ?? {};
     const fileSystem = fSys ?? fsDefault();
     const fileNameGenerator = createNameGenerator();
     const fileNames = createLazy<string[]>(
@@ -106,22 +81,15 @@ export async function createObjectFolder<T>(
         size,
         get,
         put,
-        append,
         remove,
         exists,
         all,
         newest,
         clear,
         allObjects,
-        newestObjects,
-        searchObjects,
-        findObject,
         allNames: async () => {
             return fileNames.get();
         },
-        getSubFolderNames,
-        getSubFolder,
-        createSubFolder,
     };
 
     async function size(): Promise<number> {
@@ -161,12 +129,6 @@ export async function createObjectFolder<T>(
             pushName(fileName);
         }
         return fileName;
-    }
-
-    async function append(...objects: T[]): Promise<void> {
-        for (let obj of objects) {
-            await put(obj);
-        }
     }
 
     async function remove(name: string): Promise<void> {
@@ -241,9 +203,6 @@ export async function createObjectFolder<T>(
         if (folderSettings.safeWrites) {
             names = removeHidden(names);
         }
-        if (folderSettings.allowSubFolders) {
-            names = removeDirNames(names);
-        }
         names.sort();
         return names;
     }
@@ -263,107 +222,17 @@ export async function createObjectFolder<T>(
         }
     }
 
-    async function* newestObjects(): AsyncIterableIterator<T> {
-        for await (const nv of newest()) {
-            yield nv.value;
-        }
-    }
-
-    async function searchObjects(
-        maxMatches: number,
-        matcher: (nv: NameValue<T>) => number,
-    ): Promise<ScoredItem<T>[]> {
-        const topN = createTopNList<T>(maxMatches);
-        for await (const nv of newest()) {
-            let score = matcher(nv);
-            if (score) {
-                topN.push(nv.value, score);
-            }
-        }
-        return topN.byRank();
-    }
-
-    async function findObject(
-        criteria: (nv: NameValue<T>) => boolean,
-    ): Promise<NameValue<T> | undefined> {
-        for await (const nv of newest()) {
-            if (criteria(nv)) {
-                return nv;
-            }
-        }
-        return undefined;
-    }
-
-    async function getSubFolderNames(): Promise<string[]> {
-        const allNames = await fileSystem.readdir(folderPath);
-        return getDirNames(allNames);
-    }
-
-    async function getSubFolder<V>(
-        name: string | string[],
-        subFolderSettings?: ObjectFolderSettings,
-    ): Promise<ObjectFolder<V> | undefined> {
-        subFoldersAllowed();
-
-        const dirPath = typeof name === "string" ? [name] : name;
-        const subFolderPath = await getSubFolderPath(dirPath);
-        const fullFolderPath = fullPath(subFolderPath);
-        if (fileSystem.exists(fullFolderPath)) {
-            return await createObjectFolder<V>(
-                fullFolderPath,
-                subFolderSettings ?? folderSettings,
-                fileSystem,
-            );
-        }
-        return undefined;
-    }
-
-    async function createSubFolder<V>(
-        name: string | string[],
-        subFolderSettings?: ObjectFolderSettings,
-    ): Promise<ObjectFolder<V>> {
-        subFoldersAllowed();
-
-        const dirPath = typeof name === "string" ? [name] : name;
-        const subFolderPath = await ensureSubFolders(dirPath);
-        return await createObjectFolder<V>(
-            fullPath(subFolderPath),
-            subFolderSettings ?? folderSettings,
-            fileSystem,
-        );
-    }
-
-    async function ensureSubFolders(dirPath: string[]): Promise<string> {
-        let subFolderPath = getSubFolderPath(dirPath);
-        const fullSubFolderPath = fullPath(subFolderPath);
-        await fileSystem.ensureDir(fullSubFolderPath);
-        return subFolderPath;
-    }
-
-    function getSubFolderPath(dirPath: string[]): string {
-        let subFolderPath: string = "";
-        for (let i = 0; i < dirPath.length; ++i) {
-            subFolderPath = path.join(subFolderPath, ensureDirName(dirPath[i]));
-        }
-        return subFolderPath;
-    }
-
     function fullPath(name: string): string {
         return path.join(folderPath, name);
     }
 
-    function subFoldersAllowed(): void {
-        if (!folderSettings.allowSubFolders) {
-            throw new Error("Subfolders not permitted");
-        }
-    }
-
     function createNameGenerator() {
-        const fileNameType = settings?.fileNameType ?? FileNameType.Timestamp;
+        const fileNameType =
+            folderSettings.fileNameType ?? FileNameType.Timestamp;
         return createFileNameGenerator(
             fileNameType === FileNameType.Timestamp
                 ? generateTimestampString
-                : generateTickString,
+                : generateTicksString,
             (name: string) => {
                 return !fileSystem.exists(fullPath(name));
             },
@@ -395,7 +264,7 @@ export function ensureUniqueObjectName(
     }).name;
 }
 
-function generateTickString(timestamp?: Date): string {
+export function generateTicksString(timestamp?: Date): string {
     timestamp ??= new Date();
     return timestamp.getTime().toString();
 }
@@ -415,34 +284,13 @@ function ensureDirName(name: string): string {
     return name;
 }
 
-function isDir(name: string): boolean {
-    return name[0] == DIR_PREFIX;
-}
-
 function isHidden(name: string): boolean {
     const lastChar = name[name.length - 1];
     return lastChar === TEMP_SUFFIX || lastChar === BACKUP_SUFFIX;
 }
 
-function removeDirNames(names: string[]): string[] {
-    return names.filter((d) => !isDir(d));
-}
-
 function removeHidden(names: string[]): string[] {
     return names.filter((n) => !isHidden(n));
-}
-
-function getDirNames(names: string[]): string[] {
-    const dirNames: string[] = [];
-    for (const name of names) {
-        if (isDir(name)) {
-            const actualName = name.substring(1);
-            if (actualName.length > 0) {
-                dirNames.push(actualName);
-            }
-        }
-    }
-    return dirNames;
 }
 
 function toTempPath(filePath: string) {

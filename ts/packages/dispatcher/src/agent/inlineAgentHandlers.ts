@@ -25,24 +25,21 @@ import { executeConfigAction } from "../action/system/configActionHandler.js";
 import { CommandHandlerContext } from "../handlers/common/commandHandlerContext.js";
 import { getConfigCommandHandlers } from "../handlers/configCommandHandlers.js";
 import { getConstructionCommandHandlers } from "../handlers/constructionCommandHandlers.js";
-import { CorrectCommandHandler } from "../handlers/correctCommandHandler.js";
 import { DebugCommandHandler } from "../handlers/debugCommandHandlers.js";
-import { ExplainCommandHandler } from "../handlers/explainCommandHandler.js";
 import { getSessionCommandHandlers } from "../handlers/sessionCommandHandlers.js";
 import { getHistoryCommandHandlers } from "../handlers/historyCommandHandler.js";
 import { TraceCommandHandler } from "../handlers/traceCommandHandler.js";
-import { TranslateCommandHandler } from "../handlers/translateCommandHandler.js";
 import { getRandomCommandHandlers } from "../handlers/randomCommandHandler.js";
 import { getNotifyCommandHandlers } from "../handlers/notifyCommandHandler.js";
 import { processRequests } from "../utils/interactive.js";
 import { getConsoleRequestIO } from "../handlers/common/interactiveIO.js";
 import {
+    getDefaultSubCommandDescriptor,
     getParsedCommand,
     getPrompt,
     processCommandNoLock,
     resolveCommand,
 } from "../dispatcher/command.js";
-import { RequestCommandHandler } from "../handlers/requestCommandHandler.js";
 import { DisplayCommandHandler } from "../handlers/displayCommandHandler.js";
 import { getHandlerTableUsage, getUsage } from "../dispatcher/commandHelp.js";
 import {
@@ -61,6 +58,7 @@ import {
 } from "../translation/actionInfo.js";
 import { executeActions } from "../action/actionHandlers.js";
 import { getObjectProperty } from "common-utils";
+import { dispatcherAgent } from "../dispatcher/dispatcherAgent.js";
 
 function executeSystemAction(
     action: AppAction,
@@ -104,23 +102,36 @@ class HelpCommandHandler implements CommandHandler {
             );
 
             const command = getParsedCommand(result);
-            if (result.descriptor !== undefined) {
-                displayResult(getUsage(command, result.descriptor), context);
-            } else {
-                if (result.table === undefined) {
-                    throw new Error(`Unknown command '${params.args.command}'`);
-                }
-                if (result.suffix.length !== 0) {
-                    displayError(
-                        `ERROR: '${result.suffix}' is not a subcommand for '@${command}'`,
-                        context,
-                    );
-                }
-                displayResult(
-                    getHandlerTableUsage(result.table, command, systemContext),
+            if (result.suffix.length !== 0) {
+                displayError(
+                    `ERROR: '${result.suffix}' is not a subcommand for '@${command}'`,
                     context,
                 );
             }
+
+            if (result.descriptor !== undefined) {
+                const defaultSubCommand =
+                    result.table !== undefined
+                        ? getDefaultSubCommandDescriptor(result.table)
+                        : undefined;
+
+                if (defaultSubCommand !== result.descriptor) {
+                    displayResult(
+                        getUsage(command, result.descriptor),
+                        context,
+                    );
+                    return;
+                }
+            }
+
+            if (result.table === undefined) {
+                throw new Error(`Unknown command '${params.args.command}'`);
+            }
+
+            displayResult(
+                getHandlerTableUsage(result.table, command, systemContext),
+                context,
+            );
         }
     }
 }
@@ -165,16 +176,6 @@ class RunCommandScriptHandler implements CommandHandler {
         }
     }
 }
-
-const dispatcherHandlers: CommandHandlerTable = {
-    description: "Type Agent Dispatcher Commands",
-    commands: {
-        request: new RequestCommandHandler(),
-        translate: new TranslateCommandHandler(),
-        explain: new ExplainCommandHandler(),
-        correct: new CorrectCommandHandler(),
-    },
-};
 
 class ActionCommandHandler implements CommandHandler {
     public readonly description = "Execute an action";
@@ -349,9 +350,7 @@ const systemHandlers: CommandHandlerTable = {
 };
 
 const inlineHandlers: { [key: string]: AppAgent } = {
-    dispatcher: {
-        ...getCommandInterface(dispatcherHandlers),
-    },
+    dispatcher: dispatcherAgent,
     system: {
         getTemplateSchema: getSystemTemplateSchema,
         getTemplateCompletion: getSystemTemplateCompletion,

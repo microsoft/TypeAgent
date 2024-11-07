@@ -32,14 +32,18 @@ export type ExplanationValidator<T> = (
     explanation: T,
 ) => string | undefined;
 
-export type CreateConstructionInfo = {
+export type ExplainerConfig = {
+    constructionCreationConfig: ConstructionCreationConfig | undefined;
+};
+
+export type ConstructionCreationConfig = {
     getSchemaConfig?: SchemaConfigProvider | undefined;
 };
 
 export type ConstructionFactory<T> = (
     requestAction: RequestAction,
     explanation: T,
-    createConstructionInfo: CreateConstructionInfo,
+    constructionCreationConfig: ConstructionCreationConfig,
 ) => Construction;
 
 type ToPrettyString<T> = (explanation: T) => string;
@@ -47,7 +51,7 @@ type ToPrettyString<T> = (explanation: T) => string;
 export interface GenericExplainer<T extends object = object> {
     generate(
         requestAction: RequestAction,
-        createConstructionInfo?: CreateConstructionInfo,
+        config?: ExplainerConfig,
     ): Promise<GenericExplanationResult<T>>;
 
     correct?(
@@ -59,6 +63,7 @@ export interface GenericExplainer<T extends object = object> {
     validate(
         requestAction: RequestAction,
         explanation: T,
+        config?: ExplainerConfig,
     ): ValidationError | undefined;
     createConstruction?: ConstructionFactory<any> | undefined;
 

@@ -49,7 +49,6 @@ const handlers: CommandHandlerTable = {
     commands: {
         spotify: {
             description: "Configure spotify integration",
-            defaultSubCommand: undefined,
             commands: {
                 load: loadHandler,
             },

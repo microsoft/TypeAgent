@@ -12,6 +12,7 @@ import { TextEmbeddingModel } from "../src/index.js";
 import {
     createEmbeddingModel,
     hasApiSettings,
+    hasEmbeddingEndpoint,
     hasEmbeddingModel,
     testIf,
 } from "./testCore.js";
@@ -70,7 +71,7 @@ describe("openai.textEmbeddings", () => {
         testTimeout,
     );
     testIf(
-        () => hasEmbeddingModel(smallEndpoint),
+        () => hasEmbeddingEndpoint(smallEndpoint),
         "generateSmall",
         async () => {
             let model = createEmbeddingModel(smallEndpoint);
