@@ -47,7 +47,7 @@ import {
     SearchTermsActionV2,
     TermFilterV2,
 } from "./knowledgeTermSearchSchema2.js";
-import { getAllTermsInFilter } from "./searchProcessor.js";
+import { getAllTermsInFilter } from "./knowledgeTermSearch2.js";
 import { TypeChatLanguageModel } from "typechat";
 import { TextEmbeddingModel } from "aiclient";
 import { createSearchResponse, SearchResponse } from "./searchResponse.js";

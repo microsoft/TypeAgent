@@ -54,6 +54,7 @@ import {
     createFileSystemStorageProvider,
     StorageProvider,
 } from "../storageProvider.js";
+import { getSubjectFromActionTerm } from "./knowledgeTermSearch2.js";
 
 export interface ActionSearchResult<TActionId = any> {
     actionIds?: TActionId[] | undefined;
@@ -428,7 +429,8 @@ export async function createActionIndexOnStorage<TSourceId = any>(
     ) {
         const actionFilter: ActionFilter = {
             filterType: "Action",
-            subjectEntityName: actionTerm.subject ?? NoEntityName,
+            subjectEntityName:
+                getSubjectFromActionTerm(actionTerm) ?? NoEntityName,
             objectEntityName: actionTerm.object,
         };
         if (actionTerm.verbs) {

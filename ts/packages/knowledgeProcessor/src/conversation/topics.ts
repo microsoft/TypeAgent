@@ -46,7 +46,10 @@ import {
 import { createRecentItemsWindow } from "../temporal.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
-import { getAllTermsInFilter } from "./searchProcessor.js";
+import {
+    getAllTermsInFilter,
+    getSubjectFromActionTerm,
+} from "./knowledgeTermSearch2.js";
 import {
     createFileSystemStorageProvider,
     StorageProvider,
@@ -676,7 +679,7 @@ export async function createTopicIndexOnStorage<
     ): Promise<TopicSearchResult<TopicId>> {
         // We will just use the standard topic stuff for now, since that does the same thing
         const terms = getAllTermsInFilter(filter);
-        let sourceName = filter.action?.subject;
+        let sourceName = getSubjectFromActionTerm(filter.action);
         if (!isValidEntityName(sourceName)) {
             sourceName = undefined;
         }
