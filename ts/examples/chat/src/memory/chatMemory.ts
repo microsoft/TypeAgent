@@ -1219,16 +1219,14 @@ export async function runChatMemory(): Promise<void> {
             context.searchMemory.conversationName !== context.conversationName
         ) {
             try {
-                context.searchMemory.queueAddMessage(
-                    `USER:\n${question}`,
-                    undefined,
-                    timestampQ,
-                );
-                context.searchMemory.queueAddMessage(
-                    `ASSISTANT:\n${answer}`,
-                    undefined,
-                    timestampA,
-                );
+                context.searchMemory.queueAddMessage({
+                    text: `USER:\n${question}`,
+                    timestamp: timestampQ,
+                });
+                context.searchMemory.queueAddMessage({
+                    text: `ASSISTANT:\n${answer}`,
+                    timestamp: timestampA,
+                });
             } catch (e) {
                 printer.writeError(`Error updating history\n${e}`);
             }

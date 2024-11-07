@@ -84,19 +84,19 @@ export interface ConversationManager<TMessageId = any, TTopicId = any> {
     /**
      * Add a message to the conversation
      * @param message
-     * @param knowledge Any pre-extracted knowledge. Merged with knowledge automatically extracted from message.
-     * @param timestamp message timestamp
      */
     addMessage(
-        message: string | TextBlock,
-        knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
-        timestamp?: Date | undefined,
+        message: string | ConversationMessage,
+        extractKnowledge?: boolean | undefined,
     ): Promise<void>;
     /**
      * Add a batch message to the conversation
      * @param messages Conversation messages to add
      */
-    addMessageBatch(messages: ConversationMessage[]): Promise<void>;
+    addMessageBatch(
+        messages: ConversationMessage[],
+        extractKnowledge?: boolean | undefined,
+    ): Promise<void>;
     /**
      * Queue the message for adding to the conversation memory in the background
      * @param message
@@ -105,9 +105,7 @@ export interface ConversationManager<TMessageId = any, TTopicId = any> {
      * @returns true if queued. False if queue is full
      */
     queueAddMessage(
-        message: string | TextBlock,
-        knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
-        timestamp?: Date | undefined,
+        message: string | ConversationMessage,
         extractKnowledge?: boolean | undefined,
     ): boolean;
     /**
@@ -230,62 +228,59 @@ export async function createConversationManager(
     };
 
     function addMessage(
-        text: string | TextBlock,
-        knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
-        timestamp?: Date | undefined,
+        message: string | ConversationMessage,
+        extractKnowledge?: boolean,
     ): Promise<void> {
+        if (typeof message === "string") {
+            message = { text: message };
+        }
+
         return addMessageToConversation(
             conversation,
             knowledgeExtractor,
             topicMerger,
-            {
-                text: text,
-                knowledge,
-                timestamp,
-            },
+            message,
+            extractKnowledge,
         );
     }
 
-    function addMessageBatch(messages: ConversationMessage[]): Promise<void> {
+    function addMessageBatch(
+        messages: ConversationMessage[],
+        extractKnowledge?: boolean | undefined,
+    ): Promise<void> {
         if (messages.length === 1) {
             const message = messages[0];
-            return addMessage(
-                message.text,
-                message.knowledge,
-                message.timestamp,
-            );
+            return addMessage(message, extractKnowledge);
         }
         return addMessageBatchToConversation(
             conversation,
             knowledgeExtractor,
             topicMerger,
             messages,
+            extractKnowledge,
         );
     }
 
     function queueAddMessage(
-        message: string | TextBlock,
-        knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
-        timestamp?: Date | undefined,
+        message: string | ConversationMessage,
         extractKnowledge?: boolean | undefined,
     ): boolean {
+        if (typeof message === "string") {
+            message = { text: message };
+        }
         extractKnowledge ??= true;
-        if (knowledge) {
-            if (Array.isArray(knowledge)) {
-                knowledge = removeMemorizedEntities(knowledge);
+        if (message.knowledge) {
+            if (Array.isArray(message.knowledge)) {
+                message.knowledge = removeMemorizedEntities(message.knowledge);
             } else {
-                knowledge.entities = removeMemorizedEntities(
-                    knowledge.entities,
+                message.knowledge.entities = removeMemorizedEntities(
+                    message.knowledge.entities,
                 );
             }
         }
         return updateTaskQueue.push({
             type: "addMessage",
-            message: {
-                text: message,
-                knowledge,
-                timestamp,
-            },
+            message,
             extractKnowledge,
         });
     }

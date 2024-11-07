@@ -941,11 +941,10 @@ export class RequestCommandHandler implements CommandHandler {
                 requestAction !== undefined &&
                 systemContext.conversationManager
             ) {
-                systemContext.conversationManager.queueAddMessage(
-                    request,
-                    [],
-                    new Date(),
-                );
+                systemContext.conversationManager.queueAddMessage({
+                    text: request,
+                    timestamp: new Date(),
+                });
             }
             await requestExecute(requestAction, context);
             if (canUseCacheMatch) {

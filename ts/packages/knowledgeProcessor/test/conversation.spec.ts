@@ -107,11 +107,11 @@ async function addEntities(
         name: "pizza",
         type: ["food"],
     };
-    await cm.addMessage(testMessage, [entity1, entity2]);
+    await cm.addMessage({ text: testMessage, knowledge: [entity1, entity2] });
 }
 
 function queueEntities(cm: conversation.ConversationManager): void {
-    const testMessage = "Shakespeare did pushups while he wrote Macbeth";
+    const message = "Shakespeare did pushups while he wrote Macbeth";
     let entity1: conversation.ConcreteEntity = {
         name: "Shakespeare",
         type: ["writer", "person"],
@@ -124,5 +124,8 @@ function queueEntities(cm: conversation.ConversationManager): void {
         name: "Macbeth",
         type: ["play"],
     };
-    cm.queueAddMessage(testMessage, [entity1, entity2, entity3]);
+    cm.queueAddMessage({
+        text: message,
+        knowledge: [entity1, entity2, entity3],
+    });
 }
