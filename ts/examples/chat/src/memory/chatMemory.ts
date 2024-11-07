@@ -812,10 +812,13 @@ export async function runChatMemory(): Promise<void> {
         }
 
         const index = await context.conversation.getEntityIndex();
-        for await (const entity of index.entities()) {
-            await writeExtractedEntity(entity);
-            printer.writeLine();
-        }
+        const entities = [
+            ...conversation.toCompositeEntities(
+                await asyncArray.toArray(index.entities()),
+            ),
+        ];
+        entities.sort((x, y) => x.name.localeCompare(y.name));
+        printer.writeCompositeEntities(entities);
     }
 
     function actionsDef(): CommandMetadata {
@@ -1498,7 +1501,7 @@ export async function runChatMemory(): Promise<void> {
             }
         }
     }
-
+    /*
     async function writeExtractedEntity(
         entity: conversation.ExtractedEntity,
         showTopics?: boolean,
@@ -1520,6 +1523,7 @@ export async function runChatMemory(): Promise<void> {
             }
         }
     }
+    */
 
     async function writeEntitiesById(
         index: knowLib.conversation.EntityIndex,

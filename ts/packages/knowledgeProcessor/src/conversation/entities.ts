@@ -553,6 +553,15 @@ export function toCompositeEntity(entity: ConcreteEntity): CompositeEntity {
     return composite;
 }
 
+export function toCompositeEntities(
+    entities: Iterable<ExtractedEntity>,
+): IterableIterator<CompositeEntity> {
+    const merged = mergeCompositeEntities(
+        collections.mapIterate(entities, (e) => toCompositeEntity(e.value)),
+    );
+    return collections.mapIterate(merged.values(), (e) => e.value);
+}
+
 export function facetToString(facet: Facet): string {
     return `${facet.name}="${knowledgeValueToString(facet.value)}"`;
 }

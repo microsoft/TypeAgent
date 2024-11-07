@@ -208,6 +208,15 @@ export function* slices<T=any>(array: T[], size: number): IterableIterator<Slice
     }
 }
 
+export function* mapIterate<T, TResult>(
+    items: Iterable<T>,
+    processor: (item: T) => TResult,
+): IterableIterator<TResult> {
+    for (const item of items) {
+        yield processor(item);
+    }
+}
+
 export class CircularArray<T> implements Iterable<T> {
     private buffer: T[];
     private count: number;
