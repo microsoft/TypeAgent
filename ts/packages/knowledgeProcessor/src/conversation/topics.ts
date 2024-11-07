@@ -377,7 +377,7 @@ export interface TopicIndex<TTopicId = any, TSourceId = any> {
         id?: TTopicId,
     ): Promise<TTopicId>;
     addMultiple(
-        text: TextBlock<TSourceId>[],
+        text: TextBlock<TSourceId>[] | ExtractedTopic<TSourceId>[],
         ids?: TTopicId[],
     ): Promise<TTopicId[]>;
     search(
@@ -521,7 +521,7 @@ export async function createTopicIndexOnStorage<
     }
 
     async function addMultiple(
-        topics: TextBlock<TSourceId>[],
+        topics: TextBlock<TSourceId>[] | ExtractedTopic<TSourceId>[],
         ids?: TopicId[],
     ): Promise<TopicId[]> {
         if (ids && ids.length !== topics.length) {
@@ -717,5 +717,5 @@ export async function createTopicIndexOnStorage<
 function isExtractedTopic<TSourceId = any>(
     obj: any,
 ): obj is ExtractedTopic<TSourceId> {
-    return obj && typeof obj === "object" && "value" in obj;
+    return obj && typeof obj === "object" && obj.value?.value;
 }
