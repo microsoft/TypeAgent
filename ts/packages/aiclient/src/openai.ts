@@ -653,17 +653,17 @@ export function createChatModel(
         // image_url content with streaming token usage reporting is currently broken
         // TODO: remove after API endpoint correctly handles this case
         let historyIncludesImages: boolean = false;
-        messages.map((ps) => {              
+        messages.map((ps) => {
             if (ps.content instanceof Array) {
-                const content = ps.content as MultimodalPromptContent[];  
+                const content = ps.content as MultimodalPromptContent[];
                 content.map((c) => {
                     const cTyped = c as ImagePromptContent;
                     if (cTyped.type == "image_url") {
                         historyIncludesImages = true;
-                    } 
-                })
+                    }
+                });
             }
-        })
+        });
 
         const params = {
             ...defaultParams,
