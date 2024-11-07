@@ -11,6 +11,7 @@ import {
     HistoryContext,
     FullAction,
     ProcessRequestActionResult,
+    ExplanationOptions,
 } from "agent-cache";
 import {
     CommandHandlerContext,
@@ -61,6 +62,7 @@ import { getActionTemplateEditConfig } from "../translation/actionTemplate.js";
 import { getActionInfo, validateAction } from "../translation/actionInfo.js";
 import { isUnknownAction } from "../dispatcher/dispatcherAgent.js";
 import { UnknownAction } from "../dispatcher/dispatcherActionSchema.js";
+import { RequestMetricsManager } from "../utils/metrics.js";
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugExplain = registerDebug("typeagent:explain");
@@ -189,7 +191,7 @@ async function matchRequest(
         const useTranslators = systemContext.agents.getActiveTranslators();
         const matches = constructionStore.match(request, {
             wildcard: config.matchWildcard,
-            rejectReferences: config.explanationOptions.rejectReferences,
+            rejectReferences: config.explainer.filter.reference.list,
             useTranslators,
             history,
         });
@@ -498,14 +500,14 @@ function getChatHistoryForTranslation(
         role: "system",
     });
     const entities = context.chatHistory.getTopKEntities(20);
-    const additionalInstructions = context.session.getConfig().promptOptions
+    const additionalInstructions = context.session.getConfig().promptConfig
         .additionalInstructions
         ? context.chatHistory.getCurrentInstructions()
         : undefined;
     return { promptSections, entities, additionalInstructions };
 }
 
-function hasAdditionaInstructions(history?: HistoryContext) {
+function hasAdditionalInstructions(history?: HistoryContext) {
     return (
         history &&
         history.additionalInstructions !== undefined &&
@@ -669,6 +671,7 @@ async function canTranslateWithoutContext(
         return;
     }
 
+    // Do the retranslation check, which will also check the action.
     const oldActions: IAction[] = requestAction.actions.toIActions();
     const newActions: (IAction | undefined)[] = [];
     const request = requestAction.request;
@@ -720,8 +723,8 @@ async function canTranslateWithoutContext(
             }
 
             if (
-                JSON.stringify(newAction.parameters) !==
-                JSON.stringify(oldAction.parameters)
+                JSON.stringify(newAction.parameters).toLowerCase() !==
+                JSON.stringify(oldAction.parameters).toLowerCase()
             ) {
                 throw new Error(`Action parameters mismatch without context`);
             }
@@ -743,6 +746,66 @@ async function canTranslateWithoutContext(
         });
         throw e;
     }
+}
+
+function getExplainerOptions(
+    requestAction: RequestAction,
+    context: CommandHandlerContext,
+): ExplanationOptions | undefined {
+    if (!context.session.explanation) {
+        // Explanation is disabled
+        return undefined;
+    }
+
+    if (hasAdditionalInstructions(requestAction.history)) {
+        // Translation with additional instructions are not cachable.
+        return undefined;
+    }
+
+    if (
+        !context.session.getConfig().explainer.filter.multiple &&
+        requestAction.actions.action === undefined
+    ) {
+        // filter multiple
+        return undefined;
+    }
+
+    const usedTranslators = new Map<string, TypeAgentTranslator<object>>();
+    const actions = requestAction.actions;
+    for (const action of actions) {
+        if (isUnknownAction(action)) {
+            // can't explain unknown actions
+            return undefined;
+        }
+
+        const translatorName = action.translatorName;
+        if (
+            context.agents.getTranslatorConfig(translatorName).cached === false
+        ) {
+            // explanation disable at the translator level
+            return undefined;
+        }
+
+        usedTranslators.set(
+            translatorName,
+            getTranslator(context, translatorName),
+        );
+    }
+    const { list, value, translate } =
+        context.session.getConfig().explainer.filter.reference;
+
+    return {
+        checkExplainable: translate
+            ? (requestAction: RequestAction) =>
+                  canTranslateWithoutContext(
+                      requestAction,
+                      usedTranslators,
+                      context.logger,
+                  )
+            : undefined,
+        valueInRequest: value,
+        noReferences: list,
+    };
 }
 
 async function requestExplain(
@@ -772,52 +835,15 @@ async function requestExplain(
         return;
     }
 
-    if (!context.session.explanation) {
-        // Explanation is disabled
+    const options = getExplainerOptions(requestAction, context);
+    if (options === undefined) {
         return;
     }
-
-    if (hasAdditionaInstructions(requestAction.history)) {
-        // Translation with additional instructions are not cachable.
-        return;
-    }
-
-    const usedTranslators = new Map<string, TypeAgentTranslator<object>>();
-    const actions = requestAction.actions;
-    for (const action of actions) {
-        if (isUnknownAction(action)) {
-            return;
-        }
-
-        const translatorName = action.translatorName;
-        if (
-            context.agents.getTranslatorConfig(translatorName).cached === false
-        ) {
-            return;
-        }
-
-        usedTranslators.set(
-            translatorName,
-            getTranslator(context, translatorName),
-        );
-    }
-    const { rejectReferences, retranslateWithoutContext } =
-        context.session.getConfig().explanationOptions;
 
     const processRequestActionP = context.agentCache.processRequestAction(
         requestAction,
         true,
-        {
-            checkExplainable: retranslateWithoutContext
-                ? (requestAction: RequestAction) =>
-                      canTranslateWithoutContext(
-                          requestAction,
-                          usedTranslators,
-                          context.logger,
-                      )
-                : undefined,
-            rejectReferences,
-        },
+        options,
     );
 
     if (context.explanationAsynchronousMode) {
@@ -915,7 +941,7 @@ export class RequestCommandHandler implements CommandHandler {
 
             const canUseCacheMatch =
                 (attachments === undefined || attachments.length === 0) &&
-                !hasAdditionaInstructions(history);
+                !hasAdditionalInstructions(history);
             const match = canUseCacheMatch
                 ? await matchRequest(request, context, history)
                 : undefined;

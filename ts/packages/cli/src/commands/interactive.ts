@@ -68,7 +68,7 @@ export default class Interactive extends Command {
         try {
             context = await initializeCommandHandlerContext("cli interactive", {
                 translators,
-                explainerName: flags.explainer,
+                explainer: { name: flags.explainer },
                 stdio,
                 persistSession: !flags.memory,
                 enableServiceHost: true,

@@ -53,7 +53,7 @@ export class CalendarClientLoginCommandHandler
 
 const handlers: CommandHandlerTable = {
     description: "Calendar login commmand",
-    defaultSubCommand: new CalendarClientLoginCommandHandler(),
+    defaultSubCommand: "login",
     commands: {
         login: new CalendarClientLoginCommandHandler(),
     },

@@ -53,6 +53,22 @@ type ResolveCommandResult = {
     descriptor: CommandDescriptor | undefined;
 };
 
+export function getDefaultSubCommandDescriptor(
+    table: CommandDescriptorTable,
+): CommandDescriptor | undefined {
+    if (typeof table.defaultSubCommand === "string") {
+        const defaultSubCommand = table.commands[table.defaultSubCommand];
+        if (
+            defaultSubCommand !== undefined &&
+            isCommandDescriptorTable(defaultSubCommand)
+        ) {
+            return undefined;
+        }
+        return defaultSubCommand;
+    }
+    return table.defaultSubCommand;
+}
+
 export async function resolveCommand(
     input: string,
     context: CommandHandlerContext,
@@ -102,14 +118,14 @@ export async function resolveCommand(
         while (true) {
             const subcommand = nextToken();
             if (subcommand === undefined) {
-                descriptor = table.defaultSubCommand;
+                descriptor = getDefaultSubCommandDescriptor(table);
                 break;
             }
 
             const current: CommandDescriptors = table.commands[subcommand];
             if (current === undefined) {
                 // Unknown command
-                descriptor = table.defaultSubCommand;
+                descriptor = getDefaultSubCommandDescriptor(table);
                 rollbackToken();
                 break;
             }
@@ -386,6 +402,64 @@ function getPendingFlag(
         : undefined;
 }
 
+async function getCommandParameterCompletion(
+    descriptor: CommandDescriptor,
+    context: CommandHandlerContext,
+    result: ResolveCommandResult,
+) {
+    const completions: string[] = [];
+    if (typeof descriptor.parameters !== "object") {
+        return undefined;
+    }
+    const flags = descriptor.parameters.flags;
+    const params = parseParams(result.suffix, descriptor.parameters, true);
+    const agent = context.agents.getAppAgent(result.actualAppAgentName);
+    const sessionContext = context.agents.getSessionContext(
+        result.actualAppAgentName,
+    );
+
+    const pendingFlag = getPendingFlag(params, flags);
+
+    const pendingCompletions: string[] = [];
+    if (pendingFlag === undefined) {
+        pendingCompletions.push(...params.nextArgs);
+        if (flags !== undefined) {
+            const parsedFlags = params.flags;
+            for (const [key, value] of Object.entries(flags)) {
+                const multiple = getFlagMultiple(value);
+                if (!multiple) {
+                    if (getFlagType(value) === "json") {
+                        // JSON property flags
+                        pendingCompletions.push(`--${key}.`);
+                    }
+                    if (parsedFlags?.[key] !== undefined) {
+                        // filter out non-multiple flags that is already set.
+                        continue;
+                    }
+                }
+                completions.push(`--${key}`);
+                if (value.char !== undefined) {
+                    completions.push(`-${value.char}`);
+                }
+            }
+        }
+    } else {
+        // get the potential values for the pending flag
+        pendingCompletions.push(pendingFlag);
+    }
+
+    if (agent.getCommandCompletion) {
+        completions.push(
+            ...(await agent.getCommandCompletion(
+                result.commands,
+                params,
+                pendingCompletions,
+                sessionContext,
+            )),
+        );
+    }
+    return completions;
+}
 export async function getCommandCompletion(
     input: string,
     context: CommandHandlerContext,
@@ -413,61 +487,25 @@ export async function getCommandCompletion(
     if (descriptor !== undefined) {
         if (
             result.suffix.length === 0 &&
-            table?.defaultSubCommand === result.descriptor
+            table !== undefined &&
+            getDefaultSubCommandDescriptor(table) === result.descriptor
         ) {
             // Match the default sub command.  Includes additional subcommand names
             completions.push(...Object.keys(table.commands));
         }
-
-        if (typeof descriptor.parameters !== "object") {
-            return undefined;
-        }
-        const flags = descriptor.parameters.flags;
-        const params = parseParams(result.suffix, descriptor.parameters, true);
-        const agent = context.agents.getAppAgent(result.actualAppAgentName);
-        const sessionContext = context.agents.getSessionContext(
-            result.actualAppAgentName,
+        const parameterCompletions = await getCommandParameterCompletion(
+            descriptor,
+            context,
+            result,
         );
 
-        const pendingFlag = getPendingFlag(params, flags);
-
-        const pendingCompletions: string[] = [];
-        if (pendingFlag === undefined) {
-            pendingCompletions.push(...params.nextArgs);
-            if (flags !== undefined) {
-                const parsedFlags = params.flags;
-                for (const [key, value] of Object.entries(flags)) {
-                    const multiple = getFlagMultiple(value);
-                    if (!multiple) {
-                        if (getFlagType(value) === "json") {
-                            // JSON property flags
-                            pendingCompletions.push(`--${key}.`);
-                        }
-                        if (parsedFlags?.[key] !== undefined) {
-                            // filter out non-multiple flags that is already set.
-                            continue;
-                        }
-                    }
-                    completions.push(`--${key}`);
-                    if (value.char !== undefined) {
-                        completions.push(`-${value.char}`);
-                    }
-                }
+        if (parameterCompletions === undefined) {
+            if (completions.length === 0) {
+                // No more completion from the descriptor.
+                return undefined;
             }
         } else {
-            // get the potential values for the pending flag
-            pendingCompletions.push(pendingFlag);
-        }
-
-        if (agent.getCommandCompletion) {
-            completions.push(
-                ...(await agent.getCommandCompletion(
-                    result.commands,
-                    params,
-                    pendingCompletions,
-                    sessionContext,
-                )),
-            );
+            completions.push(...parameterCompletions);
         }
     } else {
         if (result.suffix.length !== 0) {

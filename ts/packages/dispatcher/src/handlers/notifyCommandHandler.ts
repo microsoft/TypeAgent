@@ -73,13 +73,13 @@ class NotifyShowAllCommandHandler implements CommandHandlerNoParams {
 export function getNotifyCommandHandlers(): CommandHandlerTable {
     return {
         description: "Notify commands",
-        defaultSubCommand: new NotifyInfoCommandHandler(),
+        defaultSubCommand: "info",
         commands: {
             info: new NotifyInfoCommandHandler(),
             clear: new NotifyClearCommandHandler(),
             show: {
                 description: "Show notifications",
-                defaultSubCommand: new NotifyShowUnreadCommandHandler(),
+                defaultSubCommand: "unread",
                 commands: {
                     unread: new NotifyShowUnreadCommandHandler(),
                     all: new NotifyShowAllCommandHandler(),

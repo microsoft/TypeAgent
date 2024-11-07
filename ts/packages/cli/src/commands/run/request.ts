@@ -48,7 +48,7 @@ export default class RequestCommand extends Command {
             : undefined;
         const dispatcher = await createDispatcher("cli run request", {
             translators,
-            explainerName: flags.explainer,
+            explainer: { name: flags.explainer },
             cache: false,
         });
         await dispatcher.processCommand(
