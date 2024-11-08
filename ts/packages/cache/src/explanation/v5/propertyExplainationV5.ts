@@ -50,14 +50,14 @@ export function createPropertyExplainer(
         },
         (requestAction: RequestAction) => {
             return (
-                `${form} with the following value:\n${requestAction.toPromptString(true)}\n` +
+                `${form} with the following value:\n${requestAction.toPromptString()}\n` +
                 (enableContext
                     ? `For each property, explain which substring of the request or entities in the conversation history is used to compute the value. ${substringRequirement}\n`
                     : `For each property, explain which substring of the request is used to compute the value. ${substringRequirement}\n`) +
                 getActionDescription(requestAction)
             );
         },
-        (requestAction) => requestAction.toPromptString(true),
+        (requestAction) => requestAction.toPromptString(),
         validatePropertyExplanation,
     );
 }

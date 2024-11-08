@@ -70,7 +70,7 @@ export function createSubPhraseExplainer(model?: string) {
             );
         },
         createInstructions,
-        ([requestAction]) => requestAction.toPromptString(true),
+        ([requestAction]) => requestAction.toPromptString(),
         validateSubPhraseExplanationV5,
     );
 }
