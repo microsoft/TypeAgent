@@ -19,7 +19,6 @@ import {
     asyncArray,
     collections,
     dateTime,
-    ensureDir,
     getFileName,
     isDirectoryPath,
     readAllText,
@@ -40,7 +39,7 @@ import {
     argSourceFileOrFolder,
     getMessagesAndCount,
 } from "./common.js";
-import { sqlite } from "memory-providers";
+import { createEmailMemory } from "./emailMemory.js";
 
 export type ChatContext = {
     storePath: string;
@@ -62,7 +61,7 @@ export type ChatContext = {
     emailMemory: knowLib.conversation.ConversationManager;
 };
 
-enum ReservedConversationNames {
+export enum ReservedConversationNames {
     transcript = "transcript",
     outlook = "outlook",
     play = "play",
@@ -153,31 +152,6 @@ export async function createChatMemoryContext(
     };
     context.searchMemory = await createSearchMemory(context);
     return context;
-}
-
-async function createEmailMemory(
-    chatModel: ChatModel,
-    storePath: string,
-    settings: conversation.ConversationSettings,
-    useSqlite: boolean = false,
-    createNew: boolean = false,
-) {
-    const emailStorePath = path.join(
-        storePath,
-        ReservedConversationNames.outlook,
-    );
-    await ensureDir(emailStorePath);
-    const storage = useSqlite
-        ? await sqlite.createStorageDb(emailStorePath, "outlook.db", createNew)
-        : undefined;
-
-    return await knowLib.email.createEmailMemory(
-        chatModel,
-        ReservedConversationNames.outlook,
-        storePath,
-        settings,
-        storage,
-    );
 }
 
 export function createConversation(
