@@ -28,7 +28,6 @@ export async function createServiceHost() {
 export function getServiceHostCommandHandlers(): CommandHandlerTable {
     return {
         description: "Configure Service Hosting",
-        defaultSubCommand: undefined,
         commands: {
             off: {
                 description: "Turn off Service hosting integration",
