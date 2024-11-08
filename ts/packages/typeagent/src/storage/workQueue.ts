@@ -19,17 +19,21 @@ import {
 } from "./objectFolder";
 
 export interface WorkQueue {
+    onError?: (err: any) => void;
+
     count(): Promise<number>;
     addTask(obj: any): Promise<void>;
     drain(
         batchSize: number,
         concurrency: number,
         processor: (item: Path, index: number, total: number) => Promise<void>,
+        maxItems?: number,
     ): Promise<void>;
     drainTask(
         batchSize: number,
         concurrency: number,
         processor: (task: any, index: number, total: number) => Promise<void>,
+        maxItems?: number,
     ): Promise<void>;
     replay(): Promise<void>;
 }
@@ -50,13 +54,14 @@ export async function createWorkQueueFolder(
             return !fs.existsSync(taskFilePath(name));
         },
     );
-    return {
+    const thisQueue: WorkQueue = {
         count,
         addTask,
         drainTask,
         drain,
         replay,
     };
+    return thisQueue;
 
     async function count(): Promise<number> {
         const fileNames = await fs.promises.readdir(queuePath);
@@ -72,19 +77,29 @@ export async function createWorkQueueFolder(
         batchSize: number,
         concurrency: number,
         processor: (task: any, index: number, total: number) => Promise<void>,
+        maxItems?: number,
     ) {
-        return drain(batchSize, concurrency, async (item, index, total) => {
-            const task = await readJsonFile(item);
-            processor(task, index, total);
-        });
+        return drain(
+            batchSize,
+            concurrency,
+            async (item, index, total) => {
+                const task = await readJsonFile(item);
+                processor(task, index, total);
+            },
+            maxItems,
+        );
     }
 
     async function drain(
         batchSize: number,
         concurrency: number,
         processor: (item: Path, index: number, total: number) => Promise<void>,
+        maxItems?: number,
     ) {
-        const fileNames = await fs.promises.readdir(queuePath);
+        let fileNames = await fs.promises.readdir(queuePath);
+        if (maxItems && maxItems > 0) {
+            fileNames = fileNames.slice(0, maxItems);
+        }
         const total = fileNames.length;
         let startAt = 0;
         for (let slice of slices(fileNames, batchSize)) {
@@ -106,7 +121,11 @@ export async function createWorkQueueFolder(
                     await moveFileAsync(fileName, completedPath);
                 }
                 return;
-            } catch {}
+            } catch (err) {
+                if (thisQueue.onError) {
+                    thisQueue.onError(err);
+                }
+            }
             // Move to the error folder
             await moveFileAsync(fileName, errorPath);
         }

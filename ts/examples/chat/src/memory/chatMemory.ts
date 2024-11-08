@@ -32,12 +32,16 @@ import {
 } from "./common.js";
 import { createEmailCommands, createEmailMemory } from "./emailMemory.js";
 
-export type ChatContext = {
-    storePath: string;
-    printer: ChatMemoryPrinter;
+export type Models = {
     chatModel: ChatModel;
     embeddingModel: TextEmbeddingModel;
     embeddingModelSmall?: TextEmbeddingModel | undefined;
+};
+
+export type ChatContext = {
+    storePath: string;
+    printer: ChatMemoryPrinter;
+    models: Models;
     maxCharsPerChunk: number;
     topicWindowSize: number;
     searchConcurrency: number;
@@ -86,16 +90,18 @@ export async function createChatMemoryContext(
     completionCallback?: (req: any, resp: any) => void,
 ): Promise<ChatContext> {
     const storePath = "/data/testChat";
-    const chatModel = openai.createChatModelDefault("chatMemory");
-    chatModel.completionCallback = completionCallback;
-    const embeddingModel = knowLib.createEmbeddingCache(
-        openai.createEmbeddingModel(),
-        64,
-    );
-    const embeddingModelSmall = openai.createEmbeddingModel("3_SMALL");
+    const models: Models = {
+        chatModel: openai.createChatModelDefault("chatMemory"),
+        embeddingModel: knowLib.createEmbeddingCache(
+            openai.createEmbeddingModel(),
+            64,
+        ),
+        embeddingModelSmall: openai.createEmbeddingModel("3_SMALL"),
+    };
+    models.chatModel.completionCallback = completionCallback;
     const conversationName = ReservedConversationNames.transcript;
     const conversationSettings =
-        knowLib.conversation.createConversationSettings(embeddingModel);
+        knowLib.conversation.createConversationSettings(models.embeddingModel);
 
     const conversationPath = path.join(storePath, conversationName);
     const conversation = await createConversation(
@@ -105,7 +111,7 @@ export async function createChatMemoryContext(
     const conversationManager =
         await knowLib.conversation.createConversationManager(
             {
-                model: chatModel,
+                model: models.chatModel,
             },
             conversationName,
             conversationPath,
@@ -117,9 +123,7 @@ export async function createChatMemoryContext(
     const context: ChatContext = {
         storePath,
         printer: new ChatMemoryPrinter(getInteractiveIO()),
-        chatModel,
-        embeddingModel,
-        embeddingModelSmall,
+        models,
         maxCharsPerChunk: 4096,
         topicWindowSize: 8,
         searchConcurrency: 2,
@@ -136,7 +140,7 @@ export async function createChatMemoryContext(
             actionTopK,
         ),
         emailMemory: await createEmailMemory(
-            chatModel,
+            models,
             storePath,
             conversationSettings,
             true,
@@ -174,7 +178,7 @@ export async function createSearchMemory(
     const conversationName = "search";
     const memory = await conversation.createConversationManager(
         {
-            model: context.chatModel,
+            model: context.models.chatModel,
         },
         conversationName,
         context.storePath,
@@ -199,12 +203,14 @@ export async function loadConversation(
 
         context.conversation = await createConversation(
             conversationPath,
-            conversation.createConversationSettings(context.embeddingModel),
+            conversation.createConversationSettings(
+                context.models.embeddingModel,
+            ),
         );
         context.conversationName = name;
         context.conversationManager =
             await conversation.createConversationManager(
-                { model: context.chatModel },
+                { model: context.models.chatModel },
                 name,
                 conversationPath,
                 false,
@@ -490,7 +496,7 @@ export async function runChatMemory(): Promise<void> {
     async function knowledge(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, knowledgeDef());
         const extractor = conversation.createKnowledgeExtractor(
-            context.chatModel,
+            context.models.chatModel,
             {
                 maxContextLength: context.maxCharsPerChunk,
                 mergeActionKnowledge: false,
@@ -964,7 +970,7 @@ export async function runChatMemory(): Promise<void> {
         const namedArgs = parseNamedArguments(args, runTestSetDef());
         const comparisons = await conversation.testData.compareQueryBatchFile(
             context.conversationManager,
-            context.embeddingModel,
+            context.models.embeddingModel,
             namedArgs.filePath,
             namedArgs.concurrency,
             writeProgress,
