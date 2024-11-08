@@ -51,9 +51,12 @@ export interface StorageProvider {
         name: string,
         valueType: ValueDataType<TValueId>,
     ): Promise<KeyValueIndex<string, TValueId>>;
+
+    clear(): Promise<void>;
 }
 
 export function createFileSystemStorageProvider(
+    rootPath: string,
     defaultFolderSettings?: ObjectFolderSettings,
     fSys?: FileSystem | undefined,
 ): StorageProvider {
@@ -62,6 +65,7 @@ export function createFileSystemStorageProvider(
         createTemporalLog: _createTemporalLog,
         createTextIndex: _createTextIndex,
         createIndex: _createIndex,
+        clear,
     };
 
     async function _createObjectFolder<T>(
@@ -69,6 +73,7 @@ export function createFileSystemStorageProvider(
         name: string,
         settings?: ObjectFolderSettings,
     ): Promise<ObjectFolder<T>> {
+        verifyPath(basePath);
         return createObjectFolder<T>(
             path.join(basePath, name),
             settings ?? defaultFolderSettings,
@@ -81,6 +86,7 @@ export function createFileSystemStorageProvider(
         basePath: string,
         name: string,
     ) {
+        verifyPath(basePath);
         return createTemporalLog<T>(
             settings,
             path.join(basePath, name),
@@ -95,6 +101,7 @@ export function createFileSystemStorageProvider(
         name: string,
         sourceIdType: ValueDataType<TSourceId>,
     ): Promise<TextIndex<string, TSourceId>> {
+        verifyPath(basePath);
         return createTextIndex<TSourceId>(
             settings,
             path.join(basePath, name),
@@ -108,10 +115,22 @@ export function createFileSystemStorageProvider(
         name: string,
         valueType: ValueDataType<TValueId>,
     ) {
+        verifyPath(basePath);
         return createIndexFolder<TValueId>(
             path.join(basePath, name),
             defaultFolderSettings,
             fSys,
         );
+    }
+
+    function verifyPath(basePath: string) {
+        if (!basePath.startsWith(rootPath)) {
+            throw new Error(`${basePath} must be a subDir of ${rootPath}`);
+        }
+    }
+
+    async function clear() {
+        // TODO: implement this once conversation is cleaned up and message Index is also backed by storageProvider
+        // await removeDir(rootPath, fSys);
     }
 }

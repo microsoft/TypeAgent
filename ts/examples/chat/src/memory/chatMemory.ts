@@ -46,6 +46,7 @@ export type ChatContext = {
     storePath: string;
     chatModel: ChatModel;
     embeddingModel: TextEmbeddingModel;
+    embeddingModelSmall?: TextEmbeddingModel | undefined;
     maxCharsPerChunk: number;
     topicWindowSize: number;
     searchConcurrency: number;
@@ -100,8 +101,10 @@ export async function createChatMemoryContext(
         openai.createEmbeddingModel(),
         64,
     );
+    const embeddingModelSmall = openai.createEmbeddingModel("3_SMALL");
     const conversationName = ReservedConversationNames.transcript;
-    const conversationSettings = createConversationSettings(embeddingModel);
+    const conversationSettings =
+        knowLib.conversation.createConversationSettings(embeddingModel);
 
     const conversationPath = path.join(storePath, conversationName);
     const conversation = await createConversation(
@@ -110,11 +113,13 @@ export async function createChatMemoryContext(
     );
     const conversationManager =
         await knowLib.conversation.createConversationManager(
+            {
+                model: chatModel,
+            },
             conversationName,
             conversationPath,
             false,
             conversation,
-            chatModel,
         );
     const entityTopK = 16;
     const actionTopK = 16;
@@ -122,6 +127,7 @@ export async function createChatMemoryContext(
         storePath,
         chatModel,
         embeddingModel,
+        embeddingModelSmall,
         maxCharsPerChunk: 4096,
         topicWindowSize: 8,
         searchConcurrency: 2,
@@ -174,12 +180,6 @@ async function createEmailMemory(
     );
 }
 
-function createConversationSettings(
-    embeddingModel?: TextEmbeddingModel,
-): conversation.ConversationSettings {
-    return conversation.createConversationSettings(embeddingModel);
-}
-
 export function createConversation(
     rootPath: string,
     settings: knowLib.conversation.ConversationSettings,
@@ -206,6 +206,9 @@ export async function createSearchMemory(
 ): Promise<conversation.ConversationManager> {
     const conversationName = "search";
     const memory = await conversation.createConversationManager(
+        {
+            model: context.chatModel,
+        },
         conversationName,
         context.storePath,
         true,
@@ -229,16 +232,16 @@ export async function loadConversation(
 
         context.conversation = await createConversation(
             conversationPath,
-            createConversationSettings(context.embeddingModel),
+            conversation.createConversationSettings(context.embeddingModel),
         );
         context.conversationName = name;
         context.conversationManager =
             await conversation.createConversationManager(
+                { model: context.chatModel },
                 name,
                 conversationPath,
                 false,
                 context.conversation,
-                context.chatModel,
             );
     } else {
         context.conversation = reservedCm.conversation;
@@ -475,6 +478,7 @@ export async function runChatMemory(): Promise<void> {
                 concurrency: argConcurrency(1),
                 clean: argClean(),
                 chunkSize: argChunkSize(context.maxCharsPerChunk),
+                maxMessages: argNum("Max messages"),
             },
         };
     }
@@ -494,10 +498,13 @@ export async function runChatMemory(): Promise<void> {
             if (namedArgs.clean) {
                 await context.emailMemory.clear(true);
             }
-            const emails = await knowLib.email.loadEmailFolder(
+            let emails = await knowLib.email.loadEmailFolder(
                 sourcePath,
                 namedArgs.concurrency,
             );
+            if (namedArgs.maxMessages && namedArgs.maxMessages > 0) {
+                emails = emails.slice(0, namedArgs.maxMessages);
+            }
             let i = 0;
             for (const emailBatch of collections.slices(
                 emails,
@@ -814,10 +821,13 @@ export async function runChatMemory(): Promise<void> {
         }
 
         const index = await context.conversation.getEntityIndex();
-        for await (const entity of index.entities()) {
-            await writeExtractedEntity(entity);
-            printer.writeLine();
-        }
+        const entities = [
+            ...conversation.toCompositeEntities(
+                await asyncArray.toArray(index.entities()),
+            ),
+        ];
+        entities.sort((x, y) => x.name.localeCompare(y.name));
+        printer.writeCompositeEntities(entities);
     }
 
     function actionsDef(): CommandMetadata {
@@ -1132,7 +1142,19 @@ export async function runChatMemory(): Promise<void> {
             searchOptions.fallbackSearch = { maxMatches: 10 };
         }
         if (!namedArgs.eval) {
-            await searchNoEval(query, searchOptions);
+            // just translate user query into structured query without eval
+            const translationContext =
+                await context.searcher.buildContext(searchOptions);
+            const searchResult: any = namedArgs.v2
+                ? await searcher.actions.translateSearchTermsV2(
+                      query,
+                      translationContext,
+                  )
+                : await context.searcher.actions.translateSearch(
+                      query,
+                      translationContext,
+                  );
+            printer.writeJson(searchResult);
             return;
         }
 
@@ -1221,16 +1243,14 @@ export async function runChatMemory(): Promise<void> {
             context.searchMemory.conversationName !== context.conversationName
         ) {
             try {
-                context.searchMemory.queueAddMessage(
-                    `USER:\n${question}`,
-                    undefined,
-                    timestampQ,
-                );
-                context.searchMemory.queueAddMessage(
-                    `ASSISTANT:\n${answer}`,
-                    undefined,
-                    timestampA,
-                );
+                context.searchMemory.queueAddMessage({
+                    text: `USER:\n${question}`,
+                    timestamp: timestampQ,
+                });
+                context.searchMemory.queueAddMessage({
+                    text: `ASSISTANT:\n${answer}`,
+                    timestamp: timestampA,
+                });
             } catch (e) {
                 printer.writeError(`Error updating history\n${e}`);
             }
@@ -1490,7 +1510,7 @@ export async function runChatMemory(): Promise<void> {
             }
         }
     }
-
+    /*
     async function writeExtractedEntity(
         entity: conversation.ExtractedEntity,
         showTopics?: boolean,
@@ -1512,6 +1532,7 @@ export async function runChatMemory(): Promise<void> {
             }
         }
     }
+    */
 
     async function writeEntitiesById(
         index: knowLib.conversation.EntityIndex,

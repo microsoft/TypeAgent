@@ -234,6 +234,7 @@ export async function initializeCommandHandlerContext(
     const sessionDirPath = session.getSessionDirPath();
     const conversationManager = sessionDirPath
         ? await Conversation.createConversationManager(
+              {},
               "conversation",
               sessionDirPath,
               false,
