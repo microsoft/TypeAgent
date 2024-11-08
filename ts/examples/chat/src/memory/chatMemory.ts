@@ -14,35 +14,27 @@ import {
     argNum,
     parseNamedArguments,
     runConsole,
+    getInteractiveIO,
 } from "interactive-app";
-import {
-    asyncArray,
-    collections,
-    dateTime,
-    getFileName,
-    isDirectoryPath,
-    readAllText,
-} from "typeagent";
+import { asyncArray, dateTime, getFileName, readAllText } from "typeagent";
 import chalk, { ChalkInstance } from "chalk";
 import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
-import { importMsgFiles, timestampBlocks } from "./importer.js";
+import { timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
 import {
-    argChunkSize,
-    argClean,
     argConcurrency,
     argDestFile,
     argMinScore,
     argPause,
     argSourceFile,
-    argSourceFileOrFolder,
     getMessagesAndCount,
 } from "./common.js";
-import { createEmailMemory } from "./emailMemory.js";
+import { createEmailCommands, createEmailMemory } from "./emailMemory.js";
 
 export type ChatContext = {
     storePath: string;
+    printer: ChatMemoryPrinter;
     chatModel: ChatModel;
     embeddingModel: TextEmbeddingModel;
     embeddingModelSmall?: TextEmbeddingModel | undefined;
@@ -124,6 +116,7 @@ export async function createChatMemoryContext(
     const actionTopK = 16;
     const context: ChatContext = {
         storePath,
+        printer: new ChatMemoryPrinter(getInteractiveIO()),
         chatModel,
         embeddingModel,
         embeddingModelSmall,
@@ -238,12 +231,11 @@ export async function loadConversation(
 export async function runChatMemory(): Promise<void> {
     let context = await createChatMemoryContext(printStats);
     let showTokenStats = true;
-    let printer: ChatMemoryPrinter;
-    const handlers: Record<string, CommandHandler> = {
+    let printer = context.printer;
+    const commands: Record<string, CommandHandler> = {
         importPlay,
         importTranscript,
         importMessage,
-        importEmail,
         load,
         history,
         replay,
@@ -259,15 +251,14 @@ export async function runChatMemory(): Promise<void> {
         runTestSet,
         tokenLog,
     };
-    addStandardHandlers(handlers);
-    await runConsole({
-        onStart,
-        inputHandler,
-        handlers,
-    });
+    createEmailCommands(context, commands);
+    addStandardHandlers(commands);
 
     function onStart(io: InteractiveIo): void {
-        printer = new ChatMemoryPrinter(io);
+        if (io !== context.printer.io) {
+            printer = new ChatMemoryPrinter(io);
+            context.printer = printer;
+        }
     }
 
     async function inputHandler(
@@ -304,7 +295,7 @@ export async function runChatMemory(): Promise<void> {
     //
     //--------------------
 
-    handlers.history.metadata = "Display search history.";
+    commands.history.metadata = "Display search history.";
     async function history(args: string[], io: InteractiveIo): Promise<void> {
         if (context.searchMemory) {
             await writeHistory(context.searchMemory.conversation);
@@ -313,7 +304,7 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    handlers.importTranscript.metadata = importChatDef();
+    commands.importTranscript.metadata = importChatDef();
     async function importTranscript(
         args: string[],
         io: InteractiveIo,
@@ -372,7 +363,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.importPlay.metadata = importChatDef();
+    commands.importPlay.metadata = importChatDef();
     async function importPlay(
         args: string[],
         io: InteractiveIo,
@@ -414,7 +405,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.importMessage.metadata = importMessageDef();
+    commands.importMessage.metadata = importMessageDef();
     async function importMessage(
         args: string[],
         io: InteractiveIo,
@@ -442,79 +433,7 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    function importEmailDef(): CommandMetadata {
-        return {
-            description: "Import emails in a folder",
-            args: {
-                sourcePath: argSourceFileOrFolder(),
-            },
-            options: {
-                concurrency: argConcurrency(1),
-                clean: argClean(),
-                chunkSize: argChunkSize(context.maxCharsPerChunk),
-                maxMessages: argNum("Max messages"),
-            },
-        };
-    }
-    handlers.importEmail.metadata = importEmailDef();
-    async function importEmail(args: string[], io: InteractiveIo) {
-        const namedArgs = parseNamedArguments(args, importEmailDef());
-        let sourcePath: string = namedArgs.sourcePath;
-        let isDir = isDirectoryPath(sourcePath);
-        let isJson = sourcePath.endsWith("json");
-        if (isDir && !isJson) {
-            printer.writeInColor(chalk.cyan, "Converting message files");
-            await importMsgFiles(sourcePath, io);
-            sourcePath = path.join(sourcePath, "json");
-        }
-        if (isDir) {
-            printer.writeInColor(chalk.cyan, "Adding emails to memory");
-            if (namedArgs.clean) {
-                await context.emailMemory.clear(true);
-            }
-            let emails = await knowLib.email.loadEmailFolder(
-                sourcePath,
-                namedArgs.concurrency,
-            );
-            if (namedArgs.maxMessages && namedArgs.maxMessages > 0) {
-                emails = emails.slice(0, namedArgs.maxMessages);
-            }
-            let i = 0;
-            for (const emailBatch of collections.slices(
-                emails,
-                namedArgs.concurrency,
-            )) {
-                ++i;
-                printer.writeBatchProgress(
-                    emailBatch,
-                    undefined,
-                    emails.length,
-                );
-                emailBatch.value.forEach((e) =>
-                    printer.writeLine(
-                        `${e.sourcePath}\n${knowLib.email.emailToString(e).length} chars`,
-                    ),
-                );
-                await knowLib.email.addEmailToConversation(
-                    context.emailMemory,
-                    emailBatch.value,
-                    namedArgs.chunkSize,
-                );
-            }
-        } else if (isJson) {
-            if (
-                !(await knowLib.email.addEmailFileToConversation(
-                    context.emailMemory,
-                    sourcePath,
-                    namedArgs.chunkSize,
-                ))
-            ) {
-                printer.writeLine(`Could not load ${sourcePath}`);
-            }
-        }
-    }
-
-    handlers.replay.metadata = "Replay the chat";
+    commands.replay.metadata = "Replay the chat";
     async function replay(args: string[], io: InteractiveIo) {
         await writeHistory(context.conversation);
     }
@@ -532,7 +451,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.load.metadata = loadDef();
+    commands.load.metadata = loadDef();
     async function load(args: string[], io: InteractiveIo) {
         if (args.length > 0) {
             const namedArgs = parseNamedArguments(args, loadDef());
@@ -567,7 +486,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.knowledge.metadata = knowledgeDef();
+    commands.knowledge.metadata = knowledgeDef();
     async function knowledge(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, knowledgeDef());
         const extractor = conversation.createKnowledgeExtractor(
@@ -619,7 +538,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.buildIndex.metadata = buildIndexDef();
+    commands.buildIndex.metadata = buildIndexDef();
     async function buildIndex(
         args: string[],
         io: InteractiveIo,
@@ -711,7 +630,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.topics.metadata = topicsDef();
+    commands.topics.metadata = topicsDef();
     async function topics(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, topicsDef());
         const index = await context.conversation.getTopicsIndex(
@@ -763,7 +682,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.entities.metadata = entitiesDef();
+    commands.entities.metadata = entitiesDef();
     async function entities(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, entitiesDef());
         let query = namedArgs.name ?? namedArgs.type ?? namedArgs.facet;
@@ -825,7 +744,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.actions.metadata = actionsDef();
+    commands.actions.metadata = actionsDef();
     async function actions(args: string[], io: InteractiveIo) {
         const index = await context.conversation.getActionIndex();
         if (args.length === 0) {
@@ -904,7 +823,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.searchQuery.metadata = searchDef();
+    commands.searchQuery.metadata = searchDef();
     async function searchQuery(
         args: string[],
         io: InteractiveIo,
@@ -961,7 +880,7 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    handlers.search.metadata = searchDef();
+    commands.search.metadata = searchDef();
     async function search(args: string[], io: InteractiveIo): Promise<void> {
         await searchConversation(context.searcher, true, args);
     }
@@ -974,7 +893,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.searchV2Debug.metadata = searchV2DebugDef();
+    commands.searchV2Debug.metadata = searchV2DebugDef();
     async function searchV2Debug(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, searchV2DebugDef());
         const result = await context.searcher.actions.translateSearchTermsV2(
@@ -1016,7 +935,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.makeTestSet.metadata = makeTestSetDef();
+    commands.makeTestSet.metadata = makeTestSetDef();
     async function makeTestSet(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, makeTestSetDef());
         await conversation.testData.searchBatchFile(
@@ -1040,7 +959,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.runTestSet.metadata = runTestSetDef();
+    commands.runTestSet.metadata = runTestSetDef();
     async function runTestSet(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, runTestSetDef());
         const comparisons = await conversation.testData.compareQueryBatchFile(
@@ -1077,7 +996,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.tokenLog.metadata = tokenLogDef();
+    commands.tokenLog.metadata = tokenLogDef();
     async function tokenLog(args: string[]) {
         const namedArgs = parseNamedArguments(args, tokenLogDef());
         showTokenStats =
@@ -1572,4 +1491,10 @@ export async function runChatMemory(): Promise<void> {
     function writeProgress(value: string, i: number, total: number) {
         printer.writeLine(`${i + 1}/${total} ${value}`);
     }
+
+    await runConsole({
+        onStart,
+        inputHandler,
+        handlers: commands,
+    });
 }
