@@ -191,7 +191,7 @@ const handlers: CommandHandlerTable = {
     commands: {
         show: {
             description: "Show shell settings",
-            defaultSubCommand: new ShellShowSettingsCommandHandler(),
+            defaultSubCommand: "settings",
             commands: {
                 settings: new ShellShowSettingsCommandHandler(),
                 help: new ShellShowHelpCommandHandler(),

@@ -34,7 +34,7 @@ import { asyncArray, ObjectFolder } from "typeagent";
 import { CodeDocumentation, SemanticCodeIndex } from "code-processor";
 
 import { Chunk, ChunkedFile, chunkifyPythonFiles } from "./pythonChunker.js";
-import { CodeBlockWithDocs, FileDocumenter } from "./main.js";
+import { CodeBlockWithDocs, FileDocumenter } from "./fileDocumenter.js";
 
 // TODO: Turn (chunkFolder, codeIndex, summaryFolder) into a single object.
 
@@ -57,12 +57,14 @@ export async function importPythonFiles(
     // Compute some stats for log message.
     let lines = 0;
     let blobs = 0;
+    let chunks = 0;
     let errors = 0;
     for (const result of results) {
         if ("error" in result) {
             errors++;
         } else {
             const chunkedFile = result;
+            chunks += chunkedFile.chunks.length;
             for (const chunk of chunkedFile.chunks) {
                 blobs += chunk.blobs.length;
                 for (const blob of chunk.blobs) {
@@ -73,7 +75,7 @@ export async function importPythonFiles(
     }
     console.log(
         `[Chunked ${filenames.length} files ` +
-            `(${lines} lines, ${blobs} blobs, ${errors} errors) ` +
+            `(${lines} lines, ${blobs} blobs, ${chunks} chunks, ${errors} errors) ` +
             `in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
     );
 
@@ -95,9 +97,16 @@ export async function importPythonFiles(
             `[Documenting ${chunks.length} chunks from ${chunkedFile.filename}]`,
         );
         const t0 = Date.now();
-        const docs = await fileDocumenter.document(chunks);
+        try {
+            const docs = await fileDocumenter.document(chunks);
+            if (verbose) console.log(docs);
+        } catch (error) {
+            console.log(
+                `[Error documenting ${chunkedFile.filename}: ${error}]`,
+            );
+            continue;
+        }
         const t1 = Date.now();
-        console.log(docs);
         console.log(
             `[Documented ${chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
         );
@@ -146,7 +155,7 @@ async function processChunkedFile(
     // Limit concurrency to avoid 429 errors.
     await asyncArray.forEachAsync(
         chunks,
-        4,
+        verbose ? 1 : 4,
         async (chunk) =>
             await processChunk(
                 chunk,
@@ -176,7 +185,7 @@ async function processChunk(
         (acc, blob) => acc + blob.lines.length,
         0,
     );
-    // console.log(`  [Embedding ${chunk.id} (${lineCount} lines)]`);
+    if (verbose) console.log(`  [Embedding ${chunk.id} (${lineCount} lines)]`);
     const putPromise = chunkFolder.put(chunk, chunk.id);
     const blobLines = extractBlobLines(chunk);
     const codeBlock: CodeBlockWithDocs = {
@@ -187,9 +196,13 @@ async function processChunk(
     const docs = await codeIndex.put(codeBlock, chunk.id, chunk.filename);
     await summaryFolder.put(docs, chunk.id);
     await putPromise;
-    // for (const comment of docs.comments || []) {
-    //     console.log(wordWrap(`    ${comment.lineNumber}. ${comment.comment}`));
-    // }
+    if (verbose) {
+        for (const comment of docs.comments || []) {
+            console.log(
+                wordWrap(`    ${comment.lineNumber}. ${comment.comment}`),
+            );
+        }
+    }
     const t1 = Date.now();
     if (verbose) {
         console.log(

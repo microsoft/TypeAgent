@@ -2,15 +2,8 @@
 // Licensed under the MIT License.
 
 import Database, * as sqlite from "better-sqlite3";
-import { removeDir } from "typeagent";
-
-export type ColumnType = string | number;
-
-export type SqlColumnType<T> = T extends string
-    ? "TEXT"
-    : T extends number
-      ? "INTEGER"
-      : never;
+import { ValueDataType, ValueType } from "knowledge-processor";
+import { removeFile } from "typeagent";
 
 export type AssignedId<T> = {
     id: T;
@@ -19,16 +12,22 @@ export type AssignedId<T> = {
 
 export type BooleanRow = {};
 
-export async function createDb(
+export async function createDatabase(
     filePath: string,
     createNew: boolean,
 ): Promise<sqlite.Database> {
     if (createNew) {
-        await removeDir(filePath);
+        await deleteDatabase(filePath);
     }
     const db = new Database(filePath);
     db.pragma("journal_mode = WAL");
     return db;
+}
+
+export async function deleteDatabase(filePath: string): Promise<void> {
+    await removeFile(filePath);
+    await removeFile(filePath + "-shm");
+    await removeFile(filePath + "-wal");
 }
 
 export function tablePath(rootName: string, name: string): string {
@@ -51,12 +50,14 @@ export type ColumnSerializer = {
     deserialize: (x: any) => any;
 };
 
-export function getTypeSerializer<T extends ColumnType>(
-    type: SqlColumnType<T>,
+export function getTypeSerializer<T extends ValueType>(
+    type: ValueDataType<T>,
 ): [boolean, ColumnSerializer] {
     const isIdInt = type === "INTEGER";
     const serializer: ColumnSerializer = {
-        serialize: isIdInt ? (x: any) => x : (x: any) => x.toString(),
+        serialize: isIdInt
+            ? (x: any) => x
+            : (x: any) => (x ? x.toString() : undefined),
         deserialize: isIdInt ? (x: any) => x : (x: any) => Number.parseInt(x),
     };
     return [isIdInt, serializer];

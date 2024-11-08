@@ -234,6 +234,7 @@ export async function initializeCommandHandlerContext(
     const sessionDirPath = session.getSessionDirPath();
     const conversationManager = sessionDirPath
         ? await Conversation.createConversationManager(
+              {},
               "conversation",
               sessionDirPath,
               false,
@@ -421,7 +422,7 @@ export async function changeContextConfig(
     if (translatorChanged || actionsChanged || commandsChanged) {
         Object.assign(changed, await updateAppAgentStates(context, changed));
     }
-    if (changed.explainerName !== undefined) {
+    if (changed.explainer?.name !== undefined) {
         try {
             systemContext.agentCache = await getAgentCache(
                 systemContext.session,
@@ -430,10 +431,12 @@ export async function changeContextConfig(
             );
         } catch (e: any) {
             displayError(`Failed to change explainer: ${e.message}`, context);
-            delete changed.explainerName;
+            delete changed.explainer?.name;
             // Restore old explainer name
             systemContext.session.setConfig({
-                explainerName: systemContext.agentCache.explainerName,
+                explainer: {
+                    name: systemContext.agentCache.explainerName,
+                },
             });
         }
 

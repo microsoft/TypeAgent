@@ -3,7 +3,7 @@
 
 import * as sqlite from "better-sqlite3";
 import { composers, ensureTestDir, testFilePath } from "./testCore.js";
-import { createDb } from "../src/sqlite/common.js";
+import { createDatabase } from "../src/sqlite/common.js";
 import { createTemporalLogTable } from "../src/sqlite/temporalTable.js";
 
 describe("sqlite.temporalTable", () => {
@@ -11,7 +11,7 @@ describe("sqlite.temporalTable", () => {
     let db: sqlite.Database | undefined;
     beforeAll(async () => {
         await ensureTestDir();
-        db = await createDb(testFilePath("temporal.db"), true);
+        db = await createDatabase(testFilePath("temporal.db"), true);
     });
     afterAll(() => {
         if (db) {
@@ -41,6 +41,8 @@ describe("sqlite.temporalTable", () => {
                 expect(ids).toHaveLength(blocks.length);
                 allIds.push(...ids);
             }
+            const size = await table.size();
+            expect(size).toEqual(allIds.length);
 
             const windowLength = 8;
             const latest = [...table.iterateNewest(windowLength)];

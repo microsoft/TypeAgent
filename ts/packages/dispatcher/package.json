@@ -47,6 +47,7 @@
     "image-agent": "workspace:*",
     "knowledge-processor": "workspace:*",
     "list-agent": "workspace:*",
+    "markdown-agent": "workspace:*",
     "music": "workspace:*",
     "photo-agent": "workspace:*",
     "proper-lockfile": "^4.1.2",

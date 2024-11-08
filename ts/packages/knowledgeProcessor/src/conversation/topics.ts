@@ -17,11 +17,7 @@ import {
     createJsonTranslator,
 } from "typechat";
 import { AggregateTopicResponse } from "./aggregateTopicSchema.js";
-import {
-    TextIndex,
-    TextIndexSettings,
-    createTextIndex,
-} from "../knowledgeIndex.js";
+import { TextIndex, TextIndexSettings } from "../knowledgeIndex.js";
 import path from "path";
 import {
     SourceTextBlock,
@@ -33,7 +29,6 @@ import {
 import { TopicFilter } from "./knowledgeSearchSchema.js";
 import {
     TemporalLog,
-    createTemporalLog,
     filterTemporalSequence,
     getRangeOfTemporalSequence,
     itemsFromTemporalSequence,
@@ -45,12 +40,24 @@ import {
     intersect,
     intersectMultiple,
     removeUndefined,
+    unionMultiple,
     uniqueFrom,
 } from "../setOperations.js";
-import { createRecentItemsWindow } from "./conversation.js";
+import { createRecentItemsWindow } from "../temporal.js";
 import { TermFilter } from "./knowledgeTermSearchSchema.js";
 import { TermFilterV2 } from "./knowledgeTermSearchSchema2.js";
-import { getAllTermsInFilter } from "./searchProcessor.js";
+import {
+    getAllTermsInFilter,
+    getSubjectFromActionTerm,
+} from "./knowledgeTermSearch2.js";
+import {
+    createFileSystemStorageProvider,
+    StorageProvider,
+    ValueDataType,
+    ValueType,
+} from "../storageProvider.js";
+import { KeyValueIndex } from "../keyValueIndex.js";
+import { isValidEntityName } from "./knowledge.js";
 
 export interface TopicExtractor {
     nextTopic(
@@ -290,11 +297,11 @@ export async function createTopicMerger<TTopicId = string>(
         };
         if (topicIndex) {
             if (updateIndex) {
-                await topicIndex.putNext(
+                await topicIndex.addNext(
                     [aggregateTopic.value],
                     aggregateTopic.timestamp,
                 );
-                await topicIndex.put(aggregateTopic.value);
+                await topicIndex.add(aggregateTopic.value);
             }
         }
         if (settings.trackRecent) {
@@ -310,6 +317,7 @@ export async function createTopicMerger<TTopicId = string>(
 }
 
 export interface TopicSearchOptions extends SearchOptions {
+    sourceNameSearchOptions?: SearchOptions;
     loadTopics?: boolean;
 }
 
@@ -320,6 +328,10 @@ export function createTopicSearchOptions(
         maxMatches: isTopicSummary ? Number.MAX_SAFE_INTEGER : 8,
         minScore: 0.8,
         loadTopics: true,
+        sourceNameSearchOptions: {
+            maxMatches: 8,
+            minScore: 0.8,
+        },
     };
 }
 
@@ -357,12 +369,29 @@ export interface TopicIndex<TTopicId = any, TSourceId = any> {
      */
     getSourceIds(ids: TTopicId[]): Promise<TSourceId[]>;
     getSourceIdsForTopic(topic: string): Promise<TSourceId[] | undefined>;
-    put(topic: string | TextBlock<TSourceId>): Promise<TTopicId>;
-    putNext(
+    /**
+     * Add the topic to the topic index and the topic sequence with the supplied timestamp
+     * @param topics
+     * @param timestamp
+     */
+    addNext(
         topics: TextBlock<TSourceId>[],
         timestamp?: Date,
     ): Promise<TTopicId[]>;
-    putMultiple(text: TextBlock<TSourceId>[]): Promise<TTopicId[]>;
+    /**
+     * Add a topic to the index, but not to the sequence
+     * @param topic
+     */
+    add(
+        topic: string | TextBlock<TSourceId>,
+        sourceName?: string,
+        id?: TTopicId,
+    ): Promise<TTopicId>;
+    addMultiple(
+        text: TextBlock<TSourceId>[],
+        sourceName?: string,
+        ids?: TTopicId[],
+    ): Promise<TTopicId[]>;
     search(
         filter: TopicFilter,
         options: TopicSearchOptions,
@@ -382,43 +411,72 @@ export interface TopicIndex<TTopicId = any, TSourceId = any> {
     ): Promise<Set<TSourceId> | undefined>;
 }
 
-export async function createTopicIndex<TSourceId = any>(
+export async function createTopicIndex<TSourceId extends ValueType = string>(
     settings: TextIndexSettings,
+    getNameIndex: () => Promise<TextIndex<string>>,
     rootPath: string,
+    name: string,
+    sourceIdType: ValueDataType<TSourceId>,
     folderSettings?: ObjectFolderSettings,
     fSys?: FileSystem,
 ): Promise<TopicIndex<string, TSourceId>> {
+    return createTopicIndexOnStorage<TSourceId>(
+        settings,
+        getNameIndex,
+        rootPath,
+        name,
+        createFileSystemStorageProvider(rootPath, folderSettings, fSys),
+        sourceIdType,
+    );
+}
+
+export async function createTopicIndexOnStorage<
+    TSourceId extends ValueType = string,
+>(
+    settings: TextIndexSettings,
+    getNameIndex: () => Promise<TextIndex<string>>,
+    basePath: string,
+    name: string,
+    storageProvider: StorageProvider,
+    sourceIdType: ValueDataType<TSourceId>,
+): Promise<TopicIndex<string, TSourceId>> {
     type TopicId = string;
     // Timestamped sequence of topics, as they were seen
-    const sequence = await createTemporalLog<TopicId[]>(
+    const sequence = await storageProvider.createTemporalLog<TopicId[]>(
         { concurrency: settings.concurrency },
-        path.join(rootPath, "sequence"),
-        folderSettings,
-        fSys,
+        path.join(basePath, name),
+        "sequence",
     );
-    const textIndex = await createTextIndex<TSourceId>(
+    const topicIndex = await storageProvider.createTextIndex<TSourceId>(
         settings,
-        rootPath,
-        folderSettings,
-        fSys,
+        basePath,
+        name,
+        sourceIdType,
+    );
+    // Optionally maintain an index of the entities that that were involved in discussing
+    // or formulating this topic...
+    const sourceNameToTopicIndex = await storageProvider.createIndex<TopicId>(
+        basePath,
+        "sourceEntities",
+        "TEXT",
     );
     return {
         settings,
         sequence,
-        textIndex: textIndex,
+        textIndex: topicIndex,
         topics,
-        entries: textIndex.entries,
+        entries: topicIndex.entries,
         getTopicSequence,
         get,
         getText,
         getMultiple,
-        getId: textIndex.getId,
+        getId: topicIndex.getId,
         getMultipleText,
         getSourceIds,
         getSourceIdsForTopic,
-        put,
-        putNext,
-        putMultiple,
+        add,
+        addNext,
+        addMultiple,
         search,
         searchTerms,
         searchTermsV2,
@@ -426,24 +484,24 @@ export async function createTopicIndex<TSourceId = any>(
     };
 
     async function* topics(): AsyncIterableIterator<string> {
-        for (const topic of textIndex.text()) {
+        for (const topic of topicIndex.text()) {
             yield topic;
         }
     }
 
     async function get(id: TopicId): Promise<TextBlock<TSourceId> | undefined> {
-        const topic = await textIndex.getText(id);
+        const topic = await topicIndex.getText(id);
         return topic
             ? {
                   value: topic,
-                  sourceIds: await textIndex.getById(id),
+                  sourceIds: await topicIndex.getById(id),
                   type: TextBlockType.Sentence,
               }
             : undefined;
     }
 
     async function getText(id: TopicId): Promise<string> {
-        return (await textIndex.getText(id)) ?? "";
+        return (await topicIndex.getText(id)) ?? "";
     }
 
     async function getMultiple(
@@ -464,43 +522,73 @@ export async function createTopicIndex<TSourceId = any>(
     }
 
     async function getSourceIds(ids: TopicId[]): Promise<TSourceId[]> {
-        const postings = removeUndefined(await textIndex.getByIds(ids));
+        const postings = removeUndefined(await topicIndex.getByIds(ids));
         return uniqueFrom<TSourceId[]>(postings, (p) => p, true) as TSourceId[];
     }
 
     async function getSourceIdsForTopic(
         topic: string,
     ): Promise<TSourceId[] | undefined> {
-        return textIndex.get(topic);
+        return topicIndex.get(topic);
     }
 
-    async function putMultiple(
+    async function addMultiple(
         topics: TextBlock<TSourceId>[],
+        sourceName?: string,
+        ids?: TopicId[],
     ): Promise<TopicId[]> {
-        return textIndex.putMultiple(topics);
+        if (ids && ids.length !== topics.length) {
+            throw Error("Id length mismatch");
+        }
+        const topicIds: TopicId[] = [];
+        for (let i = 0; i < topics.length; ++i) {
+            let id = await add(topics[i], sourceName, ids ? ids[i] : undefined);
+            topicIds.push(id);
+        }
+
+        return topicIds;
     }
 
-    async function putNext(
+    async function addNext(
         topics: TextBlock<TSourceId>[],
         timestamp?: Date,
     ): Promise<TopicId[]> {
         const topicIds = await asyncArray.mapAsync(topics, 1, (t) =>
-            textIndex.put(t.value),
+            topicIndex.put(t.value),
         );
         topicIds.sort();
         await sequence.put(topicIds, timestamp);
         return topicIds;
     }
 
-    async function put(topic: string | TextBlock<TSourceId>): Promise<TopicId> {
-        return typeof topic === "string"
-            ? textIndex.put(topic)
-            : textIndex.put(topic.value, topic.sourceIds);
+    async function add(
+        topic: string | TextBlock<TSourceId>,
+        sourceName?: string | undefined,
+        id?: TopicId,
+    ): Promise<TopicId> {
+        let topicId: TopicId | undefined;
+        if (typeof topic === "string") {
+            topicId = id ? id : await topicIndex.put(topic);
+        } else {
+            topicId = id
+                ? id
+                : await topicIndex.put(topic.value, topic.sourceIds);
+        }
+
+        if (sourceName) {
+            const names = await getNameIndex();
+            const nameId = await names.getId(sourceName);
+            if (nameId) {
+                await sourceNameToTopicIndex.put([topicId], nameId);
+            }
+        }
+        return topicId;
     }
 
     async function search(
         filter: TopicFilter,
         options: TopicSearchOptions,
+        sourceName?: string,
     ): Promise<TopicSearchResult<TopicId>> {
         let results = createSearchResults<TopicId>();
         if (filter.timeRange) {
@@ -512,13 +600,28 @@ export async function createTopicIndex<TSourceId = any>(
         if (filter.topics) {
             if (filter.topics === "*") {
                 // Wildcard
-                results.topicIds = await asyncArray.toArray(textIndex.ids());
+                results.topicIds = await asyncArray.toArray(topicIndex.ids());
             } else {
-                results.topicIds = await textIndex.getNearestText(
+                results.topicIds = await topicIndex.getNearestText(
                     filter.topics,
                     options.maxMatches,
                     options.minScore,
                 );
+            }
+            if (sourceName && results.topicIds && results.topicIds.length > 0) {
+                const names = await getNameIndex();
+                const topicIdsWithSource = await matchName(
+                    names,
+                    sourceNameToTopicIndex,
+                    sourceName,
+                    options,
+                );
+                results.topicIds = [
+                    ...intersect(
+                        results.topicIds,
+                        topicIdsWithSource ? topicIdsWithSource : [],
+                    ),
+                ];
             }
         }
 
@@ -577,13 +680,17 @@ export async function createTopicIndex<TSourceId = any>(
     ): Promise<TopicSearchResult<TopicId>> {
         // We will just use the standard topic stuff for now, since that does the same thing
         const terms = getAllTermsInFilter(filter);
+        let sourceName = getSubjectFromActionTerm(filter.action);
+        if (!isValidEntityName(sourceName)) {
+            sourceName = undefined;
+        }
         const topics = terms && terms.length > 0 ? terms.join(" ") : "*";
         const topicFilter: TopicFilter = {
             filterType: "Topic",
             topics,
             timeRange: filter.timeRange,
         };
-        return search(topicFilter, options);
+        return search(topicFilter, options, sourceName);
     }
 
     async function loadSourceIds(
@@ -632,5 +739,31 @@ export async function createTopicIndex<TSourceId = any>(
             };
             yield block;
         }
+    }
+
+    async function matchName(
+        names: TextIndex<string>,
+        nameIndex: KeyValueIndex<string, TopicId>,
+        name: string | undefined,
+        searchOptions: TopicSearchOptions,
+    ): Promise<IterableIterator<TopicId> | undefined> {
+        const options = searchOptions.sourceNameSearchOptions ?? searchOptions;
+        // Possible names of entities
+        const nameIds = await names.getNearestText(
+            name!,
+            options.maxMatches,
+            options.minScore,
+        );
+        if (nameIds && nameIds.length > 0) {
+            // Load all topic Ids for those entities
+            const matches = await nameIndex.getMultiple(
+                nameIds,
+                settings.concurrency,
+            );
+            if (matches && matches.length > 0) {
+                return unionMultiple(...matches);
+            }
+        }
+        return undefined;
     }
 }

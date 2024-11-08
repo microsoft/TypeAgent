@@ -39,7 +39,7 @@ export class MailClientLoginCommandHandler implements CommandHandlerNoParams {
 
 const handlers: CommandHandlerTable = {
     description: "Email login commmand",
-    defaultSubCommand: new MailClientLoginCommandHandler(),
+    defaultSubCommand: "login",
     commands: {
         login: new MailClientLoginCommandHandler(),
     },

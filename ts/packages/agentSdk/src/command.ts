@@ -39,7 +39,7 @@ export type CommandDescriptor = {
 export type CommandDescriptorTable = {
     description: string;
     commands: Record<string, CommandDescriptors>; // The 'command' table to resolve the next '<subcommand>' in the input
-    defaultSubCommand?: CommandDescriptor | undefined; // optional command to resolve to if this is the end of the command or the next '<subcommand>' doesn't match any in the 'commands' table
+    defaultSubCommand?: CommandDescriptor | string | undefined; // optional command to resolve to if this is the end of the command or the next '<subcommand>' doesn't match any in the 'commands' table
 };
 
 export type CommandDescriptors =

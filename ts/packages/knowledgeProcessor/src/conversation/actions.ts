@@ -11,18 +11,17 @@ import {
     dateTime,
 } from "typeagent";
 import {
-    KeyValueIndex,
-    KnowledgeStore,
     TermMap,
     TextIndex,
     TextIndexSettings,
-    createIndexFolder,
-    createKnowledgeStore,
     createTermMap,
-    createTextIndex,
 } from "../knowledgeIndex.js";
+import {
+    createKnowledgeStoreOnStorage,
+    KnowledgeStore,
+} from "../knowledgeStore.js";
+import { KeyValueIndex } from "../keyValueIndex.js";
 import { Action, ActionParam, VerbTense } from "./knowledgeSchema.js";
-import path from "path";
 import { ActionFilter } from "./knowledgeSearchSchema.js";
 import {
     TemporalLog,
@@ -42,6 +41,7 @@ import {
 } from "../setOperations.js";
 import {
     ExtractedAction,
+    isValidEntityName,
     knowledgeValueToString,
     NoEntityName,
 } from "./knowledge.js";
@@ -50,11 +50,11 @@ import { toStopDate, toStartDate } from "./knowledgeActions.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
 import { TermFilterV2, ActionTerm } from "./knowledgeTermSearchSchema2.js";
 import { facetToString } from "./entities.js";
-
-export interface ActionSearchOptions extends SearchOptions {
-    verbSearchOptions?: SearchOptions | undefined;
-    loadActions?: boolean | undefined;
-}
+import {
+    createFileSystemStorageProvider,
+    StorageProvider,
+} from "../storageProvider.js";
+import { getSubjectFromActionTerm } from "./knowledgeTermSearch2.js";
 
 export interface ActionSearchResult<TActionId = any> {
     actionIds?: TActionId[] | undefined;
@@ -70,6 +70,11 @@ function createSearchResults<TActionId = any>(): ActionSearchResult<TActionId> {
             return getRangeOfTemporalSequence(this.temporalSequence);
         },
     };
+}
+
+export interface ActionSearchOptions extends SearchOptions {
+    verbSearchOptions?: SearchOptions | undefined;
+    loadActions?: boolean | undefined;
 }
 
 export function createActionSearchOptions(
@@ -117,12 +122,25 @@ export interface ActionIndex<TActionId = any, TSourceId = any>
     getAllVerbs(): Promise<string[]>;
 }
 
-export async function createActionIndex<TSourceId = any>(
+export function createActionIndex<TSourceId = any>(
     settings: TextIndexSettings,
     getNameIndex: () => Promise<TextIndex<string>>,
     rootPath: string,
     folderSettings?: ObjectFolderSettings,
     fSys?: FileSystem,
+): Promise<ActionIndex<string, TSourceId>> {
+    return createActionIndexOnStorage<TSourceId>(
+        settings,
+        getNameIndex,
+        rootPath,
+        createFileSystemStorageProvider(rootPath, folderSettings, fSys),
+    );
+}
+export async function createActionIndexOnStorage<TSourceId = any>(
+    settings: TextIndexSettings,
+    getNameIndex: () => Promise<TextIndex<string>>,
+    rootPath: string,
+    storageProvider: StorageProvider,
 ): Promise<ActionIndex<string, TSourceId>> {
     type ActionId = string;
     // Initialize indexes
@@ -133,32 +151,23 @@ export async function createActionIndex<TSourceId = any>(
         objectIndex,
         indirectObjectIndex,
     ] = await Promise.all([
-        createKnowledgeStore<ExtractedAction<TSourceId>>(
+        createKnowledgeStoreOnStorage<ExtractedAction<TSourceId>>(
             settings,
             rootPath,
-            folderSettings,
-            fSys,
+            storageProvider,
         ),
-        createTextIndex<ActionId>(
+        storageProvider.createTextIndex<ActionId>(
             settings,
-            path.join(rootPath, "verbs"),
-            folderSettings,
-            fSys,
+            rootPath,
+            "verbs",
+            "TEXT",
         ),
-        createIndexFolder<ActionId>(
-            path.join(rootPath, "subjects"),
-            folderSettings,
-            fSys,
-        ),
-        createIndexFolder<ActionId>(
-            path.join(rootPath, "objects"),
-            folderSettings,
-            fSys,
-        ),
-        createIndexFolder<ActionId>(
-            path.join(rootPath, "indirectObjects"),
-            folderSettings,
-            fSys,
+        storageProvider.createIndex<ActionId>(rootPath, "subjects", "TEXT"),
+        storageProvider.createIndex<ActionId>(rootPath, "objects", "TEXT"),
+        storageProvider.createIndex<ActionId>(
+            rootPath,
+            "indirectObjects",
+            "TEXT",
         ),
     ]);
     const verbTermMap = createTermMap();
@@ -261,7 +270,7 @@ export async function createActionIndex<TSourceId = any>(
         name: string,
         actionIds: ActionId[],
     ): Promise<void> {
-        if (isEntityName(name)) {
+        if (isValidEntityName(name)) {
             const nameId = await names.getId(name);
             if (nameId) {
                 await nameIndex.put(actionIds, nameId);
@@ -420,7 +429,8 @@ export async function createActionIndex<TSourceId = any>(
     ) {
         const actionFilter: ActionFilter = {
             filterType: "Action",
-            subjectEntityName: actionTerm.subject ?? "none",
+            subjectEntityName:
+                getSubjectFromActionTerm(actionTerm) ?? NoEntityName,
             objectEntityName: actionTerm.object,
         };
         if (actionTerm.verbs) {
@@ -438,7 +448,7 @@ export async function createActionIndex<TSourceId = any>(
         name: string | undefined,
         options: ActionSearchOptions,
     ): Promise<IterableIterator<ActionId> | undefined> {
-        if (isEntityName(name)) {
+        if (isValidEntityName(name)) {
             // Possible names of entities
             const nameIds = await names.getNearestText(
                 name!,
@@ -567,7 +577,7 @@ export function actionToString(action: Action): string {
     return text;
 
     function appendEntityName(text: string, name: string): string {
-        if (isEntityName(name)) {
+        if (isValidEntityName(name)) {
             text += " ";
             text += name;
         }
@@ -615,13 +625,13 @@ export function toCompositeAction(action: Action) {
     const composite: CompositeAction = {
         verbs: actionVerbsToString(action.verbs, action.verbTense),
     };
-    if (isEntityName(action.subjectEntityName)) {
+    if (isValidEntityName(action.subjectEntityName)) {
         composite.subject = action.subjectEntityName;
     }
-    if (isEntityName(action.objectEntityName)) {
+    if (isValidEntityName(action.objectEntityName)) {
         composite.object = action.objectEntityName;
     }
-    if (isEntityName(action.indirectObjectEntityName)) {
+    if (isValidEntityName(action.indirectObjectEntityName)) {
         composite.indirectObject = action.indirectObjectEntityName;
     }
     if (action.params) {
@@ -775,16 +785,12 @@ function compareActionGroupValue(
 function* getFullActions(actions: Iterable<Action>): IterableIterator<Action> {
     for (const a of actions) {
         if (
-            isEntityName(a.subjectEntityName) &&
+            isValidEntityName(a.subjectEntityName) &&
             a.verbs &&
             a.verbs.length > 0 &&
-            isEntityName(a.objectEntityName)
+            isValidEntityName(a.objectEntityName)
         ) {
             yield a;
         }
     }
-}
-
-function isEntityName(name: string | undefined): boolean {
-    return name !== undefined && name.length > 0 && name !== NoEntityName;
 }

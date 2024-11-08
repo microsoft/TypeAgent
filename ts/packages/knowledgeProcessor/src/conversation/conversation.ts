@@ -6,17 +6,11 @@ import {
     ObjectFolder,
     ObjectFolderSettings,
     SearchOptions,
-    collections,
     createObjectFolder,
     dateTime,
     removeDir,
 } from "typeagent";
-import {
-    TextBlock,
-    SourceTextBlock,
-    valueToString,
-    TextBlockType,
-} from "../text.js";
+import { TextBlock, SourceTextBlock, TextBlockType } from "../text.js";
 import { Topic } from "./topicSchema.js";
 import { TextStore, createTextStore } from "../textStore.js";
 import path from "path";
@@ -24,7 +18,7 @@ import {
     TopicIndex,
     TopicMerger,
     TopicSearchOptions,
-    createTopicIndex,
+    createTopicIndexOnStorage,
     createTopicMerger,
     createTopicSearchOptions,
 } from "./topics.js";
@@ -35,7 +29,7 @@ import {
 import {
     EntityIndex,
     EntitySearchOptions,
-    createEntityIndex,
+    createEntityIndexOnStorage,
     createEntitySearchOptions,
 } from "./entities.js";
 import { ExtractedKnowledge } from "./knowledge.js";
@@ -45,7 +39,7 @@ import { MessageIndex, createMessageIndex } from "./messages.js";
 import {
     ActionIndex,
     ActionSearchOptions,
-    createActionIndex,
+    createActionIndexOnStorage,
     createActionSearchOptions,
 } from "./actions.js";
 import { SearchTermsAction, TermFilter } from "./knowledgeTermSearchSchema.js";
@@ -53,65 +47,56 @@ import {
     SearchTermsActionV2,
     TermFilterV2,
 } from "./knowledgeTermSearchSchema2.js";
-import { getAllTermsInFilter } from "./searchProcessor.js";
+import { getAllTermsInFilter } from "./knowledgeTermSearch2.js";
 import { TypeChatLanguageModel } from "typechat";
 import { TextEmbeddingModel } from "aiclient";
 import { createSearchResponse, SearchResponse } from "./searchResponse.js";
+import {
+    createFileSystemStorageProvider,
+    StorageProvider,
+} from "../storageProvider.js";
+import { RecentItems, createRecentItemsWindow } from "../temporal.js";
 
-export interface RecentItems<T> {
-    readonly entries: collections.CircularArray<T>;
-    push(items: T | T[]): void;
-    getContext(maxContextLength: number): string[];
-    getUnique(): T[];
-    reset(): void;
+export interface ConversationSettings {
+    indexSettings: TextIndexSettings;
+    indexActions?: boolean;
+    initializer?: ((conversation: Conversation) => Promise<void>) | undefined;
 }
 
-export function createRecentItemsWindow<T>(
-    windowSize: number,
-    stringify?: (value: T) => string,
-): RecentItems<T> {
-    const entries = new collections.CircularArray<T>(windowSize);
+export function createConversationSettings(
+    embeddingModel?: TextEmbeddingModel,
+): ConversationSettings {
     return {
-        entries,
-        push,
-        getContext,
-        getUnique,
-        reset() {
-            entries.reset();
+        indexSettings: {
+            caseSensitive: false,
+            concurrency: 2,
+            embeddingModel,
+            semanticIndex: true,
         },
     };
+}
 
-    function push(items: T | T[]): void {
-        if (Array.isArray(items)) {
-            for (const item of items) {
-                entries.push(item);
-            }
-        } else {
-            entries.push(items);
-        }
-    }
+export type ConversationSearchOptions = {
+    entity: EntitySearchOptions;
+    topic: TopicSearchOptions;
+    // Include if you want to use actions in your search
+    action?: ActionSearchOptions | undefined;
+    topicLevel?: number;
+    loadMessages?: boolean;
+};
 
-    function getContext(maxContextLength: number): string[] {
-        let sections: string[] = [];
-        let totalLength = 0;
-        // Get the range of sections that could be pushed on, NEWEST first
-        for (const item of entries.itemsReverse()) {
-            const content = valueToString(item, stringify);
-            const nextLength = content.length;
-            if (nextLength + totalLength > maxContextLength) {
-                break;
-            }
-            sections.push(content);
-            totalLength += nextLength;
-        }
-        sections.reverse();
-        return sections;
-    }
-
-    function getUnique(): T[] {
-        const unique = new Set<T>(entries);
-        return unique.size > 0 ? [...unique.values()] : [];
-    }
+export function createConversationSearchOptions(
+    topLevelSummary: boolean = false,
+): ConversationSearchOptions {
+    const topicLevel = topLevelSummary ? 2 : 1;
+    const searchOptions: ConversationSearchOptions = {
+        entity: createEntitySearchOptions(true),
+        topic: createTopicSearchOptions(topLevelSummary),
+        action: createActionSearchOptions(true),
+        topicLevel,
+        loadMessages: !topLevelSummary,
+    };
+    return searchOptions;
 }
 
 export interface Conversation<
@@ -128,11 +113,6 @@ export interface Conversation<
     getEntityIndex(): Promise<EntityIndex<TEntityId, MessageId>>;
     getTopicsIndex(level?: number): Promise<TopicIndex<TTopicId, MessageId>>;
     getActionIndex(): Promise<ActionIndex<TActionId, MessageId>>;
-    removeEntities(): Promise<void>;
-    removeTopics(level?: number): Promise<void>;
-    removeKnowledge(): Promise<void>;
-    removeActions(): Promise<void>;
-    removeMessageIndex(): Promise<void>;
     /**
      *
      * @param removeMessages If you want the original messages also removed. Set to false if you just want to rebuild the indexes
@@ -198,47 +178,6 @@ export type ExtractedKnowledgeIds<
     actionIds?: TActionId[] | undefined;
 };
 
-export type ConversationSettings = {
-    indexSettings: TextIndexSettings;
-    indexActions?: boolean;
-};
-
-export function createConversationSettings(
-    embeddingModel?: TextEmbeddingModel,
-): ConversationSettings {
-    return {
-        indexSettings: {
-            caseSensitive: false,
-            concurrency: 2,
-            embeddingModel,
-            semanticIndex: true,
-        },
-    };
-}
-
-export type ConversationSearchOptions = {
-    entity: EntitySearchOptions;
-    topic: TopicSearchOptions;
-    // Include if you want to use actions in your search
-    action?: ActionSearchOptions | undefined;
-    topicLevel?: number;
-    loadMessages?: boolean;
-};
-
-export function createConversationSearchOptions(
-    topLevelSummary: boolean = false,
-): ConversationSearchOptions {
-    const topicLevel = topLevelSummary ? 2 : 1;
-    const searchOptions: ConversationSearchOptions = {
-        entity: createEntitySearchOptions(true),
-        topic: createTopicSearchOptions(topLevelSummary),
-        action: createActionSearchOptions(true),
-        topicLevel,
-        loadMessages: !topLevelSummary,
-    };
-    return searchOptions;
-}
-
 /**
  * Create or load a persistent conversation, using the given rootPath as the storage root.
  * - The conversation is stored in folders below the given root path
@@ -254,6 +193,7 @@ export async function createConversation(
     rootPath: string,
     folderSettings?: ObjectFolderSettings | undefined,
     fSys?: FileSystem | undefined,
+    storageProvider?: StorageProvider,
 ): Promise<Conversation<string, string, string>> {
     type MessageId = string;
     type TopicId = string;
@@ -265,6 +205,11 @@ export async function createConversation(
         cacheNames: true,
         useWeakRefs: true,
     };
+    storageProvider ??= createFileSystemStorageProvider(
+        rootPath,
+        folderSettings,
+        fSys,
+    );
     const messages = await createTextStore(
         { concurrency: settings.indexSettings.concurrency },
         path.join(rootPath, "messages"),
@@ -283,9 +228,7 @@ export async function createConversation(
     const actionPath = path.join(rootPath, "actions");
     let actionIndex: ActionIndex | undefined;
 
-    await load();
-
-    return {
+    const thisConversation: Conversation<string, string, string> = {
         settings,
         messages,
         knowledge: knowledgeStore,
@@ -293,11 +236,6 @@ export async function createConversation(
         getEntityIndex,
         getTopicsIndex,
         getActionIndex,
-        removeEntities,
-        removeTopics,
-        removeKnowledge,
-        removeActions,
-        removeMessageIndex,
         clear,
         addMessage,
         addKnowledgeForMessage,
@@ -311,6 +249,8 @@ export async function createConversation(
         addNextEntities,
         indexEntities,
     };
+    await load();
+    return thisConversation;
 
     async function getMessageIndex(): Promise<MessageIndex<MessageId>> {
         if (!messageIndex) {
@@ -326,11 +266,10 @@ export async function createConversation(
 
     async function getEntityIndex(): Promise<EntityIndex> {
         if (!entityIndex) {
-            entityIndex = await createEntityIndex<MessageId>(
+            entityIndex = await createEntityIndexOnStorage<MessageId>(
                 settings.indexSettings,
                 entityPath,
-                folderSettings,
-                fSys,
+                storageProvider!,
             );
         }
         return entityIndex;
@@ -342,12 +281,11 @@ export async function createConversation(
 
     async function getActionIndex(): Promise<ActionIndex> {
         if (!actionIndex) {
-            actionIndex = await createActionIndex<MessageId>(
+            actionIndex = await createActionIndexOnStorage<MessageId>(
                 settings.indexSettings,
                 getEntityNameIndex,
                 actionPath,
-                folderSettings,
-                fSys,
+                storageProvider!,
             );
         }
         return actionIndex;
@@ -389,6 +327,7 @@ export async function createConversation(
     }
 
     async function removeKnowledge(): Promise<void> {
+        // TODO: Migrate to file system storage provider
         await Promise.all([
             knowledgeStore.clear(),
             removeTopics(1),
@@ -396,6 +335,8 @@ export async function createConversation(
             removeEntities(),
             removeActions(),
         ]);
+        topics.clear();
+        await storageProvider!.clear();
     }
 
     async function removeMessageIndex(): Promise<void> {
@@ -406,22 +347,27 @@ export async function createConversation(
     async function clear(removeMessages: boolean): Promise<void> {
         await removeMessageIndex();
         await removeKnowledge();
-
         if (removeMessages) {
             await messages.clear();
         }
+        await load();
     }
 
     async function load() {
         await Promise.all([loadKnowledge(), getMessageIndex()]);
+        if (settings.initializer) {
+            await settings.initializer(thisConversation);
+        }
     }
 
     async function loadTopicIndex(name: string): Promise<TopicIndex> {
-        const index = await createTopicIndex<MessageId>(
+        const index = await createTopicIndexOnStorage<MessageId>(
             settings.indexSettings,
-            path.join(rootPath, name),
-            folderSettings,
-            fSys,
+            getEntityNameIndex,
+            rootPath,
+            name,
+            storageProvider!,
+            "TEXT",
         );
         return index;
     }
@@ -461,16 +407,18 @@ export async function createConversation(
     async function addKnowledgeToIndex(
         knowledge: ExtractedKnowledge<MessageId>,
         knowledgeIds: ExtractedKnowledgeIds<TopicId, EntityId, ActionId>,
-        message?: SourceTextBlock<MessageId>,
+        message?: SourceTextBlock<MessageId> | undefined,
     ): Promise<void> {
         // these indexes are independent, they can be updated concurrently.
         await Promise.all([
             indexMessage(message),
-            indexTopics(knowledge),
             indexEntities(knowledge, knowledgeIds),
         ]);
-        // actions depends on entities
-        await indexActions(knowledge, knowledgeIds);
+        // actions and topics depend on entities
+        await Promise.all([
+            indexTopics(knowledge, knowledgeIds),
+            indexActions(knowledge, knowledgeIds),
+        ]);
     }
 
     async function indexMessage(
@@ -489,7 +437,7 @@ export async function createConversation(
     ): Promise<void> {
         if (knowledge.topics && knowledge.topics.length > 0) {
             const topicIndex = await getTopicsIndex();
-            knowledgeIds.topicIds = await topicIndex.putNext(
+            knowledgeIds.topicIds = await topicIndex.addNext(
                 knowledge.topics,
                 timestamp,
             );
@@ -498,10 +446,15 @@ export async function createConversation(
 
     async function indexTopics(
         knowledge: ExtractedKnowledge<MessageId>,
+        knowledgeIds: ExtractedKnowledgeIds<TopicId, EntityId, ActionId>,
     ): Promise<void> {
         if (knowledge.topics && knowledge.topics.length > 0) {
             const topicIndex = await getTopicsIndex();
-            await topicIndex.putMultiple(knowledge.topics);
+            await topicIndex.addMultiple(
+                knowledge.topics,
+                knowledge.sourceEntityName,
+                knowledgeIds.topicIds,
+            );
         }
     }
 
@@ -672,13 +625,7 @@ export async function createConversation(
                 ? await actionIndex.searchTermsV2(filter, options.action)
                 : undefined;
             const tasks = [
-                topicIndex.searchTermsV2(
-                    {
-                        searchTerms: getAllTermsInFilter(filter),
-                        timeRange: filter.timeRange,
-                    },
-                    options.topic,
-                ),
+                topicIndex.searchTermsV2(filter, options.topic),
                 entityIndex.searchTermsV2(
                     {
                         searchTerms: getAllTermsInFilter(filter, false),
@@ -822,28 +769,68 @@ export async function createConversation(
     }
 }
 
-export interface ConversationTopicMerger extends TopicMerger {
+export interface ConversationTopicMerger<TTopicId = any>
+    extends TopicMerger<TTopicId> {
     reset(): Promise<void>;
 }
 
-export async function createConversationTopicMerger(
+export async function createConversationTopicMerger<TTopicId = string>(
     mergeModel: TypeChatLanguageModel,
     conversation: Conversation,
     baseTopicLevel: number,
     mergeWindowSize: number = 4,
-): Promise<ConversationTopicMerger> {
+): Promise<ConversationTopicMerger<TTopicId>> {
     let baseTopics: TopicIndex | undefined;
     let topLevelTopics: TopicIndex | undefined;
     let topicMerger: TopicMerger | undefined;
     await init();
 
     return {
-        ...topicMerger!,
+        get settings() {
+            return topicMerger!.settings;
+        },
+        next,
+        mergeWindow,
+        clearRecent,
         reset,
     };
 
-    async function reset(): Promise<void> {
-        await init();
+    function next(
+        lastTopics: TextBlock[],
+        lastTopicIds: TTopicId[],
+        timestamp: Date | undefined,
+        updateIndex: boolean,
+    ) {
+        return topicMerger!.next(
+            lastTopics,
+            lastTopicIds,
+            timestamp,
+            updateIndex,
+        );
+    }
+
+    function mergeWindow(
+        lastTopics: TextBlock[],
+        lastTopicIds: TTopicId[],
+        timestamp: Date | undefined,
+        windowSize: number,
+        updateIndex: boolean,
+    ) {
+        return topicMerger!.mergeWindow(
+            lastTopics,
+            lastTopicIds,
+            timestamp,
+            windowSize,
+            updateIndex,
+        );
+    }
+
+    function clearRecent(): void {
+        topicMerger!.clearRecent();
+    }
+
+    function reset(): Promise<void> {
+        return init();
     }
 
     async function init() {
