@@ -78,7 +78,7 @@ export class HistoryDeleteCommandHandler implements CommandHandler {
 export function getHistoryCommandHandlers(): CommandHandlerTable {
     return {
         description: "History commands",
-        defaultSubCommand: new HistoryListCommandHandler(),
+        defaultSubCommand: "list",
         commands: {
             list: new HistoryListCommandHandler(),
             clear: new HistoryClearCommandHandler(),

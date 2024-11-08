@@ -573,27 +573,3 @@ export function createSearchProcessor(
         return searchOptions;
     }
 }
-
-export function getAllTermsInFilter(
-    filter: TermFilterV2,
-    includeVerbs: boolean = true,
-): string[] {
-    const action = filter.action;
-    if (action) {
-        let terms: string[] = [];
-        if (includeVerbs && action.verbs) {
-            terms.push(...action.verbs.words);
-        }
-        if (action.subject) {
-            terms.push(action.subject);
-        }
-        if (action.object) {
-            terms.push(action.object);
-        }
-        if (filter.searchTerms && filter.searchTerms.length > 0) {
-            terms.push(...filter.searchTerms);
-        }
-        return terms;
-    }
-    return filter.searchTerms ?? [];
-}

@@ -35,6 +35,9 @@ import { Entity } from "@typeagent/agent-sdk";
 function toEntities(actions: Actions): Entity[] {
     const entities: Entity[] = [];
     for (const action of actions) {
+        if (action.parameters === undefined) {
+            continue;
+        }
         for (const [key, value] of Object.entries(action.parameters)) {
             if (typeof value === "string") {
                 entities.push({

@@ -17,6 +17,8 @@ import {
     success,
     error,
     TypeChatLanguageModel,
+    MultimodalPromptContent,
+    ImagePromptContent,
 } from "typechat";
 import { readServerEventStream } from "./serverEvents";
 import { priorityQueue } from "async";
@@ -637,7 +639,7 @@ export function createChatModel(
             return headerResult;
         }
 
-        const messages =
+        const messages: PromptSection[] =
             typeof prompt === "string"
                 ? [{ role: "user", content: prompt }]
                 : prompt;
@@ -646,11 +648,26 @@ export function createChatModel(
         if (completionSettings) {
             completionParams = { ...completionSettings };
         }
+
+        // BUGBUG - https://learn.microsoft.com/en-us/answers/questions/1805363/azure-openai-streaming-token-usage
+        // image_url content with streaming token usage reporting is currently broken
+        // TODO: remove after API endpoint correctly handles this case
+        let historyIncludesImages: boolean = false;
+        let isImageProptContent = (c: MultimodalPromptContent) =>
+            (c as ImagePromptContent).type == "image_url";
+        messages.map((ps) => {
+            if (Array.isArray(ps.content)) {
+                if (ps.content.some(isImageProptContent)) {
+                    historyIncludesImages = true;
+                }
+            }
+        });
+
         const params = {
             ...defaultParams,
             messages: messages,
             stream: true,
-            stream_options: { include_usage: true },
+            stream_options: { include_usage: true && !historyIncludesImages },
             ...completionParams,
         };
         const result = await callApi(
@@ -799,12 +816,28 @@ export type AzureChatModelName =
  * @param dimensions (optional) text-embedding-03 and later models allow variable length embeddings
  */
 export function createEmbeddingModel(
-    apiSettings?: ApiSettings,
+    endpoint: string,
+    dimensions?: number | undefined,
+): TextEmbeddingModel;
+export function createEmbeddingModel(
+    apiSettings?: ApiSettings | undefined,
+    dimensions?: number | undefined,
+): TextEmbeddingModel;
+export function createEmbeddingModel(
+    apiSettingsOrEndpoint?: ApiSettings | string | undefined,
     dimensions?: number | undefined,
 ): TextEmbeddingModel {
+    if (typeof apiSettingsOrEndpoint === "string") {
+        apiSettingsOrEndpoint = apiSettingsFromEnv(
+            ModelType.Embedding,
+            undefined,
+            apiSettingsOrEndpoint,
+        );
+    }
     // https://platform.openai.com/docs/api-reference/embeddings/create#embeddings-create-input
     const maxBatchSize = 2048;
-    const settings = apiSettings ?? apiSettingsFromEnv(ModelType.Embedding);
+    const settings =
+        apiSettingsOrEndpoint ?? apiSettingsFromEnv(ModelType.Embedding);
     const defaultParams: any = settings.isAzure
         ? {}
         : {

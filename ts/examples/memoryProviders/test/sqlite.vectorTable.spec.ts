@@ -10,7 +10,7 @@ import {
     testFilePath,
     testIf,
 } from "./testCore.js";
-import { createDb } from "../src/sqlite/common.js";
+import { createDatabase } from "../src/sqlite/common.js";
 import { createVectorTable } from "../src/sqlite/vectorTable.js";
 import { NormalizedEmbedding, SimilarityType } from "typeagent";
 
@@ -21,7 +21,7 @@ describe("sqlite.vectorTable", () => {
 
     beforeAll(async () => {
         await ensureTestDir();
-        db = await createDb(testFilePath("vectorIndex.db"), true);
+        db = await createDatabase(testFilePath("vectorIndex.db"), true);
     });
     afterAll(() => {
         if (db) {

@@ -3,7 +3,7 @@
 
 import path from "path";
 import * as knowLib from "knowledge-processor";
-import { createDb, tablePath } from "./common.js";
+import { createDatabase, tablePath } from "./common.js";
 import { createTextIndex } from "./textTable.js";
 import { createObjectTable } from "./objectTable.js";
 import { ObjectFolder, ObjectFolderSettings } from "typeagent";
@@ -14,6 +14,8 @@ import { createKeyValueTable, KeyValueTable } from "./keyValueTable.js";
 export interface StorageDb extends knowLib.StorageProvider {
     readonly rootPath: string;
     readonly name: string;
+
+    close(): void;
 }
 
 export async function createStorageDb(
@@ -21,7 +23,9 @@ export async function createStorageDb(
     name: string,
     createNew: boolean,
 ): Promise<StorageDb> {
-    const db = await createDb(path.join(rootPath, name), createNew);
+    const dbPath = path.join(rootPath, name);
+    let db = await createDatabase(dbPath, createNew);
+    let counter = 0;
     return {
         rootPath,
         name,
@@ -29,6 +33,8 @@ export async function createStorageDb(
         createTemporalLog: _createTemporalLog,
         createTextIndex: _createTextIndex,
         createIndex: _createIndex,
+        close,
+        clear,
     };
 
     async function _createObjectFolder<T>(
@@ -36,6 +42,7 @@ export async function createStorageDb(
         name: string,
         settings?: ObjectFolderSettings,
     ): Promise<ObjectFolder<T>> {
+        ensureOpen();
         return createObjectTable<T>(db, getTablePath(basePath, name), settings);
     }
 
@@ -44,6 +51,7 @@ export async function createStorageDb(
         basePath: string,
         name: string,
     ): Promise<TemporalTable<string, T>> {
+        ensureOpen();
         return createTemporalLogTable<T, string, string>(
             db,
             getTablePath(basePath, name),
@@ -58,6 +66,7 @@ export async function createStorageDb(
         name: string,
         sourceIdType: knowLib.ValueDataType<TSourceId>,
     ) {
+        ensureOpen();
         return createTextIndex<string, TSourceId>(
             settings,
             db,
@@ -72,6 +81,7 @@ export async function createStorageDb(
         name: string,
         valueType: knowLib.ValueDataType<TValueId>,
     ): Promise<KeyValueTable<string, TValueId>> {
+        ensureOpen();
         return createKeyValueTable<string, TValueId>(
             db,
             getTablePath(basePath, name),
@@ -87,5 +97,24 @@ export async function createStorageDb(
             .replaceAll("/", "_")
             .replaceAll("\\", "_");
         return tablePath(baseDir, name);
+    }
+
+    function ensureOpen() {
+        if (db && db.open) {
+            return;
+        }
+        throw new Error(`Database ${rootPath}, version ${counter} is not open`);
+    }
+
+    function close() {
+        if (db) {
+            db.close();
+        }
+    }
+
+    async function clear(): Promise<void> {
+        close();
+        db = await createDatabase(dbPath, true);
+        counter++;
     }
 }

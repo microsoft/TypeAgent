@@ -3,7 +3,7 @@
 
 import * as sqlite from "better-sqlite3";
 import * as knowLib from "knowledge-processor";
-import { createDb } from "../src/sqlite/common.js";
+import { createDatabase } from "../src/sqlite/common.js";
 import { ensureTestDir, testFilePath } from "./testCore.js";
 import { createKeyValueTable } from "../src/sqlite/keyValueTable.js";
 
@@ -12,7 +12,7 @@ describe("sqlite.keyValueTable", () => {
     let db: sqlite.Database | undefined;
     beforeAll(async () => {
         await ensureTestDir();
-        db = await createDb(testFilePath("kvIndex.db"), true);
+        db = await createDatabase(testFilePath("kvIndex.db"), true);
     });
     afterAll(() => {
         if (db) {

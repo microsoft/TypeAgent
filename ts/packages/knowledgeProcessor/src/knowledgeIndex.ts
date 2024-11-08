@@ -669,6 +669,7 @@ export function createTermSet(caseSensitive: boolean = false) {
 }
 
 export interface TermMap {
+    size(): number;
     get(term: string): string | undefined;
     put(term: string, value: string): void;
 }
@@ -676,6 +677,9 @@ export interface TermMap {
 export function createTermMap(caseSensitive: boolean = false) {
     const map = new Map<string, string>();
     return {
+        size() {
+            return map.size;
+        },
         get(term: string) {
             return map.get(prepareTerm(term));
         },

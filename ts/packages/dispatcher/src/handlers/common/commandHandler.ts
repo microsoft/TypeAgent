@@ -40,7 +40,7 @@ export function getToggleHandlerTable(
 ): CommandHandlerTable {
     return {
         description: `Toggle ${name}`,
-        defaultSubCommand: undefined,
+        defaultSubCommand: "on",
         commands: getToggleCommandHandlers(name, toggle),
     };
 }

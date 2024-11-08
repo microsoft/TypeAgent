@@ -3,7 +3,6 @@
 
 // Types
 export type {
-    IAction,
     JSONAction,
     FullAction,
     ParamValueType,
@@ -28,6 +27,7 @@ export type {
     AgentCache,
     CacheConfig,
     ProcessRequestActionResult,
+    ExplanationOptions,
 } from "./cache/cache.js";
 
 // Functionalities
