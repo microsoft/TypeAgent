@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { IAction } from "agent-cache";
 import { TranslatorSchemaDef } from "common-utils";
 import { AppAction } from "@typeagent/agent-sdk";
+import { TranslatedAction } from "../handlers/requestCommandHandler.js";
 
 // Multiple Action is what is used and returned from the LLM
 const multipleActionName = "multiple";
@@ -13,7 +13,7 @@ export type MultipleAction = {
     parameters: {
         requests: {
             request: string;
-            action: IAction;
+            action: TranslatedAction;
         }[];
     };
 };

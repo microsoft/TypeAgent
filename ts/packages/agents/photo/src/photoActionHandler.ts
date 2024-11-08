@@ -25,10 +25,10 @@ type PhotoActionContext = {
 };
 
 async function executePhotoAction(
-    action: AppAction,
+    action: PhotoAction,
     context: ActionContext<PhotoActionContext>,
 ) {
-    let result = await handlePhotoAction(action as PhotoAction, context);
+    let result = await handlePhotoAction(action, context);
     return result;
 }
 
