@@ -27,6 +27,7 @@ import {
 } from "./auth";
 import registerDebug from "debug";
 import { TokenCounter } from "./tokenCounter";
+import { PromptLogger } from "./promptLogger";
 
 const debugOpenAI = registerDebug("typeagent:openai");
 
@@ -619,6 +620,8 @@ export function createChatModel(
             model.completionCallback(params, data);
         }
 
+        PromptLogger.getInstance().logModelRequest(messages as PromptSection[]);
+            
         try {
             // track token usage
             TokenCounter.getInstance().add(data.usage, tags);
@@ -663,6 +666,9 @@ export function createChatModel(
         if (!result.success) {
             return result;
         }
+        
+        PromptLogger.getInstance().logModelRequest(messages as PromptSection[]);
+
         return {
             success: true,
             data: (async function* () {
