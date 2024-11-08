@@ -616,11 +616,12 @@ export async function createTopicIndexOnStorage<
                     sourceName,
                     options,
                 );
-                if (topicIdsWithSource) {
-                    results.topicIds = [
-                        ...intersect(results.topicIds, topicIdsWithSource),
-                    ];
-                }
+                results.topicIds = [
+                    ...intersect(
+                        results.topicIds,
+                        topicIdsWithSource ? topicIdsWithSource : [],
+                    ),
+                ];
             }
         }
 

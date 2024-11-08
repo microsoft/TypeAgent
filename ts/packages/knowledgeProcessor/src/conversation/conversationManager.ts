@@ -380,6 +380,7 @@ export async function createConversationManager(
     async function clear(removeMessages: boolean): Promise<void> {
         await conversation.clear(removeMessages);
         await topicMerger!.reset();
+        await load();
     }
 
     async function createMerger(): Promise<ConversationTopicMerger> {

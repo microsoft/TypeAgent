@@ -769,25 +769,65 @@ export async function createConversation(
     }
 }
 
-export interface ConversationTopicMerger extends TopicMerger {
+export interface ConversationTopicMerger<TTopicId = any>
+    extends TopicMerger<TTopicId> {
     reset(): Promise<void>;
 }
 
-export async function createConversationTopicMerger(
+export async function createConversationTopicMerger<TTopicId = string>(
     mergeModel: TypeChatLanguageModel,
     conversation: Conversation,
     baseTopicLevel: number,
     mergeWindowSize: number = 4,
-): Promise<ConversationTopicMerger> {
+): Promise<ConversationTopicMerger<TTopicId>> {
     let baseTopics: TopicIndex | undefined;
     let topLevelTopics: TopicIndex | undefined;
     let topicMerger: TopicMerger | undefined;
     await init();
 
     return {
-        ...topicMerger!,
+        get settings() {
+            return topicMerger!.settings;
+        },
+        next,
+        mergeWindow,
+        clearRecent,
         reset,
     };
+
+    function next(
+        lastTopics: TextBlock[],
+        lastTopicIds: TTopicId[],
+        timestamp: Date | undefined,
+        updateIndex: boolean,
+    ) {
+        return topicMerger!.next(
+            lastTopics,
+            lastTopicIds,
+            timestamp,
+            updateIndex,
+        );
+    }
+
+    function mergeWindow(
+        lastTopics: TextBlock[],
+        lastTopicIds: TTopicId[],
+        timestamp: Date | undefined,
+        windowSize: number,
+        updateIndex: boolean,
+    ) {
+        return topicMerger!.mergeWindow(
+            lastTopics,
+            lastTopicIds,
+            timestamp,
+            windowSize,
+            updateIndex,
+        );
+    }
+
+    function clearRecent(): void {
+        topicMerger!.clearRecent();
+    }
 
     function reset(): Promise<void> {
         return init();
