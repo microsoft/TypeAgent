@@ -457,24 +457,12 @@ export function createConstructionV5(
     // Collect the property names that we will ignore alternates for.
     const disableAlternateParamValues = new Set<string>();
 
-    // REVIEW: only add the synonyms transforms if there it has only 1 sub-phrase
-    const disableSynonyms = new Set<string>(
-        explanation.propertyAlternatives
-            .filter((e) => e.propertySubPhrases.length > 1)
-            .map((e) => e.propertyName),
-    );
-
     for (const phrase of explanation.subPhrases) {
         if (!hasPropertyNames(phrase)) {
             if (!useSynonymsForNonPropertySubPhrase(phrase)) {
                 disableSynonymsSubPhrases.add(phrase);
             }
             continue;
-        }
-
-        // Disable synonyms for subphrase for properties that has multiple sub-phrases.
-        if (phrase.propertyNames.some((name) => disableSynonyms.has(name))) {
-            disableSynonymsSubPhrases.add(phrase);
         }
 
         // Disable parameter alternatives
@@ -597,18 +585,18 @@ export function createConstructionV5(
 
     const parts = explanation.subPhrases.map((phrase) => {
         try {
-            const useSynonyms = !disableSynonymsSubPhrases.has(phrase);
-            const synonyms = useSynonyms
-                ? phrase.synonyms.filter((s) => s !== "")
-                : [];
-            const matches = [phrase.text, ...synonyms];
-
+            const matches = [phrase.text];
             if (!hasPropertyNames(phrase)) {
+                if (useSynonymsForNonPropertySubPhrase(phrase)) {
+                    matches.push(...phrase.synonyms.filter((s) => s !== ""));
+                }
                 return createMatchPart(matches, phrase.category, {
                     optional: !!phrase.isOptional,
                     canBeMerged: canBeMergedNonPropertySubPhrase(phrase),
                 });
             }
+
+            // Process property sub-phrases
             const hasSinglePropertyName = phrase.propertyNames.length === 1;
             if (hasSinglePropertyName) {
                 const propertyName = phrase.propertyNames[0];
@@ -621,7 +609,6 @@ export function createConstructionV5(
 
             // REVIEW: can the match set be merged if it is for multiple param names?
             let canBeMerged = hasSinglePropertyName;
-
             const transformInfos: TransformInfo[] = [];
             // Get the parameter info that this phase maps to
             for (const propertyName of phrase.propertyNames) {
@@ -632,7 +619,6 @@ export function createConstructionV5(
                 );
                 transformInfos.push(transformInfo);
                 if (entityParamMap.has(propertyName)) {
-                    matches.length = 1; // remove the synonyms
                     enableWildcard = false; // not a wildcard mapping
                     canBeMerged = false; // REVIEW: can you merge matchset for entity references?
 
@@ -649,19 +635,6 @@ export function createConstructionV5(
                 const shouldBeCopied = shouldValueBeCopied(phrase, paramInfo);
                 enableWildcard = enableWildcard && shouldBeCopied;
 
-                // REVIEW: only add the synonyms transforms if there it has only 1 sub-phrase
-                if (useSynonyms) {
-                    const transforms = getTransforms(transformInfo.namespace);
-                    synonyms.forEach((synonym) => {
-                        transforms.add(
-                            transformInfo.transformName,
-                            synonym,
-                            // REVIEW: should we just use the synonym if shouldBeCopied be true?
-                            paramInfo.propertyValue,
-                            false,
-                        );
-                    });
-                }
                 if (!disableAlternateParamValues.has(propertyName)) {
                     collectAltParamMatches(matches, phrase, paramInfo);
                 }
@@ -710,7 +683,9 @@ function toPrettyString(explanation: Explanation) {
         Math.max(
             phrase.text.length,
             phrase.category.length + 2,
-            ...phrase.synonyms.map((s) => s.length),
+            ...(hasPropertyNames(phrase)
+                ? []
+                : phrase.synonyms.map((s) => s.length)),
             ...categories.map((c) => c.length),
         ),
     );
@@ -742,15 +717,17 @@ function toPrettyString(explanation: Explanation) {
 
     // Synonyms
     const maxSynonyms = Math.max(
-        ...explanation.subPhrases.map((phrase) => phrase.synonyms.length),
+        ...explanation.subPhrases.map((phrase) =>
+            hasPropertyNames(phrase) ? 0 : phrase.synonyms.length,
+        ),
     );
 
     for (let i = 0; i < maxSynonyms; i++) {
         lines.push(
             createLine(
                 i === 0 ? "Synonyms" : "",
-                explanation.subPhrases.map(
-                    (phrase) => phrase.synonyms[i] ?? "",
+                explanation.subPhrases.map((phrase) =>
+                    hasPropertyNames(phrase) ? "" : phrase.synonyms[i] ?? "",
                 ),
             ),
         );
