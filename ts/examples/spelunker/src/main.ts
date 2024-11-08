@@ -31,16 +31,33 @@ const __dirname = path.dirname(__filename);
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
 
+// Sample file to load with `-` argument
+const sampleFile = path.join(__dirname, "sample.py.txt");
+
 await main();
 
-// Usage: node main.js file1.py [file2.py] ...  # Import files
-// OR:    node main.js --files filelist.txt  # Import files listed in filelist.txt
-// OR:    node main.js -  # Load sample file (sample.py.txt)
-// OR:    node main.js    # Query previously loaded files
 async function main(): Promise<void> {
     console.log("[Hi!]");
 
     const t0 = Date.now();
+
+    const help =
+        process.argv.includes("-h") ||
+        process.argv.includes("--help") ||
+        process.argv.includes("-?") ||
+        process.argv.includes("--?");
+    if (help) {
+        console.log(
+            "Usage:\n" +
+                "Loading modules:\n" +
+                "   node main.js file1.py [file2.py] ...  # Load files\n" +
+                "   node main.js --files filelist.txt  # Load files listed in filelist.txt\n" +
+                `   node main.js -  # Load sample file (${path.relative(process.cwd(), sampleFile)})\n` +
+                "Interactive query loop:\n" +
+                "   node main.js    # Query previously loaded files (use @search --query 'your query')\n",
+        );
+        return;
+    }
 
     const verbose =
         process.argv.includes("-v") || process.argv.includes("--verbose");
@@ -107,7 +124,6 @@ function processArgs(): string[] {
     if (process.argv.length > 2) {
         files = process.argv.slice(2);
         if (files.length === 1 && files[0] === "-") {
-            const sampleFile = path.join(__dirname, "sample.py.txt");
             files = [sampleFile];
         } else if (files.length === 2 && files[0] === "--files") {
             // Read list of files from a file.
