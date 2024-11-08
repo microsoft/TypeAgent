@@ -33,8 +33,8 @@ dotenv.config({ path: envPath });
 
 await main();
 
-// Usage: node main.js [file1.py] [file2.py] ...
-// OR:    node main.js --files filelist.txt
+// Usage: node main.js file1.py [file2.py] ...  # Import files
+// OR:    node main.js --files filelist.txt  # Import files listed in filelist.txt
 // OR:    node main.js -  # Load sample file (sample.py.txt)
 // OR:    node main.js    # Query previously loaded files
 async function main(): Promise<void> {
@@ -96,9 +96,9 @@ async function main(): Promise<void> {
         console.log(
             `[Imported ${files.length} files in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
         );
+    } else {
+        await runQueryInterface(chunkFolder, codeIndex, summaryFolder, verbose);
     }
-
-    await runQueryInterface(chunkFolder, codeIndex, summaryFolder, verbose);
 }
 
 function processArgs(): string[] {
