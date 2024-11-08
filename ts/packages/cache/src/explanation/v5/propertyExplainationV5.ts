@@ -76,7 +76,6 @@ export function isEntityParameter(
 
 // REVIEW: disable entity constructions.
 const enableEntityConstructions = false;
-const langTool = getLanguageTools("en");
 
 function validatePropertyExplanation(
     requestAction: RequestAction,

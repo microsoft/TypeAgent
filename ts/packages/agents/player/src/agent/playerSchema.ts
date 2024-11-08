@@ -32,7 +32,7 @@ export type PlayerAction =
 // Use playRandom when the user asks for some music to play
 export interface PlayRandomAction {
     actionName: "playRandom";
-    parameters: {
+    parameters?: {
         quantity?: number;
     };
 }
@@ -190,7 +190,7 @@ export interface GetAlbumAction {
 // Set the current track list to the user's favorite tracks
 export interface GetFavoritesAction {
     actionName: "getFavorites";
-    parameters: {
+    parameters?: {
         // number of favorites to get
         count?: number;
     };

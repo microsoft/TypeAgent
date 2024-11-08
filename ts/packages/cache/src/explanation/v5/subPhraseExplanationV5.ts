@@ -75,7 +75,7 @@ export function createSubPhraseExplainer(model?: string) {
     );
 }
 
-function isPropertySubPhrase(phrase: SubPhrase): phrase is PropertySubPhase {
+export function isPropertySubPhrase(phrase: SubPhrase): phrase is PropertySubPhase {
     return phrase.hasOwnProperty("propertyNames");
 }
 
