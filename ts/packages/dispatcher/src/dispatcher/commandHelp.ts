@@ -11,6 +11,7 @@ import {
     getFlagType,
     isCommandDescriptorTable,
 } from "@typeagent/agent-sdk/helpers/command";
+import { getDefaultSubCommandDescriptor } from "./command.js";
 
 export function getUsage(command: string, descriptor: CommandDescriptor) {
     if (descriptor.help) {
@@ -74,15 +75,25 @@ export function getHandlerTableUsage(
     systemContext: CommandHandlerContext,
 ) {
     const output: string[] = [];
-    output.push(`${chalk.bold(chalk.underline(table.description))}`);
-    output.push();
     if (command) {
+        const defaultSubCommand = getDefaultSubCommandDescriptor(table);
+        if (defaultSubCommand !== undefined) {
+            output.push(`${chalk.bold(chalk.underline("Command"))}`);
+            output.push(getUsage(command, defaultSubCommand));
+            output.push("");
+        }
+        output.push(
+            `${chalk.bold(chalk.underline(`Subcommands: ${table.description}`))}`,
+        );
+        output.push("");
         output.push(`${chalk.bold("Usage")}: @${command} <subcommand> ...`);
         output.push();
         output.push(`${chalk.bold("<subcommand>:")}`);
     } else {
+        output.push(`${chalk.bold(chalk.underline(table.description))}`);
+        output.push("");
         output.push(`${chalk.bold("Usage")}: @[<agentName>] <subcommand> ...`);
-        output.push();
+        output.push("");
         output.push(`${chalk.bold("<agentNames>:")} (default to 'system')`);
         const names = systemContext.agents.getAppAgentNames();
         const maxNameLength = Math.max(...names.map((name) => name.length));
@@ -93,7 +104,7 @@ export function getHandlerTableUsage(
                 );
             }
         }
-        output.push();
+        output.push("");
         output.push(`${chalk.bold("<subcommand>")} ('system')`);
     }
 

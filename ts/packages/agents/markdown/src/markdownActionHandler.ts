@@ -120,8 +120,6 @@ async function handleMarkdownAction(
             }
             break;
         }
-        default:
-            throw new Error(`Unknown action: ${action.actionName}`);
     }
     return result;
 }
