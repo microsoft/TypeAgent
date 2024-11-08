@@ -44,16 +44,12 @@ export function createFileDocumenter(model: ChatModel): FileDocumenter {
             "Also add lists keywords, topics, goals, and dependencies.\n" +
             "The code has (non-contiguous) line numbers, e.g.: `[1]: def foo():`\n" +
             "There are also marker lines, e.g.: `***: Document the following FuncDef`\n" +
-            "Write a concise paragraph (plus topics/keywords/goals) for EACH marker.\n" +
-            "For example, the output could be:\n" +
+            "Write a concise paragraph for EACH marker.\n" +
+            "For example, the comment could be:\n" +
             "```\n" +
             "Method Utils.longest_prefix finds the longest common prefix of a list of strings.\n" +
-            "\n" +
-            "KEYWORDS: longest common prefix, list of strings.\n" +
-            "TOPICS: string, prefix, algorithm.\n" +
-            "GOALS: find longest common prefix.\n" +
-            "DEPENDENCIES: None.\n" +
-            "```\n";
+            "```\n" +
+            "Also fill in the lists of keywords, topics, goals, and dependencies.\n";
         const result = await fileDocTranslator.translate(request, text);
 
         // Now assign each comment to its chunk.
@@ -61,22 +57,17 @@ export function createFileDocumenter(model: ChatModel): FileDocumenter {
             const codeDocs: CodeDocumentation = result.data;
             // Assign each comment to its chunk.
             for (const chunk of chunks) {
-                chunk.docs = {
-                    comments: [
-                        {
-                            lineNumber: chunk.blobs[0].start + 1,
-                            comment: `${chunk.treeName}`,
-                        },
-                    ],
-                };
                 for (const comment of codeDocs.comments ?? []) {
                     for (const blob of chunk.blobs) {
+                        // Reminder: blob.start is 0-based, comment.lineNumber is 1-based.
                         if (
                             !blob.breadcrumb &&
                             blob.start < comment.lineNumber &&
                             comment.lineNumber <= blob.start + blob.lines.length
                         ) {
-                            chunk.docs.comments!.push(comment);
+                            const comments = chunk?.docs?.comments ?? [];
+                            comments.push(comment);
+                            chunk.docs = { comments };
                         }
                     }
                 }

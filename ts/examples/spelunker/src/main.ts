@@ -37,8 +37,6 @@ const sampleFile = path.join(__dirname, "sample.py.txt");
 await main();
 
 async function main(): Promise<void> {
-    console.log("[Hi!]");
-
     const t0 = Date.now();
 
     const help =

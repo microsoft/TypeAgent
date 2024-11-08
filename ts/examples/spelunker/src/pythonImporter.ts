@@ -99,7 +99,7 @@ export async function importPythonFiles(
         const t0 = Date.now();
         try {
             const docs = await fileDocumenter.document(chunks);
-            if (verbose) console.log(docs);
+            if (verbose) console.log(JSON.stringify(docs, null, 4));
         } catch (error) {
             console.log(
                 `[Error documenting ${chunkedFile.filename}: ${error}]`,
