@@ -30,20 +30,17 @@ TypeScript, of course).
 
 import * as fs from "fs";
 
-import { asyncArray, ObjectFolder } from "typeagent";
-import { CodeDocumentation, SemanticCodeIndex } from "code-processor";
+import { asyncArray } from "typeagent";
 
 import { Chunk, ChunkedFile, chunkifyPythonFiles } from "./pythonChunker.js";
-import { CodeBlockWithDocs, FileDocumenter } from "./fileDocumenter.js";
+import { CodeBlockWithDocs } from "./fileDocumenter.js";
+import { ChunkyIndex } from "./chunkyIndex.js";
 
 // TODO: Turn (chunkFolder, codeIndex, summaryFolder) into a single object.
 
 export async function importPythonFiles(
     files: string[],
-    fileDocumenter: FileDocumenter,
-    chunkFolder: ObjectFolder<Chunk>,
-    codeIndex: SemanticCodeIndex,
-    summaryFolder: ObjectFolder<CodeDocumentation>,
+    chunkyIndex: ChunkyIndex,
     firstFile = true,
     verbose = false,
 ): Promise<boolean> {
@@ -101,7 +98,7 @@ export async function importPythonFiles(
         );
         const t0 = Date.now();
         try {
-            const docs = await fileDocumenter.document(chunks);
+            const docs = await chunkyIndex.fileDocumenter.document(chunks);
             if (verbose) console.log(JSON.stringify(docs, null, 4));
         } catch (error) {
             console.log(
@@ -115,9 +112,7 @@ export async function importPythonFiles(
         );
         firstFile = await processChunkedFile(
             chunkedFile,
-            chunkFolder,
-            codeIndex,
-            summaryFolder,
+            chunkyIndex,
             firstFile,
             verbose,
         );
@@ -127,9 +122,7 @@ export async function importPythonFiles(
 
 async function processChunkedFile(
     chunkedFile: ChunkedFile, // TODO: Use a type with filename and docs guaranteed present.
-    chunkFolder: ObjectFolder<Chunk>,
-    codeIndex: SemanticCodeIndex,
-    summaryFolder: ObjectFolder<CodeDocumentation>,
+    chunkyIndex: ChunkyIndex,
     firstFile = false,
     verbose = false,
 ): Promise<boolean> {
@@ -148,9 +141,7 @@ async function processChunkedFile(
         const chunk = chunks.shift()!;
         await processChunk(
             chunk,
-            chunkFolder,
-            codeIndex,
-            summaryFolder,
+            chunkyIndex,
             verbose,
         );
     }
@@ -162,9 +153,7 @@ async function processChunkedFile(
         async (chunk) =>
             await processChunk(
                 chunk,
-                chunkFolder,
-                codeIndex,
-                summaryFolder,
+                chunkyIndex,
                 verbose,
             ),
     );
@@ -178,9 +167,7 @@ async function processChunkedFile(
 
 async function processChunk(
     chunk: Chunk,
-    chunkFolder: ObjectFolder<Chunk>,
-    codeIndex: SemanticCodeIndex,
-    summaryFolder: ObjectFolder<CodeDocumentation>,
+    chunkyIndex: ChunkyIndex,
     verbose = false,
 ): Promise<void> {
     const t0 = Date.now();
@@ -189,15 +176,15 @@ async function processChunk(
         0,
     );
     if (verbose) console.log(`  [Embedding ${chunk.id} (${lineCount} lines)]`);
-    const putPromise = chunkFolder.put(chunk, chunk.id);
+    const putPromise = chunkyIndex.chunkFolder!.put(chunk, chunk.id);
     const blobLines = extractBlobLines(chunk);
     const codeBlock: CodeBlockWithDocs = {
         code: blobLines,
         language: "python",
         docs: chunk.docs!,
     };
-    const docs = await codeIndex.put(codeBlock, chunk.id, chunk.filename);
-    await summaryFolder.put(docs, chunk.id);
+    const docs = await chunkyIndex.codeIndex!.put(codeBlock, chunk.id, chunk.filename);
+    await chunkyIndex.summaryFolder!.put(docs, chunk.id);
     await putPromise;
     if (verbose) {
         for (const comment of docs.comments || []) {

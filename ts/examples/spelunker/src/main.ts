@@ -9,19 +9,10 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// Workspace package imports
-import { openai } from "aiclient";
-import { CodeDocumentation, createSemanticCodeIndex } from "code-processor";
-import { createObjectFolder } from "typeagent";
-
 // Local imports
-import { Chunk } from "./pythonChunker.js";
 import { importPythonFiles } from "./pythonImporter.js";
 import { runQueryInterface } from "./queryInterface.js";
-import {
-    createFakeCodeDocumenter,
-    createFileDocumenter,
-} from "./fileDocumenter.js";
+import { ChunkyIndex } from "./chunkyIndex.js";
 
 // Set __dirname to emulate old JS behavior
 const __filename = fileURLToPath(import.meta.url);
@@ -39,6 +30,7 @@ await main();
 async function main(): Promise<void> {
     const t0 = Date.now();
 
+    // TODO: switch to whatever interactive-app does.
     const help =
         process.argv.includes("-h") ||
         process.argv.includes("--help") ||
@@ -68,26 +60,8 @@ async function main(): Promise<void> {
     const files = processArgs();
 
     let homeDir = process.platform === "darwin" ? process.env.HOME || "" : "";
-    const dataRoot = homeDir + "/data";
-    const spelunkerRoot = dataRoot + "/spelunker";
-
-    const chunkFolder = await createObjectFolder<Chunk>(
-        spelunkerRoot + "/chunks",
-        { serializer: (obj) => JSON.stringify(obj, null, 2) },
-    );
-    const chatModel = openai.createChatModelDefault("spelunkerChat");
-    const fileDocumenter = createFileDocumenter(chatModel);
-    const fakeCodeDocumenter = createFakeCodeDocumenter();
-    const codeIndex = await createSemanticCodeIndex(
-        spelunkerRoot + "/index",
-        fakeCodeDocumenter,
-        undefined,
-        (obj) => JSON.stringify(obj, null, 2),
-    );
-    const summaryFolder = await createObjectFolder<CodeDocumentation>(
-        spelunkerRoot + "/summaries",
-        { serializer: (obj) => JSON.stringify(obj, null, 2) },
-    );
+    const rootDir = path.join(homeDir, "/data/spelunker");
+    const chunkyIndex = await ChunkyIndex.createInstance(rootDir);
 
     const t1 = Date.now();
     console.log(`[Initialized in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`);
@@ -99,10 +73,7 @@ async function main(): Promise<void> {
 
         await importPythonFiles(
             files,
-            fileDocumenter,
-            chunkFolder,
-            codeIndex,
-            summaryFolder,
+            chunkyIndex,
             true,
             verbose,
         );
@@ -112,7 +83,7 @@ async function main(): Promise<void> {
             `[Imported ${files.length} files in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
         );
     } else {
-        await runQueryInterface(chunkFolder, codeIndex, summaryFolder, verbose);
+        await runQueryInterface(chunkyIndex, verbose);
     }
 }
 
