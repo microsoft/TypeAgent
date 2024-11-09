@@ -5,10 +5,16 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Bundle
 import android.speech.RecognizerIntent
 import android.util.Log
+import android.view.View
 import android.view.ViewGroup
+import android.webkit.ConsoleMessage
+import android.webkit.PermissionRequest
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
@@ -100,8 +106,8 @@ class MainActivity : ComponentActivity() {
     @Composable
     @Preview
     fun Browser() {
-        val url = "http://10.0.2.2:3000"
-        //val url = "http://192.168.1.142:3000/"
+        //val url = "http://10.0.2.2:3000"
+        val url = "http://192.168.1.142:3000/"
 
         Column() {
             Button(
@@ -109,7 +115,6 @@ class MainActivity : ComponentActivity() {
                 onClick = { wvv?.reload() }) { Text(text = "Refresh") }
             AndroidView(factory = {
 
-                //val wv = WebView(it)
                 wvv = WebView(it)
                 val bridge = Bridge(applicationContext, wvv!!)
                 jsi = JavaScriptInterface(it);
@@ -127,7 +132,42 @@ class MainActivity : ComponentActivity() {
                     // javascript callback
                     addJavascriptInterface(jsi!!, "Android")
 
-                    // url/client
+                    // chrome client
+                    webChromeClient = object : WebChromeClient() {
+
+                        override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                            Log.i("WebChromeClient", consoleMessage!!.message());
+                            return super.onConsoleMessage(consoleMessage)
+                        }
+
+                        override fun getVideoLoadingProgressView(): View? {
+                            return super.getVideoLoadingProgressView()
+                        }
+
+                        override fun onPermissionRequest(request: PermissionRequest?) {
+                            super.onPermissionRequest(request)
+
+                            request!!.grant(request.resources)
+                        }
+
+                        override fun onPermissionRequestCanceled(request: PermissionRequest?) {
+                            super.onPermissionRequestCanceled(request)
+                        }
+
+                        override fun onShowFileChooser(
+                            webView: WebView?,
+                            filePathCallback: ValueCallback<Array<Uri>>?,
+                            fileChooserParams: FileChooserParams?
+                        ): Boolean {
+                            return super.onShowFileChooser(
+                                webView,
+                                filePathCallback,
+                                fileChooserParams
+                            )
+                        }
+                    }
+
+                    // js client view
                     webViewClient = object : WebViewClient() {
                         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                             bridge.init()
