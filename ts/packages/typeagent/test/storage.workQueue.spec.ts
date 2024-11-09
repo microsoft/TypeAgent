@@ -26,7 +26,7 @@ describe("storage.workQueue", () => {
                 expect(completed).toHaveLength(tasks.length);
                 expect(await queue.count()).toBe(0);
 
-                await queue.replay();
+                await queue.requeue();
             }
         },
         timeoutMs,

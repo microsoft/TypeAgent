@@ -28,7 +28,9 @@ import {
     argMinScore,
     argPause,
     argSourceFile,
+    createIndexingStats,
     getMessagesAndCount,
+    IndexingStats,
 } from "./common.js";
 import { createEmailCommands, createEmailMemory } from "./emailMemory.js";
 
@@ -43,6 +45,7 @@ export type ChatContext = {
     printer: ChatMemoryPrinter;
     models: Models;
     maxCharsPerChunk: number;
+    stats: IndexingStats;
     topicWindowSize: number;
     searchConcurrency: number;
     minScore: number;
@@ -94,9 +97,14 @@ export async function createChatMemoryContext(
         chatModel: openai.createChatModelDefault("chatMemory"),
         embeddingModel: knowLib.createEmbeddingCache(
             openai.createEmbeddingModel(),
-            64,
+            1024,
         ),
-        embeddingModelSmall: openai.createEmbeddingModel("3_SMALL"),
+        /*
+        embeddingModelSmall: knowLib.createEmbeddingCache(
+            openai.createEmbeddingModel("3_SMALL", 1536),
+            256,
+        ),
+        */
     };
     models.chatModel.completionCallback = completionCallback;
     const conversationName = ReservedConversationNames.transcript;
@@ -124,6 +132,7 @@ export async function createChatMemoryContext(
         storePath,
         printer: new ChatMemoryPrinter(getInteractiveIO()),
         models,
+        stats: createIndexingStats(),
         maxCharsPerChunk: 4096,
         topicWindowSize: 8,
         searchConcurrency: 2,
@@ -290,6 +299,7 @@ export async function runChatMemory(): Promise<void> {
     }
 
     function printStats(req: any, response: any): void {
+        context.stats.addTokens(response.usage);
         if (showTokenStats) {
             printer.writeCompletionStats(response.usage);
             printer.writeLine();

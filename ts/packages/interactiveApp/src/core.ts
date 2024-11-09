@@ -28,7 +28,7 @@ export class StopWatch {
      * @returns printable string for time elapsed
      */
     public elapsedString(inSeconds: boolean = true): string {
-        return millisecondsToString(this._elapsedMs, inSeconds ? "s" : "ms");
+        return `[${millisecondsToString(this._elapsedMs, inSeconds ? "s" : "ms")}]`;
     }
 
     /**
@@ -69,7 +69,7 @@ export function millisecondsToString(ms: number, format: "ms" | "s" | "m") {
             time /= 1000 * 60;
             break;
     }
-    return `[${time.toFixed(3)}${format}]`;
+    return `${time.toFixed(3)}${format}`;
 }
 
 export function sleep(ms: number): Promise<void> {

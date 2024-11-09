@@ -71,11 +71,6 @@ export async function createEmailMemory(
     );
 }
 
-export type IndexingStats = {
-    totalMs: number;
-    totalChars: number;
-};
-
 export function createEmailCommands(
     context: ChatContext,
     commands: Record<string, CommandHandler>,
@@ -146,41 +141,52 @@ export function createEmailCommands(
         queue.onError = (err) => context.printer.writeError(err);
 
         const clock = new StopWatch();
-        let stats: IndexingStats = {
-            totalChars: 0,
-            totalMs: 0,
-        };
-        await queue.drain(
-            namedArgs.concurrency,
-            namedArgs.concurrency,
-            async (filePath, index, total) => {
-                context.printer.writeProgress(index + 1, total);
+        context.stats.clear();
+        let attempts = 1;
+        const maxAttempts = 2;
+        while (attempts <= maxAttempts) {
+            await queue.drain(
+                namedArgs.concurrency,
+                namedArgs.concurrency,
+                async (filePath, index, total) => {
+                    context.printer.writeProgress(index + 1, total);
 
-                let email = await knowLib.email.loadEmailFile(filePath);
-                const emailLength = knowLib.email.emailToString(email!).length;
-                stats.totalChars += emailLength;
-                context.printer.writeLine(
-                    `${email!.sourcePath}\n${emailLength} chars`,
-                );
-                clock.start();
-                await knowLib.email.addEmailToConversation(
-                    context.emailMemory,
-                    email!,
-                    namedArgs.chunkSize,
-                );
-                clock.stop();
-                stats.totalMs += clock.elapsedMs;
-                context.printer.writeInColor(
-                    chalk.green,
-                    `[${clock.elapsedString()}, ${millisecondsToString(stats.totalMs, "m")}]`,
-                );
-                context.printer.writeLine();
-            },
-            namedArgs.maxMessages,
-        );
-        context.printer.writeInColor(
-            chalk.green,
-            `${stats.totalChars} chars\n[${millisecondsToString(stats.totalMs, "m")}]`,
-        );
+                    let email = await knowLib.email.loadEmailFile(filePath);
+                    const emailLength = knowLib.email.emailToString(
+                        email!,
+                    ).length;
+                    context.stats.totalChars += emailLength;
+                    context.printer.writeLine(
+                        `${email!.sourcePath}\n${emailLength} chars`,
+                    );
+
+                    clock.start();
+                    await knowLib.email.addEmailToConversation(
+                        context.emailMemory,
+                        email!,
+                        namedArgs.chunkSize,
+                    );
+                    clock.stop();
+                    context.stats.totalMs += clock.elapsedMs;
+
+                    context.printer.writeInColor(
+                        chalk.green,
+                        `[${clock.elapsedString()}, ${millisecondsToString(context.stats.totalMs, "m")}]`,
+                    );
+                    context.printer.writeLine();
+                },
+                namedArgs.maxMessages,
+            );
+            // Replay any errors
+            if (!(await queue.requeueErrors())) {
+                break;
+            }
+            ++attempts;
+            if (attempts <= maxAttempts) {
+                context.printer.writeHeading("Retrying errors");
+            }
+        }
+        context.printer.writeHeading("Indexing Stats");
+        context.printer.writeIndexingStats(context.stats);
     }
 }

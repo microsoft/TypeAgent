@@ -7,7 +7,6 @@ import {
     ensureDir,
     Path,
     readJsonFile,
-    removeDir,
     removeFile,
     writeJsonFile,
 } from "../objStream";
@@ -35,19 +34,26 @@ export interface WorkQueue {
         processor: (task: any, index: number, total: number) => Promise<void>,
         maxItems?: number,
     ): Promise<void>;
-    replay(): Promise<void>;
+    requeue(): Promise<boolean>;
+    requeueErrors(): Promise<boolean>;
 }
 
 export async function createWorkQueueFolder(
     rootPath: string,
     queueFolderName?: string,
 ): Promise<WorkQueue> {
-    let queuePath = await ensureDir(
-        path.join(rootPath, (queueFolderName ??= "queue")),
+    queueFolderName ??= "queue";
+    let queuePath = await ensureDir(path.join(rootPath, queueFolderName));
+    queueFolderName ??= "";
+    let completedPath = await ensureDir(
+        path.join(rootPath, queueFolderName + "_completed"),
     );
-    let completedPath = await ensureDir(path.join(rootPath, "completed"));
-    let skippedPath = await ensureDir(path.join(rootPath, "skipped"));
-    let errorPath = await ensureDir(path.join(rootPath, "error"));
+    let skippedPath = await ensureDir(
+        path.join(rootPath, queueFolderName + "_skipped"),
+    );
+    let errorPath = await ensureDir(
+        path.join(rootPath, queueFolderName + "_error"),
+    );
     const namedGenerator = createFileNameGenerator(
         generateTimestampString,
         (name: string) => {
@@ -59,7 +65,8 @@ export async function createWorkQueueFolder(
         addTask,
         drainTask,
         drain,
-        replay,
+        requeue,
+        requeueErrors,
     };
     return thisQueue;
 
@@ -115,10 +122,10 @@ export async function createWorkQueueFolder(
             const filePath = taskFilePath(fileName);
             try {
                 if (isAlreadyProcessed(fileName)) {
-                    await moveFileAsync(fileName, skippedPath);
+                    await moveFileTo(fileName, skippedPath);
                 } else {
                     await processor(filePath, startAt + index, total);
-                    await moveFileAsync(fileName, completedPath);
+                    await moveFileTo(fileName, completedPath);
                 }
                 return;
             } catch (err) {
@@ -127,27 +134,43 @@ export async function createWorkQueueFolder(
                 }
             }
             // Move to the error folder
-            await moveFileAsync(fileName, errorPath);
+            await moveFileTo(fileName, errorPath);
         }
     }
 
-    async function replay(): Promise<void> {
-        await removeDir(queuePath);
-        await fs.promises.rename(completedPath, queuePath);
-        await ensureDir(completedPath);
+    async function requeue(): Promise<boolean> {
+        const completedFiles = await fs.promises.readdir(completedPath);
+        for (const fileName of completedFiles) {
+            await moveFileTo(fileName, queuePath, completedPath);
+        }
+        return completedFiles.length > 0;
+    }
+
+    async function requeueErrors(): Promise<boolean> {
+        const errorFiles = await fs.promises.readdir(errorPath);
+        for (const fileName of errorFiles) {
+            await moveFileTo(fileName, queuePath, errorPath);
+        }
+        return errorFiles.length > 0;
     }
 
     function isAlreadyProcessed(fileName: string) {
         return fs.existsSync(path.join(completedPath, fileName));
     }
 
-    async function moveFileAsync(
+    async function moveFileTo(
         fileName: string,
         targetDirPath: string,
+        fromDirPath?: string,
     ): Promise<void> {
         const targetFilePath = path.join(targetDirPath, fileName);
         await removeFile(targetFilePath);
-        await fs.promises.rename(taskFilePath(fileName), targetFilePath);
+        await fs.promises.rename(
+            fromDirPath
+                ? path.join(fromDirPath, fileName)
+                : taskFilePath(fileName),
+            targetFilePath,
+        );
     }
 
     function taskFilePath(name: string): string {
