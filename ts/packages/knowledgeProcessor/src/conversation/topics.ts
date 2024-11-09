@@ -572,9 +572,14 @@ export async function createTopicIndexOnStorage<
         if (typeof topic === "string") {
             topicId = id ? id : await topicIndex.put(topic);
         } else {
-            topicId = id
-                ? id
-                : await topicIndex.put(topic.value, topic.sourceIds);
+            if (id) {
+                topicId = id;
+                if (topic.sourceIds) {
+                    await topicIndex.addSources(topicId, topic.sourceIds);
+                }
+            } else {
+                topicId = await topicIndex.put(topic.value, topic.sourceIds);
+            }
         }
 
         if (sourceName) {
