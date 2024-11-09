@@ -178,7 +178,6 @@ export class BrowserConnector {
   async getPageUrl() {
     const action = {
       actionName: "getPageUrl",
-      parameters: {},
     };
 
     return this.getPageDataFromBrowser(action);
@@ -211,7 +210,6 @@ export class BrowserConnector {
   async awaitPageLoad() {
     const action = {
       actionName: "awaitPageLoad",
-      parameters: {},
     };
 
     return this.sendActionToBrowser(action, "browserActionRequest");

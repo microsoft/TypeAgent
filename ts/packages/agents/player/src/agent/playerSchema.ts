@@ -32,7 +32,7 @@ export type PlayerAction =
 // Use playRandom when the user asks for some music to play
 export interface PlayRandomAction {
     actionName: "playRandom";
-    parameters: {
+    parameters?: {
         quantity?: number;
     };
 }
@@ -91,31 +91,26 @@ export interface PlayGenreAction {
 // show now playing including track information, and playback status including playback device
 export interface StatusAction {
     actionName: "status";
-    parameters: {};
 }
 
 // pause playback
 export interface PauseAction {
     actionName: "pause";
-    parameters: {};
 }
 
 // resume playback
 export interface ResumeAction {
     actionName: "resume";
-    parameters: {};
 }
 
 // next track
 export interface NextAction {
     actionName: "next";
-    parameters: {};
 }
 
 // previous track
 export interface PreviousAction {
     actionName: "previous";
-    parameters: {};
 }
 
 // turn shuffle on or off
@@ -127,7 +122,6 @@ export interface ShuffleAction {
 // list available playback devices
 export interface ListDevicesAction {
     actionName: "listDevices";
-    parameters: {};
 }
 
 // select playback device by keyword
@@ -172,7 +166,6 @@ export interface SearchTracksAction {
 // list all playlists
 export interface ListPlaylistsAction {
     actionName: "listPlaylists";
-    parameters: {};
 }
 
 // get playlist by name
@@ -197,7 +190,7 @@ export interface GetAlbumAction {
 // Set the current track list to the user's favorite tracks
 export interface GetFavoritesAction {
     actionName: "getFavorites";
-    parameters: {
+    parameters?: {
         // number of favorites to get
         count?: number;
     };
@@ -238,5 +231,4 @@ export interface DeletePlaylistAction {
 // set the current track list to the queue of upcoming tracks
 export interface GetQueueAction {
     actionName: "getQueue";
-    parameters: {};
 }
