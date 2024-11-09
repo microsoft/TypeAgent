@@ -6,6 +6,7 @@ import { Chunk } from "./pythonChunker.js";
 import { openai, ChatModel } from "aiclient";
 import { createFakeCodeDocumenter, createFileDocumenter, FileDocumenter } from "./fileDocumenter.js";
 import { CodeDocumentation, CodeDocumenter, createSemanticCodeIndex, SemanticCodeIndex } from "code-processor";
+import * as knowLib from "knowledge-processor";
 
 // A bundle of object stores and indices etc.
 export class ChunkyIndex {
@@ -17,6 +18,7 @@ export class ChunkyIndex {
     chunkFolder!: ObjectFolder<Chunk>;
     codeIndex!: SemanticCodeIndex;
     summaryFolder!: ObjectFolder<CodeDocumentation>;
+    ancestryFolder!: knowLib.KeyValueIndex<string, string>;
 
     private constructor(rootDir: string) {
         this.rootDir = rootDir;
@@ -41,6 +43,7 @@ export class ChunkyIndex {
             instance.rootDir + "/summaries",
             { serializer: (obj) => JSON.stringify(obj, null, 2) },
         );
+        instance.ancestryFolder = await knowLib.createIndexFolder<string>(instance.rootDir + "/ancestry");
         return instance;
     }
 }

@@ -184,7 +184,8 @@ async function processChunk(
         docs: chunk.docs!,
     };
     const docs = await chunkyIndex.codeIndex!.put(codeBlock, chunk.id, chunk.filename);
-    await chunkyIndex.summaryFolder!.put(docs, chunk.id);
+    await chunkyIndex.summaryFolder.put(docs, chunk.id);
+    await chunkyIndex.ancestryFolder.put([chunk.id], chunk.parentId || "root");
     await putPromise;
     if (verbose) {
         for (const comment of docs.comments || []) {
