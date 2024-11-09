@@ -47,9 +47,12 @@ export async function importPythonFiles(
     firstFile = true,
     verbose = false,
 ): Promise<boolean> {
+    // Canonicalize filenames.
     let filenames = files.map((file) =>
         fs.existsSync(file) ? fs.realpathSync(file) : file,
     );
+
+    // Chunkify Python files. (TODO: Make generic over languages)
     const t0 = Date.now();
     const results = await chunkifyPythonFiles(filenames);
     const t1 = Date.now();
@@ -80,15 +83,15 @@ export async function importPythonFiles(
     );
 
     // TODO: concurrency.
-    for (const item of results) {
-        if ("error" in item) {
-            console.log(`[Error: ${item.error}]`);
-            if (item.output) {
-                console.log(`[output: ${item.output}]`);
+    for (const result of results) {
+        if ("error" in result) {
+            console.log(`[Error: ${result.error}]`);
+            if (result.output) {
+                console.log(`[output: ${result.output}]`);
             }
             continue;
         }
-        const chunkedFile = item;
+        const chunkedFile = result;
         const chunks = chunkedFile.chunks;
         for (const chunk of chunks) {
             chunk.filename = chunkedFile.filename;
