@@ -249,6 +249,7 @@ export async function createTextIndex<
         getNearestHitsMultiple,
         put,
         putMultiple,
+        addSources,
         nearestNeighbors,
         nearestNeighborsText,
         remove,
@@ -343,6 +344,15 @@ export async function createTextIndex<
             ids.push(serializer.serialize(id));
         }
         return ids;
+    }
+
+    async function addSources(
+        textId: TTextId,
+        postings: TSourceId[],
+    ): Promise<void> {
+        if (postings && postings.length > 0) {
+            postingsTable.putSync(postings, serializer.deserialize(textId));
+        }
     }
 
     function* getExactHits(
@@ -493,7 +503,14 @@ export async function createTextIndex<
             maxMatches,
             minScore,
         );
-        return isIdInt ? matches : matches.map((m) => serializer.serialize(m));
+        return isIdInt
+            ? matches
+            : matches.map((m) => {
+                  return {
+                      score: m.score,
+                      item: serializer.serialize(m.item),
+                  };
+              });
     }
 
     async function nearestNeighborsTextIds(
