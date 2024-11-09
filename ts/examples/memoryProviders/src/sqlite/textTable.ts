@@ -493,7 +493,14 @@ export async function createTextIndex<
             maxMatches,
             minScore,
         );
-        return isIdInt ? matches : matches.map((m) => serializer.serialize(m));
+        return isIdInt
+            ? matches
+            : matches.map((m) => {
+                  return {
+                      score: m.score,
+                      item: serializer.serialize(m.item),
+                  };
+              });
     }
 
     async function nearestNeighborsTextIds(

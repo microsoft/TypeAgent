@@ -523,7 +523,9 @@ export async function createTopicIndexOnStorage<
 
     async function getSourceIds(ids: TopicId[]): Promise<TSourceId[]> {
         const postings = removeUndefined(await topicIndex.getByIds(ids));
-        return uniqueFrom<TSourceId[]>(postings, (p) => p, true) as TSourceId[];
+        return postings && postings.length > 0
+            ? (uniqueFrom<TSourceId[]>(postings, (p) => p, true) as TSourceId[])
+            : [];
     }
 
     async function getSourceIdsForTopic(
