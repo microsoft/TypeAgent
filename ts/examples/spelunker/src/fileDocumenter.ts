@@ -43,7 +43,6 @@ export function createFileDocumenter(model: ChatModel): FileDocumenter {
         }
         const request =
             "Document the given Python code, its purpose, and any relevant details.\n" +
-            "Also add lists keywords, topics, goals, and dependencies.\n" +
             "The code has (non-contiguous) line numbers, e.g.: `[1]: def foo():`\n" +
             "There are also marker lines, e.g.: `***: Document the following FuncDef`\n" +
             "Write a concise paragraph for EACH marker.\n" +
