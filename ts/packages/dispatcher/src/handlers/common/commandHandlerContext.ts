@@ -2,10 +2,7 @@
 // Licensed under the MIT License.
 
 import { ChildProcess } from "child_process";
-import {
-    Limiter,
-    createLimiter,
-} from "common-utils";
+import { Limiter, createLimiter } from "common-utils";
 import {
     ChildLogger,
     Logger,

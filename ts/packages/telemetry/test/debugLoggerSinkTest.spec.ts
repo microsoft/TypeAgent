@@ -3,12 +3,10 @@
 
 import { createDebugLoggerSink } from "../src/indexNode.js";
 
-
 describe("Debug logger sink", () => {
-
     it("createDebugLoggerSink should succeed", () => {
         const sink = createDebugLoggerSink();
 
-        expect(sink).not.toBeNull();        
+        expect(sink).not.toBeNull();
     });
 });
