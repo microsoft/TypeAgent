@@ -25,7 +25,8 @@
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
     "aiclient": "workspace:*",
-    "common-utils": "workspace:*"
+    "common-utils": "workspace:*",
+    "telemetry": "workspace:*"
   },
   "devDependencies": {
     "prettier": "^3.2.5",
