@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// TODO: Rename this file and the exported types to differ from the other codeDocSchema.ts.
+
 // Extracted information for a chunk of code.
 export type LineDoc = {
     lineNumber: number;

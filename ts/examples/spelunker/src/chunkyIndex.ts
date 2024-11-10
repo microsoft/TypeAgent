@@ -1,12 +1,22 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createObjectFolder, ObjectFolder } from "typeagent";
-import { Chunk } from "./pythonChunker.js";
 import { openai, ChatModel } from "aiclient";
-import { createFakeCodeDocumenter, createFileDocumenter, FileDocumenter } from "./fileDocumenter.js";
-import { CodeDocumentation, CodeDocumenter, createSemanticCodeIndex, SemanticCodeIndex } from "code-processor";
+import {
+    CodeDocumenter,
+    createSemanticCodeIndex,
+    SemanticCodeIndex,
+} from "code-processor";
 import * as knowLib from "knowledge-processor";
+import { createObjectFolder, ObjectFolder } from "typeagent";
+
+import { CodeDocumentation } from "./codeDocSchema.js";
+import {
+    createFakeCodeDocumenter,
+    createFileDocumenter,
+    FileDocumenter,
+} from "./fileDocumenter.js";
+import { Chunk } from "./pythonChunker.js";
 
 // A bundle of object stores and indices etc.
 export class ChunkyIndex {
@@ -20,6 +30,10 @@ export class ChunkyIndex {
     summaryFolder!: ObjectFolder<CodeDocumentation>;
     childrenFolder!: knowLib.KeyValueIndex<string, string>;
     parentFolder!: knowLib.KeyValueIndex<string, string>;
+    keywordsFolder!: knowLib.KeyValueIndex<string, string>;
+    topicsFolder!: knowLib.KeyValueIndex<string, string>;
+    goalsFolder!: knowLib.KeyValueIndex<string, string>;
+    dependenciesFolder!: knowLib.KeyValueIndex<string, string>;
 
     private constructor(rootDir: string) {
         this.rootDir = rootDir;
@@ -44,8 +58,24 @@ export class ChunkyIndex {
             instance.rootDir + "/summaries",
             { serializer: (obj) => JSON.stringify(obj, null, 2) },
         );
-        instance.childrenFolder = await knowLib.createIndexFolder<string>(instance.rootDir + "/children");
-        instance.parentFolder = await knowLib.createIndexFolder<string>(instance.rootDir + "/parent");
+        instance.childrenFolder = await knowLib.createIndexFolder<string>(
+            instance.rootDir + "/children",
+        );
+        instance.parentFolder = await knowLib.createIndexFolder<string>(
+            instance.rootDir + "/parent",
+        );
+        instance.keywordsFolder = await knowLib.createIndexFolder<string>(
+            instance.rootDir + "/keywords",
+        );
+        instance.topicsFolder = await knowLib.createIndexFolder<string>(
+            instance.rootDir + "/topics",
+        );
+        instance.goalsFolder = await knowLib.createIndexFolder<string>(
+            instance.rootDir + "/goals",
+        );
+        instance.dependenciesFolder = await knowLib.createIndexFolder<string>(
+            instance.rootDir + "/dependencies",
+        );
         return instance;
     }
 }

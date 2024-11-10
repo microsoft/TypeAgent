@@ -32,9 +32,10 @@ import * as fs from "fs";
 
 import { asyncArray } from "typeagent";
 
-import { Chunk, ChunkedFile, chunkifyPythonFiles } from "./pythonChunker.js";
-import { CodeBlockWithDocs } from "./fileDocumenter.js";
 import { ChunkyIndex } from "./chunkyIndex.js";
+import { CodeDocumentation } from "./codeDocSchema.js";
+import { CodeBlockWithDocs } from "./fileDocumenter.js";
+import { Chunk, ChunkedFile, chunkifyPythonFiles } from "./pythonChunker.js";
 
 // TODO: Turn (chunkFolder, codeIndex, summaryFolder) into a single object.
 
@@ -110,7 +111,7 @@ export async function importPythonFiles(
         console.log(
             `[Documented ${chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
         );
-        firstFile = await processChunkedFile(
+        firstFile = await embedChunkedFile(
             chunkedFile,
             chunkyIndex,
             firstFile,
@@ -120,8 +121,8 @@ export async function importPythonFiles(
     return firstFile;
 }
 
-async function processChunkedFile(
-    chunkedFile: ChunkedFile, // TODO: Use a type with filename and docs guaranteed present.
+async function embedChunkedFile(
+    chunkedFile: ChunkedFile,
     chunkyIndex: ChunkyIndex,
     firstFile = false,
     verbose = false,
@@ -139,23 +140,14 @@ async function processChunkedFile(
     // Handle the first chunk of the first file separately, it waits for API key setup.
     if (firstFile) {
         const chunk = chunks.shift()!;
-        await processChunk(
-            chunk,
-            chunkyIndex,
-            verbose,
-        );
+        await embedChunk(chunk, chunkyIndex, verbose);
     }
 
     // Limit concurrency to avoid 429 errors.
     await asyncArray.forEachAsync(
         chunks,
         verbose ? 1 : 4,
-        async (chunk) =>
-            await processChunk(
-                chunk,
-                chunkyIndex,
-                verbose,
-            ),
+        async (chunk) => await embedChunk(chunk, chunkyIndex, verbose),
     );
 
     const t1 = Date.now();
@@ -165,7 +157,7 @@ async function processChunkedFile(
     return false;
 }
 
-async function processChunk(
+async function embedChunk(
     chunk: Chunk,
     chunkyIndex: ChunkyIndex,
     verbose = false,
@@ -176,23 +168,46 @@ async function processChunk(
         0,
     );
     if (verbose) console.log(`  [Embedding ${chunk.id} (${lineCount} lines)]`);
-    const putPromise = chunkyIndex.chunkFolder!.put(chunk, chunk.id);
+    await chunkyIndex.chunkFolder!.put(chunk, chunk.id);
     const blobLines = extractBlobLines(chunk);
     const codeBlock: CodeBlockWithDocs = {
         code: blobLines,
         language: "python",
         docs: chunk.docs!,
     };
-    const docs = await chunkyIndex.codeIndex!.put(codeBlock, chunk.id, chunk.filename);
+    const docs = (await chunkyIndex.codeIndex!.put(
+        codeBlock,
+        chunk.id,
+        chunk.filename,
+    )) as CodeDocumentation;
     await chunkyIndex.summaryFolder.put(docs, chunk.id);
     await chunkyIndex.childrenFolder.put([chunk.id], chunk.parentId || "root");
     await chunkyIndex.parentFolder.put([chunk.parentId || "root"], chunk.id);
-    await putPromise;
+    for (const comment of docs.comments || []) {
+        await writeToIndex(chunk.id, comment.topics, chunkyIndex.topicsFolder);
+        await writeToIndex(
+            chunk.id,
+            comment.keywords,
+            chunkyIndex.keywordsFolder,
+        );
+        await writeToIndex(chunk.id, comment.goals, chunkyIndex.goalsFolder);
+        await writeToIndex(
+            chunk.id,
+            comment.dependencies,
+            chunkyIndex.dependenciesFolder,
+        );
+    }
     if (verbose) {
         for (const comment of docs.comments || []) {
-            console.log(
-                wordWrap(`    ${comment.lineNumber}. ${comment.comment}`),
-            );
+            console.log(wordWrap(`${comment.comment} (${comment.lineNumber})`));
+            if (comment.topics?.length)
+                console.log(`TOPICS: ${comment.topics.join(", ")}`);
+            if (comment.keywords?.length)
+                console.log(`KEYWORDS: ${comment.keywords.join(", ")}`);
+            if (comment.goals?.length)
+                console.log(`GOALS: ${comment.goals.join(", ")}`);
+            if (comment.dependencies?.length)
+                console.log(`DEPENDENCIES: ${comment.dependencies.join(", ")}`);
         }
     }
     const t1 = Date.now();
@@ -227,4 +242,21 @@ export function wordWrap(text: string, width: number = 80): string {
     }
     lines.push(line);
     return lines.join("\n");
+}
+
+async function writeToIndex(
+    id: string,
+    values: string[] | undefined,
+    folder: any,
+) {
+    for (const value of values || []) {
+        await folder.put([id], sanitizeKey(value));
+    }
+}
+
+function sanitizeKey(key: string): string {
+    return key
+        .toLowerCase()
+        .replace(/[\\/\s]+/g, "_")
+        .replace("\\", "_");
 }

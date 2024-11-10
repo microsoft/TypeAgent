@@ -1,12 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CodeBlock, CodeDocumentation, CodeDocumenter } from "code-processor";
-import { Chunk } from "./pythonChunker.js";
-import { createTypeScriptJsonValidator } from "typechat/ts";
-import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { ChatModel } from "aiclient";
+import { CodeBlock, CodeDocumenter } from "code-processor";
 import { loadSchema } from "typeagent";
+import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
+import { createTypeScriptJsonValidator } from "typechat/ts";
+
+import { CodeDocumentation } from "./codeDocSchema.js";
+import { Chunk } from "./pythonChunker.js";
 
 // For various reasons we want to index chunks separately,
 // but we want to produce their documentation in the context of the whole file.

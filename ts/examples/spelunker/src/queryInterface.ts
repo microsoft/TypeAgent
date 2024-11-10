@@ -3,13 +3,14 @@
 
 // User interface for querying the index.
 
-import { CodeDocumentation } from "code-processor";
 import * as iapp from "interactive-app";
+import path from "path";
 import { ScoredItem } from "typeagent";
+
+import { ChunkyIndex } from "./chunkyIndex.js";
+import { CodeDocumentation } from "./codeDocSchema.js";
 import { Chunk } from "./pythonChunker.js";
 import { wordWrap } from "./pythonImporter.js";
-import path from "path";
-import { ChunkyIndex } from "./chunkyIndex.js";
 
 type QueryOptions = {
     maxHits: number;
@@ -65,12 +66,7 @@ export async function runQueryInterface(
             minScore: namedArgs.minScore,
             verbose: namedArgs.verbose ?? verbose,
         };
-        await processQuery(
-            query,
-            chunkyIndex,
-            io,
-            options,
-        );
+        await processQuery(query, chunkyIndex, io, options);
     }
 
     // Define special handlers, then run the console loop.
@@ -100,7 +96,11 @@ async function processQuery(
 ): Promise<void> {
     let hits: ScoredItem<string>[];
     try {
-        hits = await chunkyIndex.codeIndex!.find(input, options.maxHits, options.minScore);
+        hits = await chunkyIndex.codeIndex!.find(
+            input,
+            options.maxHits,
+            options.minScore,
+        );
     } catch (error) {
         io.writer.writeLine(`[${error}]`);
         return;
@@ -111,7 +111,9 @@ async function processQuery(
 
     for (let i = 0; i < hits.length; i++) {
         const hit = hits[i];
-        const chunk: Chunk | undefined = await chunkyIndex.chunkFolder!.get(hit.item);
+        const chunk: Chunk | undefined = await chunkyIndex.chunkFolder!.get(
+            hit.item,
+        );
         if (!chunk) {
             io.writer.writeLine(`${hit} --> [No data]`);
             continue;
@@ -123,9 +125,8 @@ async function processQuery(
                 `file: ${path.relative(process.cwd(), chunk.filename!)}, ` +
                 `type: ${chunk.treeName}`,
         );
-        const summary: CodeDocumentation | undefined = await chunkyIndex.summaryFolder!.get(
-            hit.item,
-        );
+        const summary: CodeDocumentation | undefined =
+            await chunkyIndex.summaryFolder!.get(hit.item);
         if (summary?.comments?.length) {
             for (const comment of summary.comments)
                 io.writer.writeLine(
