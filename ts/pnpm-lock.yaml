@@ -248,6 +248,9 @@ importers:
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
+      knowledge-processor:
+        specifier: workspace:*
+        version: link:../../packages/knowledgeProcessor
       typeagent:
         specifier: workspace:*
         version: link:../../packages/typeagent
