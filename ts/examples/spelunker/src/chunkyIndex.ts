@@ -18,7 +18,8 @@ export class ChunkyIndex {
     chunkFolder!: ObjectFolder<Chunk>;
     codeIndex!: SemanticCodeIndex;
     summaryFolder!: ObjectFolder<CodeDocumentation>;
-    ancestryFolder!: knowLib.KeyValueIndex<string, string>;
+    childrenFolder!: knowLib.KeyValueIndex<string, string>;
+    parentFolder!: knowLib.KeyValueIndex<string, string>;
 
     private constructor(rootDir: string) {
         this.rootDir = rootDir;
@@ -43,7 +44,8 @@ export class ChunkyIndex {
             instance.rootDir + "/summaries",
             { serializer: (obj) => JSON.stringify(obj, null, 2) },
         );
-        instance.ancestryFolder = await knowLib.createIndexFolder<string>(instance.rootDir + "/ancestry");
+        instance.childrenFolder = await knowLib.createIndexFolder<string>(instance.rootDir + "/children");
+        instance.parentFolder = await knowLib.createIndexFolder<string>(instance.rootDir + "/parent");
         return instance;
     }
 }
