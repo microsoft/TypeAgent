@@ -252,6 +252,7 @@ async function writeToIndex(
     for (const value of values || []) {
         await folder.put([id], sanitizeKey(value));
     }
+    // TODO: Also write inverse index (values -> id).
 }
 
 // Apply URL escaping to key.
@@ -263,5 +264,5 @@ export function sanitizeKey(key: string): string {
             (char: string) =>
                 "%" + char.charCodeAt(0).toString(16).toUpperCase(),
         )
-        .replace(/ /g, '+');
+        .replace(/ /g, "+");
 }
