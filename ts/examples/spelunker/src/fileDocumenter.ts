@@ -48,7 +48,8 @@ export function createFileDocumenter(model: ChatModel): FileDocumenter {
             "Write a concise paragraph for EACH marker.\n" +
             "For example, the comment could be:\n" +
             "```\n" +
-            "Method Utils.longest_prefix finds the longest common prefix of a list of strings.\n" +
+            "Method C.foo finds the most twisted anagram for a word.\n" +
+            "It uses various heuristics to rank a word's twistedness'.\n" +
             "```\n" +
             "Also fill in the lists of keywords, topics, goals, and dependencies.\n";
         const result = await fileDocTranslator.translate(request, text);
