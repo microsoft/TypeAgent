@@ -3,15 +3,17 @@
 
 import { ChildProcess } from "child_process";
 import {
-    ChildLogger,
     Limiter,
+    createLimiter,
+} from "common-utils";
+import {
+    ChildLogger,
     Logger,
     LoggerSink,
     MultiSinkLogger,
     createDebugLoggerSink,
-    createLimiter,
     createMongoDBLoggerSink,
-} from "common-utils";
+} from "telemetry";
 import {
     AgentCache,
     GenericExplanationResult,

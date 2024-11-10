@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import fs from "node:fs";
-import { getMimeType, StopWatch } from "common-utils";
+import { getMimeType } from "common-utils";
+import { StopWatch } from "telemetry";
 import {
     ChatResponseAction,
     Entity,

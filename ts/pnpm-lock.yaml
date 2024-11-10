@@ -643,6 +643,9 @@ importers:
       knowledge-processor:
         specifier: workspace:*
         version: link:../../knowledgeProcessor
+      telemetry:
+        specifier: workspace:*
+        version: link:../../telemetry
       typeagent:
         specifier: workspace:*
         version: link:../../typeagent
@@ -846,6 +849,9 @@ importers:
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
+      telemetry:
+        specifier: workspace:*
+        version: link:../../telemetry
     devDependencies:
       prettier:
         specifier: ^3.2.5
@@ -1093,6 +1099,9 @@ importers:
       debug:
         specifier: ^4.3.4
         version: 4.3.4(supports-color@8.1.1)
+      telemetry:
+        specifier: workspace:*
+        version: link:../telemetry
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.3)
@@ -1477,6 +1486,9 @@ importers:
       schema-parser:
         specifier: workspace:*
         version: link:../schemaParser
+      telemetry:
+        specifier: workspace:*
+        version: link:../telemetry
       typeagent:
         specifier: workspace:*
         version: link:../typeagent
@@ -1765,6 +1777,52 @@ importers:
       vite:
         specifier: ^5.2.14
         version: 5.4.8(@types/node@18.18.7)(less@4.2.0)(terser@5.27.0)
+
+  packages/telemetry:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../agentSdk
+      chalk:
+        specifier: ^5.3.0
+        version: 5.3.0
+      debug:
+        specifier: ^4.3.4
+        version: 4.3.4(supports-color@8.1.1)
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.3.1
+      find-config:
+        specifier: ^1.0.0
+        version: 1.0.0
+      mongodb:
+        specifier: ^6.3.0
+        version: 6.3.0(socks@2.8.3)
+    devDependencies:
+      '@types/debug':
+        specifier: ^4.1.10
+        version: 4.1.10
+      '@types/find-config':
+        specifier: 1.0.4
+        version: 1.0.4
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.7
+      '@types/node':
+        specifier: ^18.18.7
+        version: 18.18.7
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@18.18.7)(ts-node@10.9.1(@types/node@18.18.7)(typescript@5.4.3))
+      prettier:
+        specifier: ^3.2.5
+        version: 3.2.5
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
 
   packages/typeagent:
     dependencies:

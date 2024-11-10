@@ -22,8 +22,8 @@ import {
 import {
     CachedImageWithDetails,
     getColorElapsedString,
-    Logger,
 } from "common-utils";
+import { Logger } from "telemetry";
 import {
     executeActions,
     getTranslatorPrefix,
