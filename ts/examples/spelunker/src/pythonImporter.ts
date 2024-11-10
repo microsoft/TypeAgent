@@ -254,9 +254,14 @@ async function writeToIndex(
     }
 }
 
-function sanitizeKey(key: string): string {
+// Apply URL escaping to key.
+export function sanitizeKey(key: string): string {
     return key
-        .toLowerCase()
-        .replace(/[\\/\s]+/g, "_")
-        .replace("\\", "_");
+        .replace(/%/g, "%%")
+        .replace(
+            /[^\w% ]/g,
+            (char: string) =>
+                "%" + char.charCodeAt(0).toString(16).toUpperCase(),
+        )
+        .replace(/ /g, '+');
 }
