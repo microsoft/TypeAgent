@@ -100,6 +100,9 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
                 );
             } else {
                 console.error("Missing required file paths for -statgen mode.");
+                console.error(
+                    "Please use -statgen -actionreqEmbeddingsFile <file> -statGenFile <file>",
+                );
             }
         } else {
             console.log(

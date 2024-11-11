@@ -1,6 +1,5 @@
 import * as fs from "fs";
 import chalk from "chalk";
-
 import { similarity, SimilarityType } from "typeagent";
 
 export interface StatsResult {
@@ -76,10 +75,12 @@ export function generateStats(data: any[], threshold: number = 0.7) {
             .map((action) => ({
                 actionName: action.actionName,
                 typeName: action.typeName,
-                score: similarity(
-                    action.embedding,
-                    requestEmbedding,
-                    SimilarityType.Cosine,
+                score: parseFloat(
+                    similarity(
+                        action.embedding,
+                        requestEmbedding,
+                        SimilarityType.Cosine,
+                    ).toFixed(2),
                 ),
             }))
             .sort((a, b) => {
