@@ -1,0 +1,6206 @@
+[
+  {
+    "command": "acceptSelectedSuggestionOnEnter"
+  },
+  {
+    "command": "acceptSnippet"
+  },
+  {
+    "command": "accessibility.announcement.help"
+  },
+  {
+    "command": "actions.findWithSelection"
+  },
+  {
+    "command": "addRootFolder"
+  },
+  {
+    "command": "breadcrumbs.toggle"
+  },
+  {
+    "command": "breadcrumbs.toggleFromEditorTitle"
+  },
+  {
+    "command": "callStack.collapse"
+  },
+  {
+    "command": "callStackWidget.goToFile"
+  },
+  {
+    "command": "changeEditorIndentation5"
+  },
+  {
+    "command": "chat.inlineResourceAnchor.addFileToChat"
+  },
+  {
+    "command": "chat.inlineSymbolAnchor.goToDefinition"
+  },
+  {
+    "command": "chat.inlineSymbolAnchor.goToReferences"
+  },
+  {
+    "command": "chatEditing.acceptAllFiles"
+  },
+  {
+    "command": "chatEditing.acceptFile"
+  },
+  {
+    "command": "chatEditing.discardAllFiles"
+  },
+  {
+    "command": "chatEditing.discardFile"
+  },
+  {
+    "command": "chatEditing.openDiffs"
+  },
+  {
+    "command": "chatEditing.openFile"
+  },
+  {
+    "command": "chatEditing.startSession"
+  },
+  {
+    "command": "chatEditing.stopSession"
+  },
+  {
+    "command": "cleanSearchEditorState"
+  },
+  {
+    "command": "closeReferenceSearchEditor"
+  },
+  {
+    "command": "coda-shell.start"
+  },
+  {
+    "command": "codelens.showLensesInCurrentLine"
+  },
+  {
+    "command": "columnSelect"
+  },
+  {
+    "command": "comments.collapse"
+  },
+  {
+    "command": "comments.expand"
+  },
+  {
+    "command": "comments.reply"
+  },
+  {
+    "command": "compareFiles"
+  },
+  {
+    "command": "compareSelected"
+  },
+  {
+    "command": "compositionEnd"
+  },
+  {
+    "command": "compositionStart"
+  },
+  {
+    "command": "compositionType"
+  },
+  {
+    "command": "copilot-chat.focus"
+  },
+  {
+    "command": "copilot-chat.resetViewLocation"
+  },
+  {
+    "command": "createCursor"
+  },
+  {
+    "command": "cursorLineEnd"
+  },
+  {
+    "command": "cursorLineEndSelect"
+  },
+  {
+    "command": "cursorLineStart"
+  },
+  {
+    "command": "cursorLineStartSelect"
+  },
+  {
+    "command": "cursorRedo"
+  },
+  {
+    "command": "cursorWordEndLeft"
+  },
+  {
+    "command": "cursorWordEndLeftSelect"
+  },
+  {
+    "command": "cursorWordPartLeft"
+  },
+  {
+    "command": "cursorWordPartLeftSelect"
+  },
+  {
+    "command": "cursorWordPartRight"
+  },
+  {
+    "command": "cursorWordPartRightSelect"
+  },
+  {
+    "command": "cursorWordPartStartLeft"
+  },
+  {
+    "command": "cursorWordPartStartLeftSelect"
+  },
+  {
+    "command": "cursorWordRight"
+  },
+  {
+    "command": "cursorWordRightSelect"
+  },
+  {
+    "command": "cursorWordStartLeft"
+  },
+  {
+    "command": "cursorWordStartLeftSelect"
+  },
+  {
+    "command": "cursorWordStartRight"
+  },
+  {
+    "command": "cursorWordStartRightSelect"
+  },
+  {
+    "command": "cut"
+  },
+  {
+    "command": "debug.action.openDisassemblyView"
+  },
+  {
+    "command": "debug.action.toggleDisassemblyViewSourceCode"
+  },
+  {
+    "command": "debug.addConfiguration"
+  },
+  {
+    "command": "debug.addToWatchExpressions"
+  },
+  {
+    "command": "debug.breakWhenValueChanges"
+  },
+  {
+    "command": "debug.breakWhenValueIsAccessed"
+  },
+  {
+    "command": "debug.breakWhenValueIsRead"
+  },
+  {
+    "command": "debug.collapseRepl"
+  },
+  {
+    "command": "debug.copyEvaluatePath"
+  },
+  {
+    "command": "debug.copyStackTrace"
+  },
+  {
+    "command": "debug.editBreakpoint"
+  },
+  {
+    "command": "debug.editBreakpointMode"
+  },
+  {
+    "command": "debug.editFunctionBreakpoint"
+  },
+  {
+    "command": "debug.editFunctionBreakpointHitCount"
+  },
+  {
+    "command": "debug.enableOrDisableBreakpoint"
+  },
+  {
+    "command": "debug.installAdditionalDebuggers"
+  },
+  {
+    "command": "debug.jumpToCursor"
+  },
+  {
+    "command": "debug.replCopy"
+  },
+  {
+    "command": "debug.replPaste"
+  },
+  {
+    "command": "debug.setWatchExpression"
+  },
+  {
+    "command": "debug.startFromConfig"
+  },
+  {
+    "command": "debug.toggleReplIgnoreFocus"
+  },
+  {
+    "command": "debugpy.clearCacheAndReload"
+  },
+  {
+    "command": "debugpy.debugInTerminal"
+  },
+  {
+    "command": "debugpy.debugUsingLaunchConfig"
+  },
+  {
+    "command": "debugpy.reportIssue"
+  },
+  {
+    "command": "debugpy.viewOutput"
+  },
+  {
+    "command": "default:compositionEnd"
+  },
+  {
+    "command": "default:compositionStart"
+  },
+  {
+    "command": "default:compositionType"
+  },
+  {
+    "command": "default:cut"
+  },
+  {
+    "command": "default:paste"
+  },
+  {
+    "command": "default:redo"
+  },
+  {
+    "command": "default:replacePreviousChar"
+  },
+  {
+    "command": "default:type"
+  },
+  {
+    "command": "default:undo"
+  },
+  {
+    "command": "deleteAllLeft"
+  },
+  {
+    "command": "deleteAllRight"
+  },
+  {
+    "command": "deleteInsideWord"
+  },
+  {
+    "command": "deleteWordEndLeft"
+  },
+  {
+    "command": "deleteWordEndRight"
+  },
+  {
+    "command": "deleteWordPartLeft"
+  },
+  {
+    "command": "deleteWordPartRight"
+  },
+  {
+    "command": "deleteWordStartLeft"
+  },
+  {
+    "command": "deleteWordStartRight"
+  },
+  {
+    "command": "detailsContainers.focus"
+  },
+  {
+    "command": "detailsContainers.resetViewLocation"
+  },
+  {
+    "command": "devVolumes.focus"
+  },
+  {
+    "command": "devVolumes.resetViewLocation"
+  },
+  {
+    "command": "developer.showCurrentFileAsReleaseNotes"
+  },
+  {
+    "command": "diffEditor.collapseAllUnchangedRegions"
+  },
+  {
+    "command": "diffEditor.revert"
+  },
+  {
+    "command": "diffEditor.showAllUnchangedRegions"
+  },
+  {
+    "command": "diffEditor.switchSide"
+  },
+  {
+    "command": "diffEditor.toggleCollapseUnchangedRegions"
+  },
+  {
+    "command": "diffEditor.toggleShowMovedCodeBlocks"
+  },
+  {
+    "command": "diffEditor.toggleUseInlineViewWhenSpaceIsLimited"
+  },
+  {
+    "command": "dockerContainers.focus"
+  },
+  {
+    "command": "dockerContainers.removeView"
+  },
+  {
+    "command": "dockerContainers.resetViewLocation"
+  },
+  {
+    "command": "dockerContainers.toggleVisibility"
+  },
+  {
+    "command": "dockerImages.focus"
+  },
+  {
+    "command": "dockerImages.removeView"
+  },
+  {
+    "command": "dockerImages.resetViewLocation"
+  },
+  {
+    "command": "dockerImages.toggleVisibility"
+  },
+  {
+    "command": "dockerNetworks.focus"
+  },
+  {
+    "command": "dockerNetworks.removeView"
+  },
+  {
+    "command": "dockerNetworks.resetViewLocation"
+  },
+  {
+    "command": "dockerNetworks.toggleVisibility"
+  },
+  {
+    "command": "dockerRegistries.focus"
+  },
+  {
+    "command": "dockerRegistries.removeView"
+  },
+  {
+    "command": "dockerRegistries.resetViewLocation"
+  },
+  {
+    "command": "dockerRegistries.toggleVisibility"
+  },
+  {
+    "command": "dockerVolumes.focus"
+  },
+  {
+    "command": "dockerVolumes.removeView"
+  },
+  {
+    "command": "dockerVolumes.resetViewLocation"
+  },
+  {
+    "command": "dockerVolumes.toggleVisibility"
+  },
+  {
+    "command": "editor.action.addCursorsToBottom"
+  },
+  {
+    "command": "editor.action.addCursorsToTop"
+  },
+  {
+    "command": "editor.action.addSelectionToPreviousFindMatch"
+  },
+  {
+    "command": "editor.action.changeTabDisplaySize"
+  },
+  {
+    "command": "editor.action.clipboardCopyWithSyntaxHighlightingAction"
+  },
+  {
+    "command": "editor.action.debugEditorGpuRenderer"
+  },
+  {
+    "command": "editor.action.decreaseHoverVerbosityLevel"
+  },
+  {
+    "command": "editor.action.detectIndentation"
+  },
+  {
+    "command": "editor.action.diffReview.next"
+  },
+  {
+    "command": "editor.action.diffReview.prev"
+  },
+  {
+    "command": "editor.action.duplicateSelection"
+  },
+  {
+    "command": "editor.action.findReferences"
+  },
+  {
+    "command": "editor.action.fixAll"
+  },
+  {
+    "command": "editor.action.focusNextCursor"
+  },
+  {
+    "command": "editor.action.focusPreviousCursor"
+  },
+  {
+    "command": "editor.action.focusStickyScroll"
+  },
+  {
+    "command": "editor.action.fontZoomIn"
+  },
+  {
+    "command": "editor.action.fontZoomOut"
+  },
+  {
+    "command": "editor.action.fontZoomReset"
+  },
+  {
+    "command": "editor.action.forceRetokenize"
+  },
+  {
+    "command": "editor.action.format"
+  },
+  {
+    "command": "editor.action.formatChanges"
+  },
+  {
+    "command": "editor.action.formatDocument.multiple"
+  },
+  {
+    "command": "editor.action.formatSelection.multiple"
+  },
+  {
+    "command": "editor.action.goToDeclaration"
+  },
+  {
+    "command": "editor.action.goToMatchFindAction"
+  },
+  {
+    "command": "editor.action.goToSelectionAnchor"
+  },
+  {
+    "command": "editor.action.goToTypeDefinition"
+  },
+  {
+    "command": "editor.action.increaseHoverVerbosityLevel"
+  },
+  {
+    "command": "editor.action.indentUsingSpaces"
+  },
+  {
+    "command": "editor.action.indentUsingTabs"
+  },
+  {
+    "command": "editor.action.indentationToSpaces"
+  },
+  {
+    "command": "editor.action.indentationToTabs"
+  },
+  {
+    "command": "editor.action.inlineSuggest.acceptNextLine"
+  },
+  {
+    "command": "editor.action.inlineSuggest.toggleAlwaysShowToolbar"
+  },
+  {
+    "command": "editor.action.insertSnippet"
+  },
+  {
+    "command": "editor.action.inspectTMScopes"
+  },
+  {
+    "command": "editor.action.joinLines"
+  },
+  {
+    "command": "editor.action.measureExtHostLatency"
+  },
+  {
+    "command": "editor.action.moveCarretLeftAction"
+  },
+  {
+    "command": "editor.action.moveCarretRightAction"
+  },
+  {
+    "command": "editor.action.moveSelectionToPreviousFindMatch"
+  },
+  {
+    "command": "editor.action.openDeclarationToTheSide"
+  },
+  {
+    "command": "editor.action.openLink"
+  },
+  {
+    "command": "editor.action.pasteAs"
+  },
+  {
+    "command": "editor.action.pasteAsText"
+  },
+  {
+    "command": "editor.action.peekDeclaration"
+  },
+  {
+    "command": "editor.action.peekTypeDefinition"
+  },
+  {
+    "command": "editor.action.previewDeclaration"
+  },
+  {
+    "command": "editor.action.referenceSearch.trigger"
+  },
+  {
+    "command": "editor.action.reindentlines"
+  },
+  {
+    "command": "editor.action.reindentselectedlines"
+  },
+  {
+    "command": "editor.action.removeDuplicateLines"
+  },
+  {
+    "command": "editor.action.resetSuggestSize"
+  },
+  {
+    "command": "editor.action.revealDeclaration"
+  },
+  {
+    "command": "editor.action.selectToBracket"
+  },
+  {
+    "command": "editor.action.showDefinitionPreviewHover"
+  },
+  {
+    "command": "editor.action.showOrFocusStandaloneColorPicker"
+  },
+  {
+    "command": "editor.action.showReferences"
+  },
+  {
+    "command": "editor.action.showSnippets"
+  },
+  {
+    "command": "editor.action.smartSelect.grow"
+  },
+  {
+    "command": "editor.action.sortLinesAscending"
+  },
+  {
+    "command": "editor.action.sortLinesDescending"
+  },
+  {
+    "command": "editor.action.sourceAction"
+  },
+  {
+    "command": "editor.action.startDebugTextMate"
+  },
+  {
+    "command": "editor.action.surroundWithSnippet"
+  },
+  {
+    "command": "editor.action.toggleColumnSelection"
+  },
+  {
+    "command": "editor.action.toggleMinimap"
+  },
+  {
+    "command": "editor.action.toggleRenderControlCharacter"
+  },
+  {
+    "command": "editor.action.toggleRenderWhitespace"
+  },
+  {
+    "command": "editor.action.toggleStickyScroll"
+  },
+  {
+    "command": "editor.action.transformToCamelcase"
+  },
+  {
+    "command": "editor.action.transformToKebabcase"
+  },
+  {
+    "command": "editor.action.transformToLowercase"
+  },
+  {
+    "command": "editor.action.transformToPascalcase"
+  },
+  {
+    "command": "editor.action.transformToSnakecase"
+  },
+  {
+    "command": "editor.action.transformToTitlecase"
+  },
+  {
+    "command": "editor.action.transformToUppercase"
+  },
+  {
+    "command": "editor.action.transpose"
+  },
+  {
+    "command": "editor.action.transposeLetters"
+  },
+  {
+    "command": "editor.action.unicodeHighlight.disableHighlightingOfAmbiguousCharacters"
+  },
+  {
+    "command": "editor.action.unicodeHighlight.disableHighlightingOfInvisibleCharacters"
+  },
+  {
+    "command": "editor.action.unicodeHighlight.disableHighlightingOfNonBasicAsciiCharacters"
+  },
+  {
+    "command": "editor.action.unicodeHighlight.showExcludeOptions"
+  },
+  {
+    "command": "editor.action.wordHighlight.trigger"
+  },
+  {
+    "command": "editor.actions.findWithArgs"
+  },
+  {
+    "command": "editor.debug.action.addLogPoint"
+  },
+  {
+    "command": "editor.debug.action.conditionalBreakpoint"
+  },
+  {
+    "command": "editor.debug.action.editBreakpoint"
+  },
+  {
+    "command": "editor.debug.action.goToNextBreakpoint"
+  },
+  {
+    "command": "editor.debug.action.goToPreviousBreakpoint"
+  },
+  {
+    "command": "editor.debug.action.runToCursor"
+  },
+  {
+    "command": "editor.debug.action.selectionToRepl"
+  },
+  {
+    "command": "editor.debug.action.selectionToWatch"
+  },
+  {
+    "command": "editor.debug.action.stepIntoTargets"
+  },
+  {
+    "command": "editor.debug.action.triggerByBreakpoint"
+  },
+  {
+    "command": "editor.emmet.action.balanceIn"
+  },
+  {
+    "command": "editor.emmet.action.balanceOut"
+  },
+  {
+    "command": "editor.emmet.action.decrementNumberByOne"
+  },
+  {
+    "command": "editor.emmet.action.decrementNumberByOneTenth"
+  },
+  {
+    "command": "editor.emmet.action.decrementNumberByTen"
+  },
+  {
+    "command": "editor.emmet.action.evaluateMathExpression"
+  },
+  {
+    "command": "editor.emmet.action.incrementNumberByOne"
+  },
+  {
+    "command": "editor.emmet.action.incrementNumberByOneTenth"
+  },
+  {
+    "command": "editor.emmet.action.incrementNumberByTen"
+  },
+  {
+    "command": "editor.emmet.action.matchTag"
+  },
+  {
+    "command": "editor.emmet.action.mergeLines"
+  },
+  {
+    "command": "editor.emmet.action.nextEditPoint"
+  },
+  {
+    "command": "editor.emmet.action.prevEditPoint"
+  },
+  {
+    "command": "editor.emmet.action.reflectCSSValue"
+  },
+  {
+    "command": "editor.emmet.action.removeTag"
+  },
+  {
+    "command": "editor.emmet.action.selectNextItem"
+  },
+  {
+    "command": "editor.emmet.action.selectPrevItem"
+  },
+  {
+    "command": "editor.emmet.action.splitJoinTag"
+  },
+  {
+    "command": "editor.emmet.action.toggleComment"
+  },
+  {
+    "command": "editor.emmet.action.updateImageSize"
+  },
+  {
+    "command": "editor.emmet.action.updateTag"
+  },
+  {
+    "command": "editor.emmet.action.wrapWithAbbreviation"
+  },
+  {
+    "command": "editor.gotoNextFold"
+  },
+  {
+    "command": "editor.gotoParentFold"
+  },
+  {
+    "command": "editor.gotoPreviousFold"
+  },
+  {
+    "command": "editor.inlayHints.Reset"
+  },
+  {
+    "command": "editor.showTypeHierarchy"
+  },
+  {
+    "command": "editor.toggleImportFold"
+  },
+  {
+    "command": "emmet.expandAbbreviation"
+  },
+  {
+    "command": "explorer.download"
+  },
+  {
+    "command": "explorer.newFile"
+  },
+  {
+    "command": "explorer.newFolder"
+  },
+  {
+    "command": "explorer.openWith"
+  },
+  {
+    "command": "explorer.upload"
+  },
+  {
+    "command": "extension.bisect.next"
+  },
+  {
+    "command": "extension.bisect.start"
+  },
+  {
+    "command": "extension.bisect.stop"
+  },
+  {
+    "command": "extension.js-debug.addCustomBreakpoints"
+  },
+  {
+    "command": "extension.js-debug.addXHRBreakpoints"
+  },
+  {
+    "command": "extension.js-debug.callers.add"
+  },
+  {
+    "command": "extension.js-debug.callers.goToCaller"
+  },
+  {
+    "command": "extension.js-debug.callers.gotToTarget"
+  },
+  {
+    "command": "extension.js-debug.callers.remove"
+  },
+  {
+    "command": "extension.js-debug.callers.removeAll"
+  },
+  {
+    "command": "extension.js-debug.createDebuggerTerminal"
+  },
+  {
+    "command": "extension.js-debug.createDiagnostics"
+  },
+  {
+    "command": "extension.js-debug.debugLink"
+  },
+  {
+    "command": "extension.js-debug.disableSourceMapStepping"
+  },
+  {
+    "command": "extension.js-debug.editXHRBreakpoints"
+  },
+  {
+    "command": "extension.js-debug.enableSourceMapStepping"
+  },
+  {
+    "command": "extension.js-debug.getDiagnosticLogs"
+  },
+  {
+    "command": "extension.js-debug.network.clear"
+  },
+  {
+    "command": "extension.js-debug.network.copyUri"
+  },
+  {
+    "command": "extension.js-debug.network.openBody"
+  },
+  {
+    "command": "extension.js-debug.network.openBodyInHex"
+  },
+  {
+    "command": "extension.js-debug.network.replayXHR"
+  },
+  {
+    "command": "extension.js-debug.network.viewRequest"
+  },
+  {
+    "command": "extension.js-debug.npmScript"
+  },
+  {
+    "command": "extension.js-debug.openEdgeDevTools"
+  },
+  {
+    "command": "extension.js-debug.prettyPrint"
+  },
+  {
+    "command": "extension.js-debug.removeAllCustomBreakpoints"
+  },
+  {
+    "command": "extension.js-debug.removeXHRBreakpoint"
+  },
+  {
+    "command": "extension.js-debug.revealPage"
+  },
+  {
+    "command": "extension.js-debug.startProfile"
+  },
+  {
+    "command": "extension.js-debug.stopProfile"
+  },
+  {
+    "command": "extension.js-debug.toggleSkippingFile"
+  },
+  {
+    "command": "extension.jsProfileVisualizer.table.clearCodeLenses"
+  },
+  {
+    "command": "extension.node-debug.toggleAutoAttach"
+  },
+  {
+    "command": "extension.open"
+  },
+  {
+    "command": "extension.pwa-node-debug.attachNodeProcess"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.AI"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.Azure"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.Chat"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.Data Science"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.Debuggers"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.Education"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.Extension Packs"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.Formatters"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.Keymaps"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.Language Packs"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.Linters"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.Machine Learning"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.Notebooks"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.Other"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.Programming Languages"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.SCM Providers"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.Snippets"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.Testing"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.Themes"
+  },
+  {
+    "command": "extensions.actions.searchByCategory.Visualization"
+  },
+  {
+    "command": "extensions.filter.featured"
+  },
+  {
+    "command": "extensions.recommendedList.focus"
+  },
+  {
+    "command": "extensions.recommendedList.resetViewLocation"
+  },
+  {
+    "command": "extensions.sort.installs"
+  },
+  {
+    "command": "extensions.sort.name"
+  },
+  {
+    "command": "extensions.sort.publishedDate"
+  },
+  {
+    "command": "extensions.sort.rating"
+  },
+  {
+    "command": "extensions.sort.updateDate"
+  },
+  {
+    "command": "files.openTimeline"
+  },
+  {
+    "command": "files.participants.resetChoice"
+  },
+  {
+    "command": "filesExplorer.findInWorkspace"
+  },
+  {
+    "command": "focusAndAcceptSuggestion"
+  },
+  {
+    "command": "getContextKeyInfo"
+  },
+  {
+    "command": "git-base.api.getRemoteSources"
+  },
+  {
+    "command": "git._syncAll"
+  },
+  {
+    "command": "git.acceptMerge"
+  },
+  {
+    "command": "git.addRemote"
+  },
+  {
+    "command": "git.api.getRemoteSources"
+  },
+  {
+    "command": "git.api.getRepositories"
+  },
+  {
+    "command": "git.api.getRepositoryState"
+  },
+  {
+    "command": "git.branch"
+  },
+  {
+    "command": "git.branchFrom"
+  },
+  {
+    "command": "git.checkout"
+  },
+  {
+    "command": "git.checkoutDetached"
+  },
+  {
+    "command": "git.checkoutRefDetached"
+  },
+  {
+    "command": "git.cherryPick"
+  },
+  {
+    "command": "git.cherryPickRef"
+  },
+  {
+    "command": "git.clean"
+  },
+  {
+    "command": "git.cleanAll"
+  },
+  {
+    "command": "git.cleanAllTracked"
+  },
+  {
+    "command": "git.cleanAllUntracked"
+  },
+  {
+    "command": "git.clone"
+  },
+  {
+    "command": "git.cloneRecursive"
+  },
+  {
+    "command": "git.close"
+  },
+  {
+    "command": "git.closeAllDiffEditors"
+  },
+  {
+    "command": "git.closeAllUnmodifiedEditors"
+  },
+  {
+    "command": "git.closeOtherRepositories"
+  },
+  {
+    "command": "git.commit"
+  },
+  {
+    "command": "git.commitAll"
+  },
+  {
+    "command": "git.commitAllAmend"
+  },
+  {
+    "command": "git.commitAllAmendNoVerify"
+  },
+  {
+    "command": "git.commitAllNoVerify"
+  },
+  {
+    "command": "git.commitAllSigned"
+  },
+  {
+    "command": "git.commitAllSignedNoVerify"
+  },
+  {
+    "command": "git.commitAmend"
+  },
+  {
+    "command": "git.commitAmendNoVerify"
+  },
+  {
+    "command": "git.commitEmpty"
+  },
+  {
+    "command": "git.commitEmptyNoVerify"
+  },
+  {
+    "command": "git.commitMessageAccept"
+  },
+  {
+    "command": "git.commitMessageDiscard"
+  },
+  {
+    "command": "git.commitNoVerify"
+  },
+  {
+    "command": "git.commitSigned"
+  },
+  {
+    "command": "git.commitSignedNoVerify"
+  },
+  {
+    "command": "git.commitStaged"
+  },
+  {
+    "command": "git.commitStagedAmend"
+  },
+  {
+    "command": "git.commitStagedAmendNoVerify"
+  },
+  {
+    "command": "git.commitStagedNoVerify"
+  },
+  {
+    "command": "git.commitStagedSigned"
+  },
+  {
+    "command": "git.commitStagedSignedNoVerify"
+  },
+  {
+    "command": "git.continueInLocalClone"
+  },
+  {
+    "command": "git.copyCommitId"
+  },
+  {
+    "command": "git.copyCommitMessage"
+  },
+  {
+    "command": "git.createTag"
+  },
+  {
+    "command": "git.deleteBranch"
+  },
+  {
+    "command": "git.deleteRemoteTag"
+  },
+  {
+    "command": "git.deleteTag"
+  },
+  {
+    "command": "git.diff.stageHunk"
+  },
+  {
+    "command": "git.diff.stageSelection"
+  },
+  {
+    "command": "git.fetch"
+  },
+  {
+    "command": "git.fetchAll"
+  },
+  {
+    "command": "git.fetchPrune"
+  },
+  {
+    "command": "git.fetchRef"
+  },
+  {
+    "command": "git.ignore"
+  },
+  {
+    "command": "git.init"
+  },
+  {
+    "command": "git.manageUnsafeRepositories"
+  },
+  {
+    "command": "git.merge"
+  },
+  {
+    "command": "git.mergeAbort"
+  },
+  {
+    "command": "git.openAllChanges"
+  },
+  {
+    "command": "git.openChange"
+  },
+  {
+    "command": "git.openFile"
+  },
+  {
+    "command": "git.openFile2"
+  },
+  {
+    "command": "git.openHEADFile"
+  },
+  {
+    "command": "git.openMergeEditor"
+  },
+  {
+    "command": "git.openRepositoriesInParentFolders"
+  },
+  {
+    "command": "git.openRepository"
+  },
+  {
+    "command": "git.openResource"
+  },
+  {
+    "command": "git.publish"
+  },
+  {
+    "command": "git.pull"
+  },
+  {
+    "command": "git.pullFrom"
+  },
+  {
+    "command": "git.pullRebase"
+  },
+  {
+    "command": "git.pullRef"
+  },
+  {
+    "command": "git.push"
+  },
+  {
+    "command": "git.pushForce"
+  },
+  {
+    "command": "git.pushRef"
+  },
+  {
+    "command": "git.pushTags"
+  },
+  {
+    "command": "git.pushTo"
+  },
+  {
+    "command": "git.pushToForce"
+  },
+  {
+    "command": "git.pushWithTags"
+  },
+  {
+    "command": "git.pushWithTagsForce"
+  },
+  {
+    "command": "git.rebase"
+  },
+  {
+    "command": "git.rebaseAbort"
+  },
+  {
+    "command": "git.refresh"
+  },
+  {
+    "command": "git.removeRemote"
+  },
+  {
+    "command": "git.rename"
+  },
+  {
+    "command": "git.renameBranch"
+  },
+  {
+    "command": "git.reopenClosedRepositories"
+  },
+  {
+    "command": "git.restoreCommitTemplate"
+  },
+  {
+    "command": "git.revealFileInOS.linux"
+  },
+  {
+    "command": "git.revealFileInOS.mac"
+  },
+  {
+    "command": "git.revealFileInOS.windows"
+  },
+  {
+    "command": "git.revealInExplorer"
+  },
+  {
+    "command": "git.revertChange"
+  },
+  {
+    "command": "git.runGitMerge"
+  },
+  {
+    "command": "git.runGitMergeDiff3"
+  },
+  {
+    "command": "git.showOutput"
+  },
+  {
+    "command": "git.stage"
+  },
+  {
+    "command": "git.stageAll"
+  },
+  {
+    "command": "git.stageAllMerge"
+  },
+  {
+    "command": "git.stageAllTracked"
+  },
+  {
+    "command": "git.stageAllUntracked"
+  },
+  {
+    "command": "git.stageChange"
+  },
+  {
+    "command": "git.stageFile"
+  },
+  {
+    "command": "git.stash"
+  },
+  {
+    "command": "git.stashApply"
+  },
+  {
+    "command": "git.stashApplyEditor"
+  },
+  {
+    "command": "git.stashApplyLatest"
+  },
+  {
+    "command": "git.stashDrop"
+  },
+  {
+    "command": "git.stashDropAll"
+  },
+  {
+    "command": "git.stashDropEditor"
+  },
+  {
+    "command": "git.stashIncludeUntracked"
+  },
+  {
+    "command": "git.stashPop"
+  },
+  {
+    "command": "git.stashPopEditor"
+  },
+  {
+    "command": "git.stashPopLatest"
+  },
+  {
+    "command": "git.stashStaged"
+  },
+  {
+    "command": "git.stashView"
+  },
+  {
+    "command": "git.sync"
+  },
+  {
+    "command": "git.syncRebase"
+  },
+  {
+    "command": "git.timeline.compareWithSelected"
+  },
+  {
+    "command": "git.timeline.copyCommitId"
+  },
+  {
+    "command": "git.timeline.copyCommitMessage"
+  },
+  {
+    "command": "git.timeline.openDiff"
+  },
+  {
+    "command": "git.timeline.selectForCompare"
+  },
+  {
+    "command": "git.timeline.viewCommit"
+  },
+  {
+    "command": "git.undoCommit"
+  },
+  {
+    "command": "git.unstage"
+  },
+  {
+    "command": "git.unstageAll"
+  },
+  {
+    "command": "git.unstageFile"
+  },
+  {
+    "command": "git.viewAllChanges"
+  },
+  {
+    "command": "git.viewChanges"
+  },
+  {
+    "command": "git.viewCommit"
+  },
+  {
+    "command": "git.viewStagedChanges"
+  },
+  {
+    "command": "git.viewUntrackedChanges"
+  },
+  {
+    "command": "github.copilot.chat.attachFile"
+  },
+  {
+    "command": "github.copilot.chat.attachSelection"
+  },
+  {
+    "command": "github.copilot.chat.explain"
+  },
+  {
+    "command": "github.copilot.chat.explain.palette"
+  },
+  {
+    "command": "github.copilot.chat.selectKnowledgeBase"
+  },
+  {
+    "command": "github.copilot.collectDiagnostics"
+  },
+  {
+    "command": "github.copilot.createFile"
+  },
+  {
+    "command": "github.copilot.createLaunchJsonFileWithContents"
+  },
+  {
+    "command": "github.copilot.createProject"
+  },
+  {
+    "command": "github.copilot.debug.collectDiagnostics"
+  },
+  {
+    "command": "github.copilot.debug.generateConfiguration"
+  },
+  {
+    "command": "github.copilot.debug.generateSTest"
+  },
+  {
+    "command": "github.copilot.debug.workbenchState"
+  },
+  {
+    "command": "github.copilot.devcontainer.generateDevContainerConfig"
+  },
+  {
+    "command": "github.copilot.executeSearch"
+  },
+  {
+    "command": "github.copilot.ghpr.applySuggestion"
+  },
+  {
+    "command": "github.copilot.git.generateCommitMessage"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.fix"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.generate"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.generateDocs"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.generateTests"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.review"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.review.apply"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.review.applyAndNext"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.review.applyShort"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.review.changes"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.review.continueInChat"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.review.continueInInlineChat"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.review.current"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.review.discard"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.review.discardAll"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.review.discardAndNext"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.review.discardShort"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.review.markHelpful"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.review.markUnhelpful"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.review.next"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.review.previous"
+  },
+  {
+    "command": "github.copilot.interactiveEditor.review.stagedChanges"
+  },
+  {
+    "command": "github.copilot.interactiveSession.feedback"
+  },
+  {
+    "command": "github.copilot.offline"
+  },
+  {
+    "command": "github.copilot.open.walkthrough"
+  },
+  {
+    "command": "github.copilot.openDocs"
+  },
+  {
+    "command": "github.copilot.openFile"
+  },
+  {
+    "command": "github.copilot.openLogs"
+  },
+  {
+    "command": "github.copilot.sendFeedback"
+  },
+  {
+    "command": "github.copilot.signIn"
+  },
+  {
+    "command": "github.copilot.startDebugging"
+  },
+  {
+    "command": "github.copilot.terminal.explainTerminalLastCommand"
+  },
+  {
+    "command": "github.copilot.terminal.explainTerminalSelection"
+  },
+  {
+    "command": "github.copilot.terminal.explainTerminalSelectionContextMenu"
+  },
+  {
+    "command": "github.copilot.terminal.fixTerminalLastCommand"
+  },
+  {
+    "command": "github.copilot.terminal.generateCommitMessage"
+  },
+  {
+    "command": "github.copilot.tests.applyMutations"
+  },
+  {
+    "command": "github.copilot.tests.fixTestFailure"
+  },
+  {
+    "command": "github.copilot.tests.fixTestFailure.applyAndRerun"
+  },
+  {
+    "command": "github.copilot.toggleCopilot"
+  },
+  {
+    "command": "github.copilot.toggleStatusMenu"
+  },
+  {
+    "command": "github.copilotChat.signIn"
+  },
+  {
+    "command": "github.copilotChat.signInChoose"
+  },
+  {
+    "command": "github.copilotChat.signInGHE"
+  },
+  {
+    "command": "github.copyVscodeDevLink"
+  },
+  {
+    "command": "github.copyVscodeDevLinkFile"
+  },
+  {
+    "command": "github.copyVscodeDevLinkWithoutRange"
+  },
+  {
+    "command": "github.openOnVscodeDev"
+  },
+  {
+    "command": "github.publish"
+  },
+  {
+    "command": "goToNextReferenceFromEmbeddedEditor"
+  },
+  {
+    "command": "goToPreviousReferenceFromEmbeddedEditor"
+  },
+  {
+    "command": "hideCustomTitleBar"
+  },
+  {
+    "command": "hideCustomTitleBarInFullScreen"
+  },
+  {
+    "command": "imagePreview.copyImage"
+  },
+  {
+    "command": "imagePreview.zoomIn"
+  },
+  {
+    "command": "imagePreview.zoomOut"
+  },
+  {
+    "command": "inlayHints.startReadingLineWithHint"
+  },
+  {
+    "command": "inlineChat.configure"
+  },
+  {
+    "command": "inlineChat.toggleDiff"
+  },
+  {
+    "command": "interactive.input.clear"
+  },
+  {
+    "command": "interactiveEditor.start"
+  },
+  {
+    "command": "io.orta.jest.disable-auto-focus"
+  },
+  {
+    "command": "io.orta.jest.editor.workspace.run-all-tests"
+  },
+  {
+    "command": "io.orta.jest.editor.workspace.toggle-coverage"
+  },
+  {
+    "command": "io.orta.jest.run-all-tests"
+  },
+  {
+    "command": "io.orta.jest.save-output-config"
+  },
+  {
+    "command": "io.orta.jest.setup-extension"
+  },
+  {
+    "command": "io.orta.jest.start"
+  },
+  {
+    "command": "io.orta.jest.stop"
+  },
+  {
+    "command": "io.orta.jest.test-item.reveal-output"
+  },
+  {
+    "command": "io.orta.jest.test-item.run-mode.change"
+  },
+  {
+    "command": "io.orta.jest.test-item.update-snapshot"
+  },
+  {
+    "command": "io.orta.jest.test-item.view-snapshot"
+  },
+  {
+    "command": "io.orta.jest.toggle-coverage"
+  },
+  {
+    "command": "io.orta.jest.workspace.run-all-tests"
+  },
+  {
+    "command": "io.orta.jest.workspace.save-run-mode"
+  },
+  {
+    "command": "io.orta.jest.workspace.start"
+  },
+  {
+    "command": "io.orta.jest.workspace.stop"
+  },
+  {
+    "command": "io.orta.jest.workspace.toggle-coverage"
+  },
+  {
+    "command": "ipynb.cleanInvalidImageAttachment"
+  },
+  {
+    "command": "ipynb.newUntitledIpynb"
+  },
+  {
+    "command": "ipynb.openIpynbInNotebookEditor"
+  },
+  {
+    "command": "javascript.goToProjectConfig"
+  },
+  {
+    "command": "javascript.reloadProjects"
+  },
+  {
+    "command": "javascript.removeUnusedImports"
+  },
+  {
+    "command": "javascript.sortImports"
+  },
+  {
+    "command": "js.projectStatus.command"
+  },
+  {
+    "command": "jsBrowserBreakpoints.focus"
+  },
+  {
+    "command": "jsBrowserBreakpoints.resetViewLocation"
+  },
+  {
+    "command": "jsDebugNetworkTree.focus"
+  },
+  {
+    "command": "jsDebugNetworkTree.resetViewLocation"
+  },
+  {
+    "command": "jsExcludedCallers.focus"
+  },
+  {
+    "command": "jsExcludedCallers.resetViewLocation"
+  },
+  {
+    "command": "json.clearCache"
+  },
+  {
+    "command": "json.sort"
+  },
+  {
+    "command": "keybindings.editor.clearSearchHistory"
+  },
+  {
+    "command": "keybindings.editor.copyCommandKeybindingEntry"
+  },
+  {
+    "command": "keybindings.editor.copyCommandTitle"
+  },
+  {
+    "command": "keybindings.editor.resetKeybinding"
+  },
+  {
+    "command": "keybindings.editor.showConflicts"
+  },
+  {
+    "command": "keybindings.editor.showDefaultKeybindings"
+  },
+  {
+    "command": "keybindings.editor.showExtensionKeybindings"
+  },
+  {
+    "command": "keybindings.editor.showUserKeybindings"
+  },
+  {
+    "command": "keywordActivation.status.command"
+  },
+  {
+    "command": "lastCursorLineSelect"
+  },
+  {
+    "command": "lastCursorLineSelectDrag"
+  },
+  {
+    "command": "lastCursorWordSelect"
+  },
+  {
+    "command": "layoutEditorGroups"
+  },
+  {
+    "command": "lineBreakInsert"
+  },
+  {
+    "command": "list.collapseAllToFocus"
+  },
+  {
+    "command": "list.focusParent"
+  },
+  {
+    "command": "list.resizeColumn"
+  },
+  {
+    "command": "list.scrollLeft"
+  },
+  {
+    "command": "list.scrollRight"
+  },
+  {
+    "command": "list.selectAndPreserveFocus"
+  },
+  {
+    "command": "list.toggleFilterOnType"
+  },
+  {
+    "command": "list.toggleFindMatchType"
+  },
+  {
+    "command": "list.toggleFindMode"
+  },
+  {
+    "command": "list.toggleKeyboardNavigation"
+  },
+  {
+    "command": "list.triggerTypeNavigation"
+  },
+  {
+    "command": "loadedScripts.collapse"
+  },
+  {
+    "command": "markdown.editor.insertImageFromWorkspace"
+  },
+  {
+    "command": "markdown.editor.insertLinkFromWorkspace"
+  },
+  {
+    "command": "markdown.findAllFileReferences"
+  },
+  {
+    "command": "markdown.preview.refresh"
+  },
+  {
+    "command": "markdown.preview.toggleLock"
+  },
+  {
+    "command": "markdown.showLockedPreviewToSide"
+  },
+  {
+    "command": "markdown.showPreviewSecuritySelector"
+  },
+  {
+    "command": "markdown.showSource"
+  },
+  {
+    "command": "menu.resetHiddenStates"
+  },
+  {
+    "command": "merge-conflict.accept.all-both"
+  },
+  {
+    "command": "merge-conflict.accept.all-current"
+  },
+  {
+    "command": "merge-conflict.accept.all-incoming"
+  },
+  {
+    "command": "merge-conflict.accept.both"
+  },
+  {
+    "command": "merge-conflict.accept.current"
+  },
+  {
+    "command": "merge-conflict.accept.incoming"
+  },
+  {
+    "command": "merge-conflict.accept.selection"
+  },
+  {
+    "command": "merge-conflict.compare"
+  },
+  {
+    "command": "merge-conflict.next"
+  },
+  {
+    "command": "merge-conflict.previous"
+  },
+  {
+    "command": "merge.acceptAllInput1"
+  },
+  {
+    "command": "merge.acceptAllInput2"
+  },
+  {
+    "command": "merge.columnLayout"
+  },
+  {
+    "command": "merge.dev.copyContentsJson"
+  },
+  {
+    "command": "merge.dev.loadContentsFromFolder"
+  },
+  {
+    "command": "merge.dev.openContentsJson"
+  },
+  {
+    "command": "merge.dev.openSelectionInTemporaryMergeEditor"
+  },
+  {
+    "command": "merge.dev.saveContentsToFolder"
+  },
+  {
+    "command": "merge.goToNextUnhandledConflict"
+  },
+  {
+    "command": "merge.goToPreviousUnhandledConflict"
+  },
+  {
+    "command": "merge.mixedLayout"
+  },
+  {
+    "command": "merge.openBaseEditor"
+  },
+  {
+    "command": "merge.openResult"
+  },
+  {
+    "command": "merge.showBase"
+  },
+  {
+    "command": "merge.showBaseCenter"
+  },
+  {
+    "command": "merge.showBaseTop"
+  },
+  {
+    "command": "merge.showNonConflictingChanges"
+  },
+  {
+    "command": "merge.toggleActiveConflictInput1"
+  },
+  {
+    "command": "merge.toggleActiveConflictInput2"
+  },
+  {
+    "command": "mergeEditor.acceptMerge"
+  },
+  {
+    "command": "mergeEditor.compareInput1WithBase"
+  },
+  {
+    "command": "mergeEditor.compareInput2WithBase"
+  },
+  {
+    "command": "mergeEditor.resetCloseWithConflictsChoice"
+  },
+  {
+    "command": "mergeEditor.resetResultToBaseAndAutoMerge"
+  },
+  {
+    "command": "multiDiffEditor.collapseAll"
+  },
+  {
+    "command": "multiDiffEditor.expandAll"
+  },
+  {
+    "command": "multiDiffEditor.goToFile"
+  },
+  {
+    "command": "noop"
+  },
+  {
+    "command": "notebook.action.changeTabDisplaySize"
+  },
+  {
+    "command": "notebook.action.convertIndentationToSpaces"
+  },
+  {
+    "command": "notebook.action.convertIndentationToTabs"
+  },
+  {
+    "command": "notebook.action.indentUsingSpaces"
+  },
+  {
+    "command": "notebook.action.indentUsingTabs"
+  },
+  {
+    "command": "notebook.action.toggleNotebookStickyScroll"
+  },
+  {
+    "command": "notebook.cancelExecution"
+  },
+  {
+    "command": "notebook.cell.cancelExecution"
+  },
+  {
+    "command": "notebook.cell.changeLanguage"
+  },
+  {
+    "command": "notebook.cell.chat.close"
+  },
+  {
+    "command": "notebook.cell.chat.restore"
+  },
+  {
+    "command": "notebook.cell.chat.startAtTop"
+  },
+  {
+    "command": "notebook.cell.chat.stop"
+  },
+  {
+    "command": "notebook.cell.collapseAllCellInputs"
+  },
+  {
+    "command": "notebook.cell.collapseAllCellOutputs"
+  },
+  {
+    "command": "notebook.cell.executeCellAndBelow"
+  },
+  {
+    "command": "notebook.cell.executeCellsAbove"
+  },
+  {
+    "command": "notebook.cell.expandAllCellInputs"
+  },
+  {
+    "command": "notebook.cell.expandAllCellOutputs"
+  },
+  {
+    "command": "notebook.cell.insertCodeCellAtTop"
+  },
+  {
+    "command": "notebook.cell.insertMarkdownCellAbove"
+  },
+  {
+    "command": "notebook.cell.insertMarkdownCellAtTop"
+  },
+  {
+    "command": "notebook.cell.insertMarkdownCellBelow"
+  },
+  {
+    "command": "notebook.cell.joinSelected"
+  },
+  {
+    "command": "notebook.cellOuput.showEmptyOutputs"
+  },
+  {
+    "command": "notebook.cellOutput.copy"
+  },
+  {
+    "command": "notebook.cellOutput.openInTextEditor"
+  },
+  {
+    "command": "notebook.chat.selectAndInsertKernelVariable"
+  },
+  {
+    "command": "notebook.clearAllCellsOutputs"
+  },
+  {
+    "command": "notebook.clearNotebookEdtitorTypeCache"
+  },
+  {
+    "command": "notebook.clearNotebookKernelsMRUCache"
+  },
+  {
+    "command": "notebook.diff.cell.revertInput"
+  },
+  {
+    "command": "notebook.diff.cell.revertMetadata"
+  },
+  {
+    "command": "notebook.diff.cell.revertOutputs"
+  },
+  {
+    "command": "notebook.diff.cell.switchOutputRenderingStyleToText"
+  },
+  {
+    "command": "notebook.diff.cell.toggleCollapseUnchangedRegions"
+  },
+  {
+    "command": "notebook.diff.openFile"
+  },
+  {
+    "command": "notebook.diff.revertMetadata"
+  },
+  {
+    "command": "notebook.diff.showMetadata"
+  },
+  {
+    "command": "notebook.diff.showOutputs"
+  },
+  {
+    "command": "notebook.diff.switchToText"
+  },
+  {
+    "command": "notebook.diffEditor.2.cell.revertInput"
+  },
+  {
+    "command": "notebook.diffEditor.2.cell.revertMetadata"
+  },
+  {
+    "command": "notebook.diffEditor.2.cell.revertOutputs"
+  },
+  {
+    "command": "notebook.diffEditor.2.goToCell"
+  },
+  {
+    "command": "notebook.diffEditor.hideUnchangedCells"
+  },
+  {
+    "command": "notebook.diffEditor.showUnchangedCells"
+  },
+  {
+    "command": "notebook.execute"
+  },
+  {
+    "command": "notebook.inlineChat.acceptChangesAndRun"
+  },
+  {
+    "command": "notebook.inspectLayout"
+  },
+  {
+    "command": "notebook.interruptExecution"
+  },
+  {
+    "command": "notebook.outline.toggleCodeCellSymbols"
+  },
+  {
+    "command": "notebook.outline.toggleCodeCells"
+  },
+  {
+    "command": "notebook.outline.toggleShowMarkdownHeadersOnly"
+  },
+  {
+    "command": "notebook.renderAllMarkdownCells"
+  },
+  {
+    "command": "notebook.revealLastFailedCell"
+  },
+  {
+    "command": "notebook.revealRunningCell"
+  },
+  {
+    "command": "notebook.saveMimeTypeOrder"
+  },
+  {
+    "command": "notebook.section.expandSection"
+  },
+  {
+    "command": "notebook.section.foldSection"
+  },
+  {
+    "command": "notebook.section.runCells"
+  },
+  {
+    "command": "notebook.section.runSingleCell"
+  },
+  {
+    "command": "notebook.selectIndentation"
+  },
+  {
+    "command": "notebook.setProfile"
+  },
+  {
+    "command": "notebook.toggle.diff.cell.ignoreTrimWhitespace"
+  },
+  {
+    "command": "notebook.toggleCellToolbarPosition"
+  },
+  {
+    "command": "notebook.toggleCellToolbarPositionFromEditorTitle"
+  },
+  {
+    "command": "notebook.toggleLayoutTroubleshoot"
+  },
+  {
+    "command": "notebook.toggleLineNumbersFromEditorTitle"
+  },
+  {
+    "command": "notifications.clearAll"
+  },
+  {
+    "command": "notifications.focusToasts"
+  },
+  {
+    "command": "notifications.toggleDoNotDisturbMode"
+  },
+  {
+    "command": "notifications.toggleDoNotDisturbModeBySource"
+  },
+  {
+    "command": "notifications.toggleList"
+  },
+  {
+    "command": "npm-intellisense.import"
+  },
+  {
+    "command": "npm.debugScript"
+  },
+  {
+    "command": "npm.focus"
+  },
+  {
+    "command": "npm.openScript"
+  },
+  {
+    "command": "npm.packageManager"
+  },
+  {
+    "command": "npm.refresh"
+  },
+  {
+    "command": "npm.resetViewLocation"
+  },
+  {
+    "command": "npm.runInstall"
+  },
+  {
+    "command": "npm.runScript"
+  },
+  {
+    "command": "npm.runScriptFromFolder"
+  },
+  {
+    "command": "npm.runSelectedScript"
+  },
+  {
+    "command": "openEditors.closeAll"
+  },
+  {
+    "command": "openEditors.newUntitledFile"
+  },
+  {
+    "command": "openInIntegratedTerminal"
+  },
+  {
+    "command": "openInTerminal"
+  },
+  {
+    "command": "openReference"
+  },
+  {
+    "command": "opensshremotes.addNewSshHost"
+  },
+  {
+    "command": "opensshremotes.cleanCurrentRemoteServer"
+  },
+  {
+    "command": "opensshremotes.cleanDevBox"
+  },
+  {
+    "command": "opensshremotes.cleanLocalServer"
+  },
+  {
+    "command": "opensshremotes.cleanRemoteServer"
+  },
+  {
+    "command": "opensshremotes.getHelp"
+  },
+  {
+    "command": "opensshremotes.getStarted"
+  },
+  {
+    "command": "opensshremotes.openConfigFile"
+  },
+  {
+    "command": "opensshremotes.openEmptyWindow"
+  },
+  {
+    "command": "opensshremotes.openEmptyWindowInCurrentWindow"
+  },
+  {
+    "command": "opensshremotes.openEmptyWindowOnCurrentHost"
+  },
+  {
+    "command": "opensshremotes.openWebUI"
+  },
+  {
+    "command": "opensshremotes.provideFeedback"
+  },
+  {
+    "command": "opensshremotes.reportIssue"
+  },
+  {
+    "command": "opensshremotes.settings"
+  },
+  {
+    "command": "opensshremotes.showLog"
+  },
+  {
+    "command": "outline.collapse"
+  },
+  {
+    "command": "outline.expand"
+  },
+  {
+    "command": "outline.filterOnType"
+  },
+  {
+    "command": "outline.focus"
+  },
+  {
+    "command": "outline.followCursor"
+  },
+  {
+    "command": "outline.removeView"
+  },
+  {
+    "command": "outline.resetViewLocation"
+  },
+  {
+    "command": "outline.sortByKind"
+  },
+  {
+    "command": "outline.sortByName"
+  },
+  {
+    "command": "outline.sortByPosition"
+  },
+  {
+    "command": "outline.toggleVisibility"
+  },
+  {
+    "command": "paste"
+  },
+  {
+    "command": "perf.event.profiling"
+  },
+  {
+    "command": "perf.insta.printAsyncCycles"
+  },
+  {
+    "command": "perf.insta.printTraces"
+  },
+  {
+    "command": "perfview.show"
+  },
+  {
+    "command": "prettier.createConfigFile"
+  },
+  {
+    "command": "prettier.forceFormatDocument"
+  },
+  {
+    "command": "prettier.openOutput"
+  },
+  {
+    "command": "problems.action.copyMessage"
+  },
+  {
+    "command": "problems.action.copyRelatedInformationMessage"
+  },
+  {
+    "command": "problems.action.showMultilineMessage"
+  },
+  {
+    "command": "problems.action.showSinglelineMessage"
+  },
+  {
+    "command": "pylance.dumpCachedTypes"
+  },
+  {
+    "command": "pylance.dumpCodeFlowGraph"
+  },
+  {
+    "command": "pylance.dumpNodes"
+  },
+  {
+    "command": "pylance.dumpTokens"
+  },
+  {
+    "command": "pylance.dumpTypes"
+  },
+  {
+    "command": "pylance.gotoOutputChannel"
+  },
+  {
+    "command": "pylance.indexing.clearPersistedIndices"
+  },
+  {
+    "command": "pylance.learnMoreAboutImportResolution"
+  },
+  {
+    "command": "pylance.logging.start"
+  },
+  {
+    "command": "pylance.logging.stop"
+  },
+  {
+    "command": "pylance.profiling.start"
+  },
+  {
+    "command": "pylance.profiling.stop"
+  },
+  {
+    "command": "pylance.reportIssue"
+  },
+  {
+    "command": "python.analysis.restartLanguageServer"
+  },
+  {
+    "command": "python.clearCacheAndReload"
+  },
+  {
+    "command": "python.clearWorkspaceInterpreter"
+  },
+  {
+    "command": "python.configureTests"
+  },
+  {
+    "command": "python.createEnvironment"
+  },
+  {
+    "command": "python.createEnvironment-button"
+  },
+  {
+    "command": "python.createNewFile"
+  },
+  {
+    "command": "python.createTerminal"
+  },
+  {
+    "command": "python.enableSourceMapSupport"
+  },
+  {
+    "command": "python.execInDedicatedTerminal"
+  },
+  {
+    "command": "python.execInTerminal"
+  },
+  {
+    "command": "python.execInTerminal-icon"
+  },
+  {
+    "command": "python.execSelectionInDjangoShell"
+  },
+  {
+    "command": "python.installJupyter"
+  },
+  {
+    "command": "python.launchTensorBoard"
+  },
+  {
+    "command": "python.reportIssue"
+  },
+  {
+    "command": "python.setInterpreter"
+  },
+  {
+    "command": "python.startNativeREPL"
+  },
+  {
+    "command": "python.startREPL"
+  },
+  {
+    "command": "python.viewLanguageServerOutput"
+  },
+  {
+    "command": "python.viewOutput"
+  },
+  {
+    "command": "refactorPreview"
+  },
+  {
+    "command": "refactorPreview.discard"
+  },
+  {
+    "command": "refactorPreview.focus"
+  },
+  {
+    "command": "refactorPreview.groupByFile"
+  },
+  {
+    "command": "refactorPreview.groupByType"
+  },
+  {
+    "command": "refactorPreview.resetViewContainerLocation"
+  },
+  {
+    "command": "refactorPreview.resetViewLocation"
+  },
+  {
+    "command": "refactorPreview.toggleGrouping"
+  },
+  {
+    "command": "references-view.clear"
+  },
+  {
+    "command": "references-view.clearHistory"
+  },
+  {
+    "command": "references-view.copy"
+  },
+  {
+    "command": "references-view.copyAll"
+  },
+  {
+    "command": "references-view.copyPath"
+  },
+  {
+    "command": "references-view.findImplementations"
+  },
+  {
+    "command": "references-view.pickFromHistory"
+  },
+  {
+    "command": "references-view.refind"
+  },
+  {
+    "command": "references-view.refresh"
+  },
+  {
+    "command": "references-view.removeCallItem"
+  },
+  {
+    "command": "references-view.removeReferenceItem"
+  },
+  {
+    "command": "references-view.removeTypeItem"
+  },
+  {
+    "command": "references-view.showIncomingCalls"
+  },
+  {
+    "command": "references-view.showOutgoingCalls"
+  },
+  {
+    "command": "references-view.showSubtypes"
+  },
+  {
+    "command": "references-view.showSupertypes"
+  },
+  {
+    "command": "references-view.showTypeHierarchy"
+  },
+  {
+    "command": "references-view.tree.focus"
+  },
+  {
+    "command": "references-view.tree.resetViewLocation"
+  },
+  {
+    "command": "remote-containers.addExtensionToConfig"
+  },
+  {
+    "command": "remote-containers.attachToContainerInCurrentWindow"
+  },
+  {
+    "command": "remote-containers.attachToContainerInNewWindow"
+  },
+  {
+    "command": "remote-containers.attachToK8sContainer"
+  },
+  {
+    "command": "remote-containers.attachToK8sContainerFromViewlet"
+  },
+  {
+    "command": "remote-containers.attachToRunningContainer"
+  },
+  {
+    "command": "remote-containers.attachToRunningContainerFromViewlet"
+  },
+  {
+    "command": "remote-containers.checkoutPRInVolume"
+  },
+  {
+    "command": "remote-containers.cleanUpDevContainers"
+  },
+  {
+    "command": "remote-containers.cloneInVolume"
+  },
+  {
+    "command": "remote-containers.cloneInVolumeFromViewlet"
+  },
+  {
+    "command": "remote-containers.cloneRepositoryInVolumeFromViewlet"
+  },
+  {
+    "command": "remote-containers.configureContainerFeatures"
+  },
+  {
+    "command": "remote-containers.createDevContainer"
+  },
+  {
+    "command": "remote-containers.createDevContainerFile"
+  },
+  {
+    "command": "remote-containers.createDevContainerFileWithCopilot"
+  },
+  {
+    "command": "remote-containers.editDevContainerJSON"
+  },
+  {
+    "command": "remote-containers.explorerDetailsRefresh"
+  },
+  {
+    "command": "remote-containers.explorerTargetsRefresh"
+  },
+  {
+    "command": "remote-containers.explorerVolumesRefresh"
+  },
+  {
+    "command": "remote-containers.getHelp"
+  },
+  {
+    "command": "remote-containers.getStarted"
+  },
+  {
+    "command": "remote-containers.inspectDockerResource"
+  },
+  {
+    "command": "remote-containers.inspectInBasicDevContainer"
+  },
+  {
+    "command": "remote-containers.inspectVolume"
+  },
+  {
+    "command": "remote-containers.inspectVolumeFromViewlet"
+  },
+  {
+    "command": "remote-containers.installDocker"
+  },
+  {
+    "command": "remote-containers.installDockerInWSL"
+  },
+  {
+    "command": "remote-containers.installUserCLI"
+  },
+  {
+    "command": "remote-containers.labelPortAndUpdateConfig"
+  },
+  {
+    "command": "remote-containers.newContainer"
+  },
+  {
+    "command": "remote-containers.openAttachConfigByNameFile"
+  },
+  {
+    "command": "remote-containers.openAttachDevContainerFile"
+  },
+  {
+    "command": "remote-containers.openDevContainerFile"
+  },
+  {
+    "command": "remote-containers.openFolder"
+  },
+  {
+    "command": "remote-containers.openFolderInContainerInCurrentWindow"
+  },
+  {
+    "command": "remote-containers.openFolderInContainerInNewWindow"
+  },
+  {
+    "command": "remote-containers.openInformationAboutMountPerformance"
+  },
+  {
+    "command": "remote-containers.openLastLogFile"
+  },
+  {
+    "command": "remote-containers.openLogFile"
+  },
+  {
+    "command": "remote-containers.openPullRequestInVolume"
+  },
+  {
+    "command": "remote-containers.openRepositoryFromGitWithEditSession"
+  },
+  {
+    "command": "remote-containers.openRepositoryFromRemoteHubWithEditSession"
+  },
+  {
+    "command": "remote-containers.openRepositoryInUniqueVolume"
+  },
+  {
+    "command": "remote-containers.openRepositoryInVolume"
+  },
+  {
+    "command": "remote-containers.openWorkspace"
+  },
+  {
+    "command": "remote-containers.provideFeedback"
+  },
+  {
+    "command": "remote-containers.pruneVolumes"
+  },
+  {
+    "command": "remote-containers.rebuildAndReopenInContainer"
+  },
+  {
+    "command": "remote-containers.rebuildContainer"
+  },
+  {
+    "command": "remote-containers.rebuildContainerNoCache"
+  },
+  {
+    "command": "remote-containers.rebuildNoCacheAndReopenInContainer"
+  },
+  {
+    "command": "remote-containers.removeContainer"
+  },
+  {
+    "command": "remote-containers.removeRecentFolder"
+  },
+  {
+    "command": "remote-containers.removeVolume"
+  },
+  {
+    "command": "remote-containers.reopenInContainer"
+  },
+  {
+    "command": "remote-containers.reopenInSSH"
+  },
+  {
+    "command": "remote-containers.reopenInTunnel"
+  },
+  {
+    "command": "remote-containers.reopenInWSL"
+  },
+  {
+    "command": "remote-containers.reopenLocally"
+  },
+  {
+    "command": "remote-containers.reportIssue"
+  },
+  {
+    "command": "remote-containers.revealLogTerminal"
+  },
+  {
+    "command": "remote-containers.revealPostCreateTerminal"
+  },
+  {
+    "command": "remote-containers.settings"
+  },
+  {
+    "command": "remote-containers.showContainerLog"
+  },
+  {
+    "command": "remote-containers.showDetails"
+  },
+  {
+    "command": "remote-containers.showRecoveryContainerNotificationReset"
+  },
+  {
+    "command": "remote-containers.showReopenInContainerNotificationReset"
+  },
+  {
+    "command": "remote-containers.startContainer"
+  },
+  {
+    "command": "remote-containers.stopContainer"
+  },
+  {
+    "command": "remote-containers.switchContainer"
+  },
+  {
+    "command": "remote-containers.testConnection"
+  },
+  {
+    "command": "remote-containers.trySample"
+  },
+  {
+    "command": "remote-explorer.add"
+  },
+  {
+    "command": "remote-explorer.configureSsh"
+  },
+  {
+    "command": "remote-explorer.connectToFolderInCurrentWindow"
+  },
+  {
+    "command": "remote-explorer.connectToFolderInNewWindow"
+  },
+  {
+    "command": "remote-explorer.connectToRemoteInCurrentWindow"
+  },
+  {
+    "command": "remote-explorer.connectToRemoteInNewWindow"
+  },
+  {
+    "command": "remote-explorer.connectToWslUsingDistro"
+  },
+  {
+    "command": "remote-explorer.connectToWslUsingDistroInNewWindow"
+  },
+  {
+    "command": "remote-explorer.deleteFolderHistoryItem"
+  },
+  {
+    "command": "remote-explorer.refresh"
+  },
+  {
+    "command": "remote-explorer.signIntoTunnelGithub"
+  },
+  {
+    "command": "remote-explorer.signIntoTunnelMicrosoft"
+  },
+  {
+    "command": "remote-explorer.unregisterTunnel"
+  },
+  {
+    "command": "remote-tunnels.connectCurrentWindowToTunnel"
+  },
+  {
+    "command": "remote-tunnels.getStarted"
+  },
+  {
+    "command": "remote-tunnels.openOnDesktop"
+  },
+  {
+    "command": "remote-tunnels.reportIssue"
+  },
+  {
+    "command": "remote-tunnels.settings"
+  },
+  {
+    "command": "remote-tunnels.showUsageLimits"
+  },
+  {
+    "command": "remote-tunnels.signIntoTunnelWithDifferentAccount"
+  },
+  {
+    "command": "remote-wsl.connect"
+  },
+  {
+    "command": "remote-wsl.connectInNewWindow"
+  },
+  {
+    "command": "remote-wsl.connectUsingDistro"
+  },
+  {
+    "command": "remote-wsl.connectUsingDistroInNewWindow"
+  },
+  {
+    "command": "remote-wsl.explorer.addDistro"
+  },
+  {
+    "command": "remote-wsl.explorer.connectInCurrentWindow"
+  },
+  {
+    "command": "remote-wsl.explorer.connectInNewWindow"
+  },
+  {
+    "command": "remote-wsl.explorer.deleteDistro"
+  },
+  {
+    "command": "remote-wsl.explorer.openDistroInCurrentWindow"
+  },
+  {
+    "command": "remote-wsl.explorer.openDistroInNewWindow"
+  },
+  {
+    "command": "remote-wsl.explorer.refresh"
+  },
+  {
+    "command": "remote-wsl.explorer.removeFolder"
+  },
+  {
+    "command": "remote-wsl.explorer.setDefaultDistro"
+  },
+  {
+    "command": "remote-wsl.getHelp"
+  },
+  {
+    "command": "remote-wsl.getStarted"
+  },
+  {
+    "command": "remote-wsl.newWindow"
+  },
+  {
+    "command": "remote-wsl.newWindowForDistro"
+  },
+  {
+    "command": "remote-wsl.openFolder"
+  },
+  {
+    "command": "remote-wsl.provideFeedback"
+  },
+  {
+    "command": "remote-wsl.reopenFromRecommendation"
+  },
+  {
+    "command": "remote-wsl.reopenInWSL"
+  },
+  {
+    "command": "remote-wsl.reopenInWindows"
+  },
+  {
+    "command": "remote-wsl.reportIssue"
+  },
+  {
+    "command": "remote-wsl.showLog"
+  },
+  {
+    "command": "remote.tunnel.changeLocalPort"
+  },
+  {
+    "command": "remote.tunnel.closeCommandPalette"
+  },
+  {
+    "command": "remote.tunnel.copyAddressCommandPalette"
+  },
+  {
+    "command": "remote.tunnel.forwardCommandPalette"
+  },
+  {
+    "command": "remote.tunnel.forwardInline"
+  },
+  {
+    "command": "remote.tunnel.open"
+  },
+  {
+    "command": "remote.tunnel.openCommandPalette"
+  },
+  {
+    "command": "remote.tunnel.openPreview"
+  },
+  {
+    "command": "remote.tunnel.setProtocolHttp"
+  },
+  {
+    "command": "remote.tunnel.setProtocolHttps"
+  },
+  {
+    "command": "remoteTargets.focus"
+  },
+  {
+    "command": "remoteTargets.resetViewLocation"
+  },
+  {
+    "command": "removeRootFolder"
+  },
+  {
+    "command": "repl.action.copyAll"
+  },
+  {
+    "command": "replacePreviousChar"
+  },
+  {
+    "command": "resetGettingStartedProgress"
+  },
+  {
+    "command": "revealInExplorer"
+  },
+  {
+    "command": "scm.openInIntegratedTerminal"
+  },
+  {
+    "command": "scm.openInTerminal"
+  },
+  {
+    "command": "scrollEditorBottom"
+  },
+  {
+    "command": "scrollEditorTop"
+  },
+  {
+    "command": "scrollLeft"
+  },
+  {
+    "command": "scrollRight"
+  },
+  {
+    "command": "search.action.clearHistory"
+  },
+  {
+    "command": "search.action.clearSearchResults"
+  },
+  {
+    "command": "search.action.collapseSearchResults"
+  },
+  {
+    "command": "search.action.copyAll"
+  },
+  {
+    "command": "search.action.excludeFromSearch"
+  },
+  {
+    "command": "search.action.expandRecursively"
+  },
+  {
+    "command": "search.action.expandSearchResults"
+  },
+  {
+    "command": "search.action.focusFilesToExclude"
+  },
+  {
+    "command": "search.action.focusFilesToInclude"
+  },
+  {
+    "command": "search.action.focusSearchList"
+  },
+  {
+    "command": "search.action.openEditor"
+  },
+  {
+    "command": "search.action.openNewEditor"
+  },
+  {
+    "command": "search.action.openNewEditorFromView"
+  },
+  {
+    "command": "search.action.openNewEditorToSide"
+  },
+  {
+    "command": "search.action.refreshSearchResults"
+  },
+  {
+    "command": "search.action.revealInSideBar"
+  },
+  {
+    "command": "search.action.viewAsList"
+  },
+  {
+    "command": "search.action.viewAsTree"
+  },
+  {
+    "command": "selectFirstSuggestion"
+  },
+  {
+    "command": "selectForCompare"
+  },
+  {
+    "command": "selectLastSuggestion"
+  },
+  {
+    "command": "setRootFolder"
+  },
+  {
+    "command": "setSelection"
+  },
+  {
+    "command": "settings.filterByOnline"
+  },
+  {
+    "command": "settings.filterByTelemetry"
+  },
+  {
+    "command": "settings.filterUntrusted"
+  },
+  {
+    "command": "settings.switchToJSON"
+  },
+  {
+    "command": "showCustomTitleBar"
+  },
+  {
+    "command": "showEditorScreenReaderNotification"
+  },
+  {
+    "command": "signals.sounds.help"
+  },
+  {
+    "command": "simpleBrowser.show"
+  },
+  {
+    "command": "targetsContainers.focus"
+  },
+  {
+    "command": "targetsContainers.resetViewLocation"
+  },
+  {
+    "command": "targetsWsl.focus"
+  },
+  {
+    "command": "targetsWsl.resetViewLocation"
+  },
+  {
+    "command": "terminal.focus"
+  },
+  {
+    "command": "terminal.removeView"
+  },
+  {
+    "command": "terminal.resetViewContainerLocation"
+  },
+  {
+    "command": "terminal.resetViewLocation"
+  },
+  {
+    "command": "terminal.toggleVisibility"
+  },
+  {
+    "command": "testing.callStack.debug"
+  },
+  {
+    "command": "testing.callStack.run"
+  },
+  {
+    "command": "testing.cancelTestRefresh"
+  },
+  {
+    "command": "testing.clearTestResults"
+  },
+  {
+    "command": "testing.collapseAll"
+  },
+  {
+    "command": "testing.collapsePeekStack"
+  },
+  {
+    "command": "testing.configureProfile"
+  },
+  {
+    "command": "testing.continuousRunUsingForTest"
+  },
+  {
+    "command": "testing.coverage"
+  },
+  {
+    "command": "testing.coverage.close"
+  },
+  {
+    "command": "testing.coverage.uri"
+  },
+  {
+    "command": "testing.coverageFilterToTest"
+  },
+  {
+    "command": "testing.coverageFilterToTestInEditor"
+  },
+  {
+    "command": "testing.coverageSelected"
+  },
+  {
+    "command": "testing.coverageToggleToolbar"
+  },
+  {
+    "command": "testing.coverageViewChangeSorting"
+  },
+  {
+    "command": "testing.debug"
+  },
+  {
+    "command": "testing.debug.uri"
+  },
+  {
+    "command": "testing.debugSelected"
+  },
+  {
+    "command": "testing.getSelectedProfiles"
+  },
+  {
+    "command": "testing.goToRelatedCode"
+  },
+  {
+    "command": "testing.goToRelatedTest"
+  },
+  {
+    "command": "testing.hideTest"
+  },
+  {
+    "command": "testing.openCoverage"
+  },
+  {
+    "command": "testing.openMessageInEditor"
+  },
+  {
+    "command": "testing.peekRelatedCode"
+  },
+  {
+    "command": "testing.peekRelatedTest"
+  },
+  {
+    "command": "testing.run"
+  },
+  {
+    "command": "testing.run.uri"
+  },
+  {
+    "command": "testing.runSelected"
+  },
+  {
+    "command": "testing.runUsing"
+  },
+  {
+    "command": "testing.searchForTestExtension"
+  },
+  {
+    "command": "testing.selectDefaultTestProfiles"
+  },
+  {
+    "command": "testing.sortByDuration"
+  },
+  {
+    "command": "testing.sortByLocation"
+  },
+  {
+    "command": "testing.sortByStatus"
+  },
+  {
+    "command": "testing.startContinuousRun"
+  },
+  {
+    "command": "testing.stopContinuousRun"
+  },
+  {
+    "command": "testing.toggleContinuousRunForTest"
+  },
+  {
+    "command": "testing.unhideAllTests"
+  },
+  {
+    "command": "testing.unhideTest"
+  },
+  {
+    "command": "testing.viewAsList"
+  },
+  {
+    "command": "testing.viewAsTree"
+  },
+  {
+    "command": "timeline.focus"
+  },
+  {
+    "command": "timeline.removeView"
+  },
+  {
+    "command": "timeline.resetViewLocation"
+  },
+  {
+    "command": "timeline.toggleVisibility"
+  },
+  {
+    "command": "toggle.diff.ignoreTrimWhitespace"
+  },
+  {
+    "command": "toggle.diff.renderSideBySide"
+  },
+  {
+    "command": "toggle.toggleCustomTitleBar"
+  },
+  {
+    "command": "toggle.window.commandCenter"
+  },
+  {
+    "command": "toggle.window.customTitleBarVisibility"
+  },
+  {
+    "command": "toggle.window.customTitleBarVisibility.windowed"
+  },
+  {
+    "command": "toggle.workbench.editor.editorActionsLocation"
+  },
+  {
+    "command": "toggle.workbench.layoutControl.enabled"
+  },
+  {
+    "command": "tree.toggleStickyScroll"
+  },
+  {
+    "command": "tunnel-forwarding.restart"
+  },
+  {
+    "command": "tunnel-forwarding.showLog"
+  },
+  {
+    "command": "typescript.findAllFileReferences"
+  },
+  {
+    "command": "typescript.goToProjectConfig"
+  },
+  {
+    "command": "typescript.goToSourceDefinition"
+  },
+  {
+    "command": "typescript.openTsServerLog"
+  },
+  {
+    "command": "typescript.reloadProjects"
+  },
+  {
+    "command": "typescript.removeUnusedImports"
+  },
+  {
+    "command": "typescript.restartTsServer"
+  },
+  {
+    "command": "typescript.selectTypeScriptVersion"
+  },
+  {
+    "command": "typescript.sortImports"
+  },
+  {
+    "command": "typescript.tsserverRequest"
+  },
+  {
+    "command": "update.check"
+  },
+  {
+    "command": "update.checkForUpdate"
+  },
+  {
+    "command": "update.checking"
+  },
+  {
+    "command": "update.downloadNow"
+  },
+  {
+    "command": "update.downloadUpdate"
+  },
+  {
+    "command": "update.downloading"
+  },
+  {
+    "command": "update.install"
+  },
+  {
+    "command": "update.installUpdate"
+  },
+  {
+    "command": "update.restart"
+  },
+  {
+    "command": "update.restartToUpdate"
+  },
+  {
+    "command": "update.showCurrentReleaseNotes"
+  },
+  {
+    "command": "update.showUpdateReleaseNotes"
+  },
+  {
+    "command": "update.updating"
+  },
+  {
+    "command": "variables.collapse"
+  },
+  {
+    "command": "vscode-docker.activateRegistryProviders"
+  },
+  {
+    "command": "vscode-docker.compose.down"
+  },
+  {
+    "command": "vscode-docker.compose.restart"
+  },
+  {
+    "command": "vscode-docker.compose.up"
+  },
+  {
+    "command": "vscode-docker.compose.up.subset"
+  },
+  {
+    "command": "vscode-docker.configure"
+  },
+  {
+    "command": "vscode-docker.configureCompose"
+  },
+  {
+    "command": "vscode-docker.containers.attachShell"
+  },
+  {
+    "command": "vscode-docker.containers.browse"
+  },
+  {
+    "command": "vscode-docker.containers.composeGroup.down"
+  },
+  {
+    "command": "vscode-docker.containers.composeGroup.logs"
+  },
+  {
+    "command": "vscode-docker.containers.composeGroup.restart"
+  },
+  {
+    "command": "vscode-docker.containers.composeGroup.start"
+  },
+  {
+    "command": "vscode-docker.containers.composeGroup.stop"
+  },
+  {
+    "command": "vscode-docker.containers.configureExplorer"
+  },
+  {
+    "command": "vscode-docker.containers.downloadFile"
+  },
+  {
+    "command": "vscode-docker.containers.group.remove"
+  },
+  {
+    "command": "vscode-docker.containers.inspect"
+  },
+  {
+    "command": "vscode-docker.containers.openFile"
+  },
+  {
+    "command": "vscode-docker.containers.prune"
+  },
+  {
+    "command": "vscode-docker.containers.refresh"
+  },
+  {
+    "command": "vscode-docker.containers.remove"
+  },
+  {
+    "command": "vscode-docker.containers.restart"
+  },
+  {
+    "command": "vscode-docker.containers.select"
+  },
+  {
+    "command": "vscode-docker.containers.start"
+  },
+  {
+    "command": "vscode-docker.containers.stats"
+  },
+  {
+    "command": "vscode-docker.containers.stop"
+  },
+  {
+    "command": "vscode-docker.containers.viewLogs"
+  },
+  {
+    "command": "vscode-docker.contexts.configureExplorer"
+  },
+  {
+    "command": "vscode-docker.contexts.help"
+  },
+  {
+    "command": "vscode-docker.contexts.inspect"
+  },
+  {
+    "command": "vscode-docker.contexts.refresh"
+  },
+  {
+    "command": "vscode-docker.contexts.remove"
+  },
+  {
+    "command": "vscode-docker.contexts.use"
+  },
+  {
+    "command": "vscode-docker.debugging.initializeForDebugging"
+  },
+  {
+    "command": "vscode-docker.help"
+  },
+  {
+    "command": "vscode-docker.help.openWalkthrough"
+  },
+  {
+    "command": "vscode-docker.help.reportIssue"
+  },
+  {
+    "command": "vscode-docker.images.build"
+  },
+  {
+    "command": "vscode-docker.images.configureExplorer"
+  },
+  {
+    "command": "vscode-docker.images.copyFullTag"
+  },
+  {
+    "command": "vscode-docker.images.group.remove"
+  },
+  {
+    "command": "vscode-docker.images.hideDangling"
+  },
+  {
+    "command": "vscode-docker.images.inspect"
+  },
+  {
+    "command": "vscode-docker.images.prune"
+  },
+  {
+    "command": "vscode-docker.images.pull"
+  },
+  {
+    "command": "vscode-docker.images.push"
+  },
+  {
+    "command": "vscode-docker.images.refresh"
+  },
+  {
+    "command": "vscode-docker.images.remove"
+  },
+  {
+    "command": "vscode-docker.images.run"
+  },
+  {
+    "command": "vscode-docker.images.runAzureCli"
+  },
+  {
+    "command": "vscode-docker.images.runInteractive"
+  },
+  {
+    "command": "vscode-docker.images.showDangling"
+  },
+  {
+    "command": "vscode-docker.images.tag"
+  },
+  {
+    "command": "vscode-docker.networks.configureExplorer"
+  },
+  {
+    "command": "vscode-docker.networks.create"
+  },
+  {
+    "command": "vscode-docker.networks.inspect"
+  },
+  {
+    "command": "vscode-docker.networks.prune"
+  },
+  {
+    "command": "vscode-docker.networks.refresh"
+  },
+  {
+    "command": "vscode-docker.networks.remove"
+  },
+  {
+    "command": "vscode-docker.openDockerDownloadPage"
+  },
+  {
+    "command": "vscode-docker.pruneSystem"
+  },
+  {
+    "command": "vscode-docker.registries.azure.buildImage"
+  },
+  {
+    "command": "vscode-docker.registries.azure.createRegistry"
+  },
+  {
+    "command": "vscode-docker.registries.azure.deleteRegistry"
+  },
+  {
+    "command": "vscode-docker.registries.azure.deleteRepository"
+  },
+  {
+    "command": "vscode-docker.registries.azure.openInPortal"
+  },
+  {
+    "command": "vscode-docker.registries.azure.untagImage"
+  },
+  {
+    "command": "vscode-docker.registries.azure.viewProperties"
+  },
+  {
+    "command": "vscode-docker.registries.connectRegistry"
+  },
+  {
+    "command": "vscode-docker.registries.copyImageDigest"
+  },
+  {
+    "command": "vscode-docker.registries.copyRemoteFullTag"
+  },
+  {
+    "command": "vscode-docker.registries.deleteImage"
+  },
+  {
+    "command": "vscode-docker.registries.deployImageToAca"
+  },
+  {
+    "command": "vscode-docker.registries.deployImageToAzure"
+  },
+  {
+    "command": "vscode-docker.registries.disconnectRegistry"
+  },
+  {
+    "command": "vscode-docker.registries.dockerHub.openInBrowser"
+  },
+  {
+    "command": "vscode-docker.registries.genericV2.addTrackedRegistry"
+  },
+  {
+    "command": "vscode-docker.registries.genericV2.removeTrackedRegistry"
+  },
+  {
+    "command": "vscode-docker.registries.help"
+  },
+  {
+    "command": "vscode-docker.registries.inspectRemoteImageManifest"
+  },
+  {
+    "command": "vscode-docker.registries.logInToDockerCli"
+  },
+  {
+    "command": "vscode-docker.registries.logOutOfDockerCli"
+  },
+  {
+    "command": "vscode-docker.registries.pullImage"
+  },
+  {
+    "command": "vscode-docker.registries.pullRepository"
+  },
+  {
+    "command": "vscode-docker.registries.reconnectRegistry"
+  },
+  {
+    "command": "vscode-docker.registries.refresh"
+  },
+  {
+    "command": "vscode-docker.views.dockerContexts.focus"
+  },
+  {
+    "command": "vscode-docker.views.dockerContexts.removeView"
+  },
+  {
+    "command": "vscode-docker.views.dockerContexts.resetViewLocation"
+  },
+  {
+    "command": "vscode-docker.views.dockerContexts.toggleVisibility"
+  },
+  {
+    "command": "vscode-docker.views.help.focus"
+  },
+  {
+    "command": "vscode-docker.views.help.removeView"
+  },
+  {
+    "command": "vscode-docker.views.help.resetViewLocation"
+  },
+  {
+    "command": "vscode-docker.views.help.toggleVisibility"
+  },
+  {
+    "command": "vscode-docker.volumes.configureExplorer"
+  },
+  {
+    "command": "vscode-docker.volumes.inspect"
+  },
+  {
+    "command": "vscode-docker.volumes.prune"
+  },
+  {
+    "command": "vscode-docker.volumes.refresh"
+  },
+  {
+    "command": "vscode-docker.volumes.remove"
+  },
+  {
+    "command": "vscode-edge-devtools-view.attach"
+  },
+  {
+    "command": "vscode-edge-devtools-view.close-instance"
+  },
+  {
+    "command": "vscode-edge-devtools-view.configureLaunchJson"
+  },
+  {
+    "command": "vscode-edge-devtools-view.copyItem"
+  },
+  {
+    "command": "vscode-edge-devtools-view.cssMirrorContent"
+  },
+  {
+    "command": "vscode-edge-devtools-view.help-links.focus"
+  },
+  {
+    "command": "vscode-edge-devtools-view.help-links.removeView"
+  },
+  {
+    "command": "vscode-edge-devtools-view.help-links.resetViewLocation"
+  },
+  {
+    "command": "vscode-edge-devtools-view.help-links.toggleVisibility"
+  },
+  {
+    "command": "vscode-edge-devtools-view.launch"
+  },
+  {
+    "command": "vscode-edge-devtools-view.launchHtml"
+  },
+  {
+    "command": "vscode-edge-devtools-view.launchProject"
+  },
+  {
+    "command": "vscode-edge-devtools-view.launchScreencast"
+  },
+  {
+    "command": "vscode-edge-devtools-view.openSettings"
+  },
+  {
+    "command": "vscode-edge-devtools-view.refresh"
+  },
+  {
+    "command": "vscode-edge-devtools-view.targets.focus"
+  },
+  {
+    "command": "vscode-edge-devtools-view.targets.removeView"
+  },
+  {
+    "command": "vscode-edge-devtools-view.targets.resetViewLocation"
+  },
+  {
+    "command": "vscode-edge-devtools-view.targets.toggleVisibility"
+  },
+  {
+    "command": "vscode-edge-devtools-view.toggleInspect"
+  },
+  {
+    "command": "vscode-edge-devtools-view.toggleScreencast"
+  },
+  {
+    "command": "vscode-edge-devtools-view.viewChangelog"
+  },
+  {
+    "command": "vscode-edge-devtools-view.viewDocumentation"
+  },
+  {
+    "command": "vscode-edge-devtools.attach"
+  },
+  {
+    "command": "vscode-edge-devtools.attachToCurrentDebugTarget"
+  },
+  {
+    "command": "vscode-edge-devtools.launch"
+  },
+  {
+    "command": "vscode-webhint/apply-code-fix"
+  },
+  {
+    "command": "vscode-webhint/edit-hintrc-project"
+  },
+  {
+    "command": "vscode-webhint/ignore-axe-rule-project"
+  },
+  {
+    "command": "vscode-webhint/ignore-browsers-project"
+  },
+  {
+    "command": "vscode-webhint/ignore-feature-project"
+  },
+  {
+    "command": "vscode-webhint/ignore-hint-project"
+  },
+  {
+    "command": "walkthroughs.selectStep"
+  },
+  {
+    "command": "watch.collapse"
+  },
+  {
+    "command": "welcome.markStepComplete"
+  },
+  {
+    "command": "welcome.markStepIncomplete"
+  },
+  {
+    "command": "welcome.showAllWalkthroughs"
+  },
+  {
+    "command": "workbench.action.acceptSelectedQuickOpenItem"
+  },
+  {
+    "command": "workbench.action.activityBarLocation.bottom"
+  },
+  {
+    "command": "workbench.action.activityBarLocation.default"
+  },
+  {
+    "command": "workbench.action.activityBarLocation.hide"
+  },
+  {
+    "command": "workbench.action.activityBarLocation.top"
+  },
+  {
+    "command": "workbench.action.addRootFolder"
+  },
+  {
+    "command": "workbench.action.alignPanelCenter"
+  },
+  {
+    "command": "workbench.action.alignPanelJustify"
+  },
+  {
+    "command": "workbench.action.alignPanelLeft"
+  },
+  {
+    "command": "workbench.action.alignPanelRight"
+  },
+  {
+    "command": "workbench.action.alternativeAcceptSelectedQuickOpenItem"
+  },
+  {
+    "command": "workbench.action.blur"
+  },
+  {
+    "command": "workbench.action.browseColorThemesInMarketplace"
+  },
+  {
+    "command": "workbench.action.chat.addDynamicVariable"
+  },
+  {
+    "command": "workbench.action.chat.addParticipant"
+  },
+  {
+    "command": "workbench.action.chat.applyAll"
+  },
+  {
+    "command": "workbench.action.chat.applyCompareEdits"
+  },
+  {
+    "command": "workbench.action.chat.assignSelectedAgent"
+  },
+  {
+    "command": "workbench.action.chat.attachFile"
+  },
+  {
+    "command": "workbench.action.chat.attachSelection"
+  },
+  {
+    "command": "workbench.action.chat.clearHistory"
+  },
+  {
+    "command": "workbench.action.chat.clearInputHistory"
+  },
+  {
+    "command": "workbench.action.chat.copyAll"
+  },
+  {
+    "command": "workbench.action.chat.copyCodeBlock"
+  },
+  {
+    "command": "workbench.action.chat.copyItem"
+  },
+  {
+    "command": "workbench.action.chat.discardCompareEdits"
+  },
+  {
+    "command": "workbench.action.chat.export"
+  },
+  {
+    "command": "workbench.action.chat.history"
+  },
+  {
+    "command": "workbench.action.chat.import"
+  },
+  {
+    "command": "workbench.action.chat.inlineVoiceChat"
+  },
+  {
+    "command": "workbench.action.chat.insertIntoNewFile"
+  },
+  {
+    "command": "workbench.action.chat.insertIntoNotebook"
+  },
+  {
+    "command": "workbench.action.chat.installProviderForVoiceChat"
+  },
+  {
+    "command": "workbench.action.chat.logInputHistory"
+  },
+  {
+    "command": "workbench.action.chat.markHelpful"
+  },
+  {
+    "command": "workbench.action.chat.markUnhelpful"
+  },
+  {
+    "command": "workbench.action.chat.openInEditor"
+  },
+  {
+    "command": "workbench.action.chat.openInNewWindow"
+  },
+  {
+    "command": "workbench.action.chat.openInSidebar"
+  },
+  {
+    "command": "workbench.action.chat.quickVoiceChat"
+  },
+  {
+    "command": "workbench.action.chat.readChatResponseAloud"
+  },
+  {
+    "command": "workbench.action.chat.reportIssueForBug"
+  },
+  {
+    "command": "workbench.action.chat.retry"
+  },
+  {
+    "command": "workbench.action.chat.selectAndInsertFile"
+  },
+  {
+    "command": "workbench.action.chat.voiceChatInChatView"
+  },
+  {
+    "command": "workbench.action.chatEditor.newChat"
+  },
+  {
+    "command": "workbench.action.clearCommandHistory"
+  },
+  {
+    "command": "workbench.action.clearEditorHistory"
+  },
+  {
+    "command": "workbench.action.clearLocalePreference"
+  },
+  {
+    "command": "workbench.action.clearRecentFiles"
+  },
+  {
+    "command": "workbench.action.closeActivePinnedEditor"
+  },
+  {
+    "command": "workbench.action.closeAuxiliaryBar"
+  },
+  {
+    "command": "workbench.action.closeEditorInAllGroups"
+  },
+  {
+    "command": "workbench.action.closeEditorsAndGroup"
+  },
+  {
+    "command": "workbench.action.closeEditorsInOtherGroups"
+  },
+  {
+    "command": "workbench.action.closeEditorsToTheLeft"
+  },
+  {
+    "command": "workbench.action.closeEditorsToTheRight"
+  },
+  {
+    "command": "workbench.action.closeOtherEditors"
+  },
+  {
+    "command": "workbench.action.closePanel"
+  },
+  {
+    "command": "workbench.action.closeSidebar"
+  },
+  {
+    "command": "workbench.action.collapseAllComments"
+  },
+  {
+    "command": "workbench.action.compareEditor.focusOtherSide"
+  },
+  {
+    "command": "workbench.action.compareEditor.focusPrimarySide"
+  },
+  {
+    "command": "workbench.action.compareEditor.focusSecondarySide"
+  },
+  {
+    "command": "workbench.action.compareEditor.swapSides"
+  },
+  {
+    "command": "workbench.action.configureEditor"
+  },
+  {
+    "command": "workbench.action.configureEditorTabs"
+  },
+  {
+    "command": "workbench.action.configureLanguageBasedSettings"
+  },
+  {
+    "command": "workbench.action.configureLocale"
+  },
+  {
+    "command": "workbench.action.configureRuntimeArguments"
+  },
+  {
+    "command": "workbench.action.continueOn.extensions"
+  },
+  {
+    "command": "workbench.action.copyEditorGroupToNewWindow"
+  },
+  {
+    "command": "workbench.action.createTerminalEditor"
+  },
+  {
+    "command": "workbench.action.createTerminalEditorSameGroup"
+  },
+  {
+    "command": "workbench.action.createTerminalEditorSide"
+  },
+  {
+    "command": "workbench.action.customizeLayout"
+  },
+  {
+    "command": "workbench.action.debug.callStackBottom"
+  },
+  {
+    "command": "workbench.action.debug.callStackDown"
+  },
+  {
+    "command": "workbench.action.debug.callStackTop"
+  },
+  {
+    "command": "workbench.action.debug.callStackUp"
+  },
+  {
+    "command": "workbench.action.debug.configure"
+  },
+  {
+    "command": "workbench.action.debug.disconnectAndSuspend"
+  },
+  {
+    "command": "workbench.action.debug.focusProcess"
+  },
+  {
+    "command": "workbench.action.debug.restartFrame"
+  },
+  {
+    "command": "workbench.action.debug.reverseContinue"
+  },
+  {
+    "command": "workbench.action.debug.selectDebugConsole"
+  },
+  {
+    "command": "workbench.action.debug.selectDebugSession"
+  },
+  {
+    "command": "workbench.action.debug.selectRepl"
+  },
+  {
+    "command": "workbench.action.debug.selectandstart"
+  },
+  {
+    "command": "workbench.action.debug.showLoadedScripts"
+  },
+  {
+    "command": "workbench.action.debug.stepBack"
+  },
+  {
+    "command": "workbench.action.debug.terminateThread"
+  },
+  {
+    "command": "workbench.action.decreaseViewHeight"
+  },
+  {
+    "command": "workbench.action.decreaseViewSize"
+  },
+  {
+    "command": "workbench.action.decreaseViewWidth"
+  },
+  {
+    "command": "workbench.action.download"
+  },
+  {
+    "command": "workbench.action.duplicateActiveEditorGroupDown"
+  },
+  {
+    "command": "workbench.action.duplicateActiveEditorGroupLeft"
+  },
+  {
+    "command": "workbench.action.duplicateActiveEditorGroupRight"
+  },
+  {
+    "command": "workbench.action.duplicateActiveEditorGroupUp"
+  },
+  {
+    "command": "workbench.action.duplicateWorkspaceInNewWindow"
+  },
+  {
+    "command": "workbench.action.editor.changeEOL"
+  },
+  {
+    "command": "workbench.action.editor.changeEncoding"
+  },
+  {
+    "command": "workbench.action.editorActionsDefault"
+  },
+  {
+    "command": "workbench.action.editorActionsTitleBar"
+  },
+  {
+    "command": "workbench.action.editorLayoutSingle"
+  },
+  {
+    "command": "workbench.action.editorLayoutThreeColumns"
+  },
+  {
+    "command": "workbench.action.editorLayoutThreeRows"
+  },
+  {
+    "command": "workbench.action.editorLayoutTwoByTwoGrid"
+  },
+  {
+    "command": "workbench.action.editorLayoutTwoColumns"
+  },
+  {
+    "command": "workbench.action.editorLayoutTwoColumnsBottom"
+  },
+  {
+    "command": "workbench.action.editorLayoutTwoRows"
+  },
+  {
+    "command": "workbench.action.editorLayoutTwoRowsRight"
+  },
+  {
+    "command": "workbench.action.evenEditorWidths"
+  },
+  {
+    "command": "workbench.action.expandAllComments"
+  },
+  {
+    "command": "workbench.action.expandUnresolvedComments"
+  },
+  {
+    "command": "workbench.action.extensionHostProfiler.stop"
+  },
+  {
+    "command": "workbench.action.files.newFile"
+  },
+  {
+    "command": "workbench.action.files.openFileFolderInNewWindow"
+  },
+  {
+    "command": "workbench.action.files.openFileInNewWindow"
+  },
+  {
+    "command": "workbench.action.files.openFolderInNewWindow"
+  },
+  {
+    "command": "workbench.action.files.resetActiveEditorReadonlyInSession"
+  },
+  {
+    "command": "workbench.action.files.revert"
+  },
+  {
+    "command": "workbench.action.files.saveAll"
+  },
+  {
+    "command": "workbench.action.files.saveFiles"
+  },
+  {
+    "command": "workbench.action.files.setActiveEditorReadonlyInSession"
+  },
+  {
+    "command": "workbench.action.files.setActiveEditorWriteableInSession"
+  },
+  {
+    "command": "workbench.action.files.showOpenedFileInNewWindow"
+  },
+  {
+    "command": "workbench.action.files.toggleActiveEditorReadonlyInSession"
+  },
+  {
+    "command": "workbench.action.firstEditorInGroup"
+  },
+  {
+    "command": "workbench.action.focusAboveGroupWithoutWrap"
+  },
+  {
+    "command": "workbench.action.focusActiveEditorGroup"
+  },
+  {
+    "command": "workbench.action.focusActivityBar"
+  },
+  {
+    "command": "workbench.action.focusAuxiliaryBar"
+  },
+  {
+    "command": "workbench.action.focusBanner"
+  },
+  {
+    "command": "workbench.action.focusBelowGroupWithoutWrap"
+  },
+  {
+    "command": "workbench.action.focusCommentOnCurrentLine"
+  },
+  {
+    "command": "workbench.action.focusCommentsPanel"
+  },
+  {
+    "command": "workbench.action.focusFirstSideEditor"
+  },
+  {
+    "command": "workbench.action.focusLastEditorGroup"
+  },
+  {
+    "command": "workbench.action.focusLeftGroupWithoutWrap"
+  },
+  {
+    "command": "workbench.action.focusNextGroup"
+  },
+  {
+    "command": "workbench.action.focusOtherSideEditor"
+  },
+  {
+    "command": "workbench.action.focusPanel"
+  },
+  {
+    "command": "workbench.action.focusPreviousGroup"
+  },
+  {
+    "command": "workbench.action.focusQuickOpen"
+  },
+  {
+    "command": "workbench.action.focusRightGroupWithoutWrap"
+  },
+  {
+    "command": "workbench.action.focusSecondSideEditor"
+  },
+  {
+    "command": "workbench.action.focusStatusBar"
+  },
+  {
+    "command": "workbench.action.focusTitleBar"
+  },
+  {
+    "command": "workbench.action.generateColorTheme"
+  },
+  {
+    "command": "workbench.action.getStartedWithAccessibilityFeatures"
+  },
+  {
+    "command": "workbench.action.hideEditorActions"
+  },
+  {
+    "command": "workbench.action.hideEditorTabs"
+  },
+  {
+    "command": "workbench.action.holdLockedScrolling"
+  },
+  {
+    "command": "workbench.action.increaseViewHeight"
+  },
+  {
+    "command": "workbench.action.increaseViewSize"
+  },
+  {
+    "command": "workbench.action.increaseViewWidth"
+  },
+  {
+    "command": "workbench.action.inspectContextKeys"
+  },
+  {
+    "command": "workbench.action.inspectKeyMappings"
+  },
+  {
+    "command": "workbench.action.inspectKeyMappingsJSON"
+  },
+  {
+    "command": "workbench.action.joinAllGroups"
+  },
+  {
+    "command": "workbench.action.joinTwoGroups"
+  },
+  {
+    "command": "workbench.action.localHistory.compareWithFile"
+  },
+  {
+    "command": "workbench.action.localHistory.compareWithPrevious"
+  },
+  {
+    "command": "workbench.action.localHistory.compareWithSelected"
+  },
+  {
+    "command": "workbench.action.localHistory.create"
+  },
+  {
+    "command": "workbench.action.localHistory.delete"
+  },
+  {
+    "command": "workbench.action.localHistory.deleteAll"
+  },
+  {
+    "command": "workbench.action.localHistory.open"
+  },
+  {
+    "command": "workbench.action.localHistory.rename"
+  },
+  {
+    "command": "workbench.action.localHistory.restore"
+  },
+  {
+    "command": "workbench.action.localHistory.restoreViaEditor"
+  },
+  {
+    "command": "workbench.action.localHistory.restoreViaPicker"
+  },
+  {
+    "command": "workbench.action.localHistory.revealInOS"
+  },
+  {
+    "command": "workbench.action.localHistory.selectForCompare"
+  },
+  {
+    "command": "workbench.action.lockEditorGroup"
+  },
+  {
+    "command": "workbench.action.logStorage"
+  },
+  {
+    "command": "workbench.action.logWorkingCopies"
+  },
+  {
+    "command": "workbench.action.manageTrustedDomain"
+  },
+  {
+    "command": "workbench.action.maximizeEditorHideSidebar"
+  },
+  {
+    "command": "workbench.action.minimizeOtherEditors"
+  },
+  {
+    "command": "workbench.action.minimizeOtherEditorsHideSidebar"
+  },
+  {
+    "command": "workbench.action.moveEditorGroupToNewWindow"
+  },
+  {
+    "command": "workbench.action.moveEditorToAboveGroup"
+  },
+  {
+    "command": "workbench.action.moveEditorToBelowGroup"
+  },
+  {
+    "command": "workbench.action.moveEditorToLeftGroup"
+  },
+  {
+    "command": "workbench.action.moveEditorToNewWindow"
+  },
+  {
+    "command": "workbench.action.moveEditorToRightGroup"
+  },
+  {
+    "command": "workbench.action.moveFocusedView"
+  },
+  {
+    "command": "workbench.action.movePanelToSecondarySideBar"
+  },
+  {
+    "command": "workbench.action.movePanelToSidePanel"
+  },
+  {
+    "command": "workbench.action.moveSecondarySideBarToPanel"
+  },
+  {
+    "command": "workbench.action.moveSideBarLeft"
+  },
+  {
+    "command": "workbench.action.moveSideBarRight"
+  },
+  {
+    "command": "workbench.action.moveSidePanelToPanel"
+  },
+  {
+    "command": "workbench.action.moveView"
+  },
+  {
+    "command": "workbench.action.navigateBackInEditLocations"
+  },
+  {
+    "command": "workbench.action.navigateBackInNavigationLocations"
+  },
+  {
+    "command": "workbench.action.navigateDown"
+  },
+  {
+    "command": "workbench.action.navigateEditorGroups"
+  },
+  {
+    "command": "workbench.action.navigateForwardInEditLocations"
+  },
+  {
+    "command": "workbench.action.navigateForwardInNavigationLocations"
+  },
+  {
+    "command": "workbench.action.navigateLast"
+  },
+  {
+    "command": "workbench.action.navigateLeft"
+  },
+  {
+    "command": "workbench.action.navigatePreviousInEditLocations"
+  },
+  {
+    "command": "workbench.action.navigatePreviousInNavigationLocations"
+  },
+  {
+    "command": "workbench.action.navigateRight"
+  },
+  {
+    "command": "workbench.action.navigateToLastNavigationLocation"
+  },
+  {
+    "command": "workbench.action.navigateUp"
+  },
+  {
+    "command": "workbench.action.newEmptyEditorWindow"
+  },
+  {
+    "command": "workbench.action.newGroupAbove"
+  },
+  {
+    "command": "workbench.action.newGroupBelow"
+  },
+  {
+    "command": "workbench.action.newGroupLeft"
+  },
+  {
+    "command": "workbench.action.newGroupRight"
+  },
+  {
+    "command": "workbench.action.nextPanelView"
+  },
+  {
+    "command": "workbench.action.nextSideBarView"
+  },
+  {
+    "command": "workbench.action.openAccessibilitySettings"
+  },
+  {
+    "command": "workbench.action.openActiveLogOutputFile"
+  },
+  {
+    "command": "workbench.action.openActiveLogOutputFileInNewWindow"
+  },
+  {
+    "command": "workbench.action.openApplicationSettingsJson"
+  },
+  {
+    "command": "workbench.action.openChat"
+  },
+  {
+    "command": "workbench.action.openDefaultKeybindingsFile"
+  },
+  {
+    "command": "workbench.action.openDocumentationUrl"
+  },
+  {
+    "command": "workbench.action.openEditorAtIndex"
+  },
+  {
+    "command": "workbench.action.openExtensionLogsFolder"
+  },
+  {
+    "command": "workbench.action.openFolderSettings"
+  },
+  {
+    "command": "workbench.action.openFolderSettingsFile"
+  },
+  {
+    "command": "workbench.action.openGlobalKeybindingsFile"
+  },
+  {
+    "command": "workbench.action.openGlobalSettings"
+  },
+  {
+    "command": "workbench.action.openIssueReporter"
+  },
+  {
+    "command": "workbench.action.openLicenseUrl"
+  },
+  {
+    "command": "workbench.action.openLogFile"
+  },
+  {
+    "command": "workbench.action.openLogsFolder"
+  },
+  {
+    "command": "workbench.action.openNewsletterSignupUrl"
+  },
+  {
+    "command": "workbench.action.openNextRecentlyUsedEditor"
+  },
+  {
+    "command": "workbench.action.openNextRecentlyUsedEditorInGroup"
+  },
+  {
+    "command": "workbench.action.openPreviousEditorFromHistory"
+  },
+  {
+    "command": "workbench.action.openPreviousRecentlyUsedEditor"
+  },
+  {
+    "command": "workbench.action.openPreviousRecentlyUsedEditorInGroup"
+  },
+  {
+    "command": "workbench.action.openPrivacyStatementUrl"
+  },
+  {
+    "command": "workbench.action.openProcessExplorer"
+  },
+  {
+    "command": "workbench.action.openProfile.Default"
+  },
+  {
+    "command": "workbench.action.openQuickChat"
+  },
+  {
+    "command": "workbench.action.openRawDefaultSettings"
+  },
+  {
+    "command": "workbench.action.openRemoteSettings"
+  },
+  {
+    "command": "workbench.action.openRemoteSettingsFile"
+  },
+  {
+    "command": "workbench.action.openRequestFeatureUrl"
+  },
+  {
+    "command": "workbench.action.openSettings2"
+  },
+  {
+    "command": "workbench.action.openSettingsJson"
+  },
+  {
+    "command": "workbench.action.openSnippets"
+  },
+  {
+    "command": "workbench.action.openTipsAndTricksUrl"
+  },
+  {
+    "command": "workbench.action.openUserDataFolder"
+  },
+  {
+    "command": "workbench.action.openVideoTutorialsUrl"
+  },
+  {
+    "command": "workbench.action.openView"
+  },
+  {
+    "command": "workbench.action.openWalkthrough"
+  },
+  {
+    "command": "workbench.action.openWorkspace"
+  },
+  {
+    "command": "workbench.action.openWorkspaceConfigFile"
+  },
+  {
+    "command": "workbench.action.openWorkspaceFromEditor"
+  },
+  {
+    "command": "workbench.action.openWorkspaceInNewWindow"
+  },
+  {
+    "command": "workbench.action.openWorkspaceSettings"
+  },
+  {
+    "command": "workbench.action.openWorkspaceSettingsFile"
+  },
+  {
+    "command": "workbench.action.openYouTubeUrl"
+  },
+  {
+    "command": "workbench.action.output.activeOutputLogLevel.0"
+  },
+  {
+    "command": "workbench.action.output.activeOutputLogLevel.1"
+  },
+  {
+    "command": "workbench.action.output.activeOutputLogLevel.2"
+  },
+  {
+    "command": "workbench.action.output.activeOutputLogLevel.3"
+  },
+  {
+    "command": "workbench.action.output.activeOutputLogLevel.4"
+  },
+  {
+    "command": "workbench.action.output.activeOutputLogLevel.5"
+  },
+  {
+    "command": "workbench.action.output.activeOutputLogLevelDefault"
+  },
+  {
+    "command": "workbench.action.output.show.GitHub.copilot-chat.GitHub Copilot Chat"
+  },
+  {
+    "command": "workbench.action.output.show.GitHub.copilot.GitHub Copilot"
+  },
+  {
+    "command": "workbench.action.output.show.editSessions"
+  },
+  {
+    "command": "workbench.action.output.show.extension-output-esbenp.prettier-vscode-#1-Prettier"
+  },
+  {
+    "command": "workbench.action.output.show.extension-output-ms-edgedevtools.vscode-edge-devtools-#1-Microsoft Edge Tools"
+  },
+  {
+    "command": "workbench.action.output.show.extension-output-vscode.html-language-features-#1-HTML Language Server"
+  },
+  {
+    "command": "workbench.action.output.show.exthost"
+  },
+  {
+    "command": "workbench.action.output.show.main"
+  },
+  {
+    "command": "workbench.action.output.show.notebook.rendering"
+  },
+  {
+    "command": "workbench.action.output.show.ptyhost"
+  },
+  {
+    "command": "workbench.action.output.show.remoteTunnelService"
+  },
+  {
+    "command": "workbench.action.output.show.rendererLog"
+  },
+  {
+    "command": "workbench.action.output.show.sharedprocess"
+  },
+  {
+    "command": "workbench.action.output.show.tasks"
+  },
+  {
+    "command": "workbench.action.output.show.terminal"
+  },
+  {
+    "command": "workbench.action.output.show.userDataSync"
+  },
+  {
+    "command": "workbench.action.output.show.vscode.git.Git"
+  },
+  {
+    "command": "workbench.action.output.show.vscode.github-authentication.GitHub Authentication"
+  },
+  {
+    "command": "workbench.action.output.show.vscode.github.GitHub"
+  },
+  {
+    "command": "workbench.action.output.show.vscode.json-language-features.JSON Language Server"
+  },
+  {
+    "command": "workbench.action.output.show.vscode.typescript-language-features.TypeScript"
+  },
+  {
+    "command": "workbench.action.pauseSocketWriting"
+  },
+  {
+    "command": "workbench.action.populateFileFromSnippet"
+  },
+  {
+    "command": "workbench.action.positionPanelBottom"
+  },
+  {
+    "command": "workbench.action.positionPanelLeft"
+  },
+  {
+    "command": "workbench.action.positionPanelRight"
+  },
+  {
+    "command": "workbench.action.positionPanelTop"
+  },
+  {
+    "command": "workbench.action.previewColorTheme"
+  },
+  {
+    "command": "workbench.action.previousPanelView"
+  },
+  {
+    "command": "workbench.action.previousSideBarView"
+  },
+  {
+    "command": "workbench.action.problems.focus"
+  },
+  {
+    "command": "workbench.action.quickOpenLeastRecentlyUsedEditor"
+  },
+  {
+    "command": "workbench.action.quickOpenNavigateNext"
+  },
+  {
+    "command": "workbench.action.quickOpenNavigateNextInTerminalPicker"
+  },
+  {
+    "command": "workbench.action.quickOpenNavigatePrevious"
+  },
+  {
+    "command": "workbench.action.quickOpenNavigatePreviousInTerminalPicker"
+  },
+  {
+    "command": "workbench.action.quickOpenPreviousEditor"
+  },
+  {
+    "command": "workbench.action.quickOpenPreviousRecentlyUsedEditor"
+  },
+  {
+    "command": "workbench.action.quickOpenRecent"
+  },
+  {
+    "command": "workbench.action.quickOpenSelectNext"
+  },
+  {
+    "command": "workbench.action.quickOpenSelectPrevious"
+  },
+  {
+    "command": "workbench.action.quickOpenTerm"
+  },
+  {
+    "command": "workbench.action.quickOpenWithModes"
+  },
+  {
+    "command": "workbench.action.quickPickManyToggle"
+  },
+  {
+    "command": "workbench.action.quickSwitchWindow"
+  },
+  {
+    "command": "workbench.action.quickTextSearch"
+  },
+  {
+    "command": "workbench.action.quickchat.close"
+  },
+  {
+    "command": "workbench.action.quickchat.launchInlineChat"
+  },
+  {
+    "command": "workbench.action.quickchat.openInChatView"
+  },
+  {
+    "command": "workbench.action.quit"
+  },
+  {
+    "command": "workbench.action.reloadWindowWithExtensionsDisabled"
+  },
+  {
+    "command": "workbench.action.remote.close"
+  },
+  {
+    "command": "workbench.action.remote.extensions"
+  },
+  {
+    "command": "workbench.action.removeLargeStorageDatabaseEntries"
+  },
+  {
+    "command": "workbench.action.removeRootFolder"
+  },
+  {
+    "command": "workbench.action.reopenTextEditor"
+  },
+  {
+    "command": "workbench.action.reopenWithEditor"
+  },
+  {
+    "command": "workbench.action.reportPerformanceIssueUsingReporter"
+  },
+  {
+    "command": "workbench.action.resetFocusedViewLocation"
+  },
+  {
+    "command": "workbench.action.resetViewLocations"
+  },
+  {
+    "command": "workbench.action.restartExtensionHost"
+  },
+  {
+    "command": "workbench.action.restoreEditorsToMainWindow"
+  },
+  {
+    "command": "workbench.action.revertAndCloseActiveEditor"
+  },
+  {
+    "command": "workbench.action.saveWorkspaceAs"
+  },
+  {
+    "command": "workbench.action.selectIconTheme"
+  },
+  {
+    "command": "workbench.action.selectProductIconTheme"
+  },
+  {
+    "command": "workbench.action.setDefaultLogLevel"
+  },
+  {
+    "command": "workbench.action.setLogLevel"
+  },
+  {
+    "command": "workbench.action.showAboutDialog"
+  },
+  {
+    "command": "workbench.action.showAllEditorsByMostRecentlyUsed"
+  },
+  {
+    "command": "workbench.action.showEditorActions"
+  },
+  {
+    "command": "workbench.action.showEditorTab"
+  },
+  {
+    "command": "workbench.action.showEditorsInActiveGroup"
+  },
+  {
+    "command": "workbench.action.showEditorsInGroup"
+  },
+  {
+    "command": "workbench.action.showEmmetCommands"
+  },
+  {
+    "command": "workbench.action.showErrorsWarnings"
+  },
+  {
+    "command": "workbench.action.showInteractivePlayground"
+  },
+  {
+    "command": "workbench.action.showLogs"
+  },
+  {
+    "command": "workbench.action.showMultipleEditorTabs"
+  },
+  {
+    "command": "workbench.action.showOutputChannels"
+  },
+  {
+    "command": "workbench.action.showRuntimeExtensions"
+  },
+  {
+    "command": "workbench.action.showWindowLog"
+  },
+  {
+    "command": "workbench.action.splitEditorToAboveGroup"
+  },
+  {
+    "command": "workbench.action.splitEditorToBelowGroup"
+  },
+  {
+    "command": "workbench.action.splitEditorToFirstGroup"
+  },
+  {
+    "command": "workbench.action.splitEditorToLastGroup"
+  },
+  {
+    "command": "workbench.action.splitEditorToLeftGroup"
+  },
+  {
+    "command": "workbench.action.splitEditorToNextGroup"
+  },
+  {
+    "command": "workbench.action.splitEditorToPreviousGroup"
+  },
+  {
+    "command": "workbench.action.splitEditorToRightGroup"
+  },
+  {
+    "command": "workbench.action.stopTracing"
+  },
+  {
+    "command": "workbench.action.switchWindow"
+  },
+  {
+    "command": "workbench.action.tasks.configureDefaultBuildTask"
+  },
+  {
+    "command": "workbench.action.tasks.configureDefaultTestTask"
+  },
+  {
+    "command": "workbench.action.tasks.configureTaskRunner"
+  },
+  {
+    "command": "workbench.action.tasks.manageAutomaticRunning"
+  },
+  {
+    "command": "workbench.action.tasks.openUserTasks"
+  },
+  {
+    "command": "workbench.action.tasks.openWorkspaceFileTasks"
+  },
+  {
+    "command": "workbench.action.tasks.reRunTask"
+  },
+  {
+    "command": "workbench.action.tasks.restartTask"
+  },
+  {
+    "command": "workbench.action.tasks.runTask"
+  },
+  {
+    "command": "workbench.action.tasks.showLog"
+  },
+  {
+    "command": "workbench.action.tasks.showTasks"
+  },
+  {
+    "command": "workbench.action.tasks.terminate"
+  },
+  {
+    "command": "workbench.action.tasks.test"
+  },
+  {
+    "command": "workbench.action.tasks.toggleProblems"
+  },
+  {
+    "command": "workbench.action.terminal.attachToSession"
+  },
+  {
+    "command": "workbench.action.terminal.changeColor"
+  },
+  {
+    "command": "workbench.action.terminal.changeColorActiveTab"
+  },
+  {
+    "command": "workbench.action.terminal.changeIcon"
+  },
+  {
+    "command": "workbench.action.terminal.changeIconActiveTab"
+  },
+  {
+    "command": "workbench.action.terminal.chat.cancel"
+  },
+  {
+    "command": "workbench.action.terminal.chat.discard"
+  },
+  {
+    "command": "workbench.action.terminal.chat.viewInChat"
+  },
+  {
+    "command": "workbench.action.terminal.clear"
+  },
+  {
+    "command": "workbench.action.terminal.clearPreviousSessionHistory"
+  },
+  {
+    "command": "workbench.action.terminal.clearSuggestCache"
+  },
+  {
+    "command": "workbench.action.terminal.copyLastCommand"
+  },
+  {
+    "command": "workbench.action.terminal.copyLastCommandAndLastCommandOutput"
+  },
+  {
+    "command": "workbench.action.terminal.copyLastCommandOutput"
+  },
+  {
+    "command": "workbench.action.terminal.copySelectionAsHtml"
+  },
+  {
+    "command": "workbench.action.terminal.detachSession"
+  },
+  {
+    "command": "workbench.action.terminal.focusAtIndex1"
+  },
+  {
+    "command": "workbench.action.terminal.focusAtIndex2"
+  },
+  {
+    "command": "workbench.action.terminal.focusAtIndex3"
+  },
+  {
+    "command": "workbench.action.terminal.focusAtIndex4"
+  },
+  {
+    "command": "workbench.action.terminal.focusAtIndex5"
+  },
+  {
+    "command": "workbench.action.terminal.focusAtIndex6"
+  },
+  {
+    "command": "workbench.action.terminal.focusAtIndex7"
+  },
+  {
+    "command": "workbench.action.terminal.focusAtIndex8"
+  },
+  {
+    "command": "workbench.action.terminal.focusAtIndex9"
+  },
+  {
+    "command": "workbench.action.terminal.fontZoomIn"
+  },
+  {
+    "command": "workbench.action.terminal.fontZoomOut"
+  },
+  {
+    "command": "workbench.action.terminal.fontZoomReset"
+  },
+  {
+    "command": "workbench.action.terminal.join"
+  },
+  {
+    "command": "workbench.action.terminal.joinActiveTab"
+  },
+  {
+    "command": "workbench.action.terminal.kill"
+  },
+  {
+    "command": "workbench.action.terminal.killAll"
+  },
+  {
+    "command": "workbench.action.terminal.killViewOrEditor"
+  },
+  {
+    "command": "workbench.action.terminal.moveIntoNewWindow"
+  },
+  {
+    "command": "workbench.action.terminal.moveToEditor"
+  },
+  {
+    "command": "workbench.action.terminal.moveToTerminalPanel"
+  },
+  {
+    "command": "workbench.action.terminal.newInActiveWorkspace"
+  },
+  {
+    "command": "workbench.action.terminal.newWithCwd"
+  },
+  {
+    "command": "workbench.action.terminal.newWithProfile"
+  },
+  {
+    "command": "workbench.action.terminal.openFileLink"
+  },
+  {
+    "command": "workbench.action.terminal.openSettings"
+  },
+  {
+    "command": "workbench.action.terminal.openUrlLink"
+  },
+  {
+    "command": "workbench.action.terminal.recordSession"
+  },
+  {
+    "command": "workbench.action.terminal.relaunch"
+  },
+  {
+    "command": "workbench.action.terminal.rename"
+  },
+  {
+    "command": "workbench.action.terminal.renameWithArg"
+  },
+  {
+    "command": "workbench.action.terminal.resizePaneDown"
+  },
+  {
+    "command": "workbench.action.terminal.resizePaneLeft"
+  },
+  {
+    "command": "workbench.action.terminal.resizePaneRight"
+  },
+  {
+    "command": "workbench.action.terminal.resizePaneUp"
+  },
+  {
+    "command": "workbench.action.terminal.restartPtyHost"
+  },
+  {
+    "command": "workbench.action.terminal.runActiveFile"
+  },
+  {
+    "command": "workbench.action.terminal.runSelectedText"
+  },
+  {
+    "command": "workbench.action.terminal.selectAll"
+  },
+  {
+    "command": "workbench.action.terminal.selectDefaultShell"
+  },
+  {
+    "command": "workbench.action.terminal.selectToNextLine"
+  },
+  {
+    "command": "workbench.action.terminal.selectToPreviousLine"
+  },
+  {
+    "command": "workbench.action.terminal.setDimensions"
+  },
+  {
+    "command": "workbench.action.terminal.showEnvironmentContributions"
+  },
+  {
+    "command": "workbench.action.terminal.showTextureAtlas"
+  },
+  {
+    "command": "workbench.action.terminal.splitInActiveWorkspace"
+  },
+  {
+    "command": "workbench.action.terminal.switchTerminal"
+  },
+  {
+    "command": "workbench.action.terminal.toggleStickyScroll"
+  },
+  {
+    "command": "workbench.action.terminal.unsplit"
+  },
+  {
+    "command": "workbench.action.terminal.writeDataToTerminal"
+  },
+  {
+    "command": "workbench.action.toggleActivityBarVisibility"
+  },
+  {
+    "command": "workbench.action.toggleAutoSave"
+  },
+  {
+    "command": "workbench.action.toggleCenteredLayout"
+  },
+  {
+    "command": "workbench.action.toggleCommenting"
+  },
+  {
+    "command": "workbench.action.toggleConfirmBeforeClose"
+  },
+  {
+    "command": "workbench.action.toggleEditorGroupLock"
+  },
+  {
+    "command": "workbench.action.toggleEditorType"
+  },
+  {
+    "command": "workbench.action.toggleEditorVisibility"
+  },
+  {
+    "command": "workbench.action.toggleEditorWidths"
+  },
+  {
+    "command": "workbench.action.toggleKeepEditors"
+  },
+  {
+    "command": "workbench.action.toggleKeybindingsLog"
+  },
+  {
+    "command": "workbench.action.toggleLightDarkThemes"
+  },
+  {
+    "command": "workbench.action.toggleLockedScrolling"
+  },
+  {
+    "command": "workbench.action.toggleMaximizedPanel"
+  },
+  {
+    "command": "workbench.action.toggleMenuBar"
+  },
+  {
+    "command": "workbench.action.toggleMultiCursorModifier"
+  },
+  {
+    "command": "workbench.action.toggleNotebookClipboardLog"
+  },
+  {
+    "command": "workbench.action.toggleScreencastMode"
+  },
+  {
+    "command": "workbench.action.toggleSearchOnType"
+  },
+  {
+    "command": "workbench.action.toggleSeparatePinnedEditorTabs"
+  },
+  {
+    "command": "workbench.action.toggleSidebarPosition"
+  },
+  {
+    "command": "workbench.action.toggleSplitEditorInGroup"
+  },
+  {
+    "command": "workbench.action.toggleSplitEditorInGroupLayout"
+  },
+  {
+    "command": "workbench.action.toggleStatusbarVisibility"
+  },
+  {
+    "command": "workbench.action.triggerReconnect"
+  },
+  {
+    "command": "workbench.action.troubleshootIssue.start"
+  },
+  {
+    "command": "workbench.action.troubleshootIssue.stop"
+  },
+  {
+    "command": "workbench.action.unlockEditorGroup"
+  },
+  {
+    "command": "workbench.action.url.openUrl"
+  },
+  {
+    "command": "workbench.action.webview.openDeveloperTools"
+  },
+  {
+    "command": "workbench.action.webview.reloadWebviewAction"
+  },
+  {
+    "command": "workbench.action.zenHideEditorTabs"
+  },
+  {
+    "command": "workbench.action.zenShowEditorTab"
+  },
+  {
+    "command": "workbench.action.zenShowMultipleEditorTabs"
+  },
+  {
+    "command": "workbench.actions.sync.editMachineName"
+  },
+  {
+    "command": "workbench.actions.sync.loadActivity"
+  },
+  {
+    "command": "workbench.actions.sync.turnOffSyncOnMachine"
+  },
+  {
+    "command": "workbench.actions.sync.workbench.views.sync.localActivity.compareWithLocal"
+  },
+  {
+    "command": "workbench.actions.sync.workbench.views.sync.localActivity.replaceCurrent"
+  },
+  {
+    "command": "workbench.actions.sync.workbench.views.sync.localActivity.resolveResource"
+  },
+  {
+    "command": "workbench.actions.sync.workbench.views.sync.remoteActivity.compareWithLocal"
+  },
+  {
+    "command": "workbench.actions.sync.workbench.views.sync.remoteActivity.replaceCurrent"
+  },
+  {
+    "command": "workbench.actions.sync.workbench.views.sync.remoteActivity.resolveResource"
+  },
+  {
+    "command": "workbench.actions.syncData.reset"
+  },
+  {
+    "command": "workbench.actions.table.workbench.panel.markers.view.viewAsTable"
+  },
+  {
+    "command": "workbench.actions.table.workbench.panel.markers.view.viewAsTree"
+  },
+  {
+    "command": "workbench.actions.treeView.workbench.panel.markers.view.collapseAll"
+  },
+  {
+    "command": "workbench.actions.view.toggleProblems"
+  },
+  {
+    "command": "workbench.actions.workbench.panel.comments.toggleResolvedComments"
+  },
+  {
+    "command": "workbench.actions.workbench.panel.comments.toggleSortByResource"
+  },
+  {
+    "command": "workbench.actions.workbench.panel.comments.toggleSortByUpdatedAt"
+  },
+  {
+    "command": "workbench.actions.workbench.panel.comments.toggleUnResolvedComments"
+  },
+  {
+    "command": "workbench.actions.workbench.panel.markers.view.toggleActiveFile"
+  },
+  {
+    "command": "workbench.actions.workbench.panel.markers.view.toggleErrors"
+  },
+  {
+    "command": "workbench.actions.workbench.panel.markers.view.toggleExcludedFiles"
+  },
+  {
+    "command": "workbench.actions.workbench.panel.markers.view.toggleInfos"
+  },
+  {
+    "command": "workbench.actions.workbench.panel.markers.view.toggleWarnings"
+  },
+  {
+    "command": "workbench.debug.action.copyAll"
+  },
+  {
+    "command": "workbench.debug.action.focusBreakpointsView"
+  },
+  {
+    "command": "workbench.debug.action.focusCallStackView"
+  },
+  {
+    "command": "workbench.debug.action.focusRepl"
+  },
+  {
+    "command": "workbench.debug.action.focusVariablesView"
+  },
+  {
+    "command": "workbench.debug.action.focusWatchView"
+  },
+  {
+    "command": "workbench.debug.breakPointsView.resetViewLocation"
+  },
+  {
+    "command": "workbench.debug.callStackView.resetViewLocation"
+  },
+  {
+    "command": "workbench.debug.loadedScriptsView.focus"
+  },
+  {
+    "command": "workbench.debug.loadedScriptsView.resetViewLocation"
+  },
+  {
+    "command": "workbench.debug.panel.action.clearReplAction"
+  },
+  {
+    "command": "workbench.debug.variablesView.resetViewLocation"
+  },
+  {
+    "command": "workbench.debug.viewlet.action.addDataBreakpointOnAddress"
+  },
+  {
+    "command": "workbench.debug.viewlet.action.addFunctionBreakpointAction"
+  },
+  {
+    "command": "workbench.debug.viewlet.action.addWatchExpression"
+  },
+  {
+    "command": "workbench.debug.viewlet.action.copyValue"
+  },
+  {
+    "command": "workbench.debug.viewlet.action.copyWorkspaceVariableValue"
+  },
+  {
+    "command": "workbench.debug.viewlet.action.disableAllBreakpoints"
+  },
+  {
+    "command": "workbench.debug.viewlet.action.editDataBreakpointOnAddress"
+  },
+  {
+    "command": "workbench.debug.viewlet.action.enableAllBreakpoints"
+  },
+  {
+    "command": "workbench.debug.viewlet.action.reapplyBreakpointsAction"
+  },
+  {
+    "command": "workbench.debug.viewlet.action.removeAllBreakpoints"
+  },
+  {
+    "command": "workbench.debug.viewlet.action.removeAllWatchExpressions"
+  },
+  {
+    "command": "workbench.debug.viewlet.action.removeBreakpoint"
+  },
+  {
+    "command": "workbench.debug.viewlet.action.toggleBreakpointsActivatedAction"
+  },
+  {
+    "command": "workbench.debug.viewlet.action.viewMemory"
+  },
+  {
+    "command": "workbench.debug.watchExpressionsView.resetViewLocation"
+  },
+  {
+    "command": "workbench.debug.welcome.focus"
+  },
+  {
+    "command": "workbench.debug.welcome.removeView"
+  },
+  {
+    "command": "workbench.debug.welcome.resetViewLocation"
+  },
+  {
+    "command": "workbench.debug.welcome.toggleVisibility"
+  },
+  {
+    "command": "workbench.editSessions.actions.delete"
+  },
+  {
+    "command": "workbench.editSessions.actions.deleteAll"
+  },
+  {
+    "command": "workbench.editSessions.actions.resetAuth"
+  },
+  {
+    "command": "workbench.editSessions.actions.resume"
+  },
+  {
+    "command": "workbench.editSessions.actions.resumeFromSerializedPayload"
+  },
+  {
+    "command": "workbench.editSessions.actions.resumeLatest"
+  },
+  {
+    "command": "workbench.editSessions.actions.showEditSessions"
+  },
+  {
+    "command": "workbench.editSessions.actions.showOutputChannel"
+  },
+  {
+    "command": "workbench.editSessions.actions.signIn"
+  },
+  {
+    "command": "workbench.editSessions.actions.store"
+  },
+  {
+    "command": "workbench.editSessions.actions.storeCurrent"
+  },
+  {
+    "command": "workbench.explorer.emptyView.removeView"
+  },
+  {
+    "command": "workbench.explorer.emptyView.resetViewLocation"
+  },
+  {
+    "command": "workbench.explorer.emptyView.toggleVisibility"
+  },
+  {
+    "command": "workbench.explorer.fileView.focus"
+  },
+  {
+    "command": "workbench.explorer.openEditorsView.removeView"
+  },
+  {
+    "command": "workbench.explorer.openEditorsView.resetViewLocation"
+  },
+  {
+    "command": "workbench.explorer.openEditorsView.toggleVisibility"
+  },
+  {
+    "command": "workbench.extensions.action.addExtensionToWorkspaceRecommendations"
+  },
+  {
+    "command": "workbench.extensions.action.addToWorkspaceFolderIgnoredRecommendations"
+  },
+  {
+    "command": "workbench.extensions.action.addToWorkspaceFolderRecommendations"
+  },
+  {
+    "command": "workbench.extensions.action.addToWorkspaceIgnoredRecommendations"
+  },
+  {
+    "command": "workbench.extensions.action.addToWorkspaceRecommendations"
+  },
+  {
+    "command": "workbench.extensions.action.checkForUpdates"
+  },
+  {
+    "command": "workbench.extensions.action.clearExtensionsSearchResults"
+  },
+  {
+    "command": "workbench.extensions.action.clearLanguage"
+  },
+  {
+    "command": "workbench.extensions.action.configure"
+  },
+  {
+    "command": "workbench.extensions.action.configureKeybindings"
+  },
+  {
+    "command": "workbench.extensions.action.configureWorkspaceFolderRecommendedExtensions"
+  },
+  {
+    "command": "workbench.extensions.action.configureWorkspaceRecommendedExtensions"
+  },
+  {
+    "command": "workbench.extensions.action.copyExtension"
+  },
+  {
+    "command": "workbench.extensions.action.copyExtensionId"
+  },
+  {
+    "command": "workbench.extensions.action.debugExtensionHost"
+  },
+  {
+    "command": "workbench.extensions.action.disableAll"
+  },
+  {
+    "command": "workbench.extensions.action.disableAllWorkspace"
+  },
+  {
+    "command": "workbench.extensions.action.disableAutoUpdate"
+  },
+  {
+    "command": "workbench.extensions.action.enableAll"
+  },
+  {
+    "command": "workbench.extensions.action.enableAllWorkspace"
+  },
+  {
+    "command": "workbench.extensions.action.enableAutoUpdate"
+  },
+  {
+    "command": "workbench.extensions.action.extensionHostProfile"
+  },
+  {
+    "command": "workbench.extensions.action.extensionUpdates"
+  },
+  {
+    "command": "workbench.extensions.action.focusExtensionsView"
+  },
+  {
+    "command": "workbench.extensions.action.ignoreRecommendation"
+  },
+  {
+    "command": "workbench.extensions.action.install.anotherVersion"
+  },
+  {
+    "command": "workbench.extensions.action.install.specificVersion"
+  },
+  {
+    "command": "workbench.extensions.action.installAndDonotSync"
+  },
+  {
+    "command": "workbench.extensions.action.installExtensionFromLocation"
+  },
+  {
+    "command": "workbench.extensions.action.installExtensions"
+  },
+  {
+    "command": "workbench.extensions.action.installPrereleaseAndDonotSync"
+  },
+  {
+    "command": "workbench.extensions.action.installUnsigned"
+  },
+  {
+    "command": "workbench.extensions.action.installVSIX"
+  },
+  {
+    "command": "workbench.extensions.action.installWorkspaceRecommendedExtensions"
+  },
+  {
+    "command": "workbench.extensions.action.listBuiltInExtensions"
+  },
+  {
+    "command": "workbench.extensions.action.listWorkspaceUnsupportedExtensions"
+  },
+  {
+    "command": "workbench.extensions.action.manageAccountPreferences"
+  },
+  {
+    "command": "workbench.extensions.action.manageAuthorizedExtensionURIs"
+  },
+  {
+    "command": "workbench.extensions.action.openExtensionHostProfile"
+  },
+  {
+    "command": "workbench.extensions.action.openExtensionsFolder"
+  },
+  {
+    "command": "workbench.extensions.action.recentlyPublishedExtensions"
+  },
+  {
+    "command": "workbench.extensions.action.refreshExtension"
+  },
+  {
+    "command": "workbench.extensions.action.reinstall"
+  },
+  {
+    "command": "workbench.extensions.action.removeExtensionFromWorkspaceRecommendations"
+  },
+  {
+    "command": "workbench.extensions.action.saveExtensionHostProfile"
+  },
+  {
+    "command": "workbench.extensions.action.setColorTheme"
+  },
+  {
+    "command": "workbench.extensions.action.setFileIconTheme"
+  },
+  {
+    "command": "workbench.extensions.action.setProductIconTheme"
+  },
+  {
+    "command": "workbench.extensions.action.showDisabledExtensions"
+  },
+  {
+    "command": "workbench.extensions.action.showEnabledExtensions"
+  },
+  {
+    "command": "workbench.extensions.action.showExtensionsForLanguage"
+  },
+  {
+    "command": "workbench.extensions.action.showExtensionsWithIds"
+  },
+  {
+    "command": "workbench.extensions.action.showLanguageExtensions"
+  },
+  {
+    "command": "workbench.extensions.action.showPopularExtensions"
+  },
+  {
+    "command": "workbench.extensions.action.showPreReleaseVersion"
+  },
+  {
+    "command": "workbench.extensions.action.showRecommendedExtensions"
+  },
+  {
+    "command": "workbench.extensions.action.showRecommendedKeymapExtensions"
+  },
+  {
+    "command": "workbench.extensions.action.showReleasedVersion"
+  },
+  {
+    "command": "workbench.extensions.action.stopExtensionHostProfile"
+  },
+  {
+    "command": "workbench.extensions.action.switchToPreRlease"
+  },
+  {
+    "command": "workbench.extensions.action.switchToRelease"
+  },
+  {
+    "command": "workbench.extensions.action.toggleApplyToAllProfiles"
+  },
+  {
+    "command": "workbench.extensions.action.toggleAutoUpdateForExtension"
+  },
+  {
+    "command": "workbench.extensions.action.toggleAutoUpdatesForPublisher"
+  },
+  {
+    "command": "workbench.extensions.action.toggleIgnoreExtension"
+  },
+  {
+    "command": "workbench.extensions.action.undoIgnoredRecommendation"
+  },
+  {
+    "command": "workbench.extensions.action.updateAllExtensions"
+  },
+  {
+    "command": "workbench.extensions.command.installFromVSIX"
+  },
+  {
+    "command": "workbench.extensions.installMissingDependencies"
+  },
+  {
+    "command": "workbench.files.action.acceptLocalChanges"
+  },
+  {
+    "command": "workbench.files.action.collapseExplorerFolders"
+  },
+  {
+    "command": "workbench.files.action.compareFileWith"
+  },
+  {
+    "command": "workbench.files.action.compareNewUntitledTextFiles"
+  },
+  {
+    "command": "workbench.files.action.createFileFromExplorer"
+  },
+  {
+    "command": "workbench.files.action.createFolderFromExplorer"
+  },
+  {
+    "command": "workbench.files.action.focusFilesExplorer"
+  },
+  {
+    "command": "workbench.files.action.refreshFilesExplorer"
+  },
+  {
+    "command": "workbench.files.action.revertLocalChanges"
+  },
+  {
+    "command": "workbench.files.action.saveAllInGroup"
+  },
+  {
+    "command": "workbench.files.action.showActiveFileInExplorer"
+  },
+  {
+    "command": "workbench.getCodeExchangeProxyEndpoints"
+  },
+  {
+    "command": "workbench.notebook.layout.configure"
+  },
+  {
+    "command": "workbench.notebook.layout.configure.editorTitle"
+  },
+  {
+    "command": "workbench.notebook.layout.gettingStarted"
+  },
+  {
+    "command": "workbench.notebook.layout.select"
+  },
+  {
+    "command": "workbench.notebook.layout.webview.reset"
+  },
+  {
+    "command": "workbench.output.action.clearOutput"
+  },
+  {
+    "command": "workbench.output.action.switchBetweenOutputs"
+  },
+  {
+    "command": "workbench.output.action.toggleAutoScroll"
+  },
+  {
+    "command": "workbench.panel.chat.view.copilot.focus"
+  },
+  {
+    "command": "workbench.panel.chat.view.copilot.removeView"
+  },
+  {
+    "command": "workbench.panel.chat.view.copilot.resetViewLocation"
+  },
+  {
+    "command": "workbench.panel.chat.view.copilot.toggleVisibility"
+  },
+  {
+    "command": "workbench.panel.chatSidebar"
+  },
+  {
+    "command": "workbench.panel.chatSidebar.resetViewContainerLocation"
+  },
+  {
+    "command": "workbench.panel.comments"
+  },
+  {
+    "command": "workbench.panel.comments.removeView"
+  },
+  {
+    "command": "workbench.panel.comments.resetViewContainerLocation"
+  },
+  {
+    "command": "workbench.panel.comments.resetViewLocation"
+  },
+  {
+    "command": "workbench.panel.comments.toggleVisibility"
+  },
+  {
+    "command": "workbench.panel.markers.resetViewContainerLocation"
+  },
+  {
+    "command": "workbench.panel.markers.view.focus"
+  },
+  {
+    "command": "workbench.panel.markers.view.removeView"
+  },
+  {
+    "command": "workbench.panel.markers.view.resetViewLocation"
+  },
+  {
+    "command": "workbench.panel.markers.view.toggleVisibility"
+  },
+  {
+    "command": "workbench.panel.output.focus"
+  },
+  {
+    "command": "workbench.panel.output.removeView"
+  },
+  {
+    "command": "workbench.panel.output.resetViewContainerLocation"
+  },
+  {
+    "command": "workbench.panel.output.resetViewLocation"
+  },
+  {
+    "command": "workbench.panel.output.toggleVisibility"
+  },
+  {
+    "command": "workbench.panel.repl.resetViewContainerLocation"
+  },
+  {
+    "command": "workbench.panel.repl.view.focus"
+  },
+  {
+    "command": "workbench.panel.repl.view.removeView"
+  },
+  {
+    "command": "workbench.panel.repl.view.resetViewLocation"
+  },
+  {
+    "command": "workbench.panel.repl.view.toggleVisibility"
+  },
+  {
+    "command": "workbench.panel.testResults.resetViewContainerLocation"
+  },
+  {
+    "command": "workbench.panel.testResults.view.focus"
+  },
+  {
+    "command": "workbench.panel.testResults.view.resetViewLocation"
+  },
+  {
+    "command": "workbench.profiles.actions.cleanupProfiles"
+  },
+  {
+    "command": "workbench.profiles.actions.createFromCurrentProfile"
+  },
+  {
+    "command": "workbench.profiles.actions.createProfile"
+  },
+  {
+    "command": "workbench.profiles.actions.createTemporaryProfile"
+  },
+  {
+    "command": "workbench.profiles.actions.deleteProfile"
+  },
+  {
+    "command": "workbench.profiles.actions.exportProfile"
+  },
+  {
+    "command": "workbench.profiles.actions.help"
+  },
+  {
+    "command": "workbench.profiles.actions.manageProfiles"
+  },
+  {
+    "command": "workbench.profiles.actions.newWindowWithProfile"
+  },
+  {
+    "command": "workbench.profiles.actions.resetWorkspaces"
+  },
+  {
+    "command": "workbench.profiles.actions.switchProfile"
+  },
+  {
+    "command": "workbench.remoteTunnel.actions.configure"
+  },
+  {
+    "command": "workbench.remoteTunnel.actions.connecting"
+  },
+  {
+    "command": "workbench.remoteTunnel.actions.copyToClipboard"
+  },
+  {
+    "command": "workbench.remoteTunnel.actions.learnMore"
+  },
+  {
+    "command": "workbench.remoteTunnel.actions.manage"
+  },
+  {
+    "command": "workbench.remoteTunnel.actions.showLog"
+  },
+  {
+    "command": "workbench.remoteTunnel.actions.turnOff"
+  },
+  {
+    "command": "workbench.remoteTunnel.actions.turnOn"
+  },
+  {
+    "command": "workbench.scm.action.collapseAllRepositories"
+  },
+  {
+    "command": "workbench.scm.action.expandAllRepositories"
+  },
+  {
+    "command": "workbench.scm.action.focusNextInput"
+  },
+  {
+    "command": "workbench.scm.action.focusNextResourceGroup"
+  },
+  {
+    "command": "workbench.scm.action.focusPreviousInput"
+  },
+  {
+    "command": "workbench.scm.action.focusPreviousResourceGroup"
+  },
+  {
+    "command": "workbench.scm.action.graph.pickHistoryItemRefs"
+  },
+  {
+    "command": "workbench.scm.action.graph.pickRepository"
+  },
+  {
+    "command": "workbench.scm.action.graph.refresh"
+  },
+  {
+    "command": "workbench.scm.action.graph.revealCurrentHistoryItem"
+  },
+  {
+    "command": "workbench.scm.action.graph.viewChanges"
+  },
+  {
+    "command": "workbench.scm.action.repositories.setSortKey.discoveryTime"
+  },
+  {
+    "command": "workbench.scm.action.repositories.setSortKey.name"
+  },
+  {
+    "command": "workbench.scm.action.repositories.setSortKey.path"
+  },
+  {
+    "command": "workbench.scm.action.setListViewMode"
+  },
+  {
+    "command": "workbench.scm.action.setListViewModeNavigation"
+  },
+  {
+    "command": "workbench.scm.action.setSortKey.name"
+  },
+  {
+    "command": "workbench.scm.action.setSortKey.path"
+  },
+  {
+    "command": "workbench.scm.action.setSortKey.status"
+  },
+  {
+    "command": "workbench.scm.action.setTreeViewMode"
+  },
+  {
+    "command": "workbench.scm.action.setTreeViewModeNavigation"
+  },
+  {
+    "command": "workbench.scm.focus"
+  },
+  {
+    "command": "workbench.scm.history.focus"
+  },
+  {
+    "command": "workbench.scm.history.resetViewLocation"
+  },
+  {
+    "command": "workbench.scm.removeView"
+  },
+  {
+    "command": "workbench.scm.repositories.focus"
+  },
+  {
+    "command": "workbench.scm.repositories.resetViewLocation"
+  },
+  {
+    "command": "workbench.scm.resetViewLocation"
+  },
+  {
+    "command": "workbench.scm.toggleVisibility"
+  },
+  {
+    "command": "workbench.trust.configure"
+  },
+  {
+    "command": "workbench.trust.manage"
+  },
+  {
+    "command": "workbench.userData.actions.cancelTurnOn"
+  },
+  {
+    "command": "workbench.userData.actions.openSyncBackupsFolder"
+  },
+  {
+    "command": "workbench.userData.actions.signin"
+  },
+  {
+    "command": "workbench.userData.actions.turningOn"
+  },
+  {
+    "command": "workbench.userDataSync.actions.acceptMerges"
+  },
+  {
+    "command": "workbench.userDataSync.actions.configure"
+  },
+  {
+    "command": "workbench.userDataSync.actions.downloadSyncActivity"
+  },
+  {
+    "command": "workbench.userDataSync.actions.help"
+  },
+  {
+    "command": "workbench.userDataSync.actions.manage"
+  },
+  {
+    "command": "workbench.userDataSync.actions.settings"
+  },
+  {
+    "command": "workbench.userDataSync.actions.showConflicts"
+  },
+  {
+    "command": "workbench.userDataSync.actions.showLog"
+  },
+  {
+    "command": "workbench.userDataSync.actions.showSyncedData"
+  },
+  {
+    "command": "workbench.userDataSync.actions.syncNow"
+  },
+  {
+    "command": "workbench.userDataSync.actions.turnOff"
+  },
+  {
+    "command": "workbench.userDataSync.actions.turnOn"
+  },
+  {
+    "command": "workbench.view.debug.resetViewContainerLocation"
+  },
+  {
+    "command": "workbench.view.editSessions.resetViewContainerLocation"
+  },
+  {
+    "command": "workbench.view.explorer.resetViewContainerLocation"
+  },
+  {
+    "command": "workbench.view.extension.copilot-chat"
+  },
+  {
+    "command": "workbench.view.extension.copilot-chat.resetViewContainerLocation"
+  },
+  {
+    "command": "workbench.view.extension.dockerView"
+  },
+  {
+    "command": "workbench.view.extension.dockerView.resetViewContainerLocation"
+  },
+  {
+    "command": "workbench.view.extension.references-view"
+  },
+  {
+    "command": "workbench.view.extension.references-view.resetViewContainerLocation"
+  },
+  {
+    "command": "workbench.view.extension.test"
+  },
+  {
+    "command": "workbench.view.extension.test.resetViewContainerLocation"
+  },
+  {
+    "command": "workbench.view.extension.vscode-edge-devtools-view"
+  },
+  {
+    "command": "workbench.view.extension.vscode-edge-devtools-view.resetViewContainerLocation"
+  },
+  {
+    "command": "workbench.view.extensions.resetViewContainerLocation"
+  },
+  {
+    "command": "workbench.view.remote"
+  },
+  {
+    "command": "workbench.view.remote.resetViewContainerLocation"
+  },
+  {
+    "command": "workbench.view.scm.resetViewContainerLocation"
+  },
+  {
+    "command": "workbench.view.search.focus"
+  },
+  {
+    "command": "workbench.view.search.removeView"
+  },
+  {
+    "command": "workbench.view.search.resetViewContainerLocation"
+  },
+  {
+    "command": "workbench.view.search.resetViewLocation"
+  },
+  {
+    "command": "workbench.view.search.toggleVisibility"
+  },
+  {
+    "command": "workbench.view.sync"
+  },
+  {
+    "command": "workbench.view.sync.resetViewContainerLocation"
+  },
+  {
+    "command": "workbench.view.testCoverage.focus"
+  },
+  {
+    "command": "workbench.view.testCoverage.resetViewLocation"
+  },
+  {
+    "command": "workbench.view.testing.focus"
+  },
+  {
+    "command": "workbench.view.testing.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.editSessions.data.focus"
+  },
+  {
+    "command": "workbench.views.editSessions.data.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.builtinFeatureExtensions.focus"
+  },
+  {
+    "command": "workbench.views.extensions.builtinFeatureExtensions.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.builtinProgrammingLanguageExtensions.focus"
+  },
+  {
+    "command": "workbench.views.extensions.builtinProgrammingLanguageExtensions.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.builtinThemeExtensions.focus"
+  },
+  {
+    "command": "workbench.views.extensions.builtinThemeExtensions.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.deprecatedExtensions.focus"
+  },
+  {
+    "command": "workbench.views.extensions.deprecatedExtensions.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.disabled.focus"
+  },
+  {
+    "command": "workbench.views.extensions.disabled.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.enabled.focus"
+  },
+  {
+    "command": "workbench.views.extensions.enabled.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.installed.focus"
+  },
+  {
+    "command": "workbench.views.extensions.installed.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.marketplace.focus"
+  },
+  {
+    "command": "workbench.views.extensions.marketplace.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.otherRecommendations.focus"
+  },
+  {
+    "command": "workbench.views.extensions.otherRecommendations.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.popular.focus"
+  },
+  {
+    "command": "workbench.views.extensions.popular.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.searchBuiltin.focus"
+  },
+  {
+    "command": "workbench.views.extensions.searchBuiltin.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.searchDisabled.focus"
+  },
+  {
+    "command": "workbench.views.extensions.searchDisabled.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.searchEnabled.focus"
+  },
+  {
+    "command": "workbench.views.extensions.searchEnabled.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.searchInstalled.focus"
+  },
+  {
+    "command": "workbench.views.extensions.searchInstalled.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.searchOutdated.focus"
+  },
+  {
+    "command": "workbench.views.extensions.searchOutdated.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.searchRecentlyUpdated.focus"
+  },
+  {
+    "command": "workbench.views.extensions.searchRecentlyUpdated.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.searchWorkspaceUnsupported.focus"
+  },
+  {
+    "command": "workbench.views.extensions.searchWorkspaceUnsupported.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.untrustedPartiallySupportedExtensions.focus"
+  },
+  {
+    "command": "workbench.views.extensions.untrustedPartiallySupportedExtensions.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.untrustedUnsupportedExtensions.focus"
+  },
+  {
+    "command": "workbench.views.extensions.untrustedUnsupportedExtensions.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.virtualPartiallySupportedExtensions.focus"
+  },
+  {
+    "command": "workbench.views.extensions.virtualPartiallySupportedExtensions.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.virtualUnsupportedExtensions.focus"
+  },
+  {
+    "command": "workbench.views.extensions.virtualUnsupportedExtensions.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.extensions.workspaceRecommendations.focus"
+  },
+  {
+    "command": "workbench.views.extensions.workspaceRecommendations.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.sync.conflicts.focus"
+  },
+  {
+    "command": "workbench.views.sync.conflicts.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.sync.externalActivity.focus"
+  },
+  {
+    "command": "workbench.views.sync.externalActivity.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.sync.localActivity.focus"
+  },
+  {
+    "command": "workbench.views.sync.localActivity.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.sync.machines.focus"
+  },
+  {
+    "command": "workbench.views.sync.machines.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.sync.remoteActivity.focus"
+  },
+  {
+    "command": "workbench.views.sync.remoteActivity.resetViewLocation"
+  },
+  {
+    "command": "workbench.views.sync.troubleshoot.focus"
+  },
+  {
+    "command": "workbench.views.sync.troubleshoot.resetViewLocation"
+  },
+  {
+    "command": "~remote.forwardedPorts.focus"
+  },
+  {
+    "command": "~remote.forwardedPorts.removeView"
+  },
+  {
+    "command": "~remote.forwardedPorts.resetViewLocation"
+  },
+  {
+    "command": "~remote.forwardedPorts.toggleVisibility"
+  },
+  {
+    "command": "~remote.forwardedPortsContainer"
+  },
+  {
+    "command": "~remote.forwardedPortsContainer.resetViewContainerLocation"
+  }
+]
