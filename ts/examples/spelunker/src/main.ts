@@ -9,19 +9,10 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// Workspace package imports
-import { openai } from "aiclient";
-import { CodeDocumentation, createSemanticCodeIndex } from "code-processor";
-import { createObjectFolder } from "typeagent";
-
 // Local imports
-import { Chunk } from "./pythonChunker.js";
 import { importPythonFiles } from "./pythonImporter.js";
 import { runQueryInterface } from "./queryInterface.js";
-import {
-    createFakeCodeDocumenter,
-    createFileDocumenter,
-} from "./fileDocumenter.js";
+import { ChunkyIndex } from "./chunkyIndex.js";
 
 // Set __dirname to emulate old JS behavior
 const __filename = fileURLToPath(import.meta.url);
@@ -31,16 +22,32 @@ const __dirname = path.dirname(__filename);
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
 
+// Sample file to load with `-` argument
+const sampleFile = path.join(__dirname, "sample.py.txt");
+
 await main();
 
-// Usage: node main.js [file1.py] [file2.py] ...
-// OR:    node main.js --files filelist.txt
-// OR:    node main.js -  # Load sample file (sample.py.txt)
-// OR:    node main.js    # Query previously loaded files
 async function main(): Promise<void> {
-    console.log("[Hi!]");
-
     const t0 = Date.now();
+
+    // TODO: switch to whatever interactive-app does.
+    const help =
+        process.argv.includes("-h") ||
+        process.argv.includes("--help") ||
+        process.argv.includes("-?") ||
+        process.argv.includes("--?");
+    if (help) {
+        console.log(
+            "Usage:\n" +
+                "Loading modules:\n" +
+                "   node main.js file1.py [file2.py] ...  # Load files\n" +
+                "   node main.js --files filelist.txt  # Load files listed in filelist.txt\n" +
+                `   node main.js -  # Load sample file (${path.relative(process.cwd(), sampleFile)})\n` +
+                "Interactive query loop:\n" +
+                "   node main.js    # Query previously loaded files (use @search --query 'your query')\n",
+        );
+        return;
+    }
 
     const verbose =
         process.argv.includes("-v") || process.argv.includes("--verbose");
@@ -53,26 +60,8 @@ async function main(): Promise<void> {
     const files = processArgs();
 
     let homeDir = process.platform === "darwin" ? process.env.HOME || "" : "";
-    const dataRoot = homeDir + "/data";
-    const spelunkerRoot = dataRoot + "/spelunker";
-
-    const chunkFolder = await createObjectFolder<Chunk>(
-        spelunkerRoot + "/chunks",
-        { serializer: (obj) => JSON.stringify(obj, null, 2) },
-    );
-    const chatModel = openai.createChatModelDefault("spelunkerChat");
-    const fileDocumenter = createFileDocumenter(chatModel);
-    const fakeCodeDocumenter = createFakeCodeDocumenter();
-    const codeIndex = await createSemanticCodeIndex(
-        spelunkerRoot + "/index",
-        fakeCodeDocumenter,
-        undefined,
-        (obj) => JSON.stringify(obj, null, 2),
-    );
-    const summaryFolder = await createObjectFolder<CodeDocumentation>(
-        spelunkerRoot + "/summaries",
-        { serializer: (obj) => JSON.stringify(obj, null, 2) },
-    );
+    const rootDir = path.join(homeDir, "/data/spelunker");
+    const chunkyIndex = await ChunkyIndex.createInstance(rootDir);
 
     const t1 = Date.now();
     console.log(`[Initialized in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`);
@@ -82,23 +71,15 @@ async function main(): Promise<void> {
         console.log(`[Importing ${files.length} files]`);
         const t0 = Date.now();
 
-        await importPythonFiles(
-            files,
-            fileDocumenter,
-            chunkFolder,
-            codeIndex,
-            summaryFolder,
-            true,
-            verbose,
-        );
+        await importPythonFiles(files, chunkyIndex, true, verbose);
 
         const t1 = Date.now();
         console.log(
             `[Imported ${files.length} files in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
         );
+    } else {
+        await runQueryInterface(chunkyIndex, verbose);
     }
-
-    await runQueryInterface(chunkFolder, codeIndex, summaryFolder, verbose);
 }
 
 function processArgs(): string[] {
@@ -107,7 +88,6 @@ function processArgs(): string[] {
     if (process.argv.length > 2) {
         files = process.argv.slice(2);
         if (files.length === 1 && files[0] === "-") {
-            const sampleFile = path.join(__dirname, "sample.py.txt");
             files = [sampleFile];
         } else if (files.length === 2 && files[0] === "--files") {
             // Read list of files from a file.

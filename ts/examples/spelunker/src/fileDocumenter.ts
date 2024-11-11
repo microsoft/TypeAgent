@@ -1,12 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CodeBlock, CodeDocumentation, CodeDocumenter } from "code-processor";
-import { Chunk } from "./pythonChunker.js";
-import { createTypeScriptJsonValidator } from "typechat/ts";
-import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { ChatModel } from "aiclient";
+import { CodeBlock, CodeDocumenter } from "code-processor";
 import { loadSchema } from "typeagent";
+import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
+import { createTypeScriptJsonValidator } from "typechat/ts";
+
+import { CodeDocumentation } from "./codeDocSchema.js";
+import { Chunk } from "./pythonChunker.js";
 
 // For various reasons we want to index chunks separately,
 // but we want to produce their documentation in the context of the whole file.
@@ -44,8 +46,12 @@ export function createFileDocumenter(model: ChatModel): FileDocumenter {
             "The code has (non-contiguous) line numbers, e.g.: `[1]: def foo():`\n" +
             "There are also marker lines, e.g.: `***: Document the following FuncDef`\n" +
             "Write a concise paragraph for EACH marker.\n" +
-            "Also write a paragraph about the whole file.\n" +
-            "DON'T document any lines without markers!\n";
+            "For example, the comment could be:\n" +
+            "```\n" +
+            "Method C.foo finds the most twisted anagram for a word.\n" +
+            "It uses various heuristics to rank a word's twistedness'.\n" +
+            "```\n" +
+            "Also fill in the lists of keywords, topics, goals, and dependencies.\n";
         const result = await fileDocTranslator.translate(request, text);
 
         // Now assign each comment to its chunk.
@@ -53,22 +59,17 @@ export function createFileDocumenter(model: ChatModel): FileDocumenter {
             const codeDocs: CodeDocumentation = result.data;
             // Assign each comment to its chunk.
             for (const chunk of chunks) {
-                chunk.docs = {
-                    comments: [
-                        {
-                            lineNumber: chunk.blobs[0].start + 1,
-                            comment: `${chunk.treeName}`,
-                        },
-                    ],
-                };
                 for (const comment of codeDocs.comments ?? []) {
                     for (const blob of chunk.blobs) {
+                        // Reminder: blob.start is 0-based, comment.lineNumber is 1-based.
                         if (
                             !blob.breadcrumb &&
                             blob.start < comment.lineNumber &&
                             comment.lineNumber <= blob.start + blob.lines.length
                         ) {
-                            chunk.docs.comments!.push(comment);
+                            const comments = chunk?.docs?.comments ?? [];
+                            comments.push(comment);
+                            chunk.docs = { comments };
                         }
                     }
                 }

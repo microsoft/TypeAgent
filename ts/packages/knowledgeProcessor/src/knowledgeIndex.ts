@@ -94,8 +94,10 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
     getId(value: string): Promise<TTextId | undefined>;
     getIds(values: string[]): Promise<(TTextId | undefined)[]>;
     getText(id: TTextId): Promise<string | undefined>;
+    // TODO: rename put to "add"
     put(value: string, postings?: TSourceId[]): Promise<TTextId>;
     putMultiple(values: TextBlock<TSourceId>[]): Promise<TTextId[]>;
+    addSources(id: TTextId, postings: TSourceId[]): Promise<void>;
     getNearest(
         value: string,
         maxMatches?: number,
@@ -189,6 +191,7 @@ export async function createTextIndex<TSourceId = any>(
         getText,
         put,
         putMultiple,
+        addSources,
         getNearest,
         getNearestHits,
         getNearestHitsMultiple,
@@ -271,6 +274,10 @@ export async function createTextIndex<TSourceId = any>(
             ids.push(id);
         }
         return ids;
+    }
+
+    function addSources(textId: TextId, sourceIds: TSourceId[]): Promise<void> {
+        return updatePostings(textId, sourceIds);
     }
 
     async function addPostings(

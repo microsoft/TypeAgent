@@ -3,12 +3,15 @@
 
 // User interface for querying the index.
 
-import { CodeDocumentation, SemanticCodeIndex } from "code-processor";
 import * as iapp from "interactive-app";
-import { ObjectFolder, ScoredItem } from "typeagent";
-import { Chunk } from "./pythonChunker.js";
-import { wordWrap } from "./pythonImporter.js";
+import * as knowLib from "knowledge-processor";
 import path from "path";
+import { ScoredItem } from "typeagent";
+
+import { ChunkyIndex } from "./chunkyIndex.js";
+import { CodeDocumentation } from "./codeDocSchema.js";
+import { Chunk } from "./pythonChunker.js";
+import { sanitizeKey, wordWrap } from "./pythonImporter.js";
 
 type QueryOptions = {
     maxHits: number;
@@ -17,9 +20,7 @@ type QueryOptions = {
 };
 
 export async function runQueryInterface(
-    chunkFolder: ObjectFolder<Chunk>,
-    codeIndex: SemanticCodeIndex,
-    summaryFolder: ObjectFolder<CodeDocumentation>,
+    chunkyIndex: ChunkyIndex,
     verbose = false,
 ): Promise<void> {
     const handlers: Record<string, iapp.CommandHandler> = {
@@ -66,14 +67,7 @@ export async function runQueryInterface(
             minScore: namedArgs.minScore,
             verbose: namedArgs.verbose ?? verbose,
         };
-        await processQuery(
-            query,
-            chunkFolder,
-            codeIndex,
-            summaryFolder,
-            io,
-            options,
-        );
+        await processQuery(query, chunkyIndex, io, options);
     }
 
     // Define special handlers, then run the console loop.
@@ -97,26 +91,74 @@ export async function runQueryInterface(
 
 async function processQuery(
     input: string,
-    chunkFolder: ObjectFolder<Chunk>,
-    codeIndex: SemanticCodeIndex,
-    summaryFolder: ObjectFolder<CodeDocumentation>,
+    chunkyIndex: ChunkyIndex,
     io: iapp.InteractiveIo,
     options: QueryOptions,
 ): Promise<void> {
+    const key = sanitizeKey(input);
+    // TODO: Find a more type-safe way (so a typo in the index name is caught by the compiler).
+    for (const indexType of ["keywords", "topics", "goals", "dependencies"]) {
+        // TODO: Make this less pathetic (stemming, substrings etc.).
+        const index: knowLib.KeyValueIndex<string, string> = (
+            chunkyIndex as any
+        )[indexType + "Folder"];
+        if (!index) {
+            io.writer.writeLine(`No ${indexType} index.`);
+            continue;
+        }
+        const values = await index.get(key);
+        if (values?.length) {
+            io.writer.writeLine(
+                `Found ${values.length} ${indexType} ${plural("hit", values.length)}:`,
+            );
+            for (let i = 0; i < values.length; i++) {
+                const value = values[i];
+                const chunk = await chunkyIndex.chunkFolder!.get(value);
+                if (!chunk) {
+                    io.writer.writeLine(
+                        `Hit ${i + 1}: id: ${value} --> [No data]`,
+                    );
+                    continue;
+                }
+                io.writer.writeLine(
+                    `Hit ${i + 1}: ` +
+                        `id: ${chunk.id}, ` +
+                        `file: ${path.relative(process.cwd(), chunk.filename!)}, ` +
+                        `type: ${chunk.treeName}`,
+                );
+                if (chunk) {
+                    io.writer.writeLine(
+                        `    ${path.relative(process.cwd(), chunk.filename!)}`,
+                    );
+                    writeChunkLines(chunk, io, options.verbose ? 50 : 5);
+                }
+            }
+        }
+    }
     let hits: ScoredItem<string>[];
     try {
-        hits = await codeIndex.find(input, options.maxHits, options.minScore);
+        hits = await chunkyIndex.codeIndex!.find(
+            input,
+            options.maxHits,
+            options.minScore,
+        );
     } catch (error) {
         io.writer.writeLine(`[${error}]`);
         return;
     }
+    if (!hits.length) {
+        io.writer.writeLine("No hits.");
+        return;
+    }
     io.writer.writeLine(
-        `Got ${hits.length} hit${hits.length == 0 ? "s." : hits.length === 1 ? ":" : "s:"}`,
+        `Found ${hits.length} embedding ${plural("hit", hits.length)}:`,
     );
 
     for (let i = 0; i < hits.length; i++) {
         const hit = hits[i];
-        const chunk: Chunk | undefined = await chunkFolder.get(hit.item);
+        const chunk: Chunk | undefined = await chunkyIndex.chunkFolder!.get(
+            hit.item,
+        );
         if (!chunk) {
             io.writer.writeLine(`${hit} --> [No data]`);
             continue;
@@ -128,26 +170,38 @@ async function processQuery(
                 `file: ${path.relative(process.cwd(), chunk.filename!)}, ` +
                 `type: ${chunk.treeName}`,
         );
-        const summary: CodeDocumentation | undefined = await summaryFolder.get(
-            hit.item,
-        );
+        const summary: CodeDocumentation | undefined =
+            await chunkyIndex.summaryFolder!.get(hit.item);
         if (summary?.comments?.length) {
             for (const comment of summary.comments)
                 io.writer.writeLine(
                     wordWrap(`${comment.comment} (${comment.lineNumber})`),
                 );
         }
-        let lineBudget = options.verbose ? 100 : 10;
-        outer: for (const blob of chunk.blobs) {
-            for (let i = 0; i < blob.lines.length; i++) {
-                if (lineBudget-- <= 0) {
-                    io.writer.writeLine("...");
-                    break outer;
-                }
-                io.writer.writeLine(
-                    `${(1 + blob.start + i).toString().padStart(6)}: ${blob.lines[i].trimEnd()}`,
-                );
+        writeChunkLines(chunk, io, options.verbose ? 100 : 10);
+    }
+}
+
+function writeChunkLines(
+    chunk: Chunk,
+    io: iapp.InteractiveIo,
+    lineBudget = 10,
+): void {
+    // TODO: limit how much we write per blob too (if there are multiple).
+    outer: for (const blob of chunk.blobs) {
+        for (let i = 0; i < blob.lines.length; i++) {
+            if (lineBudget-- <= 0) {
+                io.writer.writeLine("   ...");
+                break outer;
             }
+            io.writer.writeLine(
+                `${(1 + blob.start + i).toString().padStart(6)}: ${blob.lines[i].trimEnd()}`,
+            );
         }
     }
+}
+
+function plural(s: string, n: number): string {
+    // TOO: Use Intl.PluralRules.
+    return n === 1 ? s : s + "s";
 }

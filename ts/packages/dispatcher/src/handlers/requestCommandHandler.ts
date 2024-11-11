@@ -19,11 +19,8 @@ import {
     updateCorrectionContext,
 } from "./common/commandHandlerContext.js";
 
-import {
-    CachedImageWithDetails,
-    getColorElapsedString,
-    Logger,
-} from "common-utils";
+import { CachedImageWithDetails, getColorElapsedString } from "common-utils";
+import { Logger } from "telemetry";
 import {
     executeActions,
     getTranslatorPrefix,

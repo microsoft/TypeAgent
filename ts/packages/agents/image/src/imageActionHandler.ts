@@ -8,7 +8,8 @@ import {
     ActionResult,
     ActionResultSuccess,
 } from "@typeagent/agent-sdk";
-import { downloadImage, StopWatch } from "common-utils";
+import { downloadImage } from "common-utils";
+import { StopWatch } from "telemetry";
 import {
     createActionResult,
     createActionResultFromHtmlDisplayWithScript,

@@ -376,10 +376,11 @@ export async function removeFile(
     return false;
 }
 
-export async function ensureDir(folderPath: string): Promise<void> {
+export async function ensureDir(folderPath: string): Promise<string> {
     if (!fs.existsSync(folderPath)) {
         await fs.promises.mkdir(folderPath, { recursive: true });
     }
+    return folderPath;
 }
 
 /**

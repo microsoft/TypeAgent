@@ -59,6 +59,8 @@ import { RecentItems, createRecentItemsWindow } from "../temporal.js";
 
 export interface ConversationSettings {
     indexSettings: TextIndexSettings;
+    entityIndexSettings?: TextIndexSettings | undefined;
+    actionIndexSettings?: TextIndexSettings | undefined;
     indexActions?: boolean;
     initializer?: ((conversation: Conversation) => Promise<void>) | undefined;
 }
@@ -267,7 +269,7 @@ export async function createConversation(
     async function getEntityIndex(): Promise<EntityIndex> {
         if (!entityIndex) {
             entityIndex = await createEntityIndexOnStorage<MessageId>(
-                settings.indexSettings,
+                settings.entityIndexSettings ?? settings.indexSettings,
                 entityPath,
                 storageProvider!,
             );
@@ -282,7 +284,7 @@ export async function createConversation(
     async function getActionIndex(): Promise<ActionIndex> {
         if (!actionIndex) {
             actionIndex = await createActionIndexOnStorage<MessageId>(
-                settings.indexSettings,
+                settings.actionIndexSettings ?? settings.indexSettings,
                 getEntityNameIndex,
                 actionPath,
                 storageProvider!,
