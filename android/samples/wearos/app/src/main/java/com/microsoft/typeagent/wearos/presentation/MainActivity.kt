@@ -67,7 +67,7 @@ class MainActivity : ComponentActivity() {
 
         val result = remoteActivityHelper.startRemoteActivity(
             Intent(Intent.ACTION_VIEW)
-                .setData(Uri.parse("maia://main?execute=true&prompt=${this.speechToTextText}"))
+                .setData(Uri.parse("typeagent://main?execute=true&prompt=${this.speechToTextText}"))
                 .putExtra("prompt", this.speechToTextText)
                 .addCategory(Intent.CATEGORY_BROWSABLE),
             null

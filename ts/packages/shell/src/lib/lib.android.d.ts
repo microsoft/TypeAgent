@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-declare var Android: {
+declare var Android: {    
+
     showToast: (message: string) => void;
     setAlarm: (time: string) => void;
     callPhoneNumber: (phoneNumber: string) => void;
@@ -18,6 +19,7 @@ declare var Bridge: {
     interfaces: {
         Android: {
             recognize: (callback: (test: string | undefined) => void) => void;
+            domReady: (callback: (userMessage: string) => void | undefined) => void;
         }
     }
 }

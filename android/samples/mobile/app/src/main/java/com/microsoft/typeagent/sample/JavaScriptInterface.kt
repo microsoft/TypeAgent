@@ -95,15 +95,23 @@ class JavaScriptInterface(var context: Context) : DefaultJSInterface("Android") 
             .putExtra("prompt", prompt)
             .addCategory(Intent.CATEGORY_BROWSABLE)
         startActivity(context, intent, null)
+    }
 
-//        val uri = Uri.parse("geo:0,0?q=$searchTerm")
-//        val intent = Intent(Intent.ACTION_VIEW, uri)
-//        intent.setPackage("com.google.android.apps.maps")
-//        startActivity(context, intent, null)
+    /**
+     * Called by the client once the app has fully loaded
+     * TypeScript types in lib.android.d.ts as Bridge.interfaces.Android.domReady()
+     */
+    @NativeCall(CallType.FULL_SYNC)
+    fun domReady(callback: JSFunctionWithArg<String>?) {
+        // if there's an initial prompt we should send that here
+        if (callback != null) {
+            MainActivity.currentActivity!!.prompt?.let { callback.call(it) }
+        }
     }
 
     /**
      * Starts a recognition request, awaits the result and returns the result as a promise
+     * TypeScript types in lib.android.d.ts as Bridge.interfaces.Android.recognize()
      */
     @NativeCall(CallType.FULL_SYNC)
     fun recognize(callback: JSFunctionWithArg<String?>) {

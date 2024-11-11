@@ -47,11 +47,24 @@
             android:name=".MainActivity"
             android:exported="true"
             android:theme="@style/Theme.TypeAgentAndroidSample">
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Intent filter for launching the from other apps via intents -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <data android:scheme="typeagent" android:host="main" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+            </intent-filter>
+
+
         </activity>
     </application>
 

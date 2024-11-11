@@ -43,6 +43,7 @@ import androidx.core.content.ContextCompat
 import com.microsoft.typeagent.sample.ui.theme.TypeAgentAndroidSampleTheme
 import de.andycandy.android.bridge.Bridge
 import java.util.Locale
+import java.util.UUID
 
 class MainActivity : ComponentActivity() {
 
@@ -74,6 +75,11 @@ class MainActivity : ComponentActivity() {
      */
     private var wvv: WebView? = null
 
+    /**
+     * The requested initial prompt provided by intent
+     */
+    public var prompt: String? = null
+
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -84,6 +90,8 @@ class MainActivity : ComponentActivity() {
         // set a reference to the currently running activity
         currentActivity = this
 
+        // parse any arguments
+        parseExtras()
 
         enableEdgeToEdge()
         setContent {
@@ -102,12 +110,30 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Checks supplied intent for additional arguments
+     */
+    private fun parseExtras() {
+        Log.i("intent", "$intent.toString(), Intent URI: ${intent.data} Extras: ${intent.extras}")
+        if (Intent.ACTION_VIEW == intent.action || Intent.ACTION_MAIN == intent.action) {
+            val uri = intent.data
+
+            // get the prompt from the Extra or from the query parameters
+            this.prompt = uri?.getQueryParameter("prompt")
+            if (this.prompt == null) {
+                this.prompt = intent.extras?.getString("prompt")
+                Log.i("intent", "Extracting prompt from extras.")
+            }
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     @Composable
     @Preview
     fun Browser() {
         //val url = "http://10.0.2.2:3000"
-        val url = "http://192.168.1.142:3000/"
+        //val url = "http://192.168.1.142:3000/"
+        val url = "http://10.137.63.33:3000"
 
         Column() {
             Button(
