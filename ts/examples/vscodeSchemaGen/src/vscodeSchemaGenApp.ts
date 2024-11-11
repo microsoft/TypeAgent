@@ -28,7 +28,6 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
         const __dirname = path.dirname(__filename);
 
         const output_dir = path.join(__dirname, "data", "output");
-        //const sample_commandsnkb_filepath = path.join(__dirname, 'data', 'input', 'sample_commandsnkb.json');
         const master_commandsnkb_filepath = path.join(
             __dirname,
             "data",
@@ -84,10 +83,10 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
         }
 
         if (
-            !args.some((arg) => arg.startsWith("-dataprep")) &&
-            !args.some((arg) => arg.startsWith("-schemagen")) &&
-            !args.some((arg) => arg.startsWith("-schemagen-actionprefix"))
-        ) {
+            !args.some(arg => arg.startsWith("-dataprep")) &&
+            !args.some(arg => arg.startsWith("-schemagen")) &&
+            !args.some(arg => arg.startsWith("-schemagen-actionprefix"))
+        ){
             console.log(
                 "No valid arguments passed. Please use -dataprep or -schemagen.",
             );

@@ -15,6 +15,7 @@ export interface StatsResult {
     stdDevScore: number;
 }
 
+
 function loadActionData(filePath: string): any[] {
     const rawData = fs.readFileSync(filePath, "utf8").split("\n");
     let data: any[] = [];
@@ -57,70 +58,6 @@ function calcStdDeviation(values: number[]): number {
     return Math.sqrt(avgSquaredDiff);
 }
 
-export function generateStatsWithPrecisionRecall(
-    data: any[],
-    threshold: number = 0.7,
-) {
-    const allRequests = data.flatMap((action) =>
-        action.requests.map((request: any) => ({
-            request: request.request,
-            embedding: request.embedding,
-            actualActionName: action.actionName,
-        })),
-    );
-
-    const results = allRequests.map((requestObj: any) => {
-        const {
-            request,
-            embedding: requestEmbedding,
-            actualActionName,
-        } = requestObj;
-        const matches = data
-            .map((action) => ({
-                actionName: action.actionName,
-                typeName: action.typeName,
-                score: similarity(
-                    action.embedding,
-                    requestEmbedding,
-                    SimilarityType.Cosine,
-                ),
-            }))
-            .sort((a, b) => b.score - a.score)
-            .slice(0, 10);
-
-        const topMatch = matches[0];
-        const TP =
-            topMatch &&
-            topMatch.actionName === actualActionName &&
-            topMatch.score >= threshold
-                ? 1
-                : 0;
-        const FP = 1 - TP;
-        const FN = topMatch && topMatch.score < threshold ? 1 : 0;
-
-        const precision = TP / (TP + FP);
-        const recall = TP / (TP + FN);
-
-        const scores = matches.map((match) => match.score);
-        const meanScore = calcMean(scores);
-        const medianScore = calcMedian(scores);
-        const stdDevScore = calcStdDeviation(scores);
-
-        return {
-            request,
-            actualActionName,
-            precision,
-            recall,
-            matches,
-            meanScore,
-            medianScore,
-            stdDevScore,
-        };
-    });
-
-    return results;
-}
-
 export function generateStats(data: any[], threshold: number = 0.7) {
     const allRequests = data.flatMap((action) =>
         action.requests.map((request: any) => ({
@@ -149,10 +86,7 @@ export function generateStats(data: any[], threshold: number = 0.7) {
             .sort((a, b) => b.score - a.score)
             .slice(0, 10);
 
-        const rank =
-            matches.findIndex(
-                (match) => match.actionName === actualActionName,
-            ) + 1;
+        const rank = matches.findIndex((match) => match.actionName === actualActionName) + 1;
 
         const scores = matches.map((match) => match.score);
         const meanScore = calcMean(scores);
@@ -166,47 +100,14 @@ export function generateStats(data: any[], threshold: number = 0.7) {
             matches,
             meanScore,
             medianScore,
-            stdDevScore,
+            stdDevScore
         };
     });
 
     return results;
 }
 
-export function printDetailedMarkdownTableAlt(results: StatsResult[]) {
-    console.log(
-        chalk.bold("\n## Precision and Recall with Global Request Matches\n"),
-    );
-    console.log(
-        "| Request                            | Actual Action            | Precision | Recall | Top Matches (Similarity)                                        |",
-    );
-    console.log(
-        "|------------------------------------|--------------------------|-----------|--------|-----------------------------------------------------------------|",
-    );
-
-    results.forEach((result: any) => {
-        const { request, actualActionName, precision, recall, matches } =
-            result;
-
-        const topMatches = matches
-            .map(
-                (match: any) =>
-                    `${match.actionName} (${match.score.toFixed(2)})`,
-            )
-            .join(", ");
-
-        console.log(
-            `| ${chalk.cyan(request.padEnd(34))} | ${chalk.yellow(actualActionName.padEnd(24))} | ${chalk.green(precision.toFixed(2))}    | ${chalk.blue(recall.toFixed(2))}   | ${chalk.white(topMatches)} |`,
-        );
-    });
-
-    console.log();
-}
-
-export function printDetailedMarkdownTable(
-    results: StatsResult[],
-    statsfile: string,
-) {
+export function printDetailedMarkdownTable(results: StatsResult[], statsfile: string) {
     console.log(
         chalk.bold("\n## Precision and Recall with Global Request Matches\n"),
     );
@@ -217,8 +118,7 @@ export function printDetailedMarkdownTable(
         "|------------------------------------|--------------------------|------|------------|--------------|---------|-----------------------------------------------------------------|",
     );
 
-    let csvContent =
-        "Request,Actual Action,Rank,Mean Score,Median Score,Std Dev,Top Matches\n";
+    let csvContent = "Request,Actual Action,Rank,Mean Score,Median Score,Std Dev,Top Matches\n";
     fs.writeFileSync(statsfile, csvContent);
 
     results.forEach((result: StatsResult) => {
@@ -239,13 +139,14 @@ export function printDetailedMarkdownTable(
             )
             .join(", ");
 
-        let res: string = `| ${chalk.cyan(request.padEnd(34))} | ${chalk.yellow(
-            actualActionName.padEnd(24),
-        )} | ${chalk.green(rank.toFixed(2))}    | ${chalk.magenta(meanScore.toFixed(2))}     | ${chalk.magenta(
-            medianScore.toFixed(2),
-        )}       | ${chalk.magenta(stdDevScore.toFixed(2))}  | ${chalk.white(
-            topMatches,
-        )} |`;
+        let res: string =
+            `| ${chalk.cyan(request.padEnd(34))} | ${chalk.yellow(
+                actualActionName.padEnd(24),
+            )} | ${chalk.green(rank.toFixed(2))}    | ${chalk.magenta(meanScore.toFixed(2))}     | ${chalk.magenta(
+                medianScore.toFixed(2),
+            )}       | ${chalk.magenta(stdDevScore.toFixed(2))}  | ${chalk.white(
+                topMatches,
+            )} |`;
         console.log(res);
         csvContent += `${request},${actualActionName},${rank.toFixed(2)},${meanScore.toFixed(2)},${medianScore.toFixed(2)},${stdDevScore.toFixed(2)},"${topMatches}"\n`;
         fs.writeFileSync(statsfile, csvContent);
@@ -267,10 +168,11 @@ export function saveStatsToFile(stats: StatsResult[], filePath: string) {
     fs.writeFileSync(filePath, fileContent);
 }
 
+
 export function processActionSchemaAndReqData(
     filePath: string,
     threshold: number = 0.7,
-    statsfile: string,
+    statsfile: string
 ) {
     const data = loadActionData(filePath);
     const results = generateStats(data, threshold);
