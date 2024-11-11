@@ -41,7 +41,7 @@ export async function runQueryInterface(
                 maxHits: {
                     description: "Maximum number of hits to return",
                     type: "integer",
-                    defaultValue: 10,
+                    defaultValue: 3,
                 },
                 minScore: {
                     description: "Minimum score to return",
