@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import * as fs from "fs";
 import chalk from "chalk";
 import { similarity, SimilarityType } from "typeagent";
