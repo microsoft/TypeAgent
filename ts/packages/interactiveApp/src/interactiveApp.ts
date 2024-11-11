@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import fs from "fs";
-import { InteractiveIo, createInteractiveIO } from "./InteractiveIo";
+import { InteractiveIo, getInteractiveIO } from "./InteractiveIo";
 import { exit } from "process";
 
 /**
@@ -66,7 +66,7 @@ export type InteractiveAppSettings = {
  * @param settings app settings
  */
 export async function runBatch(settings: InteractiveAppSettings) {
-    const app = new InteractiveApp(createInteractiveIO(), settings);
+    const app = new InteractiveApp(getInteractiveIO(), settings);
     settings.handlers ??= {};
     settings.handlers.batch = batch;
     settings.handlers.batch.metadata = batchDef();
@@ -132,7 +132,7 @@ export async function runConsole(
         await runBatch(settings);
         exit();
     } else {
-        const app = new InteractiveApp(createInteractiveIO(), settings);
+        const app = new InteractiveApp(getInteractiveIO(), settings);
         await app.runApp();
     }
 }

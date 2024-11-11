@@ -2,16 +2,15 @@
 // Licensed under the MIT License.
 
 import { ChildProcess } from "child_process";
+import { Limiter, createLimiter } from "common-utils";
 import {
     ChildLogger,
-    Limiter,
     Logger,
     LoggerSink,
     MultiSinkLogger,
     createDebugLoggerSink,
-    createLimiter,
     createMongoDBLoggerSink,
-} from "common-utils";
+} from "telemetry";
 import {
     AgentCache,
     GenericExplanationResult,
@@ -234,6 +233,7 @@ export async function initializeCommandHandlerContext(
     const sessionDirPath = session.getSessionDirPath();
     const conversationManager = sessionDirPath
         ? await Conversation.createConversationManager(
+              {},
               "conversation",
               sessionDirPath,
               false,

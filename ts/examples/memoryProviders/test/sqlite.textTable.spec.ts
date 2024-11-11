@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 
 import * as sqlite from "better-sqlite3";
-import { AssignedId, createDb } from "../src/sqlite/common.js";
+import { AssignedId, createDatabase } from "../src/sqlite/common.js";
 import {
     createStringTable,
     createTextIndex,
@@ -38,7 +38,7 @@ describe("sqlite.textTable", () => {
 
     beforeAll(async () => {
         await ensureTestDir();
-        db = await createDb(testFilePath("strings.db"), true);
+        db = await createDatabase(testFilePath("strings.db"), true);
     });
     afterAll(() => {
         if (db) {

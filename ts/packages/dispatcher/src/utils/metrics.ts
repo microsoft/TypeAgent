@@ -6,7 +6,7 @@ import {
     ProfileLogger,
     ProfileMeasure,
     ProfileReader,
-} from "common-utils";
+} from "telemetry";
 
 import { ProfileNames } from "./profileNames.js";
 

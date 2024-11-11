@@ -14,17 +14,14 @@ export type PaleoBioDbActions =
 
 export type ZoomIn = {
   actionName: "zoomIn";
-  parameters: {};
 };
 
 export type ZoomOut = {
   actionName: "zoomOut";
-  parameters: {};
 };
 
 export type ZoomReset = {
   actionName: "zoomReset";
-  parameters: {};
 };
 
 // Sets the geologic time for fossil records

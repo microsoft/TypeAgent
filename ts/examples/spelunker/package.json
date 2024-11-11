@@ -31,6 +31,7 @@
     "code-processor": "workspace:*",
     "dotenv": "^16.3.1",
     "interactive-app": "workspace:*",
+    "knowledge-processor": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "typescript": "^5.4.2"

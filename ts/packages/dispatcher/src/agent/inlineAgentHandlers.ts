@@ -214,10 +214,12 @@ class ActionCommandHandler implements CommandHandler {
         const action = {
             translatorName,
             actionName,
-            parameters: (params.flags.parameters as any) ?? {},
+            parameters: params.flags.parameters,
         };
 
-        validateAction(actionInfo, action, true);
+        if (!validateAction(actionInfo, action, true)) {
+            return;
+        }
         return executeActions(Actions.fromFullActions([action]), context);
     }
     public async getCompletion(

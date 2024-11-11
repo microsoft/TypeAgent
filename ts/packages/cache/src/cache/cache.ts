@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import { QueueObject, queue } from "async";
-import { ChildLogger, Logger, DeepPartialUndefined } from "common-utils";
+import { DeepPartialUndefined } from "common-utils";
+import { ChildLogger, Logger } from "telemetry";
 import { ExplanationData } from "../explanation/explanationData.js";
 import { Actions, RequestAction } from "../explanation/requestAction.js";
 import {

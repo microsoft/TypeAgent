@@ -3,7 +3,6 @@
 
 import chalk from "chalk";
 import {
-    IAction,
     RequestAction,
     Action,
     printProcessRequestActionResult,
@@ -12,6 +11,7 @@ import {
     FullAction,
     ProcessRequestActionResult,
     ExplanationOptions,
+    ParamObjectType,
 } from "agent-cache";
 import {
     CommandHandlerContext,
@@ -19,11 +19,8 @@ import {
     updateCorrectionContext,
 } from "./common/commandHandlerContext.js";
 
-import {
-    CachedImageWithDetails,
-    getColorElapsedString,
-    Logger,
-} from "common-utils";
+import { CachedImageWithDetails, getColorElapsedString } from "common-utils";
+import { Logger } from "telemetry";
 import {
     executeActions,
     getTranslatorPrefix,
@@ -45,11 +42,7 @@ import registerDebug from "debug";
 import { IncrementalJsonValueCallBack } from "../../../commonUtils/dist/incrementalJsonParser.js";
 import ExifReader from "exifreader";
 import { ProfileNames } from "../utils/profileNames.js";
-import {
-    ActionContext,
-    ParsedCommandParams,
-    Profiler,
-} from "@typeagent/agent-sdk";
+import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import {
     displayError,
@@ -61,8 +54,13 @@ import { DispatcherName } from "./common/interactiveIO.js";
 import { getActionTemplateEditConfig } from "../translation/actionTemplate.js";
 import { getActionInfo, validateAction } from "../translation/actionInfo.js";
 import { isUnknownAction } from "../dispatcher/dispatcherAgent.js";
-import { UnknownAction } from "../dispatcher/dispatcherActionSchema.js";
-import { RequestMetricsManager } from "../utils/metrics.js";
+import { UnknownAction } from "../dispatcher/schema/dispatcherActionSchema.js";
+
+// TranslatedAction are actions returned from the LLM without the translator name
+export interface TranslatedAction {
+    actionName: string;
+    parameters?: ParamObjectType;
+}
 
 const debugTranslate = registerDebug("typeagent:translate");
 const debugExplain = registerDebug("typeagent:explain");
@@ -316,7 +314,7 @@ async function translateRequestWithTranslator(
             displayError(response.message, context);
             return undefined;
         }
-        return response.data as IAction;
+        return response.data as TranslatedAction;
     } finally {
         profiler?.stop();
     }
@@ -366,7 +364,7 @@ async function findAssistantForRequest(
 }
 
 async function getNextTranslation(
-    action: IAction,
+    action: TranslatedAction,
     translatorName: string,
     context: ActionContext<CommandHandlerContext>,
     forceSearch: boolean,
@@ -393,12 +391,12 @@ async function getNextTranslation(
 }
 
 async function finalizeAction(
-    action: IAction,
+    action: TranslatedAction,
     translatorName: string,
     context: ActionContext<CommandHandlerContext>,
     history?: HistoryContext,
 ): Promise<Action | Action[] | undefined> {
-    let currentAction: IAction | undefined = action;
+    let currentAction: TranslatedAction | undefined = action;
     let currentTranslatorName: string = translatorName;
     const systemContext = context.sessionContext.agentContext;
     while (true) {
@@ -456,10 +454,11 @@ async function finalizeAction(
     }
 
     return new Action(
-        currentAction,
         systemContext.agents.getInjectedTranslatorForActionName(
             currentAction.actionName,
         ) ?? currentTranslatorName,
+        currentAction.actionName,
+        currentAction.parameters,
     );
 }
 
@@ -672,17 +671,17 @@ async function canTranslateWithoutContext(
     }
 
     // Do the retranslation check, which will also check the action.
-    const oldActions: IAction[] = requestAction.actions.toIActions();
-    const newActions: (IAction | undefined)[] = [];
+    const oldActions: FullAction[] = requestAction.actions.toFullActions();
+    const newActions: (FullAction | undefined)[] = [];
     const request = requestAction.request;
     try {
-        const translations = new Map<string, IAction>();
+        const translations = new Map<string, TranslatedAction>();
         for (const [translatorName, translator] of usedTranslators) {
             const result = await translator.translate(request);
             if (!result.success) {
                 throw new Error("Failed to translate without history context");
             }
-            const newActions = result.data as IAction;
+            const newActions = result.data as TranslatedAction;
             const count = isMultipleAction(newActions)
                 ? newActions.parameters.requests.length
                 : 1;
@@ -690,7 +689,7 @@ async function canTranslateWithoutContext(
             if (count !== oldActions.length) {
                 throw new Error("Action count mismatch without context");
             }
-            translations.set(translatorName, result.data as IAction);
+            translations.set(translatorName, result.data as TranslatedAction);
         }
 
         let index = 0;
@@ -700,7 +699,10 @@ async function canTranslateWithoutContext(
             const newAction = isMultipleAction(newTranslatedActions)
                 ? newTranslatedActions.parameters.requests[index].action
                 : newTranslatedActions;
-            newActions.push(newAction);
+            newActions.push({
+                translatorName,
+                ...newAction,
+            });
         }
 
         debugExplain(
@@ -723,8 +725,8 @@ async function canTranslateWithoutContext(
             }
 
             if (
-                JSON.stringify(newAction.parameters).toLowerCase() !==
-                JSON.stringify(oldAction.parameters).toLowerCase()
+                JSON.stringify(newAction.parameters ?? {}).toLowerCase() !==
+                JSON.stringify(oldAction.parameters ?? {}).toLowerCase()
             ) {
                 throw new Error(`Action parameters mismatch without context`);
             }
@@ -967,11 +969,10 @@ export class RequestCommandHandler implements CommandHandler {
                 requestAction !== undefined &&
                 systemContext.conversationManager
             ) {
-                systemContext.conversationManager.queueAddMessage(
-                    request,
-                    [],
-                    new Date(),
-                );
+                systemContext.conversationManager.queueAddMessage({
+                    text: request,
+                    timestamp: new Date(),
+                });
             }
             await requestExecute(requestAction, context);
             if (canUseCacheMatch) {

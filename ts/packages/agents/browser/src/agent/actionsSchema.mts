@@ -60,22 +60,18 @@ export type SearchAction = {
 
 export type GoBackAction = {
   actionName: "goBack";
-  parameters: {};
 };
 
 export type GoForwardAction = {
   actionName: "goForward";
-  parameters: {};
 };
 
 export type ScrollDownAction = {
   actionName: "scrollDown";
-  parameters: {};
 };
 
 export type ScrollUpAction = {
   actionName: "scrollUp";
-  parameters: {};
 };
 
 // Switch to an open tab, based on the tab's title
@@ -144,17 +140,14 @@ export type OpenFromBookmarks = {
 
 export type ZoomIn = {
   actionName: "zoomIn";
-  parameters: {};
 };
 
 export type ZoomOut = {
   actionName: "zoomOut";
-  parameters: {};
 };
 
 export type ZoomReset = {
   actionName: "zoomReset";
-  parameters: {};
 };
 
 export type AddToBookmarks = {
@@ -166,22 +159,18 @@ export type AddToBookmarks = {
 
 export type ReadPageContent = {
   actionName: "readPage";
-  parameters: {};
 };
 
 export type StopReadPageContent = {
   actionName: "stopReadPage";
-  parameters: {};
 };
 
 export type CaptureScreenshot = {
   actionName: "captureScreenshot";
-  parameters: {};
 };
 
 export type ReloadPage = {
   actionName: "reloadPage";
-  parameters: {};
 };
 
 export interface ApproxDatetime {

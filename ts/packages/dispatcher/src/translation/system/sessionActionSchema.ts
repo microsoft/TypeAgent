@@ -18,13 +18,11 @@ export type NewAction = {
 // List all sessions.
 export type ListAction = {
     actionName: "list";
-    parameters: {};
 };
 
 // Show information about a session.
 export type ShowInfoAction = {
     actionName: "showInfo";
-    parameters: {};
 };
 
 // Toggle history flag for the session.

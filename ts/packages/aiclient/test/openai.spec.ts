@@ -8,15 +8,18 @@ dotenv.config({
 });
 
 import { getData } from "typechat";
-import { TextEmbeddingModel } from "../src/index.js";
 import {
-    createEmbeddingModel,
     hasApiSettings,
     hasEmbeddingEndpoint,
     hasEmbeddingModel,
     testIf,
 } from "./testCore.js";
-import { createChatModelDefault, EnvVars } from "../src/openai.js";
+import {
+    createChatModelDefault,
+    createEmbeddingModel,
+    EnvVars,
+} from "../src/openai.js";
+import { TextEmbeddingModel } from "../src/models.js";
 
 const testTimeout = 30000;
 const smallEndpoint = "3_SMALL";
