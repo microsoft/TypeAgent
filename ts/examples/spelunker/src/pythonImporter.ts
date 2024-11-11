@@ -257,12 +257,5 @@ async function writeToIndex(
 
 // Apply URL escaping to key.
 export function sanitizeKey(key: string): string {
-    return key
-        .replace(/%/g, "%%")
-        .replace(
-            /[^\w% ]/g,
-            (char: string) =>
-                "%" + char.charCodeAt(0).toString(16).toUpperCase(),
-        )
-        .replace(/ /g, "+");
+    return encodeURIComponent(key).replace(/%20/g, "+"); // Encode spaces as plus, others as %xx.
 }
