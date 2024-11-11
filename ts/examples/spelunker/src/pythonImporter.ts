@@ -181,8 +181,6 @@ async function embedChunk(
         chunk.filename,
     )) as CodeDocumentation;
     await chunkyIndex.summaryFolder.put(docs, chunk.id);
-    await chunkyIndex.childrenFolder.put([chunk.id], chunk.parentId || "root");
-    await chunkyIndex.parentFolder.put([chunk.parentId || "root"], chunk.id);
     for (const comment of docs.comments || []) {
         await writeToIndex(chunk.id, comment.topics, chunkyIndex.topicsFolder);
         await writeToIndex(
