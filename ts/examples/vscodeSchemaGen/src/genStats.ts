@@ -15,7 +15,6 @@ export interface StatsResult {
     stdDevScore: number;
 }
 
-
 function loadActionData(filePath: string): any[] {
     const rawData = fs.readFileSync(filePath, "utf8").split("\n");
     let data: any[] = [];
@@ -83,16 +82,24 @@ export function generateStats(data: any[], threshold: number = 0.7) {
                     SimilarityType.Cosine,
                 ),
             }))
-            .sort((a, b) => b.score - a.score)
+            .sort((a, b) => {
+                if (b.score === a.score) {
+                    if (b.actionName === actualActionName) return 1;
+                    if (a.actionName === actualActionName) return -1;
+                    return 0;
+                }
+                return b.score - a.score;
+            })
             .slice(0, 10);
 
-        const rank = matches.findIndex((match) => match.actionName === actualActionName) + 1;
-
+        const rank =
+            matches.findIndex(
+                (match) => match.actionName === actualActionName,
+            ) + 1;
         const scores = matches.map((match) => match.score);
         const meanScore = calcMean(scores);
         const medianScore = calcMedian(scores);
         const stdDevScore = calcStdDeviation(scores);
-
         return {
             request,
             actualActionName,
@@ -100,17 +107,18 @@ export function generateStats(data: any[], threshold: number = 0.7) {
             matches,
             meanScore,
             medianScore,
-            stdDevScore
+            stdDevScore,
         };
     });
 
     return results;
 }
 
-export function printDetailedMarkdownTable(results: StatsResult[], statsfile: string) {
-    console.log(
-        chalk.bold("\n## Precision and Recall with Global Request Matches\n"),
-    );
+export function printDetailedMarkdownTable(
+    results: StatsResult[],
+    statsfile: string,
+) {
+    console.log(chalk.bold("\n## Results for User Request Matches\n"));
     console.log(
         "| Request                            | Actual Action            | Rank | Mean Score | Median Score | Std Dev | Top Matches (Similarity)                                        |",
     );
@@ -118,7 +126,8 @@ export function printDetailedMarkdownTable(results: StatsResult[], statsfile: st
         "|------------------------------------|--------------------------|------|------------|--------------|---------|-----------------------------------------------------------------|",
     );
 
-    let csvContent = "Request,Actual Action,Rank,Mean Score,Median Score,Std Dev,Top Matches\n";
+    let csvContent =
+        "Request,Actual Action,Rank,Mean Score,Median Score,Std Dev,Top Matches\n";
     fs.writeFileSync(statsfile, csvContent);
 
     results.forEach((result: StatsResult) => {
@@ -139,17 +148,21 @@ export function printDetailedMarkdownTable(results: StatsResult[], statsfile: st
             )
             .join(", ");
 
-        let res: string =
-            `| ${chalk.cyan(request.padEnd(34))} | ${chalk.yellow(
-                actualActionName.padEnd(24),
-            )} | ${chalk.green(rank.toFixed(2))}    | ${chalk.magenta(meanScore.toFixed(2))}     | ${chalk.magenta(
-                medianScore.toFixed(2),
-            )}       | ${chalk.magenta(stdDevScore.toFixed(2))}  | ${chalk.white(
-                topMatches,
-            )} |`;
-        console.log(res);
-        csvContent += `${request},${actualActionName},${rank.toFixed(2)},${meanScore.toFixed(2)},${medianScore.toFixed(2)},${stdDevScore.toFixed(2)},"${topMatches}"\n`;
-        fs.writeFileSync(statsfile, csvContent);
+        let res: string = `| ${chalk.cyan(request.padEnd(34))} | ${chalk.yellow(
+            actualActionName.padEnd(24),
+        )} | ${chalk.green(rank.toFixed(2))}    | ${chalk.magenta(meanScore.toFixed(2))}     | ${chalk.magenta(
+            medianScore.toFixed(2),
+        )}       | ${chalk.magenta(stdDevScore.toFixed(2))}  | ${chalk.white(
+            topMatches,
+        )} |`;
+
+        if (result.rank > 0) {
+            console.log(res);
+            csvContent += `[${request}],${actualActionName},${rank.toFixed(2)},${meanScore.toFixed(2)},${medianScore.toFixed(2)},${stdDevScore.toFixed(2)},"${topMatches}"\n`;
+            fs.writeFileSync(statsfile, csvContent);
+        } else {
+            console.log(chalk.red(res));
+        }
     });
 }
 
@@ -168,13 +181,12 @@ export function saveStatsToFile(stats: StatsResult[], filePath: string) {
     fs.writeFileSync(filePath, fileContent);
 }
 
-
 export function processActionSchemaAndReqData(
-    filePath: string,
+    actionreqEmbeddingsFile: string,
     threshold: number = 0.7,
-    statsfile: string
+    statsfile: string,
 ) {
-    const data = loadActionData(filePath);
-    const results = generateStats(data, threshold);
+    const data: any[] = loadActionData(actionreqEmbeddingsFile);
+    const results: any[] = generateStats(data, threshold);
     printDetailedMarkdownTable(results, statsfile);
 }

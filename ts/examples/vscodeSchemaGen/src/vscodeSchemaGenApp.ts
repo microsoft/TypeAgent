@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 import { ChatModel, openai } from "aiclient";
 import { normalizeCommandsandKBJson } from "./normalizeVscodeJson.js";
 import { processVscodeCommandsJsonFile } from "./schemaGen.js";
+import { processActionSchemaAndReqData } from "./genStats.js";
 
 export interface VSCodeSchemaGenApp {
     readonly model: ChatModel;
@@ -46,9 +47,7 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
                 "Create a master JSON for VSCODE keybindings and commands...",
             );
             await normalizeCommandsandKBJson();
-        }
-
-        if (args.includes("-schemagen")) {
+        } else if (args.includes("-schemagen")) {
             console.log("VSCODE Action Schema generation ...");
             await processVscodeCommandsJsonFile(
                 vscodeSchemaGenApp.model,
@@ -57,38 +56,54 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
                 undefined,
                 output_dir,
             );
-        }
-
-        const actionPrefixArg = args.find((arg) =>
-            arg.startsWith("-schemagen-actionprefix"),
-        );
-        console.log("actionPrefixArg: ", actionPrefixArg);
-        if (actionPrefixArg) {
-            const actionPrefix = actionPrefixArg.split("=")[1];
-
-            console.log("VSCODE Action Schema generation ...");
-            const schemaFile = path.join(
-                __dirname,
-                "data",
-                "output",
-                "vscodeCommandsSchema_[" + actionPrefix + "].ts",
+        } else if (
+            args.some((arg) => arg.startsWith("-schemagen-actionprefix"))
+        ) {
+            const actionPrefixArg = args.find((arg) =>
+                arg.startsWith("-schemagen-actionprefix"),
             );
-            await processVscodeCommandsJsonFile(
-                vscodeSchemaGenApp.model,
-                master_commandsnkb_filepath,
-                schemaFile,
-                actionPrefix,
-                output_dir,
-            );
-        }
+            if (actionPrefixArg) {
+                const actionPrefix = actionPrefixArg.split("=")[1];
 
-        if (
-            !args.some(arg => arg.startsWith("-dataprep")) &&
-            !args.some(arg => arg.startsWith("-schemagen")) &&
-            !args.some(arg => arg.startsWith("-schemagen-actionprefix"))
-        ){
+                console.log("VSCODE Action Schema generation ...");
+                const schemaFile = path.join(
+                    __dirname,
+                    "data",
+                    "output",
+                    "vscodeCommandsSchema_[" + actionPrefix + "].ts",
+                );
+                await processVscodeCommandsJsonFile(
+                    vscodeSchemaGenApp.model,
+                    master_commandsnkb_filepath,
+                    schemaFile,
+                    actionPrefix,
+                    output_dir,
+                );
+            }
+        } else if (args.includes("-statgen")) {
+            const actionReqIndex = args.indexOf("-actionreqEmbeddingsFile");
+            const statGenIndex = args.indexOf("-statGenFile");
+
+            if (actionReqIndex !== -1 && statGenIndex !== -1) {
+                const actionreqEmbeddingsFile = args[actionReqIndex + 1];
+                const statGenFilePath = args[statGenIndex + 1];
+
+                console.log(
+                    "actionreqEmbeddingsFile: ",
+                    actionreqEmbeddingsFile,
+                );
+                console.log("statGenFilePath: ", statGenFilePath);
+                processActionSchemaAndReqData(
+                    actionreqEmbeddingsFile,
+                    0.7,
+                    statGenFilePath,
+                );
+            } else {
+                console.error("Missing required file paths for -statgen mode.");
+            }
+        } else {
             console.log(
-                "No valid arguments passed. Please use -dataprep or -schemagen.",
+                "No valid arguments passed. Please use -dataprep or -schemagen or -schemagen-actionprefix.",
             );
         }
     }

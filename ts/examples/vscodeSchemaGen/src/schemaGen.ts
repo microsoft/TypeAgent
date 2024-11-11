@@ -110,7 +110,7 @@ export async function generateEmbeddingForActionsRequests(
 export async function processVscodeCommandsJsonFile(
     model: ChatModel,
     jsonFilePath: string,
-    outputFilePath: string,
+    schemaFilePath: string,
     actionPrefix: string | undefined,
     output_dir: string,
 ) {
@@ -159,7 +159,6 @@ export async function processVscodeCommandsJsonFile(
                 actionRequests = dedupeList(actionRequests);
                 actionRequests.sort();
 
-                //console.log(actionRequests);
                 let actionReqEmbeddings =
                     await generateEmbeddingForActionsRequests(
                         embeddingModel,
@@ -189,8 +188,8 @@ export async function processVscodeCommandsJsonFile(
         }
     }
 
-    fs.writeFileSync(outputFilePath, schemaDefinitions.join("\n\n"));
-    console.log(`Schema definitions written to ${outputFilePath}`);
+    fs.writeFileSync(schemaFilePath, schemaDefinitions.join("\n\n"));
+    console.log(`Schema definitions file: ${schemaFilePath}`);
     console.log(
         `Total nodes processed: ${processedNodeCount}, Total schemas generated: ${schemaCount}`,
     );
@@ -203,11 +202,8 @@ export async function processVscodeCommandsJsonFile(
         "aggr_data_[" + actionPrefix + "].jsonl",
     );
     fs.writeFileSync(jsonlFileName, jsonlData);
-    console.log(
-        `Aggregate action and request data written to ${jsonlFileName}`,
-    );
+    console.log(`Aggregate action and request data file: ${jsonlFileName}`);
 
     const statsfile = path.join(output_dir, "stats_[" + actionPrefix + "].csv");
-
     processActionSchemaAndReqData(jsonlFileName, 0.7, statsfile);
 }
