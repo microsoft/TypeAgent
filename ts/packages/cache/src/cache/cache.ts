@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import { QueueObject, queue } from "async";
-import { ChildLogger, Logger, DeepPartialUndefined } from "common-utils";
+import { DeepPartialUndefined } from "common-utils";
+import { ChildLogger, Logger } from "telemetry";
 import { ExplanationData } from "../explanation/explanationData.js";
 import { Actions, RequestAction } from "../explanation/requestAction.js";
 import {
@@ -12,6 +13,7 @@ import {
 import { GenericExplanationResult } from "../index.js";
 import { ConstructionStore, ConstructionStoreImpl } from "./store.js";
 import { ExplainerFactory } from "./factory.js";
+import { getLanguageTools } from "../utils/language.js";
 
 export type ProcessExplanationResult = {
     explanation: GenericExplanationResult;
@@ -46,13 +48,59 @@ function getFailedResult(message: string): ProcessRequestActionResult {
     };
 }
 
-type ExplanationOptions = {
+export type ExplanationOptions = {
     concurrent?: boolean; // whether to limit to run one at a time, require cache to be false
-    rejectReferences?: boolean;
+    valueInRequest?: boolean;
+    noReferences?: boolean;
     checkExplainable?:
         | ((requestAction: RequestAction) => Promise<void>)
         | undefined; // throw exception if not explainable
 };
+
+const langTool = getLanguageTools("en");
+
+function checkExplainableValues(
+    requestAction: RequestAction,
+    valueInRequest: boolean,
+    noReferences: boolean,
+) {
+    // Do a cheap parameter check first.
+    const lowercase = requestAction.request.toLowerCase();
+    const pending: unknown[] = [];
+
+    for (const action of requestAction.actions) {
+        pending.push(action.parameters);
+    }
+
+    while (pending.length > 0) {
+        const value = pending.pop();
+        if (!value) {
+            continue;
+        }
+
+        // TODO: check number too.
+        if (typeof value === "string") {
+            if (noReferences && langTool?.possibleReferentialPhrase(value)) {
+                throw new Error(
+                    "Request contains a possible referential phrase used for property values.",
+                );
+            }
+            if (valueInRequest && !lowercase.includes(value.toLowerCase())) {
+                throw new Error(
+                    `Action parameter value '${value}' not found in the request`,
+                );
+            }
+            continue;
+        }
+        if (typeof value === "object") {
+            if (Array.isArray(value)) {
+                pending.push(...value);
+            } else {
+                pending.push(...Object.values(value));
+            }
+        }
+    }
+}
 
 export class AgentCache {
     private _constructionStore: ConstructionStoreImpl;
@@ -108,7 +156,8 @@ export class AgentCache {
         options?: ExplanationOptions,
     ): Promise<ProcessRequestActionResult> {
         const concurrent = options?.concurrent ?? false;
-        const rejectReferences = options?.rejectReferences ?? true;
+        const valueInRequest = options?.valueInRequest ?? true;
+        const noReferences = options?.noReferences ?? true;
         const checkExplainable = options?.checkExplainable;
         const actions = requestAction.actions;
         for (const action of actions) {
@@ -128,6 +177,8 @@ export class AgentCache {
             }
         }
 
+        checkExplainableValues(requestAction, valueInRequest, noReferences);
+
         const task = async () => {
             const store = this._constructionStore;
             const generateConstruction = cache && store.isEnabled();
@@ -139,7 +190,6 @@ export class AgentCache {
             };
 
             const explainerConfig = {
-                rejectReferences,
                 constructionCreationConfig,
             };
 
@@ -232,8 +282,7 @@ export class AgentCache {
                 actions: requestAction.actions,
                 history: requestAction.history,
                 cache,
-                concurrent: options?.concurrent,
-                rejectReferences: options?.rejectReferences,
+                options,
                 message: e.message,
                 stack: e.stack,
             });

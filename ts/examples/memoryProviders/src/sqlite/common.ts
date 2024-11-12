@@ -12,18 +12,22 @@ export type AssignedId<T> = {
 
 export type BooleanRow = {};
 
-export async function createDb(
+export async function createDatabase(
     filePath: string,
     createNew: boolean,
 ): Promise<sqlite.Database> {
     if (createNew) {
-        await removeFile(filePath);
-        await removeFile(filePath + "-shm");
-        await removeFile(filePath + "-wal");
+        await deleteDatabase(filePath);
     }
     const db = new Database(filePath);
     db.pragma("journal_mode = WAL");
     return db;
+}
+
+export async function deleteDatabase(filePath: string): Promise<void> {
+    await removeFile(filePath);
+    await removeFile(filePath + "-shm");
+    await removeFile(filePath + "-wal");
 }
 
 export function tablePath(rootName: string, name: string): string {

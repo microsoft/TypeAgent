@@ -34,7 +34,7 @@ export async function createKnowledgeStore<T>(
     return createKnowledgeStoreOnStorage<T>(
         settings,
         rootPath,
-        createFileSystemStorageProvider(folderSettings, fSys),
+        createFileSystemStorageProvider(rootPath, folderSettings, fSys),
     );
 }
 

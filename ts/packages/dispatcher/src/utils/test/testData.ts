@@ -9,7 +9,6 @@ import {
     loadAgentJsonTranslator,
 } from "../../translation/agentTranslators.js";
 import {
-    IAction,
     JSONAction,
     RequestAction,
     CorrectionRecord,
@@ -17,11 +16,13 @@ import {
     GenericExplanationResult,
     Action,
     HistoryContext,
+    Actions,
 } from "agent-cache";
 import { getElapsedString, createLimiter, Limiter } from "common-utils";
 import { getCacheFactory } from "../cacheFactory.js";
 import { Result } from "typechat";
 import { isMultipleAction } from "../../translation/multipleActionSchema.js";
+import { TranslatedAction } from "../../handlers/requestCommandHandler.js";
 
 const testDataJSONVersion = 2;
 export type TestDataEntry<T extends object = object> =
@@ -116,7 +117,7 @@ export type GenerateTestDataResult = {
 
 type Pending = {
     request: string;
-    action: Action | Action[] | undefined;
+    action: Actions | undefined;
     history: HistoryContext | undefined;
     tags: string[] | undefined;
 };
@@ -197,7 +198,7 @@ function getInitialTestData(
 
         pending.set(request, {
             request,
-            action: actions?.data,
+            action: actions,
             history,
             tags: tagsMap.get(request),
         });
@@ -233,7 +234,7 @@ async function saveTestDataFile(
             Array.from(pending.values()).map((e) => {
                 return {
                     request: e.request,
-                    action: e.action ?? undefined,
+                    action: e.action?.toJSON(),
                     message: "Not processed",
                 };
             }),
@@ -263,12 +264,12 @@ function toExceptionMessage(e: any) {
 }
 
 function getSafeTranslateFn(translatorName: string, model?: string) {
-    const translator = loadAgentJsonTranslator(
+    const translator = loadAgentJsonTranslator<TranslatedAction>(
         translatorName,
         getBuiltinTranslatorConfigProvider(),
         model,
     );
-    return async (request: string): Promise<Result<Object>> => {
+    return async (request: string): Promise<Result<TranslatedAction>> => {
         try {
             return await translator.translate(request);
         } catch (e: any) {
@@ -343,32 +344,41 @@ function getGenerateTestDataFn(
                     tags,
                 });
             }
-            const newActions = result.data as IAction;
+            const newActions = result.data as TranslatedAction;
 
             action = isMultipleAction(newActions)
                 ? newActions.parameters.requests.map(
-                      (e) => new Action(e.action, translatorName),
+                      (e) =>
+                          new Action(
+                              translatorName,
+                              e.action.actionName,
+                              e.action.parameters,
+                          ),
                   )
-                : new Action(newActions, translatorName);
+                : new Action(
+                      translatorName,
+                      newActions.actionName,
+                      newActions.parameters,
+                  );
         }
-        const hasUnknown = (Array.isArray(action) ? action : [action]).some(
-            (a) => a.actionName === "unknown",
-        );
-        if (hasUnknown) {
-            return toFailedResult({
-                request,
-                message: "Failed translation: Unknown action",
-                tags,
-            });
+
+        const requestAction = RequestAction.create(request, action, history);
+        for (const a of requestAction.actions) {
+            if (a.actionName === "unknown") {
+                return toFailedResult({
+                    request,
+                    message: "Failed translation: Unknown action",
+                    tags,
+                });
+            }
         }
-        const explanation = await safeExplain(
-            RequestAction.create(request, action, history),
-        );
+
+        const explanation = await safeExplain(requestAction);
 
         if (!explanation.success) {
             return toFailedResult({
                 request,
-                action,
+                action: requestAction.actions.toJSON(),
                 message: `Failed Explanation: ${explanation.message}`,
                 corrections: explanation.corrections,
                 tags,
@@ -380,7 +390,7 @@ function getGenerateTestDataFn(
             elapsedMs: performance.now() - startTime,
             entry: {
                 request,
-                action,
+                action: requestAction.actions.toJSON(),
                 explanation: explanation.data,
                 corrections: explanation.corrections,
                 tags,
@@ -481,7 +491,7 @@ async function generateTestDataFile(
     const processInput = async (pendingInput: Pending) => {
         const { success, elapsedMs, entry } = await generateTestData(
             pendingInput.request,
-            pendingInput.action,
+            pendingInput.action?.data,
             pendingInput.history,
             pendingInput.tags,
         );

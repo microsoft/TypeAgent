@@ -50,14 +50,14 @@ export function createPropertyExplainer(
         },
         (requestAction: RequestAction) => {
             return (
-                `${form} with the following value:\n${requestAction.toPromptString(true)}\n` +
+                `${form} with the following value:\n${requestAction.toPromptString()}\n` +
                 (enableContext
                     ? `For each property, explain which substring of the request or entities in the conversation history is used to compute the value. ${substringRequirement}\n`
                     : `For each property, explain which substring of the request is used to compute the value. ${substringRequirement}\n`) +
                 getActionDescription(requestAction)
             );
         },
-        (requestAction) => requestAction.toPromptString(true),
+        (requestAction) => requestAction.toPromptString(),
         validatePropertyExplanation,
     );
 }
@@ -76,7 +76,6 @@ export function isEntityParameter(
 
 // REVIEW: disable entity constructions.
 const enableEntityConstructions = false;
-const langTool = getLanguageTools("en");
 
 function validatePropertyExplanation(
     requestAction: RequestAction,
@@ -140,16 +139,6 @@ function validatePropertyExplanation(
                         );
                     }
                 }
-            }
-
-            if (
-                config?.rejectReferences === true &&
-                typeof prop.value === "string" &&
-                langTool?.possibleReferentialPhrase(prop.value.toLowerCase())
-            ) {
-                throw new Error(
-                    "Request contains a possible referential phrase used for property values.",
-                );
             }
 
             const lowerCaseRequest = requestAction.request.toLowerCase();

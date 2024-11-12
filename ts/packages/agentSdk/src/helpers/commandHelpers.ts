@@ -57,14 +57,31 @@ type CommandDefinitions = CommandHandlerTypes | CommandHandlerTable;
 export interface CommandHandlerTable extends CommandDescriptorTable {
     description: string;
     commands: Record<string, CommandDefinitions>;
-    defaultSubCommand?: CommandHandlerTypes | undefined;
+    defaultSubCommand?: CommandHandlerTypes | string | undefined;
+}
+
+function getDefaultSubCommand(
+    table: CommandHandlerTable,
+): CommandHandlerTypes | undefined {
+    if (typeof table.defaultSubCommand === "string") {
+        const defaultSubCommand = table.commands[table.defaultSubCommand];
+        if (
+            defaultSubCommand !== undefined &&
+            isCommandDescriptorTable(defaultSubCommand)
+        ) {
+            return undefined;
+        }
+        return defaultSubCommand;
+    }
+    return table.defaultSubCommand;
 }
 
 function hasCompletion(handlers: CommandDefinitions): boolean {
     if (isCommandDescriptorTable(handlers)) {
+        const defaultSubCommand = getDefaultSubCommand(handlers);
         return (
-            (handlers.defaultSubCommand !== undefined &&
-                hasCompletion(handlers.defaultSubCommand)) ||
+            (defaultSubCommand !== undefined &&
+                hasCompletion(defaultSubCommand)) ||
             Object.values(handlers.commands).some(hasCompletion)
         );
     }
@@ -104,12 +121,13 @@ function getCommandHandler(
         return curr;
     }
 
-    if (curr.defaultSubCommand === undefined) {
+    const defaultSubCommand = getDefaultSubCommand(curr);
+    if (defaultSubCommand === undefined) {
         throw new Error(
             `Command '@${commandPrefix.join(" ")}' requires a subcommand`,
         );
     }
-    return curr.defaultSubCommand;
+    return defaultSubCommand;
 }
 
 export function getCommandInterface(

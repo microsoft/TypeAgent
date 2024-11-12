@@ -154,10 +154,15 @@ export function createKeyValueTable<
         concurrency?: number,
     ): Promise<TValueId[][]> {
         let matches: TValueId[][] = [];
+        let valueIds: TValueId[] = [];
         for (const id of ids) {
-            const rows = sql_get.all(id) as KeyValueRow[];
-            if (rows.length > 0) {
-                matches.push(rows.map((r) => r.valueId));
+            const rows = sql_get.iterate(id);
+            for (const row of rows) {
+                valueIds.push((row as KeyValueRow).valueId);
+            }
+            if (valueIds.length > 0) {
+                matches.push(valueIds);
+                valueIds = [];
             }
         }
         return Promise.resolve(matches);

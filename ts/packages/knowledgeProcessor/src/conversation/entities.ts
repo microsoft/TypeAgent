@@ -117,7 +117,7 @@ export function createEntityIndex<TSourceId = string>(
     return createEntityIndexOnStorage(
         settings,
         rootPath,
-        createFileSystemStorageProvider(folderSettings, fSys),
+        createFileSystemStorageProvider(rootPath, folderSettings, fSys),
     );
 }
 
@@ -223,7 +223,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
         entities: ExtractedEntity<TSourceId>[],
         ids?: EntityId[],
     ): Promise<EntityId[]> {
-        if (ids && entities.length !== ids?.length) {
+        if (ids && ids.length !== entities.length) {
             throw Error("Id length mismatch");
         }
         // TODO: parallelize
@@ -551,6 +551,15 @@ export function toCompositeEntity(entity: ConcreteEntity): CompositeEntity {
         collections.lowerAndSort(composite.facets);
     }
     return composite;
+}
+
+export function toCompositeEntities(
+    entities: Iterable<ExtractedEntity>,
+): IterableIterator<CompositeEntity> {
+    const merged = mergeCompositeEntities(
+        collections.mapIterate(entities, (e) => toCompositeEntity(e.value)),
+    );
+    return collections.mapIterate(merged.values(), (e) => e.value);
 }
 
 export function facetToString(facet: Facet): string {

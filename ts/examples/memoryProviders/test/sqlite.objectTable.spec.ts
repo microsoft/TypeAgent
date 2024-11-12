@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import * as sqlite from "better-sqlite3";
-import { createDb } from "../src/sqlite/common.js";
+import { createDatabase } from "../src/sqlite/common.js";
 import { ensureTestDir, testFilePath } from "./testCore.js";
 import { createObjectTable } from "../src/sqlite/objectTable.js";
 import { asyncArray } from "typeagent";
@@ -13,7 +13,7 @@ describe("sqlite.objectTable", () => {
 
     beforeAll(async () => {
         await ensureTestDir();
-        db = await createDb(testFilePath("objectFolders.db"), true);
+        db = await createDatabase(testFilePath("objectFolders.db"), true);
     });
     afterAll(() => {
         if (db) {

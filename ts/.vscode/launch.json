@@ -224,18 +224,84 @@
                 "${workspaceFolder}/**/*.js"
             ]
         },
-		{
-			"name": "Run Extension",
-			"type": "extensionHost",
+        {
+            "name": "Launch Parser-Test",
+            "type": "node",
+            "request": "launch",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}/examples/parser-test/src/main.ts",
+            "console": "externalTerminal",
+            //"preLaunchTask": "pnpm: build",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ]
+        },
+        {
+			"name": "VSCODE SchemaGen -dataprep",
+			"type": "node",
 			"request": "launch",
-            "cwd": "${workspaceFolder}/packages/coda",
-			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}/packages/coda"
-			],
-			"outFiles": [
-				"${workspaceFolder}/packages/coda/out/**/*.js"
-			],
-			"preLaunchTask": "${defaultBuildTask}"
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
+            "program": "./dist/main.js",
+            "args": [ "-dataprep" ],
+            "console": "externalTerminal",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ]
+		},
+		{
+			"name": "VSCODE SchemaGen -schemagen",
+			"type": "node",
+			"request": "launch",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
+            "program": "./dist/main.js",
+            "args": [ "-schemagen" ],
+            "console": "externalTerminal",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ]
+		},
+        {
+			"name": "VSCODE SchemaGen -schemagen-actionprefix",
+			"type": "node",
+			"request": "launch",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
+            "program": "./dist/main.js",
+            "args": [ "-schemagen-actionprefix=editor.action" ],
+            "console": "externalTerminal",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ]
+		},
+        {
+			"name": "VSCODE SchemaGen -statgen",
+			"type": "node",
+			"request": "launch",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
+            "program": "./dist/main.js",
+            "args": [ "-statgen",
+                "-actionreqEmbeddingsFile",
+                "",
+                "-statGenFile",
+                ""
+            ],
+            "console": "externalTerminal",
+            "outFiles": [
+                "${workspaceFolder}/**/*.js"
+            ]
 		},
         {
             "name": "Knowledge Visualizier (Main process)",

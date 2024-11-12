@@ -55,7 +55,7 @@ class TokenDetailsCommandHandler implements CommandHandlerNoParams {
 export function getTokenCommandHandlers(): CommandHandlerTable {
     return {
         description: "Get LLM token usage statistics for this session.",
-        defaultSubCommand: new TokenSummaryCommandHandler(),
+        defaultSubCommand: "summary",
         commands: {
             summary: new TokenSummaryCommandHandler(),
             details: new TokenDetailsCommandHandler(),

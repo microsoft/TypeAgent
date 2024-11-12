@@ -15,11 +15,17 @@ export type ChalkColor = {
 };
 
 export class ChalkWriter extends ConsoleWriter {
+    private _io: InteractiveIo;
     private _color: ChalkColor;
 
     constructor(io: InteractiveIo) {
         super(io.stdout);
+        this._io = io;
         this._color = {};
+    }
+
+    public get io(): InteractiveIo {
+        return this._io;
     }
 
     public getColor(): ChalkColor {

@@ -34,15 +34,14 @@ export type ParamObjectType = {
     [key: string]: ParamFieldType;
 };
 
-export interface IAction extends AppAction {
-    parameters: ParamObjectType;
+export interface FullAction extends AppAction {
+    translatorName: string;
+    parameters?: ParamObjectType;
 }
-
-export type FullAction = Required<IAction>;
 
 export interface JSONAction {
     fullActionName: string;
-    parameters: ParamObjectType;
+    parameters?: ParamObjectType;
 }
 
 function parseActionNameParts(fullActionName: string) {
@@ -54,65 +53,51 @@ function parseActionNameParts(fullActionName: string) {
 
 export class Action {
     constructor(
-        private readonly action: IAction,
         public readonly translatorName: string,
+        public readonly actionName: string,
+        public readonly parameters: ParamObjectType | undefined,
     ) {}
 
-    public get actionName() {
-        return this.action.actionName;
-    }
-
-    public get parameters() {
-        return this.action.parameters;
-    }
-
     public get fullActionName() {
-        return `${this.translatorNameString}.${this.action.actionName}`;
+        return `${this.translatorNameString}.${this.actionName}`;
     }
 
     public get translatorNameString(): string {
         return this.translatorName;
     }
     public toString() {
-        return `${this.fullActionName}(${JSON.stringify(this.action.parameters)})`;
+        return `${this.fullActionName}(${this.parameters ? JSON.stringify(this.parameters) : ""})`;
     }
     public toJSON(): JSONAction {
-        return {
-            fullActionName: this.fullActionName,
-            parameters: this.action.parameters,
-        };
-    }
-
-    public toIAction(): IAction {
-        return this.action;
+        const result: JSONAction = { fullActionName: this.fullActionName };
+        if (this.parameters) {
+            result.parameters = this.parameters;
+        }
+        return result;
     }
 
     public static fromJSONObject(actionJSON: JSONAction): Action {
         const { translatorName, actionName } = parseActionNameParts(
             actionJSON.fullActionName,
         );
-        return new Action(
-            {
-                actionName,
-                parameters: actionJSON.parameters,
-            },
-            translatorName,
-        );
+        return new Action(translatorName, actionName, actionJSON.parameters);
     }
 
     public toFullAction(): FullAction {
-        return {
-            ...this.action,
+        const result: FullAction = {
             translatorName: this.translatorName,
+            actionName: this.actionName,
         };
+        if (this.parameters) {
+            result.parameters = this.parameters;
+        }
+        return result;
     }
     public static fromFullAction(fullAction: FullAction): Action {
         return new Action(
-            {
-                actionName: fullAction.actionName,
-                parameters: fullAction.parameters,
-            },
             fullAction.translatorName,
+            fullAction.actionName,
+            fullAction.parameters,
         );
     }
 }
@@ -170,27 +155,10 @@ export class Actions {
         );
     }
 
-    public toString() {
-        return Array.isArray(this.actions)
-            ? `[${this.actions.join(",")}]`
-            : this.actions.toString();
-    }
     public toJSON() {
         return Array.isArray(this.actions)
             ? this.actions.map((a) => a.toJSON())
             : this.actions.toJSON();
-    }
-
-    public toIAction() {
-        return Array.isArray(this.actions)
-            ? this.actions.map((a) => a.toIAction())
-            : this.actions.toIAction();
-    }
-
-    public toIActions(): IAction[] {
-        return Array.isArray(this.actions)
-            ? this.actions.map((a) => a.toIAction())
-            : [this.actions.toIAction()];
     }
 
     public toFullActions(): FullAction[] {
@@ -206,7 +174,11 @@ export class Actions {
                 : fullAction.map((a) => Action.fromFullAction(a)),
         );
     }
-
+    public toString() {
+        return Array.isArray(this.actions)
+            ? `[${this.actions.join(",")}]`
+            : this.actions.toString();
+    }
     public static fromString(actions: string) {
         return new Actions(
             actions[0] === "[" ? parseActions(actions) : parseAction(actions),
@@ -236,22 +208,18 @@ function parseAction(action: string, index: number = -1) {
             `${index !== -1 ? `Action ${index}: ` : ""}Missing terminating ')'. Input must be in the form of ${format}`,
         );
     }
-    const paramStr = action.substring(leftParan + 1, action.length - 1);
-    let parameters: { [key: string]: ParamObjectType };
-    try {
-        parameters = JSON.parse(paramStr);
-    } catch (e: any) {
-        throw new Error(
-            `${index !== -1 ? `Action ${index}: ` : ""}Unable to parse parameters as JSON: '${paramStr}\n${e.message}'`,
-        );
+    const paramStr = action.substring(leftParan + 1, action.length - 1).trim();
+    let parameters: { [key: string]: ParamObjectType } | undefined;
+    if (paramStr) {
+        try {
+            parameters = JSON.parse(paramStr);
+        } catch (e: any) {
+            throw new Error(
+                `${index !== -1 ? `Action ${index}: ` : ""}Unable to parse parameters as JSON: '${paramStr}\n${e.message}'`,
+            );
+        }
     }
-    return new Action(
-        {
-            actionName,
-            parameters,
-        },
-        translatorName,
-    );
+    return new Action(translatorName, actionName, parameters);
 }
 
 function parseActions(actionStr: string) {
@@ -299,13 +267,11 @@ export class RequestAction {
         return `${this.request}${RequestAction.Separator}${this.actions}`;
     }
 
-    public toPromptString(useFullActionName: boolean) {
+    public toPromptString() {
         return JSON.stringify(
             {
                 request: this.request,
-                action: useFullActionName
-                    ? this.actions
-                    : this.actions.toIAction(),
+                actions: this.actions,
             },
             undefined,
             2,

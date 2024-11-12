@@ -45,6 +45,9 @@ export type SearchProcessingOptions = {
     maxMessages: number;
     fallbackSearch?: SearchOptions | undefined;
     skipAnswerGeneration?: boolean;
+    skipEntitySearch?: boolean;
+    skipTopicSearch?: boolean;
+    skipActionSearch?: boolean;
     progress?: ((action: any) => void) | undefined;
 };
 
@@ -442,13 +445,13 @@ export function createSearchProcessor(
         action: GetAnswerAction,
         searchOptions: ConversationSearchOptions,
     ) {
-        if (searchOptions.topic.loadTopics) {
+        if (searchOptions.topic && searchOptions.topic.loadTopics) {
             ensureTopicFilter(
                 isTopicSummaryRequest(action) ? "*" : query,
                 action.parameters.filters,
             );
         }
-        if (searchOptions.entity.loadEntities) {
+        if (searchOptions.entity && searchOptions.entity.loadEntities) {
             ensureEntityFilter(query, action.parameters.filters);
         }
     }
@@ -570,30 +573,15 @@ export function createSearchProcessor(
             },
             loadActions,
         };
+        if (options.skipTopicSearch) {
+            searchOptions.topic = undefined;
+        }
+        if (options.skipEntitySearch) {
+            searchOptions.entity = undefined;
+        }
+        if (options.skipActionSearch) {
+            searchOptions.action = undefined;
+        }
         return searchOptions;
     }
-}
-
-export function getAllTermsInFilter(
-    filter: TermFilterV2,
-    includeVerbs: boolean = true,
-): string[] {
-    const action = filter.action;
-    if (action) {
-        let terms: string[] = [];
-        if (includeVerbs && action.verbs) {
-            terms.push(...action.verbs.words);
-        }
-        if (action.subject) {
-            terms.push(action.subject);
-        }
-        if (action.object) {
-            terms.push(action.object);
-        }
-        if (filter.searchTerms && filter.searchTerms.length > 0) {
-            terms.push(...filter.searchTerms);
-        }
-        return terms;
-    }
-    return filter.searchTerms ?? [];
 }

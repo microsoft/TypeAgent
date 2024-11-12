@@ -107,12 +107,12 @@ class ConstructionNewCommandHandler implements CommandHandler {
         );
         await checkOverwriteFile(constructionPath, systemContext.requestIO);
 
-        await changeContextConfig({ cache: false }, context);
+        await changeContextConfig({ cache: { enabled: false } }, context);
         if (constructionPath) {
             await fs.promises.writeFile(constructionPath, "");
         }
         systemContext.session.setCacheDataFilePath(constructionPath);
-        await changeContextConfig({ cache: true }, context);
+        await changeContextConfig({ cache: { enabled: true } }, context);
         const filePath = constructionStore.getFilePath();
         displaySuccess(
             `Construction store initialized ${filePath ?? ""}`,
@@ -155,9 +155,9 @@ class ConstructionLoadCommandHandler implements CommandHandler {
             throw new Error(`File not found: ${constructionPath}`);
         }
 
-        await changeContextConfig({ cache: false }, context);
+        await changeContextConfig({ cache: { enabled: false } }, context);
         systemContext.session.setCacheDataFilePath(constructionPath);
-        await changeContextConfig({ cache: true }, context);
+        await changeContextConfig({ cache: { enabled: true } }, context);
 
         displaySuccess(`Construction loaded: ${constructionPath}`, context);
     }
@@ -231,7 +231,7 @@ class ConstructionOffCommandHandler implements CommandHandlerNoParams {
         const systemContext = context.sessionContext.agentContext;
         const constructionStore = systemContext.agentCache.constructionStore;
         await checkRecreateStore(constructionStore, systemContext.requestIO);
-        await changeContextConfig({ cache: false }, context);
+        await changeContextConfig({ cache: { enabled: false } }, context);
         displaySuccess("Construction store disabled.", context);
     }
 }
@@ -418,7 +418,6 @@ class ConstructionDeleteCommandHandler implements CommandHandler {
 export function getConstructionCommandHandlers(): CommandHandlerTable {
     return {
         description: "Command to manage the construction store",
-        defaultSubCommand: undefined,
         commands: {
             new: new ConstructionNewCommandHandler(),
             load: new ConstructionLoadCommandHandler(),
@@ -426,7 +425,10 @@ export function getConstructionCommandHandlers(): CommandHandlerTable {
             auto: getToggleHandlerTable(
                 "construction auto save",
                 async (context, enable) => {
-                    await changeContextConfig({ autoSave: enable }, context);
+                    await changeContextConfig(
+                        { cache: { autoSave: enable } },
+                        context,
+                    );
                 },
             ),
             off: new ConstructionOffCommandHandler(),
@@ -434,6 +436,15 @@ export function getConstructionCommandHandlers(): CommandHandlerTable {
             list: new ConstructionListCommandHandler(),
             import: new ConstructionImportCommandHandler(),
             delete: new ConstructionDeleteCommandHandler(),
+            builtin: getToggleHandlerTable(
+                "construction built-in cache",
+                async (context, enable) => {
+                    await changeContextConfig(
+                        { cache: { builtInCache: enable } },
+                        context,
+                    );
+                },
+            ),
             merge: getToggleHandlerTable(
                 "construction merge",
                 async (
@@ -441,7 +452,7 @@ export function getConstructionCommandHandlers(): CommandHandlerTable {
                     enable: boolean,
                 ) => {
                     await changeContextConfig(
-                        { mergeMatchSets: enable },
+                        { cache: { mergeMatchSets: enable } },
                         context,
                     );
                 },
@@ -453,7 +464,7 @@ export function getConstructionCommandHandlers(): CommandHandlerTable {
                     enable: boolean,
                 ) => {
                     await changeContextConfig(
-                        { matchWildcard: enable },
+                        { cache: { matchWildcard: enable } },
                         context,
                     );
                 },

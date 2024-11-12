@@ -17,6 +17,7 @@ export * from "./vector/semanticIndex";
 
 export * from "./storage/objectFolder";
 export * from "./storage/embeddingFS";
+export * from "./storage/workQueue";
 
 export * from "./classifier/textClassifier";
 

@@ -137,6 +137,7 @@ export type ExtractedKnowledge<TSourceId = any> = {
     entities?: ExtractedEntity<TSourceId>[] | undefined;
     topics?: TextBlock<TSourceId>[] | undefined;
     actions?: ExtractedAction<TSourceId>[] | undefined;
+    sourceEntityName?: string | undefined;
 };
 
 /**
@@ -307,4 +308,7 @@ function prepareEntityForMerge(entity: ConcreteEntity) {
     entity.name = entity.name.toLowerCase();
     collections.lowerAndSort(entity.type);
     return entity;
+}
+export function isValidEntityName(name: string | undefined): boolean {
+    return name !== undefined && name.length > 0 && name !== NoEntityName;
 }

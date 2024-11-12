@@ -391,7 +391,7 @@ const relativeToNow =
 
 const languageToolsEn: LanguageTools = {
     possibleReferentialPhrase(phrase: string) {
-        // TODO: initiali implemention. Can be overbroad and incomplete.
+        // TODO: initial implemention. Can be overbroad and incomplete.
         return (
             (referenceWords.test(phrase) ||
                 referenceSuffixes.test(phrase) ||
