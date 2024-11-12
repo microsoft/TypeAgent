@@ -36,7 +36,7 @@ export default class TranslateCommand extends Command {
         const dispatcher = await createDispatcher("cli run translate", {
             translators,
             actions: {}, // We don't need any actions
-            cache: false,
+            cache: { enabled: false },
         });
         await dispatcher.processCommand(`@translate ${args.request}`);
     }
