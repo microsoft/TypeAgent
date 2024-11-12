@@ -5,7 +5,11 @@ import { QueueObject, queue } from "async";
 import { DeepPartialUndefined } from "common-utils";
 import { ChildLogger, Logger } from "telemetry";
 import { ExplanationData } from "../explanation/explanationData.js";
-import { Actions, RequestAction } from "../explanation/requestAction.js";
+import {
+    Actions,
+    normalizeParamString,
+    RequestAction,
+} from "../explanation/requestAction.js";
 import {
     SchemaConfigProvider,
     doCacheAction,
@@ -65,7 +69,7 @@ function checkExplainableValues(
     noReferences: boolean,
 ) {
     // Do a cheap parameter check first.
-    const lowercase = requestAction.request.toLowerCase();
+    const normalizedRequest = normalizeParamString(requestAction.request);
     const pending: unknown[] = [];
 
     for (const action of requestAction.actions) {
@@ -85,7 +89,10 @@ function checkExplainableValues(
                     "Request contains a possible referential phrase used for property values.",
                 );
             }
-            if (valueInRequest && !lowercase.includes(value.toLowerCase())) {
+            if (
+                valueInRequest &&
+                !normalizedRequest.includes(normalizeParamString(value))
+            ) {
                 throw new Error(
                     `Action parameter value '${value}' not found in the request`,
                 );
