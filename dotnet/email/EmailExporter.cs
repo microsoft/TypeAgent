@@ -65,12 +65,50 @@ public class EmailExporter
         }
     }
 
-    public void ExportAllBySize(string rootPath)
+    public void ExportAllMsgBySize(string rootPath)
     {
         int counter = 0;
-        foreach(Email email in _outlook.MapMailItems<Email>((item) => new Email(item)))
+        foreach (MailItem item in _outlook.MapMailItems<MailItem>((item) => item))
         {
             ++counter;
+            bool isForward = item.IsForward();
+            if (item.IsForward())
+            {
+                continue;
+            }
+            Console.WriteLine($"#{counter}");
+            Console.WriteLine(item.Subject);
+
+            int size = item.BodyLatest().Length;
+            int bucket = MailStats.GetBucketForSize(size);
+            string destDirPath = Path.Join(rootPath, bucket.ToString());
+            DirectoryEx.Ensure(destDirPath);
+
+            const int MaxFileNameLength = 64;
+            string fileName = FileEx.SanitizeFileName(item.Subject, MaxFileNameLength);
+            try
+            {
+                item.SaveAs(FileEx.MakeUnique(destDirPath, fileName, ".msg"));
+            }
+            catch(System.Exception ex)
+            {
+                ConsoleEx.LogError(ex);
+            }
+        }
+    }
+
+    public void ExportAllEmailBySizeJson(string rootPath)
+    {
+        int counter = 0;
+        foreach(MailItem item in _outlook.ForEachMailItem())
+        {
+            ++counter;
+            bool isForward = item.IsForward();
+            if (item.IsForward())
+            {
+                continue;
+            }
+            Email email = new Email(item);
             Console.WriteLine($"#{counter}, {email.Body.Length} chars");
             Console.WriteLine(email.Subject);
 

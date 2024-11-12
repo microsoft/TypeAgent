@@ -22,28 +22,43 @@ public class MailStats
         int cursor = Console.CursorLeft;
         Dictionary<int, int> histogram = new Dictionary<int, int>();
 
-        int counter = 0;
-        int totalLength = 0;
-        foreach (int rawSize in _outlook.MapMailItems<int>((t) => t.BodyLatest().Length))
+        Stats skipped = new Stats();
+        Stats stats = new Stats();
+        foreach (MailItem item in _outlook.ForEachMailItem())
         {
-            totalLength += rawSize;
-            var bucket = GetBucketForSize(rawSize, SCALE);
-            Console.CursorLeft = cursor;
-            ++counter;
-            Console.Write($"{counter}, {totalLength / 1024} K");
-
-            if (histogram.TryGetValue(bucket, out int count))
+            if (item.IsForward())
             {
-                count++;
-                histogram[bucket] = count;
+                var body = item.Body;
+                skipped.Push(body.Length);
             }
             else
             {
-                histogram[bucket] = 1;
+                int rawSize = item.BodyLatest().Length;
+                stats.Push(rawSize);
+                var bucket = GetBucketForSize(rawSize, SCALE);
+                if (histogram.TryGetValue(bucket, out int count))
+                {
+                    count++;
+                    histogram[bucket] = count;
+                }
+                else
+                {
+                    histogram[bucket] = 1;
+                }
+            }
+            Console.CursorLeft = cursor;
+            Console.Write($"{stats.Values.Count}, {stats.Total / 1024} K");
+            if (skipped.Values.Count > 0)
+            {
+                Console.Write($" [FW: skipped {skipped.Values.Count}, {skipped.Total / 1024} K]");
             }
         }
         Console.WriteLine();
-        return (counter, histogram);
+        if (stats.Values.Count > 0)
+        {
+            ConsoleEx.WriteLineColor(ConsoleColor.Cyan, $"Median: {stats.Median() / 1024} K, Average: {stats.Values.Average() / 1024} K");
+        }
+        return (stats.Values.Count, histogram);
     }
 
     public static string PrintHistogram(Dictionary<int, int> histogram)

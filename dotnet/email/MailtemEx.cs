@@ -9,4 +9,10 @@ public static class MailtemEx
     {
         return BodyParser.Default.GetLatest(item.Body);
     }
+
+    public static bool IsForward(this MailItem item)
+    {
+        var subject = item.Subject.TrimStart();
+        return subject.StartsWith("FW", StringComparison.OrdinalIgnoreCase);
+    }
 }

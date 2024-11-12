@@ -10,6 +10,7 @@ export * from "./knowledgeStore.js";
 export * from "./knowledgeIndex.js";
 export * from "./temporal.js";
 export * from "./modelCache.js";
+export * from "./indexingStats.js";
 
 export * as sets from "./setOperations.js";
 
