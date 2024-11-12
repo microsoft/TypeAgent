@@ -1,0 +1,131 @@
+[
+  {
+    "id": "workbench.action.closePanel",
+    "metadata": {
+      "description": {
+        "value": "Hide Panel",
+        "original": "Hide Panel"
+      }
+    }
+  },
+  {
+    "id": "workbench.action.closeAuxiliaryBar",
+    "metadata": {
+      "description": {
+        "value": "Hide Secondary Side Bar",
+        "original": "Hide Secondary Side Bar"
+      }
+    }
+  },
+  {
+    "id": "workbench.action.movePanelToSidePanel",
+    "metadata": {
+      "description": {
+        "value": "Move Panel Views To Secondary Side Bar",
+        "original": "Move Panel Views To Secondary Side Bar"
+      }
+    }
+  },
+  {
+    "id": "workbench.action.movePanelToSecondarySideBar",
+    "metadata": {
+      "description": {
+        "value": "Move Panel Views To Secondary Side Bar",
+        "original": "Move Panel Views To Secondary Side Bar"
+      }
+    }
+  },
+  {
+    "id": "workbench.action.moveSidePanelToPanel",
+    "metadata": {
+      "description": {
+        "value": "Move Secondary Side Bar Views To Panel",
+        "original": "Move Secondary Side Bar Views To Panel"
+      }
+    }
+  },
+  {
+    "id": "workbench.action.moveSecondarySideBarToPanel",
+    "metadata": {
+      "description": {
+        "value": "Move Secondary Side Bar Views To Panel",
+        "original": "Move Secondary Side Bar Views To Panel"
+      }
+    }
+  },
+  {
+    "id": "workbench.action.closeSidebar",
+    "metadata": {
+      "description": {
+        "value": "Close Primary Side Bar",
+        "original": "Close Primary Side Bar"
+      }
+    }
+  },
+  {
+    "id": "workbench.action.toggleCenteredLayout",
+    "metadata": {
+      "description": {
+        "value": "Toggle Centered Layout",
+        "original": "Toggle Centered Layout",
+        "mnemonicTitle": "&&Centered Layout"
+      }
+    }
+  },
+  {
+    "id": "workbench.action.moveSideBarRight",
+    "metadata": {
+      "description": {
+        "value": "Move Primary Side Bar Right",
+        "original": "Move Primary Side Bar Right"
+      }
+    }
+  },
+  {
+    "id": "workbench.action.moveSideBarLeft",
+    "metadata": {
+      "description": {
+        "value": "Move Primary Side Bar Left",
+        "original": "Move Primary Side Bar Left"
+      }
+    }
+  },
+  {
+    "id": "workbench.action.toggleSidebarPosition",
+    "metadata": {
+      "description": {
+        "value": "Toggle Primary Side Bar Position",
+        "original": "Toggle Primary Side Bar Position"
+      }
+    }
+  },
+  {
+    "id": "workbench.action.toggleEditorVisibility",
+    "metadata": {
+      "description": {
+        "value": "Toggle Editor Area Visibility",
+        "original": "Toggle Editor Area Visibility",
+        "mnemonicTitle": "Show &&Editor Area"
+      }
+    }
+  },
+  {
+    "id": "workbench.action.toggleSidebarVisibility",
+    "metadata": {
+      "description": {
+        "value": "Toggle Primary Side Bar Visibility",
+        "original": "Toggle Primary Side Bar Visibility"
+      }
+    }
+  },
+  {
+    "id": "workbench.action.toggleStatusbarVisibility",
+    "metadata": {
+      "description": {
+        "value": "Toggle Status Bar Visibility",
+        "original": "Toggle Status Bar Visibility",
+        "mnemonicTitle": "S&&tatus Bar"
+      }
+    }
+  }
+]

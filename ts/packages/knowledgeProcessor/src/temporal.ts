@@ -17,6 +17,7 @@ import { intersectMultiple, setFrom } from "./setOperations.js";
 import { DateRange } from "../../typeagent/dist/dateTime.js";
 import { pathToFileURL } from "url";
 import path from "path";
+import { valueToString } from "./text.js";
 
 /**
  * @template TId the type of the log entry Id
@@ -266,4 +267,59 @@ export function getRangeOfTemporalSequence(
         startDate: sequence[0].timestamp,
         stopDate: sequence[sequence.length - 1].timestamp,
     };
+}
+export interface RecentItems<T> {
+    readonly entries: collections.CircularArray<T>;
+    push(items: T | T[]): void;
+    getContext(maxContextLength: number): string[];
+    getUnique(): T[];
+    reset(): void;
+}
+
+export function createRecentItemsWindow<T>(
+    windowSize: number,
+    stringify?: (value: T) => string,
+): RecentItems<T> {
+    const entries = new collections.CircularArray<T>(windowSize);
+    return {
+        entries,
+        push,
+        getContext,
+        getUnique,
+        reset() {
+            entries.reset();
+        },
+    };
+
+    function push(items: T | T[]): void {
+        if (Array.isArray(items)) {
+            for (const item of items) {
+                entries.push(item);
+            }
+        } else {
+            entries.push(items);
+        }
+    }
+
+    function getContext(maxContextLength: number): string[] {
+        let sections: string[] = [];
+        let totalLength = 0;
+        // Get the range of sections that could be pushed on, NEWEST first
+        for (const item of entries.itemsReverse()) {
+            const content = valueToString(item, stringify);
+            const nextLength = content.length;
+            if (nextLength + totalLength > maxContextLength) {
+                break;
+            }
+            sections.push(content);
+            totalLength += nextLength;
+        }
+        sections.reverse();
+        return sections;
+    }
+
+    function getUnique(): T[] {
+        const unique = new Set<T>(entries);
+        return unique.size > 0 ? [...unique.values()] : [];
+    }
 }

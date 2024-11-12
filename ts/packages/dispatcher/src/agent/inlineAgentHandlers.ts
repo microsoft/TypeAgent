@@ -34,6 +34,7 @@ import { getNotifyCommandHandlers } from "../handlers/notifyCommandHandler.js";
 import { processRequests } from "../utils/interactive.js";
 import { getConsoleRequestIO } from "../handlers/common/interactiveIO.js";
 import {
+    getDefaultSubCommandDescriptor,
     getParsedCommand,
     getPrompt,
     processCommandNoLock,
@@ -101,23 +102,36 @@ class HelpCommandHandler implements CommandHandler {
             );
 
             const command = getParsedCommand(result);
-            if (result.descriptor !== undefined) {
-                displayResult(getUsage(command, result.descriptor), context);
-            } else {
-                if (result.table === undefined) {
-                    throw new Error(`Unknown command '${params.args.command}'`);
-                }
-                if (result.suffix.length !== 0) {
-                    displayError(
-                        `ERROR: '${result.suffix}' is not a subcommand for '@${command}'`,
-                        context,
-                    );
-                }
-                displayResult(
-                    getHandlerTableUsage(result.table, command, systemContext),
+            if (result.suffix.length !== 0) {
+                displayError(
+                    `ERROR: '${result.suffix}' is not a subcommand for '@${command}'`,
                     context,
                 );
             }
+
+            if (result.descriptor !== undefined) {
+                const defaultSubCommand =
+                    result.table !== undefined
+                        ? getDefaultSubCommandDescriptor(result.table)
+                        : undefined;
+
+                if (defaultSubCommand !== result.descriptor) {
+                    displayResult(
+                        getUsage(command, result.descriptor),
+                        context,
+                    );
+                    return;
+                }
+            }
+
+            if (result.table === undefined) {
+                throw new Error(`Unknown command '${params.args.command}'`);
+            }
+
+            displayResult(
+                getHandlerTableUsage(result.table, command, systemContext),
+                context,
+            );
         }
     }
 }
@@ -200,10 +214,12 @@ class ActionCommandHandler implements CommandHandler {
         const action = {
             translatorName,
             actionName,
-            parameters: (params.flags.parameters as any) ?? {},
+            parameters: params.flags.parameters,
         };
 
-        validateAction(actionInfo, action, true);
+        if (!validateAction(actionInfo, action, true)) {
+            return;
+        }
         return executeActions(Actions.fromFullActions([action]), context);
     }
     public async getCompletion(

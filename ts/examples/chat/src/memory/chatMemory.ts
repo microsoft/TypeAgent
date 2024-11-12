@@ -14,39 +14,37 @@ import {
     argNum,
     parseNamedArguments,
     runConsole,
+    getInteractiveIO,
+    NamedArgs,
 } from "interactive-app";
-import {
-    asyncArray,
-    collections,
-    dateTime,
-    ensureDir,
-    getFileName,
-    isDirectoryPath,
-    readAllText,
-} from "typeagent";
+import { asyncArray, dateTime, getFileName, readAllText } from "typeagent";
 import chalk, { ChalkInstance } from "chalk";
 import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
-import { importMsgFiles, timestampBlocks } from "./importer.js";
+import { timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
 import {
-    argChunkSize,
-    argClean,
     argConcurrency,
     argDestFile,
     argMinScore,
-    argPause,
     argSourceFile,
-    argSourceFileOrFolder,
     getMessagesAndCount,
 } from "./common.js";
-import { sqlite } from "memory-providers";
+import { createEmailCommands, createEmailMemory } from "./emailMemory.js";
+import { pathToFileURL } from "url";
+
+export type Models = {
+    chatModel: ChatModel;
+    embeddingModel: TextEmbeddingModel;
+    embeddingModelSmall?: TextEmbeddingModel | undefined;
+};
 
 export type ChatContext = {
     storePath: string;
-    chatModel: ChatModel;
-    embeddingModel: TextEmbeddingModel;
+    printer: ChatMemoryPrinter;
+    models: Models;
     maxCharsPerChunk: number;
+    stats: knowLib.IndexingStats;
     topicWindowSize: number;
     searchConcurrency: number;
     minScore: number;
@@ -61,7 +59,7 @@ export type ChatContext = {
     emailMemory: knowLib.conversation.ConversationManager;
 };
 
-enum ReservedConversationNames {
+export enum ReservedConversationNames {
     transcript = "transcript",
     outlook = "outlook",
     play = "play",
@@ -90,18 +88,39 @@ function getReservedConversation(
     return undefined;
 }
 
+export function createModels(): Models {
+    const embeddingSettings = openai.apiSettingsFromEnv(
+        openai.ModelType.Embedding,
+    );
+    embeddingSettings.retryPauseMs = 5000;
+    const models: Models = {
+        chatModel: openai.createChatModelDefault("chatMemory"),
+        embeddingModel: knowLib.createEmbeddingCache(
+            openai.createEmbeddingModel(embeddingSettings),
+            1024,
+        ),
+        /*
+        embeddingModelSmall: knowLib.createEmbeddingCache(
+            openai.createEmbeddingModel("3_SMALL", 1536),
+            256,
+        ),
+        */
+    };
+    models.chatModel.retryPauseMs = 5000;
+    return models;
+}
+
 export async function createChatMemoryContext(
     completionCallback?: (req: any, resp: any) => void,
 ): Promise<ChatContext> {
     const storePath = "/data/testChat";
-    const chatModel = openai.createChatModelDefault("chatMemory");
-    chatModel.completionCallback = completionCallback;
-    const embeddingModel = knowLib.createEmbeddingCache(
-        openai.createEmbeddingModel(),
-        64,
-    );
+
+    const models: Models = createModels();
+    models.chatModel.completionCallback = completionCallback;
+
     const conversationName = ReservedConversationNames.transcript;
-    const conversationSettings = createConversationSettings(embeddingModel);
+    const conversationSettings =
+        knowLib.conversation.createConversationSettings(models.embeddingModel);
 
     const conversationPath = path.join(storePath, conversationName);
     const conversation = await createConversation(
@@ -110,18 +129,21 @@ export async function createChatMemoryContext(
     );
     const conversationManager =
         await knowLib.conversation.createConversationManager(
+            {
+                model: models.chatModel,
+            },
             conversationName,
             conversationPath,
             false,
             conversation,
-            chatModel,
         );
     const entityTopK = 16;
     const actionTopK = 16;
     const context: ChatContext = {
         storePath,
-        chatModel,
-        embeddingModel,
+        printer: new ChatMemoryPrinter(getInteractiveIO()),
+        models,
+        stats: knowLib.createIndexingStats(),
         maxCharsPerChunk: 4096,
         topicWindowSize: 8,
         searchConcurrency: 2,
@@ -138,7 +160,7 @@ export async function createChatMemoryContext(
             actionTopK,
         ),
         emailMemory: await createEmailMemory(
-            chatModel,
+            models,
             storePath,
             conversationSettings,
             true,
@@ -147,37 +169,6 @@ export async function createChatMemoryContext(
     };
     context.searchMemory = await createSearchMemory(context);
     return context;
-}
-
-async function createEmailMemory(
-    chatModel: ChatModel,
-    storePath: string,
-    settings: conversation.ConversationSettings,
-    useSqlite: boolean = false,
-    createNew: boolean = false,
-) {
-    const emailStorePath = path.join(
-        storePath,
-        ReservedConversationNames.outlook,
-    );
-    await ensureDir(emailStorePath);
-    const storage = useSqlite
-        ? await sqlite.createStorageDb(emailStorePath, "outlook.db", createNew)
-        : undefined;
-
-    return await knowLib.email.createEmailMemory(
-        chatModel,
-        ReservedConversationNames.outlook,
-        storePath,
-        settings,
-        storage,
-    );
-}
-
-function createConversationSettings(
-    embeddingModel?: TextEmbeddingModel,
-): conversation.ConversationSettings {
-    return conversation.createConversationSettings(embeddingModel);
 }
 
 export function createConversation(
@@ -206,6 +197,9 @@ export async function createSearchMemory(
 ): Promise<conversation.ConversationManager> {
     const conversationName = "search";
     const memory = await conversation.createConversationManager(
+        {
+            model: context.models.chatModel,
+        },
         conversationName,
         context.storePath,
         true,
@@ -229,16 +223,18 @@ export async function loadConversation(
 
         context.conversation = await createConversation(
             conversationPath,
-            createConversationSettings(context.embeddingModel),
+            conversation.createConversationSettings(
+                context.models.embeddingModel,
+            ),
         );
         context.conversationName = name;
         context.conversationManager =
             await conversation.createConversationManager(
+                { model: context.models.chatModel },
                 name,
                 conversationPath,
                 false,
                 context.conversation,
-                context.chatModel,
             );
     } else {
         context.conversation = reservedCm.conversation;
@@ -259,14 +255,13 @@ export async function loadConversation(
 }
 
 export async function runChatMemory(): Promise<void> {
-    let context = await createChatMemoryContext(printStats);
+    let context = await createChatMemoryContext(captureTokenStats);
     let showTokenStats = true;
-    let printer: ChatMemoryPrinter;
-    const handlers: Record<string, CommandHandler> = {
+    let printer = context.printer;
+    const commands: Record<string, CommandHandler> = {
         importPlay,
         importTranscript,
         importMessage,
-        importEmail,
         load,
         history,
         replay,
@@ -275,22 +270,21 @@ export async function runChatMemory(): Promise<void> {
         topics,
         entities,
         actions,
-        searchQuery,
         search,
         searchV2Debug,
+        searchTopics,
         makeTestSet,
         runTestSet,
         tokenLog,
     };
-    addStandardHandlers(handlers);
-    await runConsole({
-        onStart,
-        inputHandler,
-        handlers,
-    });
+    createEmailCommands(context, commands);
+    addStandardHandlers(commands);
 
     function onStart(io: InteractiveIo): void {
-        printer = new ChatMemoryPrinter(io);
+        if (io !== context.printer.io) {
+            printer = new ChatMemoryPrinter(io);
+            context.printer = printer;
+        }
     }
 
     async function inputHandler(
@@ -315,7 +309,8 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    function printStats(req: any, response: any): void {
+    function captureTokenStats(req: any, response: any): void {
+        context.stats.updateCurrentTokenStats(response.usage);
         if (showTokenStats) {
             printer.writeCompletionStats(response.usage);
             printer.writeLine();
@@ -327,7 +322,7 @@ export async function runChatMemory(): Promise<void> {
     //
     //--------------------
 
-    handlers.history.metadata = "Display search history.";
+    commands.history.metadata = "Display search history.";
     async function history(args: string[], io: InteractiveIo): Promise<void> {
         if (context.searchMemory) {
             await writeHistory(context.searchMemory.conversation);
@@ -336,7 +331,7 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    handlers.importTranscript.metadata = importChatDef();
+    commands.importTranscript.metadata = importChatDef();
     async function importTranscript(
         args: string[],
         io: InteractiveIo,
@@ -395,7 +390,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.importPlay.metadata = importChatDef();
+    commands.importPlay.metadata = importChatDef();
     async function importPlay(
         args: string[],
         io: InteractiveIo,
@@ -437,7 +432,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.importMessage.metadata = importMessageDef();
+    commands.importMessage.metadata = importMessageDef();
     async function importMessage(
         args: string[],
         io: InteractiveIo,
@@ -465,75 +460,7 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    function importEmailDef(): CommandMetadata {
-        return {
-            description: "Import emails in a folder",
-            args: {
-                sourcePath: argSourceFileOrFolder(),
-            },
-            options: {
-                concurrency: argConcurrency(1),
-                clean: argClean(),
-                chunkSize: argChunkSize(context.maxCharsPerChunk),
-            },
-        };
-    }
-    handlers.importEmail.metadata = importEmailDef();
-    async function importEmail(args: string[], io: InteractiveIo) {
-        const namedArgs = parseNamedArguments(args, importEmailDef());
-        let sourcePath: string = namedArgs.sourcePath;
-        let isDir = isDirectoryPath(sourcePath);
-        let isJson = sourcePath.endsWith("json");
-        if (isDir && !isJson) {
-            printer.writeInColor(chalk.cyan, "Converting message files");
-            await importMsgFiles(sourcePath, io);
-            sourcePath = path.join(sourcePath, "json");
-        }
-        if (isDir) {
-            printer.writeInColor(chalk.cyan, "Adding emails to memory");
-            if (namedArgs.clean) {
-                await context.emailMemory.clear(true);
-            }
-            const emails = await knowLib.email.loadEmailFolder(
-                sourcePath,
-                namedArgs.concurrency,
-            );
-            let i = 0;
-            for (const emailBatch of collections.slices(
-                emails,
-                namedArgs.concurrency,
-            )) {
-                ++i;
-                printer.writeBatchProgress(
-                    emailBatch,
-                    undefined,
-                    emails.length,
-                );
-                emailBatch.value.forEach((e) =>
-                    printer.writeLine(
-                        `${e.sourcePath}\n${knowLib.email.emailToString(e).length} chars`,
-                    ),
-                );
-                await knowLib.email.addEmailToConversation(
-                    context.emailMemory,
-                    emailBatch.value,
-                    namedArgs.chunkSize,
-                );
-            }
-        } else if (isJson) {
-            if (
-                !(await knowLib.email.addEmailFileToConversation(
-                    context.emailMemory,
-                    sourcePath,
-                    namedArgs.chunkSize,
-                ))
-            ) {
-                printer.writeLine(`Could not load ${sourcePath}`);
-            }
-        }
-    }
-
-    handlers.replay.metadata = "Replay the chat";
+    commands.replay.metadata = "Replay the chat";
     async function replay(args: string[], io: InteractiveIo) {
         await writeHistory(context.conversation);
     }
@@ -551,7 +478,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.load.metadata = loadDef();
+    commands.load.metadata = loadDef();
     async function load(args: string[], io: InteractiveIo) {
         if (args.length > 0) {
             const namedArgs = parseNamedArguments(args, loadDef());
@@ -582,15 +509,14 @@ export async function runChatMemory(): Promise<void> {
             options: {
                 maxTurns: argNum("Number of turns to run"),
                 concurrency: argConcurrency(2),
-                pause: argPause(),
             },
         };
     }
-    handlers.knowledge.metadata = knowledgeDef();
+    commands.knowledge.metadata = knowledgeDef();
     async function knowledge(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, knowledgeDef());
         const extractor = conversation.createKnowledgeExtractor(
-            context.chatModel,
+            context.models.chatModel,
             {
                 maxContextLength: context.maxCharsPerChunk,
                 mergeActionKnowledge: false,
@@ -633,12 +559,11 @@ export async function runChatMemory(): Promise<void> {
                 mergeWindow: argNum("Topic merge window size", 8),
                 maxTurns: argNum("Number of turns to run", 10),
                 concurrency: argConcurrency(2),
-                pause: argPause(),
                 actions: argBool("Index actions", true),
             },
         };
     }
-    handlers.buildIndex.metadata = buildIndexDef();
+    commands.buildIndex.metadata = buildIndexDef();
     async function buildIndex(
         args: string[],
         io: InteractiveIo,
@@ -730,7 +655,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.topics.metadata = topicsDef();
+    commands.topics.metadata = topicsDef();
     async function topics(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, topicsDef());
         const index = await context.conversation.getTopicsIndex(
@@ -747,7 +672,7 @@ export async function runChatMemory(): Promise<void> {
                     namedArgs.minScore,
                 );
             } else {
-                await searchTopics(
+                await searchTopicsText(
                     index,
                     query,
                     namedArgs.exact,
@@ -782,7 +707,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.entities.metadata = entitiesDef();
+    commands.entities.metadata = entitiesDef();
     async function entities(args: string[], io: InteractiveIo) {
         const namedArgs = parseNamedArguments(args, entitiesDef());
         let query = namedArgs.name ?? namedArgs.type ?? namedArgs.facet;
@@ -814,10 +739,13 @@ export async function runChatMemory(): Promise<void> {
         }
 
         const index = await context.conversation.getEntityIndex();
-        for await (const entity of index.entities()) {
-            await writeExtractedEntity(entity);
-            printer.writeLine();
-        }
+        const entities = [
+            ...conversation.toCompositeEntities(
+                await asyncArray.toArray(index.entities()),
+            ),
+        ];
+        entities.sort((x, y) => x.name.localeCompare(y.name));
+        printer.writeCompositeEntities(entities);
     }
 
     function actionsDef(): CommandMetadata {
@@ -841,7 +769,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.actions.metadata = actionsDef();
+    commands.actions.metadata = actionsDef();
     async function actions(args: string[], io: InteractiveIo) {
         const index = await context.conversation.getActionIndex();
         if (args.length === 0) {
@@ -902,7 +830,7 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    function searchDef(): CommandMetadata {
+    function searchDefBase(): CommandMetadata {
         return {
             description: "Natural language search on conversation",
             args: {
@@ -920,66 +848,51 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.searchQuery.metadata = searchDef();
-    async function searchQuery(
+
+    function searchDef(): CommandMetadata {
+        const def = searchDefBase();
+        if (!def.options) {
+            def.options = {};
+        }
+        def.options.skipEntities = argBool("Skip entity matching", false);
+        def.options.skipActions = argBool("Skip action matching", false);
+        def.options.skipTopics = argBool("Skip topics matching", false);
+        return def;
+    }
+    commands.search.metadata = searchDef();
+    async function search(args: string[], io: InteractiveIo): Promise<void> {
+        await searchConversation(
+            context.searcher,
+            true,
+            parseNamedArguments(args, searchDef()),
+        );
+    }
+
+    function searchTopicsDef(): CommandMetadata {
+        const def = searchDefBase();
+        if (!def.options) {
+            def.options = {};
+        }
+        def.options.showSources = argBool("Show links to source", false);
+        return def;
+    }
+    commands.searchTopics.metadata = searchDefBase();
+    async function searchTopics(
         args: string[],
         io: InteractiveIo,
     ): Promise<void> {
-        const timestampQ = new Date();
-        const namedArgs = parseNamedArguments(args, searchDef());
-        const maxMatches = namedArgs.maxMatches;
-        const minScore = namedArgs.minScore;
-        let query = namedArgs.query.trim();
-        if (!query || query.length === 0) {
-            return;
+        const namedArgs = parseNamedArguments(args, searchTopicsDef());
+        namedArgs.v2 = true;
+        namedArgs.skipActions = true;
+        namedArgs.skipEntities = true;
+        const searchResponse = await searchConversation(
+            context.searcher,
+            true,
+            namedArgs,
+        );
+        if (namedArgs.showSources && searchResponse) {
+            writeResultLinks(searchResponse);
         }
-        const searchOptions: conversation.SearchProcessingOptions = {
-            maxMatches,
-            minScore,
-            maxMessages: 15,
-            progress: (value) => printer.writeJson(value),
-        };
-        if (namedArgs.fallback) {
-            searchOptions.fallbackSearch = { maxMatches: 10 };
-        }
-        if (!namedArgs.eval) {
-            await searchNoEval(query, searchOptions);
-            return;
-        }
-
-        const result = await context.searcher.search(query, searchOptions);
-        if (!result) {
-            printer.writeError("No result");
-            return;
-        }
-        if (result.response) {
-            const timestampA = new Date();
-            const entityIndex = await context.conversation.getEntityIndex();
-            const topicIndex = await context.conversation.getTopicsIndex(
-                result.response.topicLevel,
-            );
-            printer.writeLine();
-            await writeSearchResults(
-                topicIndex,
-                entityIndex,
-                query,
-                result,
-                namedArgs.debug,
-            );
-            if (result.response.answer && namedArgs.save) {
-                const answer =
-                    result.response.answer.answer ??
-                    result.response.answer.whyNoAnswer;
-                if (answer) {
-                    recordQuestionAnswer(query, timestampQ, answer, timestampA);
-                }
-            }
-        }
-    }
-
-    handlers.search.metadata = searchDef();
-    async function search(args: string[], io: InteractiveIo): Promise<void> {
-        await searchConversation(context.searcher, true, args);
     }
 
     function searchV2DebugDef(): CommandMetadata {
@@ -990,7 +903,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.searchV2Debug.metadata = searchV2DebugDef();
+    commands.searchV2Debug.metadata = searchV2DebugDef();
     async function searchV2Debug(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, searchV2DebugDef());
         const result = await context.searcher.actions.translateSearchTermsV2(
@@ -1009,17 +922,6 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    async function searchNoEval(
-        query: string,
-        searchOptions: conversation.SearchProcessingOptions,
-    ) {
-        const searchResult = await context.searcher.actions.translateSearch(
-            query,
-            await context.searcher.buildContext(searchOptions),
-        );
-        printer.writeJson(searchResult);
-    }
-
     function makeTestSetDef(): CommandMetadata {
         return {
             description: "Make a test set from the query batch file",
@@ -1032,7 +934,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.makeTestSet.metadata = makeTestSetDef();
+    commands.makeTestSet.metadata = makeTestSetDef();
     async function makeTestSet(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, makeTestSetDef());
         await conversation.testData.searchBatchFile(
@@ -1056,12 +958,12 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.runTestSet.metadata = runTestSetDef();
+    commands.runTestSet.metadata = runTestSetDef();
     async function runTestSet(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, runTestSetDef());
         const comparisons = await conversation.testData.compareQueryBatchFile(
             context.conversationManager,
-            context.embeddingModel,
+            context.models.embeddingModel,
             namedArgs.filePath,
             namedArgs.concurrency,
             writeProgress,
@@ -1093,7 +995,7 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    handlers.tokenLog.metadata = tokenLogDef();
+    commands.tokenLog.metadata = tokenLogDef();
     async function tokenLog(args: string[]) {
         const namedArgs = parseNamedArguments(args, tokenLogDef());
         showTokenStats =
@@ -1113,14 +1015,13 @@ export async function runChatMemory(): Promise<void> {
     async function searchConversation(
         searcher: conversation.ConversationSearchProcessor,
         recordAnswer: boolean,
-        args: string[],
-    ): Promise<void> {
-        const namedArgs = parseNamedArguments(args, searchDef());
+        namedArgs: NamedArgs,
+    ): Promise<conversation.SearchResponse | undefined> {
         const maxMatches = namedArgs.maxMatches;
         const minScore = namedArgs.minScore;
         let query = namedArgs.query.trim();
         if (!query || query.length === 0) {
-            return;
+            return undefined;
         }
         const searchOptions: conversation.SearchProcessingOptions = {
             maxMatches,
@@ -1132,8 +1033,20 @@ export async function runChatMemory(): Promise<void> {
             searchOptions.fallbackSearch = { maxMatches: 10 };
         }
         if (!namedArgs.eval) {
-            await searchNoEval(query, searchOptions);
-            return;
+            // just translate user query into structured query without eval
+            const translationContext =
+                await context.searcher.buildContext(searchOptions);
+            const searchResult: any = namedArgs.v2
+                ? await searcher.actions.translateSearchTermsV2(
+                      query,
+                      translationContext,
+                  )
+                : await context.searcher.actions.translateSearch(
+                      query,
+                      translationContext,
+                  );
+            printer.writeJson(searchResult);
+            return undefined;
         }
 
         searcher.answers.settings.chunking.enable = true; //namedArgs.chunk === true;
@@ -1144,6 +1057,9 @@ export async function runChatMemory(): Promise<void> {
             | conversation.SearchTermsActionResponseV2
             | undefined;
         if (namedArgs.v2) {
+            searchOptions.skipEntitySearch = namedArgs.skipEntities;
+            searchOptions.skipActionSearch = namedArgs.skipActions;
+            searchOptions.skipTopicSearch = namedArgs.skipTopicSearch;
             result = await searcher.searchTermsV2(
                 query,
                 undefined,
@@ -1158,7 +1074,7 @@ export async function runChatMemory(): Promise<void> {
         }
         if (!result) {
             printer.writeError("No result");
-            return;
+            return undefined;
         }
         await writeSearchTermsResult(result, namedArgs.debug);
         if (result.response && result.response.answer) {
@@ -1172,6 +1088,7 @@ export async function runChatMemory(): Promise<void> {
                 }
             }
         }
+        return result.response;
     }
 
     async function writeSearchTermsResult(
@@ -1221,88 +1138,39 @@ export async function runChatMemory(): Promise<void> {
             context.searchMemory.conversationName !== context.conversationName
         ) {
             try {
-                context.searchMemory.queueAddMessage(
-                    `USER:\n${question}`,
-                    undefined,
-                    timestampQ,
-                );
-                context.searchMemory.queueAddMessage(
-                    `ASSISTANT:\n${answer}`,
-                    undefined,
-                    timestampA,
-                );
+                context.searchMemory.queueAddMessage({
+                    text: `USER:\n${question}`,
+                    timestamp: timestampQ,
+                });
+                context.searchMemory.queueAddMessage({
+                    text: `ASSISTANT:\n${answer}`,
+                    timestamp: timestampA,
+                });
             } catch (e) {
                 printer.writeError(`Error updating history\n${e}`);
             }
         }
     }
 
-    async function writeSearchResults(
-        topicIndex: conversation.TopicIndex,
-        entityIndex: conversation.EntityIndex,
-        query: string,
-        rr: conversation.SearchActionResponse,
-        debugInfo: boolean,
-        showLinks: boolean = false,
-    ) {
-        writeResultStats(rr.response);
-        if (rr.response) {
-            const action: conversation.SearchAction = rr.action;
-            switch (action.actionName) {
-                case "unknown":
-                    printer.writeError("unknown action");
-                    break;
-
-                case "getAnswer":
-                    const answer = rr.response.answer;
-                    if (answer) {
-                        if (
-                            answer &&
-                            answer.type === "Answered" &&
-                            answer.answer
-                        ) {
-                            printer.writeInColor(chalk.green, answer.answer);
-                            if (debugInfo && showLinks) {
-                                writeResultLinks(rr.response);
-                            }
-                            return;
-                        }
-
-                        printer.writeError(answer.whyNoAnswer ?? "No answer");
-                    }
-                    if (debugInfo) {
-                        writeDebugInfo(topicIndex, entityIndex, rr);
-                    }
-                    break;
+    async function writeResultLinks(
+        rr: conversation.SearchResponse,
+    ): Promise<void> {
+        if (rr.messageIds && rr.messages) {
+            const urlGet = context.conversation.messages.getUrl;
+            for (let i = 0; i < rr.messageIds.length; ++i) {
+                const message = rr.messages[i];
+                let links: string[] | undefined;
+                if (message.value.sourceIds) {
+                    links = message.value.sourceIds.map((id) =>
+                        pathToFileURL(id).toString(),
+                    );
+                } else if (urlGet) {
+                    rr.messageIds.map((id) => urlGet(id).toString());
+                } else {
+                    links = undefined;
+                }
+                printer.writeList(links, { type: "ul" });
             }
-        } else {
-            printer.writeLine("No search response");
-        }
-    }
-
-    async function writeDebugInfo(
-        topicIndex: conversation.TopicIndex,
-        entityIndex: conversation.EntityIndex,
-        rr: conversation.SearchActionResponse,
-    ) {
-        printer.writeTitle("DEBUG INFORMATION");
-        if (rr.response) {
-            printer.writeSearchResponse(rr.response);
-            if (rr.response.messages) {
-                printer.writeTitle("Messages");
-                printer.writeTemporalBlocks(
-                    chalk.blueBright,
-                    rr.response.messages,
-                );
-            }
-        }
-    }
-
-    function writeResultLinks(rr: conversation.SearchResponse): void {
-        const urlGet = context.conversation.messages.getUrl;
-        if (rr && rr.messageIds && urlGet !== undefined) {
-            const links = rr.messageIds.map((id) => urlGet(id).toString());
-            printer.writeList(links, { type: "ul" });
         }
     }
 
@@ -1344,7 +1212,7 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    async function searchTopics(
+    async function searchTopicsText(
         index: knowLib.conversation.TopicIndex,
         query: string,
         exact: boolean,
@@ -1490,7 +1358,7 @@ export async function runChatMemory(): Promise<void> {
             }
         }
     }
-
+    /*
     async function writeExtractedEntity(
         entity: conversation.ExtractedEntity,
         showTopics?: boolean,
@@ -1512,6 +1380,7 @@ export async function runChatMemory(): Promise<void> {
             }
         }
     }
+    */
 
     async function writeEntitiesById(
         index: knowLib.conversation.EntityIndex,
@@ -1577,4 +1446,10 @@ export async function runChatMemory(): Promise<void> {
     function writeProgress(value: string, i: number, total: number) {
         printer.writeLine(`${i + 1}/${total} ${value}`);
     }
+
+    await runConsole({
+        onStart,
+        inputHandler,
+        handlers: commands,
+    });
 }

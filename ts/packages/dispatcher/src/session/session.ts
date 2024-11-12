@@ -102,19 +102,25 @@ async function newSessionDir() {
 }
 
 type DispatcherConfig = {
-    explainerName: string;
     models: {
         translator: string;
         explainer: string;
     };
     bot: boolean;
     stream: boolean;
-    explanation: boolean;
-    explanationOptions: {
-        rejectReferences: boolean;
-        retranslateWithoutContext: boolean;
+    explainer: {
+        enabled: boolean;
+        name: string;
+        filter: {
+            multiple: boolean;
+            reference: {
+                value: boolean;
+                list: boolean;
+                translate: boolean;
+            };
+        };
     };
-    promptOptions: {
+    promptConfig: {
         additionalInstructions: boolean;
     };
     switch: {
@@ -125,35 +131,30 @@ type DispatcherConfig = {
     history: boolean;
 
     // Cache behaviors
-    cache: boolean;
-    builtInCache: boolean;
-    autoSave: boolean;
-    matchWildcard: boolean;
+    cache: CacheConfig & {
+        enabled: boolean;
+        autoSave: boolean;
+        builtInCache: boolean;
+        matchWildcard: boolean;
+    };
 };
 
-export type SessionConfig = AppAgentState & DispatcherConfig & CacheConfig;
+export type SessionConfig = AppAgentState & DispatcherConfig;
 
 export type SessionOptions = AppAgentStateOptions &
-    DeepPartialUndefined<DispatcherConfig> &
-    DeepPartialUndefined<CacheConfig>;
+    DeepPartialUndefined<DispatcherConfig>;
 
 const defaultSessionConfig: SessionConfig = {
     translators: undefined,
     actions: undefined,
     commands: undefined,
-    explainerName: getDefaultExplainerName(),
     models: {
         translator: "",
         explainer: "",
     },
     bot: true,
     stream: true,
-    explanation: true,
-    explanationOptions: {
-        rejectReferences: true,
-        retranslateWithoutContext: true,
-    },
-    promptOptions: {
+    promptConfig: {
         additionalInstructions: true,
     },
     switch: {
@@ -162,12 +163,26 @@ const defaultSessionConfig: SessionConfig = {
     },
     multipleActions: true,
     history: true,
-    cache: true,
-    autoSave: true,
-    mergeMatchSets: true, // the session default is different then the default in the cache
-    cacheConflicts: true, // the session default is different then the default in the cache
-    matchWildcard: true,
-    builtInCache: true,
+    explainer: {
+        enabled: true,
+        name: getDefaultExplainerName(),
+        filter: {
+            multiple: true,
+            reference: {
+                value: true,
+                list: true,
+                translate: true,
+            },
+        },
+    },
+    cache: {
+        enabled: true,
+        autoSave: true,
+        mergeMatchSets: true, // the session default is different then the default in the cache
+        cacheConflicts: true, // the session default is different then the default in the cache
+        matchWildcard: true,
+        builtInCache: true,
+    },
 };
 
 export function getDefaultSessionConfig() {
@@ -275,7 +290,7 @@ export class Session {
     }
 
     public get explainerName() {
-        return this.config.explainerName;
+        return this.config.explainer.name;
     }
 
     public get bot() {
@@ -283,25 +298,13 @@ export class Session {
     }
 
     public get explanation() {
-        return this.config.explanation;
-    }
-
-    public get cache() {
-        return this.config.cache;
-    }
-
-    public get autoSave() {
-        return this.config.autoSave;
-    }
-
-    public get builtInCache() {
-        return this.config.builtInCache;
+        return this.config.explainer.enabled;
     }
 
     public get cacheConfig(): CacheConfig {
         return {
-            mergeMatchSets: this.config.mergeMatchSets,
-            cacheConflicts: this.config.cacheConflicts,
+            mergeMatchSets: this.config.cache.mergeMatchSets,
+            cacheConflicts: this.config.cache.cacheConflicts,
         };
     }
 
@@ -437,13 +440,17 @@ export class Session {
     }
 }
 
-export async function configAgentCache(
+/**
+ * Clear existing cache state and setup the cache again.
+ */
+export async function setupAgentCache(
     session: Session,
     agentCache: AgentCache,
 ) {
-    agentCache.model = session.getConfig().models.explainer;
+    const config = session.getConfig();
+    agentCache.model = config.models.explainer;
     agentCache.constructionStore.clear();
-    if (session.cache) {
+    if (config.cache.enabled) {
         const cacheData = session.getCacheDataFilePath();
         if (cacheData !== undefined) {
             // Load if there is an existing path.
@@ -453,37 +460,41 @@ export async function configAgentCache(
             } else {
                 debugSession(`Cache file missing ${cacheData}`);
                 // Disable the cache if we can't load the file.
-                session.setConfig({ cache: false });
+                session.setConfig({ cache: { enabled: false } });
                 throw new Error(
                     `Cache file ${cacheData} missing. Use '@const new' to create a new one'`,
                 );
             }
         } else {
             // Create if there isn't an existing path.
-            const newCacheData = session.autoSave
+            const newCacheData = config.cache.autoSave
                 ? await session.ensureCacheDataFilePath()
                 : undefined;
             await agentCache.constructionStore.newCache(newCacheData);
             debugSession(`Creating session cache ${newCacheData ?? ""}`);
         }
 
-        if (session.builtInCache) {
-            const builtInConstructions = session.builtInCache
-                ? getBuiltinConstructionConfig(session.explainerName)?.file
-                : undefined;
-
-            try {
-                await agentCache.constructionStore.setBuiltInCache(
-                    builtInConstructions,
-                );
-            } catch (e: any) {
-                console.warn(
-                    `WARNING: Unable to load built-in cache: ${e.message}`,
-                );
-            }
-        }
+        await setupBuiltInCache(session, agentCache, config.cache.builtInCache);
     }
-    await agentCache.constructionStore.setAutoSave(session.autoSave);
+    await agentCache.constructionStore.setAutoSave(config.cache.autoSave);
+}
+
+export async function setupBuiltInCache(
+    session: Session,
+    agentCache: AgentCache,
+    enable: boolean,
+) {
+    const builtInConstructions = enable
+        ? getBuiltinConstructionConfig(session.explainerName)?.file
+        : undefined;
+
+    try {
+        await agentCache.constructionStore.setBuiltInCache(
+            builtInConstructions,
+        );
+    } catch (e: any) {
+        console.warn(`WARNING: Unable to load built-in cache: ${e.message}`);
+    }
 }
 
 export async function deleteSession(dir: string) {

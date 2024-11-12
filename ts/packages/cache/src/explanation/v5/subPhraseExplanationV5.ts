@@ -70,12 +70,14 @@ export function createSubPhraseExplainer(model?: string) {
             );
         },
         createInstructions,
-        ([requestAction]) => requestAction.toPromptString(true),
+        ([requestAction]) => requestAction.toPromptString(),
         validateSubPhraseExplanationV5,
     );
 }
 
-function isPropertySubPhrase(phrase: SubPhrase): phrase is PropertySubPhase {
+export function isPropertySubPhrase(
+    phrase: SubPhrase,
+): phrase is PropertySubPhase {
     return phrase.hasOwnProperty("propertyNames");
 }
 

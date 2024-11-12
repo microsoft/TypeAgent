@@ -25,11 +25,7 @@ public class Outlook : COMObject
         }
         return FilterItems(filter, (item) =>
         {
-            if (item is MailItem mailItem)
-            {
-                return new Email(mailItem);
-            }
-            return null;
+            return item is MailItem mailItem ? new Email(mailItem) : null;
         });
     }
 
@@ -75,6 +71,74 @@ public class Outlook : COMObject
         finally
         {
             COMObject.Release(filteredItems);
+            COMObject.Release(items);
+            COMObject.Release(inbox);
+            COMObject.Release(ns);
+        }
+    }
+
+    public IEnumerable<T> MapMailItems<T>(Func<MailItem, T> gettor)
+    {
+        NameSpace ns = null;
+        MAPIFolder inbox = null;
+        Items items = null;
+        try
+        {
+            ns = _outlook.GetNamespace("MAPI");
+            inbox = ns.GetDefaultFolder(OlDefaultFolders.olFolderInbox);
+            items = inbox.Items;
+            items.Sort("[ReceivedTime]", true);
+            foreach (object item in items)
+            {
+                if (item is MailItem mailItem)
+                {
+                    try
+                    {
+                        yield return gettor(mailItem);
+                    }
+                    finally
+                    {
+                        COMObject.Release(item);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            COMObject.Release(items);
+            COMObject.Release(inbox);
+            COMObject.Release(ns);
+        }
+    }
+
+    public IEnumerable<MailItem> ForEachMailItem()
+    {
+        NameSpace ns = null;
+        MAPIFolder inbox = null;
+        Items items = null;
+        try
+        {
+            ns = _outlook.GetNamespace("MAPI");
+            inbox = ns.GetDefaultFolder(OlDefaultFolders.olFolderInbox);
+            items = inbox.Items;
+            items.Sort("[ReceivedTime]", true);
+            foreach (object item in items)
+            {
+                if (item is MailItem mailItem)
+                {
+                    try
+                    {
+                        yield return mailItem;
+                    }
+                    finally
+                    {
+                        COMObject.Release(item);
+                    }
+                }
+            }
+        }
+        finally
+        {
             COMObject.Release(items);
             COMObject.Release(inbox);
             COMObject.Release(ns);

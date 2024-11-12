@@ -94,7 +94,7 @@ export function createAlternativesExplainer(
             );
         },
         createInstructions,
-        ([requestAction]) => requestAction.toPromptString(true),
+        ([requestAction]) => requestAction.toPromptString(),
         validateAlternativesExplanationV5,
     );
 }

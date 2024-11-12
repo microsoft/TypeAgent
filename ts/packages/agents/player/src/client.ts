@@ -426,7 +426,7 @@ async function playRandomAction(
     clientContext: IClientContext,
     action: PlayRandomAction,
 ) {
-    const quantity = action.parameters.quantity ?? 0;
+    const quantity = action.parameters?.quantity ?? 0;
     const savedTracks = await getFavoriteTracks(clientContext.service);
     if (savedTracks && savedTracks.length > 0) {
         if (quantity > 0) {
@@ -915,7 +915,7 @@ export async function handleCall(
         }
         case "getFavorites": {
             const getFavoritesAction = action as GetFavoritesAction;
-            const countOption = getFavoritesAction.parameters.count;
+            const countOption = getFavoritesAction.parameters?.count;
             let count = limitMax;
             if (countOption !== undefined) {
                 count = countOption;

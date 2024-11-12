@@ -18,6 +18,7 @@ import {
     createConversationManager,
 } from "../conversation/conversationManager.js";
 import {
+    Conversation,
     ConversationSettings,
     createConversation,
 } from "../conversation/conversation.js";
@@ -118,8 +119,11 @@ export function emailToString(
     return text;
 }
 
-export function emailToTextBlock(email: Email): TextBlock<string> {
-    const value = emailToString(email);
+export function emailToTextBlock(
+    email: Email,
+    includeHeader: boolean = true,
+): TextBlock<string> {
+    const value = includeHeader ? emailToString(email) : email.body;
     const block: TextBlock<string> = {
         type: TextBlockType.Raw,
         value,
@@ -270,6 +274,9 @@ export async function loadEmailFolder(
     return removeUndefined(emails);
 }
 
+export interface EmailMemorySettings extends ConversationSettings {
+    mailBoxOwner?: EmailAddress | undefined;
+}
 /**
  * Create email memory at the given root path
  * @param name
@@ -281,10 +288,11 @@ export async function createEmailMemory(
     model: ChatModel,
     name: string,
     rootPath: string,
-    settings: ConversationSettings,
+    settings: EmailMemorySettings,
     storageProvider?: StorageProvider,
 ) {
     const storePath = path.join(rootPath, name);
+    settings.initializer ??= setupEmailConversation;
     const emailConversation = await createConversation(
         settings,
         storePath,
@@ -292,20 +300,22 @@ export async function createEmailMemory(
         undefined,
         storageProvider,
     );
-
-    const actions = await emailConversation.getActionIndex();
-    actions.verbTermMap.put("say", EmailVerbs.send);
-    actions.verbTermMap.put("discuss", EmailVerbs.send);
-    actions.verbTermMap.put("talk", EmailVerbs.send);
-    actions.verbTermMap.put("get", EmailVerbs.receive);
-
     const cm = await createConversationManager(
+        {
+            model,
+            initializer: setupEmailConversationManager,
+        },
         name,
         rootPath,
         false,
         emailConversation,
-        model,
     );
+    return cm;
+}
+
+async function setupEmailConversationManager(
+    cm: ConversationManager,
+): Promise<void> {
     cm.topicMerger.settings.mergeWindowSize = 1;
     cm.topicMerger.settings.trackRecent = false;
 
@@ -314,7 +324,16 @@ export async function createEmailMemory(
     entityIndex.noiseTerms.put("message");
 
     cm.searchProcessor.answers.settings.hints = `messages are *emails*. Use email headers (to, subject. etc) to determine if message is highly relevant to the question`;
-    return cm;
+}
+
+async function setupEmailConversation(
+    emailConversation: Conversation,
+): Promise<void> {
+    const actions = await emailConversation.getActionIndex();
+    actions.verbTermMap.put("say", EmailVerbs.send);
+    actions.verbTermMap.put("discuss", EmailVerbs.send);
+    actions.verbTermMap.put("talk", EmailVerbs.send);
+    actions.verbTermMap.put("get", EmailVerbs.receive);
 }
 
 /**
@@ -354,10 +373,13 @@ export async function addEmailFileToConversation(
 }
 
 export function emailToMessage(email: Email): ConversationMessage {
+    const sender = email.from.displayName;
     return {
-        text: emailToTextBlock(email),
+        header: emailHeadersToString(email),
+        text: emailToTextBlock(email, false),
         knowledge: emailToKnowledge(email),
         timestamp: dateTime.stringToDate(email.sentOn),
+        sender,
     };
 }
 

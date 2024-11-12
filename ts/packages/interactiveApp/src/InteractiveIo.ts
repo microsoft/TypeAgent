@@ -14,6 +14,14 @@ export type InteractiveIo = {
     writer: ConsoleWriter;
 };
 
+let g_io: InteractiveIo | undefined;
+export function getInteractiveIO(): InteractiveIo {
+    if (!g_io) {
+        g_io = createInteractiveIO();
+    }
+    return g_io;
+}
+
 export function createInteractiveIO(): InteractiveIo {
     return {
         stdin: process.stdin,

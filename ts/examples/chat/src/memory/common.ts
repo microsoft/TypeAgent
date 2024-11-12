@@ -5,6 +5,10 @@ import { ArgDef } from "interactive-app";
 import { conversation, SourceTextBlock } from "knowledge-processor";
 import { asyncArray } from "typeagent";
 
+export async function pause(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function getMessages(
     cm: conversation.ConversationManager,
     maxTurns?: number | undefined,

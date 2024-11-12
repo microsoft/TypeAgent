@@ -10,12 +10,7 @@ import {
 } from "./emailActionsSchema.js";
 import { generateNotes } from "typeagent";
 import { openai } from "aiclient";
-import {
-    ActionContext,
-    AppAction,
-    AppAgent,
-    SessionContext,
-} from "@typeagent/agent-sdk";
+import { ActionContext, AppAgent, SessionContext } from "@typeagent/agent-sdk";
 import {
     createActionResultFromHtmlDisplay,
     createActionResultFromError,
@@ -39,7 +34,7 @@ export class MailClientLoginCommandHandler implements CommandHandlerNoParams {
 
 const handlers: CommandHandlerTable = {
     description: "Email login commmand",
-    defaultSubCommand: new MailClientLoginCommandHandler(),
+    defaultSubCommand: "login",
     commands: {
         login: new MailClientLoginCommandHandler(),
     },
@@ -76,7 +71,7 @@ async function updateEmailContext(
 }
 
 async function executeEmailAction(
-    action: AppAction,
+    action: EmailAction,
     context: ActionContext<EmailActionContext>,
 ) {
     const { mailClient } = context.sessionContext.agentContext;
@@ -86,7 +81,7 @@ async function executeEmailAction(
         );
     }
 
-    let result = await handleEmailAction(action as EmailAction, context);
+    let result = await handleEmailAction(action, context);
     if (result) {
         return createActionResultFromHtmlDisplay(result);
     }
