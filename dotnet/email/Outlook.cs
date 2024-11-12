@@ -81,6 +81,41 @@ public class Outlook : COMObject
         }
     }
 
+    public IEnumerable<T> MapMailItems<T>(Func<MailItem, T> gettor)
+    {
+        NameSpace ns = null;
+        MAPIFolder inbox = null;
+        Items items = null;
+        Items filteredItems = null;
+        try
+        {
+            ns = _outlook.GetNamespace("MAPI");
+            inbox = ns.GetDefaultFolder(OlDefaultFolders.olFolderInbox);
+            items = inbox.Items;
+            foreach (object item in items)
+            {
+                if (item is MailItem mailItem)
+                {
+                    try
+                    {
+                        yield return gettor(mailItem);
+                    }
+                    finally
+                    {
+                        COMObject.Release(item);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            COMObject.Release(filteredItems);
+            COMObject.Release(items);
+            COMObject.Release(inbox);
+            COMObject.Release(ns);
+        }
+    }
+
     protected override void OnDispose()
     {
         COMObject.Release(_session);
