@@ -42,7 +42,7 @@ public class EmailExporter
             Email email = _outlook.LoadEmail(sourcePath);
             email.Save(destPath);
         }
-        catch(System.Exception ex)
+        catch (System.Exception ex)
         {
             ConsoleEx.WriteLineColor(ConsoleColor.Red, $"SKIPPED {sourcePath}");
             ConsoleEx.LogError(ex);
@@ -68,7 +68,7 @@ public class EmailExporter
     public void ExportFrom(string senderName)
     {
         List<Email> emails = _outlook.LoadFrom(senderName);
-        foreach(var email in emails)
+        foreach (var email in emails)
         {
             Console.WriteLine(email.ToString());
         }

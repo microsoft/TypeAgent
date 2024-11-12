@@ -5,19 +5,23 @@ namespace TypeAgent.Core;
 
 public static class ConsoleEx
 {
-    public static string[] GetInput()
+    public static string[] GetInput(string prompt)
     {
-        Console.Write(">");
-        string line = Console.ReadLine();
-        if (line != null)
+        prompt ??= ">";
+        string line;
+        while (true)
         {
-            line = line.Trim();
+            Console.Write(prompt);
+            line = Console.ReadLine();
+            if (line != null)
+            {
+                line = line.Trim();
+            }
+            if (!string.IsNullOrEmpty(line))
+            {
+                return line.ParseCommandLine();
+            }
         }
-        if (string.IsNullOrEmpty(line))
-        {
-            return null;
-        }
-        return line.ParseCommandLine();
     }
 
     public static void LogError(System.Exception ex)

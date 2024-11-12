@@ -25,11 +25,7 @@ public class Outlook : COMObject
         }
         return FilterItems(filter, (item) =>
         {
-            if (item is MailItem mailItem)
-            {
-                return new Email(mailItem);
-            }
-            return null;
+            return item is MailItem mailItem ? new Email(mailItem) : null;
         });
     }
 

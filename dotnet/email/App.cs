@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+using System.Diagnostics;
 using TypeAgent.Core;
 
 namespace TypeAgent;
@@ -16,13 +17,22 @@ public class App
         _stats = new MailStats(outlook);
 
         _commands = new RootCommand("Mail commands");
+        _commands.AddCommand(Quit());
         _commands.AddCommand(_stats.Command_GetSize());
     }
 
     public EmailExporter Exporter => _exporter;
 
+    Command Quit()
+    {
+        Command cmd = new Command("quit");
+        cmd.SetHandler(() => Environment.Exit(0));
+        return cmd;
+    }
+
     static void Main(string[] args)
     {
+        Console.OutputEncoding = Encoding.UTF8;
         args = EnsureArgs(args);
         if (args == null || args.Length == 0)
         {
@@ -31,15 +41,13 @@ public class App
         try
         {
             using Outlook outlook = new Outlook();
-            var app= new App(outlook);
+            var app = new App(outlook);
             switch (args[0])
             {
                 default:
                     if (args[0].StartsWith('@'))
                     {
-                        args[0] = args[0].Substring(1);
-                        var result = app._commands.Invoke(args);
-                        Console.WriteLine(result);
+                        RunInteractive(app, args);
                     }
                     else
                     {
@@ -67,12 +75,22 @@ public class App
         }
     }
 
+    static void RunInteractive(App app, string[] args)
+    {
+        while (true)
+        {
+            if (args.Length > 0)
+            {
+                args[0] = args[0][1..];
+                var result = app._commands.Invoke(args);
+                Console.WriteLine(result);
+            }
+            args = ConsoleEx.GetInput("📬>");
+        }
+    }
+
     static string[]? EnsureArgs(string[] args)
     {
-        if (args != null && args.Length > 0)
-        {
-            return args;
-        }
-        return ConsoleEx.GetInput();
+        return args != null && args.Length > 0 ? args : ConsoleEx.GetInput("📬>");
     }
 }
