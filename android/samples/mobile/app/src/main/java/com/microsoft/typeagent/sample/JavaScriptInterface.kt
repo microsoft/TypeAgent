@@ -94,7 +94,7 @@ class JavaScriptInterface(var context: Context) : DefaultJSInterface("Android") 
             .setData(uri)
             .putExtra("prompt", prompt)
             .addCategory(Intent.CATEGORY_BROWSABLE)
-        startActivity(context, intent, null)
+        context.startActivity(intent)
     }
 
     /**
