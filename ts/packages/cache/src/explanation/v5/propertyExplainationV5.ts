@@ -10,7 +10,7 @@ import {
     EntityProperty,
 } from "./propertyExplanationSchemaV5WithContext.js";
 import { getPackageFilePath } from "../../utils/getPackageFilePath.js";
-import { RequestAction } from "../requestAction.js";
+import { normalizeParamString, RequestAction } from "../requestAction.js";
 import {
     getActionDescription,
     getExactStringRequirementMessage,
@@ -112,8 +112,8 @@ function validatePropertyExplanation(
             if (isEntityParameter(prop) && prop.entityIndex !== undefined) {
                 // TODO: fuzzy match
                 if (
-                    prop.substrings.join(" ").toLowerCase() ===
-                    prop.value.toString().toLowerCase()
+                    normalizeParamString(prop.substrings.join(" ")) ===
+                    normalizeParamString(prop.value.toString())
                 ) {
                     corrections.push(
                         `'${prop.name}' has value '${prop.value}' from a substring in the request. Should not have an entity index.`,
@@ -141,9 +141,13 @@ function validatePropertyExplanation(
                 }
             }
 
-            const lowerCaseRequest = requestAction.request.toLowerCase();
+            const normalizedRequest = normalizeParamString(
+                requestAction.request,
+            );
             for (const substring of prop.substrings) {
-                if (!lowerCaseRequest.includes(substring.toLowerCase())) {
+                if (
+                    !normalizedRequest.includes(normalizeParamString(substring))
+                ) {
                     corrections.push(
                         `Substring '${substring}' for property '${prop.name}' not found in the request string. ${getExactStringRequirementMessage(false)}`,
                     );
