@@ -78,7 +78,10 @@ public class EmailExporter
             int bucket = MailStats.GetBucketForSize(size);
             string destDirPath = Path.Join(rootPath, bucket.ToString());
             DirectoryEx.Ensure(destDirPath);
-            email.Save(Path.Join(destDirPath, email.EntryId + ".json"));
+
+            const int MaxFileNameLength = 64;
+            string fileName = FileEx.SanitizeFileName(email.Subject, MaxFileNameLength);
+            email.Save(FileEx.MakeUnique(destDirPath, fileName, ".json"));
         }
     }
 

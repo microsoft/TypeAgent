@@ -82,12 +82,12 @@ public class Outlook : COMObject
         NameSpace ns = null;
         MAPIFolder inbox = null;
         Items items = null;
-        Items filteredItems = null;
         try
         {
             ns = _outlook.GetNamespace("MAPI");
             inbox = ns.GetDefaultFolder(OlDefaultFolders.olFolderInbox);
             items = inbox.Items;
+            items.Sort("[ReceivedTime]", true);
             foreach (object item in items)
             {
                 if (item is MailItem mailItem)
@@ -105,7 +105,6 @@ public class Outlook : COMObject
         }
         finally
         {
-            COMObject.Release(filteredItems);
             COMObject.Release(items);
             COMObject.Release(inbox);
             COMObject.Release(ns);
