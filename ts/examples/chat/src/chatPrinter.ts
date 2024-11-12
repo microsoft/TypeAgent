@@ -6,7 +6,7 @@ import { Result } from "typechat";
 import chalk from "chalk";
 import { ChalkWriter } from "./chalkWriter.js";
 import { openai } from "aiclient";
-import { IndexingStats } from "./memory/common.js";
+import { IndexingStats } from "knowledge-processor";
 
 export class ChatPrinter extends ChalkWriter {
     constructor(io: InteractiveIo) {
@@ -43,11 +43,11 @@ export class ChatPrinter extends ChalkWriter {
     }
 
     public writeIndexingStats(stats: IndexingStats) {
-        this.writeInColor(chalk.cyan, `Chars: ${stats.totalChars}`);
+        this.writeInColor(chalk.cyan, `Chars: ${stats.totalStats.charCount}`);
         this.writeInColor(
             chalk.green,
-            `Time: ${millisecondsToString(stats.totalMs, "m")}`,
+            `Time: ${millisecondsToString(stats.totalStats.timeMs, "m")}`,
         );
-        this.writeCompletionStats(stats.tokenStats);
+        this.writeCompletionStats(stats.totalStats.tokenStats);
     }
 }

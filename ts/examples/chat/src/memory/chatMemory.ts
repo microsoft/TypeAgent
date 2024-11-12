@@ -29,9 +29,7 @@ import {
     argMinScore,
     argPause,
     argSourceFile,
-    createIndexingStats,
     getMessagesAndCount,
-    IndexingStats,
 } from "./common.js";
 import { createEmailCommands, createEmailMemory } from "./emailMemory.js";
 import { pathToFileURL } from "url";
@@ -47,7 +45,7 @@ export type ChatContext = {
     printer: ChatMemoryPrinter;
     models: Models;
     maxCharsPerChunk: number;
-    stats: IndexingStats;
+    stats: knowLib.IndexingStats;
     topicWindowSize: number;
     searchConcurrency: number;
     minScore: number;
@@ -134,7 +132,7 @@ export async function createChatMemoryContext(
         storePath,
         printer: new ChatMemoryPrinter(getInteractiveIO()),
         models,
-        stats: createIndexingStats(),
+        stats: knowLib.createIndexingStats(),
         maxCharsPerChunk: 4096,
         topicWindowSize: 8,
         searchConcurrency: 2,
@@ -246,7 +244,7 @@ export async function loadConversation(
 }
 
 export async function runChatMemory(): Promise<void> {
-    let context = await createChatMemoryContext(printStats);
+    let context = await createChatMemoryContext(captureTokenStats);
     let showTokenStats = true;
     let printer = context.printer;
     const commands: Record<string, CommandHandler> = {
@@ -300,8 +298,8 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    function printStats(req: any, response: any): void {
-        context.stats.addTokens(response.usage);
+    function captureTokenStats(req: any, response: any): void {
+        context.stats.updateCurrentTokenStats(response.usage);
         if (showTokenStats) {
             printer.writeCompletionStats(response.usage);
             printer.writeLine();

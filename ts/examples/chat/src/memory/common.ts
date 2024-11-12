@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { openai } from "aiclient";
 import { ArgDef } from "interactive-app";
 import { conversation, SourceTextBlock } from "knowledge-processor";
 import { asyncArray } from "typeagent";
@@ -98,44 +97,4 @@ export function argChunkSize(defaultValue?: number | undefined): ArgDef {
         defaultValue,
         description: "Text chunk size",
     };
-}
-
-export interface IndexingStats {
-    totalMs: number;
-    totalChars: number;
-    tokenStats: openai.CompletionUsageStats;
-
-    clear(): void;
-    addTokens(tokens: openai.CompletionUsageStats): void;
-}
-
-export function createIndexingStats(): IndexingStats {
-    const indexingStats = {
-        totalMs: 0,
-        totalChars: 0,
-        tokenStats: emptyTokenStats(),
-        addTokens,
-        clear,
-    };
-    return indexingStats;
-
-    function addTokens(stats: openai.CompletionUsageStats): void {
-        indexingStats.tokenStats.completion_tokens += stats.completion_tokens;
-        indexingStats.tokenStats.prompt_tokens += stats.prompt_tokens;
-        indexingStats.tokenStats.total_tokens += stats.total_tokens;
-    }
-
-    function clear() {
-        indexingStats.totalMs = 0;
-        indexingStats.totalChars = 0;
-        indexingStats.tokenStats = emptyTokenStats();
-    }
-
-    function emptyTokenStats(): openai.CompletionUsageStats {
-        return {
-            completion_tokens: 0,
-            prompt_tokens: 0,
-            total_tokens: 0,
-        };
-    }
 }
