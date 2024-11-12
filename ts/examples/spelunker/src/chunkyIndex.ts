@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { openai, ChatModel } from "aiclient";
+import { openai, ChatModel, TextEmbeddingModel } from "aiclient";
 import {
     CodeDocumenter,
     createSemanticCodeIndex,
@@ -22,20 +22,22 @@ import { Chunk } from "./pythonChunker.js";
 export class ChunkyIndex {
     rootDir: string;
     chatModel: ChatModel;
+    embeddingModel: TextEmbeddingModel;
     fileDocumenter: FileDocumenter;
     fakeCodeDocumenter: CodeDocumenter;
     // The rest are asynchronously initialized by initialize().
     chunkFolder!: ObjectFolder<Chunk>;
     codeIndex!: SemanticCodeIndex;
     summaryFolder!: ObjectFolder<CodeDocumentation>;
-    keywordsFolder!: knowLib.KeyValueIndex<string, string>;
-    topicsFolder!: knowLib.KeyValueIndex<string, string>;
-    goalsFolder!: knowLib.KeyValueIndex<string, string>;
-    dependenciesFolder!: knowLib.KeyValueIndex<string, string>;
+    keywordsIndex!: knowLib.TextIndex<string, string>;
+    topicsIndex!: knowLib.TextIndex<string, string>;
+    goalsIndex!: knowLib.TextIndex<string, string>;
+    dependenciesIndex!: knowLib.TextIndex<string, string>;
 
     private constructor(rootDir: string) {
         this.rootDir = rootDir;
         this.chatModel = openai.createChatModelDefault("spelunkerChat");
+        this.embeddingModel = openai.createEmbeddingModel();
         this.fileDocumenter = createFileDocumenter(this.chatModel);
         this.fakeCodeDocumenter = createFakeCodeDocumenter();
     }
@@ -56,18 +58,25 @@ export class ChunkyIndex {
             instance.rootDir + "/summaries",
             { serializer: (obj) => JSON.stringify(obj, null, 2) },
         );
-        instance.keywordsFolder = await knowLib.createIndexFolder<string>(
-            instance.rootDir + "/keywords",
-        );
-        instance.topicsFolder = await knowLib.createIndexFolder<string>(
-            instance.rootDir + "/topics",
-        );
-        instance.goalsFolder = await knowLib.createIndexFolder<string>(
-            instance.rootDir + "/goals",
-        );
-        instance.dependenciesFolder = await knowLib.createIndexFolder<string>(
-            instance.rootDir + "/dependencies",
-        );
+        instance.keywordsIndex = await makeIndex("keywords");
+        instance.topicsIndex = await makeIndex("topics");
+        instance.goalsIndex = await makeIndex("goals");
+        instance.dependenciesIndex = await makeIndex("dependencies");
+
         return instance;
+
+        async function makeIndex(
+            name: string,
+        ): Promise<knowLib.TextIndex<string, string>> {
+            return await knowLib.createTextIndex<string>(
+                {
+                    caseSensitive: false,
+                    concurrency: 4,
+                    semanticIndex: true,
+                    embeddingModel: instance.embeddingModel,
+                },
+                instance.rootDir + "/" + name,
+            );
+        }
     }
 }
