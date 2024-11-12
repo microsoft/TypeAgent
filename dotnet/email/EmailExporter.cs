@@ -65,6 +65,23 @@ public class EmailExporter
         }
     }
 
+    public void ExportAllBySize(string rootPath)
+    {
+        int counter = 0;
+        foreach(Email email in _outlook.MapMailItems<Email>((item) => new Email(item)))
+        {
+            ++counter;
+            Console.WriteLine($"#{counter}, {email.Body.Length} chars");
+            Console.WriteLine(email.Subject);
+
+            int size = email.Body.Length;
+            int bucket = MailStats.GetBucketForSize(size);
+            string destDirPath = Path.Join(rootPath, bucket.ToString());
+            DirectoryEx.Ensure(destDirPath);
+            email.Save(Path.Join(destDirPath, email.EntryId + ".json"));
+        }
+    }
+
     public void ExportFrom(string senderName)
     {
         List<Email> emails = _outlook.LoadFrom(senderName);
@@ -72,6 +89,7 @@ public class EmailExporter
         {
             Console.WriteLine(email.ToString());
         }
+        COMObject.Release(emails);
     }
 
     string DestFilePath(string sourceFilePath, string destFolderPath)

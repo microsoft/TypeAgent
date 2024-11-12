@@ -17,13 +17,47 @@ public class App
         _stats = new MailStats(outlook);
 
         _commands = new RootCommand("Mail commands");
-        _commands.AddCommand(Quit());
-        _commands.AddCommand(_stats.Command_GetSize());
+        _commands.AddCommand(Command_Quit());
+        _commands.AddCommand(Command_Distribution());
+        _commands.AddCommand(Command_ExportAll());
     }
 
     public EmailExporter Exporter => _exporter;
 
-    Command Quit()
+    public Command Command_Distribution()
+    {
+        Command command = new Command("distribution");
+        var pathOption = new Option<string>("--outPath", "Output path");
+        command.AddOption(pathOption);
+        command.SetHandler<string>((string outPath) =>
+        {
+            var (counter, histogram) = _stats.GetSizeDistribution();
+            ConsoleEx.WriteLineColor(ConsoleColor.Green, $"{counter} items");
+            string csv = MailStats.PrintHistogram(histogram);
+            if (!string.IsNullOrEmpty(outPath))
+            {
+                File.WriteAllText(outPath, csv);
+            }
+            Console.WriteLine(csv);
+        }, pathOption);
+        return command;
+    }
+
+    public Command Command_ExportAll()
+    {
+        Command command = new Command("exportAll");
+        var dirPath = new Option<string>("--dirPath", "Output path");
+        command.AddOption(dirPath);
+        command.SetHandler<string>((string dirPath) =>
+        {
+            _exporter.ExportAllBySize(dirPath);
+
+        }, dirPath);
+
+        return command;
+    }
+
+    Command Command_Quit()
     {
         Command cmd = new Command("quit");
         cmd.SetHandler(() => Environment.Exit(0));

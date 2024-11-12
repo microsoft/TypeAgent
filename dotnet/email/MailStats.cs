@@ -17,25 +17,6 @@ public class MailStats
         _outlook = outlook;
     }
 
-    public Command Command_GetSize()
-    {
-        Command command = new Command("distribution");
-        var pathOption = new Option<string>("--outPath", "Output path");
-        command.AddOption(pathOption);
-        command.SetHandler<string>((string outPath) =>
-        {
-            var (counter, histogram) = this.GetSizeDistribution();
-            ConsoleEx.WriteLineColor(ConsoleColor.Green, $"{counter} items");
-            string csv = PrintHistogram(histogram);
-            if (!string.IsNullOrEmpty(outPath))
-            {
-                File.WriteAllText(outPath, csv);
-            }
-            Console.WriteLine(csv);
-        }, pathOption);
-        return command;
-    }
-
     public (int, Dictionary<int, int>) GetSizeDistribution()
     {
         int cursor = Console.CursorLeft;
@@ -65,7 +46,7 @@ public class MailStats
         return (counter, histogram);
     }
 
-    string PrintHistogram(Dictionary<int, int> histogram)
+    public static string PrintHistogram(Dictionary<int, int> histogram)
     {
         StringBuilder sb = new StringBuilder();
         var table = histogram.ToArray();
@@ -78,7 +59,7 @@ public class MailStats
         return sb.ToString();
     }
 
-    public static int GetBucketForSize(int size, int interval)
+    public static int GetBucketForSize(int size, int interval = SCALE)
     {
         while ((size / interval) != 0)
         {

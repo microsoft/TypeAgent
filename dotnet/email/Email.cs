@@ -47,6 +47,12 @@ public class Email
     [JsonPropertyName("body")]
     public string Body { get; set; }
 
+    /*
+     * Not serialized
+     */
+    [JsonIgnore]
+    public string EntryId { get; set; }
+
     public string ToJson()
     {
         return Json.Stringify(this);
@@ -102,6 +108,7 @@ public class Email
 
     void Load(MailItem item)
     {
+        EntryId = item.EntryID;
         LoadRecipients(item);
         From = item.Sender != null ? new EmailAddress(SmtpAddressOf(item.Sender), item.Sender.Name) : null;
         Subject = item.Subject;
