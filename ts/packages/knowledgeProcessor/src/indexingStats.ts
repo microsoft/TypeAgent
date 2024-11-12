@@ -23,16 +23,14 @@ export function createIndexingStats(
     existingStats?: IndexingStats,
 ): IndexingStats {
     let current: ItemIndexingStats | undefined;
-    const indexingStats: IndexingStats = existingStats
-        ? existingStats
-        : {
-              totalStats: emptyStats(),
-              itemStats: [],
-              startItem,
-              updateCurrent,
-              updateCurrentTokenStats,
-              clear,
-          };
+    const indexingStats: IndexingStats = {
+        totalStats: existingStats?.totalStats ?? emptyStats(),
+        itemStats: existingStats?.itemStats ?? [],
+        startItem,
+        updateCurrent,
+        updateCurrentTokenStats,
+        clear,
+    };
     return indexingStats;
 
     function startItem(name?: string): void {
