@@ -6,7 +6,7 @@ dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 
 import { getCacheFactory } from "../src/utils/cacheFactory.js";
 import { readTestData } from "../src/utils/test/testData.js";
-import { Actions, RequestAction } from "agent-cache";
+import { Actions, normalizeParamString, RequestAction } from "agent-cache";
 import { loadBuiltinTranslatorSchemaConfig } from "../src/translation/agentTranslators.js";
 import { glob } from "glob";
 
@@ -59,8 +59,8 @@ describe("construction", () => {
                     requestAction.request,
                     matchConfig,
                 );
-                const matchedLowercase = construction.match(
-                    requestAction.request.toLowerCase(),
+                const matchedNormalized = construction.match(
+                    normalizeParamString(requestAction.request),
                     matchConfig,
                 );
                 if (!tags.includes("failedRoundTripAction")) {
@@ -68,7 +68,7 @@ describe("construction", () => {
                     expect(matched.length).not.toEqual(0);
                     expect(matched[0].match).toEqual(requestAction);
 
-                    expect(matchedLowercase.length).not.toEqual(0);
+                    expect(matchedNormalized.length).not.toEqual(0);
                     // TODO: Validating the lower case action
                 } else {
                     // TODO: needs fix these
