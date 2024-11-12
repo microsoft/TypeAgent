@@ -68,22 +68,27 @@ public class EmailExporter
     public void ExportAllMsgBySize(string rootPath)
     {
         int counter = 0;
-        foreach (MailItem email in _outlook.MapMailItems<MailItem>((item) => item))
+        foreach (MailItem item in _outlook.MapMailItems<MailItem>((item) => item))
         {
             ++counter;
+            bool isForward = item.IsForward();
+            if (item.IsForward())
+            {
+                continue;
+            }
             Console.WriteLine($"#{counter}");
-            Console.WriteLine(email.Subject);
+            Console.WriteLine(item.Subject);
 
-            int size = email.BodyLatest().Length;
+            int size = item.BodyLatest().Length;
             int bucket = MailStats.GetBucketForSize(size);
             string destDirPath = Path.Join(rootPath, bucket.ToString());
             DirectoryEx.Ensure(destDirPath);
 
             const int MaxFileNameLength = 64;
-            string fileName = FileEx.SanitizeFileName(email.Subject, MaxFileNameLength);
+            string fileName = FileEx.SanitizeFileName(item.Subject, MaxFileNameLength);
             try
             {
-                email.SaveAs(FileEx.MakeUnique(destDirPath, fileName, ".msg"));
+                item.SaveAs(FileEx.MakeUnique(destDirPath, fileName, ".msg"));
             }
             catch(System.Exception ex)
             {

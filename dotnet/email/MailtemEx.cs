@@ -12,6 +12,7 @@ public static class MailtemEx
 
     public static bool IsForward(this MailItem item)
     {
-        return item.Subject.StartsWith("FW:", StringComparison.OrdinalIgnoreCase);
+        var subject = item.Subject.TrimStart();
+        return subject.StartsWith("FW", StringComparison.OrdinalIgnoreCase);
     }
 }

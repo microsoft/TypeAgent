@@ -50,7 +50,7 @@ public class App
         command.AddOption(dirPath);
         command.SetHandler<string>((string dirPath) =>
         {
-            _exporter.ExportAllEmailBySizeJson(dirPath);
+            _exporter.ExportAllMsgBySize(dirPath);
 
         }, dirPath);
 
