@@ -43,7 +43,8 @@ import {
 } from "./interactiveIO.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 import { getUserId } from "../../utils/userData.js";
-import { ActionContext, AppAgentEvent, Profiler } from "@typeagent/agent-sdk";
+import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";
+import { Profiler } from "telemetry";
 import { conversation as Conversation } from "knowledge-processor";
 import {
     AppAgentManager,
