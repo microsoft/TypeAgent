@@ -6,7 +6,7 @@ import {
     MultiSinkLogger,
     createMongoDBLoggerSink,
     createDebugLoggerSink        
-} from "common-utils";
+} from "telemetry";
 
 import registerDebug from "debug";
 import { PromptSection } from "typechat";

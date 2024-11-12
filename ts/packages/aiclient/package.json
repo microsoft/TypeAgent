@@ -31,7 +31,8 @@
     "@azure/identity": "^4.2.1",
     "async": "^3.2.5",
     "debug": "^4.3.4",
-    "typechat": "^0.1.1"
+    "typechat": "^0.1.1",
+    "telemetry": "workspace:*"
   },
   "devDependencies": {
     "@types/async": "^3.2.24",
