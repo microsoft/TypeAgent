@@ -4,7 +4,7 @@
 import { getMimeType } from "common-utils";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { createServer, Server } from "node:http";
-//import { createServer as createSecureServer, Server as SecureServer } from "node:https"
+import { createServer as createSecureServer, Server as SecureServer } from "node:https"
 import path from "node:path";
 
 export type TypeAgentAPIServerConfig = {
@@ -15,29 +15,31 @@ export type TypeAgentAPIServerConfig = {
 
 export class TypeAgentAPIWebServer {
     private server: Server<any, any>;
-    //private secureServer: SecureServer<any, any>;
-    private config: TypeAgentAPIServerConfig;
+    private secureServer: SecureServer<any, any>;
 
     constructor(config: TypeAgentAPIServerConfig) {
-        this.config = config;
 
         // web server
-        this.server = createServer(this.serve);
+        this.server = createServer((request: any, response: any) => {
+            this.serve(config, request, response);
+        });
 
         // secure webserver
-        // this.secureServer = createServer(
-        //     {
-        //         key: fs.readFileSync('./localhost+2-key.pem'), // path to localhost+2-key.pem
-        //         cert: fs.readFileSync('./localhost+2.pem'), // path to localhost+2.pem
-        //         requestCert: false,
-        //         rejectUnauthorized: false,
-        //     },
-        //     this.serve);
+        this.secureServer = createSecureServer(
+            {
+                key: readFileSync('../../../.cert/localhost+2-key.pem'), // path to localhost+2-key.pem
+                cert: readFileSync('../../../.cert/localhost+2.pem'), // path to localhost+2.pem
+                requestCert: false,
+                rejectUnauthorized: false,
+            },
+            (request: any, response: any) => {
+                this.serve(config, request, response);
+            });
     }
 
-    async serve(request: any, response: any) {
+    serve(config: TypeAgentAPIServerConfig, request: any, response: any) {
         // serve up the requested file if we have it
-        let root: string = path.resolve(this.config.wwwroot);
+        let root: string = path.resolve(config.wwwroot);
         let requestedFile: string =
             request.url == "/" || request.url === undefined
                 ? "index.html"
@@ -61,6 +63,7 @@ export class TypeAgentAPIWebServer {
                         path.extname(requestedFile),
                     ),
                     "Access-Control-Allow-Origin": "*",
+                    //"Permissions-Policy": "camera=(self)", // allow access to getUserMedia() for the camera
                 });
                 response.end(readFileSync(requestedFile).toString());
 
@@ -83,9 +86,9 @@ export class TypeAgentAPIWebServer {
             console.log("Listening on all local IPs at port 3000");
         });
 
-        // this.secureServer.listen(3003, () => {
-        //     console.log("Listening securely on all local IPs at port 3003")
-        // });
+        this.secureServer.listen(3443, () => {
+            console.log("Listening securely on all local IPs at port 3443")
+        });
 
         // this.server.listen(3000, "10.137.63.33", () => {
         //     console.log("Listening on 10.137.63.33:3000");
