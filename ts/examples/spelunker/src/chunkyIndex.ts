@@ -37,7 +37,10 @@ export class ChunkyIndex {
     private constructor(rootDir: string) {
         this.rootDir = rootDir;
         this.chatModel = openai.createChatModelDefault("spelunkerChat");
-        this.embeddingModel = openai.createEmbeddingModel();
+        this.embeddingModel = knowLib.createEmbeddingCache(
+            openai.createEmbeddingModel(),
+            1000,
+        );
         this.fileDocumenter = createFileDocumenter(this.chatModel);
         this.fakeCodeDocumenter = createFakeCodeDocumenter();
     }
@@ -51,7 +54,7 @@ export class ChunkyIndex {
         instance.codeIndex = await createSemanticCodeIndex(
             instance.rootDir + "/index",
             instance.fakeCodeDocumenter,
-            undefined,
+            instance.embeddingModel,
             (obj) => JSON.stringify(obj, null, 2),
         );
         instance.summaryFolder = await createObjectFolder<CodeDocumentation>(
