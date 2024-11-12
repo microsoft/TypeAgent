@@ -27,8 +27,8 @@ export class TypeAgentAPIWebServer {
         // secure webserver
         this.secureServer = createSecureServer(
             {
-                key: readFileSync('../../../.cert/localhost+2-key.pem'), // path to localhost+2-key.pem
-                cert: readFileSync('../../../.cert/localhost+2.pem'), // path to localhost+2.pem
+                key: readFileSync('.cert/localhost+2-key.pem'), // path to localhost+2-key.pem
+                cert: readFileSync('.cert/localhost+2.pem'), // path to localhost+2.pem
                 requestCert: false,
                 rejectUnauthorized: false,
             },
