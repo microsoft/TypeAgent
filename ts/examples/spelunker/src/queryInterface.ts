@@ -199,12 +199,27 @@ async function processQuery(
         if (options.verbose)
             io.writer.writeLine(`[Searching ${indexType} index...]`);
         // TODO: try/catch like below? Embeddings can fail too...
-        await index.getNearestHits(
+        const hits: ScoredItem<ChunkId[]>[] = await index.nearestNeighbors(
             input,
-            hitTable,
             options.maxHits,
             options.minScore,
         );
+        let exactMatch = "";
+        for (const hit of hits) {
+            if (hit.score === 1.0) {
+                exactMatch = hit.item[0]; // TODO: Can there be more than one exact match?
+            }
+            if (options.verbose) {
+                io.writer.writeLine(
+                    `  ${indexType} hit: ${hit.item} (${hit.score.toFixed(3)})`,
+                );
+            }
+            for (const it of hit.item) {
+                if (it !== exactMatch) {
+                    hitTable.add(it, hit.score);
+                }
+            }
+        }
     }
 
     // Next add hits from the code index. (Different API, same idea though.)
@@ -216,6 +231,11 @@ async function processQuery(
             options.minScore,
         );
         for (const hit of hits) {
+            if (options.verbose) {
+                io.writer.writeLine(
+                    `  code hit: ${hit.item} (${hit.score.toFixed(3)})`,
+                );
+            }
             hitTable.add(hit.item, hit.score);
         }
     } catch (error) {
@@ -228,7 +248,7 @@ async function processQuery(
         return;
     }
     const hits: ScoredItem<ChunkId>[] = hitTable.byHighestScore();
-    if (hits.length > options.maxHits) hits.length = options.maxHits; // Truncate in-place.
+    hits.splice(options.maxHits);
     io.writer.writeLine(`Found ${hits.length} ${plural("hit", hits.length)}:`);
 
     for (let i = 0; i < hits.length; i++) {
