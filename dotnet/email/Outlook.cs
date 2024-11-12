@@ -111,6 +111,40 @@ public class Outlook : COMObject
         }
     }
 
+    public IEnumerable<MailItem> ForEachMailItem()
+    {
+        NameSpace ns = null;
+        MAPIFolder inbox = null;
+        Items items = null;
+        try
+        {
+            ns = _outlook.GetNamespace("MAPI");
+            inbox = ns.GetDefaultFolder(OlDefaultFolders.olFolderInbox);
+            items = inbox.Items;
+            items.Sort("[ReceivedTime]", true);
+            foreach (object item in items)
+            {
+                if (item is MailItem mailItem)
+                {
+                    try
+                    {
+                        yield return mailItem;
+                    }
+                    finally
+                    {
+                        COMObject.Release(item);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            COMObject.Release(items);
+            COMObject.Release(inbox);
+            COMObject.Release(ns);
+        }
+    }
+
     protected override void OnDispose()
     {
         COMObject.Release(_session);

@@ -65,7 +65,7 @@ public class EmailExporter
         }
     }
 
-    public void ExportAllBySize(string rootPath)
+    public void ExportAllMsgBySize(string rootPath)
     {
         int counter = 0;
         foreach (MailItem email in _outlook.MapMailItems<MailItem>((item) => item))
@@ -92,12 +92,18 @@ public class EmailExporter
         }
     }
 
-    public void ExportAllBySizeJson(string rootPath)
+    public void ExportAllEmailBySizeJson(string rootPath)
     {
         int counter = 0;
-        foreach(Email email in _outlook.MapMailItems<Email>((item) => new Email(item)))
+        foreach(MailItem item in _outlook.ForEachMailItem())
         {
             ++counter;
+            bool isForward = item.IsForward();
+            if (item.IsForward())
+            {
+                continue;
+            }
+            Email email = new Email(item);
             Console.WriteLine($"#{counter}, {email.Body.Length} chars");
             Console.WriteLine(email.Subject);
 
