@@ -875,6 +875,7 @@ export async function runChatMemory(): Promise<void> {
         io: InteractiveIo,
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, searchTopicsDef());
+        namedArgs.v2 = true;
         namedArgs.skipActions = true;
         namedArgs.skipEntities = true;
         const searchResponse = await searchConversation(
