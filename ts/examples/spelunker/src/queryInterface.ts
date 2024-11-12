@@ -79,7 +79,12 @@ export async function runQueryInterface(
         input: string,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        io.writer.writeLine("Use @ command prefix; see @help.");
+        const options: QueryOptions = {
+            maxHits: 3,
+            minScore: 0.7,
+            verbose: false,
+        };
+        await processQuery(input, chunkyIndex, io, options);
     }
 
     await iapp.runConsole({
