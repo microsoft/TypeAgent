@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import { ProfileEntry, UnreadProfileEntries } from "./profileReader.js";
-import { Profiler } from "@typeagent/agent-sdk";
 import registerDebug from "debug";
+import { Profiler } from "./profiler.js"
 
 const debug = registerDebug("typeagent:profiler");
 

@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import chalk from "chalk";
-
 /**
  * Timer for perf measurements
  */
@@ -68,8 +66,12 @@ export class StopWatch {
     }
 
     public log(label: string, inSeconds: boolean = true): void {
-        let elapsed = `[${this.elapsedString(inSeconds)}]`;
-        let text = `${chalk.gray(label)} ${chalk.green(elapsed)}`;
-        console.log(text);
+        import("chalk").then(chalk => {
+            
+            let elapsed = `[${this.elapsedString(inSeconds)}]`;
+            let text = `${chalk.default.gray(label)} ${chalk.default.green(elapsed)}`;
+            console.log(text);
+
+        })
     }
 }
