@@ -10,7 +10,7 @@ import { ScoredItem } from "typeagent";
 
 import { ChunkyIndex } from "./chunkyIndex.js";
 import { CodeDocumentation } from "./codeDocSchema.js";
-import { Chunk } from "./pythonChunker.js";
+import { Chunk, ChunkId } from "./pythonChunker.js";
 import { wordWrap } from "./pythonImporter.js";
 
 type QueryOptions = {
@@ -187,9 +187,9 @@ async function processQuery(
     // TODO: Find a more type-safe way (so a typo in the index name is caught by the compiler).
     for (const indexType of ["keywords", "topics", "goals", "dependencies"]) {
         // TODO: Make this less pathetic (stemming, substrings etc.).
-        const index: knowLib.KeyValueIndex<string, string> = (
-            chunkyIndex as any
-        )[indexType + "Index"];
+        const index: knowLib.TextIndex<string, ChunkId> = (chunkyIndex as any)[
+            indexType + "Index"
+        ];
         if (!index) {
             io.writer.writeLine(`No ${indexType} index.`);
             continue;
