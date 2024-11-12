@@ -133,7 +133,8 @@ class MainActivity : ComponentActivity() {
     fun Browser() {
         //val url = "http://10.0.2.2:3000"
         //val url = "http://192.168.1.142:3000/"
-        val url = "http://10.137.63.33:3000"
+        val url = "https://192.168.1.142:3443/"
+        //val url = "http://10.137.63.33:3000"
 
         Column() {
             Button(
