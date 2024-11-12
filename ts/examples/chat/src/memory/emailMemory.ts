@@ -33,6 +33,7 @@ import {
     argChunkSize,
     argClean,
     argConcurrency,
+    argPause,
     argSourceFileOrFolder,
 } from "./common.js";
 import chalk from "chalk";
@@ -100,6 +101,7 @@ export function createEmailCommands(
                 chunkSize: argChunkSize(context.maxCharsPerChunk),
                 maxMessages: argNum("Max messages", 25),
                 index: argBool("Index imported files", true),
+                pause: argPause(),
             },
         };
     }

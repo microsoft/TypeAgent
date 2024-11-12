@@ -27,7 +27,6 @@ import {
     argConcurrency,
     argDestFile,
     argMinScore,
-    argPause,
     argSourceFile,
     getMessagesAndCount,
 } from "./common.js";
@@ -107,6 +106,7 @@ export async function createChatMemoryContext(
         */
     };
     models.chatModel.completionCallback = completionCallback;
+    models.chatModel.retryPauseMs = 5000;
     const conversationName = ReservedConversationNames.transcript;
     const conversationSettings =
         knowLib.conversation.createConversationSettings(models.embeddingModel);
@@ -498,7 +498,6 @@ export async function runChatMemory(): Promise<void> {
             options: {
                 maxTurns: argNum("Number of turns to run"),
                 concurrency: argConcurrency(2),
-                pause: argPause(),
             },
         };
     }
@@ -549,7 +548,6 @@ export async function runChatMemory(): Promise<void> {
                 mergeWindow: argNum("Topic merge window size", 8),
                 maxTurns: argNum("Number of turns to run", 10),
                 concurrency: argConcurrency(2),
-                pause: argPause(),
                 actions: argBool("Index actions", true),
             },
         };
