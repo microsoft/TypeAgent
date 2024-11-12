@@ -184,65 +184,52 @@ async function processQuery(
     io: iapp.InteractiveIo,
     options: QueryOptions,
 ): Promise<void> {
-    // TODO: Find a more type-safe way (so a typo in the index name is caught by the compiler).
+    const hitTable = knowLib.sets.createHitTable<ChunkId>();
+
+    // First gather hits from keywords, topics etc. indexes.
     for (const indexType of ["keywords", "topics", "goals", "dependencies"]) {
-        // TODO: Make this less pathetic (stemming, substrings etc.).
+        // TODO: Find a more type-safe way (so a typo in the index name is caught by the compiler).
         const index: knowLib.TextIndex<string, ChunkId> = (chunkyIndex as any)[
             indexType + "Index"
         ];
         if (!index) {
-            io.writer.writeLine(`No ${indexType} index.`);
+            io.writer.writeLine(`[No ${indexType} index.]`);
             continue;
         }
-        const values = await index.get(input);
-        if (values?.length) {
-            io.writer.writeLine("");
-            io.writer.writeLine(
-                `Found ${values.length} ${indexType} ${plural("hit", values.length)}:`,
-            );
-            for (let i = 0; i < values.length; i++) {
-                const value = values[i];
-                const chunk = await chunkyIndex.chunkFolder!.get(value);
-                if (!chunk) {
-                    io.writer.writeLine(
-                        `Hit ${i + 1}: id: ${value} --> [No data]`,
-                    );
-                    continue;
-                }
-                io.writer.writeLine(
-                    `Hit ${i + 1}: ` +
-                        `id: ${chunk.id}, ` +
-                        `file: ${path.relative(process.cwd(), chunk.filename!)}, ` +
-                        `type: ${chunk.treeName}`,
-                );
-                if (chunk) {
-                    io.writer.writeLine(
-                        `    ${path.relative(process.cwd(), chunk.filename!)}`,
-                    );
-                    writeChunkLines(chunk, io, options.verbose ? 50 : 5);
-                }
-            }
-        }
+        if (options.verbose)
+            io.writer.writeLine(`[Searching ${indexType} index...]`);
+        // TODO: try/catch like below? Embeddings can fail too...
+        await index.getNearestHits(
+            input,
+            hitTable,
+            options.maxHits,
+            options.minScore,
+        );
     }
-    let hits: ScoredItem<string>[];
+
+    // Next add hits from the code index. (Different API, same idea though.)
     try {
-        hits = await chunkyIndex.codeIndex!.find(
+        if (options.verbose) io.writer.writeLine(`[Searching code index...]`);
+        const hits: ScoredItem<ChunkId>[] = await chunkyIndex.codeIndex!.find(
             input,
             options.maxHits,
             options.minScore,
         );
+        for (const hit of hits) {
+            hitTable.add(hit.item, hit.score);
+        }
     } catch (error) {
-        io.writer.writeLine(`[${error}]`);
-        return;
+        io.writer.writeLine(`[Code index query failed; skipping: ${error}]`);
     }
-    if (!hits.length) {
+
+    // Now show the top options.maxHits hits.
+    if (!hitTable.size) {
         io.writer.writeLine("No hits.");
         return;
     }
-    io.writer.writeLine("");
-    io.writer.writeLine(
-        `Found ${hits.length} embedding ${plural("hit", hits.length)}:`,
-    );
+    const hits: ScoredItem<ChunkId>[] = hitTable.byHighestScore();
+    if (hits.length > options.maxHits) hits.length = options.maxHits; // Truncate in-place.
+    io.writer.writeLine(`Found ${hits.length} ${plural("hit", hits.length)}:`);
 
     for (let i = 0; i < hits.length; i++) {
         const hit = hits[i];
@@ -268,7 +255,7 @@ async function processQuery(
                     wordWrap(`${comment.comment} (${comment.lineNumber})`),
                 );
         }
-        writeChunkLines(chunk, io, options.verbose ? 100 : 10);
+        writeChunkLines(chunk, io, options.verbose ? 100 : 5);
     }
 }
 
