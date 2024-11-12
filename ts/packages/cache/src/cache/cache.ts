@@ -3,7 +3,7 @@
 
 import { QueueObject, queue } from "async";
 import { DeepPartialUndefined } from "common-utils";
-import { ChildLogger, Logger } from "telemetry";
+import * as Telemetry from "telemetry";
 import { ExplanationData } from "../explanation/explanationData.js";
 import {
     Actions,
@@ -117,14 +117,14 @@ export class AgentCache {
         reject: (reason?: any) => void;
     }>;
 
-    private readonly logger: Logger | undefined;
+    private readonly logger: Telemetry.Logger | undefined;
     public model?: string;
     constructor(
         public readonly explainerName: string,
         private readonly getExplainerForTranslator: ExplainerFactory,
         private readonly getSchemaConfig?: SchemaConfigProvider,
         cacheOptions?: CacheOptions,
-        logger?: Logger,
+        logger?: Telemetry.Logger,
     ) {
         this._constructionStore = new ConstructionStoreImpl(
             explainerName,
@@ -140,7 +140,7 @@ export class AgentCache {
         });
 
         this.logger = logger
-            ? new ChildLogger(logger, "cache", {
+            ? new Telemetry.ChildLogger(logger, "cache", {
                   explainerName,
               })
             : undefined;

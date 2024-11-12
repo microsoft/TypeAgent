@@ -13,5 +13,6 @@ export { createDebugLoggerSink } from "./logger/debugLoggerSink.js";
 
 export * from "./stopWatch.js";
 
+export * from "./profiler/profiler.js";
 export * from "./profiler/profileLogger.js";
 export * from "./profiler/profileReader.js";
