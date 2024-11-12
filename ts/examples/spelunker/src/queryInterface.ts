@@ -11,7 +11,7 @@ import { ScoredItem } from "typeagent";
 import { ChunkyIndex } from "./chunkyIndex.js";
 import { CodeDocumentation } from "./codeDocSchema.js";
 import { Chunk } from "./pythonChunker.js";
-import { sanitizeKey, wordWrap } from "./pythonImporter.js";
+import { wordWrap } from "./pythonImporter.js";
 
 type QueryOptions = {
     maxHits: number;
@@ -25,6 +25,10 @@ export async function runQueryInterface(
 ): Promise<void> {
     const handlers: Record<string, iapp.CommandHandler> = {
         search,
+        keywords,
+        topics,
+        goals,
+        dependencies,
     };
     iapp.addStandardHandlers(handlers);
 
@@ -41,7 +45,7 @@ export async function runQueryInterface(
                 maxHits: {
                     description: "Maximum number of hits to return",
                     type: "integer",
-                    defaultValue: 10,
+                    defaultValue: 3,
                 },
                 minScore: {
                     description: "Minimum score to return",
@@ -70,6 +74,86 @@ export async function runQueryInterface(
         await processQuery(query, chunkyIndex, io, options);
     }
 
+    function keywordsDef(): iapp.CommandMetadata {
+        return {
+            description: "Show all recorded keywords and their postings.",
+        };
+    }
+    handlers.keywords.metadata = keywordsDef();
+    async function keywords(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        await reportIndex(args, io, "keywords");
+    }
+
+    function topicsDef(): iapp.CommandMetadata {
+        return {
+            description: "Show all recorded topics and their postings.",
+        };
+    }
+    handlers.topics.metadata = topicsDef();
+    async function topics(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        await reportIndex(args, io, "topics");
+    }
+
+    function goalsDef(): iapp.CommandMetadata {
+        return {
+            description: "Show all recorded goals and their postings.",
+        };
+    }
+    handlers.goals.metadata = goalsDef();
+    async function goals(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        await reportIndex(args, io, "goals");
+    }
+
+    function dependenciesDef(): iapp.CommandMetadata {
+        return {
+            description: "Show all recorded dependencies and their postings.",
+        };
+    }
+    handlers.dependencies.metadata = dependenciesDef();
+    async function dependencies(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        await reportIndex(args, io, "dependencies");
+    }
+
+    async function reportIndex(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+        indexName: string, // E.g. "keywords"
+    ): Promise<void> {
+        // const namedArgs = iapp.parseNamedArguments(args, keywordsDef());
+        const index: knowLib.TextIndex<string, string> = (chunkyIndex as any)[
+            indexName + "Index"
+        ];
+        const iterator: AsyncIterableIterator<knowLib.TextBlock<string>> =
+            index.entries();
+        const values: knowLib.TextBlock<string>[] = [];
+        for await (const value of iterator) {
+            values.push(value);
+        }
+        if (!values.length) {
+            io.writer.writeLine(`No ${indexName}.`);
+        } else {
+            io.writer.writeLine(`Found ${values.length} ${indexName}.`);
+            values.sort();
+            for (const value of values) {
+                io.writer.writeLine(
+                    `${value.value} :: ${value.sourceIds?.toString().replace(/,/g, ", ")}`,
+                );
+            }
+        }
+    }
+
     // Define special handlers, then run the console loop.
 
     async function onStart(io: iapp.InteractiveIo): Promise<void> {
@@ -79,7 +163,12 @@ export async function runQueryInterface(
         input: string,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        io.writer.writeLine("Use @ command prefix; see @help.");
+        const options: QueryOptions = {
+            maxHits: 3,
+            minScore: 0.7,
+            verbose: false,
+        };
+        await processQuery(input, chunkyIndex, io, options);
     }
 
     await iapp.runConsole({
@@ -95,19 +184,19 @@ async function processQuery(
     io: iapp.InteractiveIo,
     options: QueryOptions,
 ): Promise<void> {
-    const key = sanitizeKey(input);
     // TODO: Find a more type-safe way (so a typo in the index name is caught by the compiler).
     for (const indexType of ["keywords", "topics", "goals", "dependencies"]) {
         // TODO: Make this less pathetic (stemming, substrings etc.).
         const index: knowLib.KeyValueIndex<string, string> = (
             chunkyIndex as any
-        )[indexType + "Folder"];
+        )[indexType + "Index"];
         if (!index) {
             io.writer.writeLine(`No ${indexType} index.`);
             continue;
         }
-        const values = await index.get(key);
+        const values = await index.get(input);
         if (values?.length) {
+            io.writer.writeLine("");
             io.writer.writeLine(
                 `Found ${values.length} ${indexType} ${plural("hit", values.length)}:`,
             );
@@ -150,6 +239,7 @@ async function processQuery(
         io.writer.writeLine("No hits.");
         return;
     }
+    io.writer.writeLine("");
     io.writer.writeLine(
         `Found ${hits.length} embedding ${plural("hit", hits.length)}:`,
     );

@@ -54,10 +54,15 @@ export type ConversationMessage = {
      * Message timestamp
      */
     timestamp?: Date | undefined;
+    header?: string | undefined;
     /**
      * Message sender
      */
     sender?: string | undefined;
+    /**
+     * Optional message header.
+     * No knowledge is extracted from the header
+     */
 };
 
 export type AddMessageTask = {
@@ -453,7 +458,7 @@ export async function addMessageToConversation(
     extractKnowledge: boolean = true,
 ): Promise<void> {
     const messageBlock = await conversation.addMessage(
-        message.text,
+        getMessageHeaderAndText(message),
         message.timestamp,
     );
 
@@ -486,7 +491,7 @@ export async function addMessageBatchToConversation(
     extractKnowledge: boolean = true,
 ): Promise<void> {
     const messageBlocks = await asyncArray.mapAsync(messages, 1, (m) =>
-        conversation.addMessage(m.text, m.timestamp),
+        conversation.addMessage(getMessageHeaderAndText(m), m.timestamp),
     );
     assert.ok(messages.length === messageBlocks.length);
 
@@ -547,6 +552,14 @@ async function extractKnowledgeFromMessage(
             priorKnowledge!,
         );
     }
+    // Ignore message header if there is one
+    if (message.header) {
+        messageBlock = {
+            ...messageBlock,
+        };
+        messageBlock.value = getMessageText(message);
+    }
+
     const knowledgeResult = shouldExtractKnowledge
         ? await extractKnowledgeFromBlock(knowledgeExtractor, messageBlock)
         : undefined;
@@ -610,4 +623,25 @@ async function indexKnowledge(
             true,
         );
     }
+}
+
+function getMessageText(message: ConversationMessage): string {
+    return typeof message.text === "string" ? message.text : message.text.value;
+}
+
+function getMessageHeaderAndText(
+    message: ConversationMessage,
+): string | TextBlock {
+    if (message.header) {
+        if (typeof message.text === "string") {
+            return message.header + "\n\n" + message.text;
+        }
+        let textBlock: TextBlock = {
+            type: message.text.type,
+            value: message.header + "\n\n" + message.text,
+            sourceIds: message.text.sourceIds,
+        };
+        return textBlock;
+    }
+    return message.text;
 }
