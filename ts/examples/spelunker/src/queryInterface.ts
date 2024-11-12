@@ -11,7 +11,7 @@ import { ScoredItem } from "typeagent";
 import { ChunkyIndex } from "./chunkyIndex.js";
 import { CodeDocumentation } from "./codeDocSchema.js";
 import { Chunk } from "./pythonChunker.js";
-import { sanitizeKey, wordWrap } from "./pythonImporter.js";
+import { wordWrap } from "./pythonImporter.js";
 
 type QueryOptions = {
     maxHits: number;
@@ -100,7 +100,6 @@ async function processQuery(
     io: iapp.InteractiveIo,
     options: QueryOptions,
 ): Promise<void> {
-    const key = sanitizeKey(input);
     // TODO: Find a more type-safe way (so a typo in the index name is caught by the compiler).
     for (const indexType of ["keywords", "topics", "goals", "dependencies"]) {
         // TODO: Make this less pathetic (stemming, substrings etc.).
@@ -111,8 +110,9 @@ async function processQuery(
             io.writer.writeLine(`No ${indexType} index.`);
             continue;
         }
-        const values = await index.get(key);
+        const values = await index.get(input);
         if (values?.length) {
+            io.writer.writeLine("");
             io.writer.writeLine(
                 `Found ${values.length} ${indexType} ${plural("hit", values.length)}:`,
             );
@@ -138,7 +138,6 @@ async function processQuery(
                     writeChunkLines(chunk, io, options.verbose ? 50 : 5);
                 }
             }
-            io.writer.writeLine("");
         }
     }
     let hits: ScoredItem<string>[];
@@ -156,6 +155,7 @@ async function processQuery(
         io.writer.writeLine("No hits.");
         return;
     }
+    io.writer.writeLine("");
     io.writer.writeLine(
         `Found ${hits.length} embedding ${plural("hit", hits.length)}:`,
     );
