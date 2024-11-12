@@ -60,7 +60,8 @@ export class MatchSet {
         public readonly namespace: string | undefined,
         private readonly index: number = -1, // Assign an index as id for serialization and reference in construction
     ) {
-        // Case insensitive match, use lower case to avoid duplicates with only difference in case.
+        // Case insensitive match
+        // TODO: non-diacritic match
         this.matches = new Set(Array.from(matches).map((m) => m.toLowerCase()));
     }
 

@@ -17,6 +17,7 @@ import {
     getDefaultExplainerName,
     createActionProps,
     normalizeParamValue,
+    normalizeParamString,
 } from "agent-cache";
 import { loadBuiltinTranslatorSchemaConfig } from "../src/translation/agentTranslators.js";
 import { glob } from "glob";
@@ -124,7 +125,7 @@ function getTestInputPart(testFileName: string) {
 function normalizeParams(action: JSONAction) {
     if (action.parameters !== undefined) {
         action.parameters = JSON.parse(
-            JSON.stringify(action.parameters).toLowerCase(), // normalize the lower case
+            normalizeParamString(JSON.stringify(action.parameters)), // normalize the lower case
         );
     }
 }
