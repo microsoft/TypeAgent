@@ -171,8 +171,9 @@ export function createEmailCommands(
         let attempts = 1;
         const clock = new StopWatch();
         const maxAttempts = 2;
+        let maxMessages = namedArgs.maxMessages;
         while (attempts <= maxAttempts) {
-            await queue.drain(
+            const successCount = await queue.drain(
                 namedArgs.concurrency,
                 namedArgs.concurrency,
                 async (filePath, index, total) => {
@@ -201,11 +202,14 @@ export function createEmailCommands(
                     );
                     context.printer.writeLine();
                 },
-                namedArgs.maxMessages,
+                maxMessages,
             );
             // Replay any errors
             if (!(await queue.requeueErrors())) {
                 break;
+            }
+            if (maxMessages) {
+                maxMessages -= successCount;
             }
             ++attempts;
             if (attempts <= maxAttempts) {
