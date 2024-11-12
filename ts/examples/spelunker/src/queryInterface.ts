@@ -41,7 +41,7 @@ export async function runQueryInterface(
                 maxHits: {
                     description: "Maximum number of hits to return",
                     type: "integer",
-                    defaultValue: 10,
+                    defaultValue: 3,
                 },
                 minScore: {
                     description: "Minimum score to return",
@@ -101,7 +101,7 @@ async function processQuery(
         // TODO: Make this less pathetic (stemming, substrings etc.).
         const index: knowLib.KeyValueIndex<string, string> = (
             chunkyIndex as any
-        )[indexType + "Folder"];
+        )[indexType + "Index"];
         if (!index) {
             io.writer.writeLine(`No ${indexType} index.`);
             continue;
@@ -133,6 +133,7 @@ async function processQuery(
                     writeChunkLines(chunk, io, options.verbose ? 50 : 5);
                 }
             }
+            io.writer.writeLine("");
         }
     }
     let hits: ScoredItem<string>[];

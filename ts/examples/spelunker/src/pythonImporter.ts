@@ -29,7 +29,7 @@ TypeScript, of course).
 */
 
 import * as fs from "fs";
-
+import * as knowLib from "knowledge-processor";
 import { asyncArray } from "typeagent";
 
 import { ChunkyIndex } from "./chunkyIndex.js";
@@ -181,20 +181,18 @@ async function embedChunk(
         chunk.filename,
     )) as CodeDocumentation;
     await chunkyIndex.summaryFolder.put(docs, chunk.id);
-    await chunkyIndex.childrenFolder.put([chunk.id], chunk.parentId || "root");
-    await chunkyIndex.parentFolder.put([chunk.parentId || "root"], chunk.id);
     for (const comment of docs.comments || []) {
-        await writeToIndex(chunk.id, comment.topics, chunkyIndex.topicsFolder);
+        await writeToIndex(chunk.id, comment.topics, chunkyIndex.topicsIndex);
         await writeToIndex(
             chunk.id,
             comment.keywords,
-            chunkyIndex.keywordsFolder,
+            chunkyIndex.keywordsIndex,
         );
-        await writeToIndex(chunk.id, comment.goals, chunkyIndex.goalsFolder);
+        await writeToIndex(chunk.id, comment.goals, chunkyIndex.goalsIndex);
         await writeToIndex(
             chunk.id,
             comment.dependencies,
-            chunkyIndex.dependenciesFolder,
+            chunkyIndex.dependenciesIndex,
         );
     }
     if (verbose) {
@@ -245,24 +243,17 @@ export function wordWrap(text: string, width: number = 80): string {
 }
 
 async function writeToIndex(
-    id: string,
-    values: string[] | undefined,
-    folder: any,
+    chunkId: string,
+    phrases: string[] | undefined, // List of keywords, topics, etc. in chunk
+    index: knowLib.TextIndex<string, string>,
 ) {
-    for (const value of values || []) {
-        await folder.put([id], sanitizeKey(value));
+    if (!phrases) return;
+    for (const phrase of phrases) {
+        await index.put(phrase, [chunkId]);
     }
-    // TODO: Also write inverse index (values -> id).
 }
 
-// Apply URL escaping to key.
+// Apply URL escaping to key. NOTE: Currently unused.
 export function sanitizeKey(key: string): string {
-    return key
-        .replace(/%/g, "%%")
-        .replace(
-            /[^\w% ]/g,
-            (char: string) =>
-                "%" + char.charCodeAt(0).toString(16).toUpperCase(),
-        )
-        .replace(/ /g, "+");
+    return encodeURIComponent(key).replace(/%20/g, "+"); // Encode spaces as plus, others as %xx.
 }
