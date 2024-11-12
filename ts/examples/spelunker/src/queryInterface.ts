@@ -25,6 +25,10 @@ export async function runQueryInterface(
 ): Promise<void> {
     const handlers: Record<string, iapp.CommandHandler> = {
         search,
+        keywords,
+        topics,
+        goals,
+        dependencies,
     };
     iapp.addStandardHandlers(handlers);
 
@@ -68,6 +72,86 @@ export async function runQueryInterface(
             verbose: namedArgs.verbose ?? verbose,
         };
         await processQuery(query, chunkyIndex, io, options);
+    }
+
+    function keywordsDef(): iapp.CommandMetadata {
+        return {
+            description: "Show all recorded keywords and their postings.",
+        };
+    }
+    handlers.keywords.metadata = keywordsDef();
+    async function keywords(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        await reportIndex(args, io, "keywords");
+    }
+
+    function topicsDef(): iapp.CommandMetadata {
+        return {
+            description: "Show all recorded topics and their postings.",
+        };
+    }
+    handlers.topics.metadata = topicsDef();
+    async function topics(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        await reportIndex(args, io, "topics");
+    }
+
+    function goalsDef(): iapp.CommandMetadata {
+        return {
+            description: "Show all recorded goals and their postings.",
+        };
+    }
+    handlers.goals.metadata = goalsDef();
+    async function goals(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        await reportIndex(args, io, "goals");
+    }
+
+    function dependenciesDef(): iapp.CommandMetadata {
+        return {
+            description: "Show all recorded dependencies and their postings.",
+        };
+    }
+    handlers.dependencies.metadata = dependenciesDef();
+    async function dependencies(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        await reportIndex(args, io, "dependencies");
+    }
+
+    async function reportIndex(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+        indexName: string, // E.g. "keywords"
+    ): Promise<void> {
+        // const namedArgs = iapp.parseNamedArguments(args, keywordsDef());
+        const index: knowLib.TextIndex<string, string> = (chunkyIndex as any)[
+            indexName + "Index"
+        ];
+        const iterator: AsyncIterableIterator<knowLib.TextBlock<string>> =
+            index.entries();
+        const values: knowLib.TextBlock<string>[] = [];
+        for await (const value of iterator) {
+            values.push(value);
+        }
+        if (!values.length) {
+            io.writer.writeLine(`No ${indexName}.`);
+        } else {
+            io.writer.writeLine(`Found ${values.length} ${indexName}.`);
+            values.sort();
+            for (const value of values) {
+                io.writer.writeLine(
+                    `${value.value} :: ${value.sourceIds?.toString().replace(/,/g, ", ")}`,
+                );
+            }
+        }
     }
 
     // Define special handlers, then run the console loop.
