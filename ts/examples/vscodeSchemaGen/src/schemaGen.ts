@@ -205,5 +205,5 @@ export async function processVscodeCommandsJsonFile(
     console.log(`Aggregate action and request data file: ${jsonlFileName}`);
 
     const statsfile = path.join(output_dir, "stats_[" + actionPrefix + "].csv");
-    processActionSchemaAndReqData(jsonlFileName, 0.7, statsfile);
+    processActionSchemaAndReqData(jsonlFileName, 0.7, statsfile, undefined);
 }

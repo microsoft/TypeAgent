@@ -93,10 +93,15 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
                     actionreqEmbeddingsFile,
                 );
                 console.log("statGenFilePath: ", statGenFilePath);
+                let zerorankStatsFile = path.join(
+                    path.dirname(statGenFilePath),
+                    "zero_rank_stats.csv",
+                );
                 processActionSchemaAndReqData(
                     actionreqEmbeddingsFile,
                     0.7,
                     statGenFilePath,
+                    zerorankStatsFile,
                 );
             } else {
                 console.error("Missing required file paths for -statgen mode.");
