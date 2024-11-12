@@ -12,7 +12,6 @@ export type CodeGeneralActions =
 // Triggger this action only when asked to show/open the command palette explicitly
 export type ShowCommandPaletteAction = {
     actionName: "showCommandPalette";
-    parameters: {};
 };
 
 // Quick option to access a file, alternate way to search a file by name using keyboard shortcuts
@@ -31,17 +30,14 @@ export type GotoFileOrLineOrSymbolAction = {
 // New window/instance of vscode
 export type NewWindowAction = {
     actionName: "newWindow";
-    parameters: {};
 };
 
 // Show user settings
 export type ShowUserSettingsAction = {
     actionName: "showUserSettings";
-    parameters: {};
 };
 
 // Show keyboard shortcuts
 export type ShowKeyboardShortcutsAction = {
     actionName: "showKeyboardShortcuts";
-    parameters: {};
 };

@@ -3,7 +3,6 @@
 
 // Types
 export type {
-    IAction,
     JSONAction,
     FullAction,
     ParamValueType,

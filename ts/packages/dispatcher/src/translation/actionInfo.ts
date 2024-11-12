@@ -301,7 +301,7 @@ function validateObject(
 
 export function validateAction(
     actionInfo: ActionInfo,
-    action: Record<string, unknown>,
+    action: any,
     coerce: boolean = false,
 ): action is FullAction {
     if (actionInfo.actionName !== action.actionName) {
@@ -311,6 +311,18 @@ export function validateAction(
     }
 
     const parameters = action.parameters;
+    if (actionInfo.parameters === undefined) {
+        if (parameters !== undefined) {
+            const keys = Object.keys(parameters);
+            if (keys.length > 0) {
+                throw new Error(
+                    `Action has extraneous parameters : ${keys.join(", ")}`,
+                );
+            }
+        }
+        return true;
+    }
+
     if (parameters === undefined) {
         throw new Error("Missing parameter property");
     }
@@ -321,16 +333,6 @@ export function validateAction(
         Array.isArray(parameters)
     ) {
         throw new Error("Parameter object not an object");
-    }
-
-    if (actionInfo.parameters === undefined) {
-        const keys = Object.keys(parameters);
-        if (keys.length > 0) {
-            throw new Error(
-                `Action has extraneous parameters : ${keys.join(", ")}`,
-            );
-        }
-        return true;
     }
 
     validateObject(

@@ -122,9 +122,11 @@ function getTestInputPart(testFileName: string) {
 }
 
 function normalizeParams(action: JSONAction) {
-    action.parameters = JSON.parse(
-        JSON.stringify(action.parameters).toLowerCase(), // normalize the lower case
-    );
+    if (action.parameters !== undefined) {
+        action.parameters = JSON.parse(
+            JSON.stringify(action.parameters).toLowerCase(), // normalize the lower case
+        );
+    }
 }
 
 function normalizeActions(actions: Actions) {

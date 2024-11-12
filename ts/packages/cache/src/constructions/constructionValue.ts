@@ -142,10 +142,6 @@ export function createActionProps(
         setObjectProperty(result, "actionProps", name, value);
     }
     const actionProps = result.actionProps;
-    if (actionProps.parameters === undefined) {
-        actionProps.parameters = {};
-    }
-
     // validate fullActionName
     if (Array.isArray(actionProps)) {
         actionProps.forEach((actionProp) => {

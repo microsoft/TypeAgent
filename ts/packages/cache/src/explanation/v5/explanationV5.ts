@@ -48,6 +48,7 @@ import {
     SubPhraseExplainer,
     createSubPhraseExplainer,
     hasPropertyNames,
+    isPropertySubPhrase,
 } from "./subPhraseExplanationV5.js";
 import {
     AlternativesExplainer,
@@ -586,7 +587,7 @@ export function createConstructionV5(
     const parts = explanation.subPhrases.map((phrase) => {
         try {
             const matches = [phrase.text];
-            if (!hasPropertyNames(phrase)) {
+            if (!isPropertySubPhrase(phrase)) {
                 if (useSynonymsForNonPropertySubPhrase(phrase)) {
                     matches.push(...phrase.synonyms.filter((s) => s !== ""));
                 }
