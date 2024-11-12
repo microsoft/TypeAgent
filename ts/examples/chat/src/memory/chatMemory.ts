@@ -88,14 +88,15 @@ function getReservedConversation(
     return undefined;
 }
 
-export async function createChatMemoryContext(
-    completionCallback?: (req: any, resp: any) => void,
-): Promise<ChatContext> {
-    const storePath = "/data/testChat";
+export function createModels(): Models {
+    const embeddingSettings = openai.apiSettingsFromEnv(
+        openai.ModelType.Embedding,
+    );
+    embeddingSettings.retryPauseMs = 5000;
     const models: Models = {
         chatModel: openai.createChatModelDefault("chatMemory"),
         embeddingModel: knowLib.createEmbeddingCache(
-            openai.createEmbeddingModel(),
+            openai.createEmbeddingModel(embeddingSettings),
             1024,
         ),
         /*
@@ -105,8 +106,18 @@ export async function createChatMemoryContext(
         ),
         */
     };
-    models.chatModel.completionCallback = completionCallback;
     models.chatModel.retryPauseMs = 5000;
+    return models;
+}
+
+export async function createChatMemoryContext(
+    completionCallback?: (req: any, resp: any) => void,
+): Promise<ChatContext> {
+    const storePath = "/data/testChat";
+
+    const models: Models = createModels();
+    models.chatModel.completionCallback = completionCallback;
+
     const conversationName = ReservedConversationNames.transcript;
     const conversationSettings =
         knowLib.conversation.createConversationSettings(models.embeddingModel);
