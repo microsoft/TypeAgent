@@ -152,9 +152,10 @@ export function createEmailCommands(
                     context.printer.writeProgress(index + 1, total);
 
                     let email = await knowLib.email.loadEmailFile(filePath);
-                    const emailLength = knowLib.email.emailToString(
+                    const emailLength =
+                        email!.body.length; /*knowLib.email.emailToString(
                         email!,
-                    ).length;
+                    ).length;*/
                     context.stats.totalChars += emailLength;
                     context.printer.writeLine(
                         `${email!.sourcePath}\n${emailLength} chars`,
