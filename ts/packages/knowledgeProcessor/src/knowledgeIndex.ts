@@ -18,6 +18,7 @@ import {
 import {
     HitTable,
     intersectMultiple,
+    intersectUnionMultiple,
     removeUndefined,
     union,
     unionArrays,
@@ -88,6 +89,11 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
     text(): IterableIterator<string>;
     ids(): AsyncIterableIterator<TTextId>;
     entries(): AsyncIterableIterator<TextBlock<TSourceId>>;
+    /**
+     * Get the sourceIds (if any) for the text exactly matching the given value
+     * For fuzzy matching, use getNearest
+     * @param value
+     */
     get(value: string): Promise<TSourceId[] | undefined>;
     getById(id: TTextId): Promise<TSourceId[] | undefined>;
     getByIds(ids: TTextId[]): Promise<(TSourceId[] | undefined)[]>;
@@ -97,12 +103,31 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
     // TODO: rename put to "add"
     put(value: string, postings?: TSourceId[]): Promise<TTextId>;
     putMultiple(values: TextBlock<TSourceId>[]): Promise<TTextId[]>;
+    /**
+     * Add source Ids for the given text Id
+     * @param id
+     * @param postings
+     */
     addSources(id: TTextId, postings: TSourceId[]): Promise<void>;
+    /**
+     * Get the sourceIds for the texts nearest to the given value
+     * Ids are returned in sorted order, with duplicates removed
+     * @param value
+     * @param maxMatches
+     * @param minScore
+     */
     getNearest(
         value: string,
         maxMatches?: number,
         minScore?: number,
     ): Promise<TSourceId[]>;
+    /**
+     * Get the sourceIds for the texts nearest to the given values
+     * Ids are returned in sorted order, with duplicates removed
+     * @param values
+     * @param maxMatches
+     * @param minScore
+     */
     getNearestMultiple(
         values: string[],
         maxMatches?: number,
@@ -127,11 +152,34 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         maxMatches: number,
         minScore?: number,
     ): Promise<ScoredItem<TSourceId[]>[]>;
+    /**
+     * Return the TextIds of the text nearest to the given value.
+     * @param value
+     * @param maxMatches
+     * @param minScore
+     */
     getNearestText(
-        text: string,
+        value: string,
         maxMatches: number,
         minScore?: number,
     ): Promise<TTextId[]>;
+    /**
+     * Return the TextIds of the texts nearest to the given values.
+     * @param value
+     * @param maxMatches
+     * @param minScore
+     */
+    getNearestTextMultiple(
+        values: string[],
+        maxMatches: number,
+        minScore?: number,
+    ): Promise<TTextId[]>;
+    /**
+     * Return the TextIds of the nearest matching text + their scores
+     * @param value
+     * @param maxMatches
+     * @param minScore
+     */
     nearestNeighborsText(
         value: string,
         maxMatches: number,
@@ -197,6 +245,7 @@ export async function createTextIndex<TSourceId = any>(
         getNearestHitsMultiple,
         getNearestMultiple,
         getNearestText,
+        getNearestTextMultiple,
         nearestNeighbors,
         nearestNeighborsText,
         remove,
@@ -450,6 +499,20 @@ export async function createTextIndex<TSourceId = any>(
             }
         }
         return matchedIds;
+    }
+
+    async function getNearestTextMultiple(
+        values: string[],
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<TextId[]> {
+        const matches = await asyncArray.mapAsync(
+            values,
+            settings.concurrency,
+            (t) => getNearestText(t, maxMatches, minScore),
+        );
+
+        return intersectUnionMultiple(...matches) ?? [];
     }
 
     async function nearestNeighbors(

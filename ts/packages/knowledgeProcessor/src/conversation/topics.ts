@@ -318,7 +318,8 @@ export async function createTopicMerger<TTopicId = string>(
 
 export interface TopicSearchOptions extends SearchOptions {
     sourceNameSearchOptions?: SearchOptions;
-    loadTopics?: boolean;
+    loadTopics?: boolean | undefined;
+    useHighLevel?: boolean | undefined;
 }
 
 export function createTopicSearchOptions(
@@ -403,6 +404,7 @@ export interface TopicIndex<TTopicId = any, TSourceId = any> {
     searchTermsV2(
         filter: TermFilterV2,
         options: TopicSearchOptions,
+        possibleIds?: TTopicId[] | undefined,
     ): Promise<TopicSearchResult<TTopicId>>;
     loadSourceIds(
         sourceIdLog: TemporalLog<TSourceId>,
@@ -596,6 +598,8 @@ export async function createTopicIndexOnStorage<
         filter: TopicFilter,
         options: TopicSearchOptions,
         sourceName?: string,
+        rawTerms?: string[] | undefined,
+        possibleIds?: TopicId[] | undefined,
     ): Promise<TopicSearchResult<TopicId>> {
         let results = createSearchResults<TopicId>();
         if (filter.timeRange) {
@@ -609,26 +613,43 @@ export async function createTopicIndexOnStorage<
                 // Wildcard
                 results.topicIds = await asyncArray.toArray(topicIndex.ids());
             } else {
-                results.topicIds = await topicIndex.getNearestText(
-                    filter.topics,
-                    options.maxMatches,
-                    options.minScore,
-                );
+                results.topicIds = rawTerms
+                    ? await topicIndex.getNearestTextMultiple(
+                          rawTerms,
+                          options.maxMatches,
+                          options.minScore,
+                      )
+                    : await topicIndex.getNearestText(
+                          filter.topics,
+                          options.maxMatches,
+                          options.minScore,
+                      );
             }
-            if (sourceName && results.topicIds && results.topicIds.length > 0) {
-                const names = await getNameIndex();
-                const topicIdsWithSource = await matchName(
-                    names,
-                    sourceNameToTopicIndex,
-                    sourceName,
-                    options,
-                );
-                results.topicIds = [
-                    ...intersect(
-                        results.topicIds,
-                        topicIdsWithSource ? topicIdsWithSource : [],
-                    ),
-                ];
+            if (results.topicIds && results.topicIds.length === 0) {
+                results.topicIds = undefined;
+            }
+            if (results.topicIds) {
+                if (possibleIds && possibleIds.length > 0) {
+                    // TODO: combine this and the one below
+                    results.topicIds = [
+                        ...intersect(results.topicIds, possibleIds),
+                    ];
+                }
+                if (sourceName) {
+                    const names = await getNameIndex();
+                    const topicIdsWithSource = await matchName(
+                        names,
+                        sourceNameToTopicIndex,
+                        sourceName,
+                        options,
+                    );
+                    results.topicIds = [
+                        ...intersect(
+                            results.topicIds,
+                            topicIdsWithSource ? topicIdsWithSource : [],
+                        ),
+                    ];
+                }
             }
         }
 
@@ -684,20 +705,28 @@ export async function createTopicIndexOnStorage<
     async function searchTermsV2(
         filter: TermFilterV2,
         options: TopicSearchOptions,
+        possibleIds?: TopicId[] | undefined,
     ): Promise<TopicSearchResult<TopicId>> {
         // We will just use the standard topic stuff for now, since that does the same thing
-        const terms = getAllTermsInFilter(filter);
+        const allTerms = getAllTermsInFilter(filter);
         let sourceName = getSubjectFromActionTerm(filter.action);
         if (!isValidEntityName(sourceName)) {
             sourceName = undefined;
         }
-        const topics = terms && terms.length > 0 ? terms.join(" ") : "*";
+        const topics =
+            allTerms && allTerms.length > 0 ? allTerms.join(" ") : "*";
         const topicFilter: TopicFilter = {
             filterType: "Topic",
             topics,
             timeRange: filter.timeRange,
         };
-        return search(topicFilter, options, sourceName);
+        return search(
+            topicFilter,
+            options,
+            sourceName,
+            topics !== "*" ? getAllTermsInFilter(filter, false) : undefined,
+            possibleIds,
+        );
     }
 
     async function loadSourceIds(

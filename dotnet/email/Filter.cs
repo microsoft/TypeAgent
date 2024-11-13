@@ -70,3 +70,36 @@ public class Filter
         return filter._value;
     }
 }
+
+public class EmailSender
+{
+    public EmailSender(string name, string? email = null)
+    {
+        Name = name;
+        Email = email;
+    }
+
+    public string Name
+    {
+        get;
+        private set;
+    }
+
+    public string? Email
+    {
+        get;
+        private set;
+    }
+
+    public bool HasEmail => !string.IsNullOrEmpty(Email);
+
+    public Filter ToFilter()
+    {
+        Filter filter = new Filter("SenderName", Name);
+        if (HasEmail)
+        {
+            filter = filter.And("SenderEmailAddress", Email);
+        }
+        return filter;
+    }
+}
