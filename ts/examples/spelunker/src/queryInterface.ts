@@ -248,7 +248,10 @@ async function processQuery(
         io.writer.writeLine("No hits.");
         return;
     }
-    const hits: ScoredItem<ChunkId>[] = Array.from(hitTable, ([item, score]) => ({ item, score}));
+    const hits: ScoredItem<ChunkId>[] = Array.from(
+        hitTable,
+        ([item, score]) => ({ item, score }),
+    );
     hits.sort((a, b) => b.score - a.score);
     hits.splice(options.maxHits);
     io.writer.writeLine(`Found ${hits.length} ${plural("hit", hits.length)}:`);
