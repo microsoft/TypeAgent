@@ -27,13 +27,13 @@ export interface WorkQueue {
         concurrency: number,
         processor: (item: Path, index: number, total: number) => Promise<void>,
         maxItems?: number,
-    ): Promise<void>;
+    ): Promise<number>;
     drainTask(
         batchSize: number,
         concurrency: number,
         processor: (task: any, index: number, total: number) => Promise<void>,
         maxItems?: number,
-    ): Promise<void>;
+    ): Promise<number>;
     requeue(): Promise<boolean>;
     requeueErrors(): Promise<boolean>;
 }
@@ -102,13 +102,14 @@ export async function createWorkQueueFolder(
         concurrency: number,
         processor: (item: Path, index: number, total: number) => Promise<void>,
         maxItems?: number,
-    ) {
+    ): Promise<number> {
         let fileNames = await fs.promises.readdir(queuePath);
         if (maxItems && maxItems > 0) {
             fileNames = fileNames.slice(0, maxItems);
         }
         const total = fileNames.length;
         let startAt = 0;
+        let successCount = 0;
         for (let slice of slices(fileNames, batchSize)) {
             startAt = slice.startAt;
             await asyncArray.forEachAsync(
@@ -117,6 +118,7 @@ export async function createWorkQueueFolder(
                 processFile,
             );
         }
+        return successCount;
 
         async function processFile(fileName: string, index: number) {
             const filePath = taskFilePath(fileName);
@@ -127,6 +129,7 @@ export async function createWorkQueueFolder(
                     await processor(filePath, startAt + index, total);
                     await moveFileTo(fileName, completedPath);
                 }
+                ++successCount;
                 return;
             } catch (err) {
                 if (thisQueue.onError) {

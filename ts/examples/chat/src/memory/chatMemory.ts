@@ -27,11 +27,8 @@ import {
     argConcurrency,
     argDestFile,
     argMinScore,
-    argPause,
     argSourceFile,
-    createIndexingStats,
     getMessagesAndCount,
-    IndexingStats,
 } from "./common.js";
 import { createEmailCommands, createEmailMemory } from "./emailMemory.js";
 import { pathToFileURL } from "url";
@@ -47,7 +44,7 @@ export type ChatContext = {
     printer: ChatMemoryPrinter;
     models: Models;
     maxCharsPerChunk: number;
-    stats: IndexingStats;
+    stats: knowLib.IndexingStats;
     topicWindowSize: number;
     searchConcurrency: number;
     minScore: number;
@@ -91,14 +88,15 @@ function getReservedConversation(
     return undefined;
 }
 
-export async function createChatMemoryContext(
-    completionCallback?: (req: any, resp: any) => void,
-): Promise<ChatContext> {
-    const storePath = "/data/testChat";
+export function createModels(): Models {
+    const embeddingSettings = openai.apiSettingsFromEnv(
+        openai.ModelType.Embedding,
+    );
+    embeddingSettings.retryPauseMs = 5000;
     const models: Models = {
         chatModel: openai.createChatModelDefault("chatMemory"),
         embeddingModel: knowLib.createEmbeddingCache(
-            openai.createEmbeddingModel(),
+            openai.createEmbeddingModel(embeddingSettings),
             1024,
         ),
         /*
@@ -108,7 +106,18 @@ export async function createChatMemoryContext(
         ),
         */
     };
+    models.chatModel.retryPauseMs = 5000;
+    return models;
+}
+
+export async function createChatMemoryContext(
+    completionCallback?: (req: any, resp: any) => void,
+): Promise<ChatContext> {
+    const storePath = "/data/testChat";
+
+    const models: Models = createModels();
     models.chatModel.completionCallback = completionCallback;
+
     const conversationName = ReservedConversationNames.transcript;
     const conversationSettings =
         knowLib.conversation.createConversationSettings(models.embeddingModel);
@@ -134,7 +143,7 @@ export async function createChatMemoryContext(
         storePath,
         printer: new ChatMemoryPrinter(getInteractiveIO()),
         models,
-        stats: createIndexingStats(),
+        stats: knowLib.createIndexingStats(),
         maxCharsPerChunk: 4096,
         topicWindowSize: 8,
         searchConcurrency: 2,
@@ -246,7 +255,7 @@ export async function loadConversation(
 }
 
 export async function runChatMemory(): Promise<void> {
-    let context = await createChatMemoryContext(printStats);
+    let context = await createChatMemoryContext(captureTokenStats);
     let showTokenStats = true;
     let printer = context.printer;
     const commands: Record<string, CommandHandler> = {
@@ -300,8 +309,8 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    function printStats(req: any, response: any): void {
-        context.stats.addTokens(response.usage);
+    function captureTokenStats(req: any, response: any): void {
+        context.stats.updateCurrentTokenStats(response.usage);
         if (showTokenStats) {
             printer.writeCompletionStats(response.usage);
             printer.writeLine();
@@ -500,7 +509,6 @@ export async function runChatMemory(): Promise<void> {
             options: {
                 maxTurns: argNum("Number of turns to run"),
                 concurrency: argConcurrency(2),
-                pause: argPause(),
             },
         };
     }
@@ -551,7 +559,6 @@ export async function runChatMemory(): Promise<void> {
                 mergeWindow: argNum("Topic merge window size", 8),
                 maxTurns: argNum("Number of turns to run", 10),
                 concurrency: argConcurrency(2),
-                pause: argPause(),
                 actions: argBool("Index actions", true),
             },
         };

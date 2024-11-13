@@ -10,7 +10,7 @@ import { ScoredItem } from "typeagent";
 
 import { ChunkyIndex } from "./chunkyIndex.js";
 import { CodeDocumentation } from "./codeDocSchema.js";
-import { Chunk } from "./pythonChunker.js";
+import { Chunk, ChunkId } from "./pythonChunker.js";
 import { wordWrap } from "./pythonImporter.js";
 
 type QueryOptions = {
@@ -184,65 +184,77 @@ async function processQuery(
     io: iapp.InteractiveIo,
     options: QueryOptions,
 ): Promise<void> {
-    // TODO: Find a more type-safe way (so a typo in the index name is caught by the compiler).
+    const hitTable = new Map<ChunkId, number>();
+
+    // First gather hits from keywords, topics etc. indexes.
     for (const indexType of ["keywords", "topics", "goals", "dependencies"]) {
-        // TODO: Make this less pathetic (stemming, substrings etc.).
-        const index: knowLib.KeyValueIndex<string, string> = (
-            chunkyIndex as any
-        )[indexType + "Index"];
+        // TODO: Find a more type-safe way (so a typo in the index name is caught by the compiler).
+        const index: knowLib.TextIndex<string, ChunkId> = (chunkyIndex as any)[
+            indexType + "Index"
+        ];
         if (!index) {
-            io.writer.writeLine(`No ${indexType} index.`);
+            io.writer.writeLine(`[No ${indexType} index.]`);
             continue;
         }
-        const values = await index.get(input);
-        if (values?.length) {
-            io.writer.writeLine("");
-            io.writer.writeLine(
-                `Found ${values.length} ${indexType} ${plural("hit", values.length)}:`,
-            );
-            for (let i = 0; i < values.length; i++) {
-                const value = values[i];
-                const chunk = await chunkyIndex.chunkFolder!.get(value);
-                if (!chunk) {
-                    io.writer.writeLine(
-                        `Hit ${i + 1}: id: ${value} --> [No data]`,
-                    );
-                    continue;
-                }
-                io.writer.writeLine(
-                    `Hit ${i + 1}: ` +
-                        `id: ${chunk.id}, ` +
-                        `file: ${path.relative(process.cwd(), chunk.filename!)}, ` +
-                        `type: ${chunk.treeName}`,
-                );
-                if (chunk) {
-                    io.writer.writeLine(
-                        `    ${path.relative(process.cwd(), chunk.filename!)}`,
-                    );
-                    writeChunkLines(chunk, io, options.verbose ? 50 : 5);
-                }
-            }
-        }
-    }
-    let hits: ScoredItem<string>[];
-    try {
-        hits = await chunkyIndex.codeIndex!.find(
+        if (options.verbose)
+            io.writer.writeLine(`[Searching ${indexType} index...]`);
+        // TODO: try/catch like below? Embeddings can fail too...
+        const hits: ScoredItem<ChunkId[]>[] = await index.nearestNeighbors(
             input,
             options.maxHits,
             options.minScore,
         );
-    } catch (error) {
-        io.writer.writeLine(`[${error}]`);
-        return;
+        let exactMatch: ChunkId = "";
+        for (const hit of hits) {
+            for (const id of hit.item) {
+                if (id !== exactMatch) {
+                    if (options.verbose) {
+                        io.writer.writeLine(
+                            `  ${indexType} hit: ${id} (${hit.score.toFixed(3)})`,
+                        );
+                    }
+                    const oldScore = hitTable.get(id) || 0.0;
+                    hitTable.set(id, oldScore + hit.score);
+                }
+            }
+            if (hit.score === 1.0) {
+                exactMatch = hit.item[0]; // TODO: Can there be more than one exact match?
+            }
+        }
     }
-    if (!hits.length) {
+
+    // Next add hits from the code index. (Different API, same idea though.)
+    try {
+        if (options.verbose) io.writer.writeLine(`[Searching code index...]`);
+        const hits: ScoredItem<ChunkId>[] = await chunkyIndex.codeIndex!.find(
+            input,
+            options.maxHits,
+            options.minScore,
+        );
+        for (const hit of hits) {
+            if (options.verbose) {
+                io.writer.writeLine(
+                    `  code hit: ${hit.item} (${hit.score.toFixed(3)})`,
+                );
+            }
+            hitTable.set(hit.item, hit.score);
+        }
+    } catch (error) {
+        io.writer.writeLine(`[Code index query failed; skipping: ${error}]`);
+    }
+
+    // Now show the top options.maxHits hits.
+    if (!hitTable.size) {
         io.writer.writeLine("No hits.");
         return;
     }
-    io.writer.writeLine("");
-    io.writer.writeLine(
-        `Found ${hits.length} embedding ${plural("hit", hits.length)}:`,
+    const hits: ScoredItem<ChunkId>[] = Array.from(
+        hitTable,
+        ([item, score]) => ({ item, score }),
     );
+    hits.sort((a, b) => b.score - a.score);
+    hits.splice(options.maxHits);
+    io.writer.writeLine(`Found ${hits.length} ${plural("hit", hits.length)}:`);
 
     for (let i = 0; i < hits.length; i++) {
         const hit = hits[i];
@@ -268,7 +280,7 @@ async function processQuery(
                     wordWrap(`${comment.comment} (${comment.lineNumber})`),
                 );
         }
-        writeChunkLines(chunk, io, options.verbose ? 100 : 10);
+        writeChunkLines(chunk, io, options.verbose ? 100 : 5);
     }
 }
 

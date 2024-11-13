@@ -45,6 +45,14 @@ public class COMObject : IDisposable
         }
     }
 
+    public static void Release(IEnumerable<object> values)
+    {
+        foreach (object value in values)
+        {
+            Release(value);
+        }
+    }
+
     public static void ReleaseAll()
     {
         GC.Collect();

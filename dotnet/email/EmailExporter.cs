@@ -42,10 +42,10 @@ public class EmailExporter
             Email email = _outlook.LoadEmail(sourcePath);
             email.Save(destPath);
         }
-        catch(System.Exception ex)
+        catch (System.Exception ex)
         {
-            WriteLineColor(ConsoleColor.Red, $"SKIPPED {sourcePath}");
-            LogError(ex);
+            ConsoleEx.WriteLineColor(ConsoleColor.Red, $"SKIPPED {sourcePath}");
+            ConsoleEx.LogError(ex);
         }
     }
 
@@ -65,13 +65,72 @@ public class EmailExporter
         }
     }
 
+    public void ExportAllMsgBySize(string rootPath)
+    {
+        int counter = 0;
+        foreach (MailItem item in _outlook.MapMailItems<MailItem>((item) => item))
+        {
+            ++counter;
+            bool isForward = item.IsForward();
+            if (item.IsForward())
+            {
+                continue;
+            }
+            Console.WriteLine($"#{counter}");
+            Console.WriteLine(item.Subject);
+
+            int size = item.BodyLatest().Length;
+            int bucket = MailStats.GetBucketForSize(size);
+            string destDirPath = Path.Join(rootPath, bucket.ToString());
+            DirectoryEx.Ensure(destDirPath);
+
+            const int MaxFileNameLength = 64;
+            string fileName = FileEx.SanitizeFileName(item.Subject, MaxFileNameLength);
+            try
+            {
+                item.SaveAs(FileEx.MakeUnique(destDirPath, fileName, ".msg"));
+            }
+            catch(System.Exception ex)
+            {
+                ConsoleEx.LogError(ex);
+            }
+        }
+    }
+
+    public void ExportAllEmailBySizeJson(string rootPath)
+    {
+        int counter = 0;
+        foreach(MailItem item in _outlook.ForEachMailItem())
+        {
+            ++counter;
+            bool isForward = item.IsForward();
+            if (item.IsForward())
+            {
+                continue;
+            }
+            Email email = new Email(item);
+            Console.WriteLine($"#{counter}, {email.Body.Length} chars");
+            Console.WriteLine(email.Subject);
+
+            int size = email.Body.Length;
+            int bucket = MailStats.GetBucketForSize(size);
+            string destDirPath = Path.Join(rootPath, bucket.ToString());
+            DirectoryEx.Ensure(destDirPath);
+
+            const int MaxFileNameLength = 64;
+            string fileName = FileEx.SanitizeFileName(email.Subject, MaxFileNameLength);
+            email.Save(FileEx.MakeUnique(destDirPath, fileName, ".json"));
+        }
+    }
+
     public void ExportFrom(string senderName)
     {
         List<Email> emails = _outlook.LoadFrom(senderName);
-        foreach(var email in emails)
+        foreach (var email in emails)
         {
             Console.WriteLine(email.ToString());
         }
+        COMObject.Release(emails);
     }
 
     string DestFilePath(string sourceFilePath, string destFolderPath)
@@ -110,78 +169,4 @@ public class EmailExporter
         return destFolderPath;
     }
 
-    static void Main(string[] args)
-    {
-        args = EnsureArgs(args);
-        if (args == null || args.Length == 0)
-        {
-            return;
-        }
-        try
-        {
-            using Outlook outlook = new Outlook();
-            var exporter = new EmailExporter(outlook);
-            switch(args[0])
-            {
-                default:
-                    exporter.Export(args.ElementAtOrDefault(0), args.ElementAtOrDefault(1));
-                    break;
-
-                case "--sender":
-                    exporter.ExportFrom(args.GetArg(1));
-                    break;
-
-                case "--print":
-                    exporter.PrintEmail(args.GetArg(1));
-                    Console.ReadLine();
-                    return;
-            }
-        }
-        catch(System.Exception ex)
-        {
-            LogError(ex);
-        }
-        finally
-        {
-            COMObject.ReleaseAll();
-        }
-    }
-
-    static string[]? EnsureArgs(string[] args)
-    {
-        if (args != null && args.Length > 0)
-        {
-            return args;
-        }
-        return GetInput();
-    }
-
-    static string[] GetInput()
-    {
-        Console.Write(">");
-        string line = Console.ReadLine();
-        if (line != null)
-        {
-            line = line.Trim();
-        }
-        if (string.IsNullOrEmpty(line))
-        {
-            return null;
-        }
-        return line.ParseCommandLine();
-    }
-
-    static void LogError(System.Exception ex)
-    {
-        WriteLineColor(ConsoleColor.DarkYellow, $"##Error##\n{ex.Message}\n####");
-        Console.WriteLine();
-    }
-
-    static void WriteLineColor(ConsoleColor color, string message)
-    {
-        var prevColor = Console.ForegroundColor;
-        Console.ForegroundColor = color;
-        Console.WriteLine(message);
-        Console.ForegroundColor = prevColor;
-    }
 }

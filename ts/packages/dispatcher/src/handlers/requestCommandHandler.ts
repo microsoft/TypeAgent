@@ -12,6 +12,7 @@ import {
     ProcessRequestActionResult,
     ExplanationOptions,
     ParamObjectType,
+    equalNormalizedParamObject,
 } from "agent-cache";
 import {
     CommandHandlerContext,
@@ -188,7 +189,7 @@ async function matchRequest(
         const config = systemContext.session.getConfig();
         const useTranslators = systemContext.agents.getActiveTranslators();
         const matches = constructionStore.match(request, {
-            wildcard: config.matchWildcard,
+            wildcard: config.cache.matchWildcard,
             rejectReferences: config.explainer.filter.reference.list,
             useTranslators,
             history,
@@ -215,7 +216,7 @@ async function matchRequest(
                         developerMode: systemContext.developerMode,
                         translators: useTranslators,
                         explainerName: systemContext.agentCache.explainerName,
-                        matchWildcard: config.matchWildcard,
+                        matchWildcard: config.cache.matchWildcard,
                         allMatches: matches.map((m) => {
                             const { construction: _, match, ...rest } = m;
                             return { action: match.actions, ...rest };
@@ -725,8 +726,10 @@ async function canTranslateWithoutContext(
             }
 
             if (
-                JSON.stringify(newAction.parameters ?? {}).toLowerCase() !==
-                JSON.stringify(oldAction.parameters ?? {}).toLowerCase()
+                !equalNormalizedParamObject(
+                    newAction.parameters,
+                    oldAction.parameters,
+                )
             ) {
                 throw new Error(`Action parameters mismatch without context`);
             }

@@ -10,7 +10,14 @@ import {
     Models,
     ReservedConversationNames,
 } from "./chatMemory.js";
-import { createWorkQueueFolder, ensureDir, isDirectoryPath } from "typeagent";
+import {
+    createWorkQueueFolder,
+    ensureDir,
+    isDirectoryPath,
+    readJsonFile,
+    removeFile,
+    writeJsonFile,
+} from "typeagent";
 import {
     argBool,
     argNum,
@@ -26,10 +33,11 @@ import {
     argChunkSize,
     argClean,
     argConcurrency,
+    argPause,
     argSourceFileOrFolder,
 } from "./common.js";
 import chalk from "chalk";
-import { importMsgFiles } from "./importer.js";
+import { convertMsgFiles } from "./importer.js";
 
 export async function createEmailMemory(
     models: Models,
@@ -76,6 +84,7 @@ export function createEmailCommands(
     commands: Record<string, CommandHandler>,
 ): void {
     commands.importEmail = importEmail;
+    commands.convertMsg = convertMsgs;
 
     //--------
     // Commands
@@ -90,8 +99,9 @@ export function createEmailCommands(
                 concurrency: argConcurrency(1),
                 clean: argClean(),
                 chunkSize: argChunkSize(context.maxCharsPerChunk),
-                maxMessages: argNum("Max messages"),
+                maxMessages: argNum("Max messages", 25),
                 index: argBool("Index imported files", true),
+                pause: argPause(),
             },
         };
     }
@@ -101,14 +111,6 @@ export function createEmailCommands(
         let sourcePath: string = namedArgs.sourcePath;
         let isDir = isDirectoryPath(sourcePath);
         let isJson = sourcePath.endsWith("json");
-        if (isDir && !isJson) {
-            context.printer.writeInColor(
-                chalk.cyan,
-                "Converting message files",
-            );
-            await importMsgFiles(sourcePath, io);
-            sourcePath = path.join(sourcePath, "json");
-        }
         if (namedArgs.index) {
             if (isDir) {
                 await indexEmails(namedArgs, sourcePath);
@@ -126,6 +128,30 @@ export function createEmailCommands(
         }
     }
 
+    function convertMsgsDef(): CommandMetadata {
+        return {
+            description: "Convert msg files in a folder",
+            args: {
+                sourcePath: argSourceFileOrFolder(),
+            },
+        };
+    }
+    async function convertMsgs(
+        args: string[],
+        io: InteractiveIo,
+    ): Promise<void> {
+        const namedArgs = parseNamedArguments(args, convertMsgsDef());
+        let sourcePath: string = namedArgs.sourcePath;
+        let isDir = isDirectoryPath(sourcePath);
+        if (isDir) {
+            context.printer.writeInColor(
+                chalk.cyan,
+                "Converting message files",
+            );
+            await convertMsgFiles(sourcePath, io);
+        }
+    }
+
     //-------------
     // End commands
     //-------------
@@ -140,27 +166,28 @@ export function createEmailCommands(
         );
         queue.onError = (err) => context.printer.writeError(err);
 
-        const clock = new StopWatch();
-        context.stats.clear();
+        let statsDirPath = path.join(path.dirname(sourcePath), "stats");
+        await ensureDir(statsDirPath);
+
+        context.stats = await loadStats(statsDirPath, namedArgs.clean);
         let attempts = 1;
+        const clock = new StopWatch();
         const maxAttempts = 2;
+        let maxMessages = namedArgs.maxMessages;
         while (attempts <= maxAttempts) {
-            await queue.drain(
+            const successCount = await queue.drain(
                 namedArgs.concurrency,
                 namedArgs.concurrency,
                 async (filePath, index, total) => {
                     context.printer.writeProgress(index + 1, total);
 
                     let email = await knowLib.email.loadEmailFile(filePath);
-                    const emailLength =
-                        email!.body.length; /*knowLib.email.emailToString(
-                        email!,
-                    ).length;*/
-                    context.stats.totalChars += emailLength;
+                    const emailLength = email!.body.length;
                     context.printer.writeLine(
                         `${email!.sourcePath}\n${emailLength} chars`,
                     );
 
+                    context.stats.startItem();
                     clock.start();
                     await knowLib.email.addEmailToConversation(
                         context.emailMemory,
@@ -168,19 +195,23 @@ export function createEmailCommands(
                         namedArgs.chunkSize,
                     );
                     clock.stop();
-                    context.stats.totalMs += clock.elapsedMs;
+                    context.stats.updateCurrent(clock.elapsedMs, emailLength);
+                    await saveStats(statsDirPath);
 
                     context.printer.writeInColor(
                         chalk.green,
-                        `[${clock.elapsedString()}, ${millisecondsToString(context.stats.totalMs, "m")}]`,
+                        `[${clock.elapsedString()}, ${millisecondsToString(context.stats.totalStats.timeMs, "m")}]`,
                     );
                     context.printer.writeLine();
                 },
-                namedArgs.maxMessages,
+                maxMessages,
             );
             // Replay any errors
             if (!(await queue.requeueErrors())) {
                 break;
+            }
+            if (maxMessages) {
+                maxMessages -= successCount;
             }
             ++attempts;
             if (attempts <= maxAttempts) {
@@ -189,5 +220,27 @@ export function createEmailCommands(
         }
         context.printer.writeHeading("Indexing Stats");
         context.printer.writeIndexingStats(context.stats);
+    }
+
+    async function loadStats(
+        sourcePath: string,
+        clean: boolean,
+    ): Promise<knowLib.IndexingStats> {
+        const statsFilePath = getStatsFilePath(sourcePath);
+        let stats: knowLib.IndexingStats | undefined;
+        if (clean) {
+            await removeFile(statsFilePath);
+        } else {
+            stats = await readJsonFile<knowLib.IndexingStats>(statsFilePath);
+        }
+        return knowLib.createIndexingStats(stats);
+    }
+
+    async function saveStats(sourcePath: string) {
+        await writeJsonFile(getStatsFilePath(sourcePath), context.stats);
+    }
+
+    function getStatsFilePath(sourcePath: string) {
+        return path.join(sourcePath, "stats.json");
     }
 }
