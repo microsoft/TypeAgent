@@ -5,6 +5,7 @@ import {
     HistoryContext,
     ParamValueType,
     equalNormalizedParamValue,
+    normalizeParamString,
     normalizeParamValue,
 } from "../explanation/requestAction.js";
 
@@ -56,10 +57,10 @@ export class Transforms {
             map = new Map();
             this.transforms.set(paramName, map);
         }
-        // Case insensitive match, use lowercase for lookup
+        // Case insensitive/non-diacritic match
         // Use the count ot heuristic to prefer values original to user request
         // and not from a synonym or alternative suggested by GPT
-        this.addTransformRecord(map, text.toLowerCase(), {
+        this.addTransformRecord(map, normalizeParamString(text), {
             value,
             count: original ? 1 : 0,
         });
@@ -71,8 +72,10 @@ export class Transforms {
             map = new Map();
             this.transforms.set(paramName, map);
         }
-        // Case insensitive match, use lowercase for lookup
-        this.addTransformRecord(map, text.toLowerCase(), { entityTypes });
+        // Case insensitive/non-diacritic match
+        this.addTransformRecord(map, normalizeParamString(text), {
+            entityTypes,
+        });
     }
 
     private addTransformRecord(
@@ -204,8 +207,8 @@ export class Transforms {
                 `Internal error: no transform found for ${paramName}`,
             );
         }
-        // Case insensitive match, use lowercase for lookup
-        const record = textTransform.get(text.toLowerCase());
+        // Case insensitive/non-diacritic match
+        const record = textTransform.get(normalizeParamString(text));
         if (record === undefined) {
             return undefined;
         }
@@ -230,8 +233,8 @@ export class Transforms {
                 `Internal error: no transform found for ${paramName}`,
             );
         }
-        // Case insensitive match, use lowercase for lookup
-        const record = textTransform.get(text.toLowerCase());
+        // Case insensitive/non-diacritic match
+        const record = textTransform.get(normalizeParamString(text));
         if (
             record === undefined ||
             isTransformEntityRecord(record) ||

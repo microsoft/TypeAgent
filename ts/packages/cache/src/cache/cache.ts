@@ -3,9 +3,13 @@
 
 import { QueueObject, queue } from "async";
 import { DeepPartialUndefined } from "common-utils";
-import { ChildLogger, Logger } from "telemetry";
+import * as Telemetry from "telemetry";
 import { ExplanationData } from "../explanation/explanationData.js";
-import { Actions, RequestAction } from "../explanation/requestAction.js";
+import {
+    Actions,
+    normalizeParamString,
+    RequestAction,
+} from "../explanation/requestAction.js";
 import {
     SchemaConfigProvider,
     doCacheAction,
@@ -65,7 +69,7 @@ function checkExplainableValues(
     noReferences: boolean,
 ) {
     // Do a cheap parameter check first.
-    const lowercase = requestAction.request.toLowerCase();
+    const normalizedRequest = normalizeParamString(requestAction.request);
     const pending: unknown[] = [];
 
     for (const action of requestAction.actions) {
@@ -85,7 +89,10 @@ function checkExplainableValues(
                     "Request contains a possible referential phrase used for property values.",
                 );
             }
-            if (valueInRequest && !lowercase.includes(value.toLowerCase())) {
+            if (
+                valueInRequest &&
+                !normalizedRequest.includes(normalizeParamString(value))
+            ) {
                 throw new Error(
                     `Action parameter value '${value}' not found in the request`,
                 );
@@ -110,14 +117,14 @@ export class AgentCache {
         reject: (reason?: any) => void;
     }>;
 
-    private readonly logger: Logger | undefined;
+    private readonly logger: Telemetry.Logger | undefined;
     public model?: string;
     constructor(
         public readonly explainerName: string,
         private readonly getExplainerForTranslator: ExplainerFactory,
         private readonly getSchemaConfig?: SchemaConfigProvider,
         cacheOptions?: CacheOptions,
-        logger?: Logger,
+        logger?: Telemetry.Logger,
     ) {
         this._constructionStore = new ConstructionStoreImpl(
             explainerName,
@@ -133,7 +140,7 @@ export class AgentCache {
         });
 
         this.logger = logger
-            ? new ChildLogger(logger, "cache", {
+            ? new Telemetry.ChildLogger(logger, "cache", {
                   explainerName,
               })
             : undefined;

@@ -9,8 +9,15 @@ export type HistoryContext = {
     additionalInstructions?: string[] | undefined;
 };
 
+export function normalizeParamString(str: string) {
+    return str
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "")
+        .toLowerCase();
+}
+
 export function normalizeParamValue(value: ParamValueType) {
-    return typeof value === "string" ? value.toLowerCase() : value;
+    return typeof value === "string" ? normalizeParamString(value) : value;
 }
 
 export function equalNormalizedParamValue(
@@ -18,6 +25,16 @@ export function equalNormalizedParamValue(
     b: ParamValueType,
 ) {
     return a === b || normalizeParamValue(a) === normalizeParamValue(b);
+}
+
+export function equalNormalizedParamObject(
+    a: ParamObjectType = {},
+    b: ParamObjectType = {},
+) {
+    return (
+        normalizeParamString(JSON.stringify(a)) ===
+        normalizeParamString(JSON.stringify(b))
+    );
 }
 
 export type ParamValueType = string | number | boolean;
