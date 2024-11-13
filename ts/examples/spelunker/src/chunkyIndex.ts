@@ -16,7 +16,7 @@ import {
     createFileDocumenter,
     FileDocumenter,
 } from "./fileDocumenter.js";
-import { Chunk } from "./pythonChunker.js";
+import { Chunk, ChunkId } from "./pythonChunker.js";
 
 // A bundle of object stores and indices etc.
 export class ChunkyIndex {
@@ -29,10 +29,10 @@ export class ChunkyIndex {
     chunkFolder!: ObjectFolder<Chunk>;
     codeIndex!: SemanticCodeIndex;
     summaryFolder!: ObjectFolder<CodeDocumentation>;
-    keywordsIndex!: knowLib.TextIndex<string, string>;
-    topicsIndex!: knowLib.TextIndex<string, string>;
-    goalsIndex!: knowLib.TextIndex<string, string>;
-    dependenciesIndex!: knowLib.TextIndex<string, string>;
+    keywordsIndex!: knowLib.TextIndex<string, ChunkId>;
+    topicsIndex!: knowLib.TextIndex<string, ChunkId>;
+    goalsIndex!: knowLib.TextIndex<string, ChunkId>;
+    dependenciesIndex!: knowLib.TextIndex<string, ChunkId>;
 
     private constructor(rootDir: string) {
         this.rootDir = rootDir;
@@ -70,8 +70,8 @@ export class ChunkyIndex {
 
         async function makeIndex(
             name: string,
-        ): Promise<knowLib.TextIndex<string, string>> {
-            return await knowLib.createTextIndex<string>(
+        ): Promise<knowLib.TextIndex<string, ChunkId>> {
+            return await knowLib.createTextIndex<ChunkId>(
                 {
                     caseSensitive: false,
                     concurrency: 4,

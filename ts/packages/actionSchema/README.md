@@ -1,6 +1,6 @@
-# schema-parser
+# action-schema
 
-Parser for action schema from typescript.
+Tools for TypeAgent action schemas.
 
 ## Trademarks
 

@@ -77,41 +77,16 @@ public class Outlook : COMObject
         }
     }
 
-    public IEnumerable<T> MapMailItems<T>(Func<MailItem, T> gettor)
+    public IEnumerable<T> MapMailItems<T>(Func<MailItem, T> mapFn, OlSensitivity sensitivity = OlSensitivity.olNormal)
     {
-        NameSpace ns = null;
-        MAPIFolder inbox = null;
-        Items items = null;
-        try
+        foreach(MailItem item in ForEachMailItem(sensitivity))
         {
-            ns = _outlook.GetNamespace("MAPI");
-            inbox = ns.GetDefaultFolder(OlDefaultFolders.olFolderInbox);
-            items = inbox.Items;
-            items.Sort("[ReceivedTime]", true);
-            foreach (object item in items)
-            {
-                if (item is MailItem mailItem)
-                {
-                    try
-                    {
-                        yield return gettor(mailItem);
-                    }
-                    finally
-                    {
-                        COMObject.Release(item);
-                    }
-                }
-            }
-        }
-        finally
-        {
-            COMObject.Release(items);
-            COMObject.Release(inbox);
-            COMObject.Release(ns);
+            T result = mapFn(item);
+            yield return result;
         }
     }
 
-    public IEnumerable<MailItem> ForEachMailItem()
+    public IEnumerable<MailItem> ForEachMailItem(OlSensitivity sensitivity = OlSensitivity.olNormal)
     {
         NameSpace ns = null;
         MAPIFolder inbox = null;
@@ -124,7 +99,7 @@ public class Outlook : COMObject
             items.Sort("[ReceivedTime]", true);
             foreach (object item in items)
             {
-                if (item is MailItem mailItem)
+                if (item is MailItem mailItem && !string.IsNullOrEmpty(mailItem.Body) && mailItem.Sensitivity == sensitivity)
                 {
                     try
                     {

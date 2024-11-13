@@ -16,7 +16,7 @@ const __dirname = path.dirname(__filename);
 
 const execPromise = promisify(exec);
 
-export type IdType = string;
+export type ChunkId = string;
 
 export interface Blob {
     start: number; // int; 0-based!
@@ -26,11 +26,11 @@ export interface Blob {
 
 export interface Chunk {
     // Names here must match names in chunker.py.
-    id: IdType;
+    id: ChunkId;
     treeName: string;
     blobs: Blob[];
-    parentId: IdType;
-    children: IdType[];
+    parentId: ChunkId;
+    children: ChunkId[];
     filename?: string; // Set on receiving end to reduce JSON size.
     docs?: CodeDocumentation; // Computed on receiving end from file docs.
 }
