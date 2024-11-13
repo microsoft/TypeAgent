@@ -40,14 +40,14 @@ function generateSchemaParamObject(
     }
 }
 
-export function generateSchema(actionInfos: ActionSchema[]) {
+export function generateSchema(actionSchemas: ActionSchema[]) {
     const lines: string[] = [];
 
     lines.push(
-        `export type AllAction = ${actionInfos.map((actionInfo) => actionInfo.typeName).join("|")};`,
+        `export type AllAction = ${actionSchemas.map((actionInfo) => actionInfo.typeName).join("|")};`,
     );
 
-    for (const actionInfo of actionInfos) {
+    for (const actionInfo of actionSchemas) {
         if (actionInfo.comments) {
             lines.push(
                 actionInfo.comments
@@ -66,7 +66,5 @@ export function generateSchema(actionInfos: ActionSchema[]) {
         lines.push("}");
     }
 
-    const schema = lines.join("\n");
-    console.log(schema);
-    return schema;
+    return lines.join("\n");
 }

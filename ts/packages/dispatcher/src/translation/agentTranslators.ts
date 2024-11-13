@@ -36,6 +36,9 @@ export type TranslatorConfig = {
 } & SchemaDefinition;
 
 export interface TranslatorConfigProvider {
+    tryGetTranslatorConfig(
+        translatorName: string,
+    ): TranslatorConfig | undefined;
     getTranslatorConfig(translatorName: string): TranslatorConfig;
     getTranslatorConfigs(): [string, TranslatorConfig][];
 }
@@ -125,6 +128,9 @@ export function getDefaultBuiltinTranslatorName() {
 
 export function getBuiltinTranslatorConfigProvider(): TranslatorConfigProvider {
     return {
+        tryGetTranslatorConfig(translatorName: string) {
+            return translatorConfigs[translatorName];
+        },
         getTranslatorConfig(translatorName: string) {
             const config = translatorConfigs[translatorName];
             if (!config) {

@@ -2,10 +2,12 @@
 // Licensed under the MIT License.
 
 import { ActionSchema, parseActionSchemaFile } from "action-schema";
-import { TranslatorConfig } from "./agentTranslators.js";
+import {
+    TranslatorConfig,
+    TranslatorConfigProvider,
+} from "./agentTranslators.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { AppAction } from "@typeagent/agent-sdk";
-import { CommandHandlerContext } from "../internal.js";
 import { DeepPartialUndefined } from "common-utils";
 
 // Global Cache
@@ -28,13 +30,13 @@ export function getTranslatorActionSchemas(
 
 export function getActionSchema(
     action: DeepPartialUndefined<AppAction>,
-    systemContext: CommandHandlerContext,
+    provider: TranslatorConfigProvider,
 ) {
     const { translatorName, actionName } = action;
     if (translatorName === undefined || actionName === undefined) {
         return undefined;
     }
-    const config = systemContext.agents.tryGetTranslatorConfig(translatorName);
+    const config = provider.tryGetTranslatorConfig(translatorName);
     if (config === undefined) {
         return undefined;
     }
