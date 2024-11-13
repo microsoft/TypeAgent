@@ -28,7 +28,12 @@ import {
     EntityProperty,
     PropertyExplanation,
 } from "./propertyExplanationSchemaV5WithContext.js";
-import { Action, Actions, RequestAction } from "../requestAction.js";
+import {
+    Action,
+    Actions,
+    normalizeParamString,
+    RequestAction,
+} from "../requestAction.js";
 import { Construction } from "../../constructions/constructions.js";
 import { TypeChatAgentResult, ValidationError } from "../typeChatAgent.js";
 import {
@@ -568,8 +573,8 @@ export function createConstructionV5(
         phrase: SubPhrase,
         paramInfo: PropertyValue,
     ) => {
-        const ltext = phrase.text.toLowerCase();
-        const lval = paramInfo.propertyValue.toString().toLowerCase();
+        const ltext = normalizeParamString(phrase.text);
+        const lval = normalizeParamString(paramInfo.propertyValue.toString());
         return (
             getPropertySpec(
                 paramInfo.propertyName,

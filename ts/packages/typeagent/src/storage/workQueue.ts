@@ -41,6 +41,7 @@ export interface WorkQueue {
 export async function createWorkQueueFolder(
     rootPath: string,
     queueFolderName?: string,
+    workItemFilter?: (queuePath: string, workItems: Path[]) => Promise<Path[]>,
 ): Promise<WorkQueue> {
     queueFolderName ??= "queue";
     let queuePath = await ensureDir(path.join(rootPath, queueFolderName));
@@ -104,6 +105,9 @@ export async function createWorkQueueFolder(
         maxItems?: number,
     ): Promise<number> {
         let fileNames = await fs.promises.readdir(queuePath);
+        if (workItemFilter) {
+            fileNames = await workItemFilter(queuePath, fileNames);
+        }
         if (maxItems && maxItems > 0) {
             fileNames = fileNames.slice(0, maxItems);
         }

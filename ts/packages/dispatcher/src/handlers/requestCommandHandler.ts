@@ -12,7 +12,10 @@ import {
     ProcessRequestActionResult,
     ExplanationOptions,
     ParamObjectType,
+    equalNormalizedParamObject,
 } from "agent-cache";
+
+import { validateAction } from "action-schema";
 import {
     CommandHandlerContext,
     getTranslator,
@@ -52,7 +55,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { DispatcherName } from "./common/interactiveIO.js";
 import { getActionTemplateEditConfig } from "../translation/actionTemplate.js";
-import { getActionInfo, validateAction } from "../translation/actionInfo.js";
+import { getActionSchema } from "../translation/actionSchema.js";
 import { isUnknownAction } from "../dispatcher/dispatcherAgent.js";
 import { UnknownAction } from "../dispatcher/schema/dispatcherActionSchema.js";
 
@@ -83,7 +86,7 @@ function validateReplaceActions(
         if (typeof action !== "object") {
             throw new Error("Invalid replacement");
         }
-        const actionInfo = getActionInfo(action, systemContext);
+        const actionInfo = getActionSchema(action, systemContext.agents);
         if (actionInfo === undefined) {
             throw new Error("Invalid replacement");
         }
@@ -725,8 +728,10 @@ async function canTranslateWithoutContext(
             }
 
             if (
-                JSON.stringify(newAction.parameters ?? {}).toLowerCase() !==
-                JSON.stringify(oldAction.parameters ?? {}).toLowerCase()
+                !equalNormalizedParamObject(
+                    newAction.parameters,
+                    oldAction.parameters,
+                )
             ) {
                 throw new Error(`Action parameters mismatch without context`);
             }

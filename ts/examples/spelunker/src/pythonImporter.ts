@@ -35,7 +35,12 @@ import { asyncArray } from "typeagent";
 import { ChunkyIndex } from "./chunkyIndex.js";
 import { CodeDocumentation } from "./codeDocSchema.js";
 import { CodeBlockWithDocs } from "./fileDocumenter.js";
-import { Chunk, ChunkedFile, chunkifyPythonFiles } from "./pythonChunker.js";
+import {
+    Chunk,
+    ChunkedFile,
+    ChunkId,
+    chunkifyPythonFiles,
+} from "./pythonChunker.js";
 
 // TODO: Turn (chunkFolder, codeIndex, summaryFolder) into a single object.
 
@@ -243,9 +248,9 @@ export function wordWrap(text: string, width: number = 80): string {
 }
 
 async function writeToIndex(
-    chunkId: string,
+    chunkId: ChunkId,
     phrases: string[] | undefined, // List of keywords, topics, etc. in chunk
-    index: knowLib.TextIndex<string, string>,
+    index: knowLib.TextIndex<string, ChunkId>,
 ) {
     if (!phrases) return;
     for (const phrase of phrases) {

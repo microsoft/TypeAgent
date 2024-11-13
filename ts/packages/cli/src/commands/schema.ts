@@ -8,7 +8,9 @@ import {
     getFullSchemaText,
     getBuiltinTranslatorNames,
     getBuiltinTranslatorConfigProvider,
+    getActionSchema,
 } from "agent-dispatcher/internal";
+import { generateSchema } from "action-schema";
 
 export default class Schema extends Command {
     static description = "Show schema used by translators";
@@ -33,12 +35,34 @@ export default class Schema extends Command {
             required: true,
             options: getBuiltinTranslatorNames(),
         }),
+        actionName: Args.string({
+            description: "Action name",
+            required: false,
+        }),
     };
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(Schema);
         const provider = getBuiltinTranslatorConfigProvider();
         if (!flags.assistant) {
+            if (args.actionName) {
+                const actionSchema = getActionSchema(
+                    {
+                        translatorName: args.translator,
+                        actionName: args.actionName,
+                    },
+                    provider,
+                );
+                if (actionSchema) {
+                    console.log(generateSchema([actionSchema]));
+                } else {
+                    console.error(
+                        `Action ${args.actionName} not found in translator ${args.translator}`,
+                    );
+                }
+
+                return;
+            }
             console.log(
                 getFullSchemaText(
                     args.translator,

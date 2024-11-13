@@ -21,11 +21,11 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
+    "action-schema": "workspace:*",
     "aiclient": "workspace:*",
     "dotenv": "^16.3.1",
     "interactive-app": "workspace:*",
     "schema-author": "workspace:*",
-    "schema-parser": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "typescript": "^5.4.2"
