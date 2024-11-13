@@ -70,7 +70,10 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         with:
           name: node-app
-          path: ./ts
+          path: |
+            ./ts/packages/api
+            .ts/packages/shell
+          compression-level: 9
 
   deploy:
     runs-on: windows-latest
