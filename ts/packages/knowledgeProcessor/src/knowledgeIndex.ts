@@ -139,7 +139,7 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         maxMatches: number,
         minScore?: number,
     ): Promise<ScoredItem<TTextId>[]>;
-    nearestNeighborsPairs( // Pairs of plain text and array of source ID
+    nearestNeighborsPairs(
         value: string,
         maxMatches: number,
         minScore?: number,
@@ -438,7 +438,6 @@ export async function createTextIndex<TSourceId = any>(
         return Array.isArray(combined) ? combined : [...combined];
     }
 
-    // TODO: ename to getNearestTextIds
     async function getNearestText(
         value: string,
         maxMatches?: number,
@@ -479,7 +478,6 @@ export async function createTextIndex<TSourceId = any>(
         });
     }
 
-    // TODO: Rename to nearestNeighborsTextId
     async function nearestNeighborsText(
         value: string,
         maxMatches: number,
