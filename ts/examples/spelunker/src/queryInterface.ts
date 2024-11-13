@@ -204,21 +204,15 @@ async function processQuery(
             options.maxHits,
             options.minScore,
         );
-        let exactMatch: ChunkId = "";
         for (const hit of hits) {
             for (const id of hit.item) {
-                if (id !== exactMatch) {
-                    if (options.verbose) {
-                        io.writer.writeLine(
-                            `  ${indexType} hit: ${id} (${hit.score.toFixed(3)})`,
-                        );
-                    }
-                    const oldScore = hitTable.get(id) || 0.0;
-                    hitTable.set(id, oldScore + hit.score);
+                if (options.verbose) {
+                    io.writer.writeLine(
+                        `  ${indexType} hit: ${id} (${hit.score.toFixed(3)})`,
+                    );
                 }
-            }
-            if (hit.score === 1.0) {
-                exactMatch = hit.item[0]; // TODO: Can there be more than one exact match?
+                const oldScore = hitTable.get(id) || 0.0;
+                hitTable.set(id, oldScore + hit.score);
             }
         }
     }
