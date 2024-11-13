@@ -16,13 +16,9 @@ public class Outlook : COMObject
         _session = _outlook.Session;
     }
 
-    public List<Email> LoadFrom(string senderName, string? senderEmail = null)
+    public List<Email> LoadFrom(EmailSender sender)
     {
-        Filter filter = new Filter("SenderName", senderName);
-        if (!string.IsNullOrEmpty(senderEmail))
-        {
-            filter = filter.And("SenderEmailAddress", senderEmail);
-        }
+        Filter filter = sender.ToFilter();
         return FilterItems(filter, (item) =>
         {
             return item is MailItem mailItem ? new Email(mailItem) : null;
@@ -79,7 +75,12 @@ public class Outlook : COMObject
 
     public IEnumerable<T> MapMailItems<T>(Func<MailItem, T> mapFn, OlSensitivity sensitivity = OlSensitivity.olNormal)
     {
-        foreach(MailItem item in ForEachMailItem(sensitivity))
+        return MapMailItems<T>(mapFn, null, sensitivity);
+    }
+
+    public IEnumerable<T> MapMailItems<T>(Func<MailItem, T> mapFn, Filter? filter, OlSensitivity sensitivity = OlSensitivity.olNormal)
+    {
+        foreach(MailItem item in ForEachMailItem(filter, sensitivity))
         {
             T result = mapFn(item);
             yield return result;
@@ -88,32 +89,46 @@ public class Outlook : COMObject
 
     public IEnumerable<MailItem> ForEachMailItem(OlSensitivity sensitivity = OlSensitivity.olNormal)
     {
+        return ForEachMailItem(null, sensitivity);
+    }
+
+    public IEnumerable<MailItem> ForEachMailItem(Filter? filter, OlSensitivity sensitivity = OlSensitivity.olNormal)
+    {
         NameSpace ns = null;
         MAPIFolder inbox = null;
         Items items = null;
+        Items filteredItems = null;
         try
         {
             ns = _outlook.GetNamespace("MAPI");
             inbox = ns.GetDefaultFolder(OlDefaultFolders.olFolderInbox);
             items = inbox.Items;
-            items.Sort("[ReceivedTime]", true);
-            foreach (object item in items)
+
+            if (filter is not null)
             {
-                if (item is MailItem mailItem && !string.IsNullOrEmpty(mailItem.Body) && mailItem.Sensitivity == sensitivity)
+                filteredItems = items.Restrict(filter);
+            }
+            items.Sort("[ReceivedTime]", true);
+            foreach (object item in filteredItems ?? items)
+            {
+                try
                 {
-                    try
+                    if (item is MailItem mailItem &&
+                        mailItem.HasBody() &&
+                        mailItem.Sensitivity == sensitivity)
                     {
                         yield return mailItem;
                     }
-                    finally
-                    {
-                        COMObject.Release(item);
-                    }
+                }
+                finally
+                {
+                    COMObject.Release(item);
                 }
             }
         }
         finally
         {
+            COMObject.Release(filteredItems);
             COMObject.Release(items);
             COMObject.Release(inbox);
             COMObject.Release(ns);

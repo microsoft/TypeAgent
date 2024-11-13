@@ -5,6 +5,11 @@ namespace TypeAgent;
 
 public static class MailtemEx
 {
+    public static bool HasBody(this MailItem item)
+    {
+        return !string.IsNullOrEmpty(item.Body);
+    }
+
     public static string BodyLatest(this MailItem item)
     {
         return BodyParser.Default.GetLatest(item.Body);
