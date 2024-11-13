@@ -34,11 +34,14 @@ import {
     argChunkSize,
     argClean,
     argConcurrency,
+    argDestFile,
     argPause,
     argSourceFileOrFolder,
+    indexingStatsToCsv,
 } from "./common.js";
 import chalk from "chalk";
 import { convertMsgFiles } from "./importer.js";
+import fs from "fs";
 
 export async function createEmailMemory(
     models: Models,
@@ -85,7 +88,7 @@ export function createEmailCommands(
     commands: Record<string, CommandHandler>,
 ): void {
     commands.importEmail = importEmail;
-    commands.convertMsg = convertMsgs;
+    commands.emailConvertMsg = emailConvertMsg;
     commands.emailStats = emailStats;
 
     //--------
@@ -138,7 +141,7 @@ export function createEmailCommands(
             },
         };
     }
-    async function convertMsgs(
+    async function emailConvertMsg(
         args: string[],
         io: InteractiveIo,
     ): Promise<void> {
@@ -154,13 +157,29 @@ export function createEmailCommands(
         }
     }
 
-    commands.emailStats.metadata = "Email statistics";
+    function emailStatsDef(): CommandMetadata {
+        return {
+            description: "Email indexing statistics",
+            options: {
+                destFile: argDestFile(),
+            },
+        };
+    }
+
+    commands.emailStats.metadata = emailStatsDef();
     async function emailStats(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, emailStatsDef());
         const stats = await loadStats(false);
         context.printer.writeBullet(`Email count: ${stats.itemStats.length}`);
         context.printer.writeBullet(
             `Total chars: ${stats.totalStats.charCount}`,
         );
+        const csv = indexingStatsToCsv(stats.itemStats);
+        if (namedArgs.destFile) {
+            await fs.promises.writeFile(namedArgs.destFile, csv);
+        } else {
+            context.printer.writeLine(csv);
+        }
     }
 
     //-------------
