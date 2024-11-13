@@ -99,7 +99,7 @@ export function createModels(): Models {
     const embeddingSettings = openai.apiSettingsFromEnv(
         openai.ModelType.Embedding,
     );
-    embeddingSettings.retryPauseMs = 10000;
+    embeddingSettings.retryPauseMs = 25 * 1000;
 
     const models: Models = {
         chatModel: openai.createChatModelDefault("chatMemory"),

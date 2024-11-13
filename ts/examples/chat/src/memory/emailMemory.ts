@@ -176,6 +176,7 @@ export function createEmailCommands(
         const clock = new StopWatch();
         const maxAttempts = 2;
         let maxMessages = namedArgs.maxMessages;
+        let grandTotal = context.stats.itemStats.length;
         while (attempts <= maxAttempts) {
             const successCount = await queue.drain(
                 namedArgs.concurrency,
@@ -200,10 +201,10 @@ export function createEmailCommands(
                     context.stats.updateCurrent(clock.elapsedMs, emailLength);
                     await saveStats();
 
-                    context.printer.writeInColor(
-                        chalk.green,
-                        `[${clock.elapsedString()}, ${millisecondsToString(context.stats.totalStats.timeMs, "m")}]`,
-                    );
+                    grandTotal++;
+                    const status = `[${clock.elapsedString()}, ${millisecondsToString(context.stats.totalStats.timeMs, "m")} for ${grandTotal} msgs.]`;
+
+                    context.printer.writeInColor(chalk.green, status);
                     context.printer.writeLine();
                 },
                 maxMessages,
