@@ -245,6 +245,7 @@ export async function createTextIndex<
         getNearest,
         getNearestMultiple,
         getNearestText,
+        getNearestTextMultiple,
         getNearestHits,
         getNearestHitsMultiple,
         put,
@@ -468,6 +469,21 @@ export async function createTextIndex<
                 : matches.map((m) => serializer.serialize(m));
         }
         return [];
+    }
+
+    async function getNearestTextMultiple(
+        values: string[],
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<TTextId[]> {
+        // TODO: optimize by lowering into DB if possible
+        const matches = await asyncArray.mapAsync(
+            values,
+            settings.concurrency,
+            (t) => getNearestText(t, maxMatches, minScore),
+        );
+
+        return knowLib.sets.intersectUnionMultiple(...matches) ?? [];
     }
 
     async function nearestNeighbors(

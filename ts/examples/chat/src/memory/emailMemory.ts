@@ -133,7 +133,7 @@ export function createEmailCommands(
         }
     }
 
-    function convertMsgsDef(): CommandMetadata {
+    function emailConvertMsgDef(): CommandMetadata {
         return {
             description: "Convert msg files in a folder",
             args: {
@@ -141,11 +141,12 @@ export function createEmailCommands(
             },
         };
     }
+    commands.emailConvertMsg.metadata = emailConvertMsgDef();
     async function emailConvertMsg(
         args: string[],
         io: InteractiveIo,
     ): Promise<void> {
-        const namedArgs = parseNamedArguments(args, convertMsgsDef());
+        const namedArgs = parseNamedArguments(args, emailConvertMsgDef());
         let sourcePath: string = namedArgs.sourcePath;
         let isDir = isDirectoryPath(sourcePath);
         if (isDir) {
