@@ -9,6 +9,9 @@ on:
       - dev/robgruen/android_sans_MSAL
   workflow_dispatch:
 
+permissions:
+  id-token: write
+
 jobs:
   build_ts:        
     env:
