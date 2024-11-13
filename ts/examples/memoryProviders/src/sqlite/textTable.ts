@@ -252,6 +252,7 @@ export async function createTextIndex<
         addSources,
         nearestNeighbors,
         nearestNeighborsText,
+        nearestNeighborsPairs,
         remove,
     };
 
@@ -537,6 +538,28 @@ export async function createTextIndex<
             matches.splice(0, 0, { score: 1.0, item: textId });
         }
         return matches;
+    }
+
+    async function nearestNeighborsPairs(
+        value: string,
+        maxMatches: number,
+        minScore?: number,
+    ): Promise<ScoredItem<knowLib.KVPair<TTextId, TSourceId[]>>[]> {
+        const matches = await nearestNeighborsTextIds(
+            value,
+            maxMatches,
+            minScore,
+        );
+        const results = matches.map((m) => {
+            return {
+                score: m.score,
+                item: {
+                        key: isIdInt ? m.item : serializer.serialize(m.item),
+                        value: postingsTable.getSync(m.item) ?? [],
+                },
+            };
+        });
+        return results;
     }
 
     // TODO: Optimize

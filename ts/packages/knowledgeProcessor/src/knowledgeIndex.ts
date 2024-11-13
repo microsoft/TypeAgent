@@ -143,7 +143,7 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         value: string,
         maxMatches: number,
         minScore?: number,
-    ): Promise<ScoredItem<KVPair<string, TSourceId[]>>[]>;
+    ): Promise<ScoredItem<KVPair<TTextId, TSourceId[]>>[]>;
     remove(textId: TTextId, postings: TSourceId | TSourceId[]): Promise<void>;
 }
 
