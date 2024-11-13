@@ -199,18 +199,19 @@ async function processQuery(
         if (options.verbose)
             io.writer.writeLine(`[Searching ${indexType} index...]`);
         // TODO: try/catch like below? Embeddings can fail too...
-        const hits: ScoredItem<ChunkId[]>[] = await index.nearestNeighbors(
-            input,
-            options.maxHits,
-            options.minScore,
-        );
+        const hits: ScoredItem<knowLib.KVPair<string, ChunkId[]>>[] =
+            await index.nearestNeighborsPairs(
+                input,
+                options.maxHits * 5,
+                options.minScore * 0.8,
+            );
         for (const hit of hits) {
-            for (const id of hit.item) {
-                if (options.verbose) {
-                    io.writer.writeLine(
-                        `  ${indexType} hit: ${id} (${hit.score.toFixed(3)})`,
-                    );
-                }
+            if (options.verbose) {
+                io.writer.writeLine(
+                    `  ${hit.item.key} (${hit.score.toFixed(3)}) -- ${hit.item.value}`,
+                );
+            }
+            for (const id of hit.item.value) {
                 const oldScore = hitTable.get(id) || 0.0;
                 hitTable.set(id, oldScore + hit.score);
             }
@@ -222,13 +223,15 @@ async function processQuery(
         if (options.verbose) io.writer.writeLine(`[Searching code index...]`);
         const hits: ScoredItem<ChunkId>[] = await chunkyIndex.codeIndex!.find(
             input,
-            options.maxHits,
-            options.minScore,
+            options.maxHits * 5,
+            options.minScore * 0.8,
         );
         for (const hit of hits) {
             if (options.verbose) {
+                const comment = (await chunkyIndex.summaryFolder!.get(hit.item))
+                    ?.comments?.[0]?.comment;
                 io.writer.writeLine(
-                    `  code hit: ${hit.item} (${hit.score.toFixed(3)})`,
+                    `  ${hit.item} (${hit.score.toFixed(3)}) -- ${comment?.slice(0, 100)}`,
                 );
             }
             hitTable.set(hit.item, hit.score);
