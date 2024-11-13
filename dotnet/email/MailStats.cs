@@ -17,14 +17,14 @@ public class MailStats
         _outlook = outlook;
     }
 
-    public (int, Dictionary<int, int>) GetSizeDistribution()
+    public (int, Dictionary<int, int>) GetSizeDistribution(OlSensitivity sensitivity = OlSensitivity.olNormal)
     {
         int cursor = Console.CursorLeft;
         Dictionary<int, int> histogram = new Dictionary<int, int>();
 
         Stats skipped = new Stats();
         Stats stats = new Stats();
-        foreach (MailItem item in _outlook.ForEachMailItem())
+        foreach (MailItem item in _outlook.ForEachMailItem(sensitivity))
         {
             if (item.IsForward())
             {

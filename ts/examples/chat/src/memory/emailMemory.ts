@@ -12,6 +12,7 @@ import {
 } from "./chatMemory.js";
 import {
     createWorkQueueFolder,
+    dateTime,
     ensureDir,
     isDirectoryPath,
     readJsonFile,
@@ -156,6 +157,9 @@ export function createEmailCommands(
     // End commands
     //-------------
     async function indexEmails(namedArgs: NamedArgs, sourcePath: string) {
+        if (!sourcePath.endsWith("json")) {
+            sourcePath = path.join(sourcePath, "json");
+        }
         context.printer.writeInColor(chalk.cyan, "Adding emails to memory");
         if (namedArgs.clean) {
             await context.emailMemory.clear(true);
@@ -163,13 +167,11 @@ export function createEmailCommands(
         const queue = await createWorkQueueFolder(
             path.dirname(sourcePath),
             path.basename(sourcePath),
+            getNamesOfNewestEmails,
         );
         queue.onError = (err) => context.printer.writeError(err);
 
-        let statsDirPath = path.join(path.dirname(sourcePath), "stats");
-        await ensureDir(statsDirPath);
-
-        context.stats = await loadStats(statsDirPath, namedArgs.clean);
+        context.stats = await loadStats(namedArgs.clean);
         let attempts = 1;
         const clock = new StopWatch();
         const maxAttempts = 2;
@@ -196,7 +198,7 @@ export function createEmailCommands(
                     );
                     clock.stop();
                     context.stats.updateCurrent(clock.elapsedMs, emailLength);
-                    await saveStats(statsDirPath);
+                    await saveStats();
 
                     context.printer.writeInColor(
                         chalk.green,
@@ -222,11 +224,8 @@ export function createEmailCommands(
         context.printer.writeIndexingStats(context.stats);
     }
 
-    async function loadStats(
-        sourcePath: string,
-        clean: boolean,
-    ): Promise<knowLib.IndexingStats> {
-        const statsFilePath = getStatsFilePath(sourcePath);
+    async function loadStats(clean: boolean): Promise<knowLib.IndexingStats> {
+        const statsFilePath = getStatsFilePath();
         let stats: knowLib.IndexingStats | undefined;
         if (clean) {
             await removeFile(statsFilePath);
@@ -236,11 +235,34 @@ export function createEmailCommands(
         return knowLib.createIndexingStats(stats);
     }
 
-    async function saveStats(sourcePath: string) {
-        await writeJsonFile(getStatsFilePath(sourcePath), context.stats);
+    async function saveStats() {
+        await writeJsonFile(getStatsFilePath(), context.stats);
     }
 
-    function getStatsFilePath(sourcePath: string) {
-        return path.join(sourcePath, "stats.json");
+    function getStatsFilePath() {
+        return path.join(
+            context.statsPath,
+            `${context.emailMemory.conversationName}_stats.json`,
+        );
+    }
+
+    async function getNamesOfNewestEmails(
+        rootPath: string,
+        fileNames: string[],
+    ): Promise<string[]> {
+        let timestampedNames: dateTime.Timestamped<string>[] = [];
+        for (const fileName of fileNames) {
+            const filePath = path.join(rootPath, fileName);
+            const email = await knowLib.email.loadEmailFile(filePath);
+            if (email && email.sentOn) {
+                const timestamp =
+                    dateTime.stringToDate(email.sentOn) ?? new Date();
+                timestampedNames.push({ value: fileName, timestamp });
+            }
+        }
+        timestampedNames.sort(
+            (x, y) => y.timestamp.getTime() - x.timestamp.getTime(),
+        );
+        return timestampedNames.map((t) => t.value);
     }
 }
