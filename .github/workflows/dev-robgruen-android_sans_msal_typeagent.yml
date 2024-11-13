@@ -9,57 +9,103 @@ on:
       - dev/robgruen/android_sans_MSAL
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
-  build:
-    runs-on: windows-latest
+  build_ts:        
+    env:
+      NODE_OPTIONS: "--max_old_space_size=8192"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["windows-latest"]
+        #os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+        #version: [18, 20]
+        version: [20]
 
+    runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node.js version
-        uses: actions/setup-node@v3
-        with:
-          node-version: '20.x'
-
-      - name: npm install, build, and test
+      - name: Setup Git LF
         run: |
-          npm install
-          npm run build --if-present
-          npm run test --if-present
-      
+          git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            ts:
+              - "ts/**"
+              - ".github/workflows/build-ts.yml"
+      - uses: pnpm/action-setup@v4
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        name: Install pnpm
+        with:
+          version: 9
+          run_install: false
+      - uses: actions/setup-node@v4
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        with:
+          node-version: ${{ matrix.version }}
+          cache: "pnpm"
+          cache-dependency-path: ts/pnpm-lock.yaml
+      - name: Install dependencies
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        working-directory: ts
+        run: |
+          pnpm install --frozen-lockfile --strict-peer-dependencies
+      - name: Build
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        working-directory: ts
+        run: |
+          npm run build
+      - name: Test
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        working-directory: ts
+        run: |
+          npm run test
+      - name: Lint
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        working-directory: ts
+        run: |
+          npm run lint 
       - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.4.3
         with:
           name: node-app
-          path: .
+          path: |
+            ./ts/packages/api
+            .ts/packages/shell
+          compression-level: 0
 
   deploy:
-    runs-on: ubuntu-latest
-    needs: build
+    runs-on: windows-latest
+    needs: build_ts
     environment:
-      name: 'Production'
+      name: 'test'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
     permissions:
       id-token: write #This is required for requesting the JWT
 
     steps:
       - name: Download artifact from build job
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.1.8
         with:
           name: node-app
       
       - name: Login to Azure
-        uses: azure/login@v2
+        uses: azure/login@v2.2.0
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 }}          
 
       - name: 'Deploy to Azure Web App'
-        uses: azure/webapps-deploy@v3
+        uses: azure/webapps-deploy@v3.0.1
         id: deploy-to-webapp
         with:
           app-name: 'typeagent'
-          slot-name: 'Production'
+          slot-name: 'test'
           package: .
           
