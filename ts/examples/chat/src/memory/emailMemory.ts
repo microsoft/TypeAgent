@@ -86,6 +86,7 @@ export function createEmailCommands(
 ): void {
     commands.importEmail = importEmail;
     commands.convertMsg = convertMsgs;
+    commands.emailStats = emailStats;
 
     //--------
     // Commands
@@ -151,6 +152,15 @@ export function createEmailCommands(
             );
             await convertMsgFiles(sourcePath, io);
         }
+    }
+
+    commands.emailStats.metadata = "Email statistics";
+    async function emailStats(args: string[]): Promise<void> {
+        const stats = await loadStats(false);
+        context.printer.writeBullet(`Email count: ${stats.itemStats.length}`);
+        context.printer.writeBullet(
+            `Total chars: ${stats.totalStats.charCount}`,
+        );
     }
 
     //-------------
