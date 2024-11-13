@@ -374,6 +374,8 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
 
     if (Android) {
-        Bridge.interfaces.Android.domReady((userMessage: string) => { chatView.addUserMessage(userMessage); });
+        Bridge.interfaces.Android.domReady((userMessage: string) => {
+            chatView.addUserMessage(userMessage);
+        });
     }
 });

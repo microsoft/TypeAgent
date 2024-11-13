@@ -9,7 +9,14 @@ import {
     ActionResult,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
-import { AndroidMobileAction, AutomatePhoneUIAction, CallPhoneNumberAction, SearchNearbyAction, SendSMSAction, SetAlarmAction } from "./androidMobileSchema.js";
+import {
+    AndroidMobileAction,
+    AutomatePhoneUIAction,
+    CallPhoneNumberAction,
+    SearchNearbyAction,
+    SendSMSAction,
+    SetAlarmAction,
+} from "./androidMobileSchema.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -56,14 +63,21 @@ async function handlePhotoAction(
     switch (action.actionName) {
         case "sendSMS": {
             let smsAction = action as SendSMSAction;
-            result = createActionResult(`Sending SMS to ${smsAction.parameters.phoneNumber} message '${smsAction.parameters.message}'`);
+            result = createActionResult(
+                `Sending SMS to ${smsAction.parameters.phoneNumber} message '${smsAction.parameters.message}'`,
+            );
             context.actionIO.takeAction("send-sms", smsAction.parameters);
             break;
         }
         case "callPhoneNumber": {
             let callAction = action as CallPhoneNumberAction;
-            result = createActionResult(`Calling ${callAction.parameters.phoneNumber}`);
-            context.actionIO.takeAction("call-phonenumber", callAction.parameters);
+            result = createActionResult(
+                `Calling ${callAction.parameters.phoneNumber}`,
+            );
+            context.actionIO.takeAction(
+                "call-phonenumber",
+                callAction.parameters,
+            );
             break;
         }
         case "setAlarm": {
@@ -75,13 +89,19 @@ async function handlePhotoAction(
         case "searchNearby": {
             let nearbySearchAction = action as SearchNearbyAction;
             result = createActionResult("Local search");
-            context.actionIO.takeAction("search-nearby", nearbySearchAction.parameters);
+            context.actionIO.takeAction(
+                "search-nearby",
+                nearbySearchAction.parameters,
+            );
             break;
         }
         case "automateUI": {
             let automateAction = action as AutomatePhoneUIAction;
             result = createActionResult("Automating phone UI");
-            context.actionIO.takeAction("automate-phone-ui", automateAction.parameters);
+            context.actionIO.takeAction(
+                "automate-phone-ui",
+                automateAction.parameters,
+            );
             break;
         }
         default:

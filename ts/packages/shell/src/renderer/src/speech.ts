@@ -177,12 +177,20 @@ export function recognizeOnce(
             let result: speechSDK.SpeechRecognitionResult | undefined;
 
             if (text === undefined || text === null) {
-                result = new speechSDK.SpeechRecognitionResult(undefined, speechSDK.ResultReason.NoMatch, text);
-            } else  {
-                result = new speechSDK.SpeechRecognitionResult(undefined, speechSDK.ResultReason.RecognizedSpeech, text);
+                result = new speechSDK.SpeechRecognitionResult(
+                    undefined,
+                    speechSDK.ResultReason.NoMatch,
+                    text,
+                );
+            } else {
+                result = new speechSDK.SpeechRecognitionResult(
+                    undefined,
+                    speechSDK.ResultReason.RecognizedSpeech,
+                    text,
+                );
             }
 
-            onRecognizedResult(result, inputId, buttonId, messageHandler )
+            onRecognizedResult(result, inputId, buttonId, messageHandler);
         });
     } else {
         const audioConfig = getAudioConfig();

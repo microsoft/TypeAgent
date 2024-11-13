@@ -3,7 +3,7 @@
 
 import { ProfileEntry, UnreadProfileEntries } from "./profileReader.js";
 import registerDebug from "debug";
-import { Profiler } from "./profiler.js"
+import { Profiler } from "./profiler.js";
 
 const debug = registerDebug("typeagent:profiler");
 
