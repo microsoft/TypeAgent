@@ -11,7 +11,8 @@ export interface StatsResult {
     precision?: number;
     recall?: number;
     rank: number;
-    matches: { actionName: string; score: number }[];
+    rankActualAction: number;
+    top10Matches: { actionName: string; score: number }[];
     meanScore: number;
     medianScore: number;
     stdDevScore: number;
@@ -74,7 +75,7 @@ export function generateStats(data: any[], threshold: number = 0.7) {
             embedding: requestEmbedding,
             actualActionName,
         } = requestObj;
-        const matches = data
+        const allMatches = data
             .map((action) => ({
                 actionName: action.actionName,
                 typeName: action.typeName,
@@ -93,14 +94,22 @@ export function generateStats(data: any[], threshold: number = 0.7) {
                     return 0;
                 }
                 return b.score - a.score;
-            })
-            .slice(0, 10);
+            });
 
-        const rank =
-            matches.findIndex(
+        const rankActualAction =
+            allMatches.findIndex(
                 (match) => match.actionName === actualActionName,
             ) + 1;
-        const scores = matches.map((match) => match.score);
+
+        const top10Matches = allMatches.slice(0, 10);
+        const rank =
+            rankActualAction <= 10
+                ? top10Matches.findIndex(
+                      (match) => match.actionName === actualActionName,
+                  ) + 1
+                : 0;
+
+        const scores = top10Matches.map((match) => match.score);
         const meanScore = calcMean(scores);
         const medianScore = calcMedian(scores);
         const stdDevScore = calcStdDeviation(scores);
@@ -108,7 +117,8 @@ export function generateStats(data: any[], threshold: number = 0.7) {
             request,
             actualActionName,
             rank,
-            matches,
+            rankActualAction,
+            top10Matches,
             meanScore,
             medianScore,
             stdDevScore,
@@ -132,11 +142,11 @@ export function printDetailedMarkdownTable(
     );
 
     let csvContent =
-        "Request,Actual Action,Rank,Mean Score,Median Score,Std Dev,Top Matches\n";
+        "Request,Actual Action,Actual Rank,Top 10 Rank,Mean Score,Median Score,Std Dev,Top Matches\n";
     fs.writeFileSync(statsfile, csvContent);
 
     let csvZeroRankContent =
-        "Request,Actual Action,Rank,Mean Score,Median Score,Std Dev,Top Matches\n";
+        "Request,Actual Action,Actual Rank,Mean Score,Median Score,Std Dev,Top Matches\n";
 
     if (zerorankStatsFile !== undefined) {
         fs.writeFileSync(zerorankStatsFile, csvZeroRankContent);
@@ -147,13 +157,14 @@ export function printDetailedMarkdownTable(
             request,
             actualActionName,
             rank,
-            matches,
+            rankActualAction,
+            top10Matches,
             meanScore,
             medianScore,
             stdDevScore,
         } = result;
 
-        const topMatches = matches
+        const topMatches = top10Matches
             .map(
                 (match: any) =>
                     `${match.actionName} (${match.score.toFixed(2)})`,
@@ -170,9 +181,9 @@ export function printDetailedMarkdownTable(
 
         if (rank > 0) {
             console.log(res);
-            csvContent += `"${request}",${actualActionName},${rank.toFixed(2)},${meanScore.toFixed(2)},${medianScore.toFixed(2)},${stdDevScore.toFixed(2)},"${topMatches}"\n`;
+            csvContent += `"${request}",${actualActionName},${rankActualAction.toFixed(2)},${rank.toFixed(2)},${meanScore.toFixed(2)},${medianScore.toFixed(2)},${stdDevScore.toFixed(2)},"${topMatches}"\n`;
         } else {
-            csvZeroRankContent += `"${request}",${actualActionName},${rank.toFixed(2)},${meanScore.toFixed(2)},${medianScore.toFixed(2)},${stdDevScore.toFixed(2)},"${topMatches}"\n`;
+            csvZeroRankContent += `"${request}",${actualActionName},${rankActualAction.toFixed(2)},${meanScore.toFixed(2)},${medianScore.toFixed(2)},${stdDevScore.toFixed(2)},"${topMatches}"\n`;
             console.log(`${chalk.red("**")} + ${res}`);
         }
     });
@@ -189,7 +200,7 @@ export function saveStatsToFile(stats: StatsResult[], filePath: string) {
         actualActionName: result.actualActionName,
         precision: result.precision,
         recall: result.recall,
-        topMatches: result.matches.map(
+        topMatches: result.top10Matches.map(
             (match) => `${match.actionName} (${match.score.toFixed(2)})`,
         ),
     }));
