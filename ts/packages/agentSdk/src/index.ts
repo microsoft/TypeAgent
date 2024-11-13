@@ -59,5 +59,3 @@ export type {
 } from "./templateInput.js";
 
 export { Entity } from "./memory.js";
-
-export { Profiler } from "./profiler.js";

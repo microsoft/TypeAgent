@@ -12,6 +12,7 @@ import {
     ProcessRequestActionResult,
     ExplanationOptions,
     ParamObjectType,
+    equalNormalizedParamObject,
 } from "agent-cache";
 import {
     CommandHandlerContext,
@@ -725,8 +726,10 @@ async function canTranslateWithoutContext(
             }
 
             if (
-                JSON.stringify(newAction.parameters ?? {}).toLowerCase() !==
-                JSON.stringify(oldAction.parameters ?? {}).toLowerCase()
+                !equalNormalizedParamObject(
+                    newAction.parameters,
+                    oldAction.parameters,
+                )
             ) {
                 throw new Error(`Action parameters mismatch without context`);
             }
