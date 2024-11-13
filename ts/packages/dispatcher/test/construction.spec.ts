@@ -59,7 +59,10 @@ describe("construction", () => {
                     requestAction.request,
                     matchConfig,
                 );
-                const matchedLowercase = construction.match(
+
+                // TODO: once MatchPart allow matches ignoring diacritical marks,
+                // we can use normalizeParamString instead toLowerCase here.
+                const matchedLowerCase = construction.match(
                     requestAction.request.toLowerCase(),
                     matchConfig,
                 );
@@ -68,7 +71,7 @@ describe("construction", () => {
                     expect(matched.length).not.toEqual(0);
                     expect(matched[0].match).toEqual(requestAction);
 
-                    expect(matchedLowercase.length).not.toEqual(0);
+                    expect(matchedLowerCase.length).not.toEqual(0);
                     // TODO: Validating the lower case action
                 } else {
                     // TODO: needs fix these

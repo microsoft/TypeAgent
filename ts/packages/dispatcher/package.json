@@ -29,6 +29,7 @@
   "dependencies": {
     "@azure/msal-node-extensions": "^1.0.12",
     "@typeagent/agent-sdk": "workspace:*",
+    "action-schema": "workspace:*",
     "agent-cache": "workspace:*",
     "aiclient": "workspace:*",
     "android-mobile-agent": "workspace:*",
@@ -51,7 +52,6 @@
     "music": "workspace:*",
     "photo-agent": "workspace:*",
     "proper-lockfile": "^4.1.2",
-    "schema-parser": "workspace:*",
     "telemetry": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",

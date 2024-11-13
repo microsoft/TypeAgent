@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as ts from "typescript";
+import ts from "typescript";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:schema:parser");

@@ -121,6 +121,7 @@ export function generateStats(data: any[], threshold: number = 0.7) {
 export function printDetailedMarkdownTable(
     results: StatsResult[],
     statsfile: string,
+    zerorankStatsFile?: string | undefined,
 ) {
     console.log(chalk.bold("\n## Results for User Request Matches\n"));
     console.log(
@@ -133,6 +134,13 @@ export function printDetailedMarkdownTable(
     let csvContent =
         "Request,Actual Action,Rank,Mean Score,Median Score,Std Dev,Top Matches\n";
     fs.writeFileSync(statsfile, csvContent);
+
+    let csvZeroRankContent =
+        "Request,Actual Action,Rank,Mean Score,Median Score,Std Dev,Top Matches\n";
+
+    if (zerorankStatsFile !== undefined) {
+        fs.writeFileSync(zerorankStatsFile, csvZeroRankContent);
+    }
 
     results.forEach((result: StatsResult) => {
         const {
@@ -160,14 +168,19 @@ export function printDetailedMarkdownTable(
             topMatches,
         )} |`;
 
-        if (result.rank > 0) {
+        if (rank > 0) {
             console.log(res);
-            csvContent += `[${request}],${actualActionName},${rank.toFixed(2)},${meanScore.toFixed(2)},${medianScore.toFixed(2)},${stdDevScore.toFixed(2)},"${topMatches}"\n`;
-            fs.writeFileSync(statsfile, csvContent);
+            csvContent += `"${request}",${actualActionName},${rank.toFixed(2)},${meanScore.toFixed(2)},${medianScore.toFixed(2)},${stdDevScore.toFixed(2)},"${topMatches}"\n`;
         } else {
-            console.log(chalk.red(res));
+            csvZeroRankContent += `"${request}",${actualActionName},${rank.toFixed(2)},${meanScore.toFixed(2)},${medianScore.toFixed(2)},${stdDevScore.toFixed(2)},"${topMatches}"\n`;
+            console.log(`${chalk.red("**")} + ${res}`);
         }
     });
+
+    fs.writeFileSync(statsfile, csvContent);
+    if (zerorankStatsFile !== undefined) {
+        fs.writeFileSync(zerorankStatsFile, csvZeroRankContent);
+    }
 }
 
 export function saveStatsToFile(stats: StatsResult[], filePath: string) {
@@ -189,8 +202,13 @@ export function processActionSchemaAndReqData(
     actionreqEmbeddingsFile: string,
     threshold: number = 0.7,
     statsfile: string,
+    zerorankStatsFile: string | undefined,
 ) {
     const data: any[] = loadActionData(actionreqEmbeddingsFile);
     const results: any[] = generateStats(data, threshold);
-    printDetailedMarkdownTable(results, statsfile);
+    printDetailedMarkdownTable(
+        results,
+        statsfile,
+        zerorankStatsFile?.toString(),
+    );
 }

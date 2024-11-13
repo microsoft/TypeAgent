@@ -26,8 +26,10 @@ public class BodyParser
 
     public string GetLatest(string body)
     {
-        ArgumentException.ThrowIfNullOrEmpty(body);
-  
+        if (string.IsNullOrEmpty(body))
+        {
+            return string.Empty;
+        }
         int firstDelimiterAt = -1;
         foreach (var delimiter in _delimiters)
         {

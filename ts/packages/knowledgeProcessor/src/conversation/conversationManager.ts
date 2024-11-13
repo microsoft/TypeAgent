@@ -638,7 +638,7 @@ function getMessageHeaderAndText(
         }
         let textBlock: TextBlock = {
             type: message.text.type,
-            value: message.header + "\n\n" + message.text,
+            value: message.header + "\n\n" + message.text.value,
             sourceIds: message.text.sourceIds,
         };
         return textBlock;

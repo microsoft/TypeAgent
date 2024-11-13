@@ -19,6 +19,7 @@ const referenceTests = [
     "all of him",
     "location here",
     "somewhere over there",
+    "some of it",
 ];
 
 const nonReferenceTests = [

@@ -30,17 +30,14 @@ export function mergeConfig(
                 // null means undefined
                 value = undefined;
             }
+            let configValue = config[key];
+            const strictKey = flexKeys ? !flexKeys.includes(key) : strict;
+            if (strictKey && typeof configValue !== typeof value) {
+                // Ignore invalid options.
+                continue;
+            }
             if (typeof value === "object") {
-                const strictKey = flexKeys ? !flexKeys.includes(key) : strict;
-                let configValue = config[key];
-                if (
-                    configValue === undefined ||
-                    typeof configValue !== "object"
-                ) {
-                    if (strictKey) {
-                        // Ignore invalid options.
-                        continue;
-                    }
+                if (typeof configValue !== "object") {
                     configValue = {};
                     config[key] = configValue;
                 }
@@ -50,7 +47,7 @@ export function mergeConfig(
                     changed[key] = changedValue;
                 }
             } else if (
-                config[key] !== value &&
+                configValue !== value &&
                 (!strict || config.hasOwnProperty(key))
             ) {
                 if (!strict && value === undefined) {

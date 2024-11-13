@@ -54,8 +54,8 @@ export type {
     TemplateFieldScalar,
     TemplateFieldArray,
     TemplateFieldObject,
-    TemplateFieldOpt,
     TemplateField,
+    TemplateType,
     TemplateSchema,
 } from "./templateInput.js";
 

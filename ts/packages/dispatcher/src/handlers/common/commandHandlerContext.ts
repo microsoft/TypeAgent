@@ -21,7 +21,8 @@ import readline from "readline/promises";
 import {
     Session,
     SessionOptions,
-    configAgentCache,
+    setupAgentCache,
+    setupBuiltInCache,
 } from "../../session/session.js";
 import {
     getDefaultBuiltinTranslatorName,
@@ -159,7 +160,7 @@ async function getAgentCache(
     );
 
     try {
-        await configAgentCache(session, agentCache);
+        await setupAgentCache(session, agentCache);
     } catch (e) {
         // Silence the error, the cache will be disabled
     }
@@ -402,7 +403,8 @@ export async function changeContextConfig(
     context: ActionContext<CommandHandlerContext>,
 ) {
     const systemContext = context.sessionContext.agentContext;
-    const changed = systemContext.session.setConfig(options);
+    const session = systemContext.session;
+    const changed = session.setConfig(options);
 
     const translatorChanged = changed.hasOwnProperty("translators");
     const actionsChanged = changed.hasOwnProperty("actions");
@@ -422,10 +424,11 @@ export async function changeContextConfig(
     if (translatorChanged || actionsChanged || commandsChanged) {
         Object.assign(changed, await updateAppAgentStates(context, changed));
     }
+
     if (changed.explainer?.name !== undefined) {
         try {
             systemContext.agentCache = await getAgentCache(
-                systemContext.session,
+                session,
                 systemContext.agents,
                 systemContext.logger,
             );
@@ -433,7 +436,7 @@ export async function changeContextConfig(
             displayError(`Failed to change explainer: ${e.message}`, context);
             delete changed.explainer?.name;
             // Restore old explainer name
-            systemContext.session.setConfig({
+            session.setConfig({
                 explainer: {
                     name: systemContext.agentCache.explainerName,
                 },
@@ -444,32 +447,36 @@ export async function changeContextConfig(
         return changed;
     }
 
+    const agentCache = systemContext.agentCache;
     // Propagate the options to the cache
-    systemContext.agentCache.constructionStore.setConfig(changed);
+    if (changed.cache !== undefined) {
+        agentCache.constructionStore.setConfig(changed.cache);
+    }
 
     // cache and auto save are handled separately
-    if (changed.cache !== undefined) {
+    if (changed.cache?.enabled !== undefined) {
         // the cache state is changed.
-        // Auto save and model is configured in configAgentCache as well.
-        await configAgentCache(systemContext.session, systemContext.agentCache);
+        // Auto save, model and builtInCache is configured in setupAgentCache as well.
+        await setupAgentCache(session, agentCache);
     } else {
-        if (changed.autoSave !== undefined) {
+        const autoSave = changed.cache?.autoSave;
+        if (autoSave !== undefined) {
             // Make sure the cache has a file for a persisted session
-            if (changed.autoSave) {
-                if (systemContext.session.cache) {
+            if (autoSave) {
+                if (session.getConfig().cache) {
                     const cacheDataFilePath =
-                        await systemContext.session.ensureCacheDataFilePath();
-                    await systemContext.agentCache.constructionStore.save(
-                        cacheDataFilePath,
-                    );
+                        await session.ensureCacheDataFilePath();
+                    await agentCache.constructionStore.save(cacheDataFilePath);
                 }
             }
-            await systemContext.agentCache.constructionStore.setAutoSave(
-                changed.autoSave,
-            );
+            await agentCache.constructionStore.setAutoSave(autoSave);
         }
         if (changed.models?.explainer !== undefined) {
-            systemContext.agentCache.model = changed.models.explainer;
+            agentCache.model = changed.models.explainer;
+        }
+        const builtInCache = changed.cache?.builtInCache;
+        if (builtInCache !== undefined) {
+            await setupBuiltInCache(session, agentCache, builtInCache);
         }
     }
 

@@ -7,6 +7,8 @@ namespace TypeAgent;
 
 public class EmailExporter
 {
+    const int MaxFileNameLength = 64;
+
     Outlook _outlook;
     public EmailExporter(Outlook outlook)
     {
@@ -42,10 +44,10 @@ public class EmailExporter
             Email email = _outlook.LoadEmail(sourcePath);
             email.Save(destPath);
         }
-        catch(System.Exception ex)
+        catch (System.Exception ex)
         {
-            WriteLineColor(ConsoleColor.Red, $"SKIPPED {sourcePath}");
-            LogError(ex);
+            ConsoleEx.WriteLineColor(ConsoleColor.Red, $"SKIPPED {sourcePath}");
+            ConsoleEx.LogError(ex);
         }
     }
 
@@ -65,10 +67,87 @@ public class EmailExporter
         }
     }
 
+    public void ExportAll(string rootPath, int maxMessages, bool bucketBySize = true, bool convert = false)
+    {
+        if (maxMessages <= 0)
+        {
+            maxMessages = int.MaxValue;
+        }
+        DirectoryEx.Ensure(rootPath);
+        int counter = 0;
+        foreach (MailItem item in _outlook.MapMailItems<MailItem>((item) => item))
+        {
+            ++counter;
+            try
+            {
+                bool isForward = item.IsForward();
+                if (item.IsForward())
+                {
+                    // Todo: need to parse Forwards
+                    continue;
+                }
+                Console.WriteLine($"#{counter}");
+                Console.WriteLine(item.Subject);
+
+                string destDirPath = bucketBySize ? GetDestDir(rootPath, item.BodyLatest().Length) : rootPath;
+                string fileName = FileEx.SanitizeFileName(item.Subject, MaxFileNameLength);
+                string msgFilePath = FileEx.MakeUnique(destDirPath, fileName, ".msg");
+                item.SaveAs(msgFilePath);
+                if (convert)
+                {
+                    Email email = new Email(item, msgFilePath);
+                    string jsonDirPath = Path.Join(destDirPath, "json");
+                    DirectoryEx.Ensure(jsonDirPath);
+                    string jsonFilePath = FileEx.MakeUnique(jsonDirPath, fileName, ".json");
+                    email.Save(jsonFilePath);
+                }
+            }
+            catch(System.Exception ex)
+            {
+                ConsoleEx.LogError(ex);
+            }
+            if (counter >= maxMessages)
+            {
+                break;
+            }
+        }
+    }
+
+    public void ExportAllEmailBySizeJson(string rootPath)
+    {
+        int counter = 0;
+        foreach(MailItem item in _outlook.ForEachMailItem())
+        {
+            ++counter;
+            try
+            {
+                bool isForward = item.IsForward();
+                if (item.IsForward())
+                {
+                    continue;
+                }
+                Email email = new Email(item);
+                Console.WriteLine($"#{counter}, {email.Body.Length} chars");
+                Console.WriteLine(email.Subject);
+
+                int size = email.Body.Length;
+                string destDirPath = GetDestDir(rootPath, size);
+
+                string fileName = FileEx.SanitizeFileName(email.Subject, MaxFileNameLength);
+                email.Save(FileEx.MakeUnique(destDirPath, fileName, ".json"));
+
+            }
+            catch (System.Exception ex)
+            {
+                ConsoleEx.LogError(ex);
+            }
+        }
+    }
+
     public void ExportFrom(string senderName)
     {
-        List<Email> emails = _outlook.LoadFrom(senderName);
-        foreach(var email in emails)
+        List<Email> emails = _outlook.LoadFrom(new EmailSender(senderName));
+        foreach (var email in emails)
         {
             Console.WriteLine(email.ToString());
         }
@@ -110,78 +189,11 @@ public class EmailExporter
         return destFolderPath;
     }
 
-    static void Main(string[] args)
+    string GetDestDir(string rootPath, int size)
     {
-        args = EnsureArgs(args);
-        if (args == null || args.Length == 0)
-        {
-            return;
-        }
-        try
-        {
-            using Outlook outlook = new Outlook();
-            var exporter = new EmailExporter(outlook);
-            switch(args[0])
-            {
-                default:
-                    exporter.Export(args.ElementAtOrDefault(0), args.ElementAtOrDefault(1));
-                    break;
-
-                case "--sender":
-                    exporter.ExportFrom(args.GetArg(1));
-                    break;
-
-                case "--print":
-                    exporter.PrintEmail(args.GetArg(1));
-                    Console.ReadLine();
-                    return;
-            }
-        }
-        catch(System.Exception ex)
-        {
-            LogError(ex);
-        }
-        finally
-        {
-            COMObject.ReleaseAll();
-        }
-    }
-
-    static string[]? EnsureArgs(string[] args)
-    {
-        if (args != null && args.Length > 0)
-        {
-            return args;
-        }
-        return GetInput();
-    }
-
-    static string[] GetInput()
-    {
-        Console.Write(">");
-        string line = Console.ReadLine();
-        if (line != null)
-        {
-            line = line.Trim();
-        }
-        if (string.IsNullOrEmpty(line))
-        {
-            return null;
-        }
-        return line.ParseCommandLine();
-    }
-
-    static void LogError(System.Exception ex)
-    {
-        WriteLineColor(ConsoleColor.DarkYellow, $"##Error##\n{ex.Message}\n####");
-        Console.WriteLine();
-    }
-
-    static void WriteLineColor(ConsoleColor color, string message)
-    {
-        var prevColor = Console.ForegroundColor;
-        Console.ForegroundColor = color;
-        Console.WriteLine(message);
-        Console.ForegroundColor = prevColor;
+        int bucket = MailStats.GetBucketForSize(size);
+        string destDirPath = Path.Join(rootPath, bucket.ToString());
+        DirectoryEx.Ensure(destDirPath);
+        return destDirPath;
     }
 }

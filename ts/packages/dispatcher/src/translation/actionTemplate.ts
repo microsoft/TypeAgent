@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Action, Actions } from "agent-cache";
-import { getActionInfo, getTranslatorActionInfos } from "./actionInfo.js";
+import { getActionSchema, getTranslatorActionSchemas } from "./actionSchema.js";
 import { CommandHandlerContext } from "../internal.js";
 import {
     TemplateFieldStringUnion,
@@ -40,7 +40,7 @@ function getDefaultActionTemplate(
         type: "object",
         fields: {
             translatorName: {
-                field: translatorName,
+                type: translatorName,
             },
         },
     };
@@ -60,14 +60,17 @@ function toTemplate(
         translators,
         action.translatorName,
     );
-    const actionInfos = getTranslatorActionInfos(config, action.translatorName);
+    const actionInfos = getTranslatorActionSchemas(
+        config,
+        action.translatorName,
+    );
     const actionName: TemplateFieldStringUnion = {
         type: "string-union",
         typeEnum: Array.from(actionInfos.keys()),
         discriminator: "",
     };
     template.fields.actionName = {
-        field: actionName,
+        type: actionName,
     };
 
     const actionInfo = actionInfos.get(action.actionName);
@@ -79,7 +82,7 @@ function toTemplate(
     if (actionInfo.parameters) {
         template.fields.parameters = {
             // ActionParam types are compatible with TemplateFields
-            field: actionInfo.parameters,
+            type: actionInfo.parameters,
         };
     }
     return template;
@@ -179,7 +182,7 @@ export async function getActionCompletion(
     action: DeepPartialUndefined<AppAction>,
     propertyName: string,
 ): Promise<string[]> {
-    const actionInfo = getActionInfo(action, systemContext);
+    const actionInfo = getActionSchema(action, systemContext.agents);
     if (actionInfo === undefined) {
         return [];
     }

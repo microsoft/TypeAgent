@@ -16,7 +16,7 @@ import {
 import { createSessionContext } from "../../action/actionHandlers.js";
 import { AppAgentProvider } from "../../agent/agentProvider.js";
 import registerDebug from "debug";
-import { getTranslatorActionInfos } from "../../translation/actionInfo.js";
+import { getTranslatorActionSchemas } from "../../translation/actionSchema.js";
 import { DeepPartialUndefinedAndNull } from "common-utils";
 import { DispatcherName } from "./interactiveIO.js";
 
@@ -171,7 +171,10 @@ export class AppAgentManager implements TranslatorConfigProvider {
                     this.transientAgents[name] = false;
                 }
                 if (config.injected) {
-                    const actionInfos = getTranslatorActionInfos(config, name);
+                    const actionInfos = getTranslatorActionSchemas(
+                        config,
+                        name,
+                    );
                     for (const info of actionInfos.values()) {
                         this.injectedTranslatorForActionName.set(
                             info.actionName,
