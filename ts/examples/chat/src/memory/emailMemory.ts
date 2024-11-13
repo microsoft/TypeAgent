@@ -148,6 +148,7 @@ export function createEmailCommands(
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, emailConvertMsgDef());
         let sourcePath: string = namedArgs.sourcePath;
+        /*
         let isDir = isDirectoryPath(sourcePath);
         if (isDir) {
             context.printer.writeInColor(
@@ -156,6 +157,9 @@ export function createEmailCommands(
             );
             await convertMsgFiles(sourcePath, io);
         }
+            */
+        context.printer.writeInColor(chalk.cyan, "Converting message files");
+        await convertMsgFiles(sourcePath, io);
     }
 
     function emailStatsDef(): CommandMetadata {
