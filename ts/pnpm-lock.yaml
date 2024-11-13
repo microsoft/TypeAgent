@@ -149,12 +149,12 @@ importers:
 
   examples/parserTest:
     dependencies:
+      action-schema:
+        specifier: workspace:*
+        version: link:../../packages/actionSchema
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
-      schema-parser:
-        specifier: workspace:*
-        version: link:../../packages/schemaParser
     devDependencies:
       '@types/node':
         specifier: ^20.11.17
@@ -199,6 +199,9 @@ importers:
 
   examples/schemaStudio:
     dependencies:
+      action-schema:
+        specifier: workspace:*
+        version: link:../../packages/actionSchema
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
@@ -211,9 +214,6 @@ importers:
       schema-author:
         specifier: workspace:*
         version: link:../../packages/schemaAuthor
-      schema-parser:
-        specifier: workspace:*
-        version: link:../../packages/schemaParser
       typeagent:
         specifier: workspace:*
         version: link:../../packages/typeagent
@@ -469,6 +469,28 @@ importers:
       webpack-dev-server:
         specifier: ^5.0.4
         version: 5.0.4(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0)
+
+  packages/actionSchema:
+    dependencies:
+      debug:
+        specifier: ^4.3.4
+        version: 4.3.4(supports-color@8.1.1)
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.3)
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+    devDependencies:
+      '@types/debug':
+        specifier: ^4.1.10
+        version: 4.1.10
+      '@types/node':
+        specifier: ^18.18.7
+        version: 18.18.7
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
 
   packages/agentSdk:
     dependencies:
@@ -1457,6 +1479,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      action-schema:
+        specifier: workspace:*
+        version: link:../actionSchema
       agent-cache:
         specifier: workspace:*
         version: link:../cache
@@ -1520,9 +1545,6 @@ importers:
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2
-      schema-parser:
-        specifier: workspace:*
-        version: link:../schemaParser
       telemetry:
         specifier: workspace:*
         version: link:../telemetry
@@ -1682,12 +1704,12 @@ importers:
 
   packages/schemaAuthor:
     dependencies:
+      action-schema:
+        specifier: workspace:*
+        version: link:../actionSchema
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
-      schema-parser:
-        specifier: workspace:*
-        version: link:../schemaParser
       typeagent:
         specifier: workspace:*
         version: link:../typeagent
@@ -1707,28 +1729,6 @@ importers:
       typescript:
         specifier: ^5.4.2
         version: 5.4.3
-
-  packages/schemaParser:
-    dependencies:
-      debug:
-        specifier: ^4.3.4
-        version: 4.3.4(supports-color@8.1.1)
-      typechat:
-        specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.3)
-      typescript:
-        specifier: ^5.4.2
-        version: 5.4.3
-    devDependencies:
-      '@types/debug':
-        specifier: ^4.1.10
-        version: 4.1.10
-      '@types/node':
-        specifier: ^18.18.7
-        version: 18.18.7
-      rimraf:
-        specifier: ^5.0.5
-        version: 5.0.5
 
   packages/shell:
     dependencies:
