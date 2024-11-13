@@ -554,8 +554,8 @@ export async function createTextIndex<
             return {
                 score: m.score,
                 item: {
-                        key: isIdInt ? m.item : serializer.serialize(m.item),
-                        value: postingsTable.getSync(m.item) ?? [],
+                    key: isIdInt ? m.item : serializer.serialize(m.item),
+                    value: postingsTable.getSync(m.item) ?? [],
                 },
             };
         });
