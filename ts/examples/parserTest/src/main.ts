@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import path from "path";
-import { SchemaParser, NodeType } from "schema-parser";
+import { SchemaParser, NodeType } from "action-schema";
 
 const filePath = path.join(__dirname, "testSchema.ts");
 //const filePath = path.join(__dirname, "testCalendarSchema.ts");

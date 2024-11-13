@@ -3,8 +3,8 @@
 
 import {
     TemplateFieldArray,
+    TemplateType,
     TemplateField,
-    TemplateFieldOpt,
     TemplateFieldScalar,
     TemplateSchema,
 } from "@typeagent/agent-sdk";
@@ -290,7 +290,7 @@ function createUIForField(
     data: FieldContainer,
     fullPropertyName: string,
     paramName: string,
-    paramField: TemplateField,
+    paramField: TemplateType,
     optional: boolean,
     level: number,
     parent: FieldGroup | undefined,
@@ -385,7 +385,7 @@ abstract class FieldGroup extends FieldBase {
     protected createChildField(
         fieldName: string | number,
         label: string,
-        fieldType: TemplateField,
+        fieldType: TemplateType,
         optional: boolean,
     ) {
         const field = createUIForField(
@@ -694,7 +694,7 @@ class FieldObject extends FieldGroup {
         data: FieldContainer,
         fullPropertyName: string,
         paramName: string,
-        private readonly fieldTypes: Record<string, TemplateFieldOpt>,
+        private readonly fieldTypes: Record<string, TemplateField>,
         optional: boolean = false,
         level = 0,
         parent?: FieldGroup,
@@ -714,7 +714,7 @@ class FieldObject extends FieldGroup {
         this.clearChildFields();
         for (const [k, v] of Object.entries(this.fieldTypes)) {
             const optional = v.optional ?? false;
-            const field = this.createChildField(k, k, v.field, optional);
+            const field = this.createChildField(k, k, v.type, optional);
 
             if (this.data.enableEdit && optional) {
                 field.addButton(
