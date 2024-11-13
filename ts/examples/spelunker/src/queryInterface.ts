@@ -203,7 +203,7 @@ async function processQuery(
             await index.nearestNeighborsPairs(
                 input,
                 options.maxHits * 5,
-                options.minScore * 0.8,
+                options.minScore,
             );
         for (const hit of hits) {
             if (options.verbose) {
@@ -224,7 +224,7 @@ async function processQuery(
         const hits: ScoredItem<ChunkId>[] = await chunkyIndex.codeIndex!.find(
             input,
             options.maxHits * 5,
-            options.minScore * 0.8,
+            options.minScore,
         );
         for (const hit of hits) {
             if (options.verbose) {
