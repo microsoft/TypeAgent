@@ -184,7 +184,7 @@ async function processQuery(
     io: iapp.InteractiveIo,
     options: QueryOptions,
 ): Promise<void> {
-    const hitTable = knowLib.sets.createHitTable<ChunkId>();
+    const hitTable = new Map<ChunkId, number>();
 
     // First gather hits from keywords, topics etc. indexes.
     for (const indexType of ["keywords", "topics", "goals", "dependencies"]) {
@@ -204,20 +204,21 @@ async function processQuery(
             options.maxHits,
             options.minScore,
         );
-        let exactMatch = "";
+        let exactMatch: ChunkId = "";
         for (const hit of hits) {
+            for (const id of hit.item) {
+                if (id !== exactMatch) {
+                    if (options.verbose) {
+                        io.writer.writeLine(
+                            `  ${indexType} hit: ${id} (${hit.score.toFixed(3)})`,
+                        );
+                    }
+                    const oldScore = hitTable.get(id) || 0.0;
+                    hitTable.set(id, oldScore + hit.score);
+                }
+            }
             if (hit.score === 1.0) {
                 exactMatch = hit.item[0]; // TODO: Can there be more than one exact match?
-            }
-            if (options.verbose) {
-                io.writer.writeLine(
-                    `  ${indexType} hit: ${hit.item} (${hit.score.toFixed(3)})`,
-                );
-            }
-            for (const it of hit.item) {
-                if (it !== exactMatch) {
-                    hitTable.add(it, hit.score);
-                }
             }
         }
     }
@@ -236,7 +237,7 @@ async function processQuery(
                     `  code hit: ${hit.item} (${hit.score.toFixed(3)})`,
                 );
             }
-            hitTable.add(hit.item, hit.score);
+            hitTable.set(hit.item, hit.score);
         }
     } catch (error) {
         io.writer.writeLine(`[Code index query failed; skipping: ${error}]`);
@@ -247,7 +248,8 @@ async function processQuery(
         io.writer.writeLine("No hits.");
         return;
     }
-    const hits: ScoredItem<ChunkId>[] = hitTable.byHighestScore();
+    const hits: ScoredItem<ChunkId>[] = Array.from(hitTable, ([item, score]) => ({ item, score}));
+    hits.sort((a, b) => b.score - a.score);
     hits.splice(options.maxHits);
     io.writer.writeLine(`Found ${hits.length} ${plural("hit", hits.length)}:`);
 
