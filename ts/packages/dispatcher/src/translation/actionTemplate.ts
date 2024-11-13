@@ -182,7 +182,7 @@ export async function getActionCompletion(
     action: DeepPartialUndefined<AppAction>,
     propertyName: string,
 ): Promise<string[]> {
-    const actionInfo = getActionSchema(action, systemContext);
+    const actionInfo = getActionSchema(action, systemContext.agents);
     if (actionInfo === undefined) {
         return [];
     }

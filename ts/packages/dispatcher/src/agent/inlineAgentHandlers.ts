@@ -267,7 +267,10 @@ class ActionCommandHandler implements CommandHandler {
                     actionName: params.args?.actionName,
                     parameters: params.flags?.parameters,
                 };
-                const actionInfo = getActionSchema(action, systemContext);
+                const actionInfo = getActionSchema(
+                    action,
+                    systemContext.agents,
+                );
                 if (actionInfo === undefined) {
                     continue;
                 }
@@ -295,7 +298,10 @@ class ActionCommandHandler implements CommandHandler {
                     parameters: params.flags?.parameters,
                 };
 
-                const actionSchema = getActionSchema(action, systemContext);
+                const actionSchema = getActionSchema(
+                    action,
+                    systemContext.agents,
+                );
                 if (actionSchema === undefined) {
                     continue;
                 }

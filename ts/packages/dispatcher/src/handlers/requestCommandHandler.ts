@@ -86,7 +86,7 @@ function validateReplaceActions(
         if (typeof action !== "object") {
             throw new Error("Invalid replacement");
         }
-        const actionInfo = getActionSchema(action, systemContext);
+        const actionInfo = getActionSchema(action, systemContext.agents);
         if (actionInfo === undefined) {
             throw new Error("Invalid replacement");
         }
