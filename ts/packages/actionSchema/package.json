@@ -1,15 +1,16 @@
 {
-  "name": "schema-parser",
+  "name": "action-schema",
   "version": "0.0.10",
   "description": "Parser for action schema from typescript.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/packages/schemaParser"
+    "directory": "ts/packages/actionSchema"
   },
   "license": "MIT",
   "author": "Microsoft",
+  "type": "module",
   "exports": {
     ".": "./dist/index.js"
   },
