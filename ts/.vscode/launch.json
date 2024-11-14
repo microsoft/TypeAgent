@@ -295,11 +295,11 @@
             "program": "./dist/main.js",
             "args": [ "-statgen",
                 "-actionreqEmbeddingsFile",
-                "D:\\projects\\github\\microsoft\\typeagent\\ts\\examples\\vscodeSchemaGen\\dist\\data\\output\\aggr_data_[editor.action].jsonl",
+                "",
                 "-statGenFile",
-                "D:\\projects\\github\\microsoft\\typeagent\\ts\\examples\\vscodeSchemaGen\\dist\\data\\output\\stats_[editor.action].csv",
+                "",
                 "-schemaFile",
-                "D:\\projects\\github\\microsoft\\typeagent\\ts\\examples\\vscodeSchemaGen\\dist\\data\\output\\vscodeCommandsSchema_[editor.action].ts"
+                ""
             ],
             "console": "externalTerminal",
             "outFiles": [
