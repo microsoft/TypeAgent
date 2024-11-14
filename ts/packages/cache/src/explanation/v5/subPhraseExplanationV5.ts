@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { PromptSection } from "typechat";
-import { RequestAction } from "../requestAction.js";
+import { normalizeParamString, RequestAction } from "../requestAction.js";
 import { PropertyExplanation } from "./propertyExplanationSchemaV5WithContext.js";
 import { form } from "./explanationV5.js";
 import {
@@ -70,12 +70,14 @@ export function createSubPhraseExplainer(model?: string) {
             );
         },
         createInstructions,
-        ([requestAction]) => requestAction.toPromptString(true),
+        ([requestAction]) => requestAction.toPromptString(),
         validateSubPhraseExplanationV5,
     );
 }
 
-function isPropertySubPhrase(phrase: SubPhrase): phrase is PropertySubPhase {
+export function isPropertySubPhrase(
+    phrase: SubPhrase,
+): phrase is PropertySubPhase {
     return phrase.hasOwnProperty("propertyNames");
 }
 
@@ -133,12 +135,12 @@ function validateSubPhraseExplanationV5(
             }
 
             prop.substrings.forEach((substring) => {
-                const lowerCaseSubString = substring.toLowerCase();
+                const normalizedSubString = normalizeParamString(substring);
                 const found = subPhrases.some((phrase) => {
-                    const lowerCasePhrase = phrase.text.toLowerCase();
+                    const normalizedPhrase = normalizeParamString(phrase.text);
                     return (
-                        lowerCasePhrase.includes(lowerCaseSubString) ||
-                        lowerCaseSubString.includes(lowerCasePhrase)
+                        normalizedPhrase.includes(normalizedSubString) ||
+                        normalizedSubString.includes(normalizedPhrase)
                     );
                 });
                 if (!found) {

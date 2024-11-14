@@ -11,6 +11,7 @@ import {
     MatchedValueTranslator,
     createActionProps,
 } from "./constructionValue.js";
+import { normalizeParamString } from "../explanation/requestAction.js";
 
 export function getMatchPartNames(parts: ConstructionPart[], verbose: boolean) {
     const counts = new Map<string, number>();
@@ -60,10 +61,12 @@ export type PrintOptions = {
 };
 
 function filterConstruction(construction: Construction, options: PrintOptions) {
-    const lowerMatches = options.match?.map((m) => m.toLowerCase());
-    if (lowerMatches && lowerMatches.length > 0) {
+    const normalizedMatches = options.match?.map((m) =>
+        normalizeParamString(m),
+    );
+    if (normalizedMatches && normalizedMatches.length > 0) {
         if (
-            !lowerMatches.every((m) =>
+            !normalizedMatches.every((m) =>
                 construction.parts.some((p) => {
                     if (isMatchPart(p)) {
                         for (const e of p.matchSet.matches.values()) {
@@ -106,7 +109,7 @@ export function printConstructionCache(
     options: PrintOptions,
 ) {
     const { all, verbose, match, id } = options;
-    const lowerMatches = match?.map((m) => m.toLowerCase());
+    const normalizedMatches = match?.map((m) => normalizeParamString(m));
     for (const name of cache.getConstructionNamespaces()) {
         const { constructions } = cache.getConstructionNamespace(name)!;
 
@@ -119,9 +122,9 @@ export function printConstructionCache(
             } ${filteredConstructions.length !== constructions.length ? "filtered " : ""}constructions)`,
         );
         for (const construction of filteredConstructions) {
-            if (lowerMatches && lowerMatches.length > 0) {
+            if (normalizedMatches && normalizedMatches.length > 0) {
                 if (
-                    !lowerMatches.every((m) =>
+                    !normalizedMatches.every((m) =>
                         construction.parts.some((p) => {
                             if (isMatchPart(p)) {
                                 for (const e of p.matchSet.matches.values()) {

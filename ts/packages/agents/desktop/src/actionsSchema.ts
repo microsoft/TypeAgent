@@ -79,7 +79,6 @@ export type SetVolumeAction = {
 
 export type RestoreVolumeAction = {
     actionName: "restoreVolume";
-    parameters: {};
 };
 
 export type MuteVolumeAction = {

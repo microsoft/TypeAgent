@@ -10,7 +10,7 @@ import {
     EntityProperty,
 } from "./propertyExplanationSchemaV5WithContext.js";
 import { getPackageFilePath } from "../../utils/getPackageFilePath.js";
-import { RequestAction } from "../requestAction.js";
+import { normalizeParamString, RequestAction } from "../requestAction.js";
 import {
     getActionDescription,
     getExactStringRequirementMessage,
@@ -50,14 +50,14 @@ export function createPropertyExplainer(
         },
         (requestAction: RequestAction) => {
             return (
-                `${form} with the following value:\n${requestAction.toPromptString(true)}\n` +
+                `${form} with the following value:\n${requestAction.toPromptString()}\n` +
                 (enableContext
                     ? `For each property, explain which substring of the request or entities in the conversation history is used to compute the value. ${substringRequirement}\n`
                     : `For each property, explain which substring of the request is used to compute the value. ${substringRequirement}\n`) +
                 getActionDescription(requestAction)
             );
         },
-        (requestAction) => requestAction.toPromptString(true),
+        (requestAction) => requestAction.toPromptString(),
         validatePropertyExplanation,
     );
 }
@@ -76,7 +76,6 @@ export function isEntityParameter(
 
 // REVIEW: disable entity constructions.
 const enableEntityConstructions = false;
-const langTool = getLanguageTools("en");
 
 function validatePropertyExplanation(
     requestAction: RequestAction,
@@ -113,8 +112,8 @@ function validatePropertyExplanation(
             if (isEntityParameter(prop) && prop.entityIndex !== undefined) {
                 // TODO: fuzzy match
                 if (
-                    prop.substrings.join(" ").toLowerCase() ===
-                    prop.value.toString().toLowerCase()
+                    normalizeParamString(prop.substrings.join(" ")) ===
+                    normalizeParamString(prop.value.toString())
                 ) {
                     corrections.push(
                         `'${prop.name}' has value '${prop.value}' from a substring in the request. Should not have an entity index.`,
@@ -142,9 +141,13 @@ function validatePropertyExplanation(
                 }
             }
 
-            const lowerCaseRequest = requestAction.request.toLowerCase();
+            const normalizedRequest = normalizeParamString(
+                requestAction.request,
+            );
             for (const substring of prop.substrings) {
-                if (!lowerCaseRequest.includes(substring.toLowerCase())) {
+                if (
+                    !normalizedRequest.includes(normalizeParamString(substring))
+                ) {
                     corrections.push(
                         `Substring '${substring}' for property '${prop.name}' not found in the request string. ${getExactStringRequirementMessage(false)}`,
                     );

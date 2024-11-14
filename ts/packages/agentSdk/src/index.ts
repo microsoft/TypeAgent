@@ -53,11 +53,9 @@ export type {
     TemplateFieldScalar,
     TemplateFieldArray,
     TemplateFieldObject,
-    TemplateFieldOpt,
     TemplateField,
+    TemplateType,
     TemplateSchema,
 } from "./templateInput.js";
 
 export { Entity } from "./memory.js";
-
-export { Profiler } from "./profiler.js";

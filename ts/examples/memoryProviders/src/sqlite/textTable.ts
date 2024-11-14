@@ -208,6 +208,7 @@ export async function createTextIndex<
     const textTable = createStringTable(
         db,
         tablePath(baseName, "entries"),
+        false,
         ensureExists,
     );
     const postingsTable = createKeyValueTable<number, TSourceId>(
@@ -244,12 +245,15 @@ export async function createTextIndex<
         getNearest,
         getNearestMultiple,
         getNearestText,
+        getNearestTextMultiple,
         getNearestHits,
         getNearestHitsMultiple,
         put,
         putMultiple,
+        addSources,
         nearestNeighbors,
         nearestNeighborsText,
+        nearestNeighborsPairs,
         remove,
     };
 
@@ -342,6 +346,15 @@ export async function createTextIndex<
             ids.push(serializer.serialize(id));
         }
         return ids;
+    }
+
+    async function addSources(
+        textId: TTextId,
+        postings: TSourceId[],
+    ): Promise<void> {
+        if (postings && postings.length > 0) {
+            postingsTable.putSync(postings, serializer.deserialize(textId));
+        }
     }
 
     function* getExactHits(
@@ -459,6 +472,21 @@ export async function createTextIndex<
         return [];
     }
 
+    async function getNearestTextMultiple(
+        values: string[],
+        maxMatches?: number,
+        minScore?: number,
+    ): Promise<TTextId[]> {
+        // TODO: optimize by lowering into DB if possible
+        const matches = await asyncArray.mapAsync(
+            values,
+            settings.concurrency,
+            (t) => getNearestText(t, maxMatches, minScore),
+        );
+
+        return knowLib.sets.intersectUnionMultiple(...matches) ?? [];
+    }
+
     async function nearestNeighbors(
         value: string,
         maxMatches: number,
@@ -492,7 +520,14 @@ export async function createTextIndex<
             maxMatches,
             minScore,
         );
-        return isIdInt ? matches : matches.map((m) => serializer.serialize(m));
+        return isIdInt
+            ? matches
+            : matches.map((m) => {
+                  return {
+                      score: m.score,
+                      item: serializer.serialize(m.item),
+                  };
+              });
     }
 
     async function nearestNeighborsTextIds(
@@ -519,6 +554,29 @@ export async function createTextIndex<
             matches.splice(0, 0, { score: 1.0, item: textId });
         }
         return matches;
+    }
+
+    async function nearestNeighborsPairs(
+        value: string,
+        maxMatches: number,
+        minScore?: number,
+    ): Promise<ScoredItem<TextBlock<TSourceId>>[]> {
+        const matches = await nearestNeighborsTextIds(
+            value,
+            maxMatches,
+            minScore,
+        );
+        const results = matches.map((m) => {
+            return {
+                score: m.score,
+                item: {
+                    type: TextBlockType.Sentence,
+                    value: isIdInt ? m.item : serializer.serialize(m.item),
+                    sourceIds: postingsTable.getSync(m.item) ?? [],
+                },
+            };
+        });
+        return results;
     }
 
     // TODO: Optimize

@@ -21,6 +21,7 @@ import { unionArrays } from "../setOperations.js";
 export interface KnowledgeExtractor {
     readonly settings: KnowledgeExtractorSettings;
     extract(message: string): Promise<KnowledgeResponse | undefined>;
+    translator?: TypeChatJsonTranslator<KnowledgeResponse>;
 }
 
 export type KnowledgeExtractorSettings = {
@@ -37,6 +38,7 @@ export function createKnowledgeExtractor(
     return {
         settings,
         extract,
+        translator,
     };
 
     async function extract(
@@ -137,6 +139,7 @@ export type ExtractedKnowledge<TSourceId = any> = {
     entities?: ExtractedEntity<TSourceId>[] | undefined;
     topics?: TextBlock<TSourceId>[] | undefined;
     actions?: ExtractedAction<TSourceId>[] | undefined;
+    sourceEntityName?: string | undefined;
 };
 
 /**
@@ -204,7 +207,6 @@ export async function extractKnowledgeFromBlock(
     if (!knowledge) {
         return undefined;
     }
-
     return [message, createExtractedKnowledge(message, knowledge)];
 }
 
@@ -307,4 +309,7 @@ function prepareEntityForMerge(entity: ConcreteEntity) {
     entity.name = entity.name.toLowerCase();
     collections.lowerAndSort(entity.type);
     return entity;
+}
+export function isValidEntityName(name: string | undefined): boolean {
+    return name !== undefined && name.length > 0 && name !== NoEntityName;
 }

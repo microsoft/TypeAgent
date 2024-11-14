@@ -53,7 +53,7 @@ export class ChatMemoryPrinter extends ChatPrinter {
     ): void {
         label = label ? label + " " : "";
         const text = `[${label}${curCount} / ${total}]`;
-        this.writeInColor(chalk.green, text);
+        this.writeInColor(chalk.gray, text);
     }
 
     public writeBatchProgress(

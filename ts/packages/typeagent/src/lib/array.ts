@@ -153,7 +153,7 @@ export function getInRange(
  * Array concatenation that handles (ignores) undefined arrays. The caller has to do fewer checks
  * @param arrays 
  */
-export function concatArrays<T>(...arrays: (Array<T> | undefined)[]): T[] {
+export function concatArrays<T=any>(...arrays: (Array<T> | undefined)[]): T[] {
     const result: T[] = [];
     for (const array of arrays) {
         if(array) {
@@ -205,6 +205,15 @@ export function* slices<T=any>(array: T[], size: number): IterableIterator<Slice
             break;
         }
         yield {startAt: i, value: slice};
+    }
+}
+
+export function* mapIterate<T, TResult>(
+    items: Iterable<T>,
+    processor: (item: T) => TResult,
+): IterableIterator<TResult> {
+    for (const item of items) {
+        yield processor(item);
     }
 }
 

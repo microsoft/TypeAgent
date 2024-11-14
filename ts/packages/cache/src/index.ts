@@ -3,7 +3,6 @@
 
 // Types
 export type {
-    IAction,
     JSONAction,
     FullAction,
     ParamValueType,
@@ -37,7 +36,9 @@ export {
     Actions,
     RequestAction,
     normalizeParamValue,
+    normalizeParamString,
     equalNormalizedParamValue,
+    equalNormalizedParamObject,
 } from "./explanation/requestAction.js";
 export { AgentCacheFactory, getDefaultExplainerName } from "./cache/factory.js";
 export { MatchResult } from "./constructions/constructions.js";

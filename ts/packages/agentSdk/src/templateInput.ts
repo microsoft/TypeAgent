@@ -20,22 +20,21 @@ export type TemplateFieldScalar =
 
 export type TemplateFieldArray = {
     type: "array";
-    elementType: TemplateField;
+    elementType: TemplateType;
 };
 
+export type TemplateFields = Record<string, TemplateField>;
 export type TemplateFieldObject = {
     type: "object";
-    fields: {
-        [key: string]: TemplateFieldOpt;
-    };
+    fields: TemplateFields;
 };
 
-export type TemplateFieldOpt = {
-    optional?: boolean;
-    field: TemplateField;
+export type TemplateField = {
+    optional?: boolean | undefined;
+    type: TemplateType;
 };
 
-export type TemplateField =
+export type TemplateType =
     | TemplateFieldScalar
     | TemplateFieldObject
     | TemplateFieldArray;

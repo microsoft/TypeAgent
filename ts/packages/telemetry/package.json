@@ -1,0 +1,43 @@
+{
+  "name": "telemetry",
+  "version": "0.0.1",
+  "description": "Telemetry provider package for the TypeAgent project.",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/telemetry"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "exports": {
+    ".": {
+      "node": "./dist/indexNode.js"
+    }
+  },
+  "scripts": {
+    "build": "npm run tsc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "test": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "debug": "^4.3.4",
+    "dotenv": "^16.3.1",
+    "find-config": "^1.0.0",
+    "mongodb": "^6.3.0"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.10",
+    "@types/find-config": "1.0.4",
+    "@types/jest": "^29.5.7",
+    "@types/node": "^18.18.7",
+    "jest": "^29.7.0",
+    "prettier": "^3.2.5",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.4.2"
+  }
+}

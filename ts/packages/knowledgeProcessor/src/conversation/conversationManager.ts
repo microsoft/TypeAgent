@@ -54,6 +54,15 @@ export type ConversationMessage = {
      * Message timestamp
      */
     timestamp?: Date | undefined;
+    header?: string | undefined;
+    /**
+     * Message sender
+     */
+    sender?: string | undefined;
+    /**
+     * Optional message header.
+     * No knowledge is extracted from the header
+     */
 };
 
 export type AddMessageTask = {
@@ -64,6 +73,11 @@ export type AddMessageTask = {
 };
 
 export type ConversationManagerTask = AddMessageTask;
+
+export type ConversationManagerSettings = {
+    model?: ChatModel | undefined;
+    initializer?: ((cm: ConversationManager) => Promise<void>) | undefined;
+};
 
 /**
  * A conversation manager lets you dynamically:
@@ -80,19 +94,19 @@ export interface ConversationManager<TMessageId = any, TTopicId = any> {
     /**
      * Add a message to the conversation
      * @param message
-     * @param knowledge Any pre-extracted knowledge. Merged with knowledge automatically extracted from message.
-     * @param timestamp message timestamp
      */
     addMessage(
-        message: string | TextBlock,
-        knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
-        timestamp?: Date | undefined,
+        message: string | ConversationMessage,
+        extractKnowledge?: boolean | undefined,
     ): Promise<void>;
     /**
      * Add a batch message to the conversation
      * @param messages Conversation messages to add
      */
-    addMessageBatch(messages: ConversationMessage[]): Promise<void>;
+    addMessageBatch(
+        messages: ConversationMessage[],
+        extractKnowledge?: boolean | undefined,
+    ): Promise<void>;
     /**
      * Queue the message for adding to the conversation memory in the background
      * @param message
@@ -101,9 +115,7 @@ export interface ConversationManager<TMessageId = any, TTopicId = any> {
      * @returns true if queued. False if queue is full
      */
     queueAddMessage(
-        message: string | TextBlock,
-        knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
-        timestamp?: Date | undefined,
+        message: string | ConversationMessage,
         extractKnowledge?: boolean | undefined,
     ): boolean;
     /**
@@ -163,17 +175,18 @@ export interface ConversationManager<TMessageId = any, TTopicId = any> {
  * @param createNew Use existing conversation or create a new one
  * @param existingConversation If using an existing conversation
  * @param model Pass in chat model to use
+ * @param initializer Optional initializer
  */
 export async function createConversationManager(
+    settings: ConversationManagerSettings,
     conversationName: string,
     conversationPath: string,
     createNew: boolean,
     existingConversation?: Conversation | undefined,
-    model?: ChatModel,
 ): Promise<ConversationManager<string, string>> {
     const conversationSettings = createConversationSettings();
     const chatModel =
-        model ?? openai.createChatModelDefault("conversationManager");
+        settings.model ?? openai.createChatModelDefault("conversationManager");
     const knowledgeModel = chatModel;
     const answerModel = chatModel;
 
@@ -205,9 +218,8 @@ export async function createConversationManager(
     const updateTaskQueue = collections.createTaskQueue(async (task) => {
         await handleUpdateTask(task);
     }, 64);
-    await conversation.getMessageIndex();
 
-    return {
+    const thisConversationManager: ConversationManager<string, string> = {
         conversationName,
         conversation,
         get topicMerger() {
@@ -224,62 +236,63 @@ export async function createConversationManager(
         generateAnswerForSearchResponse,
         clear,
     };
+    await load();
+    return thisConversationManager;
 
     function addMessage(
-        message: string | TextBlock,
-        knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
-        timestamp?: Date | undefined,
+        message: string | ConversationMessage,
+        extractKnowledge?: boolean,
     ): Promise<void> {
+        if (typeof message === "string") {
+            message = { text: message };
+        }
+
         return addMessageToConversation(
             conversation,
             knowledgeExtractor,
             topicMerger,
             message,
-            timestamp,
-            knowledge,
+            extractKnowledge,
         );
     }
 
-    function addMessageBatch(messages: ConversationMessage[]): Promise<void> {
+    function addMessageBatch(
+        messages: ConversationMessage[],
+        extractKnowledge?: boolean | undefined,
+    ): Promise<void> {
         if (messages.length === 1) {
             const message = messages[0];
-            return addMessage(
-                message.text,
-                message.knowledge,
-                message.timestamp,
-            );
+            return addMessage(message, extractKnowledge);
         }
         return addMessageBatchToConversation(
             conversation,
             knowledgeExtractor,
             topicMerger,
             messages,
+            extractKnowledge,
         );
     }
 
     function queueAddMessage(
-        message: string | TextBlock,
-        knowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
-        timestamp?: Date | undefined,
+        message: string | ConversationMessage,
         extractKnowledge?: boolean | undefined,
     ): boolean {
+        if (typeof message === "string") {
+            message = { text: message };
+        }
         extractKnowledge ??= true;
-        if (knowledge) {
-            if (Array.isArray(knowledge)) {
-                knowledge = removeMemorizedEntities(knowledge);
+        if (message.knowledge) {
+            if (Array.isArray(message.knowledge)) {
+                message.knowledge = removeMemorizedEntities(message.knowledge);
             } else {
-                knowledge.entities = removeMemorizedEntities(
-                    knowledge.entities,
+                message.knowledge.entities = removeMemorizedEntities(
+                    message.knowledge.entities,
                 );
             }
         }
         return updateTaskQueue.push({
             type: "addMessage",
-            message: {
-                text: message,
-                knowledge,
-                timestamp,
-            },
+            message,
             extractKnowledge,
         });
     }
@@ -299,9 +312,7 @@ export async function createConversationManager(
                         conversation,
                         knowledgeExtractor,
                         topicMerger,
-                        addTask.message.text,
-                        addTask.message.timestamp,
-                        addTask.message.knowledge,
+                        addTask.message,
                         addTask.extractKnowledge,
                     );
                     break;
@@ -364,9 +375,17 @@ export async function createConversationManager(
         return searchProcessor.generateAnswer(query, searchResponse, options);
     }
 
+    async function load(): Promise<void> {
+        await conversation.getMessageIndex();
+        if (settings.initializer) {
+            await settings.initializer(thisConversationManager);
+        }
+    }
+
     async function clear(removeMessages: boolean): Promise<void> {
         await conversation.clear(removeMessages);
         await topicMerger!.reset();
+        await load();
     }
 
     async function createMerger(): Promise<ConversationTopicMerger> {
@@ -435,20 +454,22 @@ export async function addMessageToConversation(
     conversation: Conversation,
     knowledgeExtractor: KnowledgeExtractor,
     topicMerger: TopicMerger | undefined,
-    message: string | TextBlock,
-    timestamp: Date | undefined,
-    knownKnowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
+    message: ConversationMessage,
     extractKnowledge: boolean = true,
 ): Promise<void> {
-    const messageBlock = await conversation.addMessage(message, timestamp);
+    const messageBlock = await conversation.addMessage(
+        getMessageHeaderAndText(message),
+        message.timestamp,
+    );
 
     const messageIndex = await conversation.getMessageIndex();
     await messageIndex.put(messageBlock.value, messageBlock.blockId);
 
     let extractedKnowledge = await extractKnowledgeFromMessage(
         knowledgeExtractor,
+        message,
         messageBlock,
-        knownKnowledge,
+        message.knowledge,
         extractKnowledge,
     );
     if (extractedKnowledge) {
@@ -457,7 +478,7 @@ export async function addMessageToConversation(
             topicMerger,
             messageBlock,
             extractedKnowledge,
-            timestamp,
+            message.timestamp,
         );
     }
 }
@@ -470,7 +491,7 @@ export async function addMessageBatchToConversation(
     extractKnowledge: boolean = true,
 ): Promise<void> {
     const messageBlocks = await asyncArray.mapAsync(messages, 1, (m) =>
-        conversation.addMessage(m.text, m.timestamp),
+        conversation.addMessage(getMessageHeaderAndText(m), m.timestamp),
     );
     assert.ok(messages.length === messageBlocks.length);
 
@@ -488,13 +509,15 @@ export async function addMessageBatchToConversation(
     const extractedKnowledge = await asyncArray.mapAsync(
         messageBlocks,
         concurrency,
-        (message, index) => {
-            return extractKnowledgeFromMessage(
+        async (messageBlock, index) => {
+            const knowledge = await extractKnowledgeFromMessage(
                 knowledgeExtractor,
-                message,
+                messages[index],
+                messageBlock,
                 messages[index].knowledge,
                 extractKnowledge,
             );
+            return knowledge;
         },
     );
 
@@ -515,7 +538,8 @@ export async function addMessageBatchToConversation(
 
 async function extractKnowledgeFromMessage(
     knowledgeExtractor: KnowledgeExtractor,
-    message: SourceTextBlock,
+    message: ConversationMessage,
+    messageBlock: SourceTextBlock,
     priorKnowledge?: ConcreteEntity[] | KnowledgeResponse | undefined,
     shouldExtractKnowledge: boolean = true,
 ): Promise<ExtractedKnowledge | undefined> {
@@ -523,10 +547,21 @@ async function extractKnowledgeFromMessage(
     let knownKnowledge: ExtractedKnowledge | undefined;
 
     if (hasPriorKnowledge(priorKnowledge)) {
-        knownKnowledge = createExtractedKnowledge(message, priorKnowledge!);
+        knownKnowledge = createExtractedKnowledge(
+            messageBlock,
+            priorKnowledge!,
+        );
     }
+    // Ignore message header if there is one
+    if (message.header) {
+        messageBlock = {
+            ...messageBlock,
+        };
+        messageBlock.value = getMessageText(message);
+    }
+
     const knowledgeResult = shouldExtractKnowledge
-        ? await extractKnowledgeFromBlock(knowledgeExtractor, message)
+        ? await extractKnowledgeFromBlock(knowledgeExtractor, messageBlock)
         : undefined;
 
     if (knowledgeResult) {
@@ -540,6 +575,9 @@ async function extractKnowledgeFromMessage(
         newKnowledge = knownKnowledge
             ? mergeKnowledge(knownKnowledge) // Eliminates any duplicate information
             : undefined;
+    }
+    if (newKnowledge) {
+        newKnowledge.sourceEntityName = message.sender;
     }
     return newKnowledge;
 
@@ -563,13 +601,13 @@ function removeMemorizedEntities(entities: ConcreteEntity[]): ConcreteEntity[] {
 async function indexKnowledge(
     conversation: Conversation,
     topicMerger: TopicMerger | undefined,
-    message: SourceTextBlock,
+    messageBlock: SourceTextBlock,
     knowledge: ExtractedKnowledge,
     timestamp: Date | undefined,
 ): Promise<void> {
     // Add next message... this updates the "sequence"
     const knowledgeIds = await conversation.addKnowledgeForMessage(
-        message,
+        messageBlock,
         knowledge,
     );
     await conversation.addKnowledgeToIndex(knowledge, knowledgeIds);
@@ -585,4 +623,25 @@ async function indexKnowledge(
             true,
         );
     }
+}
+
+function getMessageText(message: ConversationMessage): string {
+    return typeof message.text === "string" ? message.text : message.text.value;
+}
+
+function getMessageHeaderAndText(
+    message: ConversationMessage,
+): string | TextBlock {
+    if (message.header) {
+        if (typeof message.text === "string") {
+            return message.header + "\n\n" + message.text;
+        }
+        let textBlock: TextBlock = {
+            type: message.text.type,
+            value: message.header + "\n\n" + message.text.value,
+            sourceIds: message.text.sourceIds,
+        };
+        return textBlock;
+    }
+    return message.text;
 }
