@@ -185,6 +185,11 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         maxMatches: number,
         minScore?: number,
     ): Promise<ScoredItem<TTextId>[]>;
+    nearestNeighborsPairs(
+        value: string,
+        maxMatches: number,
+        minScore?: number,
+    ): Promise<ScoredItem<TextBlock<TSourceId>>[]>;
     remove(textId: TTextId, postings: TSourceId | TSourceId[]): Promise<void>;
 }
 
@@ -195,6 +200,10 @@ export type TextIndexSettings = {
     embeddingModel?: TextEmbeddingModel | undefined;
 };
 
+// There are *three* important types here:
+// - entries are always strings; typically words or sentences
+// - postings are arrays of TSourceIds; typically unique IDs for other objects
+// - TextId is a string that uniquely identifies an (entry, postings) pair internally
 export async function createTextIndex<TSourceId = any>(
     settings: TextIndexSettings,
     folderPath: string,
@@ -210,7 +219,7 @@ export async function createTextIndex<TSourceId = any>(
             folderSettings,
             fSys,
         ));
-    const textIdMap = await loadTextIdMap();
+    const textIdMap: Map<string, TextId> = await loadTextIdMap();
     const postingFolder = await createIndexFolder<TSourceId>(
         path.join(folderPath, "postings"),
         folderSettings,
@@ -248,6 +257,7 @@ export async function createTextIndex<TSourceId = any>(
         getNearestTextMultiple,
         nearestNeighbors,
         nearestNeighborsText,
+        nearestNeighborsPairs,
         remove,
     };
 
@@ -332,7 +342,7 @@ export async function createTextIndex<TSourceId = any>(
     async function addPostings(
         text: string,
         postings?: TSourceId[],
-    ): Promise<string> {
+    ): Promise<TextId> {
         let textId = await entriesFolder.put(text);
         const tasks = [];
         if (postings && postings.length > 0) {
@@ -543,7 +553,7 @@ export async function createTextIndex<TSourceId = any>(
             minScore,
         );
         // Also do an exact match
-        let textId = textToId(value);
+        let textId: TextId | undefined = textToId(value);
         if (textId) {
             // Remove prior match
             const pos = matches.findIndex((m) => m.item === textId);
@@ -555,17 +565,44 @@ export async function createTextIndex<TSourceId = any>(
         return matches;
     }
 
+    async function nearestNeighborsPairs(
+        query: string,
+        maxMatches: number,
+        minScore?: number,
+    ): Promise<ScoredItem<TextBlock<TSourceId>>[]> {
+        return removeUndefined(
+            await asyncArray.mapAsync(
+                await nearestNeighborsText(query, maxMatches, minScore),
+                settings.concurrency,
+                async (m) => {
+                    const value = await entriesFolder.get(m.item);
+                    if (!value) return;
+                    const sourceIds = await postingFolder.get(m.item);
+                    if (!sourceIds) return;
+                    return {
+                        score: m.score,
+                        item: {
+                            type: TextBlockType.Sentence,
+                            value,
+                            sourceIds,
+                        },
+                    };
+                },
+            ),
+        );
+    }
+
     async function loadTextIdMap(): Promise<Map<string, TextId>> {
         const map = new Map<string, TextId>();
-        const allIds = await entriesFolder.allNames();
+        const allIds: TextId[] = await entriesFolder.allNames();
         if (allIds.length > 0) {
             // Load all text entries
-            const allText = await asyncArray.mapAsync(
+            const allText: (string | undefined)[] = await asyncArray.mapAsync(
                 allIds,
                 settings.concurrency,
                 (id) => entriesFolder.get(id),
             );
-            if (!allText || allIds.length != allText.length) {
+            if (!allText || allIds.length !== allText.length) {
                 throw Error(`TextIndex is corrupt: ${folderPath}`);
             }
             // And now map the text to its ids

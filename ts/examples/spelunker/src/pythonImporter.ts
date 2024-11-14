@@ -42,8 +42,6 @@ import {
     chunkifyPythonFiles,
 } from "./pythonChunker.js";
 
-// TODO: Turn (chunkFolder, codeIndex, summaryFolder) into a single object.
-
 export async function importPythonFiles(
     files: string[],
     chunkyIndex: ChunkyIndex,
