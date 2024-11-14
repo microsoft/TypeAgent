@@ -598,14 +598,10 @@ export async function runChatMemory(): Promise<void> {
             if (count % 10 === 0) {
                 clock.stop();
                 totalElapsed += clock.elapsedMs;
-                printer.writeTiming(
-                    chalk.cyan,
-                    clock,
-                    `Processed ${count} records in time`,
-                );
+                printer.writeTiming(chalk.cyan, clock, "last 10 records");
                 // write out elapsed time in seconds
                 printer.writeLine(
-                    `Total elapsed time: ${millisecondsToString(
+                    `Processed ${count} records with total elapsed time: ${millisecondsToString(
                         totalElapsed,
                         "s",
                     )}`,
