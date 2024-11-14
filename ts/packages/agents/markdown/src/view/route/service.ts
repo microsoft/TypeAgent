@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import express, { Express, Request, Response } from "express";
 import MarkdownIt from "markdown-it";
 import { GeoJSONPlugin } from "./plugins/geoJson.js";
