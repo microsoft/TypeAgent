@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { sleep } from "aiclient";
-
 /**
  * Call an async function with retry
  * @param asyncFn Use closures to pass parameters
@@ -29,7 +27,16 @@ export async function callWithRetry<T = any>(
                 throw e;
             }
         }
-        await sleep(retryPauseMs);
+        await pause(retryPauseMs);
         retryCount++;
     }
+}
+
+/**
+ * Pause for given # of ms before resuming async execution
+ * @param ms
+ * @returns
+ */
+export function pause(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }

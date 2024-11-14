@@ -311,11 +311,6 @@ function isTransientHttpError(code: number): boolean {
     return false;
 }
 
-/**
- * Sleep for given # of ms before resuming async execution
- * @param ms
- * @returns
- */
-export function sleep(ms: number): Promise<void> {
+function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }

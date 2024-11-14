@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export * from "./common";
 export * from "./message";
 export * from "./memory";
 export * from "./prompt";
@@ -23,6 +22,7 @@ export * from "./storage/workQueue";
 export * from "./classifier/textClassifier";
 
 export * as dateTime from "./dateTime";
+export * as async from "./async";
 export * as asyncArray from "./arrayAsync";
 export * as collections from "./lib/index";
 export * as promptLib from "./promptLib";
