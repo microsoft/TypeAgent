@@ -31,6 +31,7 @@ import { timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
 import {
+    argPause,
     argConcurrency,
     argDestFile,
     argMinScore,
