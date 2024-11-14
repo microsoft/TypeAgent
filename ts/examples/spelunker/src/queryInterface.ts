@@ -186,9 +186,9 @@ export async function runQueryInterface(
         if (!namedArgs.filter) {
             hits = matches;
         } else {
-            for await (const hit of matches) {
+            for await (const match of matches) {
                 if (namedArgs.filter) {
-                    const valueWords: string[] = hit.item.value
+                    const valueWords: string[] = match.item.value
                         .split(/\s+/)
                         .filter(Boolean)
                         .map((w) => w.toLowerCase());
@@ -199,7 +199,10 @@ export async function runQueryInterface(
                     if (
                         filterWords.every((word) => valueWords.includes(word))
                     ) {
-                        hits.push(hit);
+                        if (match.score === 1.0) {
+                            match.score = filterWords.length / valueWords.length;
+                        }
+                        hits.push(match);
                     }
                 }
             }
@@ -209,9 +212,9 @@ export async function runQueryInterface(
         } else {
             io.writer.writeLine(`Found ${hits.length} ${indexName}.`);
             hits.sort((a, b) => a.item.value.localeCompare(b.item.value));
-            for (const v of hits) {
+            for (const hit of hits) {
                 io.writer.writeLine(
-                    `${v.item.value} (${v.score.toFixed(3)}) :: ${(v.item.sourceIds || []).join(", ")}`,
+                    `${hit.item.value} (${hit.score.toFixed(3)}) :: ${(hit.item.sourceIds || []).join(", ")}`,
                 );
             }
         }
