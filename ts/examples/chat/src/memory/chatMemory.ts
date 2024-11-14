@@ -16,8 +16,15 @@ import {
     runConsole,
     getInteractiveIO,
     StopWatch,
+    NamedArgs,
 } from "interactive-app";
-import { asyncArray, dateTime, getFileName, readAllText } from "typeagent";
+import {
+    asyncArray,
+    dateTime,
+    ensureDir,
+    getFileName,
+    readAllText,
+} from "typeagent";
 import chalk, { ChalkInstance } from "chalk";
 import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
 import { timestampBlocks } from "./importer.js";
@@ -27,13 +34,11 @@ import {
     argConcurrency,
     argDestFile,
     argMinScore,
-    argPause,
     argSourceFile,
-    createIndexingStats,
     getMessagesAndCount,
-    IndexingStats,
 } from "./common.js";
 import { createEmailCommands, createEmailMemory } from "./emailMemory.js";
+import { pathToFileURL } from "url";
 
 export type Models = {
     chatModel: ChatModel;
@@ -43,10 +48,11 @@ export type Models = {
 
 export type ChatContext = {
     storePath: string;
+    statsPath: string;
     printer: ChatMemoryPrinter;
     models: Models;
     maxCharsPerChunk: number;
-    stats: IndexingStats;
+    stats: knowLib.IndexingStats;
     topicWindowSize: number;
     searchConcurrency: number;
     minScore: number;
@@ -90,14 +96,16 @@ function getReservedConversation(
     return undefined;
 }
 
-export async function createChatMemoryContext(
-    completionCallback?: (req: any, resp: any) => void,
-): Promise<ChatContext> {
-    const storePath = "/data/testChat";
+export function createModels(): Models {
+    const embeddingSettings = openai.apiSettingsFromEnv(
+        openai.ModelType.Embedding,
+    );
+    embeddingSettings.retryPauseMs = 25 * 1000;
+
     const models: Models = {
         chatModel: openai.createChatModelDefault("chatMemory"),
         embeddingModel: knowLib.createEmbeddingCache(
-            openai.createEmbeddingModel(),
+            openai.createEmbeddingModel(embeddingSettings),
             1024,
         ),
         /*
@@ -107,7 +115,20 @@ export async function createChatMemoryContext(
         ),
         */
     };
+    return models;
+}
+
+export async function createChatMemoryContext(
+    completionCallback?: (req: any, resp: any) => void,
+): Promise<ChatContext> {
+    const storePath = "/data/testChat";
+    const statsPath = path.join(storePath, "stats");
+    await ensureDir(storePath);
+    await ensureDir(statsPath);
+
+    const models: Models = createModels();
     models.chatModel.completionCallback = completionCallback;
+
     const conversationName = ReservedConversationNames.transcript;
     const conversationSettings =
         knowLib.conversation.createConversationSettings(models.embeddingModel);
@@ -131,9 +152,10 @@ export async function createChatMemoryContext(
     const actionTopK = 16;
     const context: ChatContext = {
         storePath,
+        statsPath,
         printer: new ChatMemoryPrinter(getInteractiveIO()),
         models,
-        stats: createIndexingStats(),
+        stats: knowLib.createIndexingStats(),
         maxCharsPerChunk: 4096,
         topicWindowSize: 8,
         searchConcurrency: 2,
@@ -245,7 +267,7 @@ export async function loadConversation(
 }
 
 export async function runChatMemory(): Promise<void> {
-    let context = await createChatMemoryContext(printStats);
+    let context = await createChatMemoryContext(captureTokenStats);
     let showTokenStats = true;
     let printer = context.printer;
     const commands: Record<string, CommandHandler> = {
@@ -261,9 +283,9 @@ export async function runChatMemory(): Promise<void> {
         topics,
         entities,
         actions,
-        searchQuery,
         search,
         searchV2Debug,
+        searchTopics,
         makeTestSet,
         runTestSet,
         tokenLog,
@@ -300,8 +322,8 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    function printStats(req: any, response: any): void {
-        context.stats.addTokens(response.usage);
+    function captureTokenStats(req: any, response: any): void {
+        context.stats.updateCurrentTokenStats(response.usage);
         if (showTokenStats) {
             printer.writeCompletionStats(response.usage);
             printer.writeLine();
@@ -589,7 +611,6 @@ export async function runChatMemory(): Promise<void> {
             options: {
                 maxTurns: argNum("Number of turns to run"),
                 concurrency: argConcurrency(2),
-                pause: argPause(),
             },
         };
     }
@@ -640,7 +661,6 @@ export async function runChatMemory(): Promise<void> {
                 mergeWindow: argNum("Topic merge window size", 8),
                 maxTurns: argNum("Number of turns to run", 10),
                 concurrency: argConcurrency(2),
-                pause: argPause(),
                 actions: argBool("Index actions", true),
             },
         };
@@ -754,7 +774,7 @@ export async function runChatMemory(): Promise<void> {
                     namedArgs.minScore,
                 );
             } else {
-                await searchTopics(
+                await searchTopicsText(
                     index,
                     query,
                     namedArgs.exact,
@@ -912,7 +932,7 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    function searchDef(): CommandMetadata {
+    function searchDefBase(): CommandMetadata {
         return {
             description: "Natural language search on conversation",
             args: {
@@ -930,66 +950,51 @@ export async function runChatMemory(): Promise<void> {
             },
         };
     }
-    commands.searchQuery.metadata = searchDef();
-    async function searchQuery(
+
+    function searchDef(): CommandMetadata {
+        const def = searchDefBase();
+        if (!def.options) {
+            def.options = {};
+        }
+        def.options.skipEntities = argBool("Skip entity matching", false);
+        def.options.skipActions = argBool("Skip action matching", false);
+        def.options.skipTopics = argBool("Skip topics matching", false);
+        return def;
+    }
+    commands.search.metadata = searchDef();
+    async function search(args: string[], io: InteractiveIo): Promise<void> {
+        await searchConversation(
+            context.searcher,
+            true,
+            parseNamedArguments(args, searchDef()),
+        );
+    }
+
+    function searchTopicsDef(): CommandMetadata {
+        const def = searchDefBase();
+        if (!def.options) {
+            def.options = {};
+        }
+        def.options.showSources = argBool("Show links to source", false);
+        return def;
+    }
+    commands.searchTopics.metadata = searchDefBase();
+    async function searchTopics(
         args: string[],
         io: InteractiveIo,
     ): Promise<void> {
-        const timestampQ = new Date();
-        const namedArgs = parseNamedArguments(args, searchDef());
-        const maxMatches = namedArgs.maxMatches;
-        const minScore = namedArgs.minScore;
-        let query = namedArgs.query.trim();
-        if (!query || query.length === 0) {
-            return;
+        const namedArgs = parseNamedArguments(args, searchTopicsDef());
+        namedArgs.v2 = true;
+        namedArgs.skipActions = true;
+        namedArgs.skipEntities = true;
+        const searchResponse = await searchConversation(
+            context.searcher,
+            true,
+            namedArgs,
+        );
+        if (namedArgs.showSources && searchResponse) {
+            writeResultLinks(searchResponse);
         }
-        const searchOptions: conversation.SearchProcessingOptions = {
-            maxMatches,
-            minScore,
-            maxMessages: 15,
-            progress: (value) => printer.writeJson(value),
-        };
-        if (namedArgs.fallback) {
-            searchOptions.fallbackSearch = { maxMatches: 10 };
-        }
-        if (!namedArgs.eval) {
-            await searchNoEval(query, searchOptions);
-            return;
-        }
-
-        const result = await context.searcher.search(query, searchOptions);
-        if (!result) {
-            printer.writeError("No result");
-            return;
-        }
-        if (result.response) {
-            const timestampA = new Date();
-            const entityIndex = await context.conversation.getEntityIndex();
-            const topicIndex = await context.conversation.getTopicsIndex(
-                result.response.topicLevel,
-            );
-            printer.writeLine();
-            await writeSearchResults(
-                topicIndex,
-                entityIndex,
-                query,
-                result,
-                namedArgs.debug,
-            );
-            if (result.response.answer && namedArgs.save) {
-                const answer =
-                    result.response.answer.answer ??
-                    result.response.answer.whyNoAnswer;
-                if (answer) {
-                    recordQuestionAnswer(query, timestampQ, answer, timestampA);
-                }
-            }
-        }
-    }
-
-    commands.search.metadata = searchDef();
-    async function search(args: string[], io: InteractiveIo): Promise<void> {
-        await searchConversation(context.searcher, true, args);
     }
 
     function searchV2DebugDef(): CommandMetadata {
@@ -1017,17 +1022,6 @@ export async function runChatMemory(): Promise<void> {
             );
             printer.writeSearchResponse(searchResponse);
         }
-    }
-
-    async function searchNoEval(
-        query: string,
-        searchOptions: conversation.SearchProcessingOptions,
-    ) {
-        const searchResult = await context.searcher.actions.translateSearch(
-            query,
-            await context.searcher.buildContext(searchOptions),
-        );
-        printer.writeJson(searchResult);
     }
 
     function makeTestSetDef(): CommandMetadata {
@@ -1123,14 +1117,13 @@ export async function runChatMemory(): Promise<void> {
     async function searchConversation(
         searcher: conversation.ConversationSearchProcessor,
         recordAnswer: boolean,
-        args: string[],
-    ): Promise<void> {
-        const namedArgs = parseNamedArguments(args, searchDef());
+        namedArgs: NamedArgs,
+    ): Promise<conversation.SearchResponse | undefined> {
         const maxMatches = namedArgs.maxMatches;
         const minScore = namedArgs.minScore;
         let query = namedArgs.query.trim();
         if (!query || query.length === 0) {
-            return;
+            return undefined;
         }
         const searchOptions: conversation.SearchProcessingOptions = {
             maxMatches,
@@ -1155,7 +1148,7 @@ export async function runChatMemory(): Promise<void> {
                       translationContext,
                   );
             printer.writeJson(searchResult);
-            return;
+            return undefined;
         }
 
         searcher.answers.settings.chunking.enable = true; //namedArgs.chunk === true;
@@ -1166,6 +1159,9 @@ export async function runChatMemory(): Promise<void> {
             | conversation.SearchTermsActionResponseV2
             | undefined;
         if (namedArgs.v2) {
+            searchOptions.skipEntitySearch = namedArgs.skipEntities;
+            searchOptions.skipActionSearch = namedArgs.skipActions;
+            searchOptions.skipTopicSearch = namedArgs.skipTopicSearch;
             result = await searcher.searchTermsV2(
                 query,
                 undefined,
@@ -1180,7 +1176,7 @@ export async function runChatMemory(): Promise<void> {
         }
         if (!result) {
             printer.writeError("No result");
-            return;
+            return undefined;
         }
         await writeSearchTermsResult(result, namedArgs.debug);
         if (result.response && result.response.answer) {
@@ -1194,6 +1190,7 @@ export async function runChatMemory(): Promise<void> {
                 }
             }
         }
+        return result.response;
     }
 
     async function writeSearchTermsResult(
@@ -1257,72 +1254,25 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    async function writeSearchResults(
-        topicIndex: conversation.TopicIndex,
-        entityIndex: conversation.EntityIndex,
-        query: string,
-        rr: conversation.SearchActionResponse,
-        debugInfo: boolean,
-        showLinks: boolean = false,
-    ) {
-        writeResultStats(rr.response);
-        if (rr.response) {
-            const action: conversation.SearchAction = rr.action;
-            switch (action.actionName) {
-                case "unknown":
-                    printer.writeError("unknown action");
-                    break;
-
-                case "getAnswer":
-                    const answer = rr.response.answer;
-                    if (answer) {
-                        if (
-                            answer &&
-                            answer.type === "Answered" &&
-                            answer.answer
-                        ) {
-                            printer.writeInColor(chalk.green, answer.answer);
-                            if (debugInfo && showLinks) {
-                                writeResultLinks(rr.response);
-                            }
-                            return;
-                        }
-
-                        printer.writeError(answer.whyNoAnswer ?? "No answer");
-                    }
-                    if (debugInfo) {
-                        writeDebugInfo(topicIndex, entityIndex, rr);
-                    }
-                    break;
+    async function writeResultLinks(
+        rr: conversation.SearchResponse,
+    ): Promise<void> {
+        if (rr.messageIds && rr.messages) {
+            const urlGet = context.conversation.messages.getUrl;
+            for (let i = 0; i < rr.messageIds.length; ++i) {
+                const message = rr.messages[i];
+                let links: string[] | undefined;
+                if (message.value.sourceIds) {
+                    links = message.value.sourceIds.map((id) =>
+                        pathToFileURL(id).toString(),
+                    );
+                } else if (urlGet) {
+                    rr.messageIds.map((id) => urlGet(id).toString());
+                } else {
+                    links = undefined;
+                }
+                printer.writeList(links, { type: "ul" });
             }
-        } else {
-            printer.writeLine("No search response");
-        }
-    }
-
-    async function writeDebugInfo(
-        topicIndex: conversation.TopicIndex,
-        entityIndex: conversation.EntityIndex,
-        rr: conversation.SearchActionResponse,
-    ) {
-        printer.writeTitle("DEBUG INFORMATION");
-        if (rr.response) {
-            printer.writeSearchResponse(rr.response);
-            if (rr.response.messages) {
-                printer.writeTitle("Messages");
-                printer.writeTemporalBlocks(
-                    chalk.blueBright,
-                    rr.response.messages,
-                );
-            }
-        }
-    }
-
-    function writeResultLinks(rr: conversation.SearchResponse): void {
-        const urlGet = context.conversation.messages.getUrl;
-        if (rr && rr.messageIds && urlGet !== undefined) {
-            const links = rr.messageIds.map((id) => urlGet(id).toString());
-            printer.writeList(links, { type: "ul" });
         }
     }
 
@@ -1364,7 +1314,7 @@ export async function runChatMemory(): Promise<void> {
         }
     }
 
-    async function searchTopics(
+    async function searchTopicsText(
         index: knowLib.conversation.TopicIndex,
         query: string,
         exact: boolean,

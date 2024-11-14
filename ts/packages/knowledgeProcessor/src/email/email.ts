@@ -119,8 +119,11 @@ export function emailToString(
     return text;
 }
 
-export function emailToTextBlock(email: Email): TextBlock<string> {
-    const value = emailToString(email);
+export function emailToTextBlock(
+    email: Email,
+    includeHeader: boolean = true,
+): TextBlock<string> {
+    const value = includeHeader ? emailToString(email) : email.body;
     const block: TextBlock<string> = {
         type: TextBlockType.Raw,
         value,
@@ -372,7 +375,8 @@ export async function addEmailFileToConversation(
 export function emailToMessage(email: Email): ConversationMessage {
     const sender = email.from.displayName;
     return {
-        text: emailToTextBlock(email),
+        header: emailHeadersToString(email),
+        text: emailToTextBlock(email, false),
         knowledge: emailToKnowledge(email),
         timestamp: dateTime.stringToDate(email.sentOn),
         sender,

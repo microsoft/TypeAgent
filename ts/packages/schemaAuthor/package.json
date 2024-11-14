@@ -10,6 +10,7 @@
   },
   "license": "MIT",
   "author": "Microsoft",
+  "type": "module",
   "exports": {
     ".": "./dist/index.js"
   },
@@ -26,8 +27,8 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
+    "action-schema": "workspace:*",
     "aiclient": "workspace:*",
-    "schema-parser": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1"
   },

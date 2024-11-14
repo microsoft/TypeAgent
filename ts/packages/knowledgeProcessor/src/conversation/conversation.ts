@@ -79,8 +79,8 @@ export function createConversationSettings(
 }
 
 export type ConversationSearchOptions = {
-    entity: EntitySearchOptions;
-    topic: TopicSearchOptions;
+    entity?: EntitySearchOptions | undefined;
+    topic?: TopicSearchOptions | undefined;
     // Include if you want to use actions in your search
     action?: ActionSearchOptions | undefined;
     topicLevel?: number;
@@ -533,18 +533,22 @@ export async function createConversation(
         for (const filter of filters) {
             switch (filter.filterType) {
                 case "Topic":
-                    const topicResult = await topicIndex.search(
-                        filter,
-                        options.topic,
-                    );
-                    results.topics.push(topicResult);
+                    if (options.topic) {
+                        const topicResult = await topicIndex.search(
+                            filter,
+                            options.topic,
+                        );
+                        results.topics.push(topicResult);
+                    }
                     break;
                 case "Entity":
-                    const entityResult = await entityIndex.search(
-                        filter,
-                        options.entity,
-                    );
-                    results.entities.push(entityResult);
+                    if (options.entity) {
+                        const entityResult = await entityIndex.search(
+                            filter,
+                            options.entity,
+                        );
+                        results.entities.push(entityResult);
+                    }
                     break;
                 case "Action":
                     if (options.action) {
@@ -580,18 +584,20 @@ export async function createConversation(
         const results = createSearchResults();
         for (const filter of filters) {
             // Only search actions if (a) actions are enabled (b) we have an action filter
-            const topicResult = await topicIndex.searchTerms(
-                filter,
-                options.topic,
-            );
-            results.topics.push(topicResult);
-
-            const entityResult = await entityIndex.searchTerms(
-                filter,
-                options.entity,
-            );
-            results.entities.push(entityResult);
-
+            if (options.topic) {
+                const topicResult = await topicIndex.searchTerms(
+                    filter,
+                    options.topic,
+                );
+                results.topics.push(topicResult);
+            }
+            if (options.entity) {
+                const entityResult = await entityIndex.searchTerms(
+                    filter,
+                    options.entity,
+                );
+                results.entities.push(entityResult);
+            }
             if (options.action) {
                 const actionResult = await actionIndex.searchTerms(
                     filter,
@@ -623,22 +629,46 @@ export async function createConversation(
         ]);
         const results = createSearchResults();
         for (let filter of filters) {
-            const actionResult = options.action
-                ? await actionIndex.searchTermsV2(filter, options.action)
-                : undefined;
-            const tasks = [
-                topicIndex.searchTermsV2(filter, options.topic),
-                entityIndex.searchTermsV2(
-                    {
-                        searchTerms: getAllTermsInFilter(filter, false),
-                        timeRange: filter.timeRange,
-                    },
-                    options.entity,
-                ),
+            let topLevelTopicMatches =
+                options.topic &&
+                options.topic.useHighLevel &&
+                options.topicLevel === 1
+                    ? await matchTopLevelTopics(
+                          options.topicLevel,
+                          filter,
+                          options.topic,
+                      )
+                    : undefined;
+
+            const searchTasks = [
+                options.action
+                    ? await actionIndex.searchTermsV2(filter, options.action)
+                    : Promise.resolve(undefined),
+                options.topic
+                    ? topicIndex.searchTermsV2(
+                          filter,
+                          options.topic,
+                          topLevelTopicMatches,
+                      )
+                    : Promise.resolve(undefined),
+                options.entity
+                    ? entityIndex.searchTermsV2(
+                          {
+                              searchTerms: getAllTermsInFilter(filter, false),
+                              timeRange: filter.timeRange,
+                          },
+                          options.entity,
+                      )
+                    : Promise.resolve(undefined),
             ];
-            const [topicResult, entityResult] = await Promise.all(tasks);
-            results.topics.push(topicResult);
-            results.entities.push(entityResult);
+            const [actionResult, topicResult, entityResult] =
+                await Promise.all(searchTasks);
+            if (topicResult) {
+                results.topics.push(topicResult);
+            }
+            if (entityResult) {
+                results.entities.push(entityResult);
+            }
             if (actionResult) {
                 results.actions.push(actionResult);
             }
@@ -652,6 +682,19 @@ export async function createConversation(
             );
         }
         return results;
+    }
+
+    async function matchTopLevelTopics(
+        level: number,
+        filter: TermFilterV2,
+        options: TopicSearchOptions,
+    ): Promise<TopicId[] | undefined> {
+        const topicIndex = await getTopicsIndex(level + 1);
+        const result = await topicIndex.searchTermsV2(filter, options);
+        if (result.topicIds && result.topicIds.length > 0) {
+            return await topicIndex.getSourceIds(result.topicIds);
+        }
+        return undefined;
     }
 
     async function searchMessages(

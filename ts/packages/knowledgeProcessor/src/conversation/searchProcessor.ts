@@ -45,6 +45,9 @@ export type SearchProcessingOptions = {
     maxMessages: number;
     fallbackSearch?: SearchOptions | undefined;
     skipAnswerGeneration?: boolean;
+    skipEntitySearch?: boolean;
+    skipTopicSearch?: boolean;
+    skipActionSearch?: boolean;
     progress?: ((action: any) => void) | undefined;
 };
 
@@ -442,13 +445,13 @@ export function createSearchProcessor(
         action: GetAnswerAction,
         searchOptions: ConversationSearchOptions,
     ) {
-        if (searchOptions.topic.loadTopics) {
+        if (searchOptions.topic && searchOptions.topic.loadTopics) {
             ensureTopicFilter(
                 isTopicSummaryRequest(action) ? "*" : query,
                 action.parameters.filters,
             );
         }
-        if (searchOptions.entity.loadEntities) {
+        if (searchOptions.entity && searchOptions.entity.loadEntities) {
             ensureEntityFilter(query, action.parameters.filters);
         }
     }
@@ -570,6 +573,15 @@ export function createSearchProcessor(
             },
             loadActions,
         };
+        if (options.skipTopicSearch) {
+            searchOptions.topic = undefined;
+        }
+        if (options.skipEntitySearch) {
+            searchOptions.entity = undefined;
+        }
+        if (options.skipActionSearch) {
+            searchOptions.action = undefined;
+        }
         return searchOptions;
     }
 }

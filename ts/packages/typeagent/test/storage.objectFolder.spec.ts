@@ -49,38 +49,54 @@ describe("storage.objectFolder", () => {
     beforeAll(async () => {
         folder = await ensureStore(folderPath, true);
     });
-    test("idGen", () => {
-        const nameGenerator = createFileNameGenerator(
-            generateTimestampString,
-            (name: string) => true,
-        );
-        const maxNames = 256;
-        let prevName = "";
-        for (let i = 0; i < maxNames; ++i) {
-            const objFileName = nameGenerator.next().value;
-            expect(objFileName).not.toEqual(prevName);
-            prevName = objFileName;
-        }
-    });
-    test("putAndGet", async () => {
-        const obj: TestObject = {
-            key: "Foo",
-            value: "Bar",
-        };
-        const id = await folder!.put(obj);
-        const loaded = await folder!.get(id);
-        expect(loaded).toEqual(obj);
-    });
-    test("putMultiple", async () => {
-        const objCount = 10;
-        const ids = await addObjects(folder!, objCount);
-        expect(ids.length).toBe(objCount);
-    });
-    test("remove", async () => {
-        await folder!.clear();
-        const size = await folder!.size();
-        expect(size).toBe(0);
-    });
+    test(
+        "idGen",
+        () => {
+            const nameGenerator = createFileNameGenerator(
+                generateTimestampString,
+                (name: string) => true,
+            );
+            const maxNames = 256;
+            let prevName = "";
+            for (let i = 0; i < maxNames; ++i) {
+                const objFileName = nameGenerator.next().value;
+                expect(objFileName).not.toEqual(prevName);
+                prevName = objFileName;
+            }
+        },
+        timeoutMs,
+    );
+    test(
+        "putAndGet",
+        async () => {
+            const obj: TestObject = {
+                key: "Foo",
+                value: "Bar",
+            };
+            const id = await folder!.put(obj);
+            const loaded = await folder!.get(id);
+            expect(loaded).toEqual(obj);
+        },
+        timeoutMs,
+    );
+    test(
+        "putMultiple",
+        async () => {
+            const objCount = 10;
+            const ids = await addObjects(folder!, objCount);
+            expect(ids.length).toBe(objCount);
+        },
+        timeoutMs,
+    );
+    test(
+        "remove",
+        async () => {
+            await folder!.clear();
+            const size = await folder!.size();
+            expect(size).toBe(0);
+        },
+        timeoutMs,
+    );
     test(
         "readAll",
         async () => {

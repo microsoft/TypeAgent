@@ -25,7 +25,7 @@ export function* timestampBlocks(
     }
 }
 
-export async function importMsgFiles(
+export async function convertMsgFiles(
     sourcePath: string,
     io: InteractiveIo,
 ): Promise<void> {

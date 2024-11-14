@@ -3,8 +3,16 @@
 
 import { openai } from "aiclient";
 import { ArgDef } from "interactive-app";
-import { conversation, SourceTextBlock } from "knowledge-processor";
+import {
+    conversation,
+    ItemIndexingStats,
+    SourceTextBlock,
+} from "knowledge-processor";
 import { asyncArray } from "typeagent";
+
+export async function pause(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export async function getMessages(
     cm: conversation.ConversationManager,
@@ -24,6 +32,40 @@ export async function getMessagesAndCount(
         ? items.length
         : await cm.conversation.messages.size();
     return [items, count];
+}
+
+export function indexingStatsToCsv(
+    stats: ItemIndexingStats | ItemIndexingStats[],
+): string {
+    let csv = "";
+    if (Array.isArray(stats)) {
+        const hasName = stats.some((v) => v.name !== undefined);
+        if (hasName) {
+            csv += "Name, ";
+        }
+        csv +=
+            "Time Ms, Char Count, Prompt Tokens, Completion Tokens, Total Tokens\n";
+        for (const stat of stats) {
+            csv += statsToCsv(stat, hasName) + "\n";
+        }
+    } else {
+        csv = statsToCsv(stats, stats.name !== undefined);
+    }
+    return csv;
+
+    function statsToCsv(
+        stats: ItemIndexingStats,
+        includeName: boolean,
+    ): string {
+        let csv = includeName ? `${stats.name}, ` : "";
+        csv += `${stats.timeMs},${stats.charCount},`;
+        csv += completionStatsToCsv(stats.tokenStats);
+        return csv;
+    }
+}
+
+export function completionStatsToCsv(stats: openai.CompletionUsageStats) {
+    return `${stats.prompt_tokens},${stats.completion_tokens},${stats.total_tokens}`;
 }
 
 export function argSourceFile(defaultValue?: string | undefined): ArgDef {
@@ -98,44 +140,4 @@ export function argChunkSize(defaultValue?: number | undefined): ArgDef {
         defaultValue,
         description: "Text chunk size",
     };
-}
-
-export interface IndexingStats {
-    totalMs: number;
-    totalChars: number;
-    tokenStats: openai.CompletionUsageStats;
-
-    clear(): void;
-    addTokens(tokens: openai.CompletionUsageStats): void;
-}
-
-export function createIndexingStats(): IndexingStats {
-    const indexingStats = {
-        totalMs: 0,
-        totalChars: 0,
-        tokenStats: emptyTokenStats(),
-        addTokens,
-        clear,
-    };
-    return indexingStats;
-
-    function addTokens(stats: openai.CompletionUsageStats): void {
-        indexingStats.tokenStats.completion_tokens += stats.completion_tokens;
-        indexingStats.tokenStats.prompt_tokens += stats.prompt_tokens;
-        indexingStats.tokenStats.total_tokens += stats.total_tokens;
-    }
-
-    function clear() {
-        indexingStats.totalMs = 0;
-        indexingStats.totalChars = 0;
-        indexingStats.tokenStats = emptyTokenStats();
-    }
-
-    function emptyTokenStats(): openai.CompletionUsageStats {
-        return {
-            completion_tokens: 0,
-            prompt_tokens: 0,
-            total_tokens: 0,
-        };
-    }
 }

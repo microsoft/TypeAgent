@@ -71,7 +71,7 @@ export default class ExplainCommand extends Command {
                 translators,
                 actions: {}, // We don't need any actions
                 explainer: { name: flags.explainer },
-                cache: false,
+                cache: { enabled: false },
                 clientIO: flags.repeat > 1 ? null : undefined,
             },
         );

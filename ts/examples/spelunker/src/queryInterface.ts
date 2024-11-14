@@ -7,11 +7,10 @@ import * as iapp from "interactive-app";
 import * as knowLib from "knowledge-processor";
 import path from "path";
 import { ScoredItem } from "typeagent";
-
 import { ChunkyIndex } from "./chunkyIndex.js";
 import { CodeDocumentation } from "./codeDocSchema.js";
-import { Chunk } from "./pythonChunker.js";
-import { sanitizeKey, wordWrap } from "./pythonImporter.js";
+import { Chunk, ChunkId } from "./pythonChunker.js";
+import { wordWrap } from "./pythonImporter.js";
 
 type QueryOptions = {
     maxHits: number;
@@ -25,6 +24,10 @@ export async function runQueryInterface(
 ): Promise<void> {
     const handlers: Record<string, iapp.CommandHandler> = {
         search,
+        keywords,
+        topics,
+        goals,
+        dependencies,
     };
     iapp.addStandardHandlers(handlers);
 
@@ -41,7 +44,7 @@ export async function runQueryInterface(
                 maxHits: {
                     description: "Maximum number of hits to return",
                     type: "integer",
-                    defaultValue: 10,
+                    defaultValue: 3,
                 },
                 minScore: {
                     description: "Minimum score to return",
@@ -70,6 +73,154 @@ export async function runQueryInterface(
         await processQuery(query, chunkyIndex, io, options);
     }
 
+    function commonOptions(): Record<string, iapp.ArgDef> {
+        return {
+            verbose: {
+                description: "More verbose output",
+                type: "boolean",
+            },
+            filter: {
+                description: "Filter by keyword",
+                type: "string",
+            },
+            query: {
+                description: "Natural language query",
+                type: "string",
+            },
+            maxHits: {
+                description:
+                    "Maximum number of hits to return (only for query)",
+                type: "integer",
+                defaultValue: 10,
+            },
+            minScore: {
+                description: "Minimum score to return (only for query)",
+                type: "number",
+                defaultValue: 0.7,
+            },
+        };
+    }
+
+    function keywordsDef(): iapp.CommandMetadata {
+        return {
+            description: "Show all recorded keywords and their postings.",
+            options: commonOptions(),
+        };
+    }
+    handlers.keywords.metadata = keywordsDef();
+    async function keywords(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        await reportIndex(args, io, "keywords");
+    }
+
+    function topicsDef(): iapp.CommandMetadata {
+        return {
+            description: "Show all recorded topics and their postings.",
+            options: commonOptions(),
+        };
+    }
+    handlers.topics.metadata = topicsDef();
+    async function topics(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        await reportIndex(args, io, "topics");
+    }
+
+    function goalsDef(): iapp.CommandMetadata {
+        return {
+            description: "Show all recorded goals and their postings.",
+            options: commonOptions(),
+        };
+    }
+    handlers.goals.metadata = goalsDef();
+    async function goals(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        await reportIndex(args, io, "goals");
+    }
+
+    function dependenciesDef(): iapp.CommandMetadata {
+        return {
+            description: "Show all recorded dependencies and their postings.",
+            options: commonOptions(),
+        };
+    }
+    handlers.dependencies.metadata = dependenciesDef();
+    async function dependencies(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        await reportIndex(args, io, "dependencies");
+    }
+
+    async function reportIndex(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+        indexName: string, // E.g. "keywords"
+    ): Promise<void> {
+        const namedArgs = iapp.parseNamedArguments(args, keywordsDef());
+        const index: knowLib.TextIndex<string, ChunkId> = (chunkyIndex as any)[
+            indexName + "Index"
+        ];
+        let matches: ScoredItem<knowLib.TextBlock<ChunkId>>[] = [];
+        if (namedArgs.query) {
+            matches = await index.nearestNeighborsPairs(
+                namedArgs.query,
+                namedArgs.maxHits,
+                namedArgs.minScore,
+            );
+            // TODO: Merge matches with the same score and item.value
+        } else {
+            for await (const textBlock of index.entries()) {
+                matches.push({
+                    score: 1.0,
+                    item: textBlock,
+                });
+            }
+        }
+        let hits: ScoredItem<knowLib.TextBlock<ChunkId>>[] = [];
+        if (!namedArgs.filter) {
+            hits = matches;
+        } else {
+            for await (const match of matches) {
+                if (namedArgs.filter) {
+                    const valueWords: string[] = match.item.value
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .map((w) => w.toLowerCase());
+                    const filterWords: string[] = (namedArgs.filter as string)
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .map((w) => w.toLowerCase());
+                    if (
+                        filterWords.every((word) => valueWords.includes(word))
+                    ) {
+                        if (match.score === 1.0) {
+                            match.score =
+                                filterWords.length / valueWords.length;
+                        }
+                        hits.push(match);
+                    }
+                }
+            }
+        }
+        if (!hits.length) {
+            io.writer.writeLine(`No ${indexName}.`);
+        } else {
+            io.writer.writeLine(`Found ${hits.length} ${indexName}.`);
+            hits.sort((a, b) => a.item.value.localeCompare(b.item.value));
+            for (const hit of hits) {
+                io.writer.writeLine(
+                    `${hit.item.value} (${hit.score.toFixed(3)}) :: ${(hit.item.sourceIds || []).join(", ")}`,
+                );
+            }
+        }
+    }
+
     // Define special handlers, then run the console loop.
 
     async function onStart(io: iapp.InteractiveIo): Promise<void> {
@@ -79,7 +230,12 @@ export async function runQueryInterface(
         input: string,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        io.writer.writeLine("Use @ command prefix; see @help.");
+        const options: QueryOptions = {
+            maxHits: 3,
+            minScore: 0.7,
+            verbose: false,
+        };
+        await processQuery(input, chunkyIndex, io, options);
     }
 
     await iapp.runConsole({
@@ -95,64 +251,74 @@ async function processQuery(
     io: iapp.InteractiveIo,
     options: QueryOptions,
 ): Promise<void> {
-    const key = sanitizeKey(input);
-    // TODO: Find a more type-safe way (so a typo in the index name is caught by the compiler).
+    const hitTable = new Map<ChunkId, number>();
+
+    // First gather hits from keywords, topics etc. indexes.
     for (const indexType of ["keywords", "topics", "goals", "dependencies"]) {
-        // TODO: Make this less pathetic (stemming, substrings etc.).
-        const index: knowLib.KeyValueIndex<string, string> = (
-            chunkyIndex as any
-        )[indexType + "Folder"];
+        // TODO: Find a more type-safe way (so a typo in the index name is caught by the compiler).
+        const index: knowLib.TextIndex<string, ChunkId> = (chunkyIndex as any)[
+            indexType + "Index"
+        ];
         if (!index) {
-            io.writer.writeLine(`No ${indexType} index.`);
+            io.writer.writeLine(`[No ${indexType} index.]`);
             continue;
         }
-        const values = await index.get(key);
-        if (values?.length) {
-            io.writer.writeLine(
-                `Found ${values.length} ${indexType} ${plural("hit", values.length)}:`,
+        if (options.verbose)
+            io.writer.writeLine(`[Searching ${indexType} index...]`);
+        // TODO: try/catch like below? Embeddings can fail too...
+        const hits: ScoredItem<knowLib.TextBlock<ChunkId>>[] =
+            await index.nearestNeighborsPairs(
+                input,
+                options.maxHits * 5,
+                options.minScore,
             );
-            for (let i = 0; i < values.length; i++) {
-                const value = values[i];
-                const chunk = await chunkyIndex.chunkFolder!.get(value);
-                if (!chunk) {
-                    io.writer.writeLine(
-                        `Hit ${i + 1}: id: ${value} --> [No data]`,
-                    );
-                    continue;
-                }
+        for (const hit of hits) {
+            if (options.verbose) {
                 io.writer.writeLine(
-                    `Hit ${i + 1}: ` +
-                        `id: ${chunk.id}, ` +
-                        `file: ${path.relative(process.cwd(), chunk.filename!)}, ` +
-                        `type: ${chunk.treeName}`,
+                    `  ${hit.item.value} (${hit.score.toFixed(3)}) -- ${hit.item.sourceIds}`,
                 );
-                if (chunk) {
-                    io.writer.writeLine(
-                        `    ${path.relative(process.cwd(), chunk.filename!)}`,
-                    );
-                    writeChunkLines(chunk, io, options.verbose ? 50 : 5);
-                }
+            }
+            for (const id of hit.item.value) {
+                const oldScore = hitTable.get(id) || 0.0;
+                hitTable.set(id, oldScore + hit.score);
             }
         }
     }
-    let hits: ScoredItem<string>[];
+
+    // Next add hits from the code index. (Different API, same idea though.)
     try {
-        hits = await chunkyIndex.codeIndex!.find(
+        if (options.verbose) io.writer.writeLine(`[Searching code index...]`);
+        const hits: ScoredItem<ChunkId>[] = await chunkyIndex.codeIndex!.find(
             input,
-            options.maxHits,
+            options.maxHits * 5,
             options.minScore,
         );
+        for (const hit of hits) {
+            if (options.verbose) {
+                const comment = (await chunkyIndex.summaryFolder!.get(hit.item))
+                    ?.comments?.[0]?.comment;
+                io.writer.writeLine(
+                    `  ${hit.item} (${hit.score.toFixed(3)}) -- ${comment?.slice(0, 100)}`,
+                );
+            }
+            hitTable.set(hit.item, hit.score);
+        }
     } catch (error) {
-        io.writer.writeLine(`[${error}]`);
-        return;
+        io.writer.writeLine(`[Code index query failed; skipping: ${error}]`);
     }
-    if (!hits.length) {
+
+    // Now show the top options.maxHits hits.
+    if (!hitTable.size) {
         io.writer.writeLine("No hits.");
         return;
     }
-    io.writer.writeLine(
-        `Found ${hits.length} embedding ${plural("hit", hits.length)}:`,
+    const hits: ScoredItem<ChunkId>[] = Array.from(
+        hitTable,
+        ([item, score]) => ({ item, score }),
     );
+    hits.sort((a, b) => b.score - a.score);
+    hits.splice(options.maxHits);
+    io.writer.writeLine(`Found ${hits.length} ${plural("hit", hits.length)}:`);
 
     for (let i = 0; i < hits.length; i++) {
         const hit = hits[i];
@@ -178,7 +344,7 @@ async function processQuery(
                     wordWrap(`${comment.comment} (${comment.lineNumber})`),
                 );
         }
-        writeChunkLines(chunk, io, options.verbose ? 100 : 10);
+        writeChunkLines(chunk, io, options.verbose ? 100 : 5);
     }
 }
 
