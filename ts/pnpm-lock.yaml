@@ -147,25 +147,6 @@ importers:
         specifier: ^5.4.2
         version: 5.4.3
 
-  examples/parserTest:
-    dependencies:
-      action-schema:
-        specifier: workspace:*
-        version: link:../../packages/actionSchema
-      copyfiles:
-        specifier: ^2.4.1
-        version: 2.4.1
-    devDependencies:
-      '@types/node':
-        specifier: ^20.11.17
-        version: 20.11.20
-      rimraf:
-        specifier: ^5.0.5
-        version: 5.0.5
-      typescript:
-        specifier: ^5.4.2
-        version: 5.4.3
-
   examples/playground:
     dependencies:
       aiclient:

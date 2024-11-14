@@ -8,11 +8,14 @@ export function getParameterType(actionInfo: ActionSchema, name: string) {
     if (propertyNames.shift() !== "parameters") {
         return undefined;
     }
-    let curr: ActionParamType | undefined = actionInfo.parameters;
+    let curr: ActionParamType | undefined =
+        actionInfo.definition.type.fields.parameters?.type;
     if (curr === undefined) {
         return undefined;
     }
-
+    if (curr.type === "type-reference") {
+        curr = curr.definition.type;
+    }
     for (const propertyName of propertyNames) {
         const maybeIndex = parseInt(propertyName);
         if (maybeIndex.toString() == propertyName) {
@@ -29,6 +32,10 @@ export function getParameterType(actionInfo: ActionSchema, name: string) {
                 return undefined;
             }
         }
+
+        if (curr.type === "type-reference") {
+            curr = curr.definition.type;
+        }
     }
     return curr;
 }
@@ -37,11 +44,12 @@ export function getParameterNames(
     actionInfo: ActionSchema,
     getCurrentValue: (name: string) => any,
 ) {
-    if (actionInfo.parameters === undefined) {
+    const parameters = actionInfo.definition.type.fields.parameters?.type;
+    if (parameters === undefined) {
         return [];
     }
     const pending: Array<[string, ActionParamType]> = [
-        ["parameters", actionInfo.parameters],
+        ["parameters", parameters],
     ];
     const result: string[] = [];
     while (true) {
@@ -52,6 +60,12 @@ export function getParameterNames(
 
         const [name, field] = next;
         switch (field.type) {
+            case "type-union":
+                // TODO: Implement this case
+                break;
+            case "type-reference":
+                pending.push([name, field.definition.type]);
+                break;
             case "object":
                 for (const [key, value] of Object.entries(field.fields)) {
                     pending.push([`${name}.${key}`, value.type]);
