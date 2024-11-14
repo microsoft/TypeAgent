@@ -4,6 +4,7 @@
 import * as fs from "fs";
 import chalk from "chalk";
 import { similarity, SimilarityType } from "typeagent";
+import { SymbolNode, SchemaParser } from "schema-parser";
 
 export interface StatsResult {
     request: string;
@@ -132,6 +133,7 @@ export function printDetailedMarkdownTable(
     results: StatsResult[],
     statsfile: string,
     zerorankStatsFile?: string | undefined,
+    actionSchemaComments?: Record<string, string> | undefined,
 ) {
     console.log(chalk.bold("\n## Results for User Request Matches\n"));
     console.log(
@@ -146,7 +148,7 @@ export function printDetailedMarkdownTable(
     fs.writeFileSync(statsfile, csvContent);
 
     let csvZeroRankContent =
-        "Request,Actual Action,Actual Rank,Mean Score,Median Score,Std Dev,Top Matches\n";
+        "Request,Actual Action,Actual Rank,Comments,Mean Score,Median Score,Std Dev,Top Matches\n";
 
     if (zerorankStatsFile !== undefined) {
         fs.writeFileSync(zerorankStatsFile, csvZeroRankContent);
@@ -179,11 +181,18 @@ export function printDetailedMarkdownTable(
             topMatches,
         )} |`;
 
+        let comments: string = "";
+        if (actionSchemaComments !== undefined) {
+            comments = actionSchemaComments[actualActionName] ?? "";
+        }
+
         if (rank > 0) {
             console.log(res);
             csvContent += `"${request}",${actualActionName},${rankActualAction.toFixed(2)},${rank.toFixed(2)},${meanScore.toFixed(2)},${medianScore.toFixed(2)},${stdDevScore.toFixed(2)},"${topMatches}"\n`;
         } else {
-            csvZeroRankContent += `"${request}",${actualActionName},${rankActualAction.toFixed(2)},${meanScore.toFixed(2)},${medianScore.toFixed(2)},${stdDevScore.toFixed(2)},"${topMatches}"\n`;
+            csvZeroRankContent += `"${request}",${actualActionName},${rankActualAction.toFixed(2)},${
+                comments.length > 0 ? `"${comments}"` : ""
+            },${meanScore.toFixed(2)},${medianScore.toFixed(2)},${stdDevScore.toFixed(2)},"${topMatches}"\n`;
             console.log(`${chalk.red("**")} + ${res}`);
         }
     });
@@ -209,6 +218,41 @@ export function saveStatsToFile(stats: StatsResult[], filePath: string) {
     fs.writeFileSync(filePath, fileContent);
 }
 
+export type NameValue<T = string, N = string> = {
+    name: N;
+    value: T;
+};
+
+function getActionName(node: SymbolNode): string {
+    for (const child of node.children) {
+        if (child.symbol.name === "actionName") {
+            return child.symbol.value.slice(1, -1);
+        }
+    }
+    return "";
+}
+
+export function loadCommentsActionSchema(
+    filePath: string,
+): Record<string, string> {
+    const schema = new SchemaParser();
+    schema.loadSchema(filePath);
+    const typeNames = schema.actionTypeNames();
+
+    let actionSchemaComments: Record<string, string> = {};
+    for (const type of typeNames) {
+        const node = schema.openActionNode(type);
+        if (node !== undefined) {
+            let actionName = getActionName(node);
+            if (actionName !== "") {
+                let comments = node.leadingComments?.join(" ") ?? "";
+                actionSchemaComments[actionName] = comments;
+            }
+        }
+    }
+    return actionSchemaComments;
+}
+
 export function processActionSchemaAndReqData(
     actionreqEmbeddingsFile: string,
     threshold: number = 0.7,
@@ -221,5 +265,23 @@ export function processActionSchemaAndReqData(
         results,
         statsfile,
         zerorankStatsFile?.toString(),
+    );
+}
+
+export function processActionReqDataWithComments(
+    schemaFilePath: string,
+    actionreqEmbeddingsFile: string,
+    threshold: number = 0.7,
+    statsfile: string,
+    zerorankStatsFile: string | undefined,
+) {
+    const data: any[] = loadActionData(actionreqEmbeddingsFile);
+    const results: any[] = generateStats(data, threshold);
+    const actionSchemaComments = loadCommentsActionSchema(schemaFilePath);
+    printDetailedMarkdownTable(
+        results,
+        statsfile,
+        zerorankStatsFile?.toString(),
+        actionSchemaComments,
     );
 }
