@@ -9,7 +9,6 @@ import {
 } from "telemetry";
 
 import registerDebug from "debug";
-import { PromptSection } from "typechat";
 
 const debugPromptLogger = registerDebug("typeagent:promptLogger");
 
@@ -30,10 +29,8 @@ export class PromptLogger {
         return PromptLogger.instance;
     };
 
-    logModelRequest(promptContent : PromptSection[]) {
-        this.sinkLogger?.logEvent("modelRequest", {
-            prompt: promptContent
-        });       
+    logModelRequest(requestContent : any) {
+        this.sinkLogger?.logEvent("modelRequest", { requestContent });       
     }
 
     createSinkLogger() : MultiSinkLogger {
@@ -43,7 +40,7 @@ export class PromptLogger {
         try {
             dbLoggerSink = createMongoDBLoggerSink(
                 "telemetrydb",
-                "modelPromptLogs"
+                "promptLogs"
             );
         } catch (e) {
             debugPromptLogger(`DB logging disabled. ${e}`);

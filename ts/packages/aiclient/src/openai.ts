@@ -622,9 +622,15 @@ export function createChatModel(
             model.completionCallback(params, data);
         }
 
-        PromptLogger.getInstance().logModelRequest(messages as PromptSection[]);
-            
         try {
+            // track request content
+            PromptLogger.getInstance().logModelRequest(
+                {
+                    prompt: (messages as PromptSection[]), 
+                    response: data.choices,
+                    tokenUsage: data.usage
+                } );
+    
             // track token usage
             TokenCounter.getInstance().add(data.usage, tags);
         } catch {}
@@ -703,6 +709,15 @@ export function createChatModel(
                         }
                         if (data.usage) {
                             try {
+
+                                // track request content
+                                PromptLogger.getInstance().logModelRequest(
+                                    {
+                                        prompt: (messages as PromptSection[]), 
+                                        response: data.choices,
+                                        tokenUsage: data.usage,
+                                    } );
+
                                 TokenCounter.getInstance().add(
                                     data.usage,
                                     tags,
