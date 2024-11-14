@@ -15,7 +15,9 @@ import {
     parseNamedArguments,
     runConsole,
     getInteractiveIO,
+    StopWatch,
     NamedArgs,
+    millisecondsToString,
 } from "interactive-app";
 import {
     asyncArray,
@@ -30,6 +32,7 @@ import { timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
 import {
+    argPause,
     argConcurrency,
     argDestFile,
     argMinScore,
@@ -277,6 +280,7 @@ export async function runChatMemory(): Promise<void> {
         history,
         replay,
         knowledge,
+        extract,
         buildIndex,
         topics,
         entities,
@@ -511,6 +515,104 @@ export async function runChatMemory(): Promise<void> {
             }
         }
         printer.writeLine(context.conversationName);
+    }
+    interface IMessageData {
+        content: string;
+        id?: string;
+        section_title?: string;
+        speaker?: string;
+    }
+    interface IExtractedData {
+        knowledge: knowLib.conversation.KnowledgeResponse;
+        message: string;
+        id?: string | undefined;
+        description?: string | undefined;
+    }
+    function extractDef(): CommandMetadata {
+        return {
+            description:
+                "Extract knowledge from the messages in the current conversation",
+            options: {
+                maxTurns: argNum("Number of turns to run"),
+                pause: argPause(),
+                logFile: argDestFile("Log file for extraction data"),
+                inFile: argSourceFile("Input file with messages"),
+            },
+        };
+    }
+    commands.extract.metadata = extractDef();
+    async function extract(args: string[], _io: InteractiveIo) {
+        const namedArgs = parseNamedArguments(args, knowledgeDef());
+        const logFile = namedArgs.logFile as string;
+        const inFile = namedArgs.inFile as string;
+        if (!logFile || !inFile) {
+            printer.writeError("Missing logFile or inFile");
+            return;
+        }
+        const fullInPath = path.join(context.storePath, inFile);
+        const inData = JSON.parse(
+            fs.readFileSync(fullInPath, "utf8"),
+        ) as IMessageData[];
+        // open log file for writing
+        const logPath = path.join(context.storePath, logFile);
+        const logStream = fs.createWriteStream(logPath);
+        const extractor = conversation.createKnowledgeExtractor(
+            context.models.chatModel,
+            {
+                maxContextLength: context.maxCharsPerChunk,
+                mergeActionKnowledge: false,
+            },
+        );
+        const extractedData = [] as IExtractedData[];
+        // extract from each record in inData and write to the log file
+        let count = 0;
+        const maxTurns = namedArgs.maxTurns;
+        const clock = new StopWatch();
+        let totalElapsed = 0;
+        clock.start();
+        for (const record of inData) {
+            let msg = record.content;
+            if (record.speaker) {
+                msg = `${record.speaker}: ${msg}`;
+            }
+            let knowledge: knowLib.conversation.KnowledgeResponse | undefined;
+            knowledge = await extractor.extract(msg).catch((err) => {
+                printer.writeError(`Error extracting knowledge: ${err}`);
+                return undefined;
+            });
+
+            if (knowledge) {
+                const data = {
+                    knowledge,
+                    message: msg,
+                    id: record.id,
+                    description: record.section_title,
+                };
+                extractedData.push(data);
+                count++;
+            }
+            if (maxTurns && count >= maxTurns) {
+                break;
+            }
+            // write elapsed time every 10 records
+            if (count % 10 === 0) {
+                clock.stop();
+                totalElapsed += clock.elapsedMs;
+                printer.writeTiming(chalk.cyan, clock, "last 10 records");
+                // write out elapsed time in seconds
+                printer.writeLine(
+                    `Processed ${count} records with total elapsed time: ${millisecondsToString(
+                        totalElapsed,
+                        "s",
+                    )}`,
+                );
+                clock.start();
+            }
+        }
+        clock.stop();
+        const json = JSON.stringify(extractedData, null, 2);
+        logStream.write(json);
+        logStream.close();
     }
 
     function knowledgeDef(): CommandMetadata {
