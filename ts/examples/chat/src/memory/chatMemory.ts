@@ -589,8 +589,8 @@ export async function runChatMemory(): Promise<void> {
                     description: record.section_title,
                 };
                 extractedData.push(data);
+                count++;
             }
-            count++;
             if (maxTurns && count >= maxTurns) {
                 break;
             }
