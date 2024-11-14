@@ -4,7 +4,7 @@
 import * as fs from "fs";
 import chalk from "chalk";
 import { similarity, SimilarityType } from "typeagent";
-import { SymbolNode, SchemaParser } from "schema-parser";
+import { SymbolNode, SchemaParser } from "action-schema";
 
 export interface StatsResult {
     request: string;

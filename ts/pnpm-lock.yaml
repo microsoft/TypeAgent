@@ -147,25 +147,6 @@ importers:
         specifier: ^5.4.2
         version: 5.4.3
 
-  examples/parserTest:
-    dependencies:
-      copyfiles:
-        specifier: ^2.4.1
-        version: 2.4.1
-      schema-parser:
-        specifier: workspace:*
-        version: link:../../packages/schemaParser
-    devDependencies:
-      '@types/node':
-        specifier: ^20.11.17
-        version: 20.11.20
-      rimraf:
-        specifier: ^5.0.5
-        version: 5.0.5
-      typescript:
-        specifier: ^5.4.2
-        version: 5.4.3
-
   examples/playground:
     dependencies:
       aiclient:
@@ -199,6 +180,9 @@ importers:
 
   examples/schemaStudio:
     dependencies:
+      action-schema:
+        specifier: workspace:*
+        version: link:../../packages/actionSchema
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
@@ -211,9 +195,6 @@ importers:
       schema-author:
         specifier: workspace:*
         version: link:../../packages/schemaAuthor
-      schema-parser:
-        specifier: workspace:*
-        version: link:../../packages/schemaParser
       typeagent:
         specifier: workspace:*
         version: link:../../packages/typeagent
@@ -323,75 +304,11 @@ importers:
         specifier: ^5.0.4
         version: 5.0.4(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0)
 
-  examples/viewMarkdown:
-    dependencies:
-      agent-dispatcher:
-        specifier: workspace:*
-        version: link:../../packages/dispatcher
-      chalk:
-        specifier: ^5.3.0
-        version: 5.3.0
-      debug:
-        specifier: ^4.3.4
-        version: 4.3.4(supports-color@8.1.1)
-      express:
-        specifier: ^4.21.1
-        version: 4.21.1
-      katex:
-        specifier: ^0.16.11
-        version: 0.16.11
-      markdown-it:
-        specifier: ^14.1.0
-        version: 14.1.0
-      markdown-it-texmath:
-        specifier: ^1.0.0
-        version: 1.0.0
-    devDependencies:
-      '@types/debug':
-        specifier: ^4.1.10
-        version: 4.1.10
-      '@types/jest':
-        specifier: ^29.5.7
-        version: 29.5.7
-      '@types/katex':
-        specifier: ^0.16.7
-        version: 0.16.7
-      '@types/markdown-it':
-        specifier: ^14.1.2
-        version: 14.1.2
-      '@types/node':
-        specifier: ^18.18.7
-        version: 18.18.7
-      copy-webpack-plugin:
-        specifier: ^12.0.1
-        version: 12.0.2(webpack@5.94.0(webpack-cli@5.1.4))
-      jest:
-        specifier: ^29.7.0
-        version: 29.7.0(@types/node@18.18.7)(ts-node@10.9.1(@types/node@18.18.7)(typescript@5.4.3))
-      prettier:
-        specifier: ^3.2.5
-        version: 3.2.5
-      rimraf:
-        specifier: ^5.0.5
-        version: 5.0.5
-      ts-loader:
-        specifier: ^9.5.1
-        version: 9.5.1(typescript@5.4.3)(webpack@5.94.0(webpack-cli@5.1.4))
-      typescript:
-        specifier: ^5.4.2
-        version: 5.4.3
-      webpack:
-        specifier: ^5.94.0
-        version: 5.94.0(webpack-cli@5.1.4)
-      webpack-cli:
-        specifier: ^5.1.4
-        version: 5.1.4(webpack-dev-server@5.0.4)(webpack@5.94.0)
-      webpack-dev-server:
-        specifier: ^5.0.4
-        version: 5.0.4(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0)
-
   examples/vscodeSchemaGen:
     dependencies:
+      action-schema:
+        specifier: workspace:*
+        version: link:../../packages/actionSchema
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
@@ -407,9 +324,6 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
-      schema-parser:
-        specifier: workspace:*
-        version: link:../../packages/schemaParser
       typeagent:
         specifier: workspace:*
         version: link:../../packages/typeagent
@@ -472,6 +386,28 @@ importers:
       webpack-dev-server:
         specifier: ^5.0.4
         version: 5.0.4(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0)
+
+  packages/actionSchema:
+    dependencies:
+      debug:
+        specifier: ^4.3.4
+        version: 4.3.4(supports-color@8.1.1)
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.3)
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.3
+    devDependencies:
+      '@types/debug':
+        specifier: ^4.1.10
+        version: 4.1.10
+      '@types/node':
+        specifier: ^18.18.7
+        version: 18.18.7
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
 
   packages/agentSdk:
     dependencies:
@@ -930,6 +866,18 @@ importers:
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
+      express:
+        specifier: ^4.21.1
+        version: 4.21.1
+      katex:
+        specifier: ^0.16.11
+        version: 0.16.11
+      markdown-it:
+        specifier: ^14.1.0
+        version: 14.1.0
+      markdown-it-texmath:
+        specifier: ^1.0.0
+        version: 1.0.0
       typeagent:
         specifier: workspace:*
         version: link:../../typeagent
@@ -937,18 +885,54 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.3)
     devDependencies:
+      '@types/debug':
+        specifier: ^4.1.10
+        version: 4.1.10
+      '@types/express':
+        specifier: ^4.17.17
+        version: 4.17.21
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.7
+      '@types/katex':
+        specifier: ^0.16.7
+        version: 0.16.7
+      '@types/markdown-it':
+        specifier: ^14.1.2
+        version: 14.1.2
+      '@types/node':
+        specifier: ^18.18.7
+        version: 18.18.7
+      copy-webpack-plugin:
+        specifier: ^12.0.1
+        version: 12.0.2(webpack@5.94.0(webpack-cli@5.1.4))
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@18.18.7)(ts-node@10.9.1(@types/node@18.18.7)(typescript@5.4.3))
       prettier:
         specifier: ^3.2.5
         version: 3.2.5
       rimraf:
         specifier: ^5.0.5
         version: 5.0.5
+      ts-loader:
+        specifier: ^9.5.1
+        version: 9.5.1(typescript@5.4.3)(webpack@5.94.0(webpack-cli@5.1.4))
       typescript:
         specifier: ^5.4.2
         version: 5.4.3
+      webpack:
+        specifier: ^5.94.0
+        version: 5.94.0(webpack-cli@5.1.4)
+      webpack-cli:
+        specifier: ^5.1.4
+        version: 5.1.4(webpack-dev-server@5.0.4)(webpack@5.94.0)
+      webpack-dev-server:
+        specifier: ^5.0.4
+        version: 5.0.4(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0)
 
   packages/agents/photo:
     dependencies:
@@ -1234,6 +1218,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      action-schema:
+        specifier: workspace:*
+        version: link:../actionSchema
       agent-cache:
         specifier: workspace:*
         version: link:../cache
@@ -1460,6 +1447,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      action-schema:
+        specifier: workspace:*
+        version: link:../actionSchema
       agent-cache:
         specifier: workspace:*
         version: link:../cache
@@ -1523,9 +1513,6 @@ importers:
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2
-      schema-parser:
-        specifier: workspace:*
-        version: link:../schemaParser
       telemetry:
         specifier: workspace:*
         version: link:../telemetry
@@ -1685,12 +1672,12 @@ importers:
 
   packages/schemaAuthor:
     dependencies:
+      action-schema:
+        specifier: workspace:*
+        version: link:../actionSchema
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
-      schema-parser:
-        specifier: workspace:*
-        version: link:../schemaParser
       typeagent:
         specifier: workspace:*
         version: link:../typeagent
@@ -1710,28 +1697,6 @@ importers:
       typescript:
         specifier: ^5.4.2
         version: 5.4.3
-
-  packages/schemaParser:
-    dependencies:
-      debug:
-        specifier: ^4.3.4
-        version: 4.3.4(supports-color@8.1.1)
-      typechat:
-        specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.3)
-      typescript:
-        specifier: ^5.4.2
-        version: 5.4.3
-    devDependencies:
-      '@types/debug':
-        specifier: ^4.1.10
-        version: 4.1.10
-      '@types/node':
-        specifier: ^18.18.7
-        version: 18.18.7
-      rimraf:
-        specifier: ^5.0.5
-        version: 5.0.5
 
   packages/shell:
     dependencies:

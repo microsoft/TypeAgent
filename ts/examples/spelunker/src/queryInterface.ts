@@ -7,7 +7,6 @@ import * as iapp from "interactive-app";
 import * as knowLib from "knowledge-processor";
 import path from "path";
 import { ScoredItem } from "typeagent";
-
 import { ChunkyIndex } from "./chunkyIndex.js";
 import { CodeDocumentation } from "./codeDocSchema.js";
 import { Chunk, ChunkId } from "./pythonChunker.js";
@@ -74,9 +73,38 @@ export async function runQueryInterface(
         await processQuery(query, chunkyIndex, io, options);
     }
 
+    function commonOptions(): Record<string, iapp.ArgDef> {
+        return {
+            verbose: {
+                description: "More verbose output",
+                type: "boolean",
+            },
+            filter: {
+                description: "Filter by keyword",
+                type: "string",
+            },
+            query: {
+                description: "Natural language query",
+                type: "string",
+            },
+            maxHits: {
+                description:
+                    "Maximum number of hits to return (only for query)",
+                type: "integer",
+                defaultValue: 10,
+            },
+            minScore: {
+                description: "Minimum score to return (only for query)",
+                type: "number",
+                defaultValue: 0.7,
+            },
+        };
+    }
+
     function keywordsDef(): iapp.CommandMetadata {
         return {
             description: "Show all recorded keywords and their postings.",
+            options: commonOptions(),
         };
     }
     handlers.keywords.metadata = keywordsDef();
@@ -90,6 +118,7 @@ export async function runQueryInterface(
     function topicsDef(): iapp.CommandMetadata {
         return {
             description: "Show all recorded topics and their postings.",
+            options: commonOptions(),
         };
     }
     handlers.topics.metadata = topicsDef();
@@ -103,6 +132,7 @@ export async function runQueryInterface(
     function goalsDef(): iapp.CommandMetadata {
         return {
             description: "Show all recorded goals and their postings.",
+            options: commonOptions(),
         };
     }
     handlers.goals.metadata = goalsDef();
@@ -116,6 +146,7 @@ export async function runQueryInterface(
     function dependenciesDef(): iapp.CommandMetadata {
         return {
             description: "Show all recorded dependencies and their postings.",
+            options: commonOptions(),
         };
     }
     handlers.dependencies.metadata = dependenciesDef();
@@ -131,24 +162,63 @@ export async function runQueryInterface(
         io: iapp.InteractiveIo,
         indexName: string, // E.g. "keywords"
     ): Promise<void> {
-        // const namedArgs = iapp.parseNamedArguments(args, keywordsDef());
-        const index: knowLib.TextIndex<string, string> = (chunkyIndex as any)[
+        const namedArgs = iapp.parseNamedArguments(args, keywordsDef());
+        const index: knowLib.TextIndex<string, ChunkId> = (chunkyIndex as any)[
             indexName + "Index"
         ];
-        const iterator: AsyncIterableIterator<knowLib.TextBlock<string>> =
-            index.entries();
-        const values: knowLib.TextBlock<string>[] = [];
-        for await (const value of iterator) {
-            values.push(value);
+        let matches: ScoredItem<knowLib.TextBlock<ChunkId>>[] = [];
+        if (namedArgs.query) {
+            matches = await index.nearestNeighborsPairs(
+                namedArgs.query,
+                namedArgs.maxHits,
+                namedArgs.minScore,
+            );
+            // TODO: Merge matches with the same score and item.value
+        } else {
+            for await (const textBlock of index.entries()) {
+                matches.push({
+                    score: 1.0,
+                    item: textBlock,
+                });
+            }
         }
-        if (!values.length) {
+        let hits: ScoredItem<knowLib.TextBlock<ChunkId>>[] = [];
+        if (!namedArgs.filter) {
+            hits = matches;
+        } else {
+            for await (const match of matches) {
+                if (namedArgs.filter) {
+                    const valueWords: string[] = match.item.value
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .map((w) => w.toLowerCase());
+                    const filterWords: string[] = (namedArgs.filter as string)
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .map((w) => w.toLowerCase());
+                    if (
+                        filterWords.every((word) => valueWords.includes(word))
+                    ) {
+                        if (match.score === 1.0) {
+                            match.score =
+                                filterWords.length / valueWords.length;
+                        }
+                        hits.push(match);
+                    }
+                }
+            }
+        }
+        if (!hits.length) {
             io.writer.writeLine(`No ${indexName}.`);
         } else {
-            io.writer.writeLine(`Found ${values.length} ${indexName}.`);
-            values.sort();
-            for (const value of values) {
+            io.writer.writeLine(`Found ${hits.length} ${indexName}.`);
+            hits.sort((a, b) => {
+                if (a.score != b.score) return b.score - a.score;
+                return a.item.value.localeCompare(b.item.value);
+            });
+            for (const hit of hits) {
                 io.writer.writeLine(
-                    `${value.value} :: ${value.sourceIds?.toString().replace(/,/g, ", ")}`,
+                    `${hit.item.value} (${hit.score.toFixed(3)}) :: ${(hit.item.sourceIds || []).join(", ")}`,
                 );
             }
         }
@@ -199,26 +269,21 @@ async function processQuery(
         if (options.verbose)
             io.writer.writeLine(`[Searching ${indexType} index...]`);
         // TODO: try/catch like below? Embeddings can fail too...
-        const hits: ScoredItem<ChunkId[]>[] = await index.nearestNeighbors(
-            input,
-            options.maxHits,
-            options.minScore,
-        );
-        let exactMatch: ChunkId = "";
+        const hits: ScoredItem<knowLib.TextBlock<ChunkId>>[] =
+            await index.nearestNeighborsPairs(
+                input,
+                options.maxHits * 5,
+                options.minScore,
+            );
         for (const hit of hits) {
-            for (const id of hit.item) {
-                if (id !== exactMatch) {
-                    if (options.verbose) {
-                        io.writer.writeLine(
-                            `  ${indexType} hit: ${id} (${hit.score.toFixed(3)})`,
-                        );
-                    }
-                    const oldScore = hitTable.get(id) || 0.0;
-                    hitTable.set(id, oldScore + hit.score);
-                }
+            if (options.verbose) {
+                io.writer.writeLine(
+                    `  ${hit.item.value} (${hit.score.toFixed(3)}) -- ${hit.item.sourceIds}`,
+                );
             }
-            if (hit.score === 1.0) {
-                exactMatch = hit.item[0]; // TODO: Can there be more than one exact match?
+            for (const id of hit.item.sourceIds || []) {
+                const oldScore = hitTable.get(id) || 0.0;
+                hitTable.set(id, oldScore + hit.score);
             }
         }
     }
@@ -228,13 +293,15 @@ async function processQuery(
         if (options.verbose) io.writer.writeLine(`[Searching code index...]`);
         const hits: ScoredItem<ChunkId>[] = await chunkyIndex.codeIndex!.find(
             input,
-            options.maxHits,
+            options.maxHits * 5,
             options.minScore,
         );
         for (const hit of hits) {
             if (options.verbose) {
+                const comment = (await chunkyIndex.summaryFolder!.get(hit.item))
+                    ?.comments?.[0]?.comment;
                 io.writer.writeLine(
-                    `  code hit: ${hit.item} (${hit.score.toFixed(3)})`,
+                    `  ${hit.item} (${hit.score.toFixed(3)}) -- ${comment?.slice(0, 100) ?? "[no data]"}`,
                 );
             }
             hitTable.set(hit.item, hit.score);
@@ -262,7 +329,7 @@ async function processQuery(
             hit.item,
         );
         if (!chunk) {
-            io.writer.writeLine(`${hit} --> [No data]`);
+            io.writer.writeLine(`${hit.item} --> [No data]`);
             continue;
         }
 
