@@ -323,73 +323,6 @@ importers:
         specifier: ^5.0.4
         version: 5.0.4(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0)
 
-  examples/viewMarkdown:
-    dependencies:
-      agent-dispatcher:
-        specifier: workspace:*
-        version: link:../../packages/dispatcher
-      chalk:
-        specifier: ^5.3.0
-        version: 5.3.0
-      debug:
-        specifier: ^4.3.4
-        version: 4.3.4(supports-color@8.1.1)
-      express:
-        specifier: ^4.21.1
-        version: 4.21.1
-      katex:
-        specifier: ^0.16.11
-        version: 0.16.11
-      markdown-it:
-        specifier: ^14.1.0
-        version: 14.1.0
-      markdown-it-texmath:
-        specifier: ^1.0.0
-        version: 1.0.0
-    devDependencies:
-      '@types/debug':
-        specifier: ^4.1.10
-        version: 4.1.10
-      '@types/jest':
-        specifier: ^29.5.7
-        version: 29.5.7
-      '@types/katex':
-        specifier: ^0.16.7
-        version: 0.16.7
-      '@types/markdown-it':
-        specifier: ^14.1.2
-        version: 14.1.2
-      '@types/node':
-        specifier: ^18.18.7
-        version: 18.18.7
-      copy-webpack-plugin:
-        specifier: ^12.0.1
-        version: 12.0.2(webpack@5.94.0(webpack-cli@5.1.4))
-      jest:
-        specifier: ^29.7.0
-        version: 29.7.0(@types/node@18.18.7)(ts-node@10.9.1(@types/node@18.18.7)(typescript@5.4.3))
-      prettier:
-        specifier: ^3.2.5
-        version: 3.2.5
-      rimraf:
-        specifier: ^5.0.5
-        version: 5.0.5
-      ts-loader:
-        specifier: ^9.5.1
-        version: 9.5.1(typescript@5.4.3)(webpack@5.94.0(webpack-cli@5.1.4))
-      typescript:
-        specifier: ^5.4.2
-        version: 5.4.3
-      webpack:
-        specifier: ^5.94.0
-        version: 5.94.0(webpack-cli@5.1.4)
-      webpack-cli:
-        specifier: ^5.1.4
-        version: 5.1.4(webpack-dev-server@5.0.4)(webpack@5.94.0)
-      webpack-dev-server:
-        specifier: ^5.0.4
-        version: 5.0.4(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0)
-
   examples/vscodeSchemaGen:
     dependencies:
       aiclient:
@@ -943,9 +876,6 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
-      '@types/express':
-        specifier: ^4.17.17
-        version: 4.17.21
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
@@ -974,6 +904,9 @@ importers:
       '@types/debug':
         specifier: ^4.1.10
         version: 4.1.10
+      '@types/express':
+        specifier: ^4.17.17
+        version: 4.17.21
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.7
@@ -9748,7 +9681,7 @@ snapshots:
       webpack: 5.94.0(webpack-cli@5.1.4)
       webpack-cli: 5.1.4(webpack@5.94.0)
 
-  '@webpack-cli/serve@2.0.5(webpack-cli@5.1.4(webpack-dev-server@5.0.4)(webpack@5.94.0))(webpack-dev-server@5.0.4(webpack-cli@5.1.4)(webpack@5.94.0))(webpack@5.94.0(webpack-cli@5.1.4))':
+  '@webpack-cli/serve@2.0.5(webpack-cli@5.1.4(webpack-dev-server@5.0.4)(webpack@5.94.0))(webpack-dev-server@5.0.4(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0))(webpack@5.94.0(webpack-cli@5.1.4))':
     dependencies:
       webpack: 5.94.0(webpack-cli@5.1.4)
       webpack-cli: 5.1.4(webpack-dev-server@5.0.4)(webpack@5.94.0)
@@ -14641,7 +14574,7 @@ snapshots:
       '@discoveryjs/json-ext': 0.5.7
       '@webpack-cli/configtest': 2.1.1(webpack-cli@5.1.4(webpack-dev-server@5.0.4)(webpack@5.94.0))(webpack@5.94.0(webpack-cli@5.1.4))
       '@webpack-cli/info': 2.0.2(webpack-cli@5.1.4(webpack-dev-server@5.0.4)(webpack@5.94.0))(webpack@5.94.0(webpack-cli@5.1.4))
-      '@webpack-cli/serve': 2.0.5(webpack-cli@5.1.4(webpack-dev-server@5.0.4)(webpack@5.94.0))(webpack-dev-server@5.0.4(webpack-cli@5.1.4)(webpack@5.94.0))(webpack@5.94.0(webpack-cli@5.1.4))
+      '@webpack-cli/serve': 2.0.5(webpack-cli@5.1.4(webpack-dev-server@5.0.4)(webpack@5.94.0))(webpack-dev-server@5.0.4(debug@4.3.4)(webpack-cli@5.1.4)(webpack@5.94.0))(webpack@5.94.0(webpack-cli@5.1.4))
       colorette: 2.0.20
       commander: 10.0.1
       cross-spawn: 7.0.3
