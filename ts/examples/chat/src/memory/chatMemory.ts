@@ -17,6 +17,7 @@ import {
     getInteractiveIO,
     StopWatch,
     NamedArgs,
+    millisecondsToString,
 } from "interactive-app";
 import {
     asyncArray,
@@ -567,6 +568,7 @@ export async function runChatMemory(): Promise<void> {
         let count = 0;
         const maxTurns = namedArgs.maxTurns;
         const clock = new StopWatch();
+        let totalElapsed = 0;
         clock.start();
         for (const record of inData) {
             let msg = record.content;
@@ -595,7 +597,19 @@ export async function runChatMemory(): Promise<void> {
             // write elapsed time every 10 records
             if (count % 10 === 0) {
                 clock.stop();
-                printer.writeTiming(chalk.cyan, clock, "Elapsed time");
+                totalElapsed += clock.elapsedMs;
+                printer.writeTiming(
+                    chalk.cyan,
+                    clock,
+                    `Processed ${count} records in time`,
+                );
+                // write out elapsed time in seconds
+                printer.writeLine(
+                    `Total elapsed time: ${millisecondsToString(
+                        totalElapsed,
+                        "s",
+                    )}`,
+                );
                 clock.start();
             }
         }
