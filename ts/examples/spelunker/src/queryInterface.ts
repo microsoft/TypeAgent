@@ -212,7 +212,10 @@ export async function runQueryInterface(
             io.writer.writeLine(`No ${indexName}.`);
         } else {
             io.writer.writeLine(`Found ${hits.length} ${indexName}.`);
-            hits.sort((a, b) => a.item.value.localeCompare(b.item.value));
+            hits.sort((a, b) => {
+                if (a.score != b.score) return b.score - a.score;
+                return a.item.value.localeCompare(b.item.value);
+            });
             for (const hit of hits) {
                 io.writer.writeLine(
                     `${hit.item.value} (${hit.score.toFixed(3)}) :: ${(hit.item.sourceIds || []).join(", ")}`,
@@ -278,7 +281,7 @@ async function processQuery(
                     `  ${hit.item.value} (${hit.score.toFixed(3)}) -- ${hit.item.sourceIds}`,
                 );
             }
-            for (const id of hit.item.value) {
+            for (const id of hit.item.sourceIds || []) {
                 const oldScore = hitTable.get(id) || 0.0;
                 hitTable.set(id, oldScore + hit.score);
             }
@@ -298,7 +301,7 @@ async function processQuery(
                 const comment = (await chunkyIndex.summaryFolder!.get(hit.item))
                     ?.comments?.[0]?.comment;
                 io.writer.writeLine(
-                    `  ${hit.item} (${hit.score.toFixed(3)}) -- ${comment?.slice(0, 100)}`,
+                    `  ${hit.item} (${hit.score.toFixed(3)}) -- ${comment?.slice(0, 100) ?? "[no data]"}`,
                 );
             }
             hitTable.set(hit.item, hit.score);
@@ -326,7 +329,7 @@ async function processQuery(
             hit.item,
         );
         if (!chunk) {
-            io.writer.writeLine(`${hit} --> [No data]`);
+            io.writer.writeLine(`${hit.item} --> [No data]`);
             continue;
         }
 
