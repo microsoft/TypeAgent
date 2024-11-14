@@ -7,7 +7,6 @@ import * as iapp from "interactive-app";
 import * as knowLib from "knowledge-processor";
 import path from "path";
 import { ScoredItem } from "typeagent";
-
 import { ChunkyIndex } from "./chunkyIndex.js";
 import { CodeDocumentation } from "./codeDocSchema.js";
 import { Chunk, ChunkId } from "./pythonChunker.js";
@@ -74,9 +73,38 @@ export async function runQueryInterface(
         await processQuery(query, chunkyIndex, io, options);
     }
 
+    function commonOptions(): Record<string, iapp.ArgDef> {
+        return {
+            verbose: {
+                description: "More verbose output",
+                type: "boolean",
+            },
+            filter: {
+                description: "Filter by keyword",
+                type: "string",
+            },
+            query: {
+                description: "Natural language query",
+                type: "string",
+            },
+            maxHits: {
+                description:
+                    "Maximum number of hits to return (only for query)",
+                type: "integer",
+                defaultValue: 10,
+            },
+            minScore: {
+                description: "Minimum score to return (only for query)",
+                type: "number",
+                defaultValue: 0.7,
+            },
+        };
+    }
+
     function keywordsDef(): iapp.CommandMetadata {
         return {
             description: "Show all recorded keywords and their postings.",
+            options: commonOptions(),
         };
     }
     handlers.keywords.metadata = keywordsDef();
@@ -90,6 +118,7 @@ export async function runQueryInterface(
     function topicsDef(): iapp.CommandMetadata {
         return {
             description: "Show all recorded topics and their postings.",
+            options: commonOptions(),
         };
     }
     handlers.topics.metadata = topicsDef();
@@ -103,6 +132,7 @@ export async function runQueryInterface(
     function goalsDef(): iapp.CommandMetadata {
         return {
             description: "Show all recorded goals and their postings.",
+            options: commonOptions(),
         };
     }
     handlers.goals.metadata = goalsDef();
@@ -116,6 +146,7 @@ export async function runQueryInterface(
     function dependenciesDef(): iapp.CommandMetadata {
         return {
             description: "Show all recorded dependencies and their postings.",
+            options: commonOptions(),
         };
     }
     handlers.dependencies.metadata = dependenciesDef();
@@ -131,24 +162,56 @@ export async function runQueryInterface(
         io: iapp.InteractiveIo,
         indexName: string, // E.g. "keywords"
     ): Promise<void> {
-        // const namedArgs = iapp.parseNamedArguments(args, keywordsDef());
-        const index: knowLib.TextIndex<string, string> = (chunkyIndex as any)[
+        const namedArgs = iapp.parseNamedArguments(args, keywordsDef());
+        const index: knowLib.TextIndex<string, ChunkId> = (chunkyIndex as any)[
             indexName + "Index"
         ];
-        const iterator: AsyncIterableIterator<knowLib.TextBlock<string>> =
-            index.entries();
-        const values: knowLib.TextBlock<string>[] = [];
-        for await (const value of iterator) {
-            values.push(value);
+        let matches: ScoredItem<knowLib.TextBlock<ChunkId>>[] = [];
+        if (namedArgs.query) {
+            matches = await index.nearestNeighborsPairs(
+                namedArgs.query,
+                namedArgs.maxHits,
+                namedArgs.minScore,
+            );
+            // TODO: Merge matches with the same score and item.value
+        } else {
+            for await (const textBlock of index.entries()) {
+                matches.push({
+                    score: 1.0,
+                    item: textBlock,
+                });
+            }
         }
-        if (!values.length) {
+        let hits: ScoredItem<knowLib.TextBlock<ChunkId>>[] = [];
+        if (!namedArgs.filter) {
+            hits = matches;
+        } else {
+            for await (const hit of matches) {
+                if (namedArgs.filter) {
+                    const valueWords: string[] = hit.item.value
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .map((w) => w.toLowerCase());
+                    const filterWords: string[] = (namedArgs.filter as string)
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .map((w) => w.toLowerCase());
+                    if (
+                        filterWords.every((word) => valueWords.includes(word))
+                    ) {
+                        hits.push(hit);
+                    }
+                }
+            }
+        }
+        if (!hits.length) {
             io.writer.writeLine(`No ${indexName}.`);
         } else {
-            io.writer.writeLine(`Found ${values.length} ${indexName}.`);
-            values.sort();
-            for (const value of values) {
+            io.writer.writeLine(`Found ${hits.length} ${indexName}.`);
+            hits.sort((a, b) => a.item.value.localeCompare(b.item.value));
+            for (const v of hits) {
                 io.writer.writeLine(
-                    `${value.value} :: ${value.sourceIds?.toString().replace(/,/g, ", ")}`,
+                    `${v.item.value} (${v.score.toFixed(3)}) :: ${(v.item.sourceIds || []).join(", ")}`,
                 );
             }
         }
