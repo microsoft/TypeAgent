@@ -38,6 +38,7 @@ import {
     argPause,
     argSourceFileOrFolder,
     indexingStatsToCsv,
+    pause,
 } from "./common.js";
 import chalk from "chalk";
 import { convertMsgFiles } from "./importer.js";
@@ -106,7 +107,7 @@ export function createEmailCommands(
                 chunkSize: argChunkSize(context.maxCharsPerChunk),
                 maxMessages: argNum("Max messages", 25),
                 index: argBool("Index imported files", true),
-                pause: argPause(),
+                pauseMs: argPause(),
             },
         };
     }
@@ -240,6 +241,10 @@ export function createEmailCommands(
 
                     context.printer.writeInColor(chalk.green, status);
                     context.printer.writeLine();
+
+                    if (namedArgs.pauseMs > 0) {
+                        await pause(namedArgs.pauseMs);
+                    }
                 },
                 maxMessages,
             );
