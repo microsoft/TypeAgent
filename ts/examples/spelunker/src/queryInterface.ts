@@ -200,7 +200,8 @@ export async function runQueryInterface(
                         filterWords.every((word) => valueWords.includes(word))
                     ) {
                         if (match.score === 1.0) {
-                            match.score = filterWords.length / valueWords.length;
+                            match.score =
+                                filterWords.length / valueWords.length;
                         }
                         hits.push(match);
                     }
