@@ -297,6 +297,8 @@
                 "-actionreqEmbeddingsFile",
                 "",
                 "-statGenFile",
+                "",
+                "-schemaFile",
                 ""
             ],
             "console": "externalTerminal",
