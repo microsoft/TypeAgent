@@ -12,11 +12,19 @@ class DataReader:
     def load_text_file(self, filename: str) -> Dataset:
         with open(filename, "r") as file:
             raw_data = json.load(file)
-            dataset = Dataset.from_dict(raw_data)
+
+            dataset = None
+            if isinstance(raw_data, list):
+                dataset = Dataset.from_list(raw_data)
+
+            if isinstance(raw_data, dict):
+                dataset = Dataset.from_dict(raw_data)
+
             self.dataset = dataset
             return dataset
 
 if __name__ == "__main__":
+
     parser = argparse.ArgumentParser(description="Read data from a file.")
     parser.add_argument("filename", type=str, help="The name of the file to read from.")
 

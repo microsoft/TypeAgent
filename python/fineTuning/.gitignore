@@ -3,3 +3,4 @@ venv/
 *.txt
 .env
 hf_cache
+*.json

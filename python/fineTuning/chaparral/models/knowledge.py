@@ -14,10 +14,10 @@ class Quantity:
         amount = data.get("amount", None)
         units = data.get("units", None)
 
-        if not amount:
+        if amount == None:
             raise ValueError("Invalid quantity: missing amount")
         
-        if not units:
+        if units == None:
             raise ValueError("Invalid quantity: missing units")
 
         return cls(amount, units)
@@ -61,7 +61,7 @@ class Facet:
         name = data.get("name", None)
         value = data["value"]
 
-        if not name:
+        if name == None:
             raise ValueError("Invalid facet: missing name")
 
         if value == None:
@@ -94,10 +94,10 @@ class ActionParam:
         name = data.get("name", None)
         value = data.get("value", None)
 
-        if not name:
+        if name == None:
             raise ValueError("Invalid action param: missing name")
         
-        if not value:
+        if value == None:
             raise ValueError("Invalid action param: missing value")
 
         value = Value(value)
@@ -130,10 +130,10 @@ class Action:
         params = data.get("params", None)
         subjectEntityFacet = data.get("subjectEntityFacet", None)
 
-        if not verbs:
+        if verbs == None:
             raise ValueError("Invalid action: missing verbs")
         
-        if not verbTense:
+        if verbTense == None:
             raise ValueError("Invalid action: missing verbTense")
         
         if params:
@@ -183,10 +183,10 @@ class ConcreteEntity:
         type = data.get("type", None)
         facets = data.get("facets", None)
 
-        if not name:
+        if name == None:
             raise ValueError("Invalid entity: missing name")
         
-        if not type:
+        if type == None:
             raise ValueError("Invalid entity: missing type")
 
         if facets:

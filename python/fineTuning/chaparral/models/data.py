@@ -3,6 +3,7 @@
 
 from dataclasses import dataclass
 from chaparral.models.knowledge import KnowledgeResponse
+from typing import List
 
 @dataclass
 class InfoPair:
@@ -52,8 +53,23 @@ class Dataset:
 
         return cls(prompt, info_pairs)
     
+    @classmethod
+    def from_list(cls, data: List):
+        prompt = ""
+        info_pairs = [InfoPair.from_dict(pair) for pair in data]
+
+        return cls(prompt, info_pairs)
+    
     def to_dict(self):
         return {
             "prompt": self.prompt,
             "infoPairs": [pair.to_dict() for pair in self.info_pairs]
         }
+    
+    def create_train_eval_sets(self, split_ratio: float = 0.8):
+        train_size = int(len(self.info_pairs) * split_ratio)
+
+        train_set = Dataset(self.prompt, self.info_pairs[:train_size])
+        eval_set = Dataset(self.prompt, self.info_pairs[train_size:])
+
+        return train_set, eval_set
