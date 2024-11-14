@@ -13,11 +13,11 @@ import { MarkdownContent } from "./markdownDocumentSchema.js";
 export async function createMarkdownAgent(
     model: "GPT_35_TURBO" | "GPT_4" | "GPT-v" | "GPT_4o",
 ) {
-    const packageRoot = path.join("..");
+    const packageRoot = path.join("../../");
     const schemaText = await fs.promises.readFile(
         fileURLToPath(
             new URL(
-                path.join(packageRoot, "./src/markdownDocumentSchema.ts"),
+                path.join(packageRoot, "./src/agent/markdownDocumentSchema.ts"),
                 import.meta.url,
             ),
         ),
