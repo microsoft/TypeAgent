@@ -544,7 +544,7 @@ export async function createTextIndex<
         value: string,
         maxMatches: number,
         minScore?: number,
-    ): Promise<ScoredItem<knowLib.KVPair<TTextId, TSourceId[]>>[]> {
+    ): Promise<ScoredItem<TextBlock<TSourceId>>[]> {
         const matches = await nearestNeighborsTextIds(
             value,
             maxMatches,
@@ -554,8 +554,9 @@ export async function createTextIndex<
             return {
                 score: m.score,
                 item: {
-                    key: isIdInt ? m.item : serializer.serialize(m.item),
-                    value: postingsTable.getSync(m.item) ?? [],
+                    type: TextBlockType.Sentence,
+                    value: isIdInt ? m.item : serializer.serialize(m.item),
+                    sourceIds: postingsTable.getSync(m.item) ?? [],
                 },
             };
         });

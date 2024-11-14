@@ -84,8 +84,6 @@ export async function createIndexFolder<TValueId>(
     }
 }
 
-export type KVPair<TKey, TValue> = { key: TKey; value: TValue };
-
 export interface TextIndex<TTextId = any, TSourceId = any> {
     text(): IterableIterator<string>;
     ids(): AsyncIterableIterator<TTextId>;
@@ -143,7 +141,7 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
         value: string,
         maxMatches: number,
         minScore?: number,
-    ): Promise<ScoredItem<KVPair<TTextId, TSourceId[]>>[]>;
+    ): Promise<ScoredItem<TextBlock<TSourceId>>[]>;
     remove(textId: TTextId, postings: TSourceId | TSourceId[]): Promise<void>;
 }
 
@@ -505,22 +503,26 @@ export async function createTextIndex<TSourceId = any>(
     }
 
     async function nearestNeighborsPairs(
-        value: string,
+        query: string,
         maxMatches: number,
         minScore?: number,
-    ): Promise<ScoredItem<KVPair<string, TSourceId[]>>[]> {
+    ): Promise<ScoredItem<TextBlock<TSourceId>>[]> {
         return removeUndefined(
             await asyncArray.mapAsync(
-                await nearestNeighborsText(value, maxMatches, minScore),
+                await nearestNeighborsText(query, maxMatches, minScore),
                 settings.concurrency,
                 async (m) => {
-                    const key = await entriesFolder.get(m.item);
-                    if (!key) return;
-                    const value = await postingFolder.get(m.item);
+                    const value = await entriesFolder.get(m.item);
                     if (!value) return;
+                    const sourceIds = await postingFolder.get(m.item);
+                    if (!sourceIds) return;
                     return {
                         score: m.score,
-                        item: { key, value },
+                        item: {
+                            type: TextBlockType.Sentence,
+                            value,
+                            sourceIds,
+                        },
                     };
                 },
             ),

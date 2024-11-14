@@ -199,7 +199,7 @@ async function processQuery(
         if (options.verbose)
             io.writer.writeLine(`[Searching ${indexType} index...]`);
         // TODO: try/catch like below? Embeddings can fail too...
-        const hits: ScoredItem<knowLib.KVPair<string, ChunkId[]>>[] =
+        const hits: ScoredItem<knowLib.TextBlock<ChunkId>>[] =
             await index.nearestNeighborsPairs(
                 input,
                 options.maxHits * 5,
@@ -208,7 +208,7 @@ async function processQuery(
         for (const hit of hits) {
             if (options.verbose) {
                 io.writer.writeLine(
-                    `  ${hit.item.key} (${hit.score.toFixed(3)}) -- ${hit.item.value}`,
+                    `  ${hit.item.value} (${hit.score.toFixed(3)}) -- ${hit.item.sourceIds}`,
                 );
             }
             for (const id of hit.item.value) {
