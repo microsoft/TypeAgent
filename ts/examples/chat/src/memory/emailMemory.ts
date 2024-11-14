@@ -180,6 +180,7 @@ export function createEmailCommands(
         context.printer.writeBullet(
             `Total chars: ${stats.totalStats.charCount}`,
         );
+        context.printer.writeCompletionStats(stats.totalStats.tokenStats);
         const csv = indexingStatsToCsv(stats.itemStats);
         if (namedArgs.destFile) {
             await fs.promises.writeFile(namedArgs.destFile, csv);

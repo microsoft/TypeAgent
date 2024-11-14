@@ -96,15 +96,19 @@ function getReservedConversation(
 }
 
 export function createModels(): Models {
-    const embeddingSettings = openai.apiSettingsFromEnv(
+    const chatModelSettings = openai.apiSettingsFromEnv(openai.ModelType.Chat);
+    chatModelSettings.retryPauseMs = 10000;
+    const embeddingModelSettings = openai.apiSettingsFromEnv(
         openai.ModelType.Embedding,
     );
-    embeddingSettings.retryPauseMs = 25 * 1000;
+    embeddingModelSettings.retryPauseMs = 25 * 1000;
 
     const models: Models = {
-        chatModel: openai.createChatModelDefault("chatMemory"),
+        chatModel: openai.createJsonChatModel(chatModelSettings, [
+            "chatMemory",
+        ]),
         embeddingModel: knowLib.createEmbeddingCache(
-            openai.createEmbeddingModel(embeddingSettings),
+            openai.createEmbeddingModel(embeddingModelSettings),
             1024,
         ),
         /*
