@@ -15,6 +15,7 @@ import {
     parseNamedArguments,
     runConsole,
     getInteractiveIO,
+    StopWatch,
 } from "interactive-app";
 import { asyncArray, dateTime, getFileName, readAllText } from "typeagent";
 import chalk, { ChalkInstance } from "chalk";
@@ -255,6 +256,7 @@ export async function runChatMemory(): Promise<void> {
         history,
         replay,
         knowledge,
+        extract,
         buildIndex,
         topics,
         entities,
@@ -490,6 +492,95 @@ export async function runChatMemory(): Promise<void> {
         }
         printer.writeLine(context.conversationName);
     }
+    interface IMessageData {
+        content: string;
+        id?: string;
+        section_title?: string;
+        speaker?: string;
+    }
+    interface IExtractedData {
+        knowledge: knowLib.conversation.KnowledgeResponse;
+        message: string;
+        id?: string | undefined;
+        description?: string | undefined;
+    }
+    function extractDef(): CommandMetadata {
+        return {
+            description:
+                "Extract knowledge from the messages in the current conversation",
+            options: {
+                maxTurns: argNum("Number of turns to run"),
+                pause: argPause(),
+                logFile: argDestFile("Log file for extraction data"),
+                inFile: argSourceFile("Input file with messages"),
+            },
+        };
+    }
+    commands.extract.metadata = extractDef();
+    async function extract(args: string[], _io: InteractiveIo) {
+        const namedArgs = parseNamedArguments(args, knowledgeDef());
+        const logFile = namedArgs.logFile as string;
+        const inFile = namedArgs.inFile as string;
+        if (!logFile || !inFile) {
+            printer.writeError("Missing logFile or inFile");
+            return;
+        }
+        const fullInPath = path.join(context.storePath, inFile);
+        const inData = JSON.parse(
+            fs.readFileSync(fullInPath, "utf8"),
+        ) as IMessageData[];
+        // open log file for writing
+        const logPath = path.join(context.storePath, logFile);
+        const logStream = fs.createWriteStream(logPath);
+        const extractor = conversation.createKnowledgeExtractor(
+            context.models.chatModel,
+            {
+                maxContextLength: context.maxCharsPerChunk,
+                mergeActionKnowledge: false,
+            },
+        );
+        const extractedData = [] as IExtractedData[];
+        // extract from each record in inData and write to the log file
+        let count = 0;
+        const maxTurns = namedArgs.maxTurns;
+        const clock = new StopWatch();
+        clock.start();
+        for (const record of inData) {
+            let msg = record.content;
+            if (record.speaker) {
+                msg = `${record.speaker}: ${msg}`;
+            }
+            let knowledge: knowLib.conversation.KnowledgeResponse | undefined;
+            knowledge = await extractor.extract(msg).catch((err) => {
+                printer.writeError(`Error extracting knowledge: ${err}`);
+                return undefined;
+            });
+
+            if (knowledge) {
+                const data = {
+                    knowledge,
+                    message: msg,
+                    id: record.id,
+                    description: record.section_title,
+                };
+                extractedData.push(data);
+            }
+            count++;
+            if (maxTurns && count >= maxTurns) {
+                break;
+            }
+            // write elapsed time every 10 records
+            if (count % 10 === 0) {
+                clock.stop();
+                printer.writeTiming(chalk.cyan, clock, "Elapsed time");
+                clock.start();
+            }
+        }
+        clock.stop();
+        const json = JSON.stringify(extractedData, null, 2);
+        logStream.write(json);
+        logStream.close();
+    }
 
     function knowledgeDef(): CommandMetadata {
         return {
@@ -551,44 +642,8 @@ export async function runChatMemory(): Promise<void> {
                 concurrency: argConcurrency(2),
                 pause: argPause(),
                 actions: argBool("Index actions", true),
-                logFile: argDestFile("Log file for extraction data"),
             },
         };
-    }
-    function getContent(
-        knowledge: knowLib.conversation.ExtractedKnowledge,
-    ): knowLib.conversation.KnowledgeResponse {
-        const knowResponse: knowLib.conversation.KnowledgeResponse = {
-            entities: [],
-            actions: [],
-            topics: [],
-            inverseActions: [],
-        };
-        if (knowledge.entities) {
-            for (const entity of knowledge.entities) {
-                knowResponse.entities.push(entity.value);
-            }
-        }
-        if (knowledge.actions) {
-            for (const action of knowledge.actions) {
-                knowResponse.actions.push(action.value);
-            }
-        }
-        if (knowledge.topics) {
-            for (const topic of knowledge.topics) {
-                knowResponse.topics.push(topic.value);
-            }
-        }
-        console.log(knowResponse);
-        return knowResponse;
-    }
-    interface InfoPair {
-        message: string;
-        knowledge: knowLib.conversation.KnowledgeResponse;
-    }
-    interface ExtractionData {
-        prompt: string;
-        infoPairs: InfoPair[];
     }
     commands.buildIndex.metadata = buildIndexDef();
     async function buildIndex(
@@ -596,20 +651,7 @@ export async function runChatMemory(): Promise<void> {
         io: InteractiveIo,
     ): Promise<void> {
         const namedArgs = parseNamedArguments(args, buildIndexDef());
-        const logFile = namedArgs.logFile as string;
         const cm = context.conversationManager;
-        let extractionData: ExtractionData | undefined = undefined;
-        if (logFile) {
-            const translator =
-                context.conversationManager.knowledgeExtractor.translator;
-            if (translator) {
-                const prompt = translator.createRequestPrompt(
-                    "<<messages>>",
-                ) as string;
-                extractionData = { prompt, infoPairs: [] };
-                // console.log(`Prompt for log: ${prompt}`);
-            }
-        }
         await cm.clear(false);
 
         let [messages, msgCount] = await getMessagesAndCount(
@@ -642,14 +684,6 @@ export async function runChatMemory(): Promise<void> {
                     continue;
                 }
                 const [message, knowledge] = knowledgeResult;
-                if (extractionData) {
-                    const msg = message.value;
-                    const knowResponse = getContent(knowledge);
-                    extractionData.infoPairs.push({
-                        message: msg,
-                        knowledge: knowResponse,
-                    });
-                }
                 await writeKnowledgeResult(message, knowledge);
                 const knowledgeIds =
                     await cm.conversation.addKnowledgeForMessage(
@@ -677,14 +711,6 @@ export async function runChatMemory(): Promise<void> {
                 );
                 printer.writeLine();
             }
-        }
-        if (extractionData) {
-            // open log file
-            const logPath = path.join(context.storePath, logFile);
-            const logStream = fs.createWriteStream(logPath);
-            // write out extraction data as JSON
-            logStream.write(JSON.stringify(extractionData, null, 2));
-            logStream.close();
         }
     }
 
