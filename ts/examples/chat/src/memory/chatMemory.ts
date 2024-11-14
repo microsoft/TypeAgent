@@ -17,7 +17,13 @@ import {
     getInteractiveIO,
     NamedArgs,
 } from "interactive-app";
-import { asyncArray, dateTime, getFileName, readAllText } from "typeagent";
+import {
+    asyncArray,
+    dateTime,
+    ensureDir,
+    getFileName,
+    readAllText,
+} from "typeagent";
 import chalk, { ChalkInstance } from "chalk";
 import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
 import { timestampBlocks } from "./importer.js";
@@ -41,6 +47,7 @@ export type Models = {
 
 export type ChatContext = {
     storePath: string;
+    statsPath: string;
     printer: ChatMemoryPrinter;
     models: Models;
     maxCharsPerChunk: number;
@@ -92,7 +99,8 @@ export function createModels(): Models {
     const embeddingSettings = openai.apiSettingsFromEnv(
         openai.ModelType.Embedding,
     );
-    embeddingSettings.retryPauseMs = 5000;
+    embeddingSettings.retryPauseMs = 25 * 1000;
+
     const models: Models = {
         chatModel: openai.createChatModelDefault("chatMemory"),
         embeddingModel: knowLib.createEmbeddingCache(
@@ -106,7 +114,6 @@ export function createModels(): Models {
         ),
         */
     };
-    models.chatModel.retryPauseMs = 5000;
     return models;
 }
 
@@ -114,6 +121,9 @@ export async function createChatMemoryContext(
     completionCallback?: (req: any, resp: any) => void,
 ): Promise<ChatContext> {
     const storePath = "/data/testChat";
+    const statsPath = path.join(storePath, "stats");
+    await ensureDir(storePath);
+    await ensureDir(statsPath);
 
     const models: Models = createModels();
     models.chatModel.completionCallback = completionCallback;
@@ -141,6 +151,7 @@ export async function createChatMemoryContext(
     const actionTopK = 16;
     const context: ChatContext = {
         storePath,
+        statsPath,
         printer: new ChatMemoryPrinter(getInteractiveIO()),
         models,
         stats: knowLib.createIndexingStats(),

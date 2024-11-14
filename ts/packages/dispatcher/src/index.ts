@@ -14,13 +14,6 @@ export type {
     NotifyExplainedData,
 } from "./handlers/common/interactiveIO.js";
 export type { Timing, PhaseTiming, RequestMetrics } from "./utils/metrics.js";
-
-export type {
-    ActionParamArray,
-    ActionParamField,
-    ActionParamFieldOpt,
-    ActionParamScalar,
-} from "./translation/actionInfo.js";
 export type {
     TemplateEditConfig,
     TemplateData,
