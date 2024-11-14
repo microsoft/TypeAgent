@@ -149,7 +149,7 @@ async function embedChunkedFile(
     // Limit concurrency to avoid 429 errors.
     await asyncArray.forEachAsync(
         chunks,
-        verbose ? 1 : 4,
+        1, // WAS: verbose ? 1 : 4, but concurrent writing to TextIndex isn't safe.
         async (chunk) => await embedChunk(chunk, chunkyIndex, verbose),
     );
 
