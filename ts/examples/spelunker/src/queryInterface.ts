@@ -98,6 +98,10 @@ export async function runQueryInterface(
                 type: "number",
                 defaultValue: 0.7,
             },
+            debug: {
+                description: "Show debug output",
+                type: "boolean",
+            },
         };
     }
 
@@ -166,6 +170,11 @@ export async function runQueryInterface(
         const index: knowLib.TextIndex<string, ChunkId> = (chunkyIndex as any)[
             indexName + "Index"
         ];
+        if (namedArgs.debug) {
+            io.writer.writeLine(`[Debug: ${indexName}]`);
+            await debugIndex(index, indexName, verbose);
+            return;
+        }
         let matches: ScoredItem<knowLib.TextBlock<ChunkId>>[] = [];
         if (namedArgs.query) {
             matches = await index.nearestNeighborsPairs(
@@ -219,6 +228,36 @@ export async function runQueryInterface(
             for (const hit of hits) {
                 io.writer.writeLine(
                     `${hit.item.value} (${hit.score.toFixed(3)}) :: ${(hit.item.sourceIds || []).join(", ")}`,
+                );
+            }
+        }
+    }
+
+    async function debugIndex(
+        index: knowLib.TextIndex<string, ChunkId>,
+        indexName: string,
+        verbose: boolean,
+    ): Promise<void> {
+        const allTexts = Array.from(index.text());
+        for (const text of allTexts) {
+            if (verbose) console.log("Text:", text);
+            const hits = await index.nearestNeighborsPairs(
+                text,
+                allTexts.length,
+            );
+            if (verbose) {
+                for (const hit of hits) {
+                    console.log(
+                        `${hit.score.toFixed(3).padStart(7)} ${hit.item.value}`,
+                    );
+                }
+            }
+            if (hits.length < 2) {
+                console.log(`No hits for ${text}`);
+            } else {
+                const end = hits.length - 1;
+                console.log(
+                    `${hits[0].item.value}: ${hits[1].item.value} (${hits[1].score.toFixed(3)}) -- ${hits[end].item.value} (${hits[end].score.toFixed(3)})`,
                 );
             }
         }
