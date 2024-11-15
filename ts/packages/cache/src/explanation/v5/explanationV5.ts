@@ -70,13 +70,20 @@ import { createParsePart } from "../../constructions/parsePart.js";
 import {
     TransformInfo,
     createMatchPart,
+    isMatchPart,
 } from "../../constructions/matchPart.js";
 import { Transforms } from "../../constructions/transforms.js";
 import { getLanguageTools } from "../../utils/language.js";
+import {
+    createPolitenessGeneralizer,
+    PolitenessGenerializer,
+} from "./politenessGeneralizationV5.js";
+import { PolitenessGeneralization } from "./politenessGeneralizationSchemaV5.js";
 
 type Explanation = PropertyExplanation &
     SubPhraseExplanation &
-    AlternativesExplanation;
+    AlternativesExplanation &
+    PolitenessGeneralization;
 
 export type ExplanationResult = GenericExplanationResult<Explanation>;
 
@@ -89,6 +96,7 @@ class ExplanationV5TypeChatAgent {
     private readonly propertyExplainerWithContext: PropertyExplainer;
     private readonly subPhrasesExplainer: SubPhraseExplainer;
     private readonly alternativesExplainer: AlternativesExplainer;
+    private readonly politenessGeneralizer: PolitenessGenerializer;
     constructor(model?: string) {
         this.propertyExplainerWithoutContext = createPropertyExplainer(
             false,
@@ -100,8 +108,11 @@ class ExplanationV5TypeChatAgent {
         );
         this.subPhrasesExplainer = createSubPhraseExplainer(model);
         this.alternativesExplainer = createAlternativesExplainer(model);
+        this.politenessGeneralizer = createPolitenessGeneralizer(model);
     }
     public async run(input: RequestAction, config?: ExplainerConfig) {
+        const politenessGeneralizationP = this.politenessGeneralizer.run(input);
+
         const propertyExplainer = input.history
             ? this.propertyExplainerWithContext
             : this.propertyExplainerWithoutContext;
@@ -117,8 +128,8 @@ class ExplanationV5TypeChatAgent {
             // includes the data from agent1 in corrections
             result2.corrections.forEach((correction) => {
                 correction.data = {
-                    properties: result1.data.properties,
-                    subPhrases: correction.data.subPhrases,
+                    ...result1.data,
+                    ...correction.data,
                 };
             });
         }
@@ -133,14 +144,18 @@ class ExplanationV5TypeChatAgent {
             // includes the data from agent1 in corrections
             result3.corrections.forEach((correction) => {
                 correction.data = {
-                    properties: result1.data.properties,
-                    subPhrases: result2.data.subPhrases,
-                    propertyAlternatives: correction.data.propertyAlternatives,
+                    ...result1.data,
+                    ...result2.data,
+                    ...correction.data,
                 };
             });
         }
         if (!result3.success) {
             return result3;
+        }
+        const politenessGeneralization = await politenessGeneralizationP;
+        if (!politenessGeneralization.success) {
+            return politenessGeneralization;
         }
         const corrections: CorrectionRecord<Partial<Explanation>>[] = [];
         if (result1.corrections) {
@@ -152,12 +167,16 @@ class ExplanationV5TypeChatAgent {
         if (result3.corrections) {
             corrections.push(...result3.corrections);
         }
+        if (politenessGeneralization.corrections) {
+            corrections.push(...politenessGeneralization.corrections);
+        }
         const result: TypeChatAgentResult<Explanation> = {
             success: true,
             data: {
-                properties: result1.data.properties,
-                subPhrases: result2.data.subPhrases,
-                propertyAlternatives: result3.data.propertyAlternatives,
+                ...result1.data,
+                ...result2.data,
+                ...result3.data,
+                ...politenessGeneralization.data,
             },
         };
         if (corrections.length !== 0) {
@@ -686,6 +705,38 @@ export function createConstructionV5(
     const implicitProperties = explanation.properties.filter(
         (param) => !explicitPropertyNames.has(param.name),
     );
+
+    let hasPolitePrefix = false;
+    let hasPoliteSuffix = false;
+    let seenNonOptional = false;
+    for (const part of parts) {
+        if (!part.optional) {
+            hasPoliteSuffix = false;
+            seenNonOptional = true;
+        } else if (isMatchPart(part) && part.matchSet.name === "politeness") {
+            if (!seenNonOptional) {
+                hasPolitePrefix = true;
+            } else {
+                hasPoliteSuffix = true;
+            }
+        }
+    }
+
+    if (!hasPolitePrefix && explanation.politePrefixes.length !== 0) {
+        parts.unshift(
+            createMatchPart(explanation.politePrefixes, "politeness", {
+                optional: true,
+            }),
+        );
+    }
+
+    if (!hasPoliteSuffix && explanation.politeSuffixes.length !== 0) {
+        parts.push(
+            createMatchPart(explanation.politeSuffixes, "politeness", {
+                optional: true,
+            }),
+        );
+    }
 
     return Construction.create(
         parts,
