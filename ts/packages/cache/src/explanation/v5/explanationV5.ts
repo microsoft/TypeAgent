@@ -440,11 +440,11 @@ function getParserForPropertyValue(
 
 const langTool = getLanguageTools("en");
 function canBeMergedNonPropertySubPhrase(phrase: NonPropertySubPhrase) {
-    return langTool?.hasClosedClass(phrase.text) !== true;
+    return langTool?.hasClosedClass(phrase.text, phrase.isOptional) !== true;
 }
 
-function useSynonymsForNonPropertySubPhrase(phrase: SubPhrase) {
-    return langTool?.hasClosedClass(phrase.text) !== true;
+function useSynonymsForNonPropertySubPhrase(phrase: NonPropertySubPhrase) {
+    return langTool?.hasClosedClass(phrase.text, phrase.isOptional) !== true;
 }
 
 export function createConstructionV5(
