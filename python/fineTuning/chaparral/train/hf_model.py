@@ -23,15 +23,16 @@ class HFModel:
     def __init__(self, model_name):
         self.model_name = model_name
 
+    def load_model(self):
         self.model = AutoModelForCausalLM.from_pretrained(
-            model_name,
+            self.model_name,
             torch_dtype=torch.float32,
             cache_dir="./hf_cache",
             load_in_4bit=True
         )
 
         self.tokenizer = AutoTokenizer.from_pretrained(
-            model_name,
+            self.model_name,
             cache_dir="./hf_cache"
         )
 

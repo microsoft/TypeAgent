@@ -3,6 +3,8 @@
 
 from dataclasses import dataclass
 from chaparral.models.knowledge import KnowledgeResponse
+from chaparral.models.mistral import MixtralDataset
+from chaparral.prompts.knowledge import get_knowledge_prompt
 from typing import List
 
 @dataclass
@@ -73,3 +75,18 @@ class Dataset:
         eval_set = Dataset(self.prompt, self.info_pairs[train_size:])
 
         return train_set, eval_set
+    
+    def format(self, model_name: str) -> dict:
+        format_map = {
+            "mistralai/Mixtral-8x7b-v0.1": MixtralDataset
+        }
+
+        dataset_type = format_map.get(model_name, None)
+
+        if not dataset_type:
+            raise ValueError("Unsupported model name")
+        
+        return dataset_type.from_dataset(self).to_dict()
+    
+    def get_filled_prompt(self, message: str) -> str:
+        return get_knowledge_prompt(message)

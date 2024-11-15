@@ -245,3 +245,6 @@ class KnowledgeResponse:
             "topics": self.topics,
             "inverseActions": inverse_actions
         }
+    
+    def to_str(self):
+        return str(self.to_dict())

@@ -1,7 +1,6 @@
 # Copyright (c) Microsoft Corporation and Henry Lucco.
 # Licensed under the MIT License.
 
-from chaparral.train.trainer import Trainer
 from chaparral.util.datareader import DataReader
 from chaparral.train.hf_model import HFModel
 import argparse
@@ -26,17 +25,8 @@ if __name__ == "__main__":
     model_name = "mistralai/Mixtral-8x7b-v0.1"
     model = HFModel(model_name)
 
-    model.train()
-    # save model
-    # pytorch should save this automatically
-    # need to put in code to control output dir
+    model.load_training_data(train_set)
 
-    # 1. Update data reader to format data into the mixtral format
-    # 2. Using transformers load formatted data in and split it
-    #    between train and eval
-    # 3. Add code to tokenize
-    # 4. Make an hf_trainer.py file and use the Trainer class
-    #    from HF to see if you can train that way otherwise we will do the raw
-    #    dog torch way
-    # 5. get the mixtral fine tuning repo working as well so we can compare
-    #    results
+    model.load_model()
+
+    model.train()
