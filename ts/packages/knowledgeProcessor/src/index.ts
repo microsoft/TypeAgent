@@ -11,7 +11,7 @@ export * from "./knowledgeIndex.js";
 export * from "./temporal.js";
 export * from "./modelCache.js";
 export * from "./indexingStats.js";
-
+export * from "./knowledgeResponseLoss.js";
 export * as sets from "./setOperations.js";
 
 export * as conversation from "./conversation/index.js";
