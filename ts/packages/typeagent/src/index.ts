@@ -14,6 +14,8 @@ export * from "./vector/embeddings";
 export * from "./vector/vector";
 export * from "./vector/vectorIndex";
 export * from "./vector/semanticIndex";
+export * from "./vector/semanticList";
+export * from "./vector/semanticMap";
 
 export * from "./storage/objectFolder";
 export * from "./storage/embeddingFS";
