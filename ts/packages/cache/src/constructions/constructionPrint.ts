@@ -154,6 +154,9 @@ export function printConstructionCache(
                 const name = names.get(p)!;
                 if (isMatchPart(p)) {
                     const matches = Array.from(p.matchSet.matches.values());
+                    if (p.wildcardMode) {
+                        matches.unshift(".*");
+                    }
                     if (!verbose && !all && matches.length > 5) {
                         matches.splice(
                             4,

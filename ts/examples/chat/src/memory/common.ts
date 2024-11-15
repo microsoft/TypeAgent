@@ -130,7 +130,7 @@ export function argPause(): ArgDef {
     return {
         type: "number",
         defaultValue: 0,
-        description: "Throttle calls to model",
+        description: "Pause for given milliseconds after each iteration",
     };
 }
 

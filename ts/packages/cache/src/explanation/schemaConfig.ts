@@ -6,6 +6,7 @@ import { Actions } from "./requestAction.js";
 
 export type ParamSpec =
     | "wildcard"
+    | "checked_wildcard"
     | "number"
     | "percentage"
     | "ordinal"

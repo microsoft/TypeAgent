@@ -7,6 +7,7 @@ export * from "./knowledgeSearchSchema.js";
 export * from "./knowledgeTermSearchSchema.js";
 export * from "./knowledgeTermSearchSchema2.js";
 export * from "./knowledgeActions.js";
+export * from "./knowledgeResponseLoss.js";
 
 export * from "./conversation.js";
 export * from "./conversationManager.js";
