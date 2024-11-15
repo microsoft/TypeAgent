@@ -82,7 +82,6 @@ export async function createEmailMemory(
         emailSettings,
         storage,
     );
-    const entityIndex = await memory.conversation.getEntityIndex();
     return memory;
 }
 
