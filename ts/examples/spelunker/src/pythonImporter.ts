@@ -172,7 +172,7 @@ async function embedChunk(
         0,
     );
     if (verbose) console.log(`  [Embedding ${chunk.id} (${lineCount} lines)]`);
-    await exponentialBackoff(chunkyIndex.chunkFolder!.put, chunk, chunk.id);
+    await exponentialBackoff(chunkyIndex.chunkFolder.put, chunk, chunk.id);
     const blobLines = extractBlobLines(chunk);
     const codeBlock: CodeBlockWithDocs = {
         code: blobLines,
@@ -180,7 +180,7 @@ async function embedChunk(
         docs: chunk.docs!,
     };
     const docs = (await exponentialBackoff(
-        chunkyIndex.codeIndex!.put,
+        chunkyIndex.codeIndex.put,
         codeBlock,
         chunk.id,
         chunk.filename,
