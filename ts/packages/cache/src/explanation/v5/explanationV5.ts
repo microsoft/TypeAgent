@@ -34,7 +34,10 @@ import {
     normalizeParamString,
     RequestAction,
 } from "../requestAction.js";
-import { Construction } from "../../constructions/constructions.js";
+import {
+    Construction,
+    WildcardMode,
+} from "../../constructions/constructions.js";
 import { TypeChatAgentResult, ValidationError } from "../typeChatAgent.js";
 import {
     getParamSpec,
@@ -576,17 +579,35 @@ export function createConstructionV5(
         const ltext = normalizeParamString(phrase.text);
         const lval = normalizeParamString(paramInfo.propertyValue.toString());
         return (
-            getPropertySpec(
-                paramInfo.propertyName,
-                actions,
-                getSchemaConfig,
-            ) === "wildcard" &&
             // Only handle direct copy of the text to value
-            (ltext === lval ||
-                // REVIEW: a hack to ignore quote mismatch
-                ltext === `'${lval}'` ||
-                ltext === `"${lval}"`)
+            ltext === lval ||
+            // REVIEW: a hack to ignore quote mismatch
+            ltext === `'${lval}'` ||
+            ltext === `"${lval}"`
         );
+    };
+
+    const updateWildcardMode = (
+        wildcardMode: WildcardMode,
+        phrase: SubPhrase,
+        paramInfo: PropertyValue,
+    ) => {
+        if (
+            wildcardMode === WildcardMode.Disabled ||
+            !shouldValueBeCopied(phrase, paramInfo)
+        ) {
+            return WildcardMode.Disabled;
+        }
+        const spec = getPropertySpec(
+            paramInfo.propertyName,
+            actions,
+            getSchemaConfig,
+        );
+        return spec === "wildcard"
+            ? WildcardMode.Enabled
+            : spec === "checked_wildcard"
+              ? wildcardMode
+              : WildcardMode.Disabled;
     };
 
     const parts = explanation.subPhrases.map((phrase) => {
@@ -611,7 +632,7 @@ export function createConstructionV5(
                     return createParsePart(propertyName, parser);
                 }
             }
-            let enableWildcard = true;
+            let wildcardMode = WildcardMode.Checked;
 
             // REVIEW: can the match set be merged if it is for multiple param names?
             let canBeMerged = hasSinglePropertyName;
@@ -625,7 +646,7 @@ export function createConstructionV5(
                 );
                 transformInfos.push(transformInfo);
                 if (entityParamMap.has(propertyName)) {
-                    enableWildcard = false; // not a wildcard mapping
+                    wildcardMode = WildcardMode.Disabled; // not a wildcard mapping
                     canBeMerged = false; // REVIEW: can you merge matchset for entity references?
 
                     // REVIEW: Don't use other synonyms or alternatives info for entities for now
@@ -638,8 +659,11 @@ export function createConstructionV5(
                     throw new Error(`Parameter ${propertyName} not found`);
                 }
 
-                const shouldBeCopied = shouldValueBeCopied(phrase, paramInfo);
-                enableWildcard = enableWildcard && shouldBeCopied;
+                wildcardMode = updateWildcardMode(
+                    wildcardMode,
+                    phrase,
+                    paramInfo,
+                );
 
                 if (!disableAlternateParamValues.has(propertyName)) {
                     collectAltParamMatches(matches, phrase, paramInfo);
@@ -650,7 +674,7 @@ export function createConstructionV5(
             return createMatchPart(matches, baseName, {
                 transformInfos,
                 canBeMerged,
-                canBeWildcard: enableWildcard,
+                wildcardMode,
             });
         } catch (e: any) {
             throw new Error(

@@ -6,7 +6,10 @@ import { fileURLToPath } from "url";
 import { ChatModel, openai } from "aiclient";
 import { normalizeCommandsandKBJson } from "./normalizeVscodeJson.js";
 import { processVscodeCommandsJsonFile } from "./schemaGen.js";
-import { processActionSchemaAndReqData } from "./genStats.js";
+import {
+    processActionSchemaAndReqData,
+    processActionReqDataWithComments,
+} from "./genStats.js";
 
 export interface VSCodeSchemaGenApp {
     readonly model: ChatModel;
@@ -97,12 +100,26 @@ export async function createVSCodeSchemaGenApp(): Promise<VSCodeSchemaGenApp> {
                     path.dirname(statGenFilePath),
                     "zero_rank_stats.csv",
                 );
-                processActionSchemaAndReqData(
-                    actionreqEmbeddingsFile,
-                    0.7,
-                    statGenFilePath,
-                    zerorankStatsFile,
-                );
+
+                const actionSchemaIndex = args.indexOf("-schemaFile");
+                if (actionSchemaIndex !== -1) {
+                    const actionSchemaFile = args[actionSchemaIndex + 1];
+                    console.log("actionSchemaFile: ", actionSchemaFile);
+                    processActionReqDataWithComments(
+                        actionSchemaFile,
+                        actionreqEmbeddingsFile,
+                        0.7,
+                        statGenFilePath,
+                        zerorankStatsFile,
+                    );
+                } else {
+                    processActionSchemaAndReqData(
+                        actionreqEmbeddingsFile,
+                        0.7,
+                        statGenFilePath,
+                        zerorankStatsFile,
+                    );
+                }
             } else {
                 console.error("Missing required file paths for -statgen mode.");
                 console.error(

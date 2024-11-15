@@ -8,7 +8,7 @@ import { LinkedList, ListNode, allNodes, createLinkedList } from "./linkedList";
  * A Cache of V, where N is the key for V
  */
 export interface Cache<N, V> {
-    readonly length: number;
+    readonly size: number;
     has(name: N): boolean;
     get(name: N): V | undefined;
     put(name: N, value: V): void;
@@ -38,7 +38,7 @@ export function createLRUCache<N, V>(
         }
     }
     return {
-        get length() {
+        get size() {
             return kvTable.size;
         },
         has: (key) => kvTable.has(key),

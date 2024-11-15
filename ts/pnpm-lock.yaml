@@ -306,6 +306,9 @@ importers:
 
   examples/vscodeSchemaGen:
     dependencies:
+      action-schema:
+        specifier: workspace:*
+        version: link:../../packages/actionSchema
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient

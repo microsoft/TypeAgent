@@ -160,7 +160,7 @@ export class ConstructionCache {
                 ? new MatchPart(
                       this.addMatchSet(p.matchSet, mergeMatchSets),
                       p.optional,
-                      p.wildcard,
+                      p.wildcardMode,
                       p.transformInfos,
                   )
                 : p,
