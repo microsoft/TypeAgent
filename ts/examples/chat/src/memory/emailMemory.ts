@@ -75,13 +75,15 @@ export async function createEmailMemory(
         ? await sqlite.createStorageDb(emailStorePath, "outlook.db", createNew)
         : undefined;
 
-    return await knowLib.email.createEmailMemory(
+    const memory = await knowLib.email.createEmailMemory(
         models.chatModel,
         ReservedConversationNames.outlook,
         storePath,
         emailSettings,
         storage,
     );
+    const entityIndex = await memory.conversation.getEntityIndex();
+    return memory;
 }
 
 export function createEmailCommands(
