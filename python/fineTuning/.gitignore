@@ -1,6 +1,5 @@
 venv/
 *.egg-info/
-*.txt
 .env
 hf_cache
 *.json

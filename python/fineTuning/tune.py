@@ -30,3 +30,11 @@ if __name__ == "__main__":
     model.load_model()
 
     model.train()
+    # save model
+    # pytorch should save this automatically
+    # need to put in code to control output dir
+
+    #TODO Next:
+    # 1. put on to paarthurnax and attempt ot run a training job
+    # 2. make a model config json that is passed in as argument and
+    #    used to configure the model and training
