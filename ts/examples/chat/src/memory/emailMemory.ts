@@ -38,6 +38,7 @@ import {
     argPause,
     argSourceFileOrFolder,
     indexingStatsToCsv,
+    pause,
 } from "./common.js";
 import chalk from "chalk";
 import { convertMsgFiles } from "./importer.js";
@@ -74,13 +75,14 @@ export async function createEmailMemory(
         ? await sqlite.createStorageDb(emailStorePath, "outlook.db", createNew)
         : undefined;
 
-    return await knowLib.email.createEmailMemory(
+    const memory = await knowLib.email.createEmailMemory(
         models.chatModel,
         ReservedConversationNames.outlook,
         storePath,
         emailSettings,
         storage,
     );
+    return memory;
 }
 
 export function createEmailCommands(
@@ -106,7 +108,7 @@ export function createEmailCommands(
                 chunkSize: argChunkSize(context.maxCharsPerChunk),
                 maxMessages: argNum("Max messages", 25),
                 index: argBool("Index imported files", true),
-                pause: argPause(),
+                pauseMs: argPause(),
             },
         };
     }
@@ -179,6 +181,7 @@ export function createEmailCommands(
         context.printer.writeBullet(
             `Total chars: ${stats.totalStats.charCount}`,
         );
+        context.printer.writeCompletionStats(stats.totalStats.tokenStats);
         const csv = indexingStatsToCsv(stats.itemStats);
         if (namedArgs.destFile) {
             await fs.promises.writeFile(namedArgs.destFile, csv);
@@ -240,6 +243,10 @@ export function createEmailCommands(
 
                     context.printer.writeInColor(chalk.green, status);
                     context.printer.writeLine();
+
+                    if (namedArgs.pauseMs > 0) {
+                        await pause(namedArgs.pauseMs);
+                    }
                 },
                 maxMessages,
             );

@@ -55,7 +55,9 @@ export function createIndexingStats(
         totalStats.tokenStats.prompt_tokens += stats.prompt_tokens;
         totalStats.tokenStats.total_tokens += stats.total_tokens;
         if (current) {
-            current.tokenStats = stats;
+            current.tokenStats.prompt_tokens += stats.prompt_tokens;
+            current.tokenStats.completion_tokens += stats.completion_tokens;
+            current.tokenStats.total_tokens += stats.total_tokens;
         }
     }
 
