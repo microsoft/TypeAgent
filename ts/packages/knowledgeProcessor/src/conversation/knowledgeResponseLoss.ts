@@ -1,5 +1,10 @@
 import { TextEmbeddingModel } from "aiclient";
-import { KnowledgeResponse, ConcreteEntity, Facet } from "./knowledgeSchema.js";
+import {
+    KnowledgeResponse,
+    ConcreteEntity,
+    Action,
+    Facet,
+} from "./knowledgeSchema.js";
 import { createSemanticMap } from "typeagent";
 
 function getUniqueElements(arr1: string[], arr2: string[]): string[] {
@@ -159,6 +164,88 @@ async function entityLoss(
     return loss / potentialLossTotal;
 }
 
+async function actionsLoss(
+    refActions: Action[],
+    genActions: Action[],
+    model: TextEmbeddingModel,
+) {
+    const potentialVerbLoss = 5;
+    const potentialParamLoss = 1;
+    // include subject, object, and indirect object
+    const potentialSubjectLoss = 1;
+    const potentialObjectLoss = 1;
+    const potentialIndirectObjectLoss = 1;
+    const potentialSubjectEntityFacetLoss = 1;
+    const potentialLossPerAction =
+        potentialVerbLoss +
+        potentialParamLoss +
+        potentialSubjectLoss +
+        potentialObjectLoss +
+        potentialIndirectObjectLoss +
+        potentialSubjectEntityFacetLoss;
+    const potentialLossTotal = potentialLossPerAction * refActions.length;
+    let loss = 0;
+    const genMap = await createSemanticMap<Action>(model);
+    for (const action of genActions) {
+        genMap.set(action.verbs.join(" "), action);
+    }
+    for (const action of refActions) {
+        const genActionScored = await genMap.getNearest(action.verbs.join(" "));
+        loss += potentialVerbLoss * (1 - genActionScored.score);
+        const genAction = genActionScored.item;
+        if (action.params) {
+            if (!genAction.params) {
+                loss += potentialParamLoss;
+            }
+            // don't go through params for now
+        }
+        // exact match for now using normalized string
+        if (
+            normalizeString(action.subjectEntityName) !==
+            normalizeString(genAction.subjectEntityName)
+        ) {
+            loss += potentialSubjectLoss;
+        }
+        if (
+            normalizeString(action.objectEntityName) !==
+            normalizeString(genAction.objectEntityName)
+        ) {
+            loss += potentialObjectLoss;
+        }
+        if (
+            normalizeString(action.indirectObjectEntityName) !==
+            normalizeString(genAction.indirectObjectEntityName)
+        ) {
+            loss += potentialIndirectObjectLoss;
+        }
+        if (action.subjectEntityFacet) {
+            if (!genAction.subjectEntityFacet) {
+                loss += potentialSubjectEntityFacetLoss;
+            } else {
+                const genFacetLoss = await facetLoss(
+                    [action.subjectEntityFacet],
+                    [genAction.subjectEntityFacet],
+                );
+                loss += potentialSubjectEntityFacetLoss * genFacetLoss;
+            }
+        }
+    }
+    return loss / potentialLossTotal;
+}
+
+async function topicsLoss(refTopics: string[], genTopics: string[]) {
+    const map = await createSemanticMap<string>();
+    for (const topic of genTopics) {
+        map.set(topic, topic);
+    }
+    let loss = 0;
+    for (const topic of refTopics) {
+        const nearest = await map.getNearest(topic);
+        loss += 1 - nearest.score;
+    }
+    return loss / refTopics.length;
+}
+
 class NormalizedKnowledgeResponse {
     entities: NormalizedEntities;
     constructor(public response: KnowledgeResponse) {
@@ -169,12 +256,31 @@ class NormalizedKnowledgeResponse {
         normGenResponse: NormalizedKnowledgeResponse,
         model: TextEmbeddingModel,
     ) {
-        let loss = await entityLoss(
+        const potentialEntityLoss = 5;
+        const potentialActionLoss = 3;
+        const potentialTopicLoss = 1;
+        const potentialLossTotal =
+            potentialEntityLoss + potentialActionLoss + potentialTopicLoss;
+        let genEntityLoss = await entityLoss(
             this.entities,
             normGenResponse.entities,
             model,
         );
-        return loss;
+        let actionLoss = await actionsLoss(
+            this.response.actions,
+            normGenResponse.response.actions,
+            model,
+        );
+        let topicLoss = await topicsLoss(
+            this.response.topics,
+            normGenResponse.response.topics,
+        );
+        return (
+            (genEntityLoss * potentialEntityLoss +
+                actionLoss * potentialActionLoss +
+                topicLoss * potentialTopicLoss) /
+            potentialLossTotal
+        );
     }
 }
 
