@@ -36,6 +36,7 @@ import {
 } from "../requestAction.js";
 import {
     Construction,
+    ConstructionPart,
     WildcardMode,
 } from "../../constructions/constructions.js";
 import { TypeChatAgentResult, ValidationError } from "../typeChatAgent.js";
@@ -83,7 +84,7 @@ import { PolitenessGeneralization } from "./politenessGeneralizationSchemaV5.js"
 type Explanation = PropertyExplanation &
     SubPhraseExplanation &
     AlternativesExplanation &
-    PolitenessGeneralization;
+    Partial<PolitenessGeneralization>;
 
 export type ExplanationResult = GenericExplanationResult<Explanation>;
 
@@ -466,6 +467,50 @@ function useSynonymsForNonPropertySubPhrase(phrase: NonPropertySubPhrase) {
     return langTool?.hasClosedClass(phrase.text, phrase.isOptional) !== true;
 }
 
+function addPolitePrefixParts(
+    parts: ConstructionPart[],
+    explanation: Explanation,
+) {
+    if (
+        explanation.politePrefixes === undefined ||
+        explanation.politeSuffixes === undefined
+    ) {
+        return;
+    }
+
+    let hasPolitePrefix = false;
+    let hasPoliteSuffix = false;
+    let seenNonOptional = false;
+    for (const part of parts) {
+        if (!part.optional) {
+            hasPoliteSuffix = false;
+            seenNonOptional = true;
+        } else if (isMatchPart(part) && part.matchSet.name === "politeness") {
+            if (!seenNonOptional) {
+                hasPolitePrefix = true;
+            } else {
+                hasPoliteSuffix = true;
+            }
+        }
+    }
+
+    if (!hasPolitePrefix && explanation.politePrefixes.length !== 0) {
+        parts.unshift(
+            createMatchPart(explanation.politePrefixes, "politeness", {
+                optional: true,
+            }),
+        );
+    }
+
+    if (!hasPoliteSuffix && explanation.politeSuffixes.length !== 0) {
+        parts.push(
+            createMatchPart(explanation.politeSuffixes, "politeness", {
+                optional: true,
+            }),
+        );
+    }
+}
+
 export function createConstructionV5(
     requestAction: RequestAction,
     explanation: Explanation,
@@ -706,37 +751,7 @@ export function createConstructionV5(
         (param) => !explicitPropertyNames.has(param.name),
     );
 
-    let hasPolitePrefix = false;
-    let hasPoliteSuffix = false;
-    let seenNonOptional = false;
-    for (const part of parts) {
-        if (!part.optional) {
-            hasPoliteSuffix = false;
-            seenNonOptional = true;
-        } else if (isMatchPart(part) && part.matchSet.name === "politeness") {
-            if (!seenNonOptional) {
-                hasPolitePrefix = true;
-            } else {
-                hasPoliteSuffix = true;
-            }
-        }
-    }
-
-    if (!hasPolitePrefix && explanation.politePrefixes.length !== 0) {
-        parts.unshift(
-            createMatchPart(explanation.politePrefixes, "politeness", {
-                optional: true,
-            }),
-        );
-    }
-
-    if (!hasPoliteSuffix && explanation.politeSuffixes.length !== 0) {
-        parts.push(
-            createMatchPart(explanation.politeSuffixes, "politeness", {
-                optional: true,
-            }),
-        );
-    }
+    addPolitePrefixParts(parts, explanation);
 
     return Construction.create(
         parts,
