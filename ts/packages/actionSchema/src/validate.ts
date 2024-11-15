@@ -18,6 +18,20 @@ function validateField(
         throw new Error(`Field ${name} is null`);
     }
     switch (expected.type) {
+        case "type-union": {
+            for (const type of expected.types) {
+                try {
+                    validateField(name, type, actual, coerce);
+                    return;
+                } catch (e) {
+                    // ignore
+                }
+            }
+            throw new Error(`Field ${name} does not match any union type`);
+        }
+        case "type-reference":
+            validateField(name, expected.definition.type, actual, coerce);
+            break;
         case "object":
             if (typeof actual !== "object" || Array.isArray(actual)) {
                 throw new Error(`Field ${name} is not an object: ${actual}`);
@@ -50,7 +64,7 @@ function validateField(
                         case "number":
                             const num = parseInt(actual);
                             if (num.toString() === actual) {
-                                return actual;
+                                return num;
                             }
                             break;
                         case "boolean":
@@ -130,7 +144,8 @@ export function validateAction(
     }
 
     const parameters = action.parameters;
-    if (actionSchema.parameters === undefined) {
+    const parameterType = actionSchema.definition.type.fields.parameters?.type;
+    if (parameterType === undefined) {
         if (parameters !== undefined) {
             const keys = Object.keys(parameters);
             if (keys.length > 0) {
@@ -156,7 +171,7 @@ export function validateAction(
 
     validateObject(
         "parameters",
-        actionSchema.parameters,
+        parameterType as ActionParamObject, // already checked.
         parameters as Record<string, unknown>,
         coerce,
     );

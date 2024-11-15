@@ -33,7 +33,7 @@ function createSelectionSchema(
     for (const info of actionSchemas.values()) {
         actionNames.push(`"${info.actionName}"`);
         actionComments.push(
-            `"${info.actionName}"${info.comments ? ` - ${info.comments[0]}` : ""}`,
+            `"${info.actionName}"${info.definition.comments ? ` - ${info.definition.comments[0]}` : ""}`,
         );
     }
 

@@ -4,26 +4,17 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import CopyPlugin from "copy-webpack-plugin";
-import { setupMiddlewares } from "./dist/route/route.js";
 
 const dirName = fileURLToPath(new URL(".", import.meta.url));
 const srcDir = path.join(dirName, "src");
 export default {
     mode: "development",
     devtool: "inline-source-map",
-    devServer: {
-        setupMiddlewares,
-        static: {
-            directory: path.join(dirName, "dist"),
-        },
-        compress: true,
-        port: 9001,
-    },
     entry: {
-        index: path.join(srcDir, "site", "index.ts"),
+        index: path.join(srcDir, "view", "site", "index.ts"),
     },
     output: {
-        path: path.join(dirName, "dist"),
+        path: path.join(dirName, "dist", "view"),
         filename: "[name].js",
     },
     module: {
@@ -41,8 +32,14 @@ export default {
     plugins: [
         new CopyPlugin({
             patterns: [
-                { from: path.join(srcDir, "site", "index.html"), to: "." },
-                { from: path.join(srcDir, "site", "styles.css"), to: "." },
+                {
+                    from: path.join(srcDir, "view", "site", "index.html"),
+                    to: "./site/",
+                },
+                {
+                    from: path.join(srcDir, "view", "site", "styles.css"),
+                    to: "./site/",
+                },
             ],
         }),
     ],

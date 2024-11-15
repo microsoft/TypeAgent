@@ -120,6 +120,7 @@ export type StorageEncoding = "utf8" | "base64";
 
 export type StorageListOptions = {
     dirs?: boolean;
+    fullPath?: boolean;
 };
 
 export interface TokenCachePersistence {

@@ -42,8 +42,6 @@ import {
     chunkifyPythonFiles,
 } from "./pythonChunker.js";
 
-// TODO: Turn (chunkFolder, codeIndex, summaryFolder) into a single object.
-
 export async function importPythonFiles(
     files: string[],
     chunkyIndex: ChunkyIndex,
@@ -143,6 +141,7 @@ async function embedChunkedFile(
     const t0 = Date.now();
 
     // Handle the first chunk of the first file separately, it waits for API key setup.
+    // TODO: Rip all this out and just iterate over the chunks sequentially.
     if (firstFile) {
         const chunk = chunks.shift()!;
         await embedChunk(chunk, chunkyIndex, verbose);
@@ -151,7 +150,7 @@ async function embedChunkedFile(
     // Limit concurrency to avoid 429 errors.
     await asyncArray.forEachAsync(
         chunks,
-        verbose ? 1 : 4,
+        1, // WAS: verbose ? 1 : 4, but concurrent writing to TextIndex isn't safe.
         async (chunk) => await embedChunk(chunk, chunkyIndex, verbose),
     );
 
@@ -173,19 +172,20 @@ async function embedChunk(
         0,
     );
     if (verbose) console.log(`  [Embedding ${chunk.id} (${lineCount} lines)]`);
-    await chunkyIndex.chunkFolder!.put(chunk, chunk.id);
+    await exponentialBackoff(chunkyIndex.chunkFolder!.put, chunk, chunk.id);
     const blobLines = extractBlobLines(chunk);
     const codeBlock: CodeBlockWithDocs = {
         code: blobLines,
         language: "python",
         docs: chunk.docs!,
     };
-    const docs = (await chunkyIndex.codeIndex!.put(
+    const docs = (await exponentialBackoff(
+        chunkyIndex.codeIndex!.put,
         codeBlock,
         chunk.id,
         chunk.filename,
     )) as CodeDocumentation;
-    await chunkyIndex.summaryFolder.put(docs, chunk.id);
+    await exponentialBackoff(chunkyIndex.summaryFolder.put, docs, chunk.id);
     for (const comment of docs.comments || []) {
         await writeToIndex(chunk.id, comment.topics, chunkyIndex.topicsIndex);
         await writeToIndex(
@@ -252,13 +252,32 @@ async function writeToIndex(
     phrases: string[] | undefined, // List of keywords, topics, etc. in chunk
     index: knowLib.TextIndex<string, ChunkId>,
 ) {
-    if (!phrases) return;
-    for (const phrase of phrases) {
-        await index.put(phrase, [chunkId]);
+    for (const phrase of phrases ?? []) {
+        await exponentialBackoff(index.put, phrase, [chunkId]);
     }
 }
 
-// Apply URL escaping to key. NOTE: Currently unused.
+async function exponentialBackoff<T extends any[], R>(
+    callable: (...args: T) => Promise<R>,
+    ...args: T
+): Promise<any> {
+    let timeout = 1;
+    for (;;) {
+        try {
+            return await callable(...args);
+        } catch (error) {
+            if (timeout > 1000) {
+                console.log(`[Error: ${error}; giving up]`);
+                throw error;
+            }
+            console.log(`[Error: ${error}; retrying in ${timeout} ms]`);
+            await new Promise((resolve) => setTimeout(resolve, timeout));
+            timeout *= 2;
+        }
+    }
+}
+
+// Apply URL escaping to key. NOTE: Currently unused. TODO: Therefore remove.
 export function sanitizeKey(key: string): string {
     return encodeURIComponent(key).replace(/%20/g, "+"); // Encode spaces as plus, others as %xx.
 }
