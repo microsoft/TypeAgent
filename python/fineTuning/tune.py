@@ -25,6 +25,8 @@ if __name__ == "__main__":
     model_name = "mistralai/Mixtral-8x7b-v0.1"
     model = HFModel(model_name)
 
+    print("Model loaded")
+
     model.load_training_data(train_set)
 
     model.load_model()

@@ -8,6 +8,7 @@ from transformers import (
     TrainingArguments, 
     DataCollatorForLanguageModeling
 )
+from peft import LoraConfig, get_peft_model
 from datasets import Dataset as HFDataset
 from chaparral.models.data import Dataset
 import torch
@@ -23,18 +24,37 @@ class HFModel:
     def __init__(self, model_name):
         self.model_name = model_name
 
+    def init_peft(self):
+        LORA_R = 8
+        LORA_ALPHA = 2 * LORA_R
+        LORA_DROPOUT = 0.1
+
+        config = LoraConfig(
+            r=LORA_R,
+            lora_alpha=LORA_ALPHA,
+            target_modules=[ "w1", "w2", "w3"],  #Only Training the "expert" layers
+            lora_dropout=LORA_DROPOUT,
+            bias="none",
+            task_type="CAUSAL_LM"
+        )
+
+        self.model = get_peft_model(self.model, config)
+
     def load_model(self):
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             torch_dtype=torch.float32,
             cache_dir="./hf_cache",
-            load_in_4bit=True
+            load_in_4bit=True,
+            device_map="auto"
         )
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_name,
             cache_dir="./hf_cache"
         )
+
+        self.init_peft()
 
     def load_training_data(self, dataset: Dataset):
         data_dict = dataset.format(self.model_name)
