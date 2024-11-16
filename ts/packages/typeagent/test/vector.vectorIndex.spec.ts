@@ -18,6 +18,7 @@ import {
     dotProductSimple,
     euclideanLength,
 } from "../src/vector/vector";
+import { createSemanticList } from "../src";
 
 describe("vector.vectorIndex", () => {
     const timeoutMs = 5 * 1000 * 60;
@@ -53,4 +54,22 @@ describe("vector.vectorIndex", () => {
         },
         timeoutMs,
     );
+    testIf(hasEmbeddingModel, "semanticList", async () => {
+        const strings = [
+            "object",
+            "person",
+            "composer",
+            "instrument",
+            "book",
+            "movie",
+            "dog",
+            "cat",
+            "computer",
+            "phone",
+        ];
+        const model = openai.createEmbeddingModel();
+        const semanticList = createSemanticList(model);
+        await semanticList.pushMultiple(strings);
+        expect(semanticList.values).toHaveLength(strings.length);
+    });
 });

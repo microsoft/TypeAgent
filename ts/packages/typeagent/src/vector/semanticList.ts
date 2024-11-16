@@ -9,9 +9,14 @@ import {
     SimilarityType,
     TopNCollection,
 } from "./embeddings";
-import { EmbeddedValue, generateEmbedding, VectorIndex } from "./vectorIndex";
-import { asyncArray } from "..";
+import {
+    EmbeddedValue,
+    generateEmbedding,
+    generateTextEmbeddings,
+    VectorIndex,
+} from "./vectorIndex";
 import assert from "assert";
+import { callWithRetry } from "../async";
 
 /**
  * An in-memory list of T, {stringValue of T} items that also maintains embeddings of stringValue
@@ -36,9 +41,25 @@ export interface SemanticList<T> extends VectorIndex<T> {
         maxMatches: number,
         minScore?: number,
     ): Promise<ScoredItem<T>[]>;
-
-    push(value: T, stringValue?: string): Promise<void>;
-    pushMultiple(values: T[], concurrency?: number): Promise<void>;
+    /**
+     * Push an item onto the semantic list.
+     * @param value
+     * @param stringValue
+     * @param retryMaxAttempts (optional) Default is 2
+     * @param retryPauseMs (optional) Default is 1000ms with exponential backoff
+     */
+    push(
+        value: T,
+        stringValue?: string,
+        retryMaxAttempts?: number,
+        retryPauseMs?: number,
+    ): Promise<void>;
+    pushMultiple(
+        values: T[],
+        retryMaxAttempts?: number,
+        retryPauseMs?: number,
+        concurrency?: number,
+    ): Promise<void>;
     pushValue(value: EmbeddedValue<T>): void;
 }
 
@@ -59,27 +80,49 @@ export function createSemanticList<T>(
         nearestNeighbors,
     };
 
-    async function push(value: T, stringValue?: string): Promise<void> {
-        const embedding = await generateEmbedding<string>(
-            model,
-            toString(value, stringValue),
+    async function push(
+        value: T,
+        stringValue?: string,
+        retryMaxAttempts?: number,
+        retryPauseMs?: number,
+    ): Promise<void> {
+        await callWithRetry(
+            async () => {
+                const embedding = await generateEmbedding<string>(
+                    model,
+                    toString(value, stringValue),
+                );
+                pushValue({ value, embedding });
+            },
+            retryMaxAttempts,
+            retryPauseMs,
         );
-        pushValue({ value, embedding });
     }
 
     async function pushMultiple(
         values: T[],
+        retryMaxAttempts?: number,
+        retryPauseMs?: number,
         concurrency?: number,
     ): Promise<void> {
         concurrency ??= 2;
         // Generate embeddings in parallel
-        const embeddings = await asyncArray.mapAsync(values, concurrency, (v) =>
-            generateEmbedding(model, toString(v)),
+        const valueStrings = values.map((v) => toString(v));
+        await callWithRetry(
+            async () => {
+                const embeddings = await generateTextEmbeddings(
+                    model,
+                    valueStrings,
+                    concurrency,
+                );
+                assert(values.length === embeddings.length);
+                for (let i = 0; i < values.length; ++i) {
+                    pushValue({ value: values[i], embedding: embeddings[i] });
+                }
+            },
+            retryMaxAttempts,
+            retryPauseMs,
         );
-        assert(values.length === embeddings.length);
-        for (let i = 0; i < values.length; ++i) {
-            pushValue({ value: values[i], embedding: embeddings[i] });
-        }
     }
 
     function pushValue(value: EmbeddedValue<T>): void {
