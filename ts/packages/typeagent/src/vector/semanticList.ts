@@ -30,7 +30,7 @@ export interface SemanticList<T> extends VectorIndex<T> {
     ): Promise<ScoredItem[]>;
     nearestNeighbor(
         value: string | NormalizedEmbedding,
-    ): Promise<ScoredItem<T>>;
+    ): Promise<ScoredItem<T> | undefined>;
     nearestNeighbors(
         value: string | NormalizedEmbedding,
         maxMatches: number,
@@ -88,9 +88,13 @@ export function createSemanticList<T>(
 
     async function nearestNeighbor(
         value: string | NormalizedEmbedding,
-    ): Promise<ScoredItem<T>> {
+    ): Promise<ScoredItem<T> | undefined> {
         const match = await indexOf(value);
-        return { score: match.score, item: values[match.item].value };
+        if (match.item === -1) {
+            return undefined;
+        } else {
+            return { score: match.score, item: values[match.item].value };
+        }
     }
 
     async function nearestNeighbors(

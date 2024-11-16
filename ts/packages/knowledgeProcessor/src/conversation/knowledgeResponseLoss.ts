@@ -8,7 +8,27 @@ import {
     Action,
     Facet,
 } from "./knowledgeSchema.js";
-import { createSemanticMap } from "typeagent";
+// import { createSemanticMap } from "typeagent";
+
+export async function createSemanticMap<T>(_model: TextEmbeddingModel) {
+    const map = new Map<string, T>();
+    return {
+        set: (key: string, value: T) => {
+            map.set(key, value);
+        },
+        get: (key: string) => {
+            return map.get(key);
+        },
+        getNearest: async (key: string) => {
+            const item = map.get(key);
+            if (item) {
+                return { item, score: 1 };
+            } else {
+                return undefined;
+            }
+        },
+    };
+}
 
 function getUniqueElements(arr1: string[], arr2: string[]): string[] {
     return Array.from(new Set([...arr1, ...arr2]));
@@ -93,38 +113,68 @@ function entityFacetMatch(value1: Facet["value"], value2: Facet["value"]) {
     return false;
 }
 
-async function facetLoss(refFacets: Facet[], genFacets: Facet[]) {
+async function facetLoss(
+    refFacets: Facet[],
+    genFacets: Facet[],
+    model: TextEmbeddingModel,
+) {
     let loss = 0;
     let potentialNameLoss = 2;
     let potentialValueLoss = 1;
     let potentialLoss = potentialNameLoss + potentialValueLoss;
+    if (refFacets.length === 0) {
+        console.log("no ref facets");
+        return 0;
+    }
     let potentialLossTotal = refFacets.length * potentialLoss;
-    const genMap = await createSemanticMap<Facet>();
+    const genMap = await createSemanticMap<Facet>(model);
     for (const facet of genFacets) {
         genMap.set(facet.name, facet);
     }
     for (const facet of refFacets) {
         const genFacetScored = await genMap.getNearest(facet.name);
-        loss += (1 - genFacetScored.score) * potentialNameLoss;
-        const genFacet = genFacetScored.item;
-        if (!entityFacetMatch(genFacet.value, facet.value)) {
-            loss += potentialValueLoss;
+        if (genFacetScored === undefined) {
+            loss += potentialLoss;
+        } else {
+            loss += (1 - genFacetScored.score) * potentialNameLoss;
+
+            const genFacet = genFacetScored.item;
+            if (!entityFacetMatch(genFacet.value, facet.value)) {
+                loss += potentialValueLoss;
+            }
         }
     }
     return loss / potentialLossTotal;
 }
 
-async function entityTypeLoss(typeA: string[], typeB: string[]) {
-    const map = await createSemanticMap<string>();
-    for (const type of typeB) {
+async function entityTypeLoss(
+    refType: string[],
+    genType: string[],
+    model: TextEmbeddingModel,
+) {
+    if (refType.length === 0) {
+        console.log("no ref types");
+        return 0;
+    }
+    const map = await createSemanticMap<string>(model);
+    for (const type of genType) {
         map.set(type, type);
     }
     let loss = 0;
-    for (const type of typeA) {
+    for (const type of refType) {
         const nearest = await map.getNearest(type);
-        loss += 1 - nearest.score;
+        if (nearest === undefined) {
+            loss += 1;
+            console.log("type loss with undef", refType, genType);
+        } else {
+            loss += 1 - nearest.score;
+        }
     }
-    return loss / typeA.length;
+    const scaledLoss = loss / refType.length;
+    if (scaledLoss > 0.01) {
+        console.log("type loss", refType, genType, scaledLoss);
+    }
+    return scaledLoss;
 }
 
 async function entityLoss(
@@ -132,6 +182,10 @@ async function entityLoss(
     generatedEntities: NormalizedEntities,
     model: TextEmbeddingModel,
 ) {
+    if (refEntities.entities.length === 0) {
+        console.log("no ref entities");
+        return 0;
+    }
     const potentialNameLoss = 3;
     const potentialTypeLoss = 2;
     const potentialFacetLoss = 1;
@@ -147,20 +201,25 @@ async function entityLoss(
 
     for (const entity of refEntities.entities) {
         const genEntityScored = await genMap.getNearest(entity.name);
-        loss += potentialNameLoss * (1 - genEntityScored.score);
-        const genEntity = genEntityScored.item;
-        loss +=
-            potentialTypeLoss *
-            (await entityTypeLoss(entity.type, genEntity.type));
-        if (entity.facets) {
-            if (!genEntity.facets) {
-                loss += potentialFacetLoss;
-            } else {
-                const genFacetLoss = await facetLoss(
-                    entity.facets,
-                    genEntity.facets,
-                );
-                loss += potentialFacetLoss * genFacetLoss;
+        if (genEntityScored === undefined) {
+            loss += potentialLossPerEntity;
+        } else {
+            loss += potentialNameLoss * (1 - genEntityScored.score);
+            const genEntity = genEntityScored.item;
+            loss +=
+                potentialTypeLoss *
+                (await entityTypeLoss(entity.type, genEntity.type, model));
+            if (entity.facets && entity.facets.length > 0) {
+                if (!genEntity.facets || genEntity.facets.length === 0) {
+                    loss += potentialFacetLoss;
+                } else {
+                    const genFacetLoss = await facetLoss(
+                        entity.facets,
+                        genEntity.facets,
+                        model,
+                    );
+                    loss += potentialFacetLoss * genFacetLoss;
+                }
             }
         }
     }
@@ -186,6 +245,9 @@ async function actionsLoss(
         potentialObjectLoss +
         potentialIndirectObjectLoss +
         potentialSubjectEntityFacetLoss;
+    if (refActions.length === 0) {
+        return 0;
+    }
     const potentialLossTotal = potentialLossPerAction * refActions.length;
     let loss = 0;
     const genMap = await createSemanticMap<Action>(model);
@@ -194,57 +256,74 @@ async function actionsLoss(
     }
     for (const action of refActions) {
         const genActionScored = await genMap.getNearest(action.verbs.join(" "));
-        loss += potentialVerbLoss * (1 - genActionScored.score);
-        const genAction = genActionScored.item;
-        if (action.params) {
-            if (!genAction.params) {
-                loss += potentialParamLoss;
+        if (genActionScored === undefined) {
+            loss += potentialLossPerAction;
+        } else {
+            loss += potentialVerbLoss * (1 - genActionScored.score);
+            const genAction = genActionScored.item;
+            if (action.params) {
+                if (!genAction.params) {
+                    loss += potentialParamLoss;
+                }
+                // don't go through params for now
             }
-            // don't go through params for now
-        }
-        // exact match for now using normalized string
-        if (
-            normalizeString(action.subjectEntityName) !==
-            normalizeString(genAction.subjectEntityName)
-        ) {
-            loss += potentialSubjectLoss;
-        }
-        if (
-            normalizeString(action.objectEntityName) !==
-            normalizeString(genAction.objectEntityName)
-        ) {
-            loss += potentialObjectLoss;
-        }
-        if (
-            normalizeString(action.indirectObjectEntityName) !==
-            normalizeString(genAction.indirectObjectEntityName)
-        ) {
-            loss += potentialIndirectObjectLoss;
-        }
-        if (action.subjectEntityFacet) {
-            if (!genAction.subjectEntityFacet) {
-                loss += potentialSubjectEntityFacetLoss;
-            } else {
-                const genFacetLoss = await facetLoss(
-                    [action.subjectEntityFacet],
-                    [genAction.subjectEntityFacet],
-                );
-                loss += potentialSubjectEntityFacetLoss * genFacetLoss;
+            // exact match for now using normalized string
+            if (
+                normalizeString(action.subjectEntityName) !==
+                normalizeString(genAction.subjectEntityName)
+            ) {
+                loss += potentialSubjectLoss;
+            }
+            if (
+                normalizeString(action.objectEntityName) !==
+                normalizeString(genAction.objectEntityName)
+            ) {
+                loss += potentialObjectLoss;
+            }
+            if (
+                normalizeString(action.indirectObjectEntityName) !==
+                normalizeString(genAction.indirectObjectEntityName)
+            ) {
+                loss += potentialIndirectObjectLoss;
+            }
+            if (action.subjectEntityFacet) {
+                if (!genAction.subjectEntityFacet) {
+                    loss += potentialSubjectEntityFacetLoss;
+                } else {
+                    const genFacetLoss = await facetLoss(
+                        [action.subjectEntityFacet],
+                        [genAction.subjectEntityFacet],
+                        model,
+                    );
+                    loss += potentialSubjectEntityFacetLoss * genFacetLoss;
+                }
             }
         }
     }
     return loss / potentialLossTotal;
 }
 
-async function topicsLoss(refTopics: string[], genTopics: string[]) {
-    const map = await createSemanticMap<string>();
+async function topicsLoss(
+    refTopics: string[],
+    genTopics: string[],
+    model: TextEmbeddingModel,
+) {
+    if (refTopics.length === 0) {
+        console.log("no ref topics");
+        return 0;
+    }
+    const map = await createSemanticMap<string>(model);
     for (const topic of genTopics) {
         map.set(topic, topic);
     }
     let loss = 0;
     for (const topic of refTopics) {
         const nearest = await map.getNearest(topic);
-        loss += 1 - nearest.score;
+        if (nearest === undefined) {
+            loss += 1;
+        } else {
+            loss += 1 - nearest.score;
+        }
     }
     return loss / refTopics.length;
 }
@@ -277,6 +356,7 @@ class NormalizedKnowledgeResponse {
         let topicLoss = await topicsLoss(
             this.response.topics,
             normGenResponse.response.topics,
+            model,
         );
         return (
             (genEntityLoss * potentialEntityLoss +
