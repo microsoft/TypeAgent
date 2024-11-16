@@ -74,9 +74,11 @@ class HFModel:
         if not self.train_set:
             raise ValueError("No training data loaded")
 
+        training_data = list(map(lambda x: self.tokenize(x), self.train_set["items"]))
+
         trainer = Trainer(
             model = self.model,
-            train_dataset = self.train_set,
+            train_dataset = training_data,
             args = TrainingArguments(
                 per_device_train_batch_size=2,
                 gradient_accumulation_steps=4,
