@@ -2,4 +2,5 @@ venv/
 *.egg-info/
 .env
 hf_cache
+hugging_face
 *.json

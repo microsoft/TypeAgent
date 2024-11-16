@@ -9,7 +9,6 @@ from transformers import (
     DataCollatorForLanguageModeling
 )
 from peft import LoraConfig, get_peft_model
-from datasets import Dataset as HFDataset
 from chaparral.models.data import Dataset
 import torch
 from dotenv import load_dotenv
@@ -19,7 +18,7 @@ class HFModel:
     model_name: str
     model: AutoModelForCausalLM
     tokenizer: AutoTokenizer
-    train_set: HFDataset | None = None
+    train_set: Dataset | None = None
 
     def __init__(self, model_name):
         self.model_name = model_name
@@ -57,15 +56,12 @@ class HFModel:
         self.init_peft()
 
     def load_training_data(self, dataset: Dataset):
-        data_dict = dataset.format(self.model_name)
-        train_set = HFDataset.from_dict(data_dict)
-        self.train_set = train_set
+        self.train_set = dataset
 
     def tokenize(self, text: str):
         return self.tokenizer(
             text + self.tokenizer.eos_token,
             truncation=True,
-            max_length=self.params.cutoff_len,
             padding="max_length"
         )
 
@@ -74,7 +70,8 @@ class HFModel:
         if not self.train_set:
             raise ValueError("No training data loaded")
 
-        training_data = list(map(lambda x: self.tokenize(x), self.train_set["items"]))
+        data_dict = self.dataset.format(self.model_name)
+        training_data = list(map(lambda x: self.tokenize(x), data_dict["infoPairs"]))
 
         trainer = Trainer(
             model = self.model,
