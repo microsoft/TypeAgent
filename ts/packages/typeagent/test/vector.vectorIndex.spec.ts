@@ -90,6 +90,9 @@ describe("vector.vectorIndex", () => {
                     expect(match.item).toBe(item.value);
                 }
             }
+            // add one more
+            await semanticList.push("The last string");
+            expect(semanticList.values).toHaveLength(smallStrings.length + 1);
         },
         timeoutMs,
     );
@@ -111,6 +114,10 @@ describe("vector.vectorIndex", () => {
             if (match) {
                 expect(match.item).toBe(smallStrings[0]);
             }
+
+            // add one more
+            await semanticMap.set("The last string", "abc");
+            expect(semanticMap.size).toBe(smallStrings.length + 1);
         },
         timeoutMs,
     );
