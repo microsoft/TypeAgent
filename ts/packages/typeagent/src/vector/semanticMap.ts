@@ -36,7 +36,7 @@ export interface SemanticMap<T> {
     ): Promise<ScoredItem<T>[]>;
 }
 
-export async function createSemanticMap<T>(
+export async function createSemanticMap<T = any>(
     model?: TextEmbeddingModel,
     existingValues?: [EmbeddedValue<string>, T][],
 ): Promise<SemanticMap<T>> {

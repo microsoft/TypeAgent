@@ -76,7 +76,7 @@ export async function generateTextEmbeddings(
             `Values contains string with length > ${maxCharsPerChunk}`,
         );
     }
-    concurrency ??= 2;
+    concurrency ??= 1;
     if (model.maxBatchSize > 1 && model.generateEmbeddingBatch) {
         const chunks = [
             ...collections.getStringChunks(

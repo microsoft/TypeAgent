@@ -63,7 +63,7 @@ export interface SemanticList<T> extends VectorIndex<T> {
     pushValue(value: EmbeddedValue<T>): void;
 }
 
-export function createSemanticList<T>(
+export function createSemanticList<T = any>(
     model: TextEmbeddingModel,
     existingValues?: EmbeddedValue<T>[],
     stringify?: (value: T) => string,
@@ -105,7 +105,6 @@ export function createSemanticList<T>(
         retryPauseMs?: number,
         concurrency?: number,
     ): Promise<void> {
-        concurrency ??= 2;
         // Generate embeddings in parallel
         const valueStrings = values.map((v) => toString(v));
         await callWithRetry(

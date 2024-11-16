@@ -8,7 +8,7 @@ dotenv.config({
     path: path.join(__dirname, "../../../../.env"),
 });
 
-import { openai } from "aiclient";
+import { openai, TextEmbeddingModel } from "aiclient";
 import { generateRandomEmbedding, hasEmbeddingModel, testIf } from "./common";
 import { generateTextEmbeddings } from "../src/vector/vectorIndex";
 import {
@@ -18,10 +18,17 @@ import {
     dotProductSimple,
     euclideanLength,
 } from "../src/vector/vector";
-import { createSemanticList } from "../src";
+import { createSemanticList } from "../src/vector/semanticList";
+import { createSemanticMap } from "../src/vector/semanticMap";
 
 describe("vector.vectorIndex", () => {
     const timeoutMs = 5 * 1000 * 60;
+    let model: TextEmbeddingModel | undefined;
+    beforeAll(() => {
+        if (hasEmbeddingModel()) {
+            model = openai.createEmbeddingModel();
+        }
+    });
     test("dot", () => {
         const length = 1536;
         const x = generateRandomEmbedding(length);
@@ -48,28 +55,63 @@ describe("vector.vectorIndex", () => {
                 "Mountains and Streams",
                 "Science and Technology",
             ];
-            const model = openai.createEmbeddingModel();
-            const embeddings = await generateTextEmbeddings(model, strings);
+            const embeddings = await generateTextEmbeddings(model!, strings);
             expect(embeddings).toHaveLength(strings.length);
         },
         timeoutMs,
     );
-    testIf(hasEmbeddingModel, "semanticList", async () => {
-        const strings = [
-            "object",
-            "person",
-            "composer",
-            "instrument",
-            "book",
-            "movie",
-            "dog",
-            "cat",
-            "computer",
-            "phone",
-        ];
-        const model = openai.createEmbeddingModel();
-        const semanticList = createSemanticList(model);
-        await semanticList.pushMultiple(strings);
-        expect(semanticList.values).toHaveLength(strings.length);
-    });
+
+    const smallStrings = [
+        "object",
+        "person",
+        "composer",
+        "instrument",
+        "book",
+        "movie",
+        "dog",
+        "cat",
+        "computer",
+        "phone",
+    ];
+    testIf(
+        hasEmbeddingModel,
+        "semanticList",
+        async () => {
+            const semanticList = createSemanticList<string>(model!);
+            await semanticList.pushMultiple(smallStrings);
+            expect(semanticList.values).toHaveLength(smallStrings.length);
+
+            for (let i = 0; i < smallStrings.length; ++i) {
+                const item = semanticList.values[i];
+                const embedding = item.embedding;
+                const match = await semanticList.nearestNeighbor(embedding);
+                expect(match).toBeDefined();
+                if (match) {
+                    expect(match.item).toBe(item.value);
+                }
+            }
+        },
+        timeoutMs,
+    );
+    testIf(
+        hasEmbeddingModel,
+        "semanticMap",
+        async () => {
+            const semanticMap = await createSemanticMap<string>(model!);
+            // First add some of the strings
+            const firstHalf = smallStrings.slice(0, 5);
+            await semanticMap.setMultiple(firstHalf.map((s) => [s, s]));
+            expect(semanticMap.size).toBe(firstHalf.length);
+            // Now add all the strings. This should only add the new strings
+            await semanticMap.setMultiple(smallStrings.map((s) => [s, s]));
+            expect(semanticMap.size).toBe(smallStrings.length);
+
+            const match = await semanticMap.getNearest(smallStrings[0]);
+            expect(match).toBeDefined();
+            if (match) {
+                expect(match.item).toBe(smallStrings[0]);
+            }
+        },
+        timeoutMs,
+    );
 });
