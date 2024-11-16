@@ -541,6 +541,7 @@ export async function runChatMemory(): Promise<void> {
                 pause: argPause(),
                 logFile: argDestFile("Log file for extraction data"),
                 inFile: argSourceFile("Input file with messages"),
+                testLoss: argBool("Compute loss for each message"),
             },
         };
     }
@@ -560,17 +561,24 @@ export async function runChatMemory(): Promise<void> {
         // open log file for writing
         const logPath = path.join(context.storePath, logFile);
         const logStream = fs.createWriteStream(logPath);
-        const extractor = conversation.createKnowledgeExtractor(
-            context.models.chatModel,
-            {
-                maxContextLength: context.maxCharsPerChunk,
-                mergeActionKnowledge: false,
-            },
+        const chatModelSettings = openai.apiSettingsFromEnv(
+            openai.ModelType.Chat,
+            undefined,
+            "GPT_4_O",
         );
+        chatModelSettings.retryPauseMs = 10000;
+        const chatModel = openai.createJsonChatModel(chatModelSettings, [
+            "chatExtractor",
+        ]);
+        const extractor = conversation.createKnowledgeExtractor(chatModel, {
+            maxContextLength: context.maxCharsPerChunk,
+            mergeActionKnowledge: false,
+        });
         const extractedData = [] as IExtractedData[];
         // extract from each record in inData and write to the log file
         let count = 0;
         const maxTurns = namedArgs.maxTurns;
+        const testLoss = namedArgs.testLoss;
         const clock = new StopWatch();
         let totalElapsed = 0;
         clock.start();
@@ -592,6 +600,19 @@ export async function runChatMemory(): Promise<void> {
                     id: record.id,
                     description: record.section_title,
                 };
+                if (testLoss) {
+                    const loss = await conversation
+                        .knowledgeResponseLoss(
+                            knowledge,
+                            knowledge,
+                            context.models.embeddingModel,
+                        )
+                        .catch((err) => {
+                            printer.writeError(`Error computing loss: ${err}`);
+                            return 0;
+                        });
+                    printer.writeError(`Loss for ${msg} is ${loss.toFixed(2)}`);
+                }
                 extractedData.push(data);
                 count++;
             }
