@@ -137,7 +137,7 @@
             "cwd": "${workspaceFolder}/examples/chat/src/codeChat",
             //"args": ["codeMemory"]
             //"args": ["code"]
-            //"args": ["tests"]
+            "args": ["tests"]
         },
         {
             "name": "Launch YOUR Example",

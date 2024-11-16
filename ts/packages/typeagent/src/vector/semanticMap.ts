@@ -19,8 +19,18 @@ export interface SemanticMap<T> {
     getNearest(
         text: string | NormalizedEmbedding,
     ): Promise<ScoredItem<T> | undefined>;
-    set(text: string, value: T): Promise<void>;
-    setMultiple(items: [string, T][], concurrency?: number): Promise<void>;
+    set(
+        text: string,
+        value: T,
+        retryMaxAttempts?: number,
+        retryPauseMs?: number,
+    ): Promise<void>;
+    setMultiple(
+        items: [string, T][],
+        retryMaxAttempts?: number,
+        retryPauseMs?: number,
+        concurrency?: number,
+    ): Promise<void>;
     nearestNeighbors(
         value: string | NormalizedEmbedding,
         maxMatches: number,
@@ -28,7 +38,7 @@ export interface SemanticMap<T> {
     ): Promise<ScoredItem<T>[]>;
 }
 
-export async function createSemanticMap<T>(
+export async function createSemanticMap<T = any>(
     model?: TextEmbeddingModel,
     existingValues?: [EmbeddedValue<string>, T][],
 ): Promise<SemanticMap<T>> {
@@ -70,17 +80,29 @@ export async function createSemanticMap<T>(
         return map.get(text);
     }
 
-    async function set(text: string, value: T): Promise<void> {
+    async function set(
+        text: string,
+        value: T,
+        retryMaxAttempts?: number,
+        retryPauseMs?: number,
+    ): Promise<void> {
         // If new item, have to embed.
         if (!map.has(text)) {
             // New item. Must embed
-            await semanticIndex.push(text, text);
+            await semanticIndex.push(
+                text,
+                text,
+                retryMaxAttempts,
+                retryPauseMs,
+            );
         }
         map.set(text, value);
     }
 
     async function setMultiple(
         items: [string, T][],
+        retryMaxAttempts?: number,
+        retryPauseMs?: number,
         concurrency?: number,
     ): Promise<void> {
         let newItems: string[] | undefined;
@@ -93,7 +115,12 @@ export async function createSemanticMap<T>(
             map.set(text, value);
         }
         if (newItems) {
-            await semanticIndex.pushMultiple(newItems, concurrency);
+            await semanticIndex.pushMultiple(
+                newItems,
+                retryMaxAttempts,
+                retryPauseMs,
+                concurrency,
+            );
         }
     }
 
