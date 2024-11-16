@@ -185,7 +185,6 @@ async function embedChunk(
         chunk.id,
         chunk.filename,
     )) as CodeDocumentation;
-    await exponentialBackoff(chunkyIndex.summaryFolder.put, docs, chunk.id);
     for (const comment of docs.comments || []) {
         await writeToIndex(chunk.id, comment.topics, chunkyIndex.topicsIndex);
         await writeToIndex(

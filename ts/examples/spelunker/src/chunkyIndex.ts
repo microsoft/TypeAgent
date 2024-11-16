@@ -10,7 +10,6 @@ import {
 import * as knowLib from "knowledge-processor";
 import { createObjectFolder, ObjectFolder } from "typeagent";
 
-import { CodeDocumentation } from "./codeDocSchema.js";
 import {
     createFakeCodeDocumenter,
     createFileDocumenter,
@@ -28,7 +27,6 @@ export class ChunkyIndex {
     // The rest are asynchronously initialized by initialize().
     chunkFolder!: ObjectFolder<Chunk>;
     codeIndex!: SemanticCodeIndex;
-    summaryFolder!: ObjectFolder<CodeDocumentation>;
     keywordsIndex!: knowLib.TextIndex<string, ChunkId>;
     topicsIndex!: knowLib.TextIndex<string, ChunkId>;
     goalsIndex!: knowLib.TextIndex<string, ChunkId>;
@@ -56,10 +54,6 @@ export class ChunkyIndex {
             instance.fakeCodeDocumenter,
             instance.embeddingModel,
             (obj) => JSON.stringify(obj, null, 2),
-        );
-        instance.summaryFolder = await createObjectFolder<CodeDocumentation>(
-            instance.rootDir + "/summaries",
-            { serializer: (obj) => JSON.stringify(obj, null, 2) },
         );
         instance.keywordsIndex = await makeIndex("keywords");
         instance.topicsIndex = await makeIndex("topics");

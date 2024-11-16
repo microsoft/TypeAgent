@@ -330,15 +330,15 @@ async function processQuery(
     // Next add hits from the code index. (Different API, same idea though.)
     try {
         if (options.verbose) io.writer.writeLine(`[Searching code index...]`);
-        const hits: ScoredItem<ChunkId>[] = await chunkyIndex.codeIndex!.find(
+        const hits: ScoredItem<ChunkId>[] = await chunkyIndex.codeIndex.find(
             input,
             options.maxHits * 5,
             options.minScore,
         );
         for (const hit of hits) {
             if (options.verbose) {
-                const comment = (await chunkyIndex.summaryFolder!.get(hit.item))
-                    ?.comments?.[0]?.comment;
+                const chunk = await chunkyIndex.chunkFolder.get(hit.item);
+                const comment = chunk?.docs?.comments?.[0]?.comment;
                 io.writer.writeLine(
                     `  ${hit.item} (${hit.score.toFixed(3)}) -- ${comment?.slice(0, 100) ?? "[no data]"}`,
                 );
@@ -364,7 +364,7 @@ async function processQuery(
 
     for (let i = 0; i < hits.length; i++) {
         const hit = hits[i];
-        const chunk: Chunk | undefined = await chunkyIndex.chunkFolder!.get(
+        const chunk: Chunk | undefined = await chunkyIndex.chunkFolder.get(
             hit.item,
         );
         if (!chunk) {
@@ -378,8 +378,7 @@ async function processQuery(
                 `file: ${path.relative(process.cwd(), chunk.filename!)}, ` +
                 `type: ${chunk.treeName}`,
         );
-        const summary: CodeDocumentation | undefined =
-            await chunkyIndex.summaryFolder!.get(hit.item);
+        const summary: CodeDocumentation | undefined = chunk.docs;
         if (summary?.comments?.length) {
             for (const comment of summary.comments)
                 io.writer.writeLine(
