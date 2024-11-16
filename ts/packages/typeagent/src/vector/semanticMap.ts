@@ -16,7 +16,9 @@ export interface SemanticMap<T> {
     entries(): IterableIterator<[EmbeddedValue<string>, T]>;
     has(text: string): boolean;
     get(text: string): T | undefined;
-    getNearest(text: string | NormalizedEmbedding): Promise<ScoredItem<T>>;
+    getNearest(
+        text: string | NormalizedEmbedding,
+    ): Promise<ScoredItem<T> | undefined>;
     set(
         text: string,
         value: T,
@@ -124,7 +126,7 @@ export async function createSemanticMap<T = any>(
 
     async function getNearest(
         text: string | NormalizedEmbedding,
-    ): Promise<ScoredItem<T>> {
+    ): Promise<ScoredItem<T> | undefined> {
         // First try an exact match
         if (typeof text === "string") {
             const exactMatch = map.get(text);
@@ -136,7 +138,11 @@ export async function createSemanticMap<T = any>(
             }
         }
         const key = await semanticIndex.nearestNeighbor(text);
-        return valueFromScoredKey(key);
+        if (key !== undefined) {
+            return valueFromScoredKey(key);
+        } else {
+            return undefined;
+        }
     }
 
     async function nearestNeighbors(
