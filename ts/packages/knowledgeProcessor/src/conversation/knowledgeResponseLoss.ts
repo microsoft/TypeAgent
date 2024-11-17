@@ -7,6 +7,8 @@ import {
     ConcreteEntity,
     Action,
     Facet,
+    VerbTense,
+    ActionParam,
 } from "./knowledgeSchema.js";
 // import { createSemanticMap } from "typeagent";
 
@@ -30,12 +32,89 @@ export async function createSemanticMap<T>(_model: TextEmbeddingModel) {
     };
 }
 
-function getUniqueElements(arr1: string[], arr2: string[]): string[] {
-    return Array.from(new Set([...arr1, ...arr2]));
+function getUniqueElements<T>(
+    arr1: T[] | undefined,
+    arr2: T[] | undefined,
+): T[] {
+    if (!arr1) {
+        return arr2 || [];
+    } else if (!arr2) {
+        return arr1;
+    } else {
+        return Array.from(new Set([...arr1, ...arr2]));
+    }
 }
 
 function normalizeString(s: string): string {
     return s.toLowerCase();
+}
+
+function normalizeActionName(verbs: string[]): string {
+    return normalizeString(verbs.join(" "));
+}
+
+interface NormalizedAction {
+    verbs: string[];
+    verbTense: VerbTense;
+    params?: (string | ActionParam)[] | undefined;
+    subjectEntityNames?: string[] | undefined;
+    objectEntityNames?: string[] | undefined;
+    indirectObjectEntityNames?: string[] | undefined;
+    subjectEntityFacets?: Facet[] | undefined;
+}
+
+function normalizeAction(action: Action): NormalizedAction {
+    return {
+        verbs: action.verbs,
+        verbTense: action.verbTense,
+        params: action.params,
+        subjectEntityFacet: action.subjectEntityFacet,
+        subjectEntityName: [action.subjectEntityName],
+        objectEntityName: [action.objectEntityName],
+        indirectObjectEntityName: [action.indirectObjectEntityName],
+    } as NormalizedAction;
+}
+
+class NormalizedActions {
+    actionsByName: Map<string, NormalizedAction> = new Map();
+    constructor(public actions: Action[]) {
+        for (const action of actions) {
+            const normName = normalizeActionName(action.verbs);
+            let namedAction = this.actionsByName.get(normName);
+            if (namedAction) {
+                // merge the new action into the existing action
+                namedAction = this.mergeActionsToNorm(namedAction, action);
+            } else {
+                namedAction = normalizeAction(action);
+            }
+            this.actionsByName.set(normName, namedAction);
+        }
+    }
+
+    mergeActionsToNorm(
+        normAction: NormalizedAction,
+        action2: Action,
+    ): NormalizedAction {
+        return {
+            verbs: normAction.verbs,
+            verbTense: normAction.verbTense,
+            params: getUniqueElements(normAction.params, action2.params),
+            subjectEntityNames: getUniqueElements(
+                normAction.subjectEntityNames,
+                [action2.subjectEntityName],
+            ),
+            objectEntityNames: getUniqueElements(normAction.objectEntityNames, [
+                action2.objectEntityName,
+            ]),
+            indirectObjectEntityNames: getUniqueElements(
+                normAction.indirectObjectEntityNames,
+                [action2.indirectObjectEntityName],
+            ),
+            subjectEntityFacets: normAction.subjectEntityFacets?.concat(
+                action2.subjectEntityFacet || [],
+            ),
+        };
+    }
 }
 
 class NormalizedEntities {
@@ -87,6 +166,36 @@ class NormalizedEntities {
     }
 }
 
+async function stringListLoss(
+    refStrings: string[] | undefined,
+    genStrings: string[] | undefined,
+    model: TextEmbeddingModel,
+) {
+    if (!refStrings) {
+        return 0;
+    }
+    if (!genStrings) {
+        return 1;
+    }
+    if (refStrings.length === 0) {
+        return 0;
+    }
+    const map = await createSemanticMap<string>(model);
+    for (const str of genStrings) {
+        map.set(str, str);
+    }
+    let loss = 0;
+    for (const str of refStrings) {
+        const nearest = await map.getNearest(str);
+        if (nearest === undefined) {
+            loss += 1;
+        } else {
+            loss += 1 - nearest.score;
+        }
+    }
+    return loss / refStrings.length;
+}
+
 function entityFacetMatch(value1: Facet["value"], value2: Facet["value"]) {
     if (typeof value1 === "string" && typeof value2 === "string") {
         return normalizeString(value1) === normalizeString(value2);
@@ -114,7 +223,7 @@ function entityFacetMatch(value1: Facet["value"], value2: Facet["value"]) {
 }
 
 async function facetLoss(
-    refFacets: Facet[],
+    refFacets: Facet[] | undefined,
     genFacets: Facet[],
     model: TextEmbeddingModel,
 ) {
@@ -122,7 +231,7 @@ async function facetLoss(
     let potentialNameLoss = 2;
     let potentialValueLoss = 1;
     let potentialLoss = potentialNameLoss + potentialValueLoss;
-    if (refFacets.length === 0) {
+    if (!refFacets || refFacets.length === 0) {
         console.log("no ref facets");
         return 0;
     }
@@ -152,29 +261,7 @@ async function entityTypeLoss(
     genType: string[],
     model: TextEmbeddingModel,
 ) {
-    if (refType.length === 0) {
-        console.log("no ref types");
-        return 0;
-    }
-    const map = await createSemanticMap<string>(model);
-    for (const type of genType) {
-        map.set(type, type);
-    }
-    let loss = 0;
-    for (const type of refType) {
-        const nearest = await map.getNearest(type);
-        if (nearest === undefined) {
-            loss += 1;
-            console.log("type loss with undef", refType, genType);
-        } else {
-            loss += 1 - nearest.score;
-        }
-    }
-    const scaledLoss = loss / refType.length;
-    if (scaledLoss > 0.01) {
-        console.log("type loss", refType, genType, scaledLoss);
-    }
-    return scaledLoss;
+    return stringListLoss(refType, genType, model);
 }
 
 async function entityLoss(
@@ -183,7 +270,6 @@ async function entityLoss(
     model: TextEmbeddingModel,
 ) {
     if (refEntities.entities.length === 0) {
-        console.log("no ref entities");
         return 0;
     }
     const potentialNameLoss = 3;
@@ -226,12 +312,56 @@ async function entityLoss(
     return loss / potentialLossTotal;
 }
 
+async function paramsLoss(
+    refParams: (string | ActionParam)[],
+    genParams: (string | ActionParam)[],
+    model: TextEmbeddingModel,
+) {
+    const potentialLossName = 2;
+    const potentialLossValue = 1;
+    const potentialLossPerParam = potentialLossName + potentialLossValue;
+    const potentialLossTotal = potentialLossPerParam * refParams.length;
+    if (refParams.length === 0) {
+        return 0;
+    }
+    let loss = 0;
+    const genMap = await createSemanticMap<string | ActionParam>(model);
+    for (const param of genParams) {
+        if (typeof param === "string") {
+            genMap.set(param, param);
+        } else {
+            genMap.set(param.name, param);
+        }
+    }
+    for (const param of refParams) {
+        let paramName: string;
+        if (typeof param === "string") {
+            paramName = param;
+        } else {
+            paramName = param.name;
+        }
+        const genParamScored = await genMap.getNearest(paramName);
+        if (genParamScored === undefined) {
+            loss += potentialLossPerParam;
+        } else {
+            loss += potentialLossName * (1 - genParamScored.score);
+            if (typeof param !== "string") {
+                const genParam = genParamScored.item.valueOf() as ActionParam;
+                if (param.value !== genParam.value) {
+                    loss += potentialLossValue;
+                }
+            }
+        }
+    }
+    return loss / potentialLossTotal;
+}
 async function actionsLoss(
-    refActions: Action[],
-    genActions: Action[],
+    refActions: NormalizedAction[],
+    genActions: NormalizedAction[],
     model: TextEmbeddingModel,
 ) {
     const potentialVerbLoss = 5;
+    const potentialVerbTenseLoss = 2;
     const potentialParamLoss = 1;
     // include subject, object, and indirect object
     const potentialSubjectLoss = 1;
@@ -240,6 +370,7 @@ async function actionsLoss(
     const potentialSubjectEntityFacetLoss = 1;
     const potentialLossPerAction =
         potentialVerbLoss +
+        potentialVerbTenseLoss +
         potentialParamLoss +
         potentialSubjectLoss +
         potentialObjectLoss +
@@ -250,49 +381,59 @@ async function actionsLoss(
     }
     const potentialLossTotal = potentialLossPerAction * refActions.length;
     let loss = 0;
-    const genMap = await createSemanticMap<Action>(model);
+    const genMap = await createSemanticMap<NormalizedAction>(model);
     for (const action of genActions) {
-        genMap.set(action.verbs.join(" "), action);
+        const normName = normalizeActionName(action.verbs);
+        genMap.set(normName, action);
     }
     for (const action of refActions) {
-        const genActionScored = await genMap.getNearest(action.verbs.join(" "));
+        const normName = normalizeActionName(action.verbs);
+        const genActionScored = await genMap.getNearest(normName);
         if (genActionScored === undefined) {
             loss += potentialLossPerAction;
         } else {
             loss += potentialVerbLoss * (1 - genActionScored.score);
             const genAction = genActionScored.item;
+            if (action.verbTense !== genAction.verbTense) {
+                loss += potentialVerbTenseLoss;
+            }
             if (action.params) {
                 if (!genAction.params) {
                     loss += potentialParamLoss;
+                } else {
+                    const prmsLoss = await paramsLoss(
+                        action.params,
+                        genAction.params,
+                        model,
+                    );
+                    loss += potentialParamLoss * prmsLoss;
                 }
-                // don't go through params for now
             }
-            // exact match for now using normalized string
-            if (
-                normalizeString(action.subjectEntityName) !==
-                normalizeString(genAction.subjectEntityName)
-            ) {
-                loss += potentialSubjectLoss;
-            }
-            if (
-                normalizeString(action.objectEntityName) !==
-                normalizeString(genAction.objectEntityName)
-            ) {
-                loss += potentialObjectLoss;
-            }
-            if (
-                normalizeString(action.indirectObjectEntityName) !==
-                normalizeString(genAction.indirectObjectEntityName)
-            ) {
-                loss += potentialIndirectObjectLoss;
-            }
-            if (action.subjectEntityFacet) {
-                if (!genAction.subjectEntityFacet) {
+            const subjLoss = await stringListLoss(
+                action.subjectEntityNames,
+                genAction.subjectEntityNames,
+                model,
+            );
+            loss += potentialSubjectLoss * subjLoss;
+            const objLoss = await stringListLoss(
+                action.objectEntityNames,
+                genAction.objectEntityNames,
+                model,
+            );
+            loss += potentialObjectLoss * objLoss;
+            const indObjLoss = await stringListLoss(
+                action.indirectObjectEntityNames,
+                genAction.indirectObjectEntityNames,
+                model,
+            );
+            loss += potentialIndirectObjectLoss * indObjLoss;
+            if (action.subjectEntityFacets) {
+                if (!genAction.subjectEntityFacets) {
                     loss += potentialSubjectEntityFacetLoss;
                 } else {
                     const genFacetLoss = await facetLoss(
-                        [action.subjectEntityFacet],
-                        [genAction.subjectEntityFacet],
+                        action.subjectEntityFacets,
+                        genAction.subjectEntityFacets,
                         model,
                     );
                     loss += potentialSubjectEntityFacetLoss * genFacetLoss;
@@ -303,35 +444,12 @@ async function actionsLoss(
     return loss / potentialLossTotal;
 }
 
-async function topicsLoss(
-    refTopics: string[],
-    genTopics: string[],
-    model: TextEmbeddingModel,
-) {
-    if (refTopics.length === 0) {
-        console.log("no ref topics");
-        return 0;
-    }
-    const map = await createSemanticMap<string>(model);
-    for (const topic of genTopics) {
-        map.set(topic, topic);
-    }
-    let loss = 0;
-    for (const topic of refTopics) {
-        const nearest = await map.getNearest(topic);
-        if (nearest === undefined) {
-            loss += 1;
-        } else {
-            loss += 1 - nearest.score;
-        }
-    }
-    return loss / refTopics.length;
-}
-
 class NormalizedKnowledgeResponse {
     entities: NormalizedEntities;
+    actions: NormalizedActions;
     constructor(public response: KnowledgeResponse) {
         this.entities = new NormalizedEntities(response.entities);
+        this.actions = new NormalizedActions(response.actions);
     }
 
     async loss(
@@ -353,7 +471,7 @@ class NormalizedKnowledgeResponse {
             normGenResponse.response.actions,
             model,
         );
-        let topicLoss = await topicsLoss(
+        let topicLoss = await stringListLoss(
             this.response.topics,
             normGenResponse.response.topics,
             model,
