@@ -308,7 +308,7 @@ async function processQuery(
     const hitTable = new Map<ChunkId, number>();
 
     // First gather hits from keywords, topics etc. indexes.
-    for (const indexType of ["keywords", "topics", "goals", "dependencies"]) {
+    for (const indexType of ["keywords", "topics", "goals", "dependencies", "codeSummaries"]) {
         // TODO: Find a more type-safe way (so a typo in the index name is caught by the compiler).
         const index: knowLib.TextIndex<string, ChunkId> = (chunkyIndex as any)[
             indexType + "Index"
@@ -319,7 +319,7 @@ async function processQuery(
         }
         if (options.verbose)
             io.writer.writeLine(`[Searching ${indexType} index...]`);
-        // TODO: try/catch like below? Embeddings can fail too...
+        // TODO: try/catch? Embeddings can fail...
         const hits: ScoredItem<knowLib.TextBlock<ChunkId>>[] =
             await index.nearestNeighborsPairs(
                 input,
@@ -337,31 +337,6 @@ async function processQuery(
                 hitTable.set(id, oldScore + hit.score);
             }
         }
-    }
-
-    // Next add hits from the code index. (Different API, same idea though.)
-    try {
-        if (options.verbose) io.writer.writeLine(`[Searching code index...]`);
-        const hits: ScoredItem<knowLib.TextBlock<ChunkId>>[] =
-            await chunkyIndex.codeSummariesIndex.nearestNeighborsPairs(
-                input,
-                options.maxHits * 5,
-                options.minScore,
-            );
-        for (const hit of hits) {
-            if (options.verbose) {
-                for (const chunkId of hit.item.sourceIds ?? []) {
-                    const chunk = await chunkyIndex.chunkFolder.get(chunkId);
-                    const summary = chunk?.docs?.chunkDocs?.[0]?.summary;
-                    io.writer.writeLine(
-                        `  ${hit.item} (${hit.score.toFixed(3)}) -- ${summary?.slice(0, 100) ?? "[no data]"}`,
-                    );
-                }
-            }
-            hitTable.set(hit.item.value, hit.score);
-        }
-    } catch (error) {
-        io.writer.writeLine(`[Code index query failed; skipping: ${error}]`);
     }
 
     // Now show the top options.maxHits hits.
