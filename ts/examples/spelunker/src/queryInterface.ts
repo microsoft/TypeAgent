@@ -284,12 +284,69 @@ export async function runQueryInterface(
         input: string,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        const options: QueryOptions = {
-            maxHits: 3,
-            minScore: 0.7,
-            verbose: false,
-        };
-        await processQuery(input, chunkyIndex, io, options);
+        // TODO: Move prompt out of line.
+        const prompt = `
+I have indexed a mid-sized code base written in Python. I divided each
+file up in "chunks", one per function or class or toplevel scope, and
+asked an AI to provide for each chunk:
+
+- a summary
+- keywords
+- topics
+- goals
+- dependencies
+
+For example, in JSON, a typical chunk might have this output from the AI:
+
+  "docs": {
+    "chunkDocs": [
+      {
+        "lineNumber": 33,
+        "name": "Blob",
+        "summary": "Represents a sequence of text lines along withmetadata, including the starting line number and a flag indicating whether the blob should be ignored during reconstruction.",
+        "keywords": [
+          "text",
+          "metadata",
+          "blob"
+        ],
+        "topics": [
+          "data structure",
+          "text processing"
+        ],
+        "goals": [
+          "Store text lines",
+          "Manage reconstruction"
+        ],
+        "dependencies": []
+      }
+    ]
+  }
+
+This is just an example though. The real code base looks different -- it
+just uses the same format.
+
+Anyway, now that I've indexed this, I can do an efficient fuzzy search
+on any query string on each of the five categories. I will next write
+down a question and ask you to produce *queries* for each of the five
+indexes whose answers will help you answer my question. Don't try to
+answer the question (you haven't seen the code yet) -- just tell me the
+query strings for each index.
+
+My question is:
+
+${input}
+`;
+        const result = await chunkyIndex.queryMaker.translate(input, prompt);
+        if (!result.success) {
+            io.writer.writeLine(`[Error: ${result.message}]`);
+            return;
+        }
+        const specs = result.data;
+        // if (specs.unknownText) {
+        //     io.writer.writeLine(`[Unknown text: ${specs.unknownText}]`);
+        //     return;
+        // }
+        io.writer.writeLine(JSON.stringify(specs, null, 2));
     }
 
     await iapp.runConsole({

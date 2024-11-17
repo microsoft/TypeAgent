@@ -3,10 +3,13 @@
 
 import { openai, ChatModel, TextEmbeddingModel } from "aiclient";
 import * as knowLib from "knowledge-processor";
-import { createObjectFolder, ObjectFolder } from "typeagent";
+import { createObjectFolder, loadSchema, ObjectFolder } from "typeagent";
 
 import { createFileDocumenter, FileDocumenter } from "./fileDocumenter.js";
 import { Chunk, ChunkId } from "./pythonChunker.js";
+import { QuerySpecs } from "./makeQuerySchema.js";
+import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
+import { createTypeScriptJsonValidator } from "typechat/ts";
 
 // A bundle of object stores and indices etc.
 export class ChunkyIndex {
@@ -14,6 +17,7 @@ export class ChunkyIndex {
     chatModel: ChatModel;
     embeddingModel: TextEmbeddingModel;
     fileDocumenter: FileDocumenter;
+    queryMaker: TypeChatJsonTranslator<QuerySpecs>;
     // The rest are asynchronously initialized by initialize().
     chunkFolder!: ObjectFolder<Chunk>;
     summariesIndex!: knowLib.TextIndex<string, ChunkId>;
@@ -30,6 +34,7 @@ export class ChunkyIndex {
             1000,
         );
         this.fileDocumenter = createFileDocumenter(this.chatModel);
+        this.queryMaker = createQueryMaker(this.chatModel);
     }
 
     static async createInstance(rootDir: string): Promise<ChunkyIndex> {
@@ -60,4 +65,17 @@ export class ChunkyIndex {
             );
         }
     }
+}
+
+function createQueryMaker(
+    model: ChatModel,
+): TypeChatJsonTranslator<QuerySpecs> {
+    const typeName = "QuerySpecs";
+    const schema = loadSchema(["makeQuerySchema.ts"], import.meta.url);
+    const validator = createTypeScriptJsonValidator<QuerySpecs>(
+        schema,
+        typeName,
+    );
+    const translator = createJsonTranslator<QuerySpecs>(model, validator);
+    return translator;
 }
