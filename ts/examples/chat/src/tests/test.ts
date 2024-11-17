@@ -16,6 +16,7 @@ import {
     collections,
     readAllText,
     dotProductSimple,
+    createSemanticMap,
 } from "typeagent";
 import * as path from "path";
 import { getData } from "typechat";
@@ -107,6 +108,41 @@ export async function testEmbeddingModel() {
             console.log("Success");
         }
     }
+}
+
+export async function testEmbeddingBasic() {
+    const model = openai.createEmbeddingModel();
+
+    const strings = ["object", "instrument", "person", "food", "pizza"];
+    for (const str of strings) {
+        const e = await model.generateEmbedding(str);
+        if (e.success) {
+            console.log("Success");
+        }
+    }
+}
+
+export async function testSemanticMap() {
+    const strings = [
+        "lunch meeting",
+        "pick up groceries",
+        "The quick brown fox",
+        "Who is a good dog?",
+        "I am so very hungry for pizza",
+    ];
+    const model = openai.createEmbeddingModel();
+    const sm = await createSemanticMap<number>(model);
+    for (let i = 0; i < strings.length; ++i) {
+        await sm.set(strings[i], i);
+    }
+    let match = await sm.getNearest("Toto is a good dog");
+    console.log(match);
+
+    match = await sm.getNearest("pepperoni and margarhita");
+    console.log(match);
+
+    match = await sm.getNearest("we should meet up for lunch");
+    console.log(match);
 }
 
 export function generateMessageLines(count: number): string[] {
@@ -265,6 +301,7 @@ export async function testPerf() {
     testDotPerf2(1536);
 }
 export async function runTests(): Promise<void> {
+    await testSemanticMap();
     //await testEmbeddingModel();
     //await runTestCases();
     // await runKnowledgeTests();
