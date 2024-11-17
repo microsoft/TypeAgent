@@ -24,6 +24,7 @@ export async function runQueryInterface(
 ): Promise<void> {
     const handlers: Record<string, iapp.CommandHandler> = {
         search,
+        summaries,
         keywords,
         topics,
         goals,
@@ -103,6 +104,20 @@ export async function runQueryInterface(
                 type: "boolean",
             },
         };
+    }
+
+    function summariesDef(): iapp.CommandMetadata {
+        return {
+            description: "Show all recorded summaries and their postings.",
+            options: commonOptions(),
+        };
+    }
+    handlers.summaries.metadata = summariesDef();
+    async function summaries(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        await reportIndex(args, io, "codeSummaries");
     }
 
     function keywordsDef(): iapp.CommandMetadata {
@@ -265,10 +280,6 @@ export async function runQueryInterface(
 
     // Define special handlers, then run the console loop.
 
-    async function onStart(io: iapp.InteractiveIo): Promise<void> {
-        io.writer.writeLine("Welcome to the query interface!");
-    }
-
     async function inputHandler(
         input: string,
         io: iapp.InteractiveIo,
@@ -282,9 +293,9 @@ export async function runQueryInterface(
     }
 
     await iapp.runConsole({
-        onStart,
         inputHandler,
         handlers,
+        prompt: "\n🤖> ",
     });
 }
 
