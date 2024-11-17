@@ -117,7 +117,7 @@ export async function runQueryInterface(
         args: string[] | iapp.NamedArgs,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        await reportIndex(args, io, "codeSummaries");
+        await reportIndex(args, io, "summaries");
     }
 
     function keywordsDef(): iapp.CommandMetadata {
@@ -308,7 +308,13 @@ async function processQuery(
     const hitTable = new Map<ChunkId, number>();
 
     // First gather hits from keywords, topics etc. indexes.
-    for (const indexType of ["keywords", "topics", "goals", "dependencies", "codeSummaries"]) {
+    for (const indexType of [
+        "keywords",
+        "topics",
+        "goals",
+        "dependencies",
+        "summaries",
+    ]) {
         // TODO: Find a more type-safe way (so a typo in the index name is caught by the compiler).
         const index: knowLib.TextIndex<string, ChunkId> = (chunkyIndex as any)[
             indexType + "Index"
@@ -351,7 +357,7 @@ async function processQuery(
     results.sort((a, b) => b.score - a.score);
     results.splice(options.maxHits);
     io.writer.writeLine(
-        `\nFound ${results.length} ${plural("hit", results.length)} for "${input}":`,
+        `Found ${results.length} ${plural("hit", results.length)} for "${input}":`,
     );
 
     for (let i = 0; i < results.length; i++) {

@@ -16,7 +16,7 @@ export class ChunkyIndex {
     fileDocumenter: FileDocumenter;
     // The rest are asynchronously initialized by initialize().
     chunkFolder!: ObjectFolder<Chunk>;
-    codeSummariesIndex!: knowLib.TextIndex<string, ChunkId>;
+    summariesIndex!: knowLib.TextIndex<string, ChunkId>;
     keywordsIndex!: knowLib.TextIndex<string, ChunkId>;
     topicsIndex!: knowLib.TextIndex<string, ChunkId>;
     goalsIndex!: knowLib.TextIndex<string, ChunkId>;
@@ -38,7 +38,7 @@ export class ChunkyIndex {
             instance.rootDir + "/chunks",
             { serializer: (obj) => JSON.stringify(obj, null, 2) },
         );
-        instance.codeSummariesIndex = await makeIndex("code-summaries");
+        instance.summariesIndex = await makeIndex("summaries");
         instance.keywordsIndex = await makeIndex("keywords");
         instance.topicsIndex = await makeIndex("topics");
         instance.goalsIndex = await makeIndex("goals");
