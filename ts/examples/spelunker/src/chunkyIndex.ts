@@ -2,11 +2,7 @@
 // Licensed under the MIT License.
 
 import { openai, ChatModel, TextEmbeddingModel } from "aiclient";
-import {
-    CodeDocumenter,
-    createSemanticCodeIndex,
-    SemanticCodeIndex,
-} from "code-processor";
+import { CodeDocumenter } from "code-processor";
 import * as knowLib from "knowledge-processor";
 import { createObjectFolder, ObjectFolder } from "typeagent";
 
@@ -26,7 +22,7 @@ export class ChunkyIndex {
     fakeCodeDocumenter: CodeDocumenter;
     // The rest are asynchronously initialized by initialize().
     chunkFolder!: ObjectFolder<Chunk>;
-    codeIndex!: SemanticCodeIndex;
+    codeSummariesIndex!: knowLib.TextIndex<string, ChunkId>;
     keywordsIndex!: knowLib.TextIndex<string, ChunkId>;
     topicsIndex!: knowLib.TextIndex<string, ChunkId>;
     goalsIndex!: knowLib.TextIndex<string, ChunkId>;
@@ -49,12 +45,7 @@ export class ChunkyIndex {
             instance.rootDir + "/chunks",
             { serializer: (obj) => JSON.stringify(obj, null, 2) },
         );
-        instance.codeIndex = await createSemanticCodeIndex(
-            instance.rootDir + "/index",
-            instance.fakeCodeDocumenter,
-            instance.embeddingModel,
-            (obj) => JSON.stringify(obj, null, 2),
-        );
+        instance.codeSummariesIndex = await makeIndex("code-summaries");
         instance.keywordsIndex = await makeIndex("keywords");
         instance.topicsIndex = await makeIndex("topics");
         instance.goalsIndex = await makeIndex("goals");

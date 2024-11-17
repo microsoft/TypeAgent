@@ -227,7 +227,7 @@ export async function runQueryInterface(
             });
             for (const hit of hits) {
                 io.writer.writeLine(
-                    `${hit.item.value} (${hit.score.toFixed(3)}) :: ${(hit.item.sourceIds || []).join(", ")}`,
+                    `${hit.item.value} (${hit.score.toFixed(3)}) :: ${(hit.item.sourceIds ?? []).join(", ")}`,
                 );
             }
         }
@@ -320,7 +320,7 @@ async function processQuery(
                     `  ${hit.item.value} (${hit.score.toFixed(3)}) -- ${hit.item.sourceIds}`,
                 );
             }
-            for (const id of hit.item.sourceIds || []) {
+            for (const id of hit.item.sourceIds ?? []) {
                 const oldScore = hitTable.get(id) || 0.0;
                 hitTable.set(id, oldScore + hit.score);
             }
@@ -330,20 +330,23 @@ async function processQuery(
     // Next add hits from the code index. (Different API, same idea though.)
     try {
         if (options.verbose) io.writer.writeLine(`[Searching code index...]`);
-        const hits: ScoredItem<ChunkId>[] = await chunkyIndex.codeIndex.find(
-            input,
-            options.maxHits * 5,
-            options.minScore,
-        );
+        const hits: ScoredItem<knowLib.TextBlock<ChunkId>>[] =
+            await chunkyIndex.codeSummariesIndex.nearestNeighborsPairs(
+                input,
+                options.maxHits * 5,
+                options.minScore,
+            );
         for (const hit of hits) {
             if (options.verbose) {
-                const chunk = await chunkyIndex.chunkFolder.get(hit.item);
-                const comment = chunk?.docs?.comments?.[0]?.comment;
-                io.writer.writeLine(
-                    `  ${hit.item} (${hit.score.toFixed(3)}) -- ${comment?.slice(0, 100) ?? "[no data]"}`,
-                );
+                for (const chunkId of hit.item.sourceIds ?? []) {
+                    const chunk = await chunkyIndex.chunkFolder.get(chunkId);
+                    const comment = chunk?.docs?.comments?.[0]?.comment;
+                    io.writer.writeLine(
+                        `  ${hit.item} (${hit.score.toFixed(3)}) -- ${comment?.slice(0, 100) ?? "[no data]"}`,
+                    );
+                }
             }
-            hitTable.set(hit.item, hit.score);
+            hitTable.set(hit.item.value, hit.score);
         }
     } catch (error) {
         io.writer.writeLine(`[Code index query failed; skipping: ${error}]`);
@@ -354,16 +357,18 @@ async function processQuery(
         io.writer.writeLine("No hits.");
         return;
     }
-    const hits: ScoredItem<ChunkId>[] = Array.from(
+    const results: ScoredItem<ChunkId>[] = Array.from(
         hitTable,
         ([item, score]) => ({ item, score }),
     );
-    hits.sort((a, b) => b.score - a.score);
-    hits.splice(options.maxHits);
-    io.writer.writeLine(`Found ${hits.length} ${plural("hit", hits.length)}:`);
+    results.sort((a, b) => b.score - a.score);
+    results.splice(options.maxHits);
+    io.writer.writeLine(
+        `\nFound ${results.length} ${plural("hit", results.length)} for "${input}":`,
+    );
 
-    for (let i = 0; i < hits.length; i++) {
-        const hit = hits[i];
+    for (let i = 0; i < results.length; i++) {
+        const hit = results[i];
         const chunk: Chunk | undefined = await chunkyIndex.chunkFolder.get(
             hit.item,
         );
@@ -378,9 +383,9 @@ async function processQuery(
                 `file: ${path.relative(process.cwd(), chunk.filename!)}, ` +
                 `type: ${chunk.treeName}`,
         );
-        const summary: CodeDocumentation | undefined = chunk.docs;
-        if (summary?.comments?.length) {
-            for (const comment of summary.comments)
+        const docs: CodeDocumentation | undefined = chunk.docs;
+        if (docs?.comments?.length) {
+            for (const comment of docs.comments)
                 io.writer.writeLine(
                     wordWrap(`${comment.comment} (${comment.lineNumber})`),
                 );
