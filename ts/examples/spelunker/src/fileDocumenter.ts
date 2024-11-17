@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { ChatModel } from "aiclient";
-import { CodeBlock, CodeDocumenter } from "code-processor";
 import { loadSchema } from "typeagent";
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
@@ -14,10 +13,6 @@ import { Chunk } from "./pythonChunker.js";
 // but we want to produce their documentation in the context of the whole file.
 // FileDocumenter.document(chunks) produces documentation comments
 // and then assigns each comment to the appropriate chunk.
-// createFaleCodeDocumenter() returns a CodeDocumenter that retrieves
-// the pre-computed comments from the chunk's 'docs' field.
-
-// Fake code documenter to pass to createCodeIndex.
 
 // Document an entire file and assign comments to chunks.
 
@@ -84,6 +79,7 @@ export function createFileDocumenter(model: ChatModel): FileDocumenter {
 function createFileDocTranslator(
     model: ChatModel,
 ): TypeChatJsonTranslator<CodeDocumentation> {
+    // TODO: Rename the schema to avoid confusion with the *other* codeDocSchema.ts.
     const typeName = "CodeDocumentation";
     const schema = loadSchema(["codeDocSchema.ts"], import.meta.url);
     const validator = createTypeScriptJsonValidator<CodeDocumentation>(
@@ -95,23 +91,4 @@ function createFileDocTranslator(
         validator,
     );
     return translator;
-}
-
-export interface CodeBlockWithDocs extends CodeBlock {
-    docs: CodeDocumentation;
-}
-
-export function createFakeCodeDocumenter(): CodeDocumenter {
-    return {
-        document,
-    };
-
-    async function document(
-        code: CodeBlock | CodeBlockWithDocs,
-    ): Promise<CodeDocumentation> {
-        if ("docs" in code && code.docs) {
-            return code.docs;
-        }
-        return {};
-    }
 }

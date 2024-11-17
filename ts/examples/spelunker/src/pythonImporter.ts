@@ -33,8 +33,7 @@ import * as knowLib from "knowledge-processor";
 import { asyncArray } from "typeagent";
 
 import { ChunkyIndex } from "./chunkyIndex.js";
-import { CodeDocumentation } from "./codeDocSchema.js";
-import { CodeBlockWithDocs } from "./fileDocumenter.js";
+import { LineDoc } from "./codeDocSchema.js";
 import {
     Chunk,
     ChunkedFile,
@@ -172,45 +171,45 @@ async function embedChunk(
         0,
     );
     if (verbose) console.log(`  [Embedding ${chunk.id} (${lineCount} lines)]`);
-    await exponentialBackoff(chunkyIndex.chunkFolder!.put, chunk, chunk.id);
-    const blobLines = extractBlobLines(chunk);
-    const codeBlock: CodeBlockWithDocs = {
-        code: blobLines,
-        language: "python",
-        docs: chunk.docs!,
-    };
-    const docs = (await exponentialBackoff(
-        chunkyIndex.codeIndex!.put,
-        codeBlock,
-        chunk.id,
-        chunk.filename,
-    )) as CodeDocumentation;
-    await exponentialBackoff(chunkyIndex.summaryFolder.put, docs, chunk.id);
-    for (const comment of docs.comments || []) {
-        await writeToIndex(chunk.id, comment.topics, chunkyIndex.topicsIndex);
+    await exponentialBackoff(chunkyIndex.chunkFolder.put, chunk, chunk.id);
+    const summaries: string[] = [];
+    const lineDocs: LineDoc[] = chunk.docs?.comments ?? [];
+    for (const lineDoc of lineDocs) {
+        summaries.push(lineDoc.comment);
+    }
+    const combinedSummaries = summaries.join("\n").trimEnd();
+    if (combinedSummaries) {
+        await exponentialBackoff(
+            chunkyIndex.codeSummariesIndex.put,
+            combinedSummaries,
+            [chunk.id],
+        );
+    }
+    for (const lineDoc of lineDocs) {
+        await writeToIndex(chunk.id, lineDoc.topics, chunkyIndex.topicsIndex);
         await writeToIndex(
             chunk.id,
-            comment.keywords,
+            lineDoc.keywords,
             chunkyIndex.keywordsIndex,
         );
-        await writeToIndex(chunk.id, comment.goals, chunkyIndex.goalsIndex);
+        await writeToIndex(chunk.id, lineDoc.goals, chunkyIndex.goalsIndex);
         await writeToIndex(
             chunk.id,
-            comment.dependencies,
+            lineDoc.dependencies,
             chunkyIndex.dependenciesIndex,
         );
     }
     if (verbose) {
-        for (const comment of docs.comments || []) {
-            console.log(wordWrap(`${comment.comment} (${comment.lineNumber})`));
-            if (comment.topics?.length)
-                console.log(`TOPICS: ${comment.topics.join(", ")}`);
-            if (comment.keywords?.length)
-                console.log(`KEYWORDS: ${comment.keywords.join(", ")}`);
-            if (comment.goals?.length)
-                console.log(`GOALS: ${comment.goals.join(", ")}`);
-            if (comment.dependencies?.length)
-                console.log(`DEPENDENCIES: ${comment.dependencies.join(", ")}`);
+        for (const lineDoc of lineDocs) {
+            console.log(wordWrap(`${lineDoc.comment} (${lineDoc.lineNumber})`));
+            if (lineDoc.topics?.length)
+                console.log(`TOPICS: ${lineDoc.topics.join(", ")}`);
+            if (lineDoc.keywords?.length)
+                console.log(`KEYWORDS: ${lineDoc.keywords.join(", ")}`);
+            if (lineDoc.goals?.length)
+                console.log(`GOALS: ${lineDoc.goals.join(", ")}`);
+            if (lineDoc.dependencies?.length)
+                console.log(`DEPENDENCIES: ${lineDoc.dependencies.join(", ")}`);
         }
     }
     const t1 = Date.now();
@@ -220,14 +219,6 @@ async function embedChunk(
                 `in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
         );
     }
-}
-
-function extractBlobLines(chunk: Chunk): string[] {
-    const lines: string[] = [];
-    for (const blob of chunk.blobs) {
-        lines.push(...blob.lines);
-    }
-    return lines;
 }
 
 // Wrap words in anger. Written by Github Copilot.
@@ -260,7 +251,7 @@ async function writeToIndex(
 async function exponentialBackoff<T extends any[], R>(
     callable: (...args: T) => Promise<R>,
     ...args: T
-): Promise<any> {
+): Promise<R> {
     let timeout = 1;
     for (;;) {
         try {
