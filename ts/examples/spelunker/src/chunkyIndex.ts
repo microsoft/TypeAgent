@@ -2,15 +2,10 @@
 // Licensed under the MIT License.
 
 import { openai, ChatModel, TextEmbeddingModel } from "aiclient";
-import { CodeDocumenter } from "code-processor";
 import * as knowLib from "knowledge-processor";
 import { createObjectFolder, ObjectFolder } from "typeagent";
 
-import {
-    createFakeCodeDocumenter,
-    createFileDocumenter,
-    FileDocumenter,
-} from "./fileDocumenter.js";
+import { createFileDocumenter, FileDocumenter } from "./fileDocumenter.js";
 import { Chunk, ChunkId } from "./pythonChunker.js";
 
 // A bundle of object stores and indices etc.
@@ -19,7 +14,6 @@ export class ChunkyIndex {
     chatModel: ChatModel;
     embeddingModel: TextEmbeddingModel;
     fileDocumenter: FileDocumenter;
-    fakeCodeDocumenter: CodeDocumenter;
     // The rest are asynchronously initialized by initialize().
     chunkFolder!: ObjectFolder<Chunk>;
     codeSummariesIndex!: knowLib.TextIndex<string, ChunkId>;
@@ -36,7 +30,6 @@ export class ChunkyIndex {
             1000,
         );
         this.fileDocumenter = createFileDocumenter(this.chatModel);
-        this.fakeCodeDocumenter = createFakeCodeDocumenter();
     }
 
     static async createInstance(rootDir: string): Promise<ChunkyIndex> {
