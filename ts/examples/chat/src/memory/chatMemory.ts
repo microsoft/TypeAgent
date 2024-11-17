@@ -674,11 +674,20 @@ export async function runChatMemory(): Promise<void> {
         // open log file for writing
         const logPath = path.join(context.storePath, logFile);
         const logStream = fs.createWriteStream(logPath);
-        const chatModelSettings = openai.apiSettingsFromEnv(
+        /*    const chatModelSettings = openai.apiSettingsFromEnv(
             openai.ModelType.Chat,
             undefined,
             "GPT_4_O_MINI",
         );
+        */
+        const chatModelSettings = openai.localOpenAIApiSettingsFromEnv(
+            openai.ModelType.Chat,
+            process.env,
+            "LOCAL",
+        );
+        if (!chatModelSettings) {
+            return;
+        }
         chatModelSettings.retryPauseMs = 10000;
         const chatModel = openai.createJsonChatModel(chatModelSettings, [
             "chatExtractor",
@@ -721,7 +730,7 @@ export async function runChatMemory(): Promise<void> {
                     id: record.id,
                     loss,
                     refModelName: record.modelName || "gpt_4o",
-                    modelName: "gpt_4o_mini",
+                    modelName: "gemma2:9b-instruct-fp16",
                     description: record.description,
                 };
                 extractedData.push(data);
