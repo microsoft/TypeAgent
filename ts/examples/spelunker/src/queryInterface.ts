@@ -8,7 +8,7 @@ import * as knowLib from "knowledge-processor";
 import path from "path";
 import { ScoredItem } from "typeagent";
 import { ChunkyIndex } from "./chunkyIndex.js";
-import { CodeDocumentation } from "./codeDocSchema.js";
+import { FileDocumentation } from "./fileDocSchema.js";
 import { Chunk, ChunkId } from "./pythonChunker.js";
 import { wordWrap } from "./pythonImporter.js";
 
@@ -268,6 +268,7 @@ export async function runQueryInterface(
     async function onStart(io: iapp.InteractiveIo): Promise<void> {
         io.writer.writeLine("Welcome to the query interface!");
     }
+
     async function inputHandler(
         input: string,
         io: iapp.InteractiveIo,
@@ -340,9 +341,9 @@ async function processQuery(
             if (options.verbose) {
                 for (const chunkId of hit.item.sourceIds ?? []) {
                     const chunk = await chunkyIndex.chunkFolder.get(chunkId);
-                    const comment = chunk?.docs?.comments?.[0]?.comment;
+                    const summary = chunk?.docs?.chunkDocs?.[0]?.summary;
                     io.writer.writeLine(
-                        `  ${hit.item} (${hit.score.toFixed(3)}) -- ${comment?.slice(0, 100) ?? "[no data]"}`,
+                        `  ${hit.item} (${hit.score.toFixed(3)}) -- ${summary?.slice(0, 100) ?? "[no data]"}`,
                     );
                 }
             }
@@ -383,13 +384,11 @@ async function processQuery(
                 `file: ${path.relative(process.cwd(), chunk.filename!)}, ` +
                 `type: ${chunk.treeName}`,
         );
-        const docs: CodeDocumentation | undefined = chunk.docs;
-        if (docs?.comments?.length) {
-            for (const comment of docs.comments)
-                io.writer.writeLine(
-                    wordWrap(`${comment.comment} (${comment.lineNumber})`),
-                );
-        }
+        const docs: FileDocumentation | undefined = chunk.docs;
+        for (const chunkDoc of docs?.chunkDocs ?? [])
+            io.writer.writeLine(
+                wordWrap(`${chunkDoc.summary} (${chunkDoc.lineNumber})`),
+            );
         writeChunkLines(chunk, io, options.verbose ? 100 : 5);
     }
 }
