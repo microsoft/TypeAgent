@@ -10,16 +10,15 @@ import {
     VerbTense,
     ActionParam,
 } from "./knowledgeSchema.js";
-// import { createSemanticMap } from "typeagent";
+import { createSemanticMap } from "typeagent";
 
-export async function createSemanticMap<T>(_model: TextEmbeddingModel) {
+export async function createLocalSemanticMap<T>(_model: TextEmbeddingModel) {
     const map = new Map<string, T>();
     return {
-        set: (key: string, value: T) => {
-            map.set(key, value);
-        },
-        get: (key: string) => {
-            return map.get(key);
+        setMultiple(items: [string, T][]) {
+            for (const [key, value] of items) {
+                map.set(key, value);
+            }
         },
         getNearest: async (key: string) => {
             const item = map.get(key);
@@ -181,9 +180,7 @@ async function stringListLoss(
         return 0;
     }
     const map = await createSemanticMap<string>(model);
-    for (const str of genStrings) {
-        map.set(str, str);
-    }
+    map.setMultiple(genStrings.map((s) => [s, s]));
     let loss = 0;
     for (const str of refStrings) {
         const nearest = await map.getNearest(str);
@@ -237,9 +234,7 @@ async function facetLoss(
     }
     let potentialLossTotal = refFacets.length * potentialLoss;
     const genMap = await createSemanticMap<Facet>(model);
-    for (const facet of genFacets) {
-        genMap.set(facet.name, facet);
-    }
+    genMap.setMultiple(genFacets.map((facet) => [facet.name, facet]));
     for (const facet of refFacets) {
         const genFacetScored = await genMap.getNearest(facet.name);
         if (genFacetScored === undefined) {
@@ -280,9 +275,9 @@ async function entityLoss(
     const potentialLossTotal =
         refEntities.entities.length * potentialLossPerEntity;
     const genMap = await createSemanticMap<ConcreteEntity>(model);
-    for (const entity of generatedEntities.entities) {
-        genMap.set(entity.name, entity);
-    }
+    genMap.setMultiple(
+        generatedEntities.entities.map((entity) => [entity.name, entity]),
+    );
     let loss = 0;
 
     for (const entity of refEntities.entities) {
@@ -326,13 +321,15 @@ async function paramsLoss(
     }
     let loss = 0;
     const genMap = await createSemanticMap<string | ActionParam>(model);
-    for (const param of genParams) {
-        if (typeof param === "string") {
-            genMap.set(param, param);
-        } else {
-            genMap.set(param.name, param);
-        }
-    }
+    genMap.setMultiple(
+        genParams.map((param) => {
+            if (typeof param === "string") {
+                return [param, param];
+            } else {
+                return [param.name, param];
+            }
+        }),
+    );
     for (const param of refParams) {
         let paramName: string;
         if (typeof param === "string") {
@@ -382,10 +379,9 @@ async function actionsLoss(
     const potentialLossTotal = potentialLossPerAction * refActions.length;
     let loss = 0;
     const genMap = await createSemanticMap<NormalizedAction>(model);
-    for (const action of genActions) {
-        const normName = normalizeActionName(action.verbs);
-        genMap.set(normName, action);
-    }
+    genMap.setMultiple(
+        genActions.map((action) => [normalizeActionName(action.verbs), action]),
+    );
     for (const action of refActions) {
         const normName = normalizeActionName(action.verbs);
         const genActionScored = await genMap.getNearest(normName);
