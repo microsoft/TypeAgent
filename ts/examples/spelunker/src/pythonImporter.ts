@@ -33,7 +33,7 @@ import * as knowLib from "knowledge-processor";
 import { asyncArray } from "typeagent";
 
 import { ChunkyIndex } from "./chunkyIndex.js";
-import { LineDoc } from "./codeDocSchema.js";
+import { ChunkDoc } from "./fileDocSchema.js";
 import {
     Chunk,
     ChunkedFile,
@@ -173,9 +173,9 @@ async function embedChunk(
     if (verbose) console.log(`  [Embedding ${chunk.id} (${lineCount} lines)]`);
     await exponentialBackoff(chunkyIndex.chunkFolder.put, chunk, chunk.id);
     const summaries: string[] = [];
-    const lineDocs: LineDoc[] = chunk.docs?.comments ?? [];
-    for (const lineDoc of lineDocs) {
-        summaries.push(lineDoc.comment);
+    const chunkDocs: ChunkDoc[] = chunk.docs?.chunkDocs ?? [];
+    for (const chunkDoc of chunkDocs) {
+        summaries.push(chunkDoc.summary);
     }
     const combinedSummaries = summaries.join("\n").trimEnd();
     if (combinedSummaries) {
@@ -185,31 +185,35 @@ async function embedChunk(
             [chunk.id],
         );
     }
-    for (const lineDoc of lineDocs) {
-        await writeToIndex(chunk.id, lineDoc.topics, chunkyIndex.topicsIndex);
+    for (const chunkDoc of chunkDocs) {
+        await writeToIndex(chunk.id, chunkDoc.topics, chunkyIndex.topicsIndex);
         await writeToIndex(
             chunk.id,
-            lineDoc.keywords,
+            chunkDoc.keywords,
             chunkyIndex.keywordsIndex,
         );
-        await writeToIndex(chunk.id, lineDoc.goals, chunkyIndex.goalsIndex);
+        await writeToIndex(chunk.id, chunkDoc.goals, chunkyIndex.goalsIndex);
         await writeToIndex(
             chunk.id,
-            lineDoc.dependencies,
+            chunkDoc.dependencies,
             chunkyIndex.dependenciesIndex,
         );
     }
     if (verbose) {
-        for (const lineDoc of lineDocs) {
-            console.log(wordWrap(`${lineDoc.comment} (${lineDoc.lineNumber})`));
-            if (lineDoc.topics?.length)
-                console.log(`TOPICS: ${lineDoc.topics.join(", ")}`);
-            if (lineDoc.keywords?.length)
-                console.log(`KEYWORDS: ${lineDoc.keywords.join(", ")}`);
-            if (lineDoc.goals?.length)
-                console.log(`GOALS: ${lineDoc.goals.join(", ")}`);
-            if (lineDoc.dependencies?.length)
-                console.log(`DEPENDENCIES: ${lineDoc.dependencies.join(", ")}`);
+        for (const chunkDoc of chunkDocs) {
+            console.log(
+                wordWrap(`${chunkDoc.summary} (${chunkDoc.lineNumber})`),
+            );
+            if (chunkDoc.topics?.length)
+                console.log(`TOPICS: ${chunkDoc.topics.join(", ")}`);
+            if (chunkDoc.keywords?.length)
+                console.log(`KEYWORDS: ${chunkDoc.keywords.join(", ")}`);
+            if (chunkDoc.goals?.length)
+                console.log(`GOALS: ${chunkDoc.goals.join(", ")}`);
+            if (chunkDoc.dependencies?.length)
+                console.log(
+                    `DEPENDENCIES: ${chunkDoc.dependencies.join(", ")}`,
+                );
         }
     }
     const t1 = Date.now();
