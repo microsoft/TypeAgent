@@ -266,17 +266,20 @@ export function getRetryAfterMs(
 ): number {
     try {
         let pauseHeader = result.headers.get("Retry-After");
-        if (pauseHeader) {
-            let seconds = parseInt(pauseHeader);
-            let pauseMs: number;
-            if (isNaN(seconds)) {
-                const retryDate = new Date(pauseHeader);
-                pauseMs = retryDate.getTime() - Date.now(); // Already in ms
-            } else {
-                pauseMs = seconds * 1000;
-            }
-            if (pauseMs > 0) {
-                return pauseMs;
+        if (pauseHeader !== null) {
+            pauseHeader = pauseHeader.trim();
+            if (pauseHeader) {
+                let seconds = parseInt(pauseHeader);
+                let pauseMs: number;
+                if (isNaN(seconds)) {
+                    const retryDate = new Date(pauseHeader);
+                    pauseMs = retryDate.getTime() - Date.now(); // Already in ms
+                } else {
+                    pauseMs = seconds * 1000;
+                }
+                if (pauseMs > 0) {
+                    return pauseMs;
+                }
             }
         }
     } catch {}
