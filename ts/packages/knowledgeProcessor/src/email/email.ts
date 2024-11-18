@@ -1,7 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { asyncArray, dateTime, readJsonFile } from "typeagent";
+import {
+    asyncArray,
+    dateTime,
+    MessageSourceRole,
+    PromptSectionProvider,
+    readJsonFile,
+} from "typeagent";
 import {
     Action,
     ConcreteEntity,
@@ -26,6 +32,7 @@ import { isValidChunkSize, splitLargeTextIntoChunks } from "../textChunker.js";
 import { ChatModel } from "aiclient";
 import { KnownEntityTypes } from "../conversation/knowledge.js";
 import { StorageProvider } from "../storageProvider.js";
+import { PromptSection } from "typechat";
 
 export function emailAddressToString(address: EmailAddress): string {
     if (address.displayName) {
@@ -300,10 +307,15 @@ export async function createEmailMemory(
         undefined,
         storageProvider,
     );
+
+    const contextProvider = await createEmailContextProvider(
+        path.join(rootPath, "emailUserProfile.json"),
+    );
     const cm = await createConversationManager(
         {
             model,
-            initializer: setupEmailConversationManager,
+            initializer: (cm) =>
+                setupEmailConversationManager(cm, contextProvider),
         },
         name,
         rootPath,
@@ -315,6 +327,7 @@ export async function createEmailMemory(
 
 async function setupEmailConversationManager(
     cm: ConversationManager,
+    contextProvider: PromptSectionProvider,
 ): Promise<void> {
     cm.topicMerger.settings.mergeWindowSize = 1;
     cm.topicMerger.settings.trackRecent = false;
@@ -323,7 +336,31 @@ async function setupEmailConversationManager(
     entityIndex.noiseTerms.put("email");
     entityIndex.noiseTerms.put("message");
 
+    cm.searchProcessor.settings.sectionProvider = contextProvider;
     cm.searchProcessor.answers.settings.hints = `messages are *emails*. Use email headers (to, subject. etc) to determine if message is highly relevant to the question`;
+}
+
+async function createEmailContextProvider(
+    profilePath: string,
+): Promise<PromptSectionProvider> {
+    let sections: PromptSection[] | undefined;
+    const userProfile = await readJsonFile<any>(profilePath);
+    if (userProfile) {
+        sections = [];
+        sections.push({
+            role: MessageSourceRole.system,
+            content:
+                `This is the Email Inbox of:\n'''${JSON.stringify(userProfile, undefined, 2)}\n'''` +
+                "\nTranslate references to 'Me', 'I' etc. explicitly to the above user",
+        });
+    }
+    return { getSections };
+
+    async function getSections(
+        request: string,
+    ): Promise<PromptSection[] | undefined> {
+        return sections;
+    }
 }
 
 async function setupEmailConversation(

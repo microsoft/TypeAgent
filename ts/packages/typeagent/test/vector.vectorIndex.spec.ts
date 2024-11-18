@@ -9,7 +9,12 @@ dotenv.config({
 });
 
 import { openai, TextEmbeddingModel } from "aiclient";
-import { generateRandomEmbedding, hasEmbeddingModel, testIf } from "./common";
+import {
+    generateRandomEmbedding,
+    hasEmbeddingModel,
+    testDirectoryPath,
+    testIf,
+} from "./common";
 import { generateTextEmbeddings } from "../src/vector/vectorIndex";
 import {
     cosineSimilarity,
@@ -20,6 +25,9 @@ import {
 } from "../src/vector/vector";
 import { createSemanticList } from "../src/vector/semanticList";
 import { createSemanticMap } from "../src/vector/semanticMap";
+import { createSemanticIndex } from "../src/vector/semanticIndex";
+import { createEmbeddingFolder } from "../src/storage/embeddingFS";
+import { removeDir } from "../src/objStream";
 
 describe("vector.vectorIndex", () => {
     const timeoutMs = 5 * 1000 * 60;
@@ -73,6 +81,39 @@ describe("vector.vectorIndex", () => {
         "computer",
         "phone",
     ];
+
+    testIf(
+        hasEmbeddingModel,
+        "semanticIndex",
+        async () => {
+            const storePath = testDirectoryPath("semanticIndex");
+            await removeDir(storePath);
+            const store = await createEmbeddingFolder(storePath);
+            const semanticIndex = await createSemanticIndex(store, model);
+            let entries: [string, string][] = smallStrings.map((s, index) => [
+                s,
+                index.toString(),
+            ]);
+            let halfEntries = entries.slice(0, entries.length / 2);
+            let halfEntriesAdded = await semanticIndex.putMultiple(
+                halfEntries,
+                true,
+            );
+            expect(halfEntriesAdded.length).toBe(halfEntries.length);
+
+            let entriesAdded = await semanticIndex.putMultiple(entries, true);
+            expect(entriesAdded.length).toBe(entries.length);
+            for (let i = 0; i < entries.length; ++i) {
+                const entry = entries[i];
+                expect(semanticIndex.store.get(entry[1])).toBeTruthy();
+                expect(entry[1]).toEqual(entriesAdded[i][1]);
+            }
+            for (let i = 0; i < halfEntriesAdded.length; ++i) {
+                expect(halfEntriesAdded[i][1]).toEqual(entriesAdded[i][1]);
+            }
+        },
+        timeoutMs,
+    );
     testIf(
         hasEmbeddingModel,
         "semanticList",

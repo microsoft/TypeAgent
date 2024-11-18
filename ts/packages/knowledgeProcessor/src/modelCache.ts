@@ -9,6 +9,12 @@ export interface TextEmbeddingModelWithCache extends TextEmbeddingModel {
     readonly cache: collections.Cache<string, number[]>;
 }
 
+/**
+ * Create an embedding model that leverages a cache to improve performance
+ * @param model
+ * @param cacheSize
+ * @returns
+ */
 export function createEmbeddingCache(
     model: TextEmbeddingModel,
     cacheSize: number,

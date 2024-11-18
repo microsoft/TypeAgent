@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { asyncArray, collections } from "..";
+import { callWithRetry } from "../async";
 import { ScoredItem } from "../memory";
 import {
     createNormalized,
@@ -38,6 +39,9 @@ export interface VectorIndex<ID = number> {
     ): Promise<ScoredItem<ID>[]>;
 }
 
+const DefaultRetryPauseMs = 2500;
+const DefaultRetryAttempts = 3;
+
 /**
  * Generates a normalized embedding for the given value from the embedding model
  * @param model embedding model
@@ -53,6 +57,19 @@ export async function generateEmbedding<T = string>(
     }
     const result = await model.generateEmbedding(value);
     return createNormalized(getData(result));
+}
+
+export async function generateEmbeddingWithRetry<T>(
+    model: EmbeddingModel<T>,
+    value: T | NormalizedEmbedding,
+    retryMaxAttempts: number = DefaultRetryAttempts,
+    retryPauseMs: number = DefaultRetryPauseMs,
+) {
+    return callWithRetry(
+        () => generateEmbedding(model, value),
+        retryMaxAttempts,
+        retryPauseMs,
+    );
 }
 
 /**
@@ -97,6 +114,29 @@ export async function generateTextEmbeddings(
             generateEmbedding(model, v),
         );
     }
+}
+
+/**
+ * Same as generateTextEmbeddings, but with retries
+ * @param model
+ * @param values
+ * @param retryMaxAttempts
+ * @param retryPauseMs
+ * @param maxCharsPerChunk
+ * @returns
+ */
+export async function generateTextEmbeddingsWithRetry(
+    model: TextEmbeddingModel,
+    values: string[],
+    retryMaxAttempts: number = DefaultRetryAttempts,
+    retryPauseMs: number = DefaultRetryPauseMs,
+    maxCharsPerChunk: number = Number.MAX_SAFE_INTEGER,
+) {
+    return callWithRetry(
+        () => generateTextEmbeddings(model, values, maxCharsPerChunk),
+        retryMaxAttempts,
+        retryPauseMs,
+    );
 }
 
 async function generateEmbeddingBatch(
