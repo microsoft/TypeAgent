@@ -39,5 +39,6 @@ export default class TranslateCommand extends Command {
             cache: { enabled: false },
         });
         await dispatcher.processCommand(`@translate ${args.request}`);
+        await dispatcher.close();
     }
 }
