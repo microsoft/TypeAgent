@@ -180,7 +180,7 @@ async function embedChunk(
     const combinedSummaries = summaries.join("\n").trimEnd();
     if (combinedSummaries) {
         await exponentialBackoff(
-            chunkyIndex.codeSummariesIndex.put,
+            chunkyIndex.summariesIndex.put,
             combinedSummaries,
             [chunk.id],
         );
