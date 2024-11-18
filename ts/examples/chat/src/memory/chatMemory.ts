@@ -534,6 +534,7 @@ export async function runChatMemory(): Promise<void> {
         id?: string | undefined;
         description?: string | undefined;
         loss?: number | undefined;
+        simpleLoss?: number | undefined;
         modelName?: string | undefined;
         refModelName?: string | undefined;
     }
@@ -617,7 +618,15 @@ export async function runChatMemory(): Promise<void> {
                             printer.writeError(`Error computing loss: ${err}`);
                             return 0;
                         });
-                    printer.writeError(`Loss for ${msg} is ${loss.toFixed(2)}`);
+                    const simpleLoss =
+                        await conversation.simpleKnowledgeResponseLoss(
+                            knowledge,
+                            knowledge,
+                            context.models.embeddingModel,
+                        );
+                    printer.writeError(
+                        `Loss for ${msg} is ${loss.toFixed(2)}, simple loss: ${simpleLoss.toFixed(2)}`,
+                    );
                 }
                 extractedData.push(data);
                 count++;
@@ -703,6 +712,7 @@ export async function runChatMemory(): Promise<void> {
         const clock = new StopWatch();
         let totalElapsed = 0;
         let aveLoss = 0.0;
+        let aveSimpleLoss = 0.0;
         clock.start();
         for (const record of inData) {
             let msg = record.message;
@@ -721,8 +731,15 @@ export async function runChatMemory(): Promise<void> {
                 );
                 count++;
                 aveLoss += loss;
+                const simpleLoss =
+                    await knowLib.conversation.simpleKnowledgeResponseLoss(
+                        knowledge,
+                        refKnowledge,
+                        context.models.embeddingModel,
+                    );
+                aveSimpleLoss += simpleLoss;
                 printer.writeError(
-                    `Loss for ${msg} is ${loss.toFixed(2)}, ave: ${(aveLoss / count).toFixed(2)}`,
+                    `Loss for ${msg} is ${loss.toFixed(2)}, ave: ${(aveLoss / count).toFixed(2)}, simple loss: ${simpleLoss.toFixed(2)}, ave: ${(aveSimpleLoss / count).toFixed(2)}`,
                 );
                 const data = {
                     knowledge,

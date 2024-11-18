@@ -481,6 +481,80 @@ class NormalizedKnowledgeResponse {
     }
 }
 
+interface IGatheredTerms {
+    terms: string[];
+    structureTerms: string[];
+}
+
+export function gatherTerms(knowledge: KnowledgeResponse): IGatheredTerms {
+    const termsSet = new Set<string>();
+    const structuredTermsSet = new Set<string>();
+
+    function addTerm(term: string) {
+        termsSet.add(term);
+    }
+
+    function addStructuredTerm(term: string) {
+        addTerm(term);
+        structuredTermsSet.add(term);
+    }
+
+    function addFacet(facet: Facet) {
+        addStructuredTerm(facet.name);
+        if (typeof facet.value === "string") {
+            addStructuredTerm(facet.value);
+        } else if (typeof facet.value === "object") {
+            addStructuredTerm(facet.value.units);
+        }
+    }
+
+    for (const entity of knowledge.entities) {
+        addTerm(entity.name);
+        for (const type of entity.type) {
+            addStructuredTerm(type);
+        }
+        if (entity.facets) {
+            entity.facets.forEach(addFacet);
+        }
+    }
+    for (const action of knowledge.actions) {
+        addTerm(normalizeActionName(action.verbs));
+        if (action.params) {
+            for (const param of action.params) {
+                if (typeof param === "string") {
+                    addStructuredTerm(param);
+                } else {
+                    addStructuredTerm(param.name);
+                    if (typeof param.value === "string") {
+                        addStructuredTerm(param.toString());
+                    } else if (typeof param.value === "object") {
+                        addStructuredTerm(param.value.units);
+                    }
+                }
+            }
+        }
+        if (action.subjectEntityName !== "none") {
+            addStructuredTerm(action.subjectEntityName);
+        }
+        if (action.objectEntityName !== "none") {
+            addStructuredTerm(action.objectEntityName);
+        }
+        if (action.indirectObjectEntityName !== "none") {
+            addStructuredTerm(action.indirectObjectEntityName);
+        }
+        if (action.subjectEntityFacet) {
+            addFacet(action.subjectEntityFacet);
+        }
+    }
+    for (const topic of knowledge.topics) {
+        termsSet.add(topic);
+    }
+    return {
+        terms: Array.from(termsSet),
+        structureTerms: Array.from(structuredTermsSet),
+    };
+}
+
 // compute the loss between the reference response and the candidate response on a scale of 0 to 1
 export async function knowledgeResponseLoss(
     refResponse: KnowledgeResponse,
@@ -490,4 +564,34 @@ export async function knowledgeResponseLoss(
     const refNorm = new NormalizedKnowledgeResponse(refResponse);
     const genNorm = new NormalizedKnowledgeResponse(generatedResponse);
     return await refNorm.loss(genNorm, model);
+}
+
+// compute the simple loss between the reference response and the candidate response on a scale of 0 to 1
+
+export async function simpleKnowledgeResponseLoss(
+    refResponse: KnowledgeResponse,
+    generatedResponse: KnowledgeResponse,
+    model: TextEmbeddingModel,
+) {
+    const potentialTermsLoss = 2;
+    const potentialStructuredTermsLoss = 1;
+    const potentialLossTotal =
+        potentialTermsLoss + potentialStructuredTermsLoss;
+    const refTerms = gatherTerms(refResponse);
+    const genTerms = gatherTerms(generatedResponse);
+    const termsLoss = await stringListLoss(
+        refTerms.terms,
+        genTerms.terms,
+        model,
+    );
+    const structuredTermsLoss = await stringListLoss(
+        refTerms.structureTerms,
+        genTerms.structureTerms,
+        model,
+    );
+    return (
+        (termsLoss * potentialTermsLoss +
+            structuredTermsLoss * potentialStructuredTermsLoss) /
+        potentialLossTotal
+    );
 }
