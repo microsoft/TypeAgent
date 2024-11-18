@@ -104,11 +104,11 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
           
-      - name: Install dependencies
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
-        working-directory: ts
-        run: |
-          pnpm install --frozen-lockfile --strict-peer-dependencies 
+      # - name: Install dependencies
+      #   if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+      #   working-directory: ts
+      #   run: |
+      #     pnpm install --frozen-lockfile --strict-peer-dependencies 
       
       # - name: Set up QEMU
       #   # Add support for more platforms with QEMU (optional)
@@ -126,7 +126,7 @@ jobs:
         uses: Azure/docker-login@v1
         with:
           # # Container registry username
-          # username: # default is 
+          username: ${{ secrets.AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD }}
           # # Container registry password
           # password: # default is 
           # # Container registry server url
