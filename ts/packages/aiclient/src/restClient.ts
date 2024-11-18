@@ -282,7 +282,9 @@ export function getRetryAfterMs(
                 }
             }
         }
-    } catch {}
+    } catch (err: any) {
+        console.log(`Failed to parse Retry-After header ${err}`);
+    }
     return defaultValue;
 }
 

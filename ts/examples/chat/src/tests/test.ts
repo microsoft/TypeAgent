@@ -17,6 +17,8 @@ import {
     readAllText,
     dotProductSimple,
     createSemanticMap,
+    generateEmbedding,
+    asyncArray,
 } from "typeagent";
 import * as path from "path";
 import { getData } from "typechat";
@@ -300,11 +302,27 @@ export async function testPerf() {
     testDotPerf();
     testDotPerf2(1536);
 }
+
+export async function loadTestEmbeddings() {
+    const text = "The quick brown fox did something something";
+    const model = openai.createEmbeddingModel();
+    const texts: string[] = new Array(10000);
+    texts.fill(text);
+    await asyncArray.forEachAsync(texts, 4, async (t, i) => {
+        const stopWatch = new StopWatch();
+        stopWatch.start();
+        await generateEmbedding(model, t);
+        stopWatch.stop();
+        console.log(`${i} / ${stopWatch.elapsedString()}`);
+    });
+}
+
 export async function runTests(): Promise<void> {
-    await testSemanticMap();
+    //await loadTestEmbeddings();
+    //await testSemanticMap();
     //await testEmbeddingModel();
     //await runTestCases();
     // await runKnowledgeTests();
     //await testPerf();
-    testTypes<number, string>();
+    //testTypes<number, string>();
 }
