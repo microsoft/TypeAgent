@@ -11,7 +11,7 @@ import { QuerySpecs } from "./makeQuerySchema.js";
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 
-// A bundle of object stores and indices etc.
+// A bundle of object stores and indexes etc.
 export class ChunkyIndex {
     rootDir: string;
     chatModel: ChatModel;

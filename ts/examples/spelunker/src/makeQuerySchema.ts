@@ -8,7 +8,7 @@ export type QuerySpec = {
     minScore?: number;
 };
 
-// Proposed queries for all indices (or unknownText if none apply).
+// Proposed queries for all indexes (or unknownText if none apply).
 export type QuerySpecs = {
     summaries: QuerySpec;
     keywords: QuerySpec;
