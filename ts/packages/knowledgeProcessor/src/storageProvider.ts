@@ -8,7 +8,6 @@ import {
     ObjectFolderSettings,
 } from "typeagent";
 import {
-    createIndexFolder,
     createTextIndex,
     TextIndex,
     TextIndexSettings,
@@ -19,7 +18,7 @@ import {
     TemporalLog,
     TemporalLogSettings,
 } from "./temporal.js";
-import { KeyValueIndex } from "./keyValueIndex.js";
+import { createIndexFolder, KeyValueIndex } from "./keyValueIndex.js";
 
 export type ValueType = string | number;
 

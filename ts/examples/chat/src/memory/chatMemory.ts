@@ -1172,8 +1172,10 @@ export async function runChatMemory(): Promise<void> {
         }
         if (!namedArgs.eval) {
             // just translate user query into structured query without eval
-            const translationContext =
-                await context.searcher.buildContext(searchOptions);
+            const translationContext = await context.searcher.buildContext(
+                query,
+                searchOptions,
+            );
             const searchResult: any = namedArgs.v2
                 ? await searcher.actions.translateSearchTermsV2(
                       query,

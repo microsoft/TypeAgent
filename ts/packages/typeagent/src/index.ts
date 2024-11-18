@@ -18,6 +18,7 @@ export * from "./vector/semanticList";
 export * from "./vector/semanticMap";
 
 export * from "./storage/objectFolder";
+export * from "./storage/objectPage";
 export * from "./storage/embeddingFS";
 export * from "./storage/workQueue";
 
