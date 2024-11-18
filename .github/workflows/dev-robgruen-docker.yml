@@ -80,7 +80,7 @@ jobs:
       #     compression-level: 0
 
   deploy:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest # pnpm deploy does not work currently on Windows. Fails with EPERM.
     needs: build_ts
     # environment:
     #   name: 'test'
@@ -88,76 +88,32 @@ jobs:
     # permissions:
     #   id-token: write #This is required for requesting the JWT    
     steps: 
-      - name: Build and push Docker images
+      - name: Set up QEMU
+        # Add support for more platforms with QEMU (optional)
+        # https://github.com/docker/setup-qemu-action        
+        uses: docker/setup-qemu-action@v3
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3    
+        
+      - name: Build Docker image(s)
         # You may pin to the exact commit or the version.
         # uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75
         uses: docker/build-push-action@v6.9.0
-        # with:
-        #   # List of a customs host-to-IP mapping (e.g., docker:10.180.0.1)
-        #   add-hosts: # optional
-        #   # List of extra privileged entitlement (e.g., network.host,security.insecure)
-        #   allow: # optional
-        #   # List of annotation to set to the image
-        #   annotations: # optional
-        #   # List of attestation parameters (e.g., type=sbom,generator=image)
-        #   attests: # optional
-        #   # List of build-time variables
-        #   build-args: # optional
-        #   # List of additional build contexts (e.g., name=path)
-        #   build-contexts: # optional
-        #   # Builder instance
-        #   builder: # optional
-        #   # List of external cache sources for buildx (e.g., user/app:cache, type=local,src=path/to/dir)
-        #   cache-from: # optional
-        #   # List of cache export destinations for buildx (e.g., user/app:cache, type=local,dest=path/to/dir)
-        #   cache-to: # optional
-        #   # Optional parent cgroup for the container used in the build
-        #   cgroup-parent: # optional
-        #   # Build's context is the set of files located in the specified PATH or URL
-        #   context: # optional
-        #   # Path to the Dockerfile
-        #   file: # optional
-        #   # List of metadata for an image
-        #   labels: # optional
-        #   # Load is a shorthand for --output=type=docker
-        #   load: # optional, default is false
-        #   # Set the networking mode for the RUN instructions during build
-        #   network: # optional
-        #   # Do not use cache when building the image
-        #   no-cache: # optional, default is false
-        #   # Do not cache specified stages
-        #   no-cache-filters: # optional
-        #   # List of output destinations (format: type=local,dest=path)
-        #   outputs: # optional
-        #   # List of target platforms for build
-        #   platforms: # optional
-        #   # Generate provenance attestation for the build (shorthand for --attest=type=provenance)
-        #   provenance: # optional
-        #   # Always attempt to pull all referenced images
-        #   pull: # optional, default is false
-        #   # Push is a shorthand for --output=type=registry
-        #   push: # optional, default is false
-        #   # Generate SBOM attestation for the build (shorthand for --attest=type=sbom)
-        #   sbom: # optional
-        #   # List of secrets to expose to the build (e.g., key=string, GIT_AUTH_TOKEN=mytoken)
-        #   secrets: # optional
-        #   # List of secret env vars to expose to the build (e.g., key=envname, MY_SECRET=MY_ENV_VAR)
-        #   secret-envs: # optional
-        #   # List of secret files to expose to the build (e.g., key=filename, MY_SECRET=./secret.txt)
-        #   secret-files: # optional
-        #   # Size of /dev/shm (e.g., 2g)
-        #   shm-size: # optional
-        #   # List of SSH agent socket or keys to expose to the build
-        #   ssh: # optional
-        #   # List of tags
-        #   tags: # optional
-        #   # Sets the target stage to build
-        #   target: # optional
-        #   # Ulimit options (e.g., nofile=1024:1024)
-        #   ulimit: # optional
-        #   # GitHub Token used to authenticate against a repository for Git context
-        #   github-token: # optional, default is ${{ github.token }}
-                
+        with:
+          push: true
+          tags: typeagent:latest
+        
+      # - name: Docker login
+      #   uses: docker/login-action@v3.3.0
+      #   with: 
+      #     registry: typeagentcontainerregistry.azurecr.io
+      - name: Login to Azure
+        uses: azure/login@v2.2.0
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_5B0D2D6BA40F4710B45721D2112356DD }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_39BB903136F14B6EAD8F53A8AB78E3AA }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_F36C1F2C4B2C49CA8DD5C52FAB98FA30 }}                        
 
     # steps:
     #   - name: Download artifact from build job
