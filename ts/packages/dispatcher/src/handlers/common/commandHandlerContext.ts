@@ -358,7 +358,10 @@ function processSetAppAgentStateResult(
     for (const [stateName, failed] of Object.entries(result.failed)) {
         for (const [translatorName, enable, e] of failed) {
             hasFailed = true;
-            const prefix = getTranslatorPrefix(translatorName, systemContext);
+            const prefix =
+                stateName === "commands"
+                    ? systemContext.agents.getEmojis()[translatorName]
+                    : getTranslatorPrefix(translatorName, systemContext);
             cbError(
                 `${prefix}: Failed to ${enable ? "enable" : "disable"} ${stateName}: ${e.message}`,
             );
