@@ -112,11 +112,11 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
           
-      # - name: Install dependencies
-      #   if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
-      #   working-directory: ts
-      #   run: |
-      #     pnpm install --frozen-lockfile --strict-peer-dependencies 
+      - name: Install dependencies
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        working-directory: ts
+        run: |
+          pnpm install --frozen-lockfile --strict-peer-dependencies 
       
       # - name: Set up QEMU
       #   # Add support for more platforms with QEMU (optional)
@@ -132,6 +132,7 @@ jobs:
         uses: docker/build-push-action@v6.9.0
         with:
           context: .
+          file: ts/Dockerfile
           push: true
           tags: typeagent:latest
         
