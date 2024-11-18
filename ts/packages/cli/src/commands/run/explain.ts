@@ -53,6 +53,12 @@ export default class ExplainCommand extends Command {
             description: "Number of concurrent requests",
             default: 5,
         }),
+        filter: Flags.string({
+            description: "Filter for the explanation",
+            options: ["refvalue", "reflist"],
+            multiple: true,
+            required: false,
+        }),
     };
 
     static description = "Explain a request and action";
@@ -69,8 +75,11 @@ export default class ExplainCommand extends Command {
             "cli run explain",
             {
                 translators,
-                actions: {}, // We don't need any actions
-                explainer: { name: flags.explainer },
+                actions: null, // We don't need any actions
+                commands: null,
+                explainer: {
+                    name: flags.explainer,
+                },
                 cache: { enabled: false },
                 clientIO: flags.repeat > 1 ? null : undefined,
             },
@@ -84,6 +93,10 @@ export default class ExplainCommand extends Command {
             ? RequestAction.fromString(args.request)
             : testRequest;
 
+        const options = {
+            valueInRequest: flags.filter?.includes("refvalue") ?? false,
+            noReferences: flags.filter?.includes("reflist") ?? false,
+        };
         console.log(chalk.grey(`Generate explanation for '${requestAction}'`));
         if (flags.repeat > 1) {
             console.log(
@@ -104,7 +117,7 @@ export default class ExplainCommand extends Command {
                             await context.agentCache.processRequestAction(
                                 requestAction,
                                 false,
-                                { concurrent: true },
+                                { concurrent: true, ...options },
                             );
                         console.log(
                             result.explanationResult.explanation.success
@@ -147,6 +160,7 @@ export default class ExplainCommand extends Command {
             const result = await context.agentCache.processRequestAction(
                 requestAction,
                 false,
+                options,
             );
 
             printProcessRequestActionResult(result);
