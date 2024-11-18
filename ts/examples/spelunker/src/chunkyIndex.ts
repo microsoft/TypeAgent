@@ -65,6 +65,29 @@ export class ChunkyIndex {
             );
         }
     }
+
+    // TODO: Do this type-safe?
+    getIndexByName(name: string): knowLib.TextIndex<string, ChunkId> {
+        for (const pair of this.allIndexes()) {
+            if (pair.name === name) {
+                return pair.index;
+            }
+        }
+        throw new Error(`Unknown index: ${name}`);
+    }
+
+    allIndexes(): {
+        name: string;
+        index: knowLib.TextIndex<string, ChunkId>;
+    }[] {
+        return [
+            { name: "summaries", index: this.summariesIndex },
+            { name: "keywords", index: this.keywordsIndex },
+            { name: "topics", index: this.topicsIndex },
+            { name: "goals", index: this.goalsIndex },
+            { name: "dependencies", index: this.dependenciesIndex },
+        ];
+    }
 }
 
 function createQueryMaker(

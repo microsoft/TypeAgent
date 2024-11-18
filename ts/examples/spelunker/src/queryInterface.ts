@@ -182,9 +182,7 @@ export async function runQueryInterface(
         indexName: string, // E.g. "keywords"
     ): Promise<void> {
         const namedArgs = iapp.parseNamedArguments(args, keywordsDef());
-        const index: knowLib.TextIndex<string, ChunkId> = (chunkyIndex as any)[
-            indexName + "Index"
-        ];
+        const index = chunkyIndex.getIndexByName(indexName);
         if (namedArgs.debug) {
             io.writer.writeLine(`[Debug: ${indexName}]`);
             await debugIndex(index, indexName, verbose);
@@ -365,23 +363,11 @@ async function processQuery(
     const hitTable = new Map<ChunkId, number>();
 
     // First gather hits from keywords, topics etc. indexes.
-    for (const indexType of [
-        "keywords",
-        "topics",
-        "goals",
-        "dependencies",
-        "summaries",
-    ]) {
-        // TODO: Find a more type-safe way (so a typo in the index name is caught by the compiler).
-        const index: knowLib.TextIndex<string, ChunkId> = (chunkyIndex as any)[
-            indexType + "Index"
-        ];
-        if (!index) {
-            io.writer.writeLine(`[No ${indexType} index.]`);
-            continue;
-        }
+    for (const nameIndexPair of chunkyIndex.allIndexes()) {
+        const indexName = nameIndexPair.name;
+        const index = nameIndexPair.index;
         if (options.verbose)
-            io.writer.writeLine(`[Searching ${indexType} index...]`);
+            io.writer.writeLine(`[Searching ${indexName} index...]`);
         // TODO: try/catch? Embeddings can fail...
         const hits: ScoredItem<knowLib.TextBlock<ChunkId>>[] =
             await index.nearestNeighborsPairs(
