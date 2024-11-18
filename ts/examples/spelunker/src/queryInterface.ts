@@ -7,7 +7,7 @@ import * as iapp from "interactive-app";
 import * as knowLib from "knowledge-processor";
 import path from "path";
 import { ScoredItem } from "typeagent";
-import { ChunkyIndex } from "./chunkyIndex.js";
+import { IndexType, ChunkyIndex } from "./chunkyIndex.js";
 import { FileDocumentation } from "./fileDocSchema.js";
 import { Chunk, ChunkId } from "./pythonChunker.js";
 import { wordWrap } from "./pythonImporter.js";
@@ -180,7 +180,7 @@ export async function runQueryInterface(
     async function reportIndex(
         args: string[] | iapp.NamedArgs,
         io: iapp.InteractiveIo,
-        indexName: string, // E.g. "keywords"
+        indexName: IndexType,
     ): Promise<void> {
         const namedArgs = iapp.parseNamedArguments(args, keywordsDef());
         const index = chunkyIndex.getIndexByName(indexName);
@@ -283,8 +283,123 @@ export async function runQueryInterface(
         input: string,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        // TODO: Move prompt out of line.
-        const prompt = `
+        const prompt = makePrompt(input);
+        const result = await chunkyIndex.queryMaker.translate(input, prompt);
+        if (!result.success) {
+            io.writer.writeLine(`[Error: ${result.message}]`);
+            return;
+        }
+        const specs = result.data;
+        if (verbose) io.writer.writeLine(JSON.stringify(specs, null, 2));
+        const allHits: Map<
+            IndexType | "other",
+            ScoredItem<knowLib.TextBlock<string>>[]
+        > = new Map();
+
+        for (const thing of chunkyIndex.allIndexes()) {
+            const indexName = thing.name;
+            const index = thing.index;
+            const spec: QuerySpec | undefined = (specs as any)[indexName];
+            if (!spec) {
+                if (verbose) io.writer.writeLine(`[No query for ${indexName}]`);
+            } else {
+                const hits = await index.nearestNeighborsPairs(
+                    spec.query,
+                    spec.maxHits ?? 10,
+                    spec.minScore,
+                );
+                if (verbose) {
+                    io.writer.writeLine(
+                        `\nFound ${hits.length} ${indexName} for '${spec.query}':`,
+                    );
+                    for (const hit of hits) {
+                        io.writer.writeLine(
+                            `${hit.item.value} (${hit.score.toFixed(3)}) -- ${hit.item.sourceIds?.join(", ")}`,
+                        );
+                    }
+                }
+                allHits.set(indexName, hits);
+            }
+        }
+
+        // TODO: Move this out of allHits, make it a special case that exits early.
+        if (specs.unknownText) {
+            io.writer.writeLine(`[Unknown text: ${specs.unknownText}]`);
+            allHits.set("other", [
+                {
+                    item: {
+                        type: knowLib.TextBlockType.Sentence,
+                        value: specs.unknownText,
+                        sourceIds: [],
+                    },
+                    score: 1.0,
+                },
+            ]);
+        }
+
+        if (verbose) {
+            io.writer.writeLine(
+                JSON.stringify(Object.fromEntries(allHits), null, 4),
+            );
+        }
+
+        const allChunks: Map<ChunkId, Chunk> = new Map();
+        for (const [_, hits] of allHits) {
+            for (const hit of hits) {
+                for (const id of hit.item.sourceIds ?? []) {
+                    if (!allChunks.has(id)) {
+                        const chunk = await chunkyIndex.chunkFolder.get(id);
+                        if (chunk) allChunks.set(id, chunk);
+                    }
+                }
+            }
+        }
+
+        const nextPrompt = `
+Here is a JSON representation of a set of query results on indexes for keywords, topics, goals, etc.
+For each index you see a list of scored items, where each item has a value (e.g. a topic) and a list of "source ids".
+The source ids reference code chunks, which are provided separately.
+
+Using the query results and scores, please answer this question:
+
+${input}
+`;
+
+        const request = JSON.stringify({
+            allHits: Object.fromEntries(allHits),
+            chunks: Object.fromEntries(allChunks),
+        });
+        const answerResult = await chunkyIndex.answerMaker.translate(
+            request,
+            nextPrompt,
+        );
+        if (!answerResult.success) {
+            io.writer.writeLine(`[Error: ${answerResult.message}]`);
+            return;
+        }
+
+        const answer = answerResult.data;
+        io.writer.writeLine(
+            `\nAnswer (confidence ${answer.confidence.toFixed(3).replace(/0+$/, "")}):`,
+        );
+        io.writer.writeLine(wordWrap(answer.answer));
+        if (answer.message) {
+            io.writer.writeLine(`Message: ${answer.message}`);
+        }
+        if (answer.references.length) {
+            io.writer.writeLine(`References: ${answer.references}`);
+        }
+    }
+
+    await iapp.runConsole({
+        inputHandler,
+        handlers,
+        prompt: "\n🤖> ",
+    });
+}
+
+function makePrompt(input: string): string {
+    return `
 I have indexed a mid-sized code base written in Python. I divided each
 file up in "chunks", one per function or class or toplevel scope, and
 asked an AI to provide for each chunk:
@@ -297,29 +412,29 @@ asked an AI to provide for each chunk:
 
 For example, in JSON, a typical chunk might have this output from the AI:
 
-  "docs": {
+    "docs": {
     "chunkDocs": [
-      {
+        {
         "lineNumber": 33,
         "name": "Blob",
         "summary": "Represents a sequence of text lines along withmetadata, including the starting line number and a flag indicating whether the blob should be ignored during reconstruction.",
         "keywords": [
-          "text",
-          "metadata",
-          "blob"
+            "text",
+            "metadata",
+            "blob"
         ],
         "topics": [
-          "data structure",
-          "text processing"
+            "data structure",
+            "text processing"
         ],
         "goals": [
-          "Store text lines",
-          "Manage reconstruction"
+            "Store text lines",
+            "Manage reconstruction"
         ],
         "dependencies": []
-      }
+        }
     ]
-  }
+    }
 
 This is just an example though. The real code base looks different -- it
 just uses the same format.
@@ -335,46 +450,6 @@ My question is:
 
 ${input}
 `;
-        const result = await chunkyIndex.queryMaker.translate(input, prompt);
-        if (!result.success) {
-            io.writer.writeLine(`[Error: ${result.message}]`);
-            return;
-        }
-        const specs = result.data;
-        io.writer.writeLine(JSON.stringify(specs, null, 2));
-        for (const thing of chunkyIndex.allIndexes()) {
-            const indexName = thing.name;
-            const index = thing.index;
-            const spec: QuerySpec | undefined = (specs as any)[indexName];
-            if (!spec) {
-                io.writer.writeLine(`No query for ${indexName}.`);
-            } else {
-                const hits = await index.nearestNeighborsPairs(
-                    spec.query,
-                    spec.maxHits ?? 10,
-                    spec.minScore,
-                );
-                io.writer.writeLine(
-                    `Found ${hits.length} ${indexName} for '${spec.query}':`,
-                );
-                for (const hit of hits) {
-                    io.writer.writeLine(
-                        `${hit.item.value} (${hit.score.toFixed(3)})`,
-                    );
-                }
-            }
-        }
-        if (specs.unknownText) {
-            io.writer.writeLine(`[Unknown text: ${specs.unknownText}]`);
-            return;
-        }
-    }
-
-    await iapp.runConsole({
-        inputHandler,
-        handlers,
-        prompt: "\n🤖> ",
-    });
 }
 
 async function processQuery(

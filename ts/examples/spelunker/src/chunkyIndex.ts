@@ -10,6 +10,18 @@ import { Chunk, ChunkId } from "./pythonChunker.js";
 import { QuerySpecs } from "./makeQuerySchema.js";
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
+import { AnswerSpecs } from "./makeAnswerSchema.js";
+
+export type IndexType =
+    | "summaries"
+    | "keywords"
+    | "topics"
+    | "goals"
+    | "dependencies";
+export type NamedIndex = {
+    name: IndexType;
+    index: knowLib.TextIndex<string, ChunkId>;
+};
 
 // A bundle of object stores and indexes etc.
 export class ChunkyIndex {
@@ -18,6 +30,8 @@ export class ChunkyIndex {
     embeddingModel: TextEmbeddingModel;
     fileDocumenter: FileDocumenter;
     queryMaker: TypeChatJsonTranslator<QuerySpecs>;
+    answerMaker: TypeChatJsonTranslator<AnswerSpecs>;
+
     // The rest are asynchronously initialized by initialize().
     chunkFolder!: ObjectFolder<Chunk>;
     summariesIndex!: knowLib.TextIndex<string, ChunkId>;
@@ -35,6 +49,7 @@ export class ChunkyIndex {
         );
         this.fileDocumenter = createFileDocumenter(this.chatModel);
         this.queryMaker = createQueryMaker(this.chatModel);
+        this.answerMaker = createAnswerMaker(this.chatModel);
     }
 
     static async createInstance(rootDir: string): Promise<ChunkyIndex> {
@@ -67,7 +82,7 @@ export class ChunkyIndex {
     }
 
     // TODO: Do this type-safe?
-    getIndexByName(name: string): knowLib.TextIndex<string, ChunkId> {
+    getIndexByName(name: IndexType): knowLib.TextIndex<string, ChunkId> {
         for (const pair of this.allIndexes()) {
             if (pair.name === name) {
                 return pair.index;
@@ -76,10 +91,7 @@ export class ChunkyIndex {
         throw new Error(`Unknown index: ${name}`);
     }
 
-    allIndexes(): {
-        name: string;
-        index: knowLib.TextIndex<string, ChunkId>;
-    }[] {
+    allIndexes(): NamedIndex[] {
         return [
             { name: "summaries", index: this.summariesIndex },
             { name: "keywords", index: this.keywordsIndex },
@@ -100,5 +112,18 @@ function createQueryMaker(
         typeName,
     );
     const translator = createJsonTranslator<QuerySpecs>(model, validator);
+    return translator;
+}
+
+function createAnswerMaker(
+    model: ChatModel,
+): TypeChatJsonTranslator<AnswerSpecs> {
+    const typeName = "AnswerSpecs";
+    const schema = loadSchema(["makeAnswerSchema.ts"], import.meta.url);
+    const validator = createTypeScriptJsonValidator<AnswerSpecs>(
+        schema,
+        typeName,
+    );
+    const translator = createJsonTranslator<AnswerSpecs>(model, validator);
     return translator;
 }
