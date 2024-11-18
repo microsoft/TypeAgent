@@ -56,6 +56,7 @@ export default class RequestCommand extends Command {
             undefined,
             this.loadAttachment(args.attachment),
         );
+        await dispatcher.close();
     }
 
     loadAttachment(fileName: string | undefined): string[] | undefined {
