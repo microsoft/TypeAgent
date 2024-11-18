@@ -33,6 +33,7 @@ export default class RequestCommand extends Command {
             description:
                 "Explainer name (defaults to the explainer associated with the translator)",
             options: getCacheFactory().getExplainerNames(),
+            required: false,
         }),
     };
 
@@ -50,7 +51,9 @@ export default class RequestCommand extends Command {
             translators,
             actions: translators,
             commands: { dispatcher: true },
-            explainer: { name: flags.explainer },
+            explainer: flags.explainer
+                ? { enabled: true, name: flags.explainer }
+                : { enabled: false },
             cache: { enabled: false },
         });
         await dispatcher.processCommand(
@@ -59,6 +62,9 @@ export default class RequestCommand extends Command {
             this.loadAttachment(args.attachment),
         );
         await dispatcher.close();
+
+        // Some background network (like monogo) might keep the process live, exit explicitly.
+        process.exit(0);
     }
 
     loadAttachment(fileName: string | undefined): string[] | undefined {
