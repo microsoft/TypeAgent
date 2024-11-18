@@ -11,6 +11,7 @@ import { ChunkyIndex } from "./chunkyIndex.js";
 import { FileDocumentation } from "./fileDocSchema.js";
 import { Chunk, ChunkId } from "./pythonChunker.js";
 import { wordWrap } from "./pythonImporter.js";
+import { QuerySpec } from "./makeQuerySchema.js";
 
 type QueryOptions = {
     maxHits: number;
@@ -340,11 +341,33 @@ ${input}
             return;
         }
         const specs = result.data;
-        // if (specs.unknownText) {
-        //     io.writer.writeLine(`[Unknown text: ${specs.unknownText}]`);
-        //     return;
-        // }
         io.writer.writeLine(JSON.stringify(specs, null, 2));
+        for (const thing of chunkyIndex.allIndexes()) {
+            const indexName = thing.name;
+            const index = thing.index;
+            const spec: QuerySpec | undefined = (specs as any)[indexName];
+            if (!spec) {
+                io.writer.writeLine(`No query for ${indexName}.`);
+            } else {
+                const hits = await index.nearestNeighborsPairs(
+                    spec.query,
+                    spec.maxHits ?? 10,
+                    spec.minScore,
+                );
+                io.writer.writeLine(
+                    `Found ${hits.length} ${indexName} for '${spec.query}':`,
+                );
+                for (const hit of hits) {
+                    io.writer.writeLine(
+                        `${hit.item.value} (${hit.score.toFixed(3)})`,
+                    );
+                }
+            }
+        }
+        if (specs.unknownText) {
+            io.writer.writeLine(`[Unknown text: ${specs.unknownText}]`);
+            return;
+        }
     }
 
     await iapp.runConsole({
