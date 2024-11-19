@@ -70,20 +70,62 @@ function ensureTempTestDir() {
     return dir;
 }
 
+/*
+import prettier from "prettier";
+async function compare(original: string, regenerated: string) {
+    // Remove original copy right.
+    const lines = original.split("\n");
+    lines.splice(0, 2);
+    const source = lines.filter((l) => l !== "").join("\n");
+
+    // Use prettier to remove any formatting differences
+    const orig = await prettier.format(source, { parser: "typescript" });
+    const regen = await prettier.format(regenerated, { parser: "typescript" });
+
+    // Compare
+    expect(regen).toEqual(orig);
+}
+*/
+
 const tempTestDir = ensureTempTestDir();
 const testInput = tests.map((t) => [t.name, t.file, t.type]);
 describe("Action Schema Regeneration", () => {
-    it.each(testInput)("should regenerate %s", async (name, file, type) => {
-        const actionSchemas = parseActionSchemaFile(file, name, type);
+    /*
+    //
+    // There are a couple of tests that fail because of minor difference in generating
+    // - single line object property becomes multiline
+    // - location of the entry type if it is not the first one.
+    // There might be others, and because exact regeneration is not the goal, just 
+    // disable the test for now, and use this to manually check for real issues.
+    //
+    it.each(testInput)(
+        "should regenerate %s",
+        async (name, file, type) => {
+            const original = fs.readFileSync(file, "utf-8");
+            const actionSchemas = parseActionSchemaFile(file, name, type, true);
+            const regenerated = await generateSchema(actionSchemas, type, true);
+            await compare(original, regenerated);
+        },
+    );
+    */
 
-        const tempFile = path.join(tempTestDir, `${name}.${process.pid}.ts`);
-        const schema = await generateSchema(actionSchemas, type);
-        fs.writeFileSync(tempFile, schema);
+    it.each(testInput)(
+        "should roundtrip regenerated - %s",
+        async (name, file, type) => {
+            const actionSchemas = parseActionSchemaFile(file, name, type);
 
-        const roundtrip = parseActionSchemaFile(tempFile, name, type);
-        const schema2 = await generateSchema(roundtrip, type);
-        expect(schema2).toEqual(schema);
+            const tempFile = path.join(
+                tempTestDir,
+                `${name}.${process.pid}.ts`,
+            );
+            const regenerated = await generateSchema(actionSchemas, type);
+            fs.writeFileSync(tempFile, regenerated);
 
-        fs.unlinkSync(tempFile);
-    });
+            const roundtrip = parseActionSchemaFile(tempFile, name, type);
+            const schema2 = await generateSchema(roundtrip, type);
+            expect(schema2).toEqual(regenerated);
+
+            fs.unlinkSync(tempFile);
+        },
+    );
 });

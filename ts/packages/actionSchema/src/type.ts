@@ -27,6 +27,7 @@ export type ActionParamField = {
     optional?: boolean | undefined;
     type: ActionParamType;
     comments?: string[] | undefined;
+    trailingComments?: string[] | undefined;
 };
 
 export type ActionParamTypeReference = {
@@ -45,6 +46,8 @@ export type ActionInterfaceTypeDefinition = {
     name: string;
     type: ActionParamObject;
     comments?: string[] | undefined;
+    exported: boolean; // for exact regen
+    order?: number; // for exact regen
 };
 
 export type ActionAliasTypeDefinition<T = ActionParamType> = {
@@ -52,6 +55,8 @@ export type ActionAliasTypeDefinition<T = ActionParamType> = {
     name: string;
     type: T;
     comments?: string[] | undefined;
+    exported: boolean; // for exact regen
+    order?: number; // for exact regen
 };
 
 export type ActionTypeDefinition =
