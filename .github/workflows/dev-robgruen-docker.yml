@@ -27,9 +27,16 @@ jobs:
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
+          
       - uses: actions/checkout@v4
         with:
           ref: dev/robgruen/android_sans_MSAL
+
+      - uses: finnp/create-file-action@master
+        env:
+          FILE_NAME: ${{ github.workspace }}/ts/.env
+          FILE_DATA: ${{ secrets.DOCKER_DOT_ENV }}
+          
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -37,12 +44,14 @@ jobs:
             ts:
               - "ts/**"
               - ".github/workflows/build-ts.yml"
+              
       - uses: pnpm/action-setup@v4
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         name: Install pnpm
         with:
           version: 9
           run_install: false
+          
       - uses: actions/setup-node@v4
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
         with:
@@ -76,8 +85,8 @@ jobs:
       #- run: az account set --subscription b64471de-f2ac-4075-a3cb-7656bca768d0
       #- run: az account list
       #- run: az resource list --name typeagentContainerRegistry
-      #- run: ls ${{ github.workspace }} -l
-      #- run: ls ${{ github.workspace }}/ts -l
+      - run: ls ${{ github.workspace }} -l
+      - run: ls ${{ github.workspace }}/ts -l
       - run: az acr build -t typeagent:latest -r typeagentContainerRegistry --file ${{ github.workspace }}/ts/Dockerfile --subscription b64471de-f2ac-4075-a3cb-7656bca768d0 ${{ github.workspace }}/ts
                   
           
