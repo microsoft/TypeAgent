@@ -149,6 +149,7 @@ jobs:
       #     file: ts/Dockerfile
       #     push: true
       #     tags: typeagent:latest
+      - run: az account set --subscription b64471de-f2ac-4075-a3cb-7656bca768d0
       - run: az acr build -t typeAgent:latest -r typeagentContainerRegistry --file ts/DockerFile --subscription b64471de-f2ac-4075-a3cb-7656bca768d0 ./ts
         
       # - name: Docker login
