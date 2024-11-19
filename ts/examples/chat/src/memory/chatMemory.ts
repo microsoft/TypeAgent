@@ -54,7 +54,7 @@ export type ChatContext = {
     printer: ChatMemoryPrinter;
     models: Models;
     maxCharsPerChunk: number;
-    stats: knowLib.IndexingStats;
+    stats?: knowLib.IndexingStats | undefined;
     topicWindowSize: number;
     searchConcurrency: number;
     minScore: number;
@@ -161,7 +161,6 @@ export async function createChatMemoryContext(
         statsPath,
         printer: new ChatMemoryPrinter(getInteractiveIO()),
         models,
-        stats: knowLib.createIndexingStats(),
         maxCharsPerChunk: 4096,
         topicWindowSize: 8,
         searchConcurrency: 2,
@@ -330,7 +329,9 @@ export async function runChatMemory(): Promise<void> {
     }
 
     function captureTokenStats(req: any, response: any): void {
-        context.stats.updateCurrentTokenStats(response.usage);
+        if (context.stats) {
+            context.stats.updateCurrentTokenStats(response.usage);
+        }
         if (showTokenStats) {
             printer.writeCompletionStats(response.usage);
             printer.writeLine();

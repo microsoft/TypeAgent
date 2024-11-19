@@ -333,5 +333,5 @@ export function createPromptSectionBuilder(
 }
 
 export interface PromptSectionProvider {
-    getSections(request: string): Promise<PromptSection[] | undefined>;
+    getSections(request: string): Promise<PromptSection[]>;
 }

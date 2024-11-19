@@ -336,30 +336,31 @@ async function setupEmailConversationManager(
     entityIndex.noiseTerms.put("email");
     entityIndex.noiseTerms.put("message");
 
-    cm.searchProcessor.settings.sectionProvider = contextProvider;
-    cm.searchProcessor.answers.settings.hints = `messages are *emails*. Use email headers (to, subject. etc) to determine if message is highly relevant to the question`;
+    cm.searchProcessor.settings.contextProvider = contextProvider;
+    cm.searchProcessor.answers.settings.contextProvider = contextProvider;
+    cm.searchProcessor.answers.settings.hints =
+        "messages are *emails* with headers. Also use the email headers (to, from, subject. etc) to:\n" +
+        "- determine if message is highly relevant to the question\n" +
+        "- correctly answer questions that reference names/identities";
 }
 
 async function createEmailContextProvider(
     profilePath: string,
 ): Promise<PromptSectionProvider> {
-    let sections: PromptSection[] | undefined;
+    let contextSections: PromptSection[] = [];
     const userProfile = await readJsonFile<any>(profilePath);
     if (userProfile) {
-        sections = [];
-        sections.push({
+        contextSections.push({
             role: MessageSourceRole.system,
             content:
                 `This is the Email Inbox of:\n'''${JSON.stringify(userProfile, undefined, 2)}\n'''` +
-                "\nTranslate references to 'Me', 'I' etc. explicitly to the above user",
+                "\nTranslate references to first person pronouns such as 'Me', 'I' etc. explicitly to the above user",
         });
     }
     return { getSections };
 
-    async function getSections(
-        request: string,
-    ): Promise<PromptSection[] | undefined> {
-        return sections;
+    async function getSections(request: string): Promise<PromptSection[]> {
+        return contextSections;
     }
 }
 

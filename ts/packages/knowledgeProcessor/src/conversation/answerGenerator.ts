@@ -6,6 +6,7 @@ import {
     createChatTranslator,
     dateTime,
     loadSchema,
+    PromptSectionProvider,
 } from "typeagent";
 import { PromptSection } from "typechat";
 import { ChatModel } from "aiclient";
@@ -39,6 +40,7 @@ export type AnswerGeneratorSettings = {
     chunking: AnswerChunkingSettings;
     maxCharsInContext?: number | undefined;
     concurrency?: number;
+    contextProvider?: PromptSectionProvider | undefined;
     hints?: string | undefined;
 };
 
@@ -199,17 +201,23 @@ export function createAnswerGenerator(
         if (trim && contextContent.length > getMaxContextLength()) {
             contextContent = trimContext(contextContent, getMaxContextLength());
         }
-        const contextSection: PromptSection = {
+        let preamble: PromptSection[] = [];
+        if (settings.contextProvider) {
+            preamble.push(
+                ...(await settings.contextProvider.getSections(question)),
+            );
+        }
+        preamble.push({
             role: "user",
             content: `[CONVERSATION HISTORY]\n${contextContent}`,
-        };
+        });
 
         const prompt = createAnswerPrompt(
             question,
             higherPrecision,
             answerStyle,
         );
-        const result = await translator.translate(prompt, [contextSection]);
+        const result = await translator.translate(prompt, preamble);
         return result.success ? result.data : undefined;
     }
 

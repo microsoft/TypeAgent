@@ -44,7 +44,7 @@ import {
 import { createTopicSearchOptions } from "./topics.js";
 
 export type SearchProcessorSettings = {
-    sectionProvider?: PromptSectionProvider | undefined;
+    contextProvider?: PromptSectionProvider | undefined;
 };
 
 export type SearchProcessingOptions = {
@@ -241,15 +241,11 @@ export function createSearchProcessor(
                 content: `ONLY IF user request explicitly asks for time ranges, THEN use the CONVERSATION TIME RANGE: "${timeRange.startDate} to ${timeRange.stopDate}"`,
             });
         }
-        if (settings.sectionProvider) {
-            const sections = await settings.sectionProvider.getSections(query);
-            if (sections && sections.length > 0) {
-                if (context) {
-                    context.push(...sections);
-                } else {
-                    context = sections;
-                }
-            }
+        if (settings.contextProvider) {
+            context ??= [];
+            context.push(
+                ...(await settings.contextProvider.getSections(query)),
+            );
         }
         return context;
     }

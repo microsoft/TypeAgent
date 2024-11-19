@@ -227,7 +227,7 @@ export function createEmailCommands(
                         `${email!.sourcePath}\n${emailLength} chars`,
                     );
 
-                    context.stats.startItem();
+                    context.stats!.startItem();
                     clock.start();
                     await knowLib.email.addEmailToConversation(
                         context.emailMemory,
@@ -235,11 +235,11 @@ export function createEmailCommands(
                         namedArgs.chunkSize,
                     );
                     clock.stop();
-                    context.stats.updateCurrent(clock.elapsedMs, emailLength);
+                    context.stats!.updateCurrent(clock.elapsedMs, emailLength);
                     await saveStats();
 
                     grandTotal++;
-                    const status = `[${clock.elapsedString()}, ${millisecondsToString(context.stats.totalStats.timeMs, "m")} for ${grandTotal} msgs.]`;
+                    const status = `[${clock.elapsedString()}, ${millisecondsToString(context.stats!.totalStats.timeMs, "m")} for ${grandTotal} msgs.]`;
 
                     context.printer.writeInColor(chalk.green, status);
                     context.printer.writeLine();
@@ -264,6 +264,7 @@ export function createEmailCommands(
         }
         context.printer.writeHeading("Indexing Stats");
         context.printer.writeIndexingStats(context.stats);
+        context.stats = undefined;
     }
 
     async function loadStats(clean: boolean): Promise<knowLib.IndexingStats> {
