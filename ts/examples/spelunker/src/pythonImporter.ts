@@ -203,22 +203,42 @@ async function embedChunk(
     }
 }
 
-// Wrap words in anger. Written by Github Copilot.
-// TODO: Wrap each line separately; Honor indents; honor '*' or '-' for bullets.
-export function wordWrap(text: string, width: number = 80): string {
-    const words = text.split(/\s+/);
-    let line = "";
-    let lines = [];
-    for (const word of words) {
-        if (line.length + word.length + 1 > width) {
-            lines.push(line);
-            line = word;
-        } else {
-            line += (line.length ? " " : "") + word;
+// Wrap long lines. Still written by Github Copilot.
+export function wordWrap(text: string, wrapLength: number = 100): string {
+    const wrappedLines: string[] = [];
+
+    text.split("\n").forEach((line) => {
+        let match = line.match(/^(\s*[-*]\s+|\s*)/); // Match leading indent or "- ", "* ", etc.
+        let indent = match ? match[0] : "";
+        let baseIndent = indent;
+
+        // Special handling for list items: add 2 spaces to the indent for overflow lines
+        if (match && /^(\s*[-*]\s+)/.test(indent)) {
+            // const listMarkerLength = indent.length - indent.trimStart().length;
+            indent = " ".repeat(indent.length + 2);
         }
-    }
-    lines.push(line);
-    return lines.join("\n");
+
+        let currentLine = "";
+        line.trimEnd()
+            .split(/\s+/)
+            .forEach((word) => {
+                if (
+                    currentLine.length + word.length + 1 > wrapLength &&
+                    currentLine.length > 0
+                ) {
+                    wrappedLines.push(baseIndent + currentLine.trimEnd());
+                    currentLine = indent + word + " ";
+                } else {
+                    currentLine += word + " ";
+                }
+            });
+
+        if (currentLine.trimEnd()) {
+            wrappedLines.push(baseIndent + currentLine.trimEnd());
+        }
+    });
+
+    return wrappedLines.join("\n");
 }
 
 async function writeToIndex(
