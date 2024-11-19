@@ -26,8 +26,8 @@ RUN apt install -y gnome-keyring
 #COPY --from=prod-deps /app/node_modules /app/node_modules
 #COPY --from=build /app/dist /app/dist
 
-EXPOSE 3000
+EXPOSE 80:3000
 EXPOSE 3443
-EXPOSE 3030
+EXPOSE 3030:3030
 EXPOSE 3734
 CMD [ "pnpm", "start" ]
