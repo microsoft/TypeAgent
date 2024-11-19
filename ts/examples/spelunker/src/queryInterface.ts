@@ -19,7 +19,7 @@ type QueryOptions = {
     verbose: boolean;
 };
 
-export async function runQueryInterface(
+export async function interactiveQueryLoop(
     chunkyIndex: ChunkyIndex,
     verbose = false,
 ): Promise<void> {
