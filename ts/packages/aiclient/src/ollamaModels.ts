@@ -83,15 +83,13 @@ export async function getOllamaModelNames(
 
 export function ollamaApiSettingsFromEnv(
     modelType: ModelType,
-    env?: Record<string, string | undefined>,
+    env: Record<string, string | undefined> = process.env,
     endpointName?: string,
 ): OllamaApiSettings | OpenAIApiSettings {
-    const useOAIEndpoint = process.env["OLLAMA_USE_OAI_ENDPOINT"] !== "0";
-
+    const useOAIEndpoint = env["OLLAMA_USE_OAI_ENDPOINT"] !== "0";
     if (modelType === ModelType.Image) {
         throw new Error("Image model not supported");
     }
-    env ??= process.env;
     const url = getOllamaEndpointUrl(env);
     const modelName = endpointName ?? "phi3";
     if (useOAIEndpoint) {
@@ -207,7 +205,7 @@ export function createOllamaChatModel(
             ...defaultParams,
             messages: messages,
             stream: false,
-            ...completionSettings,
+            options: completionSettings,
         };
 
         const result = await callJsonApi(
