@@ -84,6 +84,8 @@ jobs:
         run: |
           git config --global core.autocrlf false
       - uses: actions/checkout@v4
+        with:
+          ref: dev/robgruen/android_sans_MSAL
       - uses: dorny/paths-filter@v3
         id: filter
         with:
