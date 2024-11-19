@@ -155,7 +155,7 @@ jobs:
       - run: az account set --subscription b64471de-f2ac-4075-a3cb-7656bca768d0
       - run: az account list
       - run: az resource list --name typeagentContainerRegistry
-      - run: az acr build -t typeAgent:latest -r typeagentContainerRegistry --file ${{vars.GITHUB_WORKSPACE}}/ts/DockerFile --subscription b64471de-f2ac-4075-a3cb-7656bca768d0 ${{vars.GITHUB_WORKSPACE}}/ts
+      - run: az acr build -t typeAgent:latest -r typeagentContainerRegistry --file $GITHUB_WORKSPACE/ts/DockerFile --subscription b64471de-f2ac-4075-a3cb-7656bca768d0 $GITHUB_WORKSPACE/ts
       # - name: Build docker image
       #   uses: azure/acr-build@v1
       #   with:
