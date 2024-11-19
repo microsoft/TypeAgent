@@ -84,14 +84,13 @@ export async function getOllamaModelNames(
 export function ollamaApiSettingsFromEnv(
     modelType: ModelType,
     env: Record<string, string | undefined> = process.env,
-    endpointName?: string,
+    modelName: string = "phi3",
 ): OllamaApiSettings | OpenAIApiSettings {
     const useOAIEndpoint = env["OLLAMA_USE_OAI_ENDPOINT"] !== "0";
     if (modelType === ModelType.Image) {
         throw new Error("Image model not supported");
     }
     const url = getOllamaEndpointUrl(env);
-    const modelName = endpointName ?? "phi3";
     if (useOAIEndpoint) {
         return {
             provider: "openai",
