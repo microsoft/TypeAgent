@@ -76,15 +76,14 @@ describe("Action Schema Regeneration", () => {
     it.each(testInput)("should regenerate %s", async (name, file, type) => {
         const actionSchemas = parseActionSchemaFile(file, name, type);
 
-        const tempFile = path.join(
-            tempTestDir,
-            `${name}.${Math.floor(Math.random() * 1000)}.ts`,
-        );
+        const tempFile = path.join(tempTestDir, `${name}.${process.pid}.ts`);
         const schema = await generateSchema(actionSchemas, type);
         fs.writeFileSync(tempFile, schema);
 
         const roundtrip = parseActionSchemaFile(tempFile, name, type);
         const schema2 = await generateSchema(roundtrip, type);
         expect(schema2).toEqual(schema);
+
+        fs.unlinkSync(tempFile);
     });
 });
