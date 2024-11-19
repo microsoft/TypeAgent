@@ -80,7 +80,7 @@ export function parseActionSchemaFile(
                 toActionSchema(
                     translatorName,
                     definition.type.definition,
-                    typeName,
+                    definition.type.name,
                 ),
             ];
         default:

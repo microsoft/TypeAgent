@@ -73,11 +73,14 @@ function generateTypeDefinition(
     lines.push(`${prefix}${generateSchemaType(definition.type, pending, 0)}`);
 }
 
-export function generateSchema(actionSchemas: ActionSchema[]) {
+export function generateSchema(
+    actionSchemas: ActionSchema[],
+    typename: string = "AllAction",
+): string {
     const lines: string[] = [];
 
     lines.push(
-        `export type AllAction = ${actionSchemas.map((actionInfo) => actionInfo.typeName).join("|")};`,
+        `export type ${typename} = ${actionSchemas.map((actionInfo) => actionInfo.typeName).join("|")};`,
     );
 
     const pending: ActionParamTypeReference[] = [];
