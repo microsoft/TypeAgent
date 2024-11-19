@@ -92,8 +92,8 @@ jobs:
       #- run: az account set --subscription b64471de-f2ac-4075-a3cb-7656bca768d0
       #- run: az account list
       #- run: az resource list --name typeagentContainerRegistry
-      - run: ls ${{ github.workspace }} -l
-      - run: ls ${{ github.workspace }}/ts -l
+      #- run: ls ${{ github.workspace }} -l
+      - run: ls ${{ github.workspace }}/ts -al
       - run: az acr build -t typeagent:latest -r typeagentContainerRegistry --file ${{ github.workspace }}/ts/Dockerfile --subscription b64471de-f2ac-4075-a3cb-7656bca768d0 ${{ github.workspace }}/ts
                   
           
