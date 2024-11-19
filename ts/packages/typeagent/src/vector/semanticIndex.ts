@@ -3,9 +3,13 @@
 
 import { TextEmbeddingModel, openai } from "aiclient";
 import { ScoredItem } from "../memory";
-import { VectorStore, generateEmbedding } from "./vectorIndex";
+import {
+    VectorStore,
+    generateEmbedding,
+    generateEmbeddingWithRetry,
+    generateTextEmbeddingsWithRetry,
+} from "./vectorIndex";
 import { NormalizedEmbedding, SimilarityType } from "./embeddings";
-import { asyncArray } from "..";
 
 export interface SemanticIndex<ID = string> {
     readonly store: VectorStore<ID>;
@@ -22,10 +26,10 @@ export interface SemanticIndex<ID = string> {
      */
     put(text: string, id?: ID | undefined, onlyIfNew?: boolean): Promise<ID>;
     putMultiple(
-        items: [string, ID][],
+        items: [string, ID | undefined][],
         onlyIfNew?: boolean,
         concurrency?: number,
-    ): Promise<void>;
+    ): Promise<[string, ID][]>;
     /**
      * Return the nearest neighbor of value
      * @param value
@@ -83,7 +87,7 @@ export function createSemanticIndex<ID = string>(
                 return id;
             }
         }
-        const embedding: NormalizedEmbedding = await generateEmbedding(
+        const embedding: NormalizedEmbedding = await generateEmbeddingWithRetry(
             model!,
             text,
         );
@@ -91,15 +95,45 @@ export function createSemanticIndex<ID = string>(
     }
 
     async function putMultiple(
-        items: [string, ID][],
+        items: [string, ID | undefined][],
         onlyIfNew?: boolean,
         concurrency?: number,
-    ): Promise<void> {
-        concurrency ??= 2;
-        await asyncArray.forEachAsync(items, concurrency, async (item) => {
-            const [text, id] = item;
-            await put(text, id, onlyIfNew);
-        });
+    ): Promise<[string, ID][]> {
+        concurrency ??= 1;
+        let pendingPositions: number[] | undefined;
+        let textBatch: string[] | undefined;
+        // First, collect the texts that need embeddings
+        for (let i = 0; i < items.length; ++i) {
+            const [text, id] = items[i];
+            if (id && onlyIfNew) {
+                if (store.exists(id)) {
+                    continue;
+                }
+            }
+            pendingPositions ??= [];
+            textBatch ??= [];
+            pendingPositions.push(i);
+            textBatch.push(text);
+        }
+        if (
+            pendingPositions &&
+            pendingPositions.length > 0 &&
+            textBatch &&
+            textBatch.length > 0
+        ) {
+            const embeddings = await generateTextEmbeddingsWithRetry(
+                model!,
+                textBatch,
+            );
+            // Add them
+            for (let i = 0; i < textBatch.length; ++i) {
+                const index = pendingPositions[i];
+                let id = items[index][1];
+                id = await store.put(embeddings[i], id);
+                items[index][1] = id;
+            }
+        }
+        return items as [string, ID][];
     }
 
     async function nearestNeighbor(

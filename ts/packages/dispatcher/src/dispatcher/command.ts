@@ -320,23 +320,20 @@ export function getSettingSummary(context: CommandHandlerContext) {
         ).values(),
     );
     prompt.push("  [", translators.join(""));
-    if (context.session.getConfig().models.translator !== "") {
-        prompt.push(
-            ` (model: ${context.session.getConfig().models.translator})`,
-        );
+    const translationModel = context.session.getConfig().translation.model;
+    if (translationModel !== "") {
+        prompt.push(` (model: ${translationModel})`);
     }
+    const explainerModel = context.session.getConfig().explainer.model;
     if (context.agentCache.explainerName !== getDefaultExplainerName()) {
         prompt.push(` (explainer: ${context.agentCache.explainerName}`);
-        if (context.session.getConfig().models.explainer !== "") {
-            prompt.push(
-                ` model: ${context.session.getConfig().models.translator}`,
-            );
+
+        if (explainerModel !== "") {
+            prompt.push(` model: ${explainerModel}`);
         }
         prompt.push(")");
-    } else if (context.session.getConfig().models.explainer !== "") {
-        prompt.push(
-            ` (explainer model: ${context.session.getConfig().models.explainer})`,
-        );
+    } else if (explainerModel !== "") {
+        prompt.push(` (explainer model: ${explainerModel})`);
     }
 
     prompt.push("]");

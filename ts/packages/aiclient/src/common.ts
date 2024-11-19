@@ -47,3 +47,17 @@ export function hasEnvSettings(
     } catch {}
     return false;
 }
+
+export function getIntFromEnv(
+    env: Record<string, string | undefined>,
+    envName: string,
+    endpointName?: string,
+): number | undefined {
+    const numString = getEnvSetting(env, envName, endpointName, "");
+    const num = numString ? parseInt(numString) : undefined;
+
+    if (num !== undefined && (num.toString() !== numString || num <= 0)) {
+        throw new Error(`Invalid value for ${envName}: ${numString}`);
+    }
+    return num;
+}
