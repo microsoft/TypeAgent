@@ -10,7 +10,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 // Local imports
-import { importPythonFiles } from "./pythonImporter.js";
+import { importAllFiles } from "./pythonImporter.js";
 import { interactiveQueryLoop } from "./queryInterface.js";
 import { ChunkyIndex } from "./chunkyIndex.js";
 
@@ -92,20 +92,4 @@ function parseCommandLine(): string[] {
         files = [];
     }
     return files;
-}
-
-async function importAllFiles(
-    files: string[],
-    chunkyIndex: ChunkyIndex,
-    verbose: boolean,
-): Promise<void> {
-    console.log(`[Importing ${files.length} files]`);
-
-    const t0 = Date.now();
-    await importPythonFiles(files, chunkyIndex, verbose);
-    const t1 = Date.now();
-
-    console.log(
-        `[Imported ${files.length} files in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
-    );
 }

@@ -42,7 +42,23 @@ import {
     ErrorItem,
 } from "./pythonChunker.js";
 
-export async function importPythonFiles(
+export async function importAllFiles(
+    files: string[],
+    chunkyIndex: ChunkyIndex,
+    verbose: boolean,
+): Promise<void> {
+    console.log(`[Importing ${files.length} files]`);
+
+    const t0 = Date.now();
+    await importPythonFiles(files, chunkyIndex, verbose);
+    const t1 = Date.now();
+
+    console.log(
+        `[Imported ${files.length} files in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+    );
+}
+
+async function importPythonFiles(
     files: string[],
     chunkyIndex: ChunkyIndex,
     verbose = false,
@@ -95,14 +111,16 @@ export async function importPythonFiles(
     console.log(`[Documenting ${chunkedFiles.length} files]`);
 
     const tt0 = Date.now();
-    const documentedChunks: FileDocumentation[] = [];
+    const documentedFiles: FileDocumentation[] = [];
     const concurrency = 8; // TODO: Make this a function argument
+    let nChunks = 0;
     await asyncArray.forEachAsync(
         chunkedFiles,
         concurrency,
         async (chunkedFile) => {
             const t0 = Date.now();
             let docs: FileDocumentation;
+            nChunks += chunkedFile.chunks.length;
             try {
                 docs = await chunkyIndex.fileDocumenter.document(
                     chunkedFile.chunks,
@@ -119,13 +137,13 @@ export async function importPythonFiles(
             console.log(
                 `  [Documented ${chunkedFile.chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunkedFile.filename}]`,
             );
-            documentedChunks.push(docs);
+            documentedFiles.push(docs);
         },
     );
     const tt1 = Date.now();
 
     console.log(
-        `[Documented ${documentedChunks.length} files in ${((tt1 - tt0) * 0.001).toFixed(3)} seconds]`,
+        `[Documented ${documentedFiles.length} files (${nChunks} chunks) in ${((tt1 - tt0) * 0.001).toFixed(3)} seconds]`,
     );
 
     const nonEmptyFiles = chunkedFiles.filter(
@@ -144,7 +162,7 @@ export async function importPythonFiles(
         const ttt1 = Date.now();
 
         console.log(
-            `[Embedded ${documentedChunks.length} files in ${((ttt1 - ttt0) * 0.001).toFixed(3)} seconds]`,
+            `[Embedded ${documentedFiles.length} files in ${((ttt1 - ttt0) * 0.001).toFixed(3)} seconds]`,
         );
     }
 }
@@ -224,44 +242,6 @@ async function embedChunk(
                 `in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunk.filename}]`,
         );
     }
-}
-
-// Wrap long lines. Still written by Github Copilot.
-export function wordWrap(text: string, wrapLength: number = 100): string {
-    const wrappedLines: string[] = [];
-
-    text.split("\n").forEach((line) => {
-        let match = line.match(/^(\s*[-*]\s+|\s*)/); // Match leading indent or "- ", "* ", etc.
-        let indent = match ? match[0] : "";
-        let baseIndent = indent;
-
-        // Special handling for list items: add 2 spaces to the indent for overflow lines
-        if (match && /^(\s*[-*]\s+)/.test(indent)) {
-            // const listMarkerLength = indent.length - indent.trimStart().length;
-            indent = " ".repeat(indent.length + 2);
-        }
-
-        let currentLine = "";
-        line.trimEnd()
-            .split(/\s+/)
-            .forEach((word) => {
-                if (
-                    currentLine.length + word.length + 1 > wrapLength &&
-                    currentLine.length > 0
-                ) {
-                    wrappedLines.push(baseIndent + currentLine.trimEnd());
-                    currentLine = indent + word + " ";
-                } else {
-                    currentLine += word + " ";
-                }
-            });
-
-        if (currentLine.trimEnd()) {
-            wrappedLines.push(baseIndent + currentLine.trimEnd());
-        }
-    });
-
-    return wrappedLines.join("\n");
 }
 
 async function writeToIndex(

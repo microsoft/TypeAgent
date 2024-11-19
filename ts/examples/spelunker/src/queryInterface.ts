@@ -14,7 +14,7 @@ import { IndexType, ChunkyIndex } from "./chunkyIndex.js";
 import { FileDocumentation } from "./fileDocSchema.js";
 import { QuerySpec } from "./makeQuerySchema.js";
 import { Chunk, ChunkId } from "./pythonChunker.js";
-import { wordWrap } from "./pythonImporter.js";
+import { importAllFiles } from "./pythonImporter.js";
 
 type QueryOptions = {
     maxHits: number;
@@ -27,7 +27,7 @@ export async function interactiveQueryLoop(
     verbose = false,
 ): Promise<void> {
     const handlers: Record<string, iapp.CommandHandler> = {
-        import: importHandler,
+        import: importHandler, // Since you can't name a function "import".
         clearMemory,
         search,
         summaries,
@@ -40,7 +40,22 @@ export async function interactiveQueryLoop(
 
     function importDef(): iapp.CommandMetadata {
         return {
-            // TODO
+            description: "Import a file or files of Python code.",
+            options: {
+                fileName: {
+                    description:
+                        "File to import (or multiple files separated by commas)",
+                    type: "string",
+                },
+                files: {
+                    description: "File containing the list of files to import",
+                    type: "string",
+                },
+                verbose: {
+                    description: "More verbose output",
+                    type: "boolean",
+                },
+            },
         };
     }
     handlers.import.metadata = importDef();
@@ -48,7 +63,21 @@ export async function interactiveQueryLoop(
         args: string[] | iapp.NamedArgs,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        // TODO
+        const namedArgs = iapp.parseNamedArguments(args, importDef());
+        const files = namedArgs.fileName
+            ? (namedArgs.fileName as string).trim().split(",")
+            : namedArgs.files
+              ? fs
+                    .readFileSync(namedArgs.files as string, "utf-8")
+                    .split("\n")
+                    .map((line) => line.trim())
+                    .filter((line) => line.length > 0 && line[0] !== "#")
+              : [];
+        if (!files.length) {
+            io.writer.writeLine("[No files to import (use --? for help)]");
+            return;
+        }
+        await importAllFiles(files, chunkyIndex, namedArgs.verbose ?? verbose);
     }
 
     handlers.clearMemory.metadata = "Clear all memory (and all indexes)";
@@ -596,4 +625,42 @@ function writeChunkLines(
 function plural(s: string, n: number): string {
     // TOO: Use Intl.PluralRules.
     return n === 1 ? s : s + "s";
+}
+
+// Wrap long lines. Still written by Github Copilot.
+export function wordWrap(text: string, wrapLength: number = 100): string {
+    const wrappedLines: string[] = [];
+
+    text.split("\n").forEach((line) => {
+        let match = line.match(/^(\s*[-*]\s+|\s*)/); // Match leading indent or "- ", "* ", etc.
+        let indent = match ? match[0] : "";
+        let baseIndent = indent;
+
+        // Special handling for list items: add 2 spaces to the indent for overflow lines
+        if (match && /^(\s*[-*]\s+)/.test(indent)) {
+            // const listMarkerLength = indent.length - indent.trimStart().length;
+            indent = " ".repeat(indent.length + 2);
+        }
+
+        let currentLine = "";
+        line.trimEnd()
+            .split(/\s+/)
+            .forEach((word) => {
+                if (
+                    currentLine.length + word.length + 1 > wrapLength &&
+                    currentLine.length > 0
+                ) {
+                    wrappedLines.push(baseIndent + currentLine.trimEnd());
+                    currentLine = indent + word + " ";
+                } else {
+                    currentLine += word + " ";
+                }
+            });
+
+        if (currentLine.trimEnd()) {
+            wrappedLines.push(baseIndent + currentLine.trimEnd());
+        }
+    });
+
+    return wrappedLines.join("\n");
 }
