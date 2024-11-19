@@ -149,18 +149,18 @@ jobs:
       #     file: ts/Dockerfile
       #     push: true
       #     tags: typeagent:latest
-      # - run: az account set --subscription b64471de-f2ac-4075-a3cb-7656bca768d0
-      # - run: az account list
-      # - run: az acr build -t typeAgent:latest -r typeagentContainerRegistry --file ts/DockerFile --subscription b64471de-f2ac-4075-a3cb-7656bca768d0 ./ts
+      - run: az account set --subscription b64471de-f2ac-4075-a3cb-7656bca768d0
+      - run: az account list
+      - run: az acr build -t typeAgent:latest -r typeagentContainerRegistry --file ts/DockerFile --subscription b64471de-f2ac-4075-a3cb-7656bca768d0 ./ts
 
-      - name: Build docker image
-        uses: azure/acr-build@v1
-        with:
-          registry: typeagentcontainerregistry
-          branch: dev/robgruen/android_sans_MSAL
-          image: typeAgent:latest
-          folder: ./ts
-          dockerfile: ./ts/Dockerfile
+      # - name: Build docker image
+      #   uses: azure/acr-build@v1
+      #   with:
+      #     registry: typeagentcontainerregistry
+      #     branch: dev/robgruen/android_sans_MSAL
+      #     image: typeAgent:latest
+      #     folder: ./ts
+      #     dockerfile: ./ts/Dockerfile
         
       # - name: Docker login
       #   uses: docker/login-action@v3.3.0
