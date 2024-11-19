@@ -18,7 +18,7 @@ export type TypeAgentAPIServerConfig = {
 
 export class TypeAgentAPIWebServer {
     private server: Server<any, any>;
-    private secureServer: SecureServer<any, any>;
+    private secureServer: SecureServer<any, any> | undefined;
 
     constructor(config: TypeAgentAPIServerConfig) {
         // web server
@@ -27,17 +27,21 @@ export class TypeAgentAPIWebServer {
         });
 
         // secure webserver
-        this.secureServer = createSecureServer(
-            {
-                key: readFileSync(".cert/localhost+2-key.pem"), // path to localhost+2-key.pem
-                cert: readFileSync(".cert/localhost+2.pem"), // path to localhost+2.pem
-                requestCert: false,
-                rejectUnauthorized: false,
-            },
-            (request: any, response: any) => {
-                this.serve(config, request, response);
-            },
-        );
+        if (existsSync(".cert/localhost+2-key.pem") && existsSync(".cert/localhost+2.pem")) {
+            this.secureServer = createSecureServer(
+                {
+                    key: readFileSync(".cert/localhost+2-key.pem"), // path to localhost+2-key.pem
+                    cert: readFileSync(".cert/localhost+2.pem"), // path to localhost+2.pem
+                    requestCert: false,
+                    rejectUnauthorized: false,
+                },
+                (request: any, response: any) => {
+                    this.serve(config, request, response);
+                },
+            );
+        } else {
+            console.warn("SSL Certificates NOT found, cannot listen for https:// requests!");
+        }
     }
 
     serve(config: TypeAgentAPIServerConfig, request: any, response: any) {
@@ -83,7 +87,7 @@ export class TypeAgentAPIWebServer {
             console.log("Listening on all local IPs at port 3000");
         });
 
-        this.secureServer.listen(3443, () => {
+        this.secureServer?.listen(3443, () => {
             console.log("Listening securely on all local IPs at port 3443");
         });
     }
