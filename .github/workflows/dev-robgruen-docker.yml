@@ -159,7 +159,7 @@ jobs:
       - run: az resource list --name typeagentContainerRegistry
       - run: ls ${{ github.workspace }} -l
       - run: ls ${{ github.workspace }}/ts -l
-      - run: az acr build -t typeAgent:latest -r typeagentContainerRegistry --file ${{ github.workspace }}/ts/DockerFile --subscription b64471de-f2ac-4075-a3cb-7656bca768d0 ${{ github.workspace }}/ts
+      - run: az acr build -t typeAgent:latest -r typeagentContainerRegistry --file ${{ github.workspace }}/ts/Dockerfile --subscription b64471de-f2ac-4075-a3cb-7656bca768d0 ${{ github.workspace }}/ts
       # - name: Build docker image
       #   uses: azure/acr-build@v1
       #   with:
