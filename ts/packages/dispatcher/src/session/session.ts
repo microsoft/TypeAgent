@@ -102,14 +102,23 @@ async function newSessionDir() {
 }
 
 type DispatcherConfig = {
-    models: {
-        translator: string;
-        explainer: string;
+    translation: {
+        enabled: boolean;
+        model: string;
+        stream: boolean;
+        promptConfig: {
+            additionalInstructions: boolean;
+        };
+        switch: {
+            inline: boolean;
+            search: boolean;
+        };
+        multipleActions: boolean;
+        history: boolean;
     };
-    bot: boolean;
-    stream: boolean;
     explainer: {
         enabled: boolean;
+        model: string;
         name: string;
         filter: {
             multiple: boolean;
@@ -120,15 +129,6 @@ type DispatcherConfig = {
             };
         };
     };
-    promptConfig: {
-        additionalInstructions: boolean;
-    };
-    switch: {
-        inline: boolean;
-        search: boolean;
-    };
-    multipleActions: boolean;
-    history: boolean;
 
     // Cache behaviors
     cache: CacheConfig & {
@@ -148,23 +148,24 @@ const defaultSessionConfig: SessionConfig = {
     translators: undefined,
     actions: undefined,
     commands: undefined,
-    models: {
-        translator: "",
-        explainer: "",
+
+    translation: {
+        enabled: true,
+        model: "",
+        stream: true,
+        promptConfig: {
+            additionalInstructions: true,
+        },
+        switch: {
+            inline: true,
+            search: true,
+        },
+        multipleActions: true,
+        history: true,
     },
-    bot: true,
-    stream: true,
-    promptConfig: {
-        additionalInstructions: true,
-    },
-    switch: {
-        inline: true,
-        search: true,
-    },
-    multipleActions: true,
-    history: true,
     explainer: {
         enabled: true,
+        model: "",
         name: getDefaultExplainerName(),
         filter: {
             multiple: true,
@@ -294,7 +295,7 @@ export class Session {
     }
 
     public get bot() {
-        return this.config.bot;
+        return this.config.translation.enabled;
     }
 
     public get explanation() {
@@ -448,7 +449,7 @@ export async function setupAgentCache(
     agentCache: AgentCache,
 ) {
     const config = session.getConfig();
-    agentCache.model = config.models.explainer;
+    agentCache.model = config.explainer.model;
     agentCache.constructionStore.clear();
     if (config.cache.enabled) {
         const cacheData = session.getCacheDataFilePath();

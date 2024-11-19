@@ -8,8 +8,10 @@ import {
     getBuiltinTranslatorNames,
 } from "agent-dispatcher/internal";
 import chalk from "chalk";
+import { getChatModelNames } from "aiclient";
 import { readFileSync, existsSync } from "fs";
 
+const modelNames = await getChatModelNames();
 export default class RequestCommand extends Command {
     static args = {
         request: Args.string({
@@ -35,6 +37,10 @@ export default class RequestCommand extends Command {
             options: getCacheFactory().getExplainerNames(),
             required: false,
         }),
+        model: Flags.string({
+            description: "Translation model to use",
+            options: modelNames,
+        }),
     };
 
     static description = "Translate a request into action and explain it";
@@ -51,6 +57,7 @@ export default class RequestCommand extends Command {
             translators,
             actions: translators,
             commands: { dispatcher: true },
+            translation: { model: flags.model },
             explainer: flags.explainer
                 ? { enabled: true, name: flags.explainer }
                 : { enabled: false },
