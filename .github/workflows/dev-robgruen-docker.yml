@@ -150,7 +150,7 @@ jobs:
       #     push: false
       #     tags: typeagent:latest
       #- run: az login
-      - run: az acr login --name typeageintcontainerregistry
+      #- run: az acr login --name typeageintcontainerregistry
       - run: az account set --subscription b64471de-f2ac-4075-a3cb-7656bca768d0
       - run: az account list
       - run: az resource list --name typeagentContainerRegistry
