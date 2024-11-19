@@ -93,36 +93,59 @@ export async function importPythonFiles(
         (result): result is ChunkedFile => "chunks" in result,
     );
     console.log(`[Documenting ${chunkedFiles.length} files]`);
-    const documentedChunks: FileDocumentation[] = [];
+
     const tt0 = Date.now();
-    await asyncArray.forEachAsync(chunkedFiles, 4, async (chunkedFile) => {
-        const t0 = Date.now();
-        let docs: FileDocumentation;
-        try {
-            docs = await chunkyIndex.fileDocumenter.document(
-                chunkedFile.chunks,
-            );
-        } catch (error) {
+    const documentedChunks: FileDocumentation[] = [];
+    const concurrency = 8; // TODO: Make this a function argument
+    await asyncArray.forEachAsync(
+        chunkedFiles,
+        concurrency,
+        async (chunkedFile) => {
+            const t0 = Date.now();
+            let docs: FileDocumentation;
+            try {
+                docs = await chunkyIndex.fileDocumenter.document(
+                    chunkedFile.chunks,
+                );
+            } catch (error) {
+                const t1 = Date.now();
+                console.log(
+                    `  [Error documenting ${chunkedFile.filename} in ${((t1 - t0) * 0.001).toFixed(3)} seconds: ${error}]`,
+                );
+                return;
+            }
+            const t1 = Date.now();
+
             console.log(
-                `[Error documenting ${chunkedFile.filename}: ${error}]`,
+                `  [Documented ${chunkedFile.chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunkedFile.filename}]`,
             );
-            return;
-        }
-        const t1 = Date.now();
-        console.log(
-            `  [Documented ${chunkedFile.chunks.length} chunks in ${((t1 - t0) * 0.001).toFixed(3)} seconds for ${chunkedFile.filename}]`,
-        );
-        documentedChunks.push(docs);
-    });
+            documentedChunks.push(docs);
+        },
+    );
     const tt1 = Date.now();
+
     console.log(
         `[Documented ${documentedChunks.length} files in ${((tt1 - tt0) * 0.001).toFixed(3)} seconds]`,
     );
 
-    // Cannot parallelize this because of concurrent writing to TextIndex.
-    console.log(`[Embedding ${documentedChunks.length} files]`);
-    for (const chunkedFile of chunkedFiles) {
-        await embedChunkedFile(chunkedFile, chunkyIndex, verbose);
+    const nonEmptyFiles = chunkedFiles.filter(
+        (cf) => cf.chunks.filter((c) => c.docs).length,
+    );
+
+    console.log(`[Embedding ${nonEmptyFiles.length} files]`);
+
+    if (nonEmptyFiles.length) {
+        const ttt0 = Date.now();
+        // Cannot parallelize this because of concurrent writing to TextIndex.
+        // TODO: Try pre-computing embeddings in parallel to fill the embeddings cache (is that cache safe?)
+        for (const chunkedFile of nonEmptyFiles) {
+            await embedChunkedFile(chunkedFile, chunkyIndex, verbose);
+        }
+        const ttt1 = Date.now();
+
+        console.log(
+            `[Embedded ${documentedChunks.length} files in ${((ttt1 - ttt0) * 0.001).toFixed(3)} seconds]`,
+        );
     }
 }
 
