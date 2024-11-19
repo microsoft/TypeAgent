@@ -29,8 +29,8 @@ RUN pnpm deploy --filter=agent-api --prod /prod/api
 
 FROM base AS api
 COPY --from=build /usr/src/app/.env /prod/api/
-COPY --from=build /prod/api /api
-WORKDIR /api
+COPY --from=build /prod/api /prod/api
+WORKDIR /prod/api
 
 #COPY ../shell/out/renderer /app/wwwroot
 #COPY --from=prod-deps /app/node_modules /app/node_modules
