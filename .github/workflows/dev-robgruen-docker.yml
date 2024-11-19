@@ -34,9 +34,10 @@ jobs:
 
       - uses: 1arp/create-a-file-action@0.4.5
         with:
-          path: ${{ github.workspace }}/ts/.env
+          path: ${{ github.workspace }}/ts/
           isAbsolutePath: true
-          file: ${{ secrets.DOCKER_DOT_ENV }}
+          file: .env
+          content: ${{ secrets.DOCKER_DOT_ENV }}
 
       # - uses: finnp/create-file-action@master
       #   env:
