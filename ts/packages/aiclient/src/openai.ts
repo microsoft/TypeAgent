@@ -399,7 +399,7 @@ function createAzureOpenAIChatModel(
                   model: settings.modelName,
               };
     const model: ChatModelWithStreaming = {
-        completionSettings: completionSettings,
+        completionSettings,
         completionCallback,
         complete,
         completeStream,
@@ -472,11 +472,6 @@ function createAzureOpenAIChatModel(
                 ? [{ role: "user", content: prompt }]
                 : prompt;
 
-        let completionParams: CompletionSettings | undefined;
-        if (completionSettings) {
-            completionParams = { ...completionSettings };
-        }
-
         // BUGBUG - https://learn.microsoft.com/en-us/answers/questions/1805363/azure-openai-streaming-token-usage
         // image_url content with streaming token usage reporting is currently broken
         // TODO: remove after API endpoint correctly handles this case
@@ -496,7 +491,7 @@ function createAzureOpenAIChatModel(
             messages: messages,
             stream: true,
             stream_options: { include_usage: true && !historyIncludesImages },
-            ...completionParams,
+            ...completionSettings,
         };
         const result = await callApi(
             headerResult.data,

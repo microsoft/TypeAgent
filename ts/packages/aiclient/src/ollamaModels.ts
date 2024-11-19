@@ -102,6 +102,7 @@ export function ollamaApiSettingsFromEnv(
                     : `${url}/v1/embeddings`,
             modelName,
             apiKey: "",
+            supportsResponseFormat: true, // REVIEW: just assume it supports it. Ollama doesn't reject this option
         };
     } else {
         return {
