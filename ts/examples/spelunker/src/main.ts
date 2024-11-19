@@ -71,7 +71,7 @@ async function main(): Promise<void> {
         console.log(`[Importing ${files.length} files]`);
         const t0 = Date.now();
 
-        await importPythonFiles(files, chunkyIndex, true, verbose);
+        await importPythonFiles(files, chunkyIndex, verbose);
 
         const t1 = Date.now();
         console.log(
