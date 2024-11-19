@@ -28,6 +28,7 @@ RUN pnpm deploy --filter=agent-api /prod/api
 # RUN pnpm run build
 
 FROM base AS api
+COPY --from=build /prod/.env /prod/
 COPY --from=build /prod/api /prod/api
 WORKDIR /prod/api
 
